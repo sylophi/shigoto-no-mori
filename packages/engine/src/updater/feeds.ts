@@ -181,8 +181,11 @@ export const makeFeeds = ({
       const failed = feedFailed("release-list");
       const cached = Option.getOrUndefined(yield* readReleaseListCache(url));
       const now = yield* Clock.currentTimeMillis;
+      // A copy fetched "later" than now is from before the clock stepped
+      // back, and answers for nothing.
       if (
         cached !== undefined &&
+        cached.fetchedAt <= now &&
         (now < cached.fetchedAt + RELEASE_LIST_MAX_AGE || now < cached.retryAt)
       ) {
         return { releases: yield* releasesOf(cached.body), confirmed: false };
@@ -293,7 +296,7 @@ export const makeFeeds = ({
       );
     });
 
-    return { send, queryFeed };
+    return { offered, send, queryFeed };
   });
 
 export type FeedsArea = Effect.Success<ReturnType<typeof makeFeeds>>;

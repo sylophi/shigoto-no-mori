@@ -4,11 +4,11 @@
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { parse, type SemVer } from "semver";
-import { isV3Release } from "./flavor.ts";
+import { APP_REPO, isV3Release } from "./flavor.ts";
 
-// The app's repo on GitHub, which the feeds and the guide's source come
-// from (shared/packaging/updateFeed.mts UPDATE_FEED_REPO).
-export const APP_REPO = "sylophi/shigoto-no-mori";
+// GitHub's list of the app's releases, the API's one page maximum: the
+// updater's release list and the app's changelog alike.
+export const RELEASE_LIST_URL = `https://api.github.com/repos/${APP_REPO}/releases?per_page=100`;
 
 // What a feed said about the release to move to.
 export type ReleaseInfo = {
@@ -32,15 +32,17 @@ export const FeedAnswer = Schema.NullOr(
   Schema.Struct({ url: Text, name: Text, notes: Text, pub_date: Text }),
 );
 
-// One entry of the GitHub release list, the fields the picker reads.
-// Drafts never reach an unauthenticated caller, so the draft flag isn't
-// read.
+// One entry of the GitHub release list, the fields the picker and the
+// changelog read. Drafts never reach an unauthenticated caller, and the
+// changelog drops one anyway rather than trust that to stay so.
 const GitHubRelease = Schema.NullOr(
   Schema.Struct({
     tag_name: Text,
     prerelease: Flag,
+    draft: Flag,
     body: Text,
     published_at: Text,
+    html_url: Text,
     assets: Schema.optional(
       Schema.NullOr(
         Schema.Array(

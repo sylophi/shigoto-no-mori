@@ -4,12 +4,6 @@
 // to Oxc for Fast Refresh), so the compiler ships via
 // @rolldown/plugin-babel using the canonical preset exported by the
 // react plugin itself.
-//
-// The plugin parses .ts and .tsx as TypeScript and nothing else, so a
-// .mts module (shared/packaging/updateFeed.mts, which the release list
-// reads and node scripts also load directly) reaches babel as plain
-// JavaScript and fails on its first type. The override teaches it the
-// third extension.
 import { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 
@@ -18,12 +12,5 @@ import babel from "@rolldown/plugin-babel";
 export const REACT_COMPILER_OPTIONS = {};
 
 export function reactCompiler() {
-  return babel({
-    presets: [reactCompilerPreset(REACT_COMPILER_OPTIONS)],
-    overrides: [
-      // `include` is babel's synonym for `test`, and the one of the two
-      // the plugin's types admit.
-      { include: /\.mts(?:$|\?)/, parserOpts: { plugins: ["typescript"] } },
-    ],
-  });
+  return babel({ presets: [reactCompilerPreset(REACT_COMPILER_OPTIONS)] });
 }

@@ -11,6 +11,7 @@
 import path from "node:path";
 import { app } from "electron";
 import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FileSystem from "effect/FileSystem";
@@ -20,10 +21,12 @@ import type * as Scope from "effect/Scope";
 import type { UpdaterState, UpdaterStatus } from "@shigomori/contracts/schemas";
 import { UpdateRequestSchema } from "@shigomori/contracts/schemas";
 import { updaterFiles } from "@shigomori/engine/Updater";
+import { RESTART_TIMEOUT } from "@shigomori/engine/updater/documents";
 import { dataDir } from "@shared/paths";
 import { readJson, writeJson } from "../core/files/jsonFile";
 
-const REQUEST_STALE_MS = 2 * 60_000;
+// Past the CLI's wait for the restart, which by then has given up.
+const REQUEST_STALE_MS = Duration.toMillis(RESTART_TIMEOUT);
 const REQUEST_POLL_MS = 1000;
 
 const files = () => updaterFiles(path, dataDir());
@@ -81,9 +84,10 @@ export const updaterBridge = ({
       ).pipe(Effect.orElseSucceed(() => null));
       yield* Effect.ignore(fs.remove(consumingPath(), { force: true }));
       if (request === null) return;
-      const now = yield* Clock.currentTimeMillis;
-      // A dropped request: the CLI times out and says so.
-      if (now - request.requestedAt > REQUEST_STALE_MS) return;
+      const age = (yield* Clock.currentTimeMillis) - request.requestedAt;
+      // A dropped request: the CLI times out and says so. One from the
+      // future is from before the clock stepped back.
+      if (age < 0 || age > REQUEST_STALE_MS) return;
       // The only action there is (UpdateRequestSchema).
       install();
     }).pipe(Effect.catch((error) => Effect.sync(() => failed(error))));

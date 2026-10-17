@@ -22,17 +22,12 @@
 // to the check alone.
 import path from "node:path";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import { app } from "electron";
 import type {
   StagedManifest,
   UpdaterState,
 } from "@shigomori/contracts/schemas";
-import {
-  InstallFailureSchema,
-  StagedManifestSchema,
-  UpdateStageResultSchema,
-} from "@shigomori/contracts/schemas";
+import { InstallFailureSchema } from "@shigomori/contracts/schemas";
 import { dataDir } from "@shared/paths";
 import { readJson } from "../core/files/jsonFile";
 import { busyRemoteRefusal } from "@shared/busy";
@@ -103,23 +98,6 @@ function setState(next: UpdaterState): void {
   fork?.(publishUpdaterState(state));
 }
 
-const decodeStageResult = Schema.decodeUnknownOption(UpdateStageResultSchema);
-
-// null unless a well-formed manifest describes a bundle that is
-// actually on disk.
-const readStagedManifest = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const files = Updater.updaterFiles(path, dataDir());
-  const manifest = yield* readJson(files.manifest, StagedManifestSchema).pipe(
-    Effect.orElseSucceed(() => null),
-  );
-  if (manifest === null) return null;
-  const there = yield* fs
-    .exists(path.join(files.staged, manifest.bundleName))
-    .pipe(Effect.orElseSucceed(() => false));
-  return there ? manifest : null;
-});
-
 // What a failed finish-install left for this start, taken so the next
 // start doesn't show it again.
 const takeInstallFailure = Effect.gen(function* () {
@@ -132,17 +110,10 @@ const takeInstallFailure = Effect.gen(function* () {
   return failure;
 });
 
-// The staged update, if it's one this build can restart into. A
-// manifest matching our own version is debris from an install that
-// crashed between swap and cleanup. Offering it would restart-loop
-// into the same version. The next stage run clears it.
-const installableStaged: Effect.Effect<
-  StagedManifest | null,
-  never,
-  FileSystem.FileSystem
-> = Effect.map(readStagedManifest, (staged) =>
-  staged !== null && staged.version !== app.getVersion() ? staged : null,
-);
+// The staged update this build can restart into.
+const installableStaged = Effect.flatMap(Updater.Updater, (updater) =>
+  updater.staged(app.getVersion()),
+).pipe(Effect.map(Option.getOrNull));
 
 // The same, from the Promise code below: nothing while the updater's
 // layer is down.
@@ -168,10 +139,18 @@ function runningApp(): Updater.Running {
 // asynchronously, and the caller is about to quit on success.
 function spawnInstaller(): Promise<void> {
   const binary = requireCliBinary();
+  const { feedUrl, releasesUrl } = updateEndpoints();
   return new Promise((resolve, reject) => {
     const child = spawn(
       binary,
-      ["update", "--finish-install", "--pid", String(process.pid)],
+      [
+        "update",
+        "--finish-install",
+        "--pid",
+        String(process.pid),
+        ...(feedUrl ? ["--feed-url", feedUrl] : []),
+        ...(releasesUrl ? ["--releases-url", releasesUrl] : []),
+      ],
       { detached: true, stdio: "ignore" },
     );
     child.once("error", reject);
@@ -262,10 +241,9 @@ const check: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
     const staged = yield* Effect.result(stage(shown));
     let next: UpdaterState;
     if (Result.isSuccess(staged)) {
-      const parsed = decodeStageResult(staged.success);
       next =
-        Option.isSome(parsed) && parsed.value.status === "staged"
-          ? readyStateFrom(parsed.value)
+        staged.success.status === "staged"
+          ? readyStateFrom(staged.success)
           : { kind: "idle" };
     } else if (codeOf(staged.failure) === "update-in-progress") {
       // A terminal `sm update` holding the staging lock is its turn,

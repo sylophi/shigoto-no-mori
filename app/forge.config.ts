@@ -10,12 +10,12 @@ import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { config as loadEnv } from "dotenv";
 import { CLI_DIST_DIR, cliBinaryName } from "./shared/packaging/cliDist.mts";
-import {
-  UPDATE_FEED_NAME,
-  UPDATE_FEED_OWNER,
-} from "./shared/packaging/updateFeed.mts";
 import { version } from "./package.json";
-import { flavorNames } from "@shigomori/engine/flavor";
+import {
+  APP_REPO_NAME,
+  APP_REPO_OWNER,
+  flavorNames,
+} from "@shigomori/engine/flavor";
 import { buildFlavor } from "./shared/packaging/buildFlavor.mts";
 import {
   CLOUDFLARED_BINARY_NAME,
@@ -289,7 +289,7 @@ const config: ForgeConfig = {
     new PublisherGithub({
       // Derived, not restated: publishing to a repo the CLI's updater
       // doesn't poll would look exactly like "no updates ever appear".
-      repository: { owner: UPDATE_FEED_OWNER, name: UPDATE_FEED_NAME },
+      repository: { owner: APP_REPO_OWNER, name: APP_REPO_NAME },
       draft: false,
     }),
   ],
