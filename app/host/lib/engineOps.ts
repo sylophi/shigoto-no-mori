@@ -393,33 +393,49 @@ export const deleteWorktree = Effect.fnUntraced(function* (
   }).pipe(Effect.ensuring(Effect.sync(scripts.end)));
 });
 
-// The merged layers of a stack, removed together from the highest
-// merged layer's worktree, which takes the worktrees of the merged
-// layers under it too. The document lists them: the worktree itself
-// under `removed`, the others under `stack.removed`, and on a cleanup
-// failure whatever went before it.
-export const deleteStack = Effect.fnUntraced(function* (
+// The merged layers of a stack under the worktree `worktreeId` names,
+// itself included: what deleteStack removes, resolved and checked.
+export const planStack = Effect.fnUntraced(function* (
   project: Project,
   input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
-  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+) {
+  return yield* asCall(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, input.worktreeId);
+      return yield* (yield* Landing.Landing).planRemoveStack(located, {
+        force: input.force === true,
+        keepBranch: false,
+        skipCleanup: input.skipCleanup === true,
+      });
+    }),
+    { projectId: project.id, worktreeId: input.worktreeId },
+  );
+});
+
+// The worktrees a stack's plan names, removed together. The document
+// lists them: the worktree itself under `removed`, the others under
+// `stack.removed`, and on a cleanup failure whatever went before it.
+// `removedOther` hears each of the others as it goes, so a removal cut
+// short still tells what went.
+export const deleteStack = Effect.fnUntraced(function* (
+  project: Project,
+  removal: Landing.StackRemoval,
+  notify: Pick<WorktreeOperationNotifiers, "notifyScript"> & {
+    readonly removedOther: (worktreeId: string) => void;
+  },
 ) {
   const scripts = yield* (yield* HostScripts.Scripts).lifecycleRuns(
     notify.notifyScript,
   );
   const doc = yield* asChange(
-    Effect.gen(function* () {
-      const located = yield* locate(project.id, input.worktreeId);
-      return yield* (yield* Landing.Landing).removeStack(
-        located,
-        {
-          force: input.force === true,
-          keepBranch: false,
-          skipCleanup: input.skipCleanup === true,
-        },
-        scriptReporter(scripts),
-      );
-    }),
-    { projectId: project.id, worktreeId: input.worktreeId },
+    Effect.flatMap(Landing.Landing, (landing) =>
+      landing.removeStack(removal, {
+        ...scriptReporter(scripts),
+        removedOther: (removed) =>
+          Effect.sync(() => notify.removedOther(removed.id)),
+      }),
+    ),
+    { projectId: project.id, worktreeId: removal.located.worktree.id },
   ).pipe(Effect.ensuring(Effect.sync(scripts.end)));
   const removed = removedIdsOf(doc);
   if (doc.ok === true) {
@@ -838,8 +854,8 @@ export const removeAllAgentHooks = Effect.suspend(() =>
 
 // `git worktree move` plus the re-key of everything stored under the
 // worktree's path-derived id (marks, its data, a pending dirty capture).
-// The caller keeps the app-side guards around it (the running work it
-// refuses, the tombstone, the mirrors re-opened).
+// The host's guards around it are the Worktrees service's
+// (worktrees/moving.ts).
 export const moveWorktree = Effect.fnUntraced(function* (
   project: Project,
   worktreeId: string,
@@ -856,8 +872,7 @@ export const moveWorktree = Effect.fnUntraced(function* (
 });
 
 // A move to the same parent under a new folder name, checked as
-// create checks a custom name. The caller keeps the same guards as a
-// move's.
+// create checks a custom name.
 export const renameWorktree = Effect.fnUntraced(function* (
   project: Project,
   worktreeId: string,

@@ -62,7 +62,8 @@ import {
   stopMirror as stopMirrorSession,
 } from "@host/mirror/sessions";
 import { syncHandlers } from "@host/ipc/modules/sync";
-import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import { scriptEventNotifier } from "@host/ipc/scriptRun";
+import * as Worktrees from "@host/lib/Worktrees";
 import * as Ops from "@host/lib/engineOps";
 import {
   BLOCK_REASON,
@@ -435,11 +436,7 @@ export const send = settled<"send">((input, ctx) =>
     return {
       moved: { ...sent, device, copySide: "remote" as const },
       settle: {
-        shelve: worktreesHandlers.setShelved({
-          projectId: project.id,
-          worktreeId: worktree.id,
-          shelved: true,
-        }),
+        shelve: Ops.setShelved(project, worktree.id, true),
         teardown: syncHandlers.teardownSource(
           {
             direction: "send",
@@ -658,13 +655,13 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
     // The session is gone either way, so this device's own forced
     // delete finishes what the runner's stop would have.
     if (copyStayed !== undefined) {
-      const removed = yield* worktreesHandlers.delete(
+      const removed = yield* (yield* Worktrees.Worktrees).remove(
         {
           projectId: target.projectId,
           worktreeId: target.worktreeId,
           force: true,
         },
-        ctx,
+        scriptEventNotifier(ctx),
       );
       if (removed.ok) copyStayed = undefined;
     }

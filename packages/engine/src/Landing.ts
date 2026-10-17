@@ -16,7 +16,7 @@ import * as Worktrees from "./Worktrees.ts";
 import { makePullRequests } from "./landing/pullRequests.ts";
 import { makeStacks } from "./landing/stacks.ts";
 import { makeCleanup } from "./landing/cleanup.ts";
-import { makeVerbs } from "./landing/verbs.ts";
+import { type StackRemoval, makeVerbs } from "./landing/verbs.ts";
 import {
   type Document,
   type DoneError,
@@ -29,6 +29,7 @@ import {
 } from "./landing/documents.ts";
 export { LandingRefused, MergePollInterval } from "./landing/documents.ts";
 export type { Document, Reporter } from "./landing/documents.ts";
+export type { StackRemoval } from "./landing/verbs.ts";
 
 export class Landing extends Context.Service<
   Landing,
@@ -65,11 +66,16 @@ export class Landing extends Context.Service<
       },
       reporter: Reporter,
     ) => Effect.Effect<Document, LandError>;
-    // `sm rm --stack`: the cleanup half of a stack land, for one that
-    // has landed.
-    readonly removeStack: (
+    // `sm rm --stack` from `located`: what it removes, resolved and
+    // checked, for removeStack to carry out.
+    readonly planRemoveStack: (
       located: Worktrees.Located,
       options: RemoveOptions,
+    ) => Effect.Effect<StackRemoval, RemoveStackError>;
+    // `sm rm --stack`: the cleanup half of a stack land, for one that
+    // has landed, removing exactly the worktrees its plan names.
+    readonly removeStack: (
+      removal: StackRemoval,
       reporter: Reporter,
     ) => Effect.Effect<Document, RemoveStackError>;
     // `sm done`: the checkout back on the primary branch, the merged
@@ -86,8 +92,7 @@ const make = Effect.gen(function* () {
   const stacks = yield* makeStacks({ pullRequests });
   const cleanup = yield* makeCleanup({ pullRequests });
   const verbs = yield* makeVerbs({ pullRequests, stacks, cleanup });
-  const { pullRequest, merge, land, removeStack, done } = verbs;
-  return Landing.of({ pullRequest, merge, land, removeStack, done });
+  return Landing.of(verbs);
 });
 
 export const layer = Layer.effect(Landing, make);

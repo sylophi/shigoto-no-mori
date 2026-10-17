@@ -57,8 +57,17 @@ export const launchTerminals = (
       Terminals.Start,
       UnknownProjectError | UnknownWorktreeError
     >;
+    readonly worktrees: (
+      projectId: string,
+    ) => Effect.Effect<
+      ReadonlyArray<{ readonly id: string; readonly path: string }>,
+      unknown
+    >;
   },
 ) =>
   ManagedRuntime.make(
-    Terminals.layer({ start: options.start }).pipe(withStore(options)),
+    Terminals.layer({
+      start: options.start,
+      worktrees: options.worktrees,
+    }).pipe(withStore(options)),
   );

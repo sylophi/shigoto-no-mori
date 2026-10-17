@@ -15,6 +15,7 @@ const app = launchTerminals({
     Effect.succeed({
       env: { ...process.env, PS1: "$ ", TERM: "xterm-256color" },
     }),
+  worktrees: () => Effect.succeed([]),
 });
 const { terminalId } = await app.runPromise(
   Effect.flatMap(Terminals.Terminals, (terminals) =>
