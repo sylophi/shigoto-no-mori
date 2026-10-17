@@ -62,15 +62,10 @@ const bareTool = <Name extends "look" | "screenshot" | "clear">(
     failure: GuideToolFailed,
   });
 
-// Before the agent touches the window, the user hears what it can do
-// and says what they want.
-const ASK_FIRST =
-  "Before your first action in the window, say in a line or two what you can do (point at things in the app and walk the user through them) and ask what they want to do or know, unless they already asked.";
-
 const Tools = Toolkit.make(
   bareTool(
     "look",
-    `The window's accessibility tree: every control on the page, each with the ref the other tools take. ${ASK_FIRST}`,
+    "The window's accessibility tree: every control on the page, each with the ref the other tools take.",
   )
     .annotate(Tool.Readonly, true)
     .annotate(Tool.Destructive, false),
@@ -148,7 +143,8 @@ const server = (session: string) =>
       McpServer.layerStdio({
         name: "shigomori",
         version,
-        instructions: `These tools drive the user's Shigoto no Mori window, to show them how to do something in the app. ${ASK_FIRST}`,
+        instructions:
+          "These tools drive the user's Shigoto no Mori window, to show them how to do something in the app.",
         protocols: [
           McpProtocol.v2025_11_25,
           McpProtocol.v2025_06_18,

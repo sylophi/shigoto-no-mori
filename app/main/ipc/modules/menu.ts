@@ -21,10 +21,6 @@ type MenuImpl = {
     windowId: number,
     harnesses: readonly GuideHarness[],
   ) => void;
-  readonly showAround: (
-    windowId: number,
-    at: { readonly x: number; readonly y: number },
-  ) => void;
 };
 
 const unset = () => {
@@ -34,7 +30,6 @@ let impl: MenuImpl = {
   setLaunchToolsEnabled: unset,
   setChords: unset,
   setGuideHarnesses: unset,
-  showAround: unset,
 };
 
 export function setMenuImpl(next: MenuImpl): void {
@@ -55,8 +50,5 @@ export const menuHandlers: Handlers<typeof menuContract, HandlerContext> = {
   // The guide's harnesses installed on the calling window's device.
   setGuideHarnesses: (harnesses, { windowId }) => {
     if (windowId !== undefined) impl.setGuideHarnesses(windowId, harnesses);
-  },
-  showAround: (at, { windowId }) => {
-    if (windowId !== undefined) impl.showAround(windowId, at);
   },
 };

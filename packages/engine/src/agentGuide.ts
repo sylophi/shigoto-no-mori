@@ -24,22 +24,22 @@ const DATA_DIR_ENV = "SHIGOMORI_DATA_DIR";
 // A TOML basic string, which a JSON string is.
 const toml = (text: string) => JSON.stringify(text);
 
-// What the app opens the harness on: the user asks in the harness, and
-// the guide's instructions have it say what it can do and ask first.
-export const GUIDE_OPENING = "Show me around Shigoto no Mori.";
+// The agent's role, as each harness's system-level instructions: it
+// starts idle, and the person types their question.
+export const GUIDE_SYSTEM_PROMPT =
+  "You are helping someone with a question about Shigoto no Mori, the app whose source and documentation are in `source/` here. Answer from the source, `skills/` and the READMEs; say when the answer is not there. Offer a walkthrough only if asked.";
 
-// The harness on `prompt`, its tools `sm guide mcp` on `session`,
-// allowed without asking each time: the app turns away what the user
-// must do themselves. The server is told the app's data dir, where it
-// finds the app, whatever the terminal's environment says.
+// The harness with the guide's role, its tools `sm guide mcp` on
+// `session`, allowed without asking each time: the app turns away what
+// the user must do themselves. The server is told the app's data dir,
+// where it finds the app, whatever the terminal's environment says.
 export const guideCommand = (input: {
   readonly harness: GuideHarness;
   readonly sm: string;
   readonly dataDir: string;
   readonly session: string;
-  readonly prompt: string;
 }) => {
-  const { harness, sm, dataDir, session, prompt } = input;
+  const { harness, sm, dataDir, session } = input;
   const args = ["guide", "mcp", "--session", session];
   switch (harness) {
     case "claude": {
@@ -48,11 +48,13 @@ export const guideCommand = (input: {
           [SERVER]: { command: sm, args, env: { [DATA_DIR_ENV]: dataDir } },
         },
       });
-      return `claude --mcp-config ${shellQuote(config)} --allowedTools mcp__${SERVER} -- ${shellQuote(prompt)}`;
+      return `claude --mcp-config ${shellQuote(config)} --append-system-prompt ${shellQuote(GUIDE_SYSTEM_PROMPT)} --allowedTools mcp__${SERVER}`;
     }
     case "codex":
       return [
         "codex",
+        "-c",
+        shellQuote(`developer_instructions=${toml(GUIDE_SYSTEM_PROMPT)}`),
         "-c",
         shellQuote(`mcp_servers.${SERVER}.command=${toml(sm)}`),
         "-c",
@@ -65,8 +67,6 @@ export const guideCommand = (input: {
         shellQuote(
           `mcp_servers.${SERVER}.default_tools_approval_mode="approve"`,
         ),
-        "--",
-        shellQuote(prompt),
       ].join(" ");
   }
 };
@@ -80,54 +80,43 @@ export const cloneSourceCommand = (tag: string) =>
 // a CLAUDE.md naming it).
 export const guideInstructions = (
   sourceUrl: string,
-) => `# Guiding a Shigoto no Mori user
+) => `# Answering a question about Shigoto no Mori
 
-This folder is Shigoto no Mori's own guide folder, which the app writes.
+This is Shigoto no Mori's guide folder, which the app writes. \`source/\`
+is the app's source at the version the person runs: \`README.md\`,
+\`PRODUCT.md\`, \`skills/\`, each folder's README, the views in
+\`packages/ui/src/views\` and the routes in \`app/renderer/router.tsx\`.
+If \`source/\` is missing, read it at ${sourceUrl}. Read the source, but
+never change it.
 
-The user opened you from Shigoto no Mori's Help menu, to be shown
-around the app: a desktop app for working on many git worktrees at
-once. The app's window is open beside this terminal, and the
-\`${SERVER}\` tools drive it.
+## The window
 
-## Before you touch the window
-
-Say in a line or two what you can do: point at things in the app and
-walk them through it, step by step, in the window itself. Then ask
-what they want to do or know, and wait for their answer. If their
-message already asks something in full ("how do I rename a
-worktree?"), answer that instead of asking.
-
-## The tools
+The app's window is open beside this terminal, and the \`${SERVER}\`
+tools show it to you and act in it:
 
 - \`look\`: the window's accessibility tree. Every control has a ref.
 - \`screenshot\`: saves the window as a PNG and answers its path. Open
   it to see the window.
 - \`point\`: highlights a ref in the window, with one sentence beside it.
-- \`click\`, \`fill\`, \`press\`: act in the window, as the user would.
+- \`click\`, \`fill\`, \`press\`: act in the window, as the person would.
 - \`navigate\`: opens a page by its route (\`/settings\`, \`/live\`,
   \`/devices/<id>/projects/<id>/worktrees/<id>\`). Every answer names
   the route the window shows.
 - \`clear\`: removes the highlight.
 
-## How to guide
+When the answer is something to do in the app, \`point\` at the control
+it starts from. When they ask you to walk them through it:
 
-1. Learn how the app does it before you act on the window. \`source/\` is the
-   app's source at the version the user runs (\`README.md\`,
-   \`PRODUCT.md\`, the views in \`packages/ui/src/views\`, the routes in
-   \`app/renderer/router.tsx\`). If \`source/\` is missing, read it at
-   ${sourceUrl}.
-2. Go step by step: \`look\`, then \`point\` at the control for the
-   step and say what it does, then click it or let the user. Say each
-   step in a line here too.
-3. Do it in the app. Don't do it behind the app's back with \`sm\`,
-   git or by editing files: the user wants to learn the app.
-4. Some controls are the user's alone: anything that deletes, removes,
-   discards or signs out, the switches that let the user's other
-   devices into this machine, what runs code (a script's Run, the
-   launch tools, a script's or a launcher's command), and every
-   terminal. The app refuses your
-   clicks and keys there. Point at the control and let them decide.
-5. When you are done, \`clear\` and say what they can do next.
-
-Read the source, but never change it.
+1. Go step by step: \`look\`, then \`point\` at the control for the
+   step and say what it does, then click it or let them. Say each step
+   in a line here too.
+2. Do it in the app. Don't do it behind the app's back with \`sm\`,
+   git or by editing files: they want to learn the app.
+3. Some controls are the person's alone: anything that deletes, removes,
+   discards or signs out, the switches that let their other devices
+   into this machine, what runs code (a script's Run, the launch
+   tools, a script's or a launcher's command), and every terminal. The
+   app refuses your clicks and keys there. Point at the control and
+   let them decide.
+4. When you are done, \`clear\` and say what they can do next.
 `;

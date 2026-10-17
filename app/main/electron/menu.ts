@@ -8,21 +8,21 @@ import { menuAccelerators } from "@shigomori/ui/lib/keymap.ts";
 import { readClientConfigSync } from "./clientConfig";
 import {
   app,
-  BrowserWindow,
   Menu,
   type MenuItemConstructorOptions,
+  type BrowserWindow,
 } from "electron";
 import type { ContractModule } from "@shigomori/contracts/contract";
 import { navContract } from "@shigomori/contracts/modules/nav";
 import {
+  askAboutTheApp,
   type GuideHarness,
-  showAroundLabel,
 } from "@shigomori/contracts/modules/guide";
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
-import { liveWindow, openWindow } from "./windows";
+import { openWindow } from "./windows";
 
 // The keymap's launch tools are nine; anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
@@ -141,36 +141,8 @@ function setGuideHarnesses(
   showing(() => guideHarnessesByWindow.set(windowId, harnesses));
 }
 
-// The Help menu's guide from a window's own control: one harness gets
-// the item's own push.
-function showAround(
-  windowId: number,
-  at: { readonly x: number; readonly y: number },
-): void {
-  const live = liveWindow(windowId);
-  const window = live && BrowserWindow.fromWebContents(live.webContents);
-  if (!live || !window) return;
-  const harnesses = guideHarnessesByWindow.get(windowId) ?? [];
-  const [only, ...others] = harnesses;
-  if (only === undefined) return;
-  if (others.length === 0) {
-    broadcast(navContract, "showAround", only, live.webContents);
-  } else {
-    Menu.buildFromTemplate(guideMenuItems(harnesses)).popup({
-      window,
-      x: Math.round(at.x),
-      y: Math.round(at.y),
-    });
-  }
-}
-
 export function installMenuImpl(): void {
-  setMenuImpl({
-    setLaunchToolsEnabled,
-    setChords,
-    setGuideHarnesses,
-    showAround,
-  });
+  setMenuImpl({ setLaunchToolsEnabled, setChords, setGuideHarnesses });
 }
 
 // The menu follows the focused window's tools.
@@ -202,16 +174,6 @@ function clickBroadcast<M extends ContractModule, K extends PushKeys<M>>(
     const wc = (focusedWindow as BrowserWindow | undefined)?.webContents;
     if (wc) broadcast(module, key, payload, wc);
   };
-}
-
-// The guide, one item for each harness installed here.
-function guideMenuItems(
-  harnesses: readonly GuideHarness[],
-): MenuItemConstructorOptions[] {
-  return harnesses.map((harness) => ({
-    label: showAroundLabel(harness),
-    click: clickBroadcast(navContract, "showAround", harness),
-  }));
 }
 
 function launchToolMenuItems(): MenuItemConstructorOptions[] {
@@ -309,7 +271,13 @@ export function buildAppMenu(): void {
     },
     {
       role: "help",
-      submenu: guideMenuItems(shownGuideHarnesses()),
+      // The guide, one item for each harness installed here.
+      submenu: shownGuideHarnesses().map(
+        (harness): MenuItemConstructorOptions => ({
+          label: askAboutTheApp(harness),
+          click: clickBroadcast(navContract, "showAround", harness),
+        }),
+      ),
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
