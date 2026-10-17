@@ -64,10 +64,18 @@ const WAITS_FOR_INDEX = new Set([
   "update-index",
 ]);
 type RunError = GitCommandError | GitOutputTooLargeError;
-const indexHeld = (error: RunError): boolean =>
-  error instanceof GitCommandError &&
-  error.exitCode !== null &&
-  stderrOf(error).includes("index.lock': File exists");
+// git's own refusal, its first line: a hook's output that says the same
+// comes after git changed something (a checkout's "Switched to branch").
+const indexHeld = (error: RunError): boolean => {
+  if (!(error instanceof GitCommandError) || error.exitCode === null) {
+    return false;
+  }
+  const first = stderrOf(error).split("\n", 1)[0] ?? "";
+  return (
+    first.startsWith("fatal: Unable to create '") &&
+    first.endsWith("index.lock': File exists.")
+  );
+};
 const waitingForIndex = <A, R>(effect: Effect.Effect<A, RunError, R>) =>
   Effect.retry(effect, {
     schedule: Schedule.exponential("50 millis"),
