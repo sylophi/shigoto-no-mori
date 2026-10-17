@@ -19,14 +19,16 @@ import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { ChannelHandlers } from "@shigomori/contracts/types";
 import type { AllContractModule } from "@shigomori/contracts/allModules";
+import { worktreePathFor } from "@shigomori/contracts/git/worktreeLayout";
 import { stackCleanupForWorktree } from "@shigomori/contracts/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
-import type {
-  Project,
-  RunningScript,
-  SharedSettingsDoc,
-  ShigomoriWorktreeData,
-  Worktree,
+import {
+  isManagedWorktree,
+  type Project,
+  type RunningScript,
+  type SharedSettingsDoc,
+  type ShigomoriWorktreeData,
+  type Worktree,
 } from "@shigomori/contracts/schemas";
 import { cloneFolderName } from "@shared/cloneUrl";
 import {
@@ -579,6 +581,31 @@ function hostHandlersFor(
     // letter tile, as the scenes draw it.
     "projects:icon": () => null,
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
+    // The host plans by the folders on disk; the lab by the preview's
+    // path math over its fixture data dir, a path in place when it reads
+    // the same.
+    "worktrees:relocationPlan": ({ projectId, layout, customPath }) => {
+      const project = forest.projects.find(({ id }) => id === projectId);
+      if (project === undefined) return [];
+      const inputs = {
+        layout,
+        projectPath: project.path,
+        customPath,
+        dataDir: `${disk.home}/.sm`,
+        canonicalDataDirName: ".sm",
+        onProjectDrive: false,
+      };
+      return (forest.worktrees[projectId] ?? [])
+        .filter(isManagedWorktree)
+        .map((worktree) => {
+          const destination = worktreePathFor(inputs, worktree.name);
+          return {
+            worktreeId: worktree.id,
+            destination,
+            inPlace: destination === worktree.path,
+          };
+        });
+    },
     "worktrees:idleAgents": ({ worktreeId }) => {
       const worktree = findWorktree(worktreeId);
       if (!worktree) throw new Error("Unknown worktree");

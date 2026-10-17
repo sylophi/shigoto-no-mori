@@ -1697,6 +1697,12 @@
     "grant": "changeCode",
     "tracksProjectUsage": true
   },
+  "worktrees:relocationPlan": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
+  },
   "worktrees:removal": {
     "kind": "push",
     "scope": "host",

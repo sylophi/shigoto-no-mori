@@ -5,14 +5,15 @@ import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import type { DeviceLayout } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+import { useRelocationPlan } from "@/hooks/worktrees/useRelocationPlan";
 import {
   isManagedWorktree,
   PROJECT_CONFIG_DEFAULTS,
+  type RelocationPlan,
   type ShigomoriConfig,
   type Worktree,
   type WorktreeLayout,
 } from "@shigomori/contracts/schemas";
-import { worktreePathFor } from "@shigomori/contracts/git/worktreeLayout";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { LocationFormView } from "@shigomori/ui/views/worktreeLocation/LocationFormView.tsx";
 
@@ -68,16 +69,8 @@ export function LocationForm({
     setSavedCustomPath(configCustomPath);
   }, [configLayout, configCustomPath, batchRunning]);
 
-  const layoutInputs = {
-    ...device,
-    layout,
-    projectPath,
-    customPath: customPath.trim() || null,
-  };
-
   // Custom layout with no folder picked yet has no resolvable
-  // destination. Without this guard, worktreeBaseFor falls back to
-  // managed-root and we'd compute a misleading toMove diff.
+  // destination, and nothing to plan.
   const customMissing = layout === "custom" && !customPath.trim();
 
   // Non-primary worktrees only. The primary checkout sits at projectPath
@@ -85,24 +78,23 @@ export function LocationForm({
   // move` works only on managed worktrees we created.
   const movable = worktrees.filter(isManagedWorktree);
 
-  const proposedFor = (worktree: Worktree): string =>
-    worktreePathFor(layoutInputs, worktree.name);
-
-  // Git spells a worktree's path with the data dir's links resolved, so
-  // one already in place under a linked data dir reads in either.
-  const inPlace = (worktree: Worktree): boolean => {
-    const proposed = proposedFor(worktree);
-    if (proposed === worktree.path) return true;
-    if (device.dataDirReal === undefined) return false;
-    // A hand-edited pointer may end the folder in a slash.
-    const dataDir = device.dataDir.replace(/\/+$/, "");
-    return (
-      proposed.startsWith(`${dataDir}/`) &&
-      worktree.path === `${device.dataDirReal}${proposed.slice(dataDir.length)}`
-    );
+  const plan = useRelocationPlan(
+    projectId,
+    layout,
+    customPath.trim() || null,
+    device.onProjectDrive,
+    !customMissing,
+  );
+  const movesOf = (entries: RelocationPlan) => {
+    const planned = new Map(entries.map((entry) => [entry.worktreeId, entry]));
+    return movable.flatMap((worktree) => {
+      const entry = planned.get(worktree.id);
+      return entry === undefined || entry.inPlace
+        ? []
+        : [{ worktree, destination: entry.destination }];
+    });
   };
-
-  const toMove = customMissing ? [] : movable.filter((w) => !inPlace(w));
+  const toMove = customMissing ? [] : movesOf(plan.data ?? []);
 
   const layoutChanged =
     layout !== savedLayout || customPath.trim() !== savedCustomPath.trim();
@@ -115,8 +107,14 @@ export function LocationForm({
     return null;
   };
 
+  // Only on a plan read: without one, an apply would save the layout
+  // and move nothing.
   const canSubmit =
-    (layoutChanged || toMove.length > 0) && !batchRunning && !customMissing;
+    (layoutChanged || toMove.length > 0) &&
+    !batchRunning &&
+    !customMissing &&
+    plan.isSuccess &&
+    !plan.isFetching;
 
   const handleApply = async () => {
     const validationError = validateCustomPath();
@@ -125,6 +123,15 @@ export function LocationForm({
       return;
     }
     setCustomPathError(null);
+    // The plan asked again under the batch's flag, so the form holds
+    // still from the click; and moved by the plan alone, so a worktree
+    // made since the list was last pushed moves too.
+    const moves = async () => {
+      const fresh = await plan.refetch();
+      return fresh.isSuccess
+        ? fresh.data.filter((entry) => !entry.inPlace)
+        : null;
+    };
 
     // The config write runs as the batch's prepare step so the form
     // stays disabled across it and a write failure aborts the moves.
@@ -154,17 +161,13 @@ export function LocationForm({
       }
     };
 
-    const queue = toMove.map((w) => ({
-      worktree: w,
-      destination: proposedFor(w),
-    }));
     await runBatch(
-      queue,
-      (q) => q.worktree.id,
-      async ({ worktree, destination }) => {
+      moves,
+      (entry) => entry.worktreeId,
+      async ({ worktreeId, destination }) => {
         await relocate.mutateAsync({
           projectId,
-          worktreeId: worktree.id,
+          worktreeId,
           destinationPath: destination,
         });
       },
@@ -189,10 +192,7 @@ export function LocationForm({
       customPath={customPath}
       customPathError={customPathError}
       onOpenPicker={() => setPickerOpen(true)}
-      toMove={toMove.map((worktree) => ({
-        worktree,
-        destination: proposedFor(worktree),
-      }))}
+      toMove={toMove}
       status={status}
       saveError={write.error?.message ?? null}
       canSubmit={canSubmit}

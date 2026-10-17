@@ -1325,5 +1325,9 @@
         "body": "y"
       }
     ]
+  },
+  "WorktreeLayoutSchema": {
+    "accepts": ["managed-root", "in-project", "custom"],
+    "rejects": ["elsewhere", ""]
   }
 }

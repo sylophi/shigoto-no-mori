@@ -308,7 +308,15 @@ export const makeMoving = ({
         });
       }
       const to = cleanPath(target);
-      if (to === worktree.path) {
+      // The same folder however it is spelled (a linked data dir, a
+      // linked custom base) is already where it is asked to go.
+      if (
+        to === worktree.path ||
+        (yield* fs.realPath(to).pipe(
+          Effect.map((real) => real === worktree.path),
+          Effect.orElseSucceed(() => false),
+        ))
+      ) {
         return {
           worktree: yield* carryMoved(project, worktree.path, to),
           previousId: worktree.id,

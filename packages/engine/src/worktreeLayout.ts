@@ -28,6 +28,8 @@ const WT = "wt";
 export type DataDirPlace = {
   readonly dataDir: string;
   readonly dataDirName: string;
+  // The data dir with its links resolved, where the caller read it.
+  readonly realDataDir?: string | undefined;
 };
 
 // The managed root's place on the project's own external drive. Always
@@ -50,7 +52,12 @@ export function projectDriveBase(
   place: DataDirPlace,
 ): string | undefined {
   const volume = externalVolumeRoot(projectPath);
-  if (volume !== undefined && place.dataDir.startsWith(`${volume}/`)) {
+  if (
+    volume !== undefined &&
+    [place.dataDir, place.realDataDir].some((dir) =>
+      dir?.startsWith(`${volume}/`),
+    )
+  ) {
     return undefined;
   }
   return driveBaseOf(projectPath, place);
@@ -96,7 +103,7 @@ export function managedBases(
   const custom = settings.customWorktreePath?.trim() ?? "";
   return [
     ...ownBases(projectPath, place),
-    ...(custom === "" ? [] : [trimTrailingSlashes(custom)]),
+    ...(custom === "" ? [] : [cleanPath(custom)]),
   ];
 }
 
@@ -127,8 +134,10 @@ export function worktreeBase(
     case "in-project":
       return join(projectPath, ".shigomori", WT);
     case "custom": {
+      // Cleaned, so a custom path of `/` stays the root rather than an
+      // empty, relative base, and one through `..` is the folder it names.
       const custom = settings.customWorktreePath?.trim() ?? "";
-      return custom === "" ? managedRoot : trimTrailingSlashes(custom);
+      return custom === "" ? managedRoot : cleanPath(custom);
     }
     case "managed-root": {
       const drive = projectDriveBase(projectPath, place);
