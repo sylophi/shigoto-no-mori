@@ -610,7 +610,7 @@ it("blocked: 4102 revoked blocks with no redial, 4103 superseded blocks with its
 
 it("liveness: a device pings the device hub, and a hub that stops answering (or never answered) is declared dead and redialed with a fresh ticket", async () => {
   const stub = await startStubHub(trackTest);
-  const ping = { intervalMs: 30, timeoutMs: 120 };
+  const ping = { intervalMs: 30, timeoutMs: 120, probeTimeoutMs: 60 };
   const a = await bootDevice(stub, "A", { ping }, trackTest);
   await waitFor(() => stub.pingsFrom("A") >= 2, "A to ping");
   assert.equal(
