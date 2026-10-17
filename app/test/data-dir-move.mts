@@ -682,6 +682,85 @@ it.each([
   },
 );
 
+// Sol's round 3: a capture made while the scripts are killed, before the
+// journal, is the one the move carries and an undo brings back.
+it("a capture made while a move kills the scripts comes back with its undo", async () => {
+  const repo = join(elsewhere, "repo");
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  const parent = join(elsewhere, "captures-late");
+  mkdirSync(parent);
+  const newId = worktreeIdFromPath(
+    join(realpathSync(parent), "moved", "wt", "repo", "fox"),
+  );
+  const head = git(repo, "rev-parse", "HEAD").trim();
+  const failed = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-captures-late", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      killAllScripts: Effect.sync(() => {
+        git(repo, "update-ref", ref(identity.id), head);
+      }),
+      beforeMove: Effect.fail("stop before the folder moves"),
+    }).pipe(Effect.flip),
+  );
+  assert.equal(failed, "stop before the folder moves");
+  const tip = (id: string) =>
+    git(repo, "for-each-ref", "--format=%(objectname)", ref(id)).trim();
+  assert.deepEqual(
+    { own: tip(identity.id), moved: tip(newId) },
+    { own: head, moved: "" },
+  );
+  git(repo, "update-ref", "-d", ref(identity.id));
+});
+
+// Sol's round 3: a move never writes its journal over one still owed.
+it("a move settles an earlier move's journal first, and waits while it can't", async () => {
+  const journal = join(engineDataDir, JOURNAL);
+  const place = (name: string) => ({
+    dataDir: engineDataDir,
+    pointerFile: join(elsewhere, `config-${name}`, "data-dir"),
+    legacyPointerFile: null,
+    defaultDataDir: join(elsewhere, "home", ".sm"),
+    dataDirName: "moved",
+  });
+  const tryMove = (name: string) => {
+    const parent = join(elsewhere, name);
+    mkdirSync(parent);
+    return runHost(
+      moveDataDir(parent, {
+        place: place(name),
+        killAllScripts: Effect.void,
+        beforeMove: Effect.fail("stop before the folder moves"),
+      }).pipe(Effect.flip),
+    );
+  };
+  writeFileSync(journal, "not a journal");
+  assert.match(String(await tryMove("unsettled")), /isn't finished or undone/);
+  assert.equal(readFileSync(journal, "utf8"), "not a journal");
+  // One a start can settle: a move to elsewhere that never landed.
+  writeFileSync(
+    journal,
+    JSON.stringify({
+      from: engineDataDir,
+      to: join(elsewhere, "never-landed"),
+      partial: null,
+      pid: 4_194_304,
+      startedAt: 0,
+      moved: [],
+    }),
+  );
+  assert.equal(await tryMove("settled"), "stop before the folder moves");
+  assert.equal(existsSync(journal), false);
+});
+
 it.each([
   ["", "alias"],
   ["///", "alias-slashes"],

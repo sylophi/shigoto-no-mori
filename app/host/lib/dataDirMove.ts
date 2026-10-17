@@ -186,6 +186,21 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         "out first.",
     });
   }
+  // An earlier move's journal is the only record of what it still owes:
+  // settled first, as a start settles it, and a move waits while it
+  // can't be, rather than write its own over it.
+  yield* resumeDataDirMove(oldDir);
+  if (
+    yield* fs
+      .exists(join(oldDir, JOURNAL))
+      .pipe(Effect.orElseSucceed(() => true))
+  ) {
+    return yield* new DataDirMoveError({
+      reason:
+        "An earlier move of the data folder isn't finished or undone yet. " +
+        "It's tried again at every start; see the log for what stops it.",
+    });
+  }
   // Running scripts are reaped below (same semantics as nuke), but
   // in-flight destructive lifecycle work (worktree/project deletes,
   // delegated engine runs) is mid-write inside the data dir and can't be
@@ -271,21 +286,25 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       onNone: () => ({}),
       onSome: (startedAt) => ({ startedAt }),
     }),
-    moved: yield* Effect.forEach(
-      repairTargets.flatMap(({ project, moved }) =>
-        moved.map((m) => ({ project, m })),
-      ),
-      ({ project, m }) =>
-        git.refTip(project.path, dirtyRef(m.oldId)).pipe(
-          Effect.map((capture) => ({
-            projectId: project.id,
-            oldPath: m.oldPath,
-            newPath: m.newPath,
-            capture: Option.getOrNull(capture),
-          })),
-        ),
-    ),
+    moved: [],
   };
+  // Each moved worktree with its dirty capture as it is now, read with
+  // the scripts gone and just before the journal: the forward re-key
+  // carries that capture or fails, and an undo carries back that one.
+  const snapshot = Effect.forEach(
+    repairTargets.flatMap(({ project, moved }) =>
+      moved.map((m) => ({ project, m })),
+    ),
+    ({ project, m }) =>
+      git.refTip(project.path, dirtyRef(m.oldId)).pipe(
+        Effect.map((capture) => ({
+          projectId: project.id,
+          oldPath: m.oldPath,
+          newPath: m.newPath,
+          capture: Option.getOrNull(capture),
+        })),
+      ),
+  );
   // Gone already is gone.
   const removeIfThere = (file: string) =>
     fs.remove(file, { force: true }).pipe(Effect.mapError(callFailureOf));
@@ -317,6 +336,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // The journal before the re-key: from here, a start that finds it
     // with the pointer unmoved undoes the re-key, and one that finds it
     // at the new place finishes the move.
+    journal.moved = yield* snapshot;
     yield* writeJournal;
     journaled = true;
 
@@ -608,12 +628,13 @@ const rekeyWorktrees = (moved: Journal["moved"], reverse: boolean) =>
             m.projectId,
             worktreeIdFromPath(m.newPath),
             m.oldPath,
-            { only: m.capture ?? null },
+            { expect: m.capture ?? null, back: true },
           )
         : Ops.rekeyWorktree(
             m.projectId,
             worktreeIdFromPath(m.oldPath),
             m.newPath,
+            { expect: m.capture ?? null },
           ),
     { discard: true },
   );

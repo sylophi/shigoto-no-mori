@@ -878,7 +878,7 @@ export const rekeyWorktree = Effect.fnUntraced(function* (
   projectId: string,
   fromId: string,
   toPath: string,
-  options: { readonly only?: string | null } = {},
+  options: { readonly expect?: string | null; readonly back?: boolean } = {},
 ) {
   return yield* asChange(
     Effect.gen(function* () {

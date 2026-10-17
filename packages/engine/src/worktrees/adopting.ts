@@ -22,7 +22,7 @@ export const makeAdopting = ({
 }) =>
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
-    const { projectSettings, row } = listing;
+    const { projectSettings, identities, row } = listing;
     const { provision, createLifecycle, addWorktree } = creating;
     const { requireClean, removeCheckout } = removing;
 
@@ -56,8 +56,10 @@ export const makeAdopting = ({
       const name = worktree.detached
         ? worktree.branch
         : sanitizeBranchForPath(worktree.branch);
-      // The replacement first, then the checkout it replaces, which the
-      // replacement goes again for if it can't: a crash between leaves
+      // The replacement first, then the checkout it replaces. A removal
+      // that fails takes the replacement back while git still lists the
+      // original; one git let go of before its folder refused to go
+      // leaves the replacement, which holds its commits. A crash between leaves
       // both on the branch, never neither, and the add claims its place
       // as git makes it. A detached one's tip is the new checkout's HEAD
       // from the add on.
@@ -73,9 +75,16 @@ export const makeAdopting = ({
           });
           yield* removeCheckout(project.path, worktree.path, true).pipe(
             Effect.onError(() =>
-              Effect.ignore(
-                removeCheckout(project.path, added.made.path, true),
-              ),
+              Effect.gen(function* () {
+                const listed = yield* identities(project).pipe(
+                  Effect.orElseSucceed(() => []),
+                );
+                if (listed.some(({ id }) => id === worktree.id)) {
+                  yield* Effect.ignore(
+                    removeCheckout(project.path, added.made.path, true),
+                  );
+                }
+              }),
             ),
           );
           yield* registry.setMark("shelved", worktree.id, false);

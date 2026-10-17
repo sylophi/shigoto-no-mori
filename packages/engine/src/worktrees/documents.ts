@@ -570,19 +570,25 @@ export const cleanupFailureWords = (failure: {
 // A worktree's rows went to its new id but its dirty capture's ref
 // didn't follow: the capture is kept under the old id. A re-key asked
 // again carries one that failed; one `occupied`, by another capture
-// under the new id, stays until that one is restored or dropped.
+// under the new id, stays until that one is restored or dropped; one
+// `changed` since the caller looked stays for the caller to look again.
 export class CaptureNotCarried extends Schema.TaggedError<CaptureNotCarried>()(
   "CaptureNotCarried",
   {
     from: Schema.String,
     to: Schema.String,
-    reason: Schema.Literals(["occupied", "failed"]),
+    reason: Schema.Literals(["occupied", "changed", "failed"]),
   },
 ) {
   override get message(): string {
-    return this.reason === "occupied"
-      ? "A worktree's uncommitted changes didn't follow it to its new place, where other uncommitted changes are kept from before; both are kept"
-      : "A worktree's uncommitted changes didn't follow it to its new place; they are kept, and the next try carries them";
+    switch (this.reason) {
+      case "occupied":
+        return "A worktree's uncommitted changes didn't follow it to its new place, where other uncommitted changes are kept from before; both are kept";
+      case "changed":
+        return "A worktree's uncommitted changes were captured again while it moved; they are kept where they were";
+      case "failed":
+        return "A worktree's uncommitted changes didn't follow it to its new place; they are kept, and the next try carries them";
+    }
   }
 }
 

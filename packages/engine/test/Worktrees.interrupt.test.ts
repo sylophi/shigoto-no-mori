@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -888,4 +889,43 @@ it("an adopt whose removal fails takes its replacement back, and adopts when ask
     managed: true,
     kept: false,
   });
+});
+
+// git can let go of the external checkout and then fail to delete its
+// folder: the replacement stays, holding a detached checkout's commits.
+it("an adopt whose removal fails after git let go keeps the replacement, the detached commit held", async () => {
+  const outside = join(box.home, "outside", "otter");
+  const stuck = join(outside, "stuck");
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      box.git(repo, "worktree", "add", "-q", "--detach", outside);
+      mkdirSync(stuck);
+      writeFileSync(join(stuck, "file"), "x\n");
+      box.git(outside, "add", "stuck/file");
+      box.git(outside, "commit", "-q", "-m", "only here");
+      const tip = box.git(outside, "rev-parse", "HEAD").trim();
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external?.detached);
+      chmodSync(stuck, 0o555);
+      const failed = yield* worktrees
+        .adopt(
+          { project, worktree: external },
+          { force: false },
+          { report: () => Effect.void, color: false },
+        )
+        .pipe(Effect.result);
+      chmodSync(stuck, 0o755);
+      const heads = (yield* worktrees.identities(project)).map((listed) =>
+        box.git(listed.path, "rev-parse", "HEAD").trim(),
+      );
+      return { failed: Result.isFailure(failed), held: heads.includes(tip) };
+    }),
+  );
+  assert.deepEqual(result, { failed: true, held: true });
 });

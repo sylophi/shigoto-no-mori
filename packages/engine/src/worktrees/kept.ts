@@ -34,25 +34,22 @@ export const makeKept = Effect.gen(function* () {
       .pipe(Effect.orDie);
 
   // A capture belongs to the worktree, not its old path. It followed (or
-  // there was none of it to carry), stayed because another is kept under
-  // `to` (never written over: a re-key back would otherwise put a stale
-  // one over the worktree's own), or failed to follow. With `only`, the
-  // one capture that is the worktree's, by its commit (null: none), and
-  // whatever else is under `from` stays.
+  // there was none to carry), stayed because another is kept under `to`
+  // (never written over: a re-key back would otherwise put a stale one
+  // over the worktree's own), stayed because it isn't the one `expect`
+  // names by its commit (null: none), or failed to follow.
   const rekeyCapture = (
     project: RegisteredProject,
     from: string,
     to: string,
-    only?: string | null,
+    expect?: string | null,
   ) =>
     Effect.gen(function* () {
       const capture = yield* git.refTip(project.path, dirtyRef(from));
-      if (
-        Option.isNone(capture) ||
-        (only !== undefined && capture.value !== only)
-      ) {
-        return "followed" as const;
+      if (expect !== undefined && Option.getOrNull(capture) !== expect) {
+        return "changed" as const;
       }
+      if (Option.isNone(capture)) return "followed" as const;
       const there = yield* git.refTip(project.path, dirtyRef(to));
       if (Option.isSome(there) && there.value !== capture.value) {
         return "occupied" as const;
@@ -96,19 +93,24 @@ export const makeKept = Effect.gen(function* () {
     forgetRows,
     // Fails when the capture didn't follow, its rows carried, for the
     // caller to try again or say so: asked again it carries the capture.
+    // A re-key `back` (an undo) leaves a capture that changed or one kept
+    // under `to` where it is, and succeeds.
     rekey: (
       project: RegisteredProject,
       from: string,
       to: string,
-      options: { readonly only?: string | null } = {},
+      options: {
+        readonly expect?: string | null;
+        readonly back?: boolean;
+      } = {},
     ) =>
       Effect.andThen(
         rekeyRows(project, from, to),
         Effect.flatMap(
-          rekeyCapture(project, from, to, options.only),
+          rekeyCapture(project, from, to, options.expect),
           (carried) =>
             carried === "followed" ||
-            (carried === "occupied" && options.only !== undefined)
+            (options.back === true && carried !== "failed")
               ? Effect.void
               : Effect.fail(
                   new CaptureNotCarried({ from, to, reason: carried }),

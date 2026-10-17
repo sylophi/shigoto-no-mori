@@ -328,7 +328,10 @@ it("never writes a capture over one kept under the id it re-keys to, either way"
       const forward = yield* Effect.flip(
         worktrees.rekey(project, from, toPath),
       );
-      yield* worktrees.rekey(project, to, fromPath, { only: own });
+      yield* worktrees.rekey(project, to, fromPath, {
+        expect: own,
+        back: true,
+      });
       const tip = (id: string) =>
         box.git(repo, "rev-parse", `refs/shigomori/dirty/${id}`).trim();
       return {
@@ -358,7 +361,10 @@ it("carries back only the capture the re-key found, none when it found none", as
       const stale = box.git(repo, "rev-parse", "HEAD").trim();
       box.git(repo, "update-ref", `refs/shigomori/dirty/${to}`, stale);
       yield* worktrees.rekey(project, from, toPath);
-      yield* worktrees.rekey(project, to, fromPath, { only: null });
+      yield* worktrees.rekey(project, to, fromPath, {
+        expect: null,
+        back: true,
+      });
       const has = (id: string) =>
         box
           .git(
@@ -373,4 +379,32 @@ it("carries back only the capture the re-key found, none when it found none", as
   )) as { from: string; to: string };
   const stale = box.git(repo, "rev-parse", "HEAD").trim();
   assert.deepEqual(result, { from: "", to: stale });
+});
+
+// A capture other than the one the caller saw stays where it is, and the
+// re-key says so.
+it("fails a re-key whose capture changed since its caller looked, the capture left in place", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const fromPath = join(box.home, "here", "fox");
+      const toPath = join(box.home, "elsewhere", "fox");
+      const from = worktreeIdFromPath(fromPath);
+      const head = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(repo, "update-ref", `refs/shigomori/dirty/${from}`, head);
+      const refused = yield* Effect.flip(
+        worktrees.rekey(project, from, toPath, { expect: null }),
+      );
+      return {
+        reason: refused.reason,
+        kept:
+          box.git(repo, "rev-parse", `refs/shigomori/dirty/${from}`).trim() ===
+          head,
+      };
+    }),
+  )) as { reason: string; kept: boolean };
+  assert.deepEqual(result, { reason: "changed", kept: true });
 });
