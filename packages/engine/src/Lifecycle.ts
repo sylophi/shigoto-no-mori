@@ -137,12 +137,19 @@ const make = Effect.gen(function* () {
   // no $SHELL at all. /bin/sh only when neither names one.
   const accountShell = spawner
     .string(
-      ChildProcess.make("/bin/sh", [
-        "-c",
-        `dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null || getent passwd "$(id -u)" | cut -d: -f7`,
-      ]),
+      ChildProcess.make(
+        "/bin/sh",
+        [
+          "-c",
+          `dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null || getent passwd "$(id -u)" | cut -d: -f7`,
+        ],
+        { forceKillAfter: "3 seconds" },
+      ),
     )
     .pipe(
+      // Cached for the service's life, so a lookup that never answers
+      // must not hold every launch after it.
+      Effect.timeout("5 seconds"),
       Effect.map((out) => out.replace(/^UserShell:/, "").trim()),
       Effect.orElseSucceed(() => ""),
     );

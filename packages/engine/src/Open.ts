@@ -214,7 +214,10 @@ const make = Effect.gen(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const handle = yield* spawner.spawn(
-          ChildProcess.make(program, [...args], { stdin: "ignore" }),
+          ChildProcess.make(program, [...args], {
+            stdin: "ignore",
+            forceKillAfter: "3 seconds",
+          }),
         );
         const [stdout, stderr, code] = yield* Effect.all(
           [
@@ -487,6 +490,7 @@ const make = Effect.gen(function* () {
           // or moved.
           ChildProcess.make("open", ["-b", flavorNames(flavor).bundleId], {
             stdin: "ignore",
+            forceKillAfter: "3 seconds",
             env: { [CD_FILE_ENV]: undefined },
             extendEnv: true,
           }),

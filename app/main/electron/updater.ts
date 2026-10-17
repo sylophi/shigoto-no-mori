@@ -62,6 +62,8 @@ const FIRST_CHECK_DELAY_MS = 60 * 1000;
 // Failed checks back off linearly (2, 3, ... ticks between attempts,
 // capped at an hour): a repeatable failure re-runs the whole download
 // pipeline, which shouldn't burn bandwidth every 10 minutes forever.
+// Counted in ticks, not by the wall clock, which a step back would
+// hold for as long as it went back.
 const MAX_BACKOFF_TICKS = 6;
 // Hard cap on one staging run (the download has its own deadline, its
 // codesign and ditto children don't). A wedged child would otherwise
@@ -74,7 +76,8 @@ let started = false;
 let installing = false;
 let checkInFlight = false;
 let failedChecks = 0;
-let nextAutoCheckAt = 0;
+// Ticks until the next automatic check.
+let ticksToCheck = 1;
 // Armed by updateNow (whether the install is unattended), null when
 // not: the next check to finish installs what it staged.
 let installWhenStaged: boolean | null = null;
@@ -281,10 +284,7 @@ const check: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
     }
     setState(next);
     failedChecks = failed ? failedChecks + 1 : 0;
-    nextAutoCheckAt = failed
-      ? Date.now() +
-        Math.min(failedChecks + 1, MAX_BACKOFF_TICKS) * CHECK_INTERVAL_MS
-      : 0;
+    ticksToCheck = failed ? Math.min(failedChecks + 1, MAX_BACKOFF_TICKS) : 1;
     // updateNow's arm (see there). One that landed mid-check gets one
     // check of its own before a miss drops it.
     const unattended = installWhenStaged;
@@ -479,9 +479,10 @@ export const layer = Layer.effectDiscard(
         return yield* Effect.forever(
           Effect.sleep(CHECK_INTERVAL_MS).pipe(
             Effect.andThen(
-              Effect.suspend(() =>
-                Date.now() >= nextAutoCheckAt ? runCheck : Effect.void,
-              ),
+              Effect.suspend(() => {
+                ticksToCheck -= 1;
+                return ticksToCheck <= 0 ? runCheck : Effect.void;
+              }),
             ),
           ),
         );

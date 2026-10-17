@@ -2,7 +2,6 @@
 // request a branch has. One runner under every lookup, so the install
 // check, the deadline and the reasons a lookup couldn't be made are the
 // same for each.
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -15,6 +14,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { elapsedMillis } from "./elapsed.ts";
 import { envVar } from "./environment.ts";
 import { ghHostFor, ghKnownHosts } from "./ghHost.ts";
 import * as Git from "./Git.ts";
@@ -509,6 +509,7 @@ const make = Effect.gen(function* () {
             ChildProcess.make("gh", [...args], {
               cwd,
               stdin: "ignore",
+              forceKillAfter: "3 seconds",
               ...(host === null
                 ? {}
                 : { env: { GH_HOST: host }, extendEnv: true }),
@@ -923,9 +924,19 @@ const make = Effect.gen(function* () {
         `merge_method=${method}`,
       ]),
     );
-    const deadline = (yield* Clock.currentTimeMillis) + ASYNC_MERGE_TIMEOUT_MS;
+    // An elapsed budget (a sleep or a clock step spends none of it), and
+    // a poll that fails is asked again within it: the merge it watches
+    // may land all the same. Past it, the PR itself says how it ended.
+    const deadline = (yield* elapsedMillis) + ASYNC_MERGE_TIMEOUT_MS;
     while (ticket.status === "pending") {
-      if ((yield* Clock.currentTimeMillis) > deadline) {
+      if ((yield* elapsedMillis) > deadline) {
+        const settled = yield* mergeProgress(repo, number).pipe(Effect.option);
+        if (Option.isSome(settled) && settled.value.state === "MERGED") {
+          return "merged" as const;
+        }
+        if (Option.isSome(settled) && settled.value.isInMergeQueue) {
+          return "enqueued" as const;
+        }
         return yield* new StackMergeFailed({
           number,
           reason: "timeout",
@@ -933,12 +944,11 @@ const make = Effect.gen(function* () {
         });
       }
       yield* Effect.sleep(ASYNC_MERGE_POLL);
-      ticket = yield* read(
-        yield* run(repo, [
-          "api",
-          `repos/{owner}/{repo}/pulls/${number}/merge-async/${ticket.uuid}`,
-        ]),
-      );
+      const polled = yield* run(repo, [
+        "api",
+        `repos/{owner}/{repo}/pulls/${number}/merge-async/${ticket.uuid}`,
+      ]).pipe(Effect.flatMap(read), Effect.option);
+      if (Option.isSome(polled)) ticket = polled.value;
     }
     if (ticket.status === "merged") return "merged" as const;
     if (ticket.status === "enqueued") return "enqueued" as const;

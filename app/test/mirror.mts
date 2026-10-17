@@ -1610,6 +1610,53 @@ it("the no-account sweep asks about each session once, so a misread credential e
   }
 });
 
+// The real daemon SIGSTOPped, as a sleep or a debugger leaves it: its
+// exit supervisor sees nothing and it reads "running". A wake's check
+// finds it silent, kills it and starts one again, and once continued
+// the old one is gone: one owner.
+it("a stopped daemon is found by a wake's check, replaced once, and the stopped one does not come back", async () => {
+  const daemonPids = async () => {
+    const { stdout } = await promisify(execFile)("ps", [
+      "-Ao",
+      "pid=,command=",
+    ]);
+    return stdout
+      .split("\n")
+      .filter(
+        (line) => line.includes(fileSyncBinary) && line.includes(" daemon "),
+      )
+      .map((line) => Number.parseInt(line.trim(), 10));
+  };
+  const [stopped] = await daemonPids();
+  assert.ok(stopped !== undefined, "no daemon process");
+  process.kill(stopped, "SIGSTOP");
+  try {
+    assert.equal(daemon.status(), "running");
+    await runtime.runPromise(MirrorDaemon.onDaemon((d) => d.checkResponsive));
+    await waitFor(
+      async () => {
+        const pids = await daemonPids();
+        return (
+          daemon.status() === "running" &&
+          pids.length === 1 &&
+          pids[0] !== stopped
+        );
+      },
+      "a new daemon, ready",
+      30_000,
+    );
+  } finally {
+    try {
+      process.kill(stopped, "SIGCONT");
+    } catch {
+      // Killed already, as it should be.
+    }
+  }
+  await delay(500);
+  assert.equal(processAlive(stopped), false, "the stopped daemon came back");
+  assert.equal((await daemonPids()).length, 1);
+});
+
 it("daemon stop is clean and the gateway holds no streams", async () => {
   // (7) Closing the daemon's layer ends it cleanly.
   const status = runtime.runSync(MirrorDaemon.onDaemon((d) => d.status));
