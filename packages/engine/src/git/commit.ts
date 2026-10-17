@@ -22,7 +22,7 @@ export const makeCommit = ({
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const { run, runChunked, onIndex } = running;
+    const { run, runChunked, onIndex, gitPath } = running;
     const { stageHunks } = hunks;
 
     const commitWith = (worktree: string, message: CommitRequest) =>
@@ -90,12 +90,7 @@ export const makeCommit = ({
       return yield* onIndex(
         worktree,
         Effect.gen(function* () {
-          const indexFile = (yield* run(worktree, [
-            "rev-parse",
-            "--path-format=absolute",
-            "--git-path",
-            "index",
-          ])).trim();
+          const indexFile = yield* gitPath(worktree, "index");
           // A repository nothing was ever added to has no index yet.
           const saved = yield* fs.readFile(indexFile).pipe(Effect.option);
           const headOf = run(worktree, [

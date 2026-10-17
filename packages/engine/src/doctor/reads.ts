@@ -4,7 +4,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Stream from "effect/Stream";
 import * as Darwin from "../Darwin.ts";
 import { parsePortPoolDirs } from "../doctorParse.ts";
 import { findExecutable } from "../executables.ts";
@@ -30,20 +29,9 @@ export const makeReads = Effect.gen(function* () {
   // lstat(2) of names in a folder, by name: a symlink's own, as Go's
   // directory entries tell them. What it can't answer is absent.
   const lstatIn = (dir: string, entries: ReadonlyArray<string>) =>
-    entries.length === 0
-      ? Effect.succeed(new Map<string, Darwin.LstatEntry>())
-      : darwin.lstat({ root: dir, paths: entries }).pipe(
-          Stream.runCollect,
-          Effect.map(
-            (found) =>
-              new Map(
-                found.flatMap((entry) =>
-                  Darwin.isFailed(entry) ? [] : [[entry.path, entry] as const],
-                ),
-              ),
-          ),
-          Effect.orElseSucceed(() => new Map<string, Darwin.LstatEntry>()),
-        );
+    Darwin.lstatByPath(darwin, dir, entries).pipe(
+      Effect.orElseSucceed(() => new Map<string, Darwin.LstatEntry>()),
+    );
 
   const statOf = (target: string) => fs.stat(target).pipe(Effect.option);
 

@@ -52,7 +52,8 @@ export type CarryOverReport = {
   }>;
 };
 
-// A checkout carry-over may look in.
+// A checkout a new worktree's files may come from: carry-over's, and
+// the clone checkout's.
 export type Source = {
   readonly name: string;
   readonly path: string;
@@ -80,7 +81,9 @@ export class CarryOver extends Context.Service<
       readonly settings: Readonly<Record<string, unknown>> | null;
       readonly checkouts: ReadonlyArray<Source>;
       readonly destination: string;
-      readonly base: string;
+      // The local branch the new worktree's base lands on, "" for none,
+      // read only when carry-over has a source to rank.
+      readonly baseBranch: Effect.Effect<string>;
     }) => Effect.Effect<Option.Option<CarryOverReport>>;
   }
 >()("sm/engine/CarryOver") {}
@@ -331,20 +334,18 @@ const make = Effect.gen(function* () {
     readonly settings: Readonly<Record<string, unknown>> | null;
     readonly checkouts: ReadonlyArray<Source>;
     readonly destination: string;
-    readonly base: string;
+    readonly baseBranch: Effect.Effect<string>;
   }) {
     const manual = manualEntries(input.settings);
     let sources: ReadonlyArray<Source> = [];
     let include: ReadonlyArray<CarryOverEntry> = [];
     let includeFailures: CarryOverFailure[] = [];
     if (manual.length > 0 || includeEnabled(input.settings)) {
-      // The checkout a branch from `base` lands on: `origin/feat` is local
-      // `feat` where that exists.
-      const baseBranch =
-        input.base === ""
-          ? ""
-          : (yield* git.resolveCheckoutRef(input.repo, input.base)).target;
-      sources = orderSources(input.checkouts, input.destination, baseBranch);
+      sources = orderSources(
+        input.checkouts,
+        input.destination,
+        yield* input.baseBranch,
+      );
       if (includeEnabled(input.settings)) {
         const resolved = yield* resolveIncludes(sources);
         include = resolved.entries;
