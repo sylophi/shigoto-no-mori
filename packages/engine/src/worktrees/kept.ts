@@ -45,12 +45,12 @@ export const makeKept = Effect.gen(function* () {
     expect?: string | null,
   ) =>
     Effect.gen(function* () {
-      const capture = yield* git.refTip(project.path, dirtyRef(from));
+      const capture = yield* git.readRef(project.path, dirtyRef(from));
       if (expect !== undefined && Option.getOrNull(capture) !== expect) {
         return "changed" as const;
       }
       if (Option.isNone(capture)) return "followed" as const;
-      const there = yield* git.refTip(project.path, dirtyRef(to));
+      const there = yield* git.readRef(project.path, dirtyRef(to));
       if (Option.isSome(there) && there.value !== capture.value) {
         return "occupied" as const;
       }
@@ -87,7 +87,24 @@ export const makeKept = Effect.gen(function* () {
       )
       .pipe(Effect.orDie);
 
+  // Whether anything is kept under `worktreeId`: its marks, sessions,
+  // shelf or data rows, or a dirty capture, read strictly.
+  const keptUnder = Effect.fn("Worktrees.keptUnder")(function* (
+    project: RegisteredProject,
+    worktreeId: string,
+  ) {
+    const rows = Object.values(yield* registry.keptIds).some((ids) =>
+      ids.has(worktreeId),
+    );
+    const described = (yield* data.kept).some(
+      (row) => row.projectId === project.id && row.worktreeId === worktreeId,
+    );
+    const capture = yield* git.readRef(project.path, dirtyRef(worktreeId));
+    return rows || described || Option.isSome(capture);
+  });
+
   return {
+    keptUnder,
     rekeyRows,
     rekeyCapture,
     forgetRows,

@@ -929,3 +929,48 @@ it("an adopt whose removal fails after git let go keeps the replacement, the det
   );
   assert.deepEqual(result, { failed: true, held: true });
 });
+
+// Sol's round 4: git can remove the checkout and its admin HEAD and then
+// fail on its logs, still listing the original with no HEAD: the
+// replacement stays, holding the detached commit.
+it("an adopt whose removal leaves the original listed without a HEAD keeps the replacement", async () => {
+  const outside = join(box.home, "outside", "otter");
+  let logs = "";
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      box.git(repo, "worktree", "add", "-q", "--detach", outside);
+      box.git(outside, "commit", "-q", "--allow-empty", "-m", "only here");
+      const tip = box.git(outside, "rev-parse", "HEAD").trim();
+      const admin = box
+        .git(outside, "rev-parse", "--path-format=absolute", "--git-dir")
+        .trim();
+      logs = join(admin, "logs");
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external?.detached);
+      chmodSync(logs, 0o555);
+      const failed = yield* worktrees
+        .adopt(
+          { project, worktree: external },
+          { force: false },
+          { report: () => Effect.void, color: false },
+        )
+        .pipe(Effect.result);
+      chmodSync(logs, 0o755);
+      const heads = (yield* worktrees.identities(project)).flatMap((listed) => {
+        try {
+          return [box.git(listed.path, "rev-parse", "HEAD").trim()];
+        } catch {
+          return [];
+        }
+      });
+      return { failed: Result.isFailure(failed), held: heads.includes(tip) };
+    }),
+  );
+  assert.deepEqual(result, { failed: true, held: true });
+});

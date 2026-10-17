@@ -2,6 +2,8 @@
 // and setup run again in a worktree.
 import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Git from "../Git.ts";
 import * as Registry from "../Registry.ts";
 import { type Located, type Reporter, WorktreeRefused } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
@@ -22,7 +24,8 @@ export const makeAdopting = ({
 }) =>
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
-    const { projectSettings, identities, row } = listing;
+    const git = yield* Git.Git;
+    const { projectSettings, row } = listing;
     const { provision, createLifecycle, addWorktree } = creating;
     const { requireClean, removeCheckout } = removing;
 
@@ -57,12 +60,11 @@ export const makeAdopting = ({
         ? worktree.branch
         : sanitizeBranchForPath(worktree.branch);
       // The replacement first, then the checkout it replaces. A removal
-      // that fails takes the replacement back while git still lists the
-      // original; one git let go of before its folder refused to go
-      // leaves the replacement, which holds its commits. A crash between leaves
-      // both on the branch, never neither, and the add claims its place
-      // as git makes it. A detached one's tip is the new checkout's HEAD
-      // from the add on.
+      // that fails takes the replacement back only while the original
+      // still holds the commits; otherwise the replacement stays, holding
+      // them. A crash between leaves both on the branch, never neither,
+      // and the add claims its place as git makes it. A detached one's tip
+      // is the new checkout's HEAD from the add on.
       const { made, found, cloned } = yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const added = yield* addWorktree(project, {
@@ -76,10 +78,18 @@ export const makeAdopting = ({
           yield* removeCheckout(project.path, worktree.path, true).pipe(
             Effect.onError(() =>
               Effect.gen(function* () {
-                const listed = yield* identities(project).pipe(
-                  Effect.orElseSucceed(() => []),
-                );
-                if (listed.some(({ id }) => id === worktree.id)) {
+                // git's listing can outlive the checkout's HEAD, so the
+                // original holds the commits only while its own HEAD
+                // still resolves to the one the replacement has.
+                const [held, tip] = yield* Effect.all([
+                  git.verifyRev(worktree.path, "HEAD").pipe(Effect.option),
+                  git.verifyRev(added.made.path, "HEAD").pipe(Effect.option),
+                ]);
+                if (
+                  Option.isSome(held) &&
+                  Option.isSome(tip) &&
+                  held.value === tip.value
+                ) {
                   yield* Effect.ignore(
                     removeCheckout(project.path, added.made.path, true),
                   );

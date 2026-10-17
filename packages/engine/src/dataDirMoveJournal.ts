@@ -34,6 +34,11 @@ export const Journal = Schema.Struct({
       // null for none: an undo carries back that one alone. A journal
       // from before it was written has none, and carries none back.
       capture: Schema.optional(Schema.NullOr(Schema.String)),
+      // How far the entry got (V3.md, Commit points): absent is
+      // `planned`, as an older journal's entries read.
+      state: Schema.optional(
+        Schema.Literals(["planned", "rekeyed", "returned"]),
+      ),
     }),
   ),
 });

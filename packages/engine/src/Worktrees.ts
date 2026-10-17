@@ -334,6 +334,12 @@ export class Worktrees extends Context.Service<
       project: RegisteredProject,
       moved: ReadonlyMap<string, string>,
     ) => Effect.Effect<void, Git.GitError>;
+    // Whether anything is kept under an id (marks, sessions, the shelf,
+    // its data, a dirty capture), the capture read strictly.
+    readonly keptUnder: (
+      project: RegisteredProject,
+      worktreeId: string,
+    ) => Effect.Effect<boolean, Git.GitError | Git.RefUnreadable>;
     // Where each managed worktree would go under `proposed` layout
     // settings, and whether it is there already, by the folder's identity.
     readonly relocationPlan: (
@@ -440,6 +446,7 @@ const make = Effect.gen(function* () {
     interruptedMoves: interrupted,
     rekey,
     forgetKept: kept.forgetRows,
+    keptUnder: kept.keptUnder,
     relocateProject,
     deletesBranch: removing.deletesBranch,
     relocationPlan,

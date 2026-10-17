@@ -1,11 +1,17 @@
 // Git's refs and objects: resolving a name, reading an object.
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import { BranchMovedError, UnknownRevisionError } from "./documents.ts";
+import {
+  BranchMovedError,
+  RefUnreadable,
+  UnknownRevisionError,
+} from "./documents.ts";
 import type { RunningArea } from "./running.ts";
 
 export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
-  Effect.sync(() => {
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
     const { run, succeeds } = running;
     // Every caller-supplied revision goes after --end-of-options, so none
     // can be read as a flag.
@@ -27,6 +33,33 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
       ref: string,
     ) {
       return yield* Effect.option(verifyRev(cwd, ref));
+    });
+
+    // A ref's commit, none when it isn't there, and a failure when git
+    // can't tell: git answers a ref it can't open as missing, so its loose
+    // file still there, or a packed-refs it can't read, says it is not.
+    const readRef = Effect.fn("Git.readRef")(function* (
+      cwd: string,
+      ref: string,
+    ) {
+      const found = yield* refTip(cwd, ref);
+      if (Option.isSome(found)) return found;
+      const [loose = "", packed = ""] = (yield* run(cwd, [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-path",
+        ref,
+        "--git-path",
+        "packed-refs",
+      ])).split("\n");
+      const unreadable =
+        (yield* fs.exists(loose).pipe(Effect.orElseSucceed(() => true))) ||
+        ((yield* fs.exists(packed).pipe(Effect.orElseSucceed(() => true))) &&
+          !(yield* fs
+            .access(packed, { readable: true })
+            .pipe(Effect.isSuccess)));
+      if (unreadable) return yield* new RefUnreadable({ ref });
+      return Option.none<string>();
     });
 
     const hasObject = Effect.fn("Git.hasObject")(function* (
@@ -139,6 +172,7 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
     return {
       verifyRev,
       refTip,
+      readRef,
       hasObject,
       isAncestor,
       resolveCommit,

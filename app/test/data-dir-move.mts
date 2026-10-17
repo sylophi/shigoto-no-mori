@@ -355,6 +355,70 @@ it("a copied move whose old tree couldn't be removed keeps its journal, and the 
   assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
 });
 
+// Sol's round 4: an old tree whose journal can't be read can't be told
+// for this move's, so the finish keeps its own until it can.
+it("a finish that can't read the old tree's journal keeps its own, and finishes once it can", async () => {
+  const old = join(elsewhere, "old-data-unread");
+  mkdirSync(old);
+  const journal = JSON.stringify({
+    from: old,
+    to: engineDataDir,
+    partial: `${engineDataDir}.partial-unread`,
+    pid: 4_194_304,
+    startedAt: 0,
+    moved: [],
+  });
+  writeFileSync(join(old, JOURNAL), journal);
+  writeFileSync(join(engineDataDir, JOURNAL), journal);
+  chmodSync(join(old, JOURNAL), 0o000);
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(existsSync(join(engineDataDir, JOURNAL)), true);
+  chmodSync(join(old, JOURNAL), 0o644);
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(existsSync(old), false);
+  assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
+});
+
+// Sol's round 4: an undo reverses by each entry's mark. A `planned` entry
+// whose re-key ran before a crash took its mark is reversed; a
+// `returned` one never again, whatever is under its new id since.
+it("an undo reverses a planned entry its re-key reached, and never a returned one", async () => {
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  const newPath = join(elsewhere, "marks", "wt", "repo", "fox");
+  const newId = worktreeIdFromPath(newPath);
+  const journalAt = (state: string) =>
+    writeFileSync(
+      join(engineDataDir, JOURNAL),
+      JSON.stringify({
+        from: engineDataDir,
+        to: join(elsewhere, "marks-never-landed"),
+        partial: null,
+        pid: 4_194_304,
+        startedAt: 0,
+        moved: [{ projectId, oldPath: fox, newPath, capture: null, state }],
+      }),
+    );
+  await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
+  assert.equal(await titleOf(identity.id), undefined, "the re-key ran");
+  journalAt("planned");
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(await titleOf(identity.id), "Fox", "a planned re-key reversed");
+  assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
+
+  await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
+  journalAt("returned");
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(await titleOf(identity.id), undefined, "a returned entry left");
+  assert.equal(await runHost(Ops.keptUnder(projectId, newId)), true);
+  await runHost(
+    Ops.rekeyWorktree(projectId, newId, fox, { expect: null, back: true }),
+  );
+  assert.equal(await titleOf(identity.id), "Fox");
+});
+
 it("keeps a move journal it can't read, which may be all that says what a move left", async () => {
   const journal = join(engineDataDir, JOURNAL);
   writeFileSync(journal, "not a journal");
@@ -624,63 +688,61 @@ it.each([
 const ref = (id: string) => `refs/shigomori/dirty/${id}`;
 
 // A move undone before its folder moved carries back the dirty capture
-// its re-key carried, and no other: with none of the worktree's own, one
-// kept under its new id from before stays there.
+// its re-key carried; one kept under a new id from before refuses the
+// move before anything moves.
 it.each([
-  ["none of its own, one kept under the new id", false],
-  ["its own", true],
-])(
-  "an undone move carries back the capture its re-key found: %s",
-  async (_name, own) => {
-    const repo = join(elsewhere, "repo");
-    const identity = (
-      await runHost(Ops.listWorktreeIdentities({ projectId }))
-    ).find((row) => row.path === fox);
-    assert.ok(identity !== undefined);
-    const parent = join(elsewhere, `captures-${String(own)}`);
-    mkdirSync(parent);
-    const newId = worktreeIdFromPath(
-      join(realpathSync(parent), "moved", "wt", "repo", "fox"),
-    );
-    const head = git(repo, "rev-parse", "HEAD").trim();
-    git(repo, "update-ref", ref(own ? identity.id : newId), head);
-    const failed = await runHost(
-      moveDataDir(parent, {
-        place: {
-          dataDir: engineDataDir,
-          pointerFile: join(
-            elsewhere,
-            `config-captures-${String(own)}`,
-            "data-dir",
-          ),
-          legacyPointerFile: null,
-          defaultDataDir: join(elsewhere, "home", ".sm"),
-          dataDirName: "moved",
-        },
-        // The re-key is done by now: an own capture is under the new id.
-        beforeMove: Effect.gen(function* () {
-          const tip = git(
-            repo,
-            "for-each-ref",
-            "--format=%(objectname)",
-            ref(newId),
-          ).trim();
-          assert.equal(tip, head);
-          return yield* Effect.fail("stop before the folder moves");
-        }),
-        killAllScripts: Effect.void,
-      }).pipe(Effect.flip),
-    );
-    assert.equal(failed, "stop before the folder moves");
-    const tip = (id: string) =>
-      git(repo, "for-each-ref", "--format=%(objectname)", ref(id)).trim();
-    assert.deepEqual(
-      { own: tip(identity.id), kept: tip(newId) },
-      own ? { own: head, kept: "" } : { own: "", kept: head },
-    );
-    git(repo, "update-ref", "-d", ref(own ? identity.id : newId));
-  },
-);
+  ["one kept under the new id refuses the move", false],
+  ["its own comes back", true],
+])("a move and its undo and a capture: %s", async (_name, own) => {
+  const repo = join(elsewhere, "repo");
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  const parent = join(elsewhere, `captures-${String(own)}`);
+  mkdirSync(parent);
+  const newId = worktreeIdFromPath(
+    join(realpathSync(parent), "moved", "wt", "repo", "fox"),
+  );
+  const head = git(repo, "rev-parse", "HEAD").trim();
+  git(repo, "update-ref", ref(own ? identity.id : newId), head);
+  const failed = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(
+          elsewhere,
+          `config-captures-${String(own)}`,
+          "data-dir",
+        ),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      // The re-key is done by now: an own capture is under the new id.
+      beforeMove: Effect.gen(function* () {
+        const tip = git(
+          repo,
+          "for-each-ref",
+          "--format=%(objectname)",
+          ref(newId),
+        ).trim();
+        assert.equal(tip, head);
+        return yield* Effect.fail("stop before the folder moves");
+      }),
+      killAllScripts: Effect.void,
+    }).pipe(Effect.flip),
+  );
+  if (own) assert.equal(failed, "stop before the folder moves");
+  else assert.match(String(failed), /Something is still kept/);
+  const tip = (id: string) =>
+    git(repo, "for-each-ref", "--format=%(objectname)", ref(id)).trim();
+  assert.deepEqual(
+    { own: tip(identity.id), kept: tip(newId) },
+    own ? { own: head, kept: "" } : { own: "", kept: head },
+  );
+  git(repo, "update-ref", "-d", ref(own ? identity.id : newId));
+});
 
 // Sol's round 3: a capture made while the scripts are killed, before the
 // journal, is the one the move carries and an undo brings back.

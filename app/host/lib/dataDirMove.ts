@@ -64,6 +64,9 @@ import {
 // A step on the file system, its failure as it crosses a wire.
 const fsStep = <A>(step: () => Promise<A>) =>
   Effect.tryPromise({ try: step, catch: callFailureOf });
+// A journal entry, its mark set as the move goes.
+type Entry = Types.Mutable<Journal["moved"][number]>;
+
 type MovedWorktree = {
   oldId: string;
   oldPath: string;
@@ -259,14 +262,41 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
             ];
           }),
         })),
-        // Repo moved or deleted, so nothing to repair for this one.
-        Effect.orElseSucceed(() => ({
-          project,
-          moved: [] as MovedWorktree[],
-        })),
+        // A project whose folder is gone has nothing to carry; one that is
+        // there but can't be listed refuses the move, or its worktrees
+        // would land with what they kept left under their old ids.
+        Effect.catch(() =>
+          Effect.flatMap(
+            fs.exists(project.path).pipe(Effect.orElseSucceed(() => true)),
+            (there) =>
+              there
+                ? Effect.fail(
+                    new DataDirMoveError({
+                      reason: `Couldn't list the worktrees of "${project.name}", so what they keep couldn't follow them. Try again.`,
+                    }),
+                  )
+                : Effect.succeed({ project, moved: [] as MovedWorktree[] }),
+          ),
+        ),
       ),
     { concurrency: "unbounded" },
   );
+
+  // Nothing may be kept under an id a worktree is about to take: the
+  // undo reads anything there as its own re-key's (V3.md, Commit points).
+  for (const { project, moved } of repairTargets) {
+    for (const m of moved) {
+      const held = yield* Ops.keptUnder(
+        project.id,
+        worktreeIdFromPath(m.newPath),
+      ).pipe(Effect.orElseSucceed(() => true));
+      if (held) {
+        return yield* new DataDirMoveError({
+          reason: `Something is still kept for a worktree that was once at ${m.newPath}, so ${m.oldPath} can't take its place there. Move the data folder somewhere else.`,
+        });
+      }
+    }
+  }
 
   const marked = repairTargets.flatMap(({ moved }) =>
     moved.map((m) => m.oldId),
@@ -277,7 +307,9 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // renamed in.
   const pointerTmp = `${pointerFile}.tmp.${suffix}`;
   const journalFile = join(oldDir, JOURNAL);
-  const journal: Types.Mutable<Journal> = {
+  const journal: Omit<Types.Mutable<Journal>, "moved"> & {
+    moved: Array<Entry>;
+  } = {
     from: oldDir,
     to: newDir,
     partial: null,
@@ -296,13 +328,17 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       moved.map((m) => ({ project, m })),
     ),
     ({ project, m }) =>
-      git.refTip(project.path, dirtyRef(m.oldId)).pipe(
-        Effect.map((capture) => ({
-          projectId: project.id,
-          oldPath: m.oldPath,
-          newPath: m.newPath,
-          capture: Option.getOrNull(capture),
-        })),
+      git.readRef(project.path, dirtyRef(m.oldId)).pipe(
+        Effect.map(
+          (capture): Entry => ({
+            projectId: project.id,
+            oldPath: m.oldPath,
+            newPath: m.newPath,
+            capture: Option.getOrNull(capture),
+            state: "planned",
+          }),
+        ),
+        Effect.mapError(callFailureOf),
       ),
   );
   // Gone already is gone.
@@ -341,9 +377,14 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     journaled = true;
 
     // Re-key the marks and per-worktree data while the engine still
-    // reads the old location (the pointer file moves below). Undone
-    // below, or by the next start, if the move never lands.
-    yield* rekeyWorktrees(journal.moved, false);
+    // reads the old location (the pointer file moves below), each entry
+    // marked as it is done. Undone below, or by the next start, if the
+    // move never lands.
+    for (const entry of journal.moved) {
+      yield* rekeyForward(entry);
+      entry.state = "rekeyed";
+      yield* writeJournal;
+    }
 
     yield* opts.beforeMove;
 
@@ -441,28 +482,37 @@ const finishMove = (journal: Journal, at: string) =>
     const fs = yield* FileSystem.FileSystem;
     // The old tree's journal goes with its folder, last, so a removal cut
     // short still reads as this move's at the next start, which removes
-    // the rest; until then the journal here is kept too.
+    // the rest; until then the journal here is kept too, as it is while
+    // the old tree's can't be read.
+    const owner =
+      journal.partial === null || resolve(journal.from) === resolve(at)
+        ? ("not" as const)
+        : yield* ownJournalAt(journal.from, journal);
+    if (owner === "unknown") {
+      yield* Effect.logWarning(
+        `[data] finishing a data-folder move, whether ${journal.from} is its old copy can't be read; the journal is kept for the next start`,
+      );
+    }
     const cleaned =
-      journal.partial === null ||
-      resolve(journal.from) === resolve(at) ||
-      !(yield* ownJournalAt(journal.from, journal)) ||
-      (yield* fs.readDirectory(journal.from).pipe(
-        Effect.flatMap((entries) =>
-          Effect.forEach(
-            entries.filter((entry) => entry !== JOURNAL),
-            (entry) =>
-              fs.remove(join(journal.from, entry), {
-                recursive: true,
-                force: true,
-              }),
-            { discard: true },
+      owner === "not" ||
+      (owner === "ours" &&
+        (yield* fs.readDirectory(journal.from).pipe(
+          Effect.flatMap((entries) =>
+            Effect.forEach(
+              entries.filter((entry) => entry !== JOURNAL),
+              (entry) =>
+                fs.remove(join(journal.from, entry), {
+                  recursive: true,
+                  force: true,
+                }),
+              { discard: true },
+            ),
           ),
-        ),
-        Effect.andThen(
-          fs.remove(journal.from, { recursive: true, force: true }),
-        ),
-        (removal) => settled(removal, "removing the old copy", "finishing"),
-      ));
+          Effect.andThen(
+            fs.remove(journal.from, { recursive: true, force: true }),
+          ),
+          (removal) => settled(removal, "removing the old copy", "finishing"),
+        )));
     const byProject = new Map<string, string[]>();
     for (const m of journal.moved) {
       byProject.set(m.projectId, [
@@ -507,18 +557,22 @@ const finishMove = (journal: Journal, at: string) =>
 
 // Whether the folder at `dir` is this move's copy, by the journal it
 // carries: a folder made there since, or one a removal already took,
-// holds none.
+// holds none; one that can't be read can't be told.
 const ownJournalAt = (dir: string, journal: Journal) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) =>
     fs.readFileString(join(dir, JOURNAL)).pipe(
-      Effect.map(Schema.decodeUnknownOption(JournalJson)),
-      Effect.orElseSucceed(() => Option.none<Journal>()),
-      Effect.map(
-        (found) =>
-          Option.isSome(found) &&
+      Effect.map((text) => {
+        const found = Schema.decodeUnknownOption(JournalJson)(text);
+        return Option.isSome(found) &&
           found.value.from === journal.from &&
-          found.value.partial === journal.partial,
+          found.value.partial === journal.partial
+          ? ("ours" as const)
+          : ("not" as const);
+      }),
+      Effect.catchReason("PlatformError", "NotFound", () =>
+        Effect.succeed("not" as const),
       ),
+      Effect.orElseSucceed(() => "unknown" as const),
     ),
   );
 
@@ -542,10 +596,9 @@ const settled = <A, E, R>(
     ),
   );
 
-// A move that never landed, undone where the data still is (`at`): the
-// re-key reversed (a worktree never re-keyed has nothing under its new
-// id, which the re-key passes over, and a capture that never left stays
-// over one kept under the new id from before), the partial copy removed, the
+// A move that never landed, undone where the data still is (`at`), by
+// the journal's marks (V3.md, Commit points): each entry re-keyed back,
+// last first, and marked before the next; the partial copy removed; the
 // journal last.
 const undoMove = (journal: Journal, at: string) =>
   Effect.gen(function* () {
@@ -556,10 +609,50 @@ const undoMove = (journal: Journal, at: string) =>
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );
-    const rekeyed = yield* settled(
-      rekeyWorktrees(journal.moved, true),
-      "the re-key back",
-    );
+    const entries: Array<Entry> = journal.moved.map((entry) => ({
+      ...entry,
+    }));
+    let rekeyed = true;
+    for (const entry of entries.toReversed()) {
+      const state = entry.state ?? "planned";
+      if (state === "returned") continue;
+      const back = Effect.gen(function* () {
+        // A `planned` entry's re-key may have run before a crash took
+        // its mark: anything under its new id is its re-key's, since a
+        // move starts only with nothing there.
+        if (
+          state === "planned" &&
+          !(yield* Ops.keptUnder(
+            entry.projectId,
+            worktreeIdFromPath(entry.newPath),
+          ))
+        ) {
+          return;
+        }
+        yield* rekeyBack(entry);
+      });
+      const done = yield* settled(
+        back.pipe(
+          Effect.andThen(
+            Effect.suspend(() => {
+              entry.state = "returned";
+              return Effect.suspend(() =>
+                writeWhole(
+                  fs,
+                  join(at, JOURNAL),
+                  Schema.encodeSync(JournalJson)({
+                    ...journal,
+                    moved: entries,
+                  }),
+                ),
+              );
+            }),
+          ),
+        ),
+        "the re-key back",
+      );
+      rekeyed = rekeyed && done;
+    }
     let removed = true;
     if (journal.partial !== null) {
       removed = yield* settled(
@@ -569,15 +662,21 @@ const undoMove = (journal: Journal, at: string) =>
       // A copy renamed in before the pointer moved: this move's own, as
       // the journal it carries says, and never the data the pointer
       // names.
-      if (
-        resolve(journal.to) !== resolve(at) &&
-        (yield* ownJournalAt(journal.to, journal))
-      ) {
+      const landed =
+        resolve(journal.to) === resolve(at)
+          ? ("not" as const)
+          : yield* ownJournalAt(journal.to, journal);
+      if (landed === "ours") {
         removed =
           (yield* settled(
             fs.remove(journal.to, { recursive: true, force: true }),
             "removing the landed copy",
           )) && removed;
+      } else if (landed === "unknown") {
+        yield* Effect.logWarning(
+          `[data] undoing a data-folder move, whether ${journal.to} is its copy can't be read; the journal is kept for the next start`,
+        );
+        removed = false;
       }
     }
     if (revived && rekeyed && removed) {
@@ -592,9 +691,23 @@ const undoMove = (journal: Journal, at: string) =>
 const resumeDataDirMove = (at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const text = yield* fs
-      .readFileString(join(at, JOURNAL))
-      .pipe(Effect.option);
+    // None only when there is none: one that can't be read is kept, and
+    // keeps a move from starting over it.
+    const text = yield* fs.readFileString(join(at, JOURNAL)).pipe(
+      Effect.map(Option.some),
+      Effect.catchReason("PlatformError", "NotFound", () =>
+        Effect.succeed(Option.none<string>()),
+      ),
+      Effect.catch((error) =>
+        Effect.as(
+          Effect.logWarning(
+            `[data] a move journal at ${join(at, JOURNAL)} can't be read, kept for a look`,
+            error,
+          ),
+          Option.none<string>(),
+        ),
+      ),
+    );
     if (Option.isNone(text)) return;
     const journal = Schema.decodeUnknownOption(JournalJson)(text.value);
     // Kept: it may be the only record of what a move left half done.
@@ -614,29 +727,25 @@ const resumeDataDirMove = (at: string) =>
     yield* undoMove(journal.value, at);
   });
 
-// Carries what the engine keys by each moved worktree's id from its old
-// id to the one its new path hashes to (or back, on `reverse`). The
-// relocate flow's `sm worktrees move` does the same for one worktree.
-// Each re-key is a read-modify-write of the same rows, so they run
-// one at a time.
-const rekeyWorktrees = (moved: Journal["moved"], reverse: boolean) =>
-  Effect.forEach(
-    moved,
-    (m) =>
-      reverse
-        ? Ops.rekeyWorktree(
-            m.projectId,
-            worktreeIdFromPath(m.newPath),
-            m.oldPath,
-            { expect: m.capture ?? null, back: true },
-          )
-        : Ops.rekeyWorktree(
-            m.projectId,
-            worktreeIdFromPath(m.oldPath),
-            m.newPath,
-            { expect: m.capture ?? null },
-          ),
-    { discard: true },
+// Carries what the engine keys by a moved worktree's id from its old id
+// to the one its new path hashes to, or back. The relocate flow's `sm
+// worktrees move` does the same for one worktree. The capture follows
+// only if it is the one the journal names: forward, another fails the
+// move (`changed`); back, another stays where it is.
+const rekeyForward = (entry: Entry) =>
+  Ops.rekeyWorktree(
+    entry.projectId,
+    worktreeIdFromPath(entry.oldPath),
+    entry.newPath,
+    { expect: entry.capture ?? null },
+  );
+
+const rekeyBack = (entry: Entry) =>
+  Ops.rekeyWorktree(
+    entry.projectId,
+    worktreeIdFromPath(entry.newPath),
+    entry.oldPath,
+    { expect: entry.capture ?? null, back: true },
   );
 
 // The resume as the host's graph runs it at start (process/layer.ts),

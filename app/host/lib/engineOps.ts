@@ -894,6 +894,21 @@ export const rekeyWorktree = Effect.fnUntraced(function* (
   );
 });
 
+// Whether anything is kept under the id `worktreeId`, for the data
+// folder move's check that a destination holds nothing of its own.
+export const keptUnder = Effect.fnUntraced(function* (
+  projectId: string,
+  worktreeId: string,
+) {
+  return yield* asCall(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      return yield* (yield* Worktrees.Worktrees).keptUnder(project, worktreeId);
+    }),
+    { projectId },
+  );
+});
+
 export const storeProjectOrder = Effect.fnUntraced(function* (ids: string[]) {
   yield* asChange(
     Effect.gen(function* () {

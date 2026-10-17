@@ -3,6 +3,7 @@
 // included (real git on a sandbox data dir).
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -407,4 +408,40 @@ it("fails a re-key whose capture changed since its caller looked, the capture le
     }),
   )) as { reason: string; kept: boolean };
   assert.deepEqual(result, { reason: "changed", kept: true });
+});
+
+// Sol's round 4: a capture git can't open is a failure, never taken for
+// none, so an undo can't settle over it and lose track of it.
+it("fails a re-key back whose capture can't be read, and carries it once it can", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const fromPath = join(box.home, "here", "fox");
+      const toPath = join(box.home, "elsewhere", "fox");
+      const from = worktreeIdFromPath(fromPath);
+      const to = worktreeIdFromPath(toPath);
+      const head = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(repo, "update-ref", `refs/shigomori/dirty/${to}`, head);
+      const loose = join(repo, ".git", "refs", "shigomori", "dirty", to);
+      chmodSync(loose, 0o000);
+      const first = yield* Effect.flip(
+        worktrees.rekey(project, to, fromPath, { expect: head, back: true }),
+      );
+      chmodSync(loose, 0o644);
+      yield* worktrees.rekey(project, to, fromPath, {
+        expect: head,
+        back: true,
+      });
+      return {
+        reason: first.reason,
+        back:
+          box.git(repo, "rev-parse", `refs/shigomori/dirty/${from}`).trim() ===
+          head,
+      };
+    }),
+  )) as { reason: string; back: boolean };
+  assert.deepEqual(result, { reason: "failed", back: true });
 });

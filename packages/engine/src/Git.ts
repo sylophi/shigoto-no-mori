@@ -63,6 +63,7 @@ import {
   PATCH_MAX_OUTPUT,
   type PrimaryRelation,
   type RunOptions,
+  type RefUnreadable,
   UndoRefusedError,
   type UnknownRevisionError,
   type UpstreamSync,
@@ -77,6 +78,7 @@ export {
   GitOutputTooLargeError,
   NestedRepositoryError,
   NoRemoteError,
+  RefUnreadable,
   UndoRefusedError,
   PATHSPEC_CHUNK,
   UnknownRevisionError,
@@ -267,6 +269,12 @@ export class Git extends Context.Service<
       cwd: string,
       rev: string,
     ) => Effect.Effect<string, GitError>;
+    // A ref's commit, none when it isn't there; a ref git can't open
+    // fails, where refTip reads it as none.
+    readonly readRef: (
+      cwd: string,
+      ref: string,
+    ) => Effect.Effect<Option.Option<string>, GitError | RefUnreadable>;
     readonly treeOf: (
       cwd: string,
       commit: string,
@@ -846,6 +854,7 @@ const make = Effect.gen(function* () {
   const {
     verifyRev,
     refTip,
+    readRef,
     hasObject,
     isAncestor,
     resolveCommit,
@@ -950,6 +959,7 @@ const make = Effect.gen(function* () {
     primaryRelation,
     readCommitMessage,
     refTip,
+    readRef,
     verifyRev,
     treeOf: Effect.fn("Git.treeOf")(function* (cwd, commit) {
       return yield* verifyRev(cwd, `${commit}^{tree}`);
