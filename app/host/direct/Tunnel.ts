@@ -677,18 +677,22 @@ const make = (options: Options) =>
             yield* setStatus({ state: "starting", hostname });
             const path = yield* pidFile;
             if (path !== null) {
+              // The pid at once, so a host killed while ps answers still
+              // leaves the next one its connector to reap; then its birth.
+              yield* fs
+                .writeFileString(path, `${child.pid}\n`)
+                .pipe(Effect.ignore);
               const born = yield* Processes.startOf(child.pid).pipe(
                 Effect.provideService(
                   ChildProcessSpawner.ChildProcessSpawner,
                   spawner,
                 ),
               );
-              yield* fs
-                .writeFileString(
-                  path,
-                  `${child.pid} ${Option.getOrElse(born, () => Processes.UNKNOWN_BIRTH)}\n`,
-                )
-                .pipe(Effect.ignore);
+              if (Option.isSome(born)) {
+                yield* fs
+                  .writeFileString(path, `${child.pid} ${born.value}\n`)
+                  .pipe(Effect.ignore);
+              }
               yield* Effect.addFinalizer(() =>
                 fs.remove(path, { force: true }).pipe(Effect.ignore),
               );
