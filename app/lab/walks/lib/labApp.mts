@@ -7,6 +7,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -16,7 +17,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { expect } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
 
@@ -241,6 +243,15 @@ async function launch(
   let current = await start();
   const close = async () => {
     await current.stop();
+    // The app's own logs (the shell's and the host's trace), kept for a
+    // look at a walk that failed in CI, where its root goes with it.
+    const keep = process.env["SM_WALK_LOGS"];
+    if (keep !== undefined && keep !== "") {
+      const walk = basename(expect.getState().testPath ?? root);
+      cpSync(join(home, "Library", "Logs"), join(keep, walk), {
+        recursive: true,
+      });
+    }
     rmSync(root, { recursive: true, force: true });
   };
   const restart = async () => {
