@@ -34,6 +34,7 @@ import {
   type MirrorSessionRaw,
   MirrorSessionRawSchema,
 } from "@shigomori/contracts/modules/mirror";
+import { answerWithin } from "@shared/remote/liveness";
 import { BACKOFF_LADDER_MS, restartSchedule } from "@shared/remote/supervisor";
 import { MIRROR_GATEWAY_TOKEN_ENV } from "./gateway";
 
@@ -122,8 +123,8 @@ const RESTART_LADDER_MS: readonly [number, ...number[]] = [
 // process and Mutagen handshakes), so requests get a generous ceiling.
 const REQUEST_TIMEOUT_MS = 120_000;
 // A request still waiting this long asks whether the daemon answers at
-// all, and one that doesn't answer a ping within PING_ANSWER_MS is
-// replaced. Its reader answers a ping at once whatever else it is
+// all, and one that doesn't answer a ping within PING_ANSWER_MS of the
+// host running is replaced. Its reader answers a ping at once whatever else it is
 // running (requests run beside it, file-sync/engine.go), so silence
 // means a stopped or hung process, not a slow create.
 const STALL_CHECK_MS = 30_000;
@@ -516,12 +517,11 @@ const make = (options: Options) =>
     // daemon answering. Silence replaces it.
     const pingOrReplace = Effect.gen(function* () {
       checking = true;
-      const answered = yield* ask("ping", {}, PING_ANSWER_MS).pipe(
-        Effect.as(true),
-        Effect.catchTags({
-          MirrorDaemonError: (error) =>
-            Effect.succeed(error.reason !== "timed-out"),
-        }),
+      const answered = Option.isSome(
+        yield* answerWithin(
+          ask("ping", {}, REQUEST_TIMEOUT_MS),
+          PING_ANSWER_MS,
+        ),
       );
       if (!answered && killChild !== null) {
         unresponsive = true;
