@@ -4,11 +4,14 @@
 import { join } from "node:path";
 import { defineConfig } from "vitest/config";
 import { isolateGit } from "../gitIsolation";
+import { ownTestTemp } from "../testTemp.mts";
 import { dedupe } from "./vite.dedupe";
 
 // Before any proof's process forks, so none inherits a way into this
-// repository (../gitIsolation.ts).
+// repository (../gitIsolation.ts), and every one leaves its temp files
+// in the run's folder (../testTemp.mts).
 isolateGit();
+ownTestTemp("app");
 
 const dir = (name: string) => join(import.meta.dirname, name);
 

@@ -15,12 +15,15 @@ import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { appRoot, repoRoot } from "./lib/checkKit.mts";
 import { isolateGit } from "../../gitIsolation.ts";
+import { ownTestTemp } from "../../testTemp.mts";
 import { coveringFiles } from "./lib/covers.mts";
 
 const VITEST = join(appRoot, "node_modules", ".bin", "vitest");
 
 // What a proof or a bench script runs under: no way into this
-// repository (../../gitIsolation.ts), whichever config it loads.
+// repository (../../gitIsolation.ts), whichever config it loads, and a
+// temp dir of the run's own (../../testTemp.mts).
+ownTestTemp("app");
 const env = { ...process.env };
 isolateGit(env);
 
