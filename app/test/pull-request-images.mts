@@ -206,6 +206,7 @@ it("an attached image on github.com takes its signed URL, and keeps it", async (
     signedBody("first"),
     "two minutes on, the wall clock back an hour: kept",
   );
+  clocks.sleep(HOUR);
   await clock.advance(2 * 60_000);
   writeFileSync(answer, rendered("third"));
   assert.equal(

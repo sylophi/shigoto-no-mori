@@ -60,6 +60,8 @@ const signedOut = join(root, "gh-signed-out");
 const hold = join(root, "gh-hold");
 const held = join(root, "gh-held");
 const detail = join(root, "gh-detail.json");
+const holdBranch = join(root, "gh-hold-branch");
+const heldBranch = join(root, "gh-held-branch");
 installFakeGh(
   root,
   `#!/bin/sh
@@ -74,7 +76,13 @@ case "$*" in
       while [ -f '${hold}' ]; do sleep 0.02; done
     fi
     echo "$answer";;
-  "pr list --state all --head fox "*) cat '${detail}';;
+  "pr list --state all --head fox "*)
+    answer=$(cat '${detail}')
+    if [ -f '${holdBranch}' ]; then
+      : > '${heldBranch}'
+      while [ -f '${holdBranch}' ]; do sleep 0.02; done
+    fi
+    echo "$answer";;
   "api graphql "*) echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}';;
   *) echo "unexpected gh $*" >&2; exit 1;;
 esac
@@ -185,6 +193,34 @@ it("a failed read isn't kept: the next ask reads again, and a failure keeps the 
   );
 });
 
+it("the map ages by whichever clock reads older: a sleep, a stopped process or the wall clock stepped forward reads it again, and a backward step keeps it no longer", async () => {
+  const repo = { id: "stepped", path: repoOn("stepped") };
+  answer([pr(5, "OPEN")]);
+  await get(repo);
+  let read = lists();
+  for (const [what, move] of [
+    ["a sleep past its age", () => clocks.sleep(AGE + 1_000)],
+    ["a stopped process past its age", () => clocks.stop(AGE + 1_000)],
+    ["the wall clock two hours on", () => clocks.sleep(2 * HOUR)],
+  ] as const) {
+    move();
+    await get(repo);
+    read += 1;
+    assert.equal(lists(), read, `${what}: read again`);
+  }
+
+  clocks.sleep(-4 * HOUR);
+  await clock.advance(AGE - 1_000);
+  await get(repo);
+  assert.equal(lists(), read, "back four hours, inside its age: fresh");
+  await clock.advance(2_000);
+  await get(repo);
+  assert.equal(lists(), read + 1, "past its age: read again");
+  // The wall clock where it was, so no wall-clock TTL stamped before
+  // the step (the readiness probe's) outlives it.
+  clocks.sleep(4 * HOUR);
+});
+
 it("a good read after the gate answered empty moves the view, though it equals the stored map", async () => {
   const gatedProject = await runHost(addProject(repoOn("gated")));
   answer([pr(5, "OPEN")]);
@@ -274,29 +310,24 @@ it("a list that started before a merge or a page's note doesn't land over them",
   assert.equal(stateOf(await get(repo)), "CLOSED", "the page's note kept");
 });
 
-// Last: its backward step would hold the readiness probe's wall-clock
-// TTL (GithubCli's caches, the TTL pass's) for the tests after it.
-it("the map ages by whichever clock reads older: a sleep, a stopped process or the wall clock stepped forward reads it again, and a backward step keeps it no longer", async () => {
-  const repo = { id: "stepped", path: repoOn("stepped") };
+it("a page's read that started before a merge doesn't note over it", async () => {
+  const repo = { id: "branch-held", path: repoOn("branch-held") };
   answer([pr(5, "OPEN")]);
   await get(repo);
-  let read = lists();
-  for (const [what, move] of [
-    ["a sleep past its age", () => clocks.sleep(AGE + 1_000)],
-    ["a stopped process past its age", () => clocks.stop(AGE + 1_000)],
-    ["the wall clock two hours on", () => clocks.sleep(2 * HOUR)],
-  ] as const) {
-    move();
-    await get(repo);
-    read += 1;
-    assert.equal(lists(), read, `${what}: read again`);
-  }
 
-  clocks.sleep(-4 * HOUR);
-  await clock.advance(AGE - 1_000);
-  await get(repo);
-  assert.equal(lists(), read, "back four hours, inside its age: fresh");
-  await clock.advance(2_000);
-  await get(repo);
-  assert.equal(lists(), read + 1, "past its age: read again");
+  writeFileSync(detail, JSON.stringify([detailOf("OPEN")]));
+  rmSync(heldBranch, { force: true });
+  writeFileSync(holdBranch, "");
+  const pending = at(
+    Effect.flatMap(PullRequestMaps, (maps) =>
+      maps.branchPullRequest(repo, "fox"),
+    ),
+  );
+  await waitFor(() => existsSync(heldBranch), "the held branch read to start");
+  answer([pr(5, "MERGED")]);
+  await at(Effect.flatMap(PullRequestMaps, (maps) => maps.moved(repo)));
+  assert.equal(stateOf(await get(repo)), "MERGED");
+  rmSync(holdBranch);
+  assert.equal((await pending)?.state, "OPEN");
+  assert.equal(stateOf(await get(repo)), "MERGED", "the merge kept");
 });
