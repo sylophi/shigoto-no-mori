@@ -12,6 +12,7 @@
 // local act. Taking it from a scope would have tied the stop control to
 // an api the caller does not need.
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { refreshQueries } from "@/lib/askAgain";
 import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import {
   errorMessageOf,
@@ -54,9 +55,7 @@ export function watchPortForwards(
   queryClient: QueryClient,
 ): void {
   api.listen(api.pushes(portForwardContract, "changed"), () => {
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.portForwards(),
-    });
+    refreshQueries(queryClient, { queryKey: queryKeys.portForwards() });
   });
 }
 
