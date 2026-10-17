@@ -8,7 +8,7 @@ import * as Processes from "@shigomori/engine/processes";
 // the readiness probe gates every PR feature, so one stuck spawn would
 // wedge them all. Callers moving real bytes (pr diff) pass a longer
 // timeout.
-const DEFAULT_TIMEOUT_MS = 30_000;
+export const GH_TIMEOUT_MS = 30_000;
 
 interface GhOptions {
   readonly cwd?: string;
@@ -32,7 +32,7 @@ export const gh = Effect.fnUntraced(function* (
       : yield* (yield* GitHub.GitHub).hostOf(options.cwd));
   return yield* Processes.exec("gh", args, {
     cwd: options.cwd,
-    timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
+    timeout: options.timeout ?? GH_TIMEOUT_MS,
     maxOutputBytes: options.maxBuffer,
     ...(host === null ? {} : { env: { GH_HOST: host }, extendEnv: true }),
   });

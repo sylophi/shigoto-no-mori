@@ -1,3 +1,4 @@
+import { checkBucket } from "@shigomori/contracts/pullRequestChecks";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -9,7 +10,6 @@ import {
   MergeMethodSchema,
   type PullRequest,
   type PullRequestCheck,
-  type PullRequestCheckBucket,
   type PullRequestDetail,
   PullRequestMergeStateSchema,
   PullRequestReviewDecisionSchema,
@@ -228,7 +228,6 @@ const StatusCheckRollupItemSchema = Schema.Struct({
   detailsUrl: Schema.optional(Schema.String),
   targetUrl: Schema.optional(Schema.String),
 });
-type StatusCheckRollupItem = typeof StatusCheckRollupItemSchema.Type;
 
 const GhPrDetailSchema = Schema.Struct({
   number: PullRequestSchema.fields.number,
@@ -275,39 +274,6 @@ class PullRequestShapeError extends Schema.TaggedError<PullRequestShapeError>()(
   override get message(): string {
     return `Unexpected gh pr list output for ${this.branch}`;
   }
-}
-
-const PASSED_CONCLUSIONS = new Set(["SUCCESS"]);
-const NEUTRAL_CONCLUSIONS = new Set(["NEUTRAL"]);
-const SKIPPED_CONCLUSIONS = new Set(["SKIPPED"]);
-const FAILING_CONCLUSIONS = new Set([
-  "FAILURE",
-  "TIMED_OUT",
-  "ACTION_REQUIRED",
-  "STARTUP_FAILURE",
-  "STALE",
-  "CANCELLED",
-]);
-
-function bucketForItem(item: StatusCheckRollupItem): PullRequestCheckBucket {
-  // CheckRun: status describes lifecycle, conclusion the final verdict.
-  // StatusContext: a single `state` covers both.
-  const typename = item["__typename"];
-  if (typename === "StatusContext" || item.state) {
-    const state = item.state ?? "";
-    if (state === "SUCCESS") return "passed";
-    if (state === "FAILURE" || state === "ERROR") return "failing";
-    return "pending";
-  }
-  if (item.status && item.status !== "COMPLETED") return "pending";
-  const conclusion = item.conclusion ?? "";
-  if (PASSED_CONCLUSIONS.has(conclusion)) return "passed";
-  if (NEUTRAL_CONCLUSIONS.has(conclusion)) return "neutral";
-  if (SKIPPED_CONCLUSIONS.has(conclusion)) return "skipped";
-  if (FAILING_CONCLUSIONS.has(conclusion)) return "failing";
-  // Empty / unrecognized conclusion on a COMPLETED check. Safest to
-  // treat as pending so the user doesn't merge on an unknown signal.
-  return "pending";
 }
 
 // detailsUrl/targetUrl are whatever the CI integration wrote: frequently
@@ -614,7 +580,7 @@ const runGhPrListDetail = Effect.fnUntraced(function* (
   if (!first) return null;
   const checkList: PullRequestCheck[] = first.statusCheckRollup.map((item) => ({
     name: item.name ?? item.context ?? "check",
-    bucket: bucketForItem(item),
+    bucket: checkBucket(item),
     url: toCheckUrl(item.detailsUrl) ?? toCheckUrl(item.targetUrl),
   }));
   return {
