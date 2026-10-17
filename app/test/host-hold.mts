@@ -60,7 +60,12 @@ import { hostContext } from "./lib/hostRuntime.mts";
 import { pushesLayer } from "./lib/hostStandIns.mts";
 import { sleepingClock, testClock, waitFor } from "./lib/checkKit.mts";
 
-const IDLE = { runningScripts: 0, inflightDeletes: 0 };
+const IDLE = {
+  runningScripts: 0,
+  inflightDeletes: 0,
+  engineChanges: 0,
+  busyTerminals: 0,
+};
 
 it("the watchdog leaves an answering host alone and calls a silent one once", async () => {
   const clock = testClock();
@@ -184,7 +189,7 @@ it("a quit's busy check takes the host's answer, or none past its deadline or on
   const clock = testClock();
   const run = <A, E>(effect: Effect.Effect<A, E>) =>
     Effect.runPromiseWith(clock.context)(effect);
-  const busy = { runningScripts: 2, inflightDeletes: 0 };
+  const busy = { ...IDLE, runningScripts: 2 };
   assert.deepEqual(
     await run(busyWithin(Effect.succeed(busy), "3 seconds")),
     Option.some(busy),

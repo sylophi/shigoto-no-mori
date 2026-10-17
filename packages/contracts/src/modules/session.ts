@@ -30,14 +30,8 @@ const BusyOperationsSchema = strict(
   Schema.Struct({
     runningScripts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     inflightDeletes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    // The host always sends both. Optional so the protocol's wire
-    // sample, which has neither, still reads.
-    engineChanges: Schema.optional(
-      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    ),
-    busyTerminals: Schema.optional(
-      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    ),
+    engineChanges: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    busyTerminals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }),
 );
 

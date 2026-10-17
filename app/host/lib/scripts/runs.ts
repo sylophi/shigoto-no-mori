@@ -350,6 +350,7 @@ export const makeRuns = ({
         .open({
           command: args.command,
           cwd: args.worktree.path,
+          place: "worktree",
           env,
           cols: DEFAULT_COLS,
           rows: DEFAULT_ROWS,
@@ -363,6 +364,14 @@ export const makeRuns = ({
               : Effect.void,
           ),
         );
+      const startedAt = yield* Clock.currentTimeMillis;
+      // A delete that marked the worktree while the PTY started has
+      // already stopped the scripts it found there.
+      const refusedNow = marks.refusal(args.worktree.id, args.project.id);
+      if (refusedNow !== null) {
+        yield* close({ graceMs: DEFAULT_GRACE_MS, wait: true });
+        return yield* new ScriptRefusedError({ reason: refusedNow });
+      }
 
       // The PTY is one ordered byte stream (stdout and stderr share the
       // terminal), so the renderer's xterm sees exactly what a real
@@ -396,7 +405,7 @@ export const makeRuns = ({
         worktreeName: args.worktree.name,
         worktreePath: args.worktree.path,
         scriptName: runScriptName(args.slot),
-        startedAt: yield* Clock.currentTimeMillis,
+        startedAt,
         exited: false,
         cancelling: false,
         done,

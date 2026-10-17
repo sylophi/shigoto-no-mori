@@ -228,7 +228,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // safely killed or moved under. Refuse instead.
   const scripts = yield* Scripts.Scripts;
   const busy = yield* scripts.busy;
-  if (busy.inflightDeletes + (busy.engineChanges ?? 0) > 0) {
+  if (busy.inflightDeletes + busy.engineChanges > 0) {
     return yield* new DataDirMoveError({
       reason:
         "Another operation is still running (worktree delete or CLI " +

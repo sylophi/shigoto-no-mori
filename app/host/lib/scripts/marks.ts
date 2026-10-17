@@ -39,7 +39,6 @@ export const makeMarks = Effect.sync(() => {
     if (creates.has(worktreeId)) return yield* new WorktreeSettingUpError();
   });
 
-  // The worktrees marked as being deleted until the scope closes.
   const deleting = Effect.fn("Scripts.deleting")(function* (
     worktreeIds: readonly string[],
   ) {

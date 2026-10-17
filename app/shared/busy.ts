@@ -9,9 +9,9 @@ export type BusyOperations = {
   // Worktree deletes and moves, and project removals.
   readonly inflightDeletes: number;
   // Any other change the engine is making.
-  readonly engineChanges?: number;
+  readonly engineChanges: number;
   // Terminals whose shell runs something.
-  readonly busyTerminals?: number;
+  readonly busyTerminals: number;
 };
 
 export type BusyAction = "quit" | "restart";
@@ -39,9 +39,9 @@ function pluralize(n: number, singular: string, plural: string): string {
 function isBusy(busy: BusyOperations): boolean {
   return (
     busy.runningScripts > 0 ||
-    (busy.busyTerminals ?? 0) > 0 ||
+    busy.busyTerminals > 0 ||
     busy.inflightDeletes > 0 ||
-    (busy.engineChanges ?? 0) > 0
+    busy.engineChanges > 0
   );
 }
 
@@ -52,13 +52,13 @@ function runningWords(
 ): { subject: string; obj: string } | null {
   const parts = [
     [busy.runningScripts, "script", "scripts"],
-    [busy.busyTerminals ?? 0, "terminal", "terminals"],
+    [busy.busyTerminals, "terminal", "terminals"],
   ] as const;
   const named = parts
     .filter(([n]) => n > 0)
     .map(([n, one, many]) => `${n} ${pluralize(n, one, many)}`);
   if (named.length === 0) return null;
-  const total = busy.runningScripts + (busy.busyTerminals ?? 0);
+  const total = busy.runningScripts + busy.busyTerminals;
   return {
     subject: `${named.join(" and ")} ${pluralize(total, "is", "are")}`,
     obj: pluralize(total, "it", "them"),
@@ -67,7 +67,7 @@ function runningWords(
 
 // "1 change is", and the pronoun for it.
 function changeWords(busy: BusyOperations): { subject: string; obj: string } {
-  const n = busy.engineChanges ?? 0;
+  const n = busy.engineChanges;
   return {
     subject: pluralize(n, `${n} change is`, `${n} changes are`),
     obj: pluralize(n, "it", "them"),

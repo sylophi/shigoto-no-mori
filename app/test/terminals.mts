@@ -563,7 +563,12 @@ describe("the service", () => {
       await waitFor(async () => (await busy()) === 1, "the job to start");
       assert.equal(
         busyDetail(
-          { runningScripts: 1, inflightDeletes: 0, busyTerminals: 1 },
+          {
+            runningScripts: 1,
+            inflightDeletes: 0,
+            engineChanges: 0,
+            busyTerminals: 1,
+          },
           "quit",
         ),
         "1 script and 1 terminal are still running. Quitting now will stop them.",

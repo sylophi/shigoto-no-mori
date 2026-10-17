@@ -105,8 +105,6 @@ export class Scripts extends Context.Service<
       effect: Effect.Effect<A, E, R>,
     ) => Effect.Effect<A, E, R>;
     readonly busy: Effect.Effect<BusyOperations>;
-    // From the moment the quit begins, so none starts after its stop of
-    // every run has looked.
     readonly refuseNew: Effect.Effect<void>;
     readonly reapRemoved: Effect.Effect<ReadonlyArray<RunningScriptWorktree>>;
   }
@@ -126,7 +124,11 @@ const make = (options: Options) =>
     const removing = yield* makeRemoving({ marks, runs });
     const { busy, quit } = yield* makeUnderWay({ marks, runs });
     yield* Effect.addFinalizer(() =>
-      Effect.suspend(() => quit(options.hurried())),
+      Effect.suspend(() => quit(options.hurried())).pipe(
+        Effect.withSpan("Lifetime.stop", {
+          attributes: { subsystem: "the scripts" },
+        }),
+      ),
     );
     return Scripts.of({
       ...runs,
