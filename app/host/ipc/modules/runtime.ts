@@ -18,6 +18,7 @@ import { busyRemoteRefusal } from "@shared/busy";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as HostPushes from "@host/lib/HostPushes";
 import * as Shell from "@host/lib/Shell";
+import * as Moves from "@host/lib/sync/Moves";
 import type { HostServices } from "@host/process/services";
 import {
   canonicalDataDirName,
@@ -25,7 +26,6 @@ import {
   dataDirSource,
   defaultDataDir,
 } from "@shared/paths";
-import { transfersUnderWay } from "@host/mirror/registry";
 
 class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
   "MoveRefusedError",
@@ -87,12 +87,6 @@ export const runtimeHandlers = {
           reason: "The data folder is already being moved.",
         });
       }
-      if (transfersUnderWay()) {
-        return yield* new MoveRefusedError({
-          reason:
-            "A worktree is still being brought here. Try again when it finishes.",
-        });
-      }
       if (unattended) {
         // It reaps every running script, and nobody here was asked.
         const refusal = busyRemoteRefusal(getBusyOperations(), "move");
@@ -105,6 +99,7 @@ export const runtimeHandlers = {
       yield* moveDataDir(parentDir, {
         place: yield* sessionPlace,
         killAllScripts: killAllScripts(),
+        movesUnderWay: (yield* Moves.Moves).underWay,
         beforeMove: Effect.suspend(() => {
           watchersStopped = true;
           return holders.release;

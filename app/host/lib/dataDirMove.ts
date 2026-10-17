@@ -166,6 +166,10 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     readonly beforeMove: Effect.Effect<void, E, R>;
     // Every script's kill chain, waited for (host/lib/scripts).
     readonly killAllScripts: Effect.Effect<void, never, R>;
+    // Whether a worktree is being sent or brought (host/lib/sync/Moves),
+    // whose files a copy would miss: asked once the move holds the lock,
+    // so one that starts after is refused by it instead.
+    readonly movesUnderWay: Effect.Effect<boolean>;
     // The copy to another volume, `copyTree` but where a proof stops it.
     readonly copy?: (
       from: string,
@@ -331,6 +335,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         reason:
           "An earlier move of the data folder isn't finished or undone yet. " +
           "It's tried again at every start; see the log for what stops it.",
+      });
+    }
+    if (yield* opts.movesUnderWay) {
+      return yield* new DataDirMoveError({
+        reason:
+          "A worktree is still being sent or brought here. Try again when it finishes.",
       });
     }
     yield* fsStep(() =>

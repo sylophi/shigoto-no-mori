@@ -55,14 +55,7 @@ import {
   rescueStrandedMove,
   reviveStore,
 } from "@shigomori/engine/dataDirMoveJournal";
-import {
-  afterFailedMove,
-  runtimeHandlers,
-} from "../host/ipc/modules/runtime.ts";
-import { DataDirHolders } from "../host/lib/DataDirHolders.ts";
-import * as Shell from "../host/lib/Shell.ts";
-import { beginTransfer, endTransfer } from "../host/mirror/registry.ts";
-import type { HandlerContext } from "../shared/ipc/transport.ts";
+import { afterFailedMove } from "../host/ipc/modules/runtime.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -170,6 +163,7 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
+        movesUnderWay: Effect.succeed(false),
         // Half the tree, then nothing more: the app was killed.
         copy: (_from, to) =>
           Effect.gen(function* () {
@@ -235,6 +229,7 @@ it("a move whose copy landed but whose pointer was never written is undone, its 
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
+        movesUnderWay: Effect.succeed(false),
       }).pipe(
         Effect.provideService(
           FileSystem.FileSystem,
@@ -585,6 +580,7 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
+        movesUnderWay: Effect.succeed(false),
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
     }).pipe(Effect.forkDetach),
   );
@@ -651,6 +647,7 @@ it("a cancel during the folder's rename keeps the landed folder and its staged p
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
+        movesUnderWay: Effect.succeed(false),
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
     }).pipe(Effect.forkDetach),
   );
@@ -735,6 +732,7 @@ it.each([
           return yield* Effect.fail("stop before the folder moves");
         }),
         killAllScripts: Effect.void,
+        movesUnderWay: Effect.succeed(false),
       }).pipe(Effect.flip),
     );
     assert.equal(moved, "stop before the folder moves");
@@ -788,6 +786,7 @@ it.each([
         return yield* Effect.fail("stop before the folder moves");
       }),
       killAllScripts: Effect.void,
+      movesUnderWay: Effect.succeed(false),
     }).pipe(Effect.flip),
   );
   if (own) assert.equal(failed, "stop before the folder moves");
@@ -828,6 +827,7 @@ it("a capture made while a move kills the scripts comes back with its undo", asy
         git(repo, "update-ref", ref(identity.id), head);
       }),
       beforeMove: Effect.fail("stop before the folder moves"),
+      movesUnderWay: Effect.succeed(false),
     }).pipe(Effect.flip),
   );
   assert.equal(failed, "stop before the folder moves");
@@ -857,6 +857,7 @@ it("a move settles an earlier move's journal first, and waits while it can't", a
       moveDataDir(parent, {
         place: place(name),
         killAllScripts: Effect.void,
+        movesUnderWay: Effect.succeed(false),
         beforeMove: Effect.fail("stop before the folder moves"),
       }).pipe(Effect.flip),
     );
@@ -895,6 +896,7 @@ it("refuses another process's writes while a move's journal is out, and takes th
         dataDirName: "moved",
       },
       killAllScripts: Effect.void,
+      movesUnderWay: Effect.succeed(false),
       beforeMove: Effect.gen(function* () {
         during = writeTheStore();
         return yield* Effect.fail("stop before the folder moves");
@@ -926,6 +928,7 @@ it.each([
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
+        movesUnderWay: Effect.succeed(false),
       }).pipe(Effect.flip),
     );
     assert.match(String(refused), /is a link to/);
@@ -964,26 +967,26 @@ it("refuses a change of the host's while a move holds the lock", async () => {
   assert.equal(await titleOf(identity.id), "Fox");
 });
 
-// A worktree being brought here still has files landing in it after
-// its landing, which a move's copy would miss: the move is refused.
-it("refuses a move while a worktree is being brought here", async () => {
-  const token = beginTransfer();
-  try {
-    const refused = await runHost(
-      runtimeHandlers
-        .moveDataDir({ parentDir: elsewhere }, {} as HandlerContext)
-        .pipe(
-          // Neither is reached before the refusal.
-          Effect.provideService(Shell.Shell, {} as Shell.Shell["Service"]),
-          Effect.provideService(
-            DataDirHolders,
-            {} as DataDirHolders["Service"],
-          ),
-          Effect.flip,
-        ),
-    );
-    assert.match(String(refused), /being brought here/);
-  } finally {
-    endTransfer(token);
-  }
+// A worktree being sent or brought still has files to land after its
+// landing, which a move's copy would miss: the move is refused, asked
+// once it holds the lock.
+it("refuses a move while a worktree is being sent or brought", async () => {
+  const parent = join(elsewhere, "while-moving");
+  const refused = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-6", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      beforeMove: Effect.void,
+      killAllScripts: Effect.void,
+      movesUnderWay: Effect.succeed(true),
+    }).pipe(Effect.flip),
+  );
+  assert.match(String(refused), /being sent or brought/);
+  assert.equal(existsSync(join(parent, "moved")), false);
+  assert.equal(journalLeft(), false);
 });

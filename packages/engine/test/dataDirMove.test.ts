@@ -187,10 +187,11 @@ it("waits out a change of its own process, and lets a change nested in one finis
   assert.deepEqual(result, { moved: true, nested: true, quick: true });
 });
 
-// Two processes asking for the lock alone while a change holds it (two
-// starts settling what a crash left) both get it, one after the other,
-// rather than hold each other off until both give up.
-it("lets two processes asking for the lock alone both have it in turn", async () => {
+// Two asking for the lock alone at once (two starts settling what a
+// crash left): one refused its reservation drops its connection, so it
+// holds no read that would keep the one reserved from committing, and
+// gets the lock in turn.
+it("lets the one reserved commit while another process asks for the lock alone", async () => {
   const home = mkdtempSync(join(tmpdir(), "engine-lock-"));
   try {
     const lockFile = join(
@@ -199,7 +200,6 @@ it("lets two processes asking for the lock alone both have it in turn", async ()
       flavorNames("dev").configDir,
       "data-dir.lock",
     );
-    mkdirSync(dirname(lockFile), { recursive: true });
     const ask = () =>
       new Promise<number | null>((resolve) => {
         const child = spawn(
@@ -209,16 +209,27 @@ it("lets two processes asking for the lock alone both have it in turn", async ()
         );
         child.once("exit", (code) => resolve(code));
       });
-    // One taken alone before, as any start's settle leaves the file.
+    // The lock's table made, as any start's settle leaves it.
     assert.equal(await ask(), 0);
-    const change = new DatabaseSync(lockFile);
-    change.exec("PRAGMA locking_mode = EXCLUSIVE");
-    change.prepare("SELECT count(*) FROM sqlite_schema").get();
-    const both = Promise.all([ask(), ask()]);
-    // Long enough for both to have asked while it holds.
+    const first = new DatabaseSync(lockFile);
+    first.exec("PRAGMA locking_mode = EXCLUSIVE");
+    first.exec("BEGIN IMMEDIATE");
+    first.exec("INSERT OR REPLACE INTO held (id) VALUES (1)");
+    const second = ask();
+    // Long enough for the other to be asking.
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    change.close();
-    assert.deepEqual(await both, [0, 0]);
+    let committed = false;
+    for (let tries = 0; tries < 20 && !committed; tries += 1) {
+      try {
+        first.exec("COMMIT");
+        committed = true;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    first.close();
+    assert.equal(committed, true, "the one reserved committed");
+    assert.equal(await second, 0, "the other had it in turn");
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

@@ -5,6 +5,7 @@
 // points; a move, and the recovery of one, holds it alone. SQLite's
 // locks are the kernel's, so a hold goes with its process, however that
 // ends, and nothing reads a pid to tell.
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -64,13 +65,13 @@ export class ChangesRunning extends Schema.TaggedError<ChangesRunning>()(
   }
 }
 
-// A move refused because the lock can't be made.
+// A change or a move refused because the lock can't be held.
 export class DataDirLockUnavailable extends Schema.TaggedError<DataDirLockUnavailable>()(
   "DataDirLockUnavailable",
   { file: Schema.String, reason: Schema.String },
 ) {
   override get message(): string {
-    return `The data folder can't be moved: its lock at ${this.file} can't be made (${this.reason}).`;
+    return `The data folder's lock at ${this.file} can't be held (${this.reason}).`;
   }
 }
 
@@ -141,8 +142,14 @@ export const layer = (open: OpenDatabase) =>
       const holdAlone = (within: Duration.Input) =>
         Effect.gen(function* () {
           const outer = yield* Effect.scope;
+          // One wait for both steps.
+          const until =
+            (yield* Clock.currentTimeMillis) +
+            Duration.toMillis(Duration.fromInputUnsafe(within));
           const reserve = Effect.gen(function* () {
-            const scope = yield* Scope.make();
+            // A child of the hold's scope, so an interrupt at any point
+            // still closes its connection with the hold.
+            const scope = yield* Scope.fork(outer);
             const exit = yield* Effect.exit(
               Scope.provide(
                 Effect.tap(connect, (sql) => sql`BEGIN IMMEDIATE`),
@@ -153,13 +160,15 @@ export const layer = (open: OpenDatabase) =>
               yield* Scope.close(scope, exit);
               return yield* exit;
             }
-            yield* Scope.addFinalizer(outer, Scope.close(scope, Exit.void));
             return exit.value;
           });
           const sql = yield* reserve.pipe(Effect.retry(askedFor(within)));
           yield* sql`CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)`;
           yield* sql`INSERT OR REPLACE INTO held (id) VALUES (1)`;
-          yield* sql`COMMIT`.pipe(Effect.retry(askedFor(within)));
+          const left = Math.max(0, until - (yield* Clock.currentTimeMillis));
+          yield* sql`COMMIT`.pipe(
+            Effect.retry(askedFor(Duration.millis(left))),
+          );
         });
 
       // Whether this user can write the lock, or the folder it goes in.
@@ -182,11 +191,12 @@ export const layer = (open: OpenDatabase) =>
           ),
           Effect.catch((error) =>
             Effect.gen(function* () {
-              // A lock this user can't write makes every move of theirs
-              // refuse too, so the change runs. Any other failure is
-              // this process's alone, and a move elsewhere may hold the
-              // lock.
-              if (yield* lockWritable) {
+              // A lock this user can't write, or one that isn't a lock
+              // database at all, makes every move refuse too, so the
+              // change runs. Any other failure is this process's alone,
+              // and a move elsewhere may hold the lock.
+              const broken = /not a database|malformed/i.test(error.message);
+              if (!broken && (yield* lockWritable)) {
                 return yield* new DataDirLockUnavailable({
                   file,
                   reason: error.message,

@@ -68,6 +68,9 @@ export class Moves extends Context.Service<
       caller: Caller,
       sourceWorktreeId: string,
     ) => Effect.Effect<boolean>;
+    // Whether a move is in flight, from before its landing to its last
+    // file: what a data-folder move's copy would miss.
+    readonly underWay: Effect.Effect<boolean>;
   }
 >()("sm/host/Moves") {}
 
@@ -130,6 +133,7 @@ const make = Effect.gen(function* () {
     // oxlint-disable-next-line shigomori/effect-fn-service-methods -- generic over the move it runs, which Effect.fn's signature would erase
     run,
     cancel,
+    underWay: Effect.map(FiberMap.size(moves), (n) => n > 0),
   });
 });
 
