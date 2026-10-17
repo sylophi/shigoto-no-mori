@@ -52,3 +52,13 @@ jobs:
 
       - name: Walks
         run: pnpm walks
+        env:
+          SM_WALK_LOGS: ${{ runner.temp }}/walk-logs
+
+      - name: Keep the app's logs of a failed walk
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: walk-logs
+          path: ${{ runner.temp }}/walk-logs
+          if-no-files-found: ignore
