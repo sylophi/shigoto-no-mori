@@ -1,5 +1,6 @@
 import {
   DEVICE_SETTINGS_DEFAULTS,
+  type DeviceSettingsPatch,
   DeviceSettingsPatchSchema,
   modeledKeyFields,
   PROJECT_CONFIG_DEFAULTS,
@@ -169,6 +170,17 @@ export class Config extends Context.Service<
     // The document as stored: no defaults filled in, keys this build
     // doesn't model included. A project with no settings reads as null.
     readonly read: (scope: ConfigScope) => Effect.Effect<ConfigDoc | null>;
+    // A device setting as it applies: the stored value when it is one
+    // of the setting's, else its default.
+    readonly device: <K extends keyof DeviceSettingsPatch>(
+      key: K,
+    ) => Effect.Effect<(typeof DEVICE_SETTINGS_DEFAULTS)[K]>;
+    // The app's save of some device settings: each key given set, or
+    // removed when it equals its default or is null, the rest kept, in
+    // one transaction.
+    readonly patch: (
+      patch: DeviceSettingsPatch,
+    ) => Effect.Effect<void, InvalidConfigDocument>;
     // A setting from its text form (true/on/yes/1, an enum member, a
     // number). A value equal to the default is stored by removing the
     // key. Answers the value stored, none for a cleared one.
@@ -485,6 +497,53 @@ const make = Effect.gen(function* () {
     return yield* load(scope);
   });
 
+  const device = Effect.fn("Config.device")(function* <
+    K extends keyof DeviceSettingsPatch,
+  >(key: K) {
+    const doc = yield* load({ kind: "device" });
+    const field: Schema.Decoder<unknown> =
+      DeviceSettingsPatchSchema.struct.fields[key];
+    const stored = Schema.decodeUnknownOption(field)(doc?.[key]);
+    return (Option.getOrUndefined(stored) ??
+      DEVICE_SETTINGS_DEFAULTS[key]) as (typeof DEVICE_SETTINGS_DEFAULTS)[K];
+  });
+
+  const patch = Effect.fn("Config.patch")(function* (
+    changes: DeviceSettingsPatch,
+  ) {
+    const given = Object.entries(changes).filter(
+      ([, value]) => value !== undefined,
+    );
+    const problem = documentProblem(
+      keysOf({ kind: "device" }).filter(({ name }) =>
+        given.some(([key]) => key === name),
+      ),
+      Object.fromEntries(given),
+    );
+    if (problem !== undefined) {
+      return yield* new InvalidConfigDocument({ problem });
+    }
+    yield* update({ kind: "device" }, (doc) => {
+      for (const [key, value] of given) {
+        if (
+          value === null ||
+          JSON.stringify(value) ===
+            JSON.stringify(
+              DEVICE_SETTINGS_DEFAULTS[key as keyof DeviceSettingsPatch],
+            )
+        ) {
+          docDelete(doc, key);
+        } else {
+          docSet(doc, key, value);
+        }
+      }
+    }).pipe(
+      Effect.catchTags({
+        MissingDefaultBranch: (missing) => Effect.die(missing),
+      }),
+    );
+  });
+
   const unset = Effect.fn("Config.unset")(function* (
     scope: ConfigScope,
     name: string,
@@ -570,6 +629,8 @@ const make = Effect.gen(function* () {
     list,
     get,
     read,
+    device,
+    patch,
     set,
     unset,
     write,

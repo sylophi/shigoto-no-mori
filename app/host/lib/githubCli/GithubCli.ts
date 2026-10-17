@@ -9,6 +9,7 @@ import type {
   PullRequestOptions,
   RepoMergeConfig,
 } from "@shigomori/contracts/schemas";
+import { DEVICE_SETTINGS_DEFAULTS } from "@shigomori/contracts/schemas";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -312,7 +313,9 @@ const make = Effect.gen(function* () {
       Effect.provideService(EngineConfig.Config, engineConfig),
       Effect.orDie,
     );
-    if (config.githubCli === false) return "integration-off" as const;
+    if (!(config.githubCli ?? DEVICE_SETTINGS_DEFAULTS.githubCli)) {
+      return "integration-off" as const;
+    }
     const { installed, authed } = yield* probe;
     if (!installed) return "gh-missing" as const;
     if (!authed) return "gh-signed-out" as const;

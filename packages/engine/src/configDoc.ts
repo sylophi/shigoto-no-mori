@@ -1,7 +1,12 @@
 // A settings document and the keys a scope models, the way the CLI
 // reads and edits them: keys are the JSON field names, dotted for
 // nesting (scripts.setup).
+import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
+import {
+  isCarryOverEntry,
+  isLauncherCommand,
+} from "@shigomori/contracts/schemas/config";
 
 export type ConfigDoc = { [key: string]: unknown };
 
@@ -206,39 +211,27 @@ export function mergeConfigDoc(
   mergeObjects(doc, payload);
 }
 
-const filled = (value: unknown) =>
-  typeof value === "string" && value.trim() !== "";
-
 // What is wrong with a launcher, a hidden launcher id and a carry-over
-// entry, in the words a refused write uses.
+// entry, in the words a refused write uses; the rule is the setting's
+// schema's.
 export const launcherProblem = (entry: unknown) => {
   if (!isObject(entry)) return "entries must be objects";
+  if (isLauncherCommand(entry)) return undefined;
   const missing = ["id", "label", "command"].find(
-    (field) => !filled(entry[field]),
+    (field) => !Schema.is(Schema.NonEmptyString)(entry[field]),
   );
-  return missing === undefined
-    ? undefined
-    : `entries need a non-empty ${missing}`;
+  return `entries need a non-empty ${missing ?? "id"}`;
 };
 
 export const launcherIdProblem = (entry: unknown) =>
   typeof entry === "string" ? undefined : "entries must be strings";
 
-// Relative, with no `..` step and no NUL.
-const isSafeRelativePath = (path: string) =>
-  !path.startsWith("/") &&
-  !path.includes("\u0000") &&
-  !path.split(/[\\/]/).includes("..");
-
 export const carryOverProblem = (entry: unknown) => {
   if (!isObject(entry)) return "entries must be objects";
-  const { path, mode } = entry;
-  if (typeof path !== "string" || path === "" || !isSafeRelativePath(path)) {
-    return "entries need a path inside the project root";
-  }
-  return mode === "copy" || mode === "symlink"
-    ? undefined
-    : "entries need mode copy or symlink";
+  if (isCarryOverEntry(entry)) return undefined;
+  return isCarryOverEntry({ ...entry, mode: "copy" })
+    ? "entries need mode copy or symlink"
+    : "entries need a path inside the project root";
 };
 
 // What keeps a whole document from being written: a required key

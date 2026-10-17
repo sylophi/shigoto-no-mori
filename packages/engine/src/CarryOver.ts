@@ -4,6 +4,11 @@
 // looked up across the project's checkouts and applied best effort into
 // the new worktree, with directory symlinks hidden from git.
 import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
+import {
+  type CarryOverEntry,
+  isCarryOverEntry,
+} from "@shigomori/contracts/schemas/config";
+import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -18,11 +23,6 @@ import * as Darwin from "./Darwin.ts";
 import { copyFailure, copyTree, entryExists } from "./entries.ts";
 import { pidAlive } from "./processes.ts";
 import * as Git from "./Git.ts";
-
-export type CarryOverEntry = {
-  readonly path: string;
-  readonly mode: "copy" | "symlink";
-};
 
 type CarryOverFailure = {
   readonly path: string;
@@ -74,27 +74,25 @@ export class CarryOver extends Context.Service<
   }
 >()("sm/engine/CarryOver") {}
 
-// The project's own entries, those that parse.
+// The project's own entries, those the setting's schema takes: never
+// anywhere but inside the worktree, whatever was synced.
 const manualEntries = (
   settings: Readonly<Record<string, unknown>> | null,
 ): ReadonlyArray<CarryOverEntry> => {
   const entries = settings?.["carryOver"];
   return Array.isArray(entries)
     ? entries.flatMap((entry) =>
-        Predicate.isObject(entry) &&
-        typeof entry["path"] === "string" &&
-        // Never anywhere but inside the worktree, whatever was synced.
-        isSafeRelPath(entry["path"]) &&
-        (entry["mode"] === "copy" || entry["mode"] === "symlink")
-          ? [{ path: entry["path"], mode: entry["mode"] }]
-          : [],
+        isCarryOverEntry(entry) ? [{ path: entry.path, mode: entry.mode }] : [],
       )
     : [];
 };
 
-// The integration is opt-out: absent means on.
-const includeEnabled = (settings: Readonly<Record<string, unknown>> | null) =>
-  settings?.["useWorktreeInclude"] !== false;
+const includeEnabled = (settings: Readonly<Record<string, unknown>> | null) => {
+  const stored = settings?.["useWorktreeInclude"];
+  return Predicate.isBoolean(stored)
+    ? stored
+    : PROJECT_CONFIG_DEFAULTS.useWorktreeInclude;
+};
 
 // Duplicate and trailing separators folded, as stored entries are
 // compared against git's output.

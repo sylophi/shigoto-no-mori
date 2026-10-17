@@ -257,10 +257,7 @@ const make = Effect.gen(function* () {
     entries?: ReadonlyArray<Launchers.Launchable>,
   ) =>
     Effect.gen(function* () {
-      const chosen = yield* config.get({ kind: "device" }, "terminal").pipe(
-        Effect.map(({ value }) => (typeof value === "string" ? value : "")),
-        Effect.orElseSucceed(() => ""),
-      );
+      const chosen = yield* config.device("terminal");
       const installed =
         TERMINAL_SCRIPTS[chosen] === undefined
           ? undefined
@@ -438,10 +435,7 @@ const make = Effect.gen(function* () {
     if (info.type === "Directory") {
       return yield* new NotAFile({ path: absolute });
     }
-    const chosen = yield* config.get({ kind: "device" }, "editor").pipe(
-      Effect.map(({ value }) => (typeof value === "string" ? value : "")),
-      Effect.orElseSucceed(() => ""),
-    );
+    const chosen = (yield* config.device("editor")) ?? "";
     const entry = (yield* launchers.launchable(located.project)).find(
       (candidate) =>
         candidate.kind === "detected" &&
