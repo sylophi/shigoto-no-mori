@@ -399,7 +399,7 @@ it("backstop: a working tree whose watch fails every time it starts is said chan
   assert.deepEqual(edits, ["p1"], "said changed on every beat");
 });
 
-it("backstop: a project whose reading hangs holds the others up for its deadline at most, and is asked again only on a doubling wait", async () => {
+it("backstop: a project whose reading hangs holds another up once, for its deadline, and is not read again while that read is out", async () => {
   const root = realpathSync(tempDir("sm-gitwatch-stall-", trackTest));
   const repos = ["hangs", "fine"].map((name) => {
     const repo = join(root, name);

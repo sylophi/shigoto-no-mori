@@ -40,6 +40,7 @@
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FiberMap from "effect/FiberMap";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -299,9 +300,9 @@ const make = (deps: GitWatcherDeps) =>
     // Each watched project's git state as last seen. The projects whose
     // watch has heard a change not yet signalled (its debounce running),
     // by the beat it first heard one in, which the backstop leaves to it
-    // for a beat. And the projects whose reconcile stalled (a volume that
-    // hangs an open, #932), skipped until a later beat on a doubling
-    // wait, so no beat piles another stuck open on the thread pool.
+    // for a beat. And the projects whose files didn't answer in time (a
+    // volume that hangs an open, #932), skipped until a later beat on a
+    // doubling wait.
     const states = new Map<string, string>();
     const hearing = new Map<string, number>();
     const stalled = new Map<
@@ -309,14 +310,55 @@ const make = (deps: GitWatcherDeps) =>
       { readonly until: number; readonly tries: number }
     >();
     let beats = 0;
-    const readState = (gitDir: string) =>
-      (deps.gitState?.(gitDir) ?? gitStateOf(gitDir)).pipe(
-        Effect.provide(platform),
-        Effect.option,
-      );
     // The working trees whose watch ended as it started, signalled once
     // until one hears an event.
     const failing = new Set<string>();
+    // Each project's read of its files in flight. A read that hangs is
+    // left to finish rather than abandoned and asked again, so a project
+    // never holds more than one stuck open on the thread pool, and no
+    // lock is held while one is out.
+    const reads = yield* FiberMap.make<string>();
+
+    // What a project's files say, read with no lock held: its git
+    // directory, its working trees and its git state (none for a reading
+    // that failed, which says nothing about a change).
+    const readProject = (projectPath: string) =>
+      Effect.gen(function* () {
+        const gitDir = yield* refsDirOf(projectPath);
+        if (gitDir === null) return { gitDir, trees: new Set<string>() };
+        const found = yield* workingTreesOf(projectPath, gitDir);
+        const state = yield* (
+          deps.gitState?.(gitDir) ?? gitStateOf(gitDir)
+        ).pipe(Effect.option);
+        return { gitDir, trees: found, state };
+      }).pipe(Effect.provide(platform));
+    type ProjectRead = Effect.Success<ReturnType<typeof readProject>>;
+
+    // The project's read, waited on for STEP_TIMEOUT at most: "busy" while
+    // an earlier one is still out (a stuck volume), "late" when this one
+    // ran past the deadline.
+    const readOf = (projectId: string, projectPath: string) =>
+      Effect.gen(function* () {
+        if (yield* FiberMap.has(reads, projectId)) return "busy" as const;
+        const fiber = yield* FiberMap.run(
+          reads,
+          projectId,
+          readProject(projectPath),
+        );
+        const read = yield* Fiber.join(fiber).pipe(
+          Effect.timeoutOption(STEP_TIMEOUT),
+          Effect.orElseSucceed(() => Option.none<ProjectRead>()),
+        );
+        return Option.isSome(read) ? read.value : ("late" as const);
+      });
+
+    const stall = (projectId: string) => {
+      const tries = (stalled.get(projectId)?.tries ?? 0) + 1;
+      stalled.set(projectId, {
+        until: beats + 2 ** Math.min(tries, 5),
+        tries,
+      });
+    };
 
     // One working tree's edits: a burst's first change opens a window,
     // and the window's end is one signal, so a tree that never goes
@@ -336,16 +378,9 @@ const make = (deps: GitWatcherDeps) =>
         Effect.ignore,
       );
 
-    // The project's working trees watched, and only those.
-    const followTrees = (
-      projectId: string,
-      projectPath: string,
-      gitDir: string,
-    ) =>
+    // The project's working trees watched, and only `wanted`.
+    const followTrees = (projectId: string, wanted: ReadonlySet<string>) =>
       Effect.gen(function* () {
-        const wanted = yield* workingTreesOf(projectPath, gitDir).pipe(
-          Effect.provide(platform),
-        );
         const held = trees.get(projectId) ?? new Set<string>();
         for (const tree of held) {
           if (!wanted.has(tree)) {
@@ -355,20 +390,14 @@ const make = (deps: GitWatcherDeps) =>
         }
         let ended = false;
         for (const tree of wanted) {
-          if (yield* FiberMap.has(treeWatches, treeKey(projectId, tree))) {
-            continue;
-          }
-          // Held, but its watch ended: edits since went unseen.
           const key = treeKey(projectId, tree);
+          if (yield* FiberMap.has(treeWatches, key)) continue;
+          // Held, but its watch ended: edits since went unseen.
           if (held.has(tree) && !failing.has(key)) {
             ended = true;
             failing.add(key);
           }
-          yield* FiberMap.run(
-            treeWatches,
-            treeKey(projectId, tree),
-            watchTree(projectId, tree),
-          );
+          yield* FiberMap.run(treeWatches, key, watchTree(projectId, tree));
         }
         trees.set(projectId, wanted);
         if (ended) deps.onFilesChanged(projectId);
@@ -384,7 +413,7 @@ const make = (deps: GitWatcherDeps) =>
       });
 
     // One project's pings: its git directory's relevant changes,
-    // debounced, and its working trees followed as worktrees come and go.
+    // debounced, its state and working trees read again with each.
     const watch = (
       projectId: string,
       entry: { readonly gitDir: string; readonly projectPath: string },
@@ -399,24 +428,16 @@ const make = (deps: GitWatcherDeps) =>
         Stream.debounce(DEBOUNCE_MS),
         Stream.runForEach(() =>
           Effect.gen(function* () {
-            // A stalled project's reads wait for its beat.
-            if (!stalled.has(projectId)) {
-              const read = yield* readState(entry.gitDir).pipe(
-                Effect.timeoutOption(STEP_TIMEOUT),
-              );
-              if (Option.isNone(read)) {
-                stalled.set(projectId, { until: beats + 2, tries: 1 });
-              } else if (Option.isSome(read.value)) {
-                states.set(projectId, read.value.value);
-              }
+            // A stalled project's files wait for its beat.
+            const read = stalled.has(projectId)
+              ? ("busy" as const)
+              : yield* readOf(projectId, entry.projectPath);
+            if (read === "late") stall(projectId);
+            if (typeof read !== "string") {
+              yield* apply(projectId, entry.projectPath, read, false);
             }
             hearing.delete(projectId);
             deps.onChange(projectId);
-            if (stalled.has(projectId)) return;
-            yield* followTrees(projectId, entry.projectPath, entry.gitDir).pipe(
-              serial.withPermits(1),
-              Effect.timeoutOption(STEP_TIMEOUT),
-            );
           }),
         ),
         // The repository went away (deleted, unmounted), or is not
@@ -432,38 +453,40 @@ const make = (deps: GitWatcherDeps) =>
         ),
       );
 
-    // One project brought in line: its git directory watched (a new
+    // A project brought in line with what its files said, under `serial`
+    // and with no file read of its own: its git directory watched (a new
     // one, or one that moved or whose watch ended), its working trees
-    // followed, and what moved that no event said signalled (a watch
-    // that dropped an event, or ended and was started again here).
-    const reconcileProject = (projectId: string, projectPath: string) =>
-      Effect.gen(function* () {
-        const gitDir = yield* refsDirOf(projectPath).pipe(
-          Effect.provide(platform),
-        );
+    // followed, and with `signal`, what moved that no event said
+    // signalled (a watch that dropped an event, or ended).
+    function apply(
+      projectId: string,
+      projectPath: string,
+      read: ProjectRead,
+      signal: boolean,
+    ): Effect.Effect<void> {
+      return Effect.gen(function* () {
         const held = gitDirs.get(projectId);
-        if (held !== undefined && held.gitDir !== gitDir) {
+        if (held !== undefined && held.gitDir !== read.gitDir) {
           gitDirs.delete(projectId);
           states.delete(projectId);
           yield* FiberMap.remove(watches, projectId);
         }
-        if (gitDir === null) return yield* dropTrees(projectId);
+        if (read.gitDir === null) return yield* dropTrees(projectId);
         // A worktree moved by `sm` writes the store, which reconciles.
-        yield* followTrees(projectId, projectPath, gitDir);
+        yield* followTrees(projectId, read.trees);
         if (!gitDirs.has(projectId)) {
-          const entry = { gitDir, projectPath };
+          const entry = { gitDir: read.gitDir, projectPath };
           gitDirs.set(projectId, entry);
           yield* FiberMap.run(watches, projectId, watch(projectId, entry));
         }
-        if ((hearing.get(projectId) ?? -2) >= beats - 1) return;
-        const state = yield* readState(gitDir);
-        if (Option.isNone(state)) return;
+        if (!("state" in read) || Option.isNone(read.state)) return;
         const last = states.get(projectId);
-        states.set(projectId, state.value);
-        if (last !== undefined && last !== state.value) {
+        states.set(projectId, read.state.value);
+        if (signal && last !== undefined && last !== read.state.value) {
           deps.onChange(projectId);
         }
       }).pipe(serial.withPermits(1));
+    }
 
     const forget = (projectId: string) =>
       Effect.gen(function* () {
@@ -475,9 +498,11 @@ const make = (deps: GitWatcherDeps) =>
         yield* dropTrees(projectId);
       }).pipe(serial.withPermits(1));
 
-    // Each project under its own deadline, so one on a volume that hangs
-    // holds `serial` for that long at most, and is skipped after on a
-    // doubling wait.
+    // Each project's files read with no lock held and at most one read
+    // out per project, so one on a volume that hangs holds up nothing
+    // but itself, and is skipped after on a doubling wait. One pass at a
+    // time, so two (the beat's and a store change's) don't read alike.
+    const passes = yield* Semaphore.make(1);
     const reconcileNow = Effect.gen(function* () {
       const projects = yield* Effect.try(() =>
         (deps.projects ?? loadProjects)(),
@@ -485,27 +510,27 @@ const make = (deps: GitWatcherDeps) =>
       // The registry is unreadable right now, so keep what is watched.
       if (Option.isNone(projects)) return;
       const ids = new Set(projects.value.map((project) => project.id));
-      const known = [...gitDirs.keys(), ...trees.keys(), ...states.keys()];
+      const known = [
+        ...gitDirs.keys(),
+        ...trees.keys(),
+        ...states.keys(),
+        ...stalled.keys(),
+      ];
       for (const projectId of new Set(known)) {
         if (!ids.has(projectId)) yield* forget(projectId);
       }
       for (const project of projects.value) {
-        const wait = stalled.get(project.id);
-        if (wait !== undefined && wait.until > beats) continue;
-        const done = yield* reconcileProject(project.id, project.path).pipe(
-          Effect.timeoutOption(STEP_TIMEOUT),
-        );
-        if (Option.isSome(done)) {
-          stalled.delete(project.id);
-        } else {
-          const tries = (wait?.tries ?? 0) + 1;
-          stalled.set(project.id, {
-            until: beats + 2 ** Math.min(tries, 5),
-            tries,
-          });
+        if ((stalled.get(project.id)?.until ?? -1) > beats) continue;
+        const read = yield* readOf(project.id, project.path);
+        if (read === "busy" || read === "late") {
+          stall(project.id);
+          continue;
         }
+        stalled.delete(project.id);
+        const quiet = (hearing.get(project.id) ?? -2) < beats - 1;
+        yield* apply(project.id, project.path, read, quiet);
       }
-    });
+    }).pipe(passes.withPermits(1));
     const reconcile = reconcileNow.pipe(
       Effect.withSpan("GitWatcher.reconcile"),
     );
