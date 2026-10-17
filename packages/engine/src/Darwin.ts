@@ -143,6 +143,27 @@ export class Darwin extends Context.Service<
 
 export const isFailed = Schema.is(Failed);
 
+// lstat of paths relative to a root, by relative path, a path it
+// couldn't answer for left out.
+export const lstatByPath = (
+  darwin: Darwin["Service"],
+  root: string,
+  paths: ReadonlyArray<string>,
+) =>
+  paths.length === 0
+    ? Effect.succeed(new Map<string, LstatEntry>())
+    : darwin.lstat({ root, paths }).pipe(
+        Stream.runCollect,
+        Effect.map(
+          (entries) =>
+            new Map(
+              entries.flatMap((entry) =>
+                isFailed(entry) ? [] : [[entry.path, entry] as const],
+              ),
+            ),
+        ),
+      );
+
 const encoder = new TextEncoder();
 
 // One NDJSON line: the verb's failure for a path, or its answer there.

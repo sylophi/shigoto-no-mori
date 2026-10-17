@@ -164,7 +164,8 @@ export const capture = (
   args: ReadonlyArray<string>,
   options: {
     readonly from?: "stdout" | "all";
-    readonly env?: Record<string, string> | undefined;
+    // A variable set to undefined is unset.
+    readonly env?: Record<string, string | undefined> | undefined;
     readonly cwd?: string;
   } = {},
 ) =>
@@ -201,7 +202,7 @@ export const captureWithin = (
   timeout: Duration.Input,
   options: {
     readonly from?: "stdout" | "all";
-    readonly env?: Record<string, string> | undefined;
+    readonly env?: Record<string, string | undefined> | undefined;
     readonly cwd?: string;
   } = {},
 ) =>

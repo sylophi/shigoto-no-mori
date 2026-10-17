@@ -12,7 +12,7 @@ import * as Path from "effect/Path";
 import { type AgentSession } from "../agentSessions.ts";
 import * as CarryOver from "../CarryOver.ts";
 import * as CloneCheckout from "../CloneCheckout.ts";
-import type { CloneSource } from "../CloneCheckout.ts";
+import type { Source } from "../CarryOver.ts";
 import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { splitRemoteRef } from "../gitParse.ts";
@@ -237,13 +237,13 @@ export const makeCreating = ({
       });
 
     // What a new worktree goes through: carry-over, then the setup script
-    // and port-pool's provision. `base` is the ref it was branched from,
-    // which decides where carry-over looks first.
+    // and port-pool's provision. `baseBranch` is the local branch its base
+    // lands on ("" for none), which decides where carry-over looks first.
     const createLifecycle = (
       project: RegisteredProject,
       worktree: WorktreeIdentity,
       checkouts: ReadonlyArray<WorktreeIdentity>,
-      base: string,
+      baseBranch: string,
       skipSetup: boolean,
       reporter: Reporter,
     ) =>
@@ -254,7 +254,7 @@ export const makeCreating = ({
           settings,
           checkouts,
           destination: worktree.path,
-          base,
+          baseBranch,
         });
         if (Option.isSome(carried)) {
           yield* reporter.report({ event: "phase", phase: "carryOver" });
@@ -338,6 +338,14 @@ export const makeCreating = ({
         yield* fs
           .makeDirectory(path.dirname(place), { recursive: true })
           .pipe(Effect.orDie);
+        // The base read once: the local branch it lands on (`origin/feat`
+        // is local `feat` where that exists), and the one a checkout
+        // tracks it with.
+        const resolved =
+          input.base === ""
+            ? undefined
+            : yield* git.resolveCheckoutRef(project.path, input.base, remotes);
+        const baseBranch = resolved?.target ?? "";
         // The checkout on the base branch, else the primary, else another:
         // where carry-over looks too.
         const source = input.clone
@@ -345,25 +353,14 @@ export const makeCreating = ({
               repo: project.path,
               checkouts: existing,
               destination: place,
-              baseBranch:
-                input.base === ""
-                  ? ""
-                  : (yield* git.resolveCheckoutRef(
-                      project.path,
-                      input.base,
-                      remotes,
-                    )).target,
+              baseBranch,
             })
-          : Option.none<CloneSource>();
+          : Option.none<Source>();
         const noCheckout = Option.isSome(source);
         // The branch the add makes: a new one, or in checkout mode the local
         // branch it tracks a remote base with.
         const branch = input.checkout
-          ? Option.getOrElse(
-              (yield* git.resolveCheckoutRef(project.path, input.base, remotes))
-                .track,
-              () => "",
-            )
+          ? Option.getOrElse(resolved?.track ?? Option.none<string>(), () => "")
           : input.branch.trim() === ""
             ? name
             : input.branch.trim();
@@ -433,7 +430,7 @@ export const makeCreating = ({
         // The id is the path's, so what a worktree removed from here left
         // under it (a removal a crash cut short) isn't this one's.
         yield* kept.forget(project, made.id);
-        return { made, found, cloned };
+        return { made, found, cloned, baseBranch };
       });
 
     const create = Effect.fn("Worktrees.create")(function* (
@@ -462,7 +459,7 @@ export const makeCreating = ({
           return yield* new WorktreeRefused({ reason, subject: ref });
         }
       }
-      const { made, found, cloned } = yield* addWorktree(project, {
+      const { made, found, cloned, baseBranch } = yield* addWorktree(project, {
         name,
         branch: input.branch ?? "",
         base: input.base ?? "",
@@ -488,7 +485,7 @@ export const makeCreating = ({
         project,
         made,
         found,
-        input.base ?? "",
+        baseBranch,
         input.skipSetup ?? false,
         reporter,
       );

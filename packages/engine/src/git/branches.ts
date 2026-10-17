@@ -32,7 +32,7 @@ export const makeBranches = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { run } = running;
+    const { run, gitPath } = running;
     const {
       listRemotes,
       localBranchExists,
@@ -71,12 +71,7 @@ export const makeBranches = ({
     const appendExcludes = Effect.fn("Git.appendExcludes")(
       function* (repo: string, paths: ReadonlyArray<string>) {
         if (paths.length === 0) return;
-        const excludeFile = yield* run(repo, [
-          "rev-parse",
-          "--path-format=absolute",
-          "--git-path",
-          "info/exclude",
-        ]).pipe(Effect.map((stdout) => stdout.trim()));
+        const excludeFile = yield* gitPath(repo, "info/exclude");
         // Only a file that isn't there yet reads as empty: rewriting one
         // that couldn't be read would lose the user's lines.
         const existing = yield* fs
@@ -233,13 +228,7 @@ export const makeBranches = ({
       }
       // The exclude file lives in the repository's git dir, which a
       // linked worktree only points at. Its rules read like the root's.
-      const exclude = yield* run(worktree, [
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-path",
-        "info/exclude",
-      ]).pipe(
-        Effect.map((stdout) => stdout.trim()),
+      const exclude = yield* gitPath(worktree, "info/exclude").pipe(
         Effect.orElseSucceed(() => ""),
       );
       if (exclude !== "") rules.push(...(yield* readRules(exclude)));

@@ -32,10 +32,9 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as SqlClient from "effect/sql/SqlClient";
-import { orderSources } from "./CarryOver.ts";
+import { orderSources, type Source } from "./CarryOver.ts";
 import * as Darwin from "./Darwin.ts";
 import { envVar } from "./environment.ts";
 import * as Git from "./Git.ts";
@@ -63,16 +62,8 @@ import {
   verifiedRecord,
 } from "./gitIndex.ts";
 import * as Paths from "./Paths.ts";
+import { capture } from "./processes.ts";
 import { worktreeIdFromPath } from "./worktreeLayout.ts";
-
-// A checkout a new worktree's files may be cloned from.
-export type CloneSource = {
-  readonly name: string;
-  readonly path: string;
-  readonly branch: string;
-  readonly isPrimary: boolean;
-  readonly detached: boolean;
-};
 
 // How a clone checkout went: tracked files cloned, paths git wrote
 // (submodules included), and clones read back and hashed.
@@ -145,10 +136,10 @@ export class CloneCheckout extends Context.Service<
     // the project or every checkout rules a clone out.
     readonly pickSource: (input: {
       readonly repo: string;
-      readonly checkouts: ReadonlyArray<CloneSource>;
+      readonly checkouts: ReadonlyArray<Source>;
       readonly destination: string;
       readonly baseBranch: string;
-    }) => Effect.Effect<Option.Option<CloneSource>>;
+    }) => Effect.Effect<Option.Option<Source>>;
     // Fills a worktree made --no-checkout: its files cloned from `source`
     // where that is safe and written by git elsewhere, else all written by
     // git when the clone gives up, then the post-checkout hook git
@@ -241,22 +232,8 @@ const make = Effect.gen(function* () {
     ).pipe(Effect.orElseSucceed(() => 0o022)),
   );
 
-  // lstat of many absolute paths in one helper call, by path.
-  // lstat of paths relative to a root, by relative path.
   const lstatUnder = (root: string, relative: ReadonlyArray<string>) =>
-    relative.length === 0
-      ? Effect.succeed(new Map<string, Darwin.LstatEntry>())
-      : darwin.lstat({ root, paths: relative }).pipe(
-          Stream.runCollect,
-          Effect.map(
-            (entries) =>
-              new Map(
-                entries.flatMap((entry) =>
-                  Darwin.isFailed(entry) ? [] : [[entry.path, entry]],
-                ),
-              ),
-          ),
-        );
+    Darwin.lstatByPath(darwin, root, relative);
 
   // lstat of absolute paths, by path. Best effort: a path it can't answer
   // for reads as absent.
@@ -271,16 +248,6 @@ const make = Effect.gen(function* () {
       ),
       Effect.orElseSucceed(() => new Map<string, Darwin.LstatEntry>()),
     );
-
-  const gitPath = (checkout: string, name: string) =>
-    git
-      .run(checkout, [
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-path",
-        name,
-      ])
-      .pipe(Effect.map((out) => out.trim()));
 
   const configValue = (checkout: string, args: ReadonlyArray<string>) =>
     git.run(checkout, ["config", ...args]).pipe(
@@ -471,7 +438,7 @@ const make = Effect.gen(function* () {
     // in between (a concurrent git) leaves the raciness cutoff unknown,
     // so nothing is cloned on its word.
     const readIndex = Effect.gen(function* () {
-      const index = yield* gitPath(source, "index");
+      const index = yield* git.gitPath(source, "index");
       const mtime = lstatAll([index]).pipe(
         Effect.map((found) => found.get(index)),
       );
@@ -507,7 +474,7 @@ const make = Effect.gen(function* () {
       else if (!path.isAbsolute(globalAttrs)) {
         globalAttrs = path.join(source, globalAttrs);
       }
-      const infoAttrs = yield* gitPath(source, "info/attributes");
+      const infoAttrs = yield* git.gitPath(source, "info/attributes");
       const origins = yield* git
         .run(source, ["config", "--list", "--show-origin", "--name-only", "-z"])
         .pipe(Effect.orElseSucceed(() => ""));
@@ -1061,7 +1028,7 @@ const make = Effect.gen(function* () {
       const file = new Uint8Array(body.length + sum.length);
       file.set(body);
       file.set(sum, body.length);
-      const index = yield* gitPath(worktree, "index");
+      const index = yield* git.gitPath(worktree, "index");
       const lock = `${index}.lock`;
       yield* fs.writeFile(lock, file, { flag: "wx", mode: 0o666 });
       yield* fs
@@ -1092,7 +1059,7 @@ const make = Effect.gen(function* () {
       const args = ["0".repeat(head.length), head, "1"];
       // Most repos have no hooks: `hook list` says so before anything else
       // is asked.
-      const hooksDir = yield* Effect.cached(gitPath(worktree, "hooks"));
+      const hooksDir = yield* Effect.cached(git.gitPath(worktree, "hooks"));
       const listed = yield* git
         .run(worktree, ["hook", "list", "-z", "post-checkout"])
         .pipe(Effect.result);
@@ -1131,25 +1098,11 @@ const make = Effect.gen(function* () {
         GIT_WORK_TREE: undefined,
       };
       const runOne = (command: string, commandArgs: ReadonlyArray<string>) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const handle = yield* spawner.spawn(
-              ChildProcess.make(command, [...commandArgs], {
-                cwd: dir,
-                env: hookEnv,
-                extendEnv: true,
-                stdin: "ignore",
-              }),
-            );
-            const output = yield* handle.all.pipe(
-              Stream.decodeText(),
-              Stream.mkString,
-              Effect.orElseSucceed(() => ""),
-            );
-            const code = yield* handle.exitCode;
-            return { code: Number(code), output };
-          }),
-        );
+        capture(spawner, command, commandArgs, {
+          from: "all",
+          cwd: dir,
+          env: hookEnv,
+        });
       const run = (command: string, commandArgs: ReadonlyArray<string>) =>
         runOne(command, commandArgs).pipe(
           // A script without a #! line, which git hands to sh as a shell
@@ -1228,10 +1181,9 @@ const make = Effect.gen(function* () {
     return outcome;
   });
 
-  // Why the project's checkouts can't be cloned from, none when they can.
-  // A sparse checkout's new worktree is sparse too, which only git lays
-  // out, and a split index keeps entries whose raciness cutoff isn't the
-  // index's own.
+  // Whether the project's checkouts can't be cloned from: a sparse
+  // checkout's new worktree is sparse too, which only git lays out, and a
+  // split index keeps entries whose raciness cutoff isn't the index's own.
   const sparseOrSplit = (checkout: string) =>
     Effect.gen(function* () {
       return (
@@ -1285,11 +1237,11 @@ const make = Effect.gen(function* () {
 
   const pickSource = Effect.fn("CloneCheckout.pickSource")(function* (input: {
     readonly repo: string;
-    readonly checkouts: ReadonlyArray<CloneSource>;
+    readonly checkouts: ReadonlyArray<Source>;
     readonly destination: string;
     readonly baseBranch: string;
   }) {
-    if (yield* projectBlocked(input.repo)) return Option.none<CloneSource>();
+    if (yield* projectBlocked(input.repo)) return Option.none<Source>();
     // In carry-over's order: the checkout on the base branch, the
     // primary, then the rest by name.
     const ordered = orderSources(
@@ -1302,7 +1254,7 @@ const make = Effect.gen(function* () {
         return Option.some(source);
       }
     }
-    return Option.none<CloneSource>();
+    return Option.none<Source>();
   });
 
   const forget = Effect.fn("CloneCheckout.forget")(function* (
