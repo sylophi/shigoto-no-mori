@@ -257,9 +257,6 @@ const scriptsAndFoundation = (options: {
   // Every file-sync child, the daemon and the serve children a peer's
   // streams opened.
   FileSyncRunner.layer.pipe(
-    // The worktree moves and removals, around the scripts and terminals
-    // they stop and refuse for, and the carry-over reads.
-    Layer.provideMerge(Worktrees.layer),
     // What the user started through a script must not outlive the app,
     // orphaned to launchd: its close stops every run.
     Layer.provideMerge(
@@ -303,6 +300,10 @@ export const layer = (options: {
     // address first as it stops, so a terminal run during the quit
     // reads "not running" instead of dialing a closing listener.
     Layer.provideMerge(loopbackLayer()),
+    // The worktree moves and removals, around the scripts and terminals
+    // they stop and refuse for and the mirrors they carry or end, and the
+    // carry-over reads.
+    Layer.provideMerge(Worktrees.layer),
     Layer.provideMerge(mirrors),
     // The mirror's changed push, which the engine above and the
     // served streams feed.
