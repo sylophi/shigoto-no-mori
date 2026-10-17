@@ -2,7 +2,13 @@
 // lands, and what is kept under its id follows it, port-pool's lease
 // included (real git on a sandbox data dir).
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  symlinkSync,
+} from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
@@ -216,4 +222,40 @@ it("reads a worktree under a linked custom base as in place, and a move to its a
     [false],
   );
   assert.equal(result.moved, result.at, "the alias moved the worktree");
+});
+
+// The managed folder is named for the project as written, and git
+// spells the worktree with links resolved: the removal still finds the
+// folders it left, with both the data dir and the project linked.
+it("prunes a removed worktree's folders under a linked data dir and a project linked by another name", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const link = join(box.home, "proj-link");
+  symlinkSync(repo, link);
+  const dataDir = box.side("engine");
+  const realDataDir = `${dataDir}-real`;
+  renameSync(dataDir, realDataDir);
+  symlinkSync(realDataDir, dataDir);
+  await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: link });
+      const made = yield* worktrees.create(
+        project,
+        { name: "fox", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      );
+      const fox = (yield* worktrees.identities(project)).find(
+        ({ id }) => id === made.worktree.id,
+      );
+      assert.ok(fox);
+      yield* worktrees.remove(
+        { project, worktree: fox },
+        { force: true, keepBranch: true, skipCleanup: true },
+        { report: () => Effect.void, color: false },
+      );
+    }),
+  );
+  assert.ok(existsSync(join(realDataDir, "wt")));
+  assert.ok(!existsSync(join(realDataDir, "wt", "proj-link")));
 });

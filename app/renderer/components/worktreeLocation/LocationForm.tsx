@@ -9,6 +9,7 @@ import { useRelocationPlan } from "@/hooks/worktrees/useRelocationPlan";
 import {
   isManagedWorktree,
   PROJECT_CONFIG_DEFAULTS,
+  type RelocationPlan,
   type ShigomoriConfig,
   type Worktree,
   type WorktreeLayout,
@@ -81,20 +82,19 @@ export function LocationForm({
     projectId,
     layout,
     customPath.trim() || null,
-    worktrees.map((worktree) => worktree.path),
+    device.onProjectDrive,
     !customMissing,
   );
-  const planned = new Map(
-    (plan.data ?? []).map((entry) => [entry.worktreeId, entry]),
-  );
-  const toMove = customMissing
-    ? []
-    : movable.flatMap((worktree) => {
-        const entry = planned.get(worktree.id);
-        return entry === undefined || entry.inPlace
-          ? []
-          : [{ worktree, destination: entry.destination }];
-      });
+  const movesOf = (entries: RelocationPlan) => {
+    const planned = new Map(entries.map((entry) => [entry.worktreeId, entry]));
+    return movable.flatMap((worktree) => {
+      const entry = planned.get(worktree.id);
+      return entry === undefined || entry.inPlace
+        ? []
+        : [{ worktree, destination: entry.destination }];
+    });
+  };
+  const toMove = customMissing ? [] : movesOf(plan.data ?? []);
 
   const layoutChanged =
     layout !== savedLayout || customPath.trim() !== savedCustomPath.trim();
@@ -107,12 +107,13 @@ export function LocationForm({
     return null;
   };
 
-  // Not while the plan is out: an apply then would save the layout and
-  // move nothing.
+  // Only on a plan read: without one, an apply would save the layout
+  // and move nothing.
   const canSubmit =
     (layoutChanged || toMove.length > 0) &&
     !batchRunning &&
     !customMissing &&
+    plan.isSuccess &&
     !plan.isFetching;
 
   const handleApply = async () => {
@@ -122,6 +123,9 @@ export function LocationForm({
       return;
     }
     setCustomPathError(null);
+    const fresh = await plan.refetch();
+    if (!fresh.isSuccess) return;
+    const moves = movesOf(fresh.data);
 
     // The config write runs as the batch's prepare step so the form
     // stays disabled across it and a write failure aborts the moves.
@@ -152,7 +156,7 @@ export function LocationForm({
     };
 
     await runBatch(
-      toMove,
+      moves,
       (q) => q.worktree.id,
       async ({ worktree, destination }) => {
         await relocate.mutateAsync({

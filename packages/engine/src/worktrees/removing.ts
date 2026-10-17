@@ -166,16 +166,19 @@ export const makeRemoving = ({
           dataDir: paths.dataDir,
           dataDirName: paths.dataDirName,
         };
-        // git spells the worktree's path with links resolved, so the bases
-        // are compared both as written and resolved.
+        // git spells the worktree's path with links resolved, and the
+        // managed folder is named for the project as written, so each base
+        // is compared both as written and resolved.
         const real = (at: string) =>
           fs.realPath(at).pipe(Effect.orElseSucceed(() => at));
+        const projects = [projectPath, yield* real(projectPath)];
+        const dataDirs = [place.dataDir, yield* real(place.dataDir)];
         const levels = Math.max(
-          ownedLevels(parent, projectPath, place),
-          ownedLevels(parent, yield* real(projectPath), {
-            ...place,
-            dataDir: yield* real(place.dataDir),
-          }),
+          ...projects.flatMap((project) =>
+            dataDirs.map((dataDir) =>
+              ownedLevels(parent, project, { ...place, dataDir }),
+            ),
+          ),
         );
         // rmdir, which takes only an empty folder: something written there
         // since keeps it.

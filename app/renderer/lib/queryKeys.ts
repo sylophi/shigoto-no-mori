@@ -268,8 +268,8 @@ function buildQueryKeys(deviceId: string) {
       projectId: string,
       layout: string,
       customPath: string | null,
-      paths: readonly string[],
-    ) => host("relocationPlan", projectId, layout, customPath, paths),
+      onProjectDrive: boolean,
+    ) => host("relocationPlan", projectId, layout, customPath, onProjectDrive),
 
     // Host-scoped: the payload (RuntimeInfoSchema) is
     // a set of per-host facts served by the host-scoped runtime contract.
