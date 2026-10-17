@@ -3,6 +3,7 @@
 //   - a run's TMPDIR is its folder, and the folder goes as it exits,
 //   - a run's folder left by a SIGKILL is swept by the next run,
 //   - a live run's folder is not, until its process is gone,
+//   - nor is a killed run's that a live process joined,
 //   - a cache entry is kept while in use and swept once unused for the
 //     bound.
 //
@@ -29,7 +30,7 @@ const ENDS = {
 };
 
 // A run of its own on `root`, not inside this proof's run.
-function launch(root: string, end: keyof typeof ENDS) {
+function launch(root: string, end: keyof typeof ENDS, joining?: string) {
   const script = `
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,7 +42,8 @@ console.log(run + "\\n" + tmpdir());
 ${ENDS[end]}
 `;
   const env: NodeJS.ProcessEnv = { ...process.env, SM_TEST_ROOT: root };
-  delete env["SM_TEST_RUN"];
+  if (joining === undefined) delete env["SM_TEST_RUN"];
+  else env["SM_TEST_RUN"] = joining;
   return [
     process.execPath,
     ["--input-type=module", "-e", script],
@@ -56,8 +58,8 @@ function runTo(root: string, end: "exit" | "kill") {
   return { run, tmp };
 }
 
-async function holdingRun(root: string) {
-  const child = spawn(...launch(root, "hold"));
+async function holdingRun(root: string, joining?: string) {
+  const child = spawn(...launch(root, "hold", joining));
   const exited = once(child, "exit");
   const kill = () => {
     child.kill("SIGKILL");
@@ -92,6 +94,19 @@ it("a live run's folder is kept until its process is gone", async () => {
   await live.kill();
   runTo(root, "exit");
   assert.equal(existsSync(live.run), false);
+});
+
+it("a killed run's folder is kept while a process that joined it lives", async () => {
+  const root = tempDir("sm-test-temp-", trackTest);
+  const runner = await holdingRun(root);
+  const joined = await holdingRun(root, runner.run);
+  assert.equal(joined.run, runner.run);
+  await runner.kill();
+  runTo(root, "exit");
+  assert.equal(existsSync(runner.run), true);
+  await joined.kill();
+  runTo(root, "exit");
+  assert.equal(existsSync(runner.run), false);
 });
 
 it("a cache entry is swept once unused for the bound", () => {

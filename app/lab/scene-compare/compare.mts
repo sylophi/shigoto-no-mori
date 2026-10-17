@@ -14,6 +14,7 @@ import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { ownTestTemp } from "../../../testTemp.mts";
 import * as Predicate from "effect/Predicate";
 import { chromium, type Browser, type Page } from "playwright-core";
 
@@ -37,6 +38,10 @@ const started = Date.now();
 
 const git = (...args: string[]) =>
   execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+
+// Its scratch files, Vite's and Chromium's with them, in a folder of
+// this run's (../../../testTemp.mts).
+ownTestTemp("scenes");
 
 // The base, checked out beside the working tree. realpath: macOS's
 // temp dir is behind a symlink, which Vite resolves its way out of and

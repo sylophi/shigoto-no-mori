@@ -1,19 +1,21 @@
 // The one owner of every test run's temp files. Each runner here (the
 // app's proof runner and vitest configs, the packages', the walks', the
-// smoke, the Go tests through `node testTemp.mts`) takes a run folder,
+// smoke, the scene comparison, the Go tests and the hub's suite through
+// `node testTemp.mts`) takes a run folder,
 // `<temp>/sm-test/<family>/<id>/`, and points TMPDIR at it before any
 // test starts, so whatever a test, the code under it or a process it
 // spawns puts in the temp dir lands there. A run removes its folder as
 // it exits. One that never gets to (killed, a crash proof's SIGKILL, an
-// interrupted `pnpm test`) leaves a folder whose pid file names a dead
-// process, and the next run of any family sweeps it, at its start and
-// at its end.
+// interrupted `pnpm test`) leaves a folder whose pid file names only
+// dead processes, and the next run of any family sweeps it, at its
+// start and at its end.
 //
 // `cache/` beside the families holds what outlives a run on purpose
 // (the proofs' sm and macfs binaries), swept once nothing has used an
 // entry for STALE_MS.
 import { spawnSync } from "node:child_process";
 import {
+  appendFileSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -47,11 +49,15 @@ export function testCacheDir(name: string): string {
 }
 
 // Takes a run folder for `family` and points this process's TMPDIR at
-// it, unless a run already owns this process tree (a runner that spawns
-// vitest, whose config calls this too). Returns the run folder.
+// it. Inside a run already (a runner that spawns vitest, whose config
+// calls this too), joins that run instead, so the run is held while
+// either process lives. Returns the run folder.
 export function ownTestTemp(family: string): string {
   const owned = process.env[RUN];
-  if (owned !== undefined) return owned;
+  if (owned !== undefined) {
+    appendFileSync(join(owned, "pid"), `\n${process.pid}`);
+    return owned;
+  }
   const root = testTempRoot();
   sweepTestTemp(root);
   mkdirSync(join(root, family), { recursive: true });
@@ -86,12 +92,21 @@ function sweepTestTemp(root = testTempRoot()): void {
 }
 
 function held(run: string, now: number): boolean {
-  let pid = 0;
+  let text = "";
   try {
-    pid = Number(readFileSync(join(run, "pid"), "utf8"));
+    text = readFileSync(join(run, "pid"), "utf8");
   } catch {}
-  // Not yet written, and 0 would signal this process's group.
-  if (!Number.isInteger(pid) || pid <= 0) return !olderThanStale(run, now);
+  // 0 would signal this process's group.
+  const pids = text
+    .split("\n")
+    .map(Number)
+    .filter((pid) => Number.isInteger(pid) && pid > 0);
+  // Not yet written.
+  if (pids.length === 0) return !olderThanStale(run, now);
+  return pids.some(alive);
+}
+
+function alive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
