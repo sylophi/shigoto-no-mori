@@ -30,7 +30,11 @@ const BusyOperationsSchema = strict(
   Schema.Struct({
     runningScripts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     inflightDeletes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    // A data-folder move doesn't count them.
+    // The host always sends both. Optional so the protocol's wire
+    // sample, which has neither, still reads.
+    engineChanges: Schema.optional(
+      Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    ),
     busyTerminals: Schema.optional(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     ),

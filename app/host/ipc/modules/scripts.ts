@@ -8,14 +8,7 @@ import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
 import { findProject } from "@host/lib/projects";
-import {
-  attachScript,
-  cancelScript,
-  listRunningScripts,
-  resizeScript,
-  startScript,
-  writeToScript,
-} from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import { shellQuote } from "@host/lib/util/shellQuote";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -51,14 +44,18 @@ function resolveScriptCommand(
   }
 }
 
+const listed = Effect.map(Scripts.Scripts, (scripts) => ({
+  runs: scripts.list(),
+}));
+
 export const scriptsViews: ViewHandlers<
   typeof scriptsContract,
-  Views.Services
+  Views.Services | Scripts.Scripts
 > = {
   watch: () =>
     Views.view(
       "scripts:watch",
-      () => Effect.sync(() => ({ runs: listRunningScripts() })),
+      () => listed,
       Views.pushed(scriptsContract, "changed"),
     ),
 };
@@ -79,7 +76,7 @@ export const scriptsHandlers = {
           project: project.name,
         });
       }
-      const runId = yield* startScript({
+      const runId = yield* (yield* Scripts.Scripts).start({
         command,
         slot: lifecycleSlot(script),
         worktree: ctx.worktree,
@@ -91,20 +88,25 @@ export const scriptsHandlers = {
     }),
 
   cancel: ({ runId }) =>
-    Effect.map(cancelScript(runId), (cancelled) => ({ cancelled })),
+    Effect.flatMap(Scripts.Scripts, (scripts) =>
+      Effect.map(scripts.cancel(runId), (cancelled) => ({ cancelled })),
+    ),
 
-  write: ({ runId, data }) => Effect.sync(() => writeToScript(runId, data)),
+  write: ({ runId, data }) =>
+    Effect.map(Scripts.Scripts, (scripts) => scripts.write(runId, data)),
 
   resize: ({ runId, cols, rows }) =>
-    Effect.sync(() => resizeScript(runId, cols, rows)),
+    Effect.map(Scripts.Scripts, (scripts) => scripts.resize(runId, cols, rows)),
 
   orphanReport: () =>
     Effect.flatMap(OrphanSweep.OrphanSweep, (sweep) => sweep.takeReport),
 
-  list: () => Effect.sync(() => ({ runs: listRunningScripts() })),
+  list: () => listed,
 
   attach: ({ runId }, handlerCtx: HandlerContext) =>
-    Effect.sync(() => attachScript(runId, scriptEventNotifier(handlerCtx))),
+    Effect.map(Scripts.Scripts, (scripts) =>
+      scripts.attach(runId, scriptEventNotifier(handlerCtx)),
+    ),
 } satisfies EffectHandlers<
   typeof scriptsContract,
   HandlerContext,

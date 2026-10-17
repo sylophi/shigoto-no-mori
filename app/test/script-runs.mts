@@ -1,6 +1,6 @@
-// Durable proof for the scripts' PTY runs (host/lib/scripts/index.ts
-// over the node-pty wrapper in ScriptRuns.ts): real login shells, real process
-// groups.
+// Durable proof for the scripts' PTY runs (host/lib/Scripts.ts over the
+// node-pty wrapper in scripts/ScriptRuns.ts): real login shells, real
+// process groups.
 //
 // Asserts:
 //   - a run that ends on its own reports its exit code and leaves the
@@ -18,13 +18,9 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { ScriptEvent } from "@shigomori/contracts/schemas";
-import {
-  cancelScript,
-  killAllScripts,
-  listRunningScripts,
-  startScript,
-} from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import { OrphanSweep } from "@host/lib/scripts/OrphanSweep";
 import { initDataDirAt } from "@shared/paths";
 import { runHost } from "./lib/hostRuntime.mts";
@@ -45,48 +41,76 @@ beforeAll(() => {
 });
 afterAll(teardown);
 
+const withScripts = <A, E>(
+  body: (scripts: Scripts.Scripts["Service"]) => Effect.Effect<A, E>,
+) => runHost(Effect.flatMap(Scripts.Scripts, body));
+
 async function run(
   command: string,
   // The store write behind the orphan sweep's record, the real one
-  // unless a proof slows it down.
+  // unless a proof slows it down, on a Scripts of its own that lasts
+  // until the run's exit.
   record?: OrphanSweep["Service"]["record"],
 ) {
   const events: ScriptEvent[] = [];
-  const start = startScript({
-    command,
-    slot: { kind: "package", name: "proof" },
-    worktree: { id: "wt", name: "wt", branch: "main", path: root },
-    project: { id: "p", path: root, name: "p" },
-    notify: (event) => events.push(event),
-  });
-  const runId = await runHost(
+  const exit = () => events.find((event) => event.kind === "exit");
+  const start = Effect.flatMap(Scripts.Scripts, (scripts) =>
+    Effect.gen(function* () {
+      const runId = yield* scripts.start({
+        command,
+        slot: { kind: "package", name: "proof" },
+        worktree: { id: "wt", name: "wt", branch: "main", path: root },
+        project: { id: "p", path: root, name: "p" },
+        notify: (event) => events.push(event),
+      });
+      if (record !== undefined) {
+        yield* Effect.promise(() =>
+          waitFor(() => exit() !== undefined, "the run to exit"),
+        );
+      }
+      const listed = () => scripts.list().some((r) => r.runId === runId);
+      return { runId, listed };
+    }),
+  );
+  const started = await runHost(
     record === undefined
       ? start
       : Effect.gen(function* () {
           const sweep = yield* OrphanSweep;
           return yield* start.pipe(
-            Effect.provideService(OrphanSweep, { ...sweep, record }),
+            Effect.provide(
+              Scripts.layer({
+                hurried: () => false,
+                env: () => process.env,
+              }).pipe(
+                Layer.provide(
+                  Layer.succeed(
+                    OrphanSweep,
+                    OrphanSweep.of({ ...sweep, record }),
+                  ),
+                ),
+              ),
+            ),
           );
         }),
   );
-  const exit = () => events.find((event) => event.kind === "exit");
-  return { runId, events, exit };
+  return { ...started, events, exit };
 }
 
 it("a run that ends reports its code and leaves the list", async () => {
-  const { runId, exit } = await run("exit 3");
+  const { runId, exit, listed } = await run("exit 3");
   await waitFor(() => exit() !== undefined, "the run to exit");
   assert.deepEqual(exit(), { runId, kind: "exit", code: 3 });
-  assert.ok(listRunningScripts().every((script) => script.runId !== runId));
+  assert.equal(listed(), false);
 });
 
 it("a run that finishes while its record is written keeps its output and exit", async () => {
   // The write lasts until the command has exited, the slowest a store
   // can be.
-  const { runId, events, exit } = await run("echo quick; exit 4", (_, exited) =>
-    Effect.asVoid(exited),
+  const { runId, events, exit, listed } = await run(
+    "echo quick; exit 4",
+    (_, exited) => Effect.asVoid(exited),
   );
-  await waitFor(() => exit() !== undefined, "the run to exit");
   assert.deepEqual(exit(), { runId, kind: "exit", code: 4 });
   assert.match(
     events
@@ -94,7 +118,7 @@ it("a run that finishes while its record is written keeps its output and exit", 
       .join(""),
     /quick/,
   );
-  assert.ok(listRunningScripts().every((script) => script.runId !== runId));
+  assert.equal(listed(), false);
 });
 
 it("a cancel takes the whole process group down and reads as stopped", async () => {
@@ -103,7 +127,7 @@ it("a cancel takes the whole process group down and reads as stopped", async () 
   await waitFor(() => existsSync(pidFile), "the background child to start");
   const background = Number(readFileSync(pidFile, "utf8").trim());
   assert.ok(processAlive(background));
-  assert.equal(await runHost(cancelScript(runId)), true);
+  assert.equal(await withScripts((scripts) => scripts.cancel(runId)), true);
   assert.deepEqual(exit(), { runId, kind: "exit", code: null });
   await waitFor(
     () => !processAlive(background),
@@ -118,7 +142,7 @@ it("a script that ignores SIGTERM is killed when the grace is up", async () => {
   );
   await waitFor(() => existsSync(ready), "the script to arm its trap");
   const started = Date.now();
-  await runHost(killAllScripts({ graceMs: 300 }));
+  await withScripts((scripts) => scripts.stopAll({ graceMs: 300 }));
   await waitFor(() => exit() !== undefined, "the run to exit");
   assert.ok(
     Date.now() - started < 3_000,

@@ -41,11 +41,7 @@ import { dirtyRef } from "@shigomori/engine/Dirty";
 import { DataDirLock } from "@shigomori/engine/DataDirLock";
 import * as Git from "@shigomori/engine/Git";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
-import {
-  clearDeleteInflight,
-  getBusyOperations,
-  markDeleteInflight,
-} from "./scripts";
+import * as Scripts from "./Scripts";
 import {
   asMoveOwner,
   type Entry,
@@ -164,7 +160,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // The caller closes its fs watchers on the data dir here, before the
     // rename -- they're moot anyway, the app relaunches after the move.
     readonly beforeMove: Effect.Effect<void, E, R>;
-    // Every script's kill chain, waited for (host/lib/scripts).
+    // Every script's kill chain, waited for (Scripts.stopAll).
     readonly killAllScripts: Effect.Effect<void, never, R>;
     // Whether a worktree is being sent or brought (host/lib/sync/Moves),
     // whose files a copy would miss: asked once the move holds the lock,
@@ -230,7 +226,9 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // in-flight destructive lifecycle work (worktree/project deletes,
   // delegated engine runs) is mid-write inside the data dir and can't be
   // safely killed or moved under. Refuse instead.
-  if (getBusyOperations().inflightDeletes > 0) {
+  const scripts = yield* Scripts.Scripts;
+  const busy = yield* scripts.busy;
+  if (busy.inflightDeletes + (busy.engineChanges ?? 0) > 0) {
     return yield* new DataDirMoveError({
       reason:
         "Another operation is still running (worktree delete or CLI " +
@@ -317,7 +315,6 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   const journalHere = Effect.suspend(() =>
     writeJournal(journalFile, journal).pipe(Effect.mapError(callFailureOf)),
   );
-  const marked: Array<string> = [];
   let pointerStaged = false;
   let retired = false;
   let journaled = false;
@@ -408,10 +405,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         });
       }
     }
-    for (const { oldId } of entries) {
-      markDeleteInflight(oldId);
-      marked.push(oldId);
-    }
+    yield* scripts.deleting(entries.map(({ oldId }) => oldId));
     // Each moved worktree with its dirty capture as it is now, read
     // strictly: the forward re-key carries that capture or fails, and an
     // undo carries back that one.
@@ -532,11 +526,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         }
       }),
     ),
-    Effect.ensuring(
-      Effect.sync(() => {
-        for (const id of marked) clearDeleteInflight(id);
-      }),
-    ),
+    Effect.scoped,
   );
   const lock = yield* DataDirLock;
   yield* lock.alone(move, "30 seconds");

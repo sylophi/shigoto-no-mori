@@ -1,6 +1,6 @@
 // Shared plumbing for the two script-run entry points (configured
 // project scripts and package.json scripts): the connection-guarded
-// notifier, and for the configured scripts, the context startScript
+// notifier, and for the configured scripts, the context a run
 // needs to set the SHIGOMORI_* env (package.json scripts run through
 // `sm run`, which sets it itself). A worktree's terminal starts with
 // the same env.
@@ -20,7 +20,7 @@ import type {
 import * as Ops from "@host/lib/engineOps";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import { findProject } from "@host/lib/projects";
-import type { NotifyScriptEvent, ScriptEnvValues } from "@host/lib/scripts";
+import type { NotifyScriptEvent, ScriptEnvValues } from "@host/lib/Scripts";
 import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";
 import type { Start } from "@host/lib/terminals/Terminals";
 
