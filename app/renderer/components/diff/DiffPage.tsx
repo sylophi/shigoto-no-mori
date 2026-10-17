@@ -325,8 +325,9 @@ export function DiffPage({
           state={
             isLoading || changes?.loading
               ? "loading"
-              : // A read asked again that failed keeps the patch shown.
-                error && patch === undefined
+              : // A pull request's patch asked again for its media keeps
+                // showing when that ask fails; any other page says so.
+                error && (patch === undefined || retryMedia === undefined)
                 ? "error"
                 : allFiles.length === 0
                   ? "empty"
