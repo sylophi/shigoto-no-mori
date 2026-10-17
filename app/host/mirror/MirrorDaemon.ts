@@ -155,8 +155,8 @@ export class MirrorDaemon extends Context.Service<
     // "failing".
     readonly failure: Effect.Effect<string | undefined>;
     readonly sessions: Effect.Effect<readonly MirrorSessionRaw[]>;
-    // Every state snapshot and every status transition, from when the
-    // stream is run.
+    // Every state snapshot and every status transition, the latest one
+    // first when the stream starts after it.
     readonly changes: Stream.Stream<void>;
     readonly create: (
       input: MirrorCreateInput,
@@ -213,7 +213,11 @@ const make = (options: Options) =>
     let checking = false;
     const runInScope = yield* FiberSet.makeRuntime<never>();
 
-    const changes = yield* PubSub.unbounded<void>();
+    // The last change is replayed to a subscriber that comes after it,
+    // so a snapshot the daemon took before its readers were up (the
+    // engine is built after this layer starts the child) still reaches
+    // them.
+    const changes = yield* PubSub.unbounded<void>({ replay: 1 });
     // Last, so the stopped status still goes out.
     yield* Effect.addFinalizer(() => PubSub.shutdown(changes));
     const changed = Effect.asVoid(PubSub.publish(changes, undefined));

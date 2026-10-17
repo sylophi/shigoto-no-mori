@@ -16,6 +16,14 @@
 //   - a terminate that fails on a session already gone is the old
 //     session ended, and one that fails on a session still listed
 //     fails the recreate,
+//   - an interrupt between the pause and the new session resumes the
+//     old one,
+//   - a recreate moves the follower's agreement to the new id, and a
+//     terminate forgets it, one that fails included,
+//   - a snapshot the daemon took before the engine was built still runs
+//     the engine's bookkeeping: an orphaned transfer in it is ended,
+//   - an engine whose stores cannot be read answers as unavailable and
+//     refuses every change, saying why,
 //   - a device leaving its account ends its sessions within the
 //     sweep's bound: a terminate the daemon never answers is given up
 //     at 5 s, and an answer that comes later notes nothing on the
@@ -30,6 +38,7 @@ import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
@@ -41,6 +50,8 @@ import * as TestClock from "effect/testing/TestClock";
 import { it } from "vitest";
 import * as FileSync from "../host/fileSync/FileSync.ts";
 import * as HostAccount from "../host/lib/HostAccount.ts";
+import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
+import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
 import * as MirrorDaemon from "../host/mirror/MirrorDaemon.ts";
 import {
   type MirrorCreateInput,
@@ -50,7 +61,8 @@ import {
 import * as MirrorEngineLayer from "../host/mirror/MirrorEngineLayer.ts";
 import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
 import { MIRROR_LABEL_LOCAL_WORKTREE } from "../host/mirror/registry.ts";
-import { settleTurns } from "./lib/checkKit.mts";
+import { MIRROR_LABEL_MODE } from "@shigomori/contracts/modules/mirror";
+import { settleTurns, waitFor } from "./lib/checkKit.mts";
 import { hostContext } from "./lib/hostRuntime.mts";
 import { rawMirrorSession } from "./lib/mirrorFakes.mts";
 import { trackTest } from "./lib/vitestKit.mts";
@@ -82,8 +94,16 @@ const input: MirrorCreateInput = {
 };
 
 // The engine over a daemon whose child answers each request with what
-// `answer` says, or holds it while `answer` says null.
-async function harness(answer: (request: Request) => Answer | null) {
+// `answer` says, or holds it while `answer` says null. The daemon comes
+// up first, having reported `early` when given before the engine is
+// built over it, and `stores` stands in for the engine's own.
+async function harness(
+  answer: (request: Request) => Answer | null,
+  options: {
+    readonly early?: readonly ReturnType<typeof session>[];
+    readonly stores?: Layer.Layer<MirrorHistoryStore.MirrorHistory>;
+  } = {},
+) {
   const requests: Request[] = [];
   const held: Request[] = [];
   const out = Effect.runSync(Queue.unbounded<Uint8Array>());
@@ -143,16 +163,32 @@ async function harness(answer: (request: Request) => Answer | null) {
       streamCount: Effect.succeed(0),
     }),
   );
+  const daemonRuntime = ManagedRuntime.make(
+    MirrorDaemon.layer({ dataDir: () => "unused" }).pipe(
+      Layer.provide(Layer.mergeAll(fakeFileSync, gateway)),
+      Layer.provideMerge(TestClock.layer()),
+      Layer.provideMerge(Layer.succeedContext(await hostContext())),
+    ),
+  );
+  trackTest(() => daemonRuntime.dispose());
+  const daemonSessions = () =>
+    daemonRuntime.runSync(MirrorDaemon.MirrorDaemon.use((d) => d.sessions));
+  if (options.early !== undefined) {
+    write({ event: "ready" });
+    write({ event: "state", sessions: options.early });
+    await waitFor(
+      () => daemonSessions().length === options.early?.length,
+      "the daemon to report its sessions",
+    );
+  }
   const runtime = ManagedRuntime.make(
     MirrorEngineLayer.layer({
       onChange: () => {},
       projectChanged: () => {},
     }).pipe(
-      Layer.provideMerge(MirrorDaemon.layer({ dataDir: () => "unused" })),
-      Layer.provide(Layer.mergeAll(fakeFileSync, gateway)),
       Layer.provideMerge(HostAccount.layer),
-      Layer.provideMerge(TestClock.layer()),
-      Layer.provide(Layer.succeedContext(await hostContext())),
+      Layer.provide(options.stores ?? Layer.empty),
+      Layer.provideMerge(Layer.succeedContext(await daemonRuntime.context())),
     ),
   );
   trackTest(() => runtime.dispose());
@@ -168,13 +204,16 @@ async function harness(answer: (request: Request) => Answer | null) {
       }),
     ),
   );
-  write({ event: "ready" });
+  if (options.early === undefined) write({ event: "ready" });
   await settleTurns();
   const engine = <A, E>(
     f: (engine: MirrorEngine["Service"]) => Effect.Effect<A, E>,
   ) => runtime.runPromiseExit(Effect.flatMap(MirrorEngine, f));
   return {
     engine,
+    // The engine's call, as a fiber a check can interrupt.
+    fork: <A, E>(f: (engine: MirrorEngine["Service"]) => Effect.Effect<A, E>) =>
+      runtime.runFork(Effect.flatMap(MirrorEngine, f)),
     requests: () =>
       requests.map((request) =>
         `${request.op} ${request.session ?? ""}`.trim(),
@@ -203,6 +242,26 @@ async function harness(answer: (request: Request) => Answer | null) {
       ),
   };
 }
+
+// The git state both sides of a session last agreed on.
+const agreed = {
+  head: { kind: "branch", branch: "main" },
+  tip: "a".repeat(40),
+  indexTree: "b".repeat(40),
+} as const;
+
+// The follower's agreements as the store has them, read and written
+// on the engine's own store.
+const agreements = {
+  save: async (entries: Record<string, typeof agreed>) =>
+    Effect.runPromiseWith(await hostContext())(
+      MirrorAgreements.MirrorAgreements.use((store) => store.save(entries)),
+    ),
+  load: async () =>
+    Effect.runPromiseWith(await hostContext())(
+      MirrorAgreements.MirrorAgreements.use((store) => store.load),
+    ),
+};
 
 const refusalOf = (exit: Exit.Exit<unknown, unknown>) => {
   if (Exit.isSuccess(exit)) return undefined;
@@ -319,4 +378,82 @@ it("a device leaving its account gives up a terminate the daemon never answers a
     [],
     "the sweep went on past its bound",
   );
+});
+
+it("an interrupt between the pause and the new session resumes the old one", async () => {
+  const { fork, held, requests, state } = await harness((request) =>
+    request.op === "create" ? null : { ok: true },
+  );
+  await state([session("old")]);
+  const recreating = fork((mirrors) => mirrors.recreate("old", input));
+  await waitFor(
+    () => held.some((request) => request.op === "create"),
+    "the create to be asked",
+  );
+  await Effect.runPromise(Fiber.interrupt(recreating));
+  await settleTurns();
+  assert.deepEqual(requests(), ["pause old", "create", "resume old"]);
+});
+
+it("a recreate moves the follower's agreement to the new id, and a terminate forgets it, one that fails included", async () => {
+  await agreements.save({ old: agreed, ended: agreed, refused: agreed });
+  const { engine, state } = await harness((request) =>
+    request.op === "create"
+      ? { ok: true, session: "new" }
+      : request.op === "terminate" && request.session === "refused"
+        ? { ok: false, error: "terminate failed" }
+        : { ok: true },
+  );
+  await state([session("old"), session("ended"), session("refused")]);
+  assert.equal(
+    succeeded(await engine((mirrors) => mirrors.recreate("old", input))),
+    "new",
+  );
+  succeeded(await engine((mirrors) => mirrors.terminate("ended")));
+  assert.equal(
+    refusalOf(await engine((mirrors) => mirrors.terminate("refused"))),
+    "terminate failed",
+  );
+  await waitFor(
+    async () => Object.keys(await agreements.load()).join() === "new",
+    "the agreements to read the new id alone",
+  );
+  assert.deepEqual(await agreements.load(), { new: agreed });
+  await agreements.save({});
+});
+
+it("a snapshot the daemon took before the engine was built still ends an orphaned transfer", async () => {
+  const orphan = rawMirrorSession({
+    session: "orphan",
+    localRoot: root,
+    labels: { [MIRROR_LABEL_MODE]: "transfer-a-token-nobody-holds" },
+  });
+  const { requests } = await harness(() => ({ ok: true }), {
+    early: [orphan],
+  });
+  await waitFor(
+    () => requests().includes("terminate orphan"),
+    "the orphaned transfer to be ended",
+  );
+});
+
+it("an engine whose stores cannot be read answers as unavailable and refuses every change", async () => {
+  const { engine, requests } = await harness(() => ({ ok: true }), {
+    stores: Layer.succeed(
+      MirrorHistoryStore.MirrorHistory,
+      MirrorHistoryStore.MirrorHistory.of({
+        load: Effect.die(new Error("the store is unreadable")),
+        save: () => Effect.void,
+      }),
+    ),
+  });
+  assert.equal(
+    succeeded(await engine((mirrors) => mirrors.status)),
+    "unavailable",
+  );
+  assert.equal(
+    refusalOf(await engine((mirrors) => mirrors.create(input))),
+    "The mirror engine failed to start: the store is unreadable.",
+  );
+  assert.deepEqual(requests(), []);
 });

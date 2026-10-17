@@ -3,10 +3,12 @@
 // mirrors this device asked peers for, and the bookkeeping each
 // snapshot runs. Apart from the tag because the helpers it runs
 // (registry.ts, sessions.ts) reach the engine by that tag.
-import { isEntityGoneError } from "@shigomori/contracts/errors";
+import { errorMessageOf, isEntityGoneError } from "@shigomori/contracts/errors";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
@@ -156,9 +158,15 @@ const make = (options: {
         whileRecreating(
           session,
           Effect.gen(function* () {
-            yield* fromDaemon(daemon.pause(session));
-            const next = yield* create(input).pipe(
-              Effect.tapError(() => Effect.ignore(daemon.resume(session))),
+            // Undone however the create ends short of a session, an
+            // interrupt included.
+            const next = yield* Effect.acquireUseRelease(
+              fromDaemon(daemon.pause(session)),
+              () => create(input),
+              (_, exit) =>
+                Exit.isSuccess(exit)
+                  ? Effect.void
+                  : Effect.ignore(daemon.resume(session)),
             );
             // An old session already gone by now was ended all the same.
             yield* fromDaemon(daemon.terminate(session)).pipe(
@@ -285,5 +293,44 @@ const make = (options: {
     return engine;
   });
 
+// An engine that failed to start (its stores unreadable) answers as
+// unavailable and refuses every change, saying why, and the rest of the
+// app comes up without mirrors.
+const unavailable = (cause: Cause.Cause<unknown>) => {
+  const refused = new MirrorError({
+    reason: `The mirror engine failed to start: ${errorMessageOf(Cause.squash(cause))}.`,
+  });
+  return MirrorEngine.of({
+    status: Effect.succeed("unavailable"),
+    failure: Effect.succeed(undefined),
+    sessions: Effect.succeed([]),
+    create: () => Effect.fail(refused),
+    recreate: () => Effect.fail(refused),
+    terminate: () => Effect.fail(refused),
+    pause: () => Effect.fail(refused),
+    resume: () => Effect.fail(refused),
+    gitStatus: () => undefined,
+    refreshGit: () => Effect.succeed(undefined),
+    history: () => [],
+    noteEvent: () => {},
+    forgetHistory: () => {},
+    moveHistory: () => {},
+    localProjectChanged: () => {},
+    peerProjectChanged: () => {},
+    peerWorktreeChanged: () => {},
+    leaveAccount: Effect.void,
+  });
+};
+
 export const layer = (options: Parameters<typeof make>[0]) =>
-  Layer.effect(MirrorEngine, make(options));
+  Layer.effect(
+    MirrorEngine,
+    make(options).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logError(
+          "[boot] the mirror engine failed to start:",
+          cause,
+        ).pipe(Effect.as(unavailable(cause))),
+      ),
+    ),
+  );
