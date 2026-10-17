@@ -32,7 +32,13 @@ import { reviveStore, strandedJournal } from "./dataDirMoveJournal.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import { StoreError, storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
-import { hashesOf, removeV2Files, sameHashes, v2Files } from "./v2Files.ts";
+import {
+  hashesOf,
+  recordVerified,
+  removeV2Files,
+  sameHashes,
+  v2Files,
+} from "./v2Files.ts";
 
 export class StoreOpenError extends Schema.TaggedError<StoreOpenError>()(
   "StoreOpenError",
@@ -158,9 +164,7 @@ const removeImported = (open: OpenDatabase, platform: Platform) =>
         "Left the v2 files in place: the import couldn't be verified",
       );
     }
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`INSERT OR REPLACE INTO v2_import (id, files)
-      VALUES (1, ${JSON.stringify(before)})`;
+    yield* recordVerified(before);
     yield* removeV2Files(files);
   }).pipe(
     Effect.provideContext(platform),
