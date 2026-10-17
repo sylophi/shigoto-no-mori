@@ -3,7 +3,7 @@
 // answers for one open pull request from a branch of it. What gh is
 // asked beyond that is logged to `ghLog`, so a walk can say what the app
 // wanted.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const PR_NUMBER = 1;
@@ -28,6 +28,8 @@ export interface FakeGitHub {
       unfetchableHead?: boolean;
     },
   ): void;
+  // GitHub names the head it really has again: the network is back.
+  reachHead(): void;
 }
 
 export function fakeGitHub(root: string): FakeGitHub {
@@ -112,7 +114,10 @@ process.exit(1);
           headRefName: head,
           baseRefOid: oid(base),
           headRefOid: unfetchableHead ? "f".repeat(40) : oid(head),
-          ...(unfetchableHead && { diffRange: [oid(base), oid(head)] }),
+          ...(unfetchableHead && {
+            diffRange: [oid(base), oid(head)],
+            realHeadRefOid: oid(head),
+          }),
           author: { login: "walk" },
           updatedAt: "2026-10-10T10:00:00Z",
           createdAt: "2026-10-10T10:00:00Z",
@@ -127,6 +132,16 @@ process.exit(1);
           assignees: [],
         }),
       );
+    },
+    reachHead() {
+      const pr = JSON.parse(readFileSync(state, "utf8")) as {
+        realHeadRefOid: string;
+        headRefOid: string;
+        diffRange?: unknown;
+      };
+      pr.headRefOid = pr.realHeadRefOid;
+      delete pr.diffRange;
+      writeFileSync(state, JSON.stringify(pr));
     },
   };
 }

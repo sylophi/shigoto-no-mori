@@ -21,7 +21,7 @@ export function MediaDiff({
   projectId: string;
   worktreeId: string;
   fileDiff: FileDiffMetadata;
-  retry?: () => void;
+  retry?: { readonly retry: () => void; readonly retrying: boolean };
 }) {
   const { type, prevObjectId, newObjectId, name } = fileDiff;
   const before = type === "new" ? undefined : prevObjectId;
@@ -66,7 +66,7 @@ function MediaDiffSide({
   oid: string;
   path: string;
   side: "old" | "new";
-  retry: (() => void) | undefined;
+  retry: { readonly retry: () => void; readonly retrying: boolean } | undefined;
 }) {
   const [ref, seen] = useSeen<HTMLDivElement>();
   const named = isFullObjectId(oid);
@@ -82,7 +82,11 @@ function MediaDiffSide({
       side={side}
       file={data}
       reading={data === undefined && !isError}
-      unnamed={named ? undefined : { onRetry: retry }}
+      unnamed={
+        named
+          ? undefined
+          : { onRetry: retry?.retry, retrying: retry?.retrying ?? false }
+      }
       sideRef={ref}
     />
   );

@@ -461,7 +461,7 @@ export function DiffPartsScene() {
                 side={side}
                 file={undefined}
                 reading={false}
-                unnamed={{ onRetry: noop }}
+                unnamed={{ onRetry: noop, retrying: false }}
               />
             ))}
           </MediaDiffView>

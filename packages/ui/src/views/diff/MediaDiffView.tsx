@@ -30,7 +30,11 @@ export function MediaDiffSideView({
   // Set when the patch names the side's blob only in short (a pull
   // request's diff from GitHub, its commits not fetched here), so it
   // can't be read: what to do about it.
-  unnamed?: { readonly onRetry: (() => void) | undefined };
+  unnamed?: {
+    readonly onRetry: (() => void) | undefined;
+    // The ask is out.
+    readonly retrying: boolean;
+  };
   // Read once scrolled near: a patch that regenerates a hundred
   // screenshots would otherwise ship every one of them up front.
   sideRef?: Ref<HTMLDivElement>;
@@ -46,11 +50,19 @@ export function MediaDiffSideView({
       {unnamed ? (
         <CenteredMessage className="flex-col gap-2 px-6 text-center">
           <span>
-            Not shown: the pull request&apos;s commits couldn&apos;t be fetched
-            here.
+            Not shown: this needs the pull request&apos;s commits, which
+            couldn&apos;t be read here.
           </span>
           {unnamed.onRetry && (
-            <Button size="sm" variant="secondary" onClick={unnamed.onRetry}>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={unnamed.retrying}
+              onClick={unnamed.onRetry}
+            >
+              {unnamed.retrying && (
+                <Loader2 aria-hidden className="size-3.5 animate-spin" />
+              )}
               Try again
             </Button>
           )}

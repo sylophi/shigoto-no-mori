@@ -98,5 +98,5 @@ build's single-instance lock is machine-wide.
 | `location` | The Worktree location page with the data folder reached through a link: a worktree already in place is not offered a move |
 | `terminals` | A terminal from the worktree's footer runs what is typed; after the app quits as a person quits it and starts again, it is back in its folder with its lines above |
 | `pull-request` | A pull request on its branch's page and its diff page with images, against the fake gh |
-| `pull-request-partial` | A pull request whose commits can't be fetched: its diff from `gh pr diff`, each image side saying it isn't here, with Try again |
+| `pull-request-partial` | A pull request whose commits can't be fetched: its diff from `gh pr diff`, each image side saying it isn't here, with Try again, which draws them once the commits are reachable |
 | `host-restart` | The host killed, then stopped until the watchdog restarts it: the band says it is reconnecting and why it restarted, no error toast, and the page reads the new host's state. The window's timers stopped past every link limit, and the whole app stopped as a sleep stops it with a commit sent as it stopped: no band, no toast, no restart, and the commit lands once. About 4 minutes |
