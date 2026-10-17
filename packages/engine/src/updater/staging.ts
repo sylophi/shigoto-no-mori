@@ -1,8 +1,6 @@
 // The updater's staging: a release downloaded, extracted, checked and staged under the lock.
 import type { StagedManifest } from "@shigomori/contracts/schemas/runtime";
 import { StagedManifestSchema } from "@shigomori/contracts/schemas/runtime";
-import * as Clock from "effect/Clock";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as FileSystem from "effect/FileSystem";
@@ -16,6 +14,7 @@ import {
   UpdateInProgress,
 } from "../stagingLock.ts";
 import {
+  deadlineIn,
   type Anchor,
   DOWNLOAD_TIMEOUT,
   DownloadFailed,
@@ -123,8 +122,7 @@ export const makeStaging = ({
       url: string,
       running: Running,
     ) {
-      const deadline =
-        (yield* Clock.currentTimeMillis) + Duration.toMillis(DOWNLOAD_TIMEOUT);
+      const deadline = yield* deadlineIn(DOWNLOAD_TIMEOUT);
       const response = yield* send(
         feedRequest(url, running),
         deadline,

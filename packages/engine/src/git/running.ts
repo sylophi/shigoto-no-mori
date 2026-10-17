@@ -91,6 +91,9 @@ export const makeRunning = Effect.gen(function* () {
                     options.stdin === undefined
                       ? "ignore"
                       : Stream.make(encoder.encode(options.stdin)),
+                  // A git a signal stopped can't act on SIGTERM, and the
+                  // scope's close waits for it to exit.
+                  forceKillAfter: "3 seconds",
                 },
               ),
             )

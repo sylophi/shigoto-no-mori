@@ -24,6 +24,7 @@ import * as Duration from "effect/Duration";
 import * as Cause from "effect/Cause";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -47,6 +48,7 @@ import {
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
 import * as Processes from "@shigomori/engine/processes";
+import { elapsedMillis, elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 
 // ---- pure deciders, exported for the direct-plane check ----
 
@@ -286,6 +288,12 @@ export class Tunnel extends Context.Service<
     readonly startingThenUp: (
       within: Duration.Duration,
     ) => Effect.Effect<boolean>;
+    // Whether a tunnel that is up still routes, asked after a wake. One
+    // that doesn't stops being advertised and is probed on as a reused
+    // tunnel is at its start, so a network still coming back costs
+    // nothing, and past that deadline its child (a stopped one, a
+    // connector that never reconnected) is killed and started again.
+    readonly recheck: Effect.Effect<void>;
   }
 >()("sm/host/Tunnel") {}
 
@@ -308,32 +316,39 @@ const probeTunnelEdge = (hostname: string) =>
   );
 
 // The probe ladder after the first attempt, until the hostname routes
-// or the deadline passes, read against the spawn time: past the
-// warning threshold every attempt waits the slow rung.
+// or the deadline passes, read against the spawn time in elapsed time
+// (a sleep or a clock step spends none of it): past the warning
+// threshold every attempt waits the slow rung.
 const probeSchedule = (
   spawnedAt: number,
   delaysMs: readonly [number, ...number[]],
   deadlineMs: number,
 ) =>
   Schedule.fromStep(
-    Effect.sync(() => {
-      let attempt = 1;
-      return (now: number, routable: boolean) => {
-        if (routable || now - spawnedAt >= deadlineMs) {
-          return Cause.done(routable);
-        }
-        const delay =
-          now - spawnedAt >= TUNNEL_PROBE_WARN_MS
-            ? TUNNEL_PROBE_SLOW_MS
-            : backoffDelayMs(delaysMs, attempt);
-        attempt += 1;
-        return Effect.succeed([routable, Duration.millis(delay)] as [
-          boolean,
-          Duration.Duration,
-        ]);
-      };
-    }),
+    Clock.clockWith((clock) =>
+      Effect.sync(() => {
+        let attempt = 1;
+        return (_now: number, routable: boolean) => {
+          const now = elapsedMillisUnsafe(clock);
+          if (routable || now - spawnedAt >= deadlineMs) {
+            return Cause.done(routable);
+          }
+          const delay =
+            now - spawnedAt >= TUNNEL_PROBE_WARN_MS
+              ? TUNNEL_PROBE_SLOW_MS
+              : backoffDelayMs(delaysMs, attempt);
+          attempt += 1;
+          return Effect.succeed([routable, Duration.millis(delay)] as [
+            boolean,
+            Duration.Duration,
+          ]);
+        };
+      }),
+    ),
   );
+
+// How an up child's run ends when a recheck found it no longer routing.
+const STOPPED_ROUTING = "stopped-routing";
 
 // What the runner knows across its attempts.
 interface Memory {
@@ -443,10 +458,13 @@ const make = (options: Options) =>
     // The readiness probe chain for a freshly spawned child: attempts on
     // the probe ladder until routable, then advertise. A child that is
     // merely not routable yet is kept and probed on (the ladder's note),
-    // up to the deadline. Deliberately NOT re-run after "up": the child
-    // process exiting is the down signal, and a liveness poll against
-    // the edge would spend a request per interval to learn what the
-    // child's exit already says.
+    // up to the deadline. Not polled after "up": the child's exit is the
+    // down signal, and a wake (`recheck`) the one time a live child is
+    // asked again, since a sleep is what leaves a connector that is
+    // running but routes nothing.
+    // Set while a child is up, for `recheck`.
+    const rechecks = yield* Ref.make(Option.none<Queue.Queue<void>>());
+
     const probe = (hostname: string, fresh: boolean, spawnedAt: number) => {
       const deadlineMs = fresh
         ? TUNNEL_PROBE_DEADLINE_FRESH_MS
@@ -456,7 +474,7 @@ const make = (options: Options) =>
         : TUNNEL_PROBE_DELAYS_REUSED_MS;
       let warned = false;
       const attempt = Effect.gen(function* () {
-        const now = yield* Clock.currentTimeMillis;
+        const now = yield* elapsedMillis;
         if (!warned && now - spawnedAt >= TUNNEL_PROBE_WARN_MS) {
           warned = true;
           yield* Effect.logWarning(
@@ -475,6 +493,23 @@ const make = (options: Options) =>
         ),
       );
     };
+
+    // An up child until a recheck finds it no longer routes and the
+    // reused ladder can't bring it back.
+    const whileRouting = (hostname: string) =>
+      Effect.gen(function* () {
+        const asked = yield* Queue.sliding<void>(1);
+        yield* Ref.set(rechecks, Option.some(asked));
+        while (true) {
+          yield* Queue.take(asked);
+          if (yield* probeOnce(hostname)) continue;
+          yield* setStatus({ state: "starting", hostname });
+          const routable = yield* probe(hostname, false, yield* elapsedMillis);
+          if (!routable) return STOPPED_ROUTING;
+          yield* setStatus({ state: "up", hostname });
+          yield* Effect.logInfo(`[tunnel] ${hostname} routes again`);
+        }
+      }).pipe(Effect.ensuring(Ref.set(rechecks, Option.none())));
 
     // An attempt that ends on the retry rails, with no healthy run to
     // count.
@@ -586,7 +621,7 @@ const make = (options: Options) =>
               );
             }
             const child = spawned.success;
-            const spawnedAt = yield* Clock.currentTimeMillis;
+            const spawnedAt = yield* elapsedMillis;
             yield* remember({ provision: { ...provision, ready: false } });
             yield* setStatus({ state: "starting", hostname });
             const path = yield* pidFile;
@@ -624,7 +659,10 @@ const make = (options: Options) =>
                         });
                         yield* setStatus({ state: "up", hostname });
                         yield* Effect.logInfo(`[tunnel] up at ${hostname}`);
-                        return yield* exited;
+                        return yield* Effect.raceFirst(
+                          exited,
+                          whileRouting(hostname),
+                        );
                       })
                     : Effect.succeed(null),
                 ),
@@ -635,8 +673,16 @@ const make = (options: Options) =>
                 `tunnel at ${hostname} never became routable`,
               );
             }
+            if (outcome === STOPPED_ROUTING) {
+              // It ran healthy until then: its run counts toward the
+              // ladder's reset, as an exit's does.
+              yield* failAttempt(
+                `tunnel at ${hostname} stopped routing after a wake`,
+              );
+              return (yield* elapsedMillis) - spawnedAt;
+            }
             yield* failAttempt(outcome);
-            return (yield* Clock.currentTimeMillis) - spawnedAt;
+            return (yield* elapsedMillis) - spawnedAt;
           }),
         );
       }).pipe(
@@ -722,6 +768,15 @@ const make = (options: Options) =>
               orElse: () => Effect.succeed(false),
             }),
           ),
+      ),
+      recheck: Ref.get(rechecks).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.void,
+            onSome: (asked) => Queue.offer(asked, undefined),
+          }),
+        ),
+        Effect.asVoid,
       ),
       tunnelUrl: SubscriptionRef.get(status).pipe(
         Effect.map((current) =>

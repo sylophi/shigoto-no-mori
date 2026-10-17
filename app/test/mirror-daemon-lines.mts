@@ -72,6 +72,7 @@ async function harness() {
   const err = Effect.runSync(Queue.unbounded<Uint8Array>());
   // How often the daemon announced a change.
   const changes = { count: 0 };
+  const kills = { count: 0 };
   // What the next spawns fail with, while set.
   const spawning: {
     refusal?: FileSync.FileSyncUnavailableError | PlatformError.PlatformError;
@@ -103,7 +104,12 @@ async function harness() {
               Effect.map(ChildProcessSpawner.ExitCode),
             ),
             isRunning: Effect.succeed(true),
-            kill: () => Effect.void,
+            // As SIGKILL does, whatever the child is doing.
+            kill: () =>
+              Effect.sync(() => {
+                kills.count += 1;
+                Deferred.doneUnsafe(exit, Effect.succeed(137));
+              }),
             stdin: Sink.drain,
             stdout: Stream.fromQueue(out).pipe(
               Stream.interruptWhen(Deferred.await(exit)),
@@ -147,6 +153,8 @@ async function harness() {
       runtime.runPromise(MirrorDaemon.onDaemon((d) => d.pause(id))),
     resume: (id: string) =>
       runtime.runPromise(MirrorDaemon.onDaemon((d) => d.resume(id))),
+    checkResponsive: () =>
+      runtime.runPromise(MirrorDaemon.onDaemon((d) => d.checkResponsive)),
   };
   await settleTurns();
   const send = async (line: unknown) => {
@@ -180,6 +188,7 @@ async function harness() {
     requests,
     logs,
     exits,
+    kills,
     adjust,
     exit,
   };
@@ -353,4 +362,41 @@ it("a daemon that stops reads failing with why until it is ready, one that can't
   spawning.refusal = new FileSync.FileSyncUnavailableError();
   await adjust(30_000);
   assert.equal(daemon.status(), "unavailable");
+});
+
+it("a daemon that stops answering (a SIGSTOP) is found by its ping, killed and started again once, its waiting request failed as unresponsive", async () => {
+  const { daemon, send, requests, exits, kills, adjust } = await harness();
+  await send({ event: "ready" });
+  // A wake's check of a daemon that answers: its refusal of the ping is
+  // an answer.
+  const answered = daemon.checkResponsive();
+  await adjust(0);
+  const ping = requests.find((request) => request["op"] === "ping");
+  assert.ok(ping !== undefined, "no ping was sent");
+  await send({ id: ping["id"], ok: false, error: 'unknown op "ping"' });
+  await answered;
+  assert.equal(kills.count, 0);
+
+  // Stopped: it reads nothing and answers nothing, and stays "running".
+  const pausing = daemon.pause("s1").then(
+    () => assert.fail("the pause resolved"),
+    (error: unknown) => error,
+  );
+  await adjust(29_000);
+  assert.equal(daemon.status(), "running");
+  assert.equal(kills.count, 0);
+  await adjust(1_000 + 10_000);
+  assert.equal(kills.count, 1, "the silent daemon was not killed");
+  const failed = await pausing;
+  assert.ok(failed instanceof MirrorDaemon.MirrorDaemonError);
+  assert.equal(failed.reason, "unresponsive");
+  assert.equal(daemon.status(), "failing");
+  assert.equal(daemon.failure(), "stopped answering");
+
+  // Started again on the ladder, and one owner: the old child is gone.
+  await adjust(1_000);
+  assert.equal(exits.length, 2);
+  await send({ event: "ready" });
+  assert.equal(daemon.status(), "running");
+  assert.equal(kills.count, 1);
 });

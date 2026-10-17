@@ -1,6 +1,5 @@
 // The updater's errors, documents and the pure helpers its areas share (EFFECT.md, section 2). `Updater.ts` re-exports what consumers use.
 import type { UpdateStageResultSchema } from "@shigomori/contracts/schemas/runtime";
-import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -14,6 +13,7 @@ import * as Headers from "effect/http/Headers";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import { elapsedMillis } from "../elapsed.ts";
 import { errnoText } from "../platformErrors.ts";
 import { parse, SemVer } from "semver";
 import { StagingLockUnavailable, UpdateInProgress } from "../stagingLock.ts";
@@ -453,8 +453,15 @@ export const RESTART_TIMEOUT = Duration.minutes(2);
 export const APP_PUBLISH_TIMEOUT = Duration.seconds(20);
 export const RESTART_HINT_AFTER = 15_000;
 
+// A wait of `limit` in polls, so it counts the time the machine is
+// awake and running them: a sleep or a clock step spends none of it, as
+// an elapsed limit on the wall clock (Schedule's `upTo` duration) would.
 export const polling = (limit: Duration.Duration) =>
-  Schedule.spaced(POLL).pipe(Schedule.upTo({ duration: limit }));
+  Schedule.spaced(POLL).pipe(
+    Schedule.upTo({
+      times: Math.ceil(Duration.toMillis(limit) / Duration.toMillis(POLL)),
+    }),
+  );
 
 export const report = (input: UpdateInput, progress: Progress) =>
   input.progress?.(progress) ?? Effect.void;
@@ -493,12 +500,18 @@ export const header = (
   name: string,
 ) => Option.getOrUndefined(Headers.get(response.headers, name));
 
+// One budget through every phase of a request (headers, body, drain):
+// a deadline in elapsed time (`../elapsed.ts`), which a sleep or a clock
+// step between phases doesn't move.
+export const deadlineIn = (budget: Duration.Duration) =>
+  Effect.map(elapsedMillis, (now) => now + Duration.toMillis(budget));
+
 // `effect` within what is left of the time until `deadline`.
 export const within = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   deadline: number,
 ) =>
-  Effect.flatMap(Clock.currentTimeMillis, (now) =>
+  Effect.flatMap(elapsedMillis, (now) =>
     Effect.timeout(effect, Duration.millis(Math.max(0, deadline - now))),
   );
 

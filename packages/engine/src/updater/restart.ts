@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import type { InstallFailure } from "@shigomori/contracts/schemas/runtime";
+import { elapsedMillis } from "../elapsed.ts";
 import { type AppStatus, formatLocalRfc3339 } from "../updateFeed.ts";
 import {
   HandoffFailed,
@@ -38,7 +39,7 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
       requestedAt: number,
       input: UpdateInput,
     ) {
-      const start = yield* Clock.currentTimeMillis;
+      const start = yield* elapsedMillis;
       let sameVersion = false;
       let hinted = false;
       const look = Effect.gen(function* () {
@@ -64,10 +65,7 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
             });
           }
         }
-        if (
-          !hinted &&
-          (yield* Clock.currentTimeMillis) - start > RESTART_HINT_AFTER
-        ) {
+        if (!hinted && (yield* elapsedMillis) - start > RESTART_HINT_AFTER) {
           hinted = true;
           yield* report(input, { phase: "waiting-for-restart" });
         }

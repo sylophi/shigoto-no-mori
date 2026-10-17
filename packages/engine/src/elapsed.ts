@@ -3,9 +3,14 @@
 // wall clock moves. On macOS it also stands still while the machine
 // sleeps. Epoch time (Clock.currentTimeMillis) stays for dates that are
 // shown, stored or compared with another machine.
-import type * as Clock from "effect/Clock";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
 
 const NANOS_PER_MILLI = 1_000_000n;
 
 export const elapsedMillisUnsafe = (clock: Clock.Clock): number =>
   Number(clock.monotonicTimeNanosUnsafe() / NANOS_PER_MILLI);
+
+export const elapsedMillis: Effect.Effect<number> = Clock.clockWith((clock) =>
+  Effect.sync(() => elapsedMillisUnsafe(clock)),
+);

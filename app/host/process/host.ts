@@ -7,6 +7,7 @@
 import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -112,9 +113,12 @@ const parentPort = (process as { parentPort: ParentPort }).parentPort;
 // beat name what a stuck host was doing.
 const BEAT_EVERY_MS = 5_000;
 const openSpans = new Set<Tracer.Span>();
-const beat = () =>
+// The spans' start times are the Clock's, so their ages are read on it.
+const beat = () => {
+  const now = Number(Effect.runSync(Clock.currentTimeNanos) / 1_000_000n);
   // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a utility process's parent port, which has no origin
-  parentPort.postMessage(beatOf(openSpans, Date.now()));
+  parentPort.postMessage(beatOf(openSpans, now));
+};
 beat();
 setInterval(beat, BEAT_EVERY_MS).unref();
 
