@@ -4,17 +4,8 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { checkBucket } from "@shigomori/contracts/pullRequestChecks";
 import { flag, list, struct, text } from "./goJson.ts";
-
-const PASSING = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
-const FAILING = new Set([
-  "FAILURE",
-  "ERROR",
-  "TIMED_OUT",
-  "CANCELLED",
-  "ACTION_REQUIRED",
-  "STARTUP_FAILURE",
-]);
 
 export type CheckVerdict = "passing" | "failing" | "pending";
 
@@ -30,17 +21,9 @@ export const CheckNode = Schema.Struct({
 });
 export type CheckNode = typeof CheckNode.Type;
 
-// One node is one verdict.
 export function checkVerdict(node: CheckNode): CheckVerdict {
-  let verdict = node.state;
-  if (verdict === "") {
-    verdict = node.status === "COMPLETED" ? node.conclusion : "PENDING";
-  }
-  return PASSING.has(verdict)
-    ? "passing"
-    : FAILING.has(verdict)
-      ? "failing"
-      : "pending";
+  const bucket = checkBucket(node);
+  return bucket === "failing" || bucket === "pending" ? bucket : "passing";
 }
 
 export type MergeProgress = {

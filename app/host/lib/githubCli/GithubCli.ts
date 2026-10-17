@@ -16,6 +16,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EngineConfig from "@shigomori/engine/Config";
@@ -25,7 +26,7 @@ import * as GitHub from "@shigomori/engine/GitHub";
 import * as Ops from "../engineOps";
 import { answersFor } from "../util/cacheTtl";
 import * as Processes from "@shigomori/engine/processes";
-import { gh } from "./exec";
+import { gh, GH_TIMEOUT_MS } from "./exec";
 import { ghHostsPath, type GithubRepoInfo, parseRemoteUrl } from "./remote";
 
 // gh installed but not usable, for a read that would rather fail than
@@ -105,29 +106,6 @@ const DESCRIPTION_TTL = Duration.hours(1);
 // A repo's people and labels change rarely, and the create pull request
 // dialog reopens often.
 const PULL_REQUEST_OPTIONS_TTL = Duration.minutes(5);
-
-// One GraphQL read: `gh repo view --json` has the three method flags
-// but not autoMergeAllowed. gh fills {owner} and {repo} from the
-// repo's remote in field values the way it does in REST paths. The
-// same query as the engine's (GitHub.mergeSettings).
-const REPO_MERGE_QUERY =
-  "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
-  "{ mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed autoMergeAllowed } }";
-
-const decodeRepoMergeConfig = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(
-    Schema.Struct({
-      data: Schema.Struct({
-        repository: Schema.Struct({
-          mergeCommitAllowed: Schema.Boolean,
-          squashMergeAllowed: Schema.Boolean,
-          rebaseMergeAllowed: Schema.Boolean,
-          autoMergeAllowed: Schema.Boolean,
-        }),
-      }),
-    }),
-  ),
-);
 
 // One read for the create pull request dialog's pickers, filled in the
 // same way. A list GitHub couldn't resolve an entry of answers a null in
@@ -231,32 +209,18 @@ const make = Effect.gen(function* () {
     { capacity: Infinity, timeToLive: answersFor(REPO_TTL) },
   );
 
+  // The engine's read at the host's gh deadline, kept only when it read.
   const mergeConfigs = yield* Cache.makeWith(
     (cwd: string) =>
-      gh(
-        [
-          "api",
-          "graphql",
-          "-F",
-          "owner={owner}",
-          "-F",
-          "name={repo}",
-          "-f",
-          `query=${REPO_MERGE_QUERY}`,
-        ],
-        { cwd },
-      ).pipe(
-        Effect.flatMap(({ stdout }) => decodeRepoMergeConfig(stdout)),
-        Effect.map(
-          ({ data: { repository } }): RepoMergeConfig => ({
-            merge: repository.mergeCommitAllowed,
-            squash: repository.squashMergeAllowed,
-            rebase: repository.rebaseMergeAllowed,
-            autoMerge: repository.autoMergeAllowed,
-          }),
+      github
+        .repoMergeConfig(cwd, { timeout: GH_TIMEOUT_MS })
+        .pipe(
+          Effect.flatMap((found) =>
+            Option.isSome(found)
+              ? Effect.succeed(found.value)
+              : Effect.fail("unread" as const),
+          ),
         ),
-        withGh,
-      ),
     { capacity: Infinity, timeToLive: answersFor(MERGE_CONFIG_TTL) },
   );
 

@@ -2,6 +2,7 @@
 // request a branch has. One runner under every lookup, so the install
 // check, the deadline and the reasons a lookup couldn't be made are the
 // same for each.
+import type { RepoMergeConfig } from "@shigomori/contracts/schemas/pullRequest";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -228,6 +229,12 @@ export class GitHub extends Context.Service<
     // doesn't block the merge, and --auto is only asked where GitHub is
     // known to accept it.
     readonly mergeSettings: (repo: string) => Effect.Effect<MergeSettings>;
+    // The repository's merge-button settings as GitHub has them, none
+    // when gh couldn't read them.
+    readonly repoMergeConfig: (
+      repo: string,
+      options?: { readonly timeout?: Duration.Input | undefined },
+    ) => Effect.Effect<Option.Option<RepoMergeConfig>>;
     // Where an open PR stands on its way to merging.
     readonly mergeProgress: (
       repo: string,
@@ -793,35 +800,44 @@ const make = Effect.gen(function* () {
   // One GraphQL read, since `gh repo view --json` has the three method
   // flags but not autoMergeAllowed. gh fills {owner} and {repo} from the
   // repo's remote.
+  const repoMergeConfig = Effect.fn("GitHub.repoMergeConfig")(function* (
+    repo: string,
+    options: { readonly timeout?: Duration.Input | undefined } = {},
+  ) {
+    const stdout = yield* run(
+      repo,
+      [
+        "api",
+        "graphql",
+        "-F",
+        "owner={owner}",
+        "-F",
+        "name={repo}",
+        "-f",
+        `query=${REPO_MERGE_QUERY}`,
+      ],
+      options,
+    ).pipe(Effect.option);
+    return Option.map(
+      Option.flatMap(stdout, repositoryOf),
+      (repository): RepoMergeConfig => ({
+        merge: repository.mergeCommitAllowed,
+        squash: repository.squashMergeAllowed,
+        rebase: repository.rebaseMergeAllowed,
+        autoMerge: repository.autoMergeAllowed,
+      }),
+    );
+  });
+
   const mergeSettings = Effect.fn("GitHub.mergeSettings")(function* (
     repo: string,
   ) {
-    const everything: MergeSettings = {
-      allowed: MERGE_METHODS,
-      autoMerge: false,
-    };
-    const stdout = yield* run(repo, [
-      "api",
-      "graphql",
-      "-F",
-      "owner={owner}",
-      "-F",
-      "name={repo}",
-      "-f",
-      `query=${REPO_MERGE_QUERY}`,
-    ]).pipe(Effect.option);
-    if (Option.isNone(stdout)) return everything;
-    const found = repositoryOf(stdout.value);
-    if (Option.isNone(found)) return everything;
-    const repository = found.value;
-    const flags: Record<MergeMethod, boolean> = {
-      merge: repository.mergeCommitAllowed,
-      squash: repository.squashMergeAllowed,
-      rebase: repository.rebaseMergeAllowed,
-    };
+    const config = yield* repoMergeConfig(repo);
+    if (Option.isNone(config))
+      return { allowed: MERGE_METHODS, autoMerge: false };
     return {
-      allowed: MERGE_METHODS.filter((method) => flags[method]),
-      autoMerge: repository.autoMergeAllowed,
+      allowed: MERGE_METHODS.filter((method) => config.value[method]),
+      autoMerge: config.value.autoMerge,
     };
   });
 
@@ -970,6 +986,7 @@ const make = Effect.gen(function* () {
     mergedHeads,
     headOf,
     mergeSettings,
+    repoMergeConfig,
     mergeProgress,
     mergeStateStatus,
     stackFor,
