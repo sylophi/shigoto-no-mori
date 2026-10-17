@@ -2,17 +2,20 @@
 // darwin helper beside the binary.
 import { dirname, join } from "node:path";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
+import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { doctorLayer, engineLayer } from "@shigomori/engine/layer";
 import * as Migration from "@shigomori/engine/Migration";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Store from "@shigomori/engine/Store";
 import { StoreError } from "@shigomori/engine/storeErrors";
+import * as Command from "effect/cli/Command";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-const open: Store.OpenDatabase = (filename) => SqliteClient.make({ filename });
+const open: Store.OpenDatabase = (filename, options) =>
+  SqliteClient.make({ filename, ...options });
 const macfs = join(dirname(process.execPath), "macfs");
 // What the agent hooks run: this binary (Agents names it by its real
 // path).
@@ -35,6 +38,7 @@ export const engine = (flavor: Flavor) =>
       engineLayer({
         flavor,
         store: owed ? Store.fromFiles(open, true) : Store.layer(open),
+        open,
         macfs,
         sm,
       }).pipe(
@@ -51,6 +55,17 @@ export const refuseUnmigrated = Effect.gen(function* () {
     return yield* new StoreError({ category: "unmigrated", cause: undefined });
   }
 });
+
+// A command that changes git, its refs or files, run while no
+// data-folder move can start: the lock held for the command's run
+// (`DataDirLock`). One that writes only the store needs none, since a
+// move's store refuses it.
+const holdingLock = Layer.effectDiscard(
+  Effect.flatMap(DataDirLock.DataDirLock, (lock) => lock.held),
+);
+export const changing = <Name extends string, Input, ContextInput, E, R>(
+  command: Command.Command<Name, Input, ContextInput, E, R>,
+) => Command.provide(command, holdingLock);
 
 // `sm doctor`'s, which opens the store inside each run, so a store that
 // won't open still gets its checklist.

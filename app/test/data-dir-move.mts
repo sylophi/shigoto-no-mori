@@ -48,9 +48,9 @@ import { afterAll, beforeAll, it } from "vitest";
 import { holdingStore, moveDataDir } from "../host/lib/dataDirMove.ts";
 import { resumeDataDirMove } from "@shigomori/engine/dataDirMove";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Paths from "@shigomori/engine/Paths";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
-  CLAIMED,
   JOURNAL,
   rescueStrandedMove,
   reviveStore,
@@ -120,20 +120,12 @@ const acrossVolumes = (
 // A journal a case left in the data dir cleared, and the store writing
 // again, as a settled move leaves them.
 const clearJournal = async () => {
-  for (const name of readdirSync(engineDataDir)) {
-    if (name === JOURNAL || name.startsWith(CLAIMED)) {
-      rmSync(join(engineDataDir, name), { force: true });
-    }
-  }
+  rmSync(join(engineDataDir, JOURNAL), { force: true });
   await runHost(reviveStore);
 };
 
-// A journal still in the data dir, as the move left it or as a settle
-// took it for itself.
-const journalLeft = () =>
-  readdirSync(engineDataDir).some(
-    (name) => name === JOURNAL || name.startsWith(CLAIMED),
-  );
+// A journal still in the data dir.
+const journalLeft = () => existsSync(join(engineDataDir, JOURNAL));
 
 const titleOf = (worktreeId: string) =>
   runHost(Ops.describeWorktree(projectId, worktreeId)).then(
@@ -267,8 +259,6 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
     from: old,
     to: `${engineDataDir}/`,
     partial: `${engineDataDir}.partial-x`,
-    pid: 4_194_304,
-    startedAt: 0,
     moved: [
       { projectId, oldPath: join(old, "wt", "repo", "fox"), newPath: fox },
     ],
@@ -291,8 +281,6 @@ it("a finished move whose worktree links couldn't be repaired keeps its journal 
       from: old,
       to: engineDataDir,
       partial: null,
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [
         {
           projectId,
@@ -318,8 +306,6 @@ it("a kept journal of a copied move never deletes a folder made at the old place
       from: old,
       to: engineDataDir,
       partial: `${engineDataDir}.partial-x`,
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [
         {
           projectId,
@@ -347,8 +333,6 @@ it("a copied move whose old tree couldn't be removed keeps its journal, and the 
     from: old,
     to: engineDataDir,
     partial: `${engineDataDir}.partial-stuck`,
-    pid: 4_194_304,
-    startedAt: 0,
     moved: [],
   });
   writeFileSync(join(old, JOURNAL), journal);
@@ -372,8 +356,6 @@ it("a finish that can't read the old tree's journal keeps its own, and finishes 
     from: old,
     to: engineDataDir,
     partial: `${engineDataDir}.partial-unread`,
-    pid: 4_194_304,
-    startedAt: 0,
     moved: [],
   });
   writeFileSync(join(old, JOURNAL), journal);
@@ -404,8 +386,6 @@ it("an undo reverses a planned entry its re-key reached, and never a returned on
         from: engineDataDir,
         to: join(elsewhere, "marks-never-landed"),
         partial: null,
-        pid: 4_194_304,
-        startedAt: 0,
         moved: [{ projectId, oldPath: fox, newPath, capture: null, state }],
       }),
     );
@@ -506,8 +486,6 @@ function landed(at: string, from: string, partial: string | null = null): void {
       from,
       to: at,
       partial,
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [],
     }),
   );
@@ -554,8 +532,6 @@ it("finds a data folder whose move a crash cut before its pointer moved", async 
       from: defaultDataDir,
       to: custom,
       partial: "x",
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [],
     }),
   );
@@ -824,8 +800,6 @@ it("a move settles an earlier move's journal first, and waits while it can't", a
       from: engineDataDir,
       to: join(elsewhere, "never-landed"),
       partial: null,
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [],
     }),
   );
@@ -887,3 +861,34 @@ it.each([
     assert.equal(existsSync(join(elsewhere, `${name}-to`)), false);
   },
 );
+
+// Every change the host makes through the engine passes the data-folder
+// lock: one is refused while a move holds it alone.
+it("refuses a change of the host's while a move holds the lock", async () => {
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  const lockFile = await runHost(
+    Effect.map(Paths.Paths, ({ pointerFile }) =>
+      join(dirname(pointerFile), "data-dir.lock"),
+    ),
+  );
+  mkdirSync(dirname(lockFile), { recursive: true });
+  const move = new DatabaseSync(lockFile);
+  move.exec("PRAGMA locking_mode = EXCLUSIVE");
+  move.exec("CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)");
+  move.exec("INSERT OR REPLACE INTO held (id) VALUES (1)");
+  try {
+    const refused = await runHost(
+      Ops.writeWorktreeDescription(projectId, identity.id, { title: "Owl" }),
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.match(String(refused), /The data folder is being moved/);
+  } finally {
+    move.close();
+  }
+  assert.equal(await titleOf(identity.id), "Fox");
+});

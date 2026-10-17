@@ -3,13 +3,22 @@
 // engine's Git over the platform's own services, so its index locks and
 // fetches are shared as in the app.
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 
+// No data-folder move runs beside these proofs: the lock lets every
+// change through.
+const noMove = Layer.succeed(DataDirLock.DataDirLock, {
+  held: Effect.void,
+  guard: (effect) => effect,
+  alone: (effect) => effect,
+});
+
 const runtime = ManagedRuntime.make(
-  Git.layer.pipe(Layer.provideMerge(NodeServices.layer)),
+  Layer.merge(Git.layer, noMove).pipe(Layer.provideMerge(NodeServices.layer)),
 );
 
 type Services = ManagedRuntime.ManagedRuntime.Services<typeof runtime>;

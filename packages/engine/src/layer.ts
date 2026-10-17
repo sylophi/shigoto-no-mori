@@ -3,6 +3,7 @@
 // where the darwin helper (macfs) is, and the terminal `sm` the agent
 // hooks run. The updater talks HTTP through
 // fetch, the one client Node and Bun both have.
+import * as DataDirLock from "./DataDirLock.ts";
 import * as DataDirMove from "./dataDirMove.ts";
 import * as Agents from "./Agents.ts";
 import * as Bundle from "./Bundle.ts";
@@ -52,6 +53,8 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 type EngineOptions = {
   readonly flavor: Flavor;
   readonly store: ReturnType<typeof Store.layer>;
+  // The driver's open, which the data-folder lock's database takes too.
+  readonly open: Store.OpenDatabase;
   readonly macfs: string;
   readonly sm: string;
 };
@@ -108,7 +111,9 @@ const services = (options: EngineOptions) =>
         MirrorInvites.layer,
       ),
     ),
-    Layer.provideMerge(Git.layer),
+    Layer.provideMerge(
+      Layer.mergeAll(Git.layer, DataDirLock.layer(options.open)),
+    ),
     Layer.provideMerge(options.store),
     Layer.provideMerge(childDefaults),
   );

@@ -1,38 +1,50 @@
-// The data-folder move's recovery as every engine process runs it (V3.md,
-// Commit points): while a move's journal is in the data dir the store
-// refuses every process's writes, and the next engine graph to come up,
-// the terminal's as much as the app's, settles it first.
+// The data-folder move's recovery as every engine process runs it, and
+// the lock that makes a move the one change under way (V3.md, Commit
+// points): while a move's journal is in the data dir the store refuses
+// every process's writes, and the next engine graph to come up, the
+// terminal's as much as the app's, settles it first, holding the lock
+// alone.
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { afterEach, beforeEach, it } from "vitest";
-import * as SqlClient from "effect/sql/SqlClient";
+import * as DataDirLock from "../src/DataDirLock.ts";
 import { finishMove, resumeDataDirMove } from "../src/dataDirMove.ts";
-import {
-  CLAIMED,
-  JOURNAL,
-  retireStore,
-  reviveStore,
-} from "../src/dataDirMoveJournal.ts";
+import { JOURNAL, retired, retireStore } from "../src/dataDirMoveJournal.ts";
+import * as Paths from "../src/Paths.ts";
 import * as Registry from "../src/Registry.ts";
 import * as WorktreeData from "../src/WorktreeData.ts";
 import * as Worktrees from "../src/Worktrees.ts";
+import { openNode } from "./lib/nodeStore.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
 
-// The settle as a graph runs it coming up, on the sandbox's platform.
+// The settle as a graph runs it coming up: the lock alone, on the
+// sandbox's platform.
 const settleAt = (dir: string) =>
-  box.engine(resumeDataDirMove(dir).pipe(Effect.provide(NodeServices.layer)));
+  box.engine(
+    Effect.flatMap(DataDirLock.DataDirLock, (lock) =>
+      lock.alone(resumeDataDirMove(dir), "5 seconds"),
+    ).pipe(Effect.provide(NodeServices.layer)),
+  );
 beforeEach(() => {
   box = sandbox();
 });
@@ -63,8 +75,6 @@ it("refuses a terminal's write while a crashed move's journal is out, and the ne
           from: dataDir,
           to: join(box.home, "moved"),
           partial: null,
-          pid: 4_194_304,
-          startedAt: 0,
           moved: [
             {
               projectId: project.id,
@@ -105,103 +115,145 @@ it("refuses a terminal's write while a crashed move's journal is out, and the ne
   assert.deepEqual(after, { title: "Fox", written: "writes again" });
 });
 
-// A journal a live recovery claimed is that recovery's; one whose
-// claimer is gone is taken over and settled.
-it("leaves a journal a live process claimed, and takes over one whose claimer is gone", async () => {
-  const dataDir = box.side("engine");
-  await box.engine(Effect.void);
-  const journal = JSON.stringify({
-    from: dataDir,
-    to: join(box.home, "never-landed"),
-    partial: null,
-    pid: 4_194_304,
-    startedAt: 0,
-    moved: [],
-  });
-  // The test's parent is running, and isn't this process.
-  const live = `${CLAIMED}${process.ppid}`;
-  writeFileSync(join(dataDir, live), journal);
-  await settleAt(dataDir);
-  assert.ok(existsSync(join(dataDir, live)));
-  rmSync(join(dataDir, live));
-  writeFileSync(join(dataDir, `${CLAIMED}4194304`), journal);
-  await settleAt(dataDir);
-  assert.deepEqual(
-    readdirSync(dataDir).filter((name) => name.startsWith("data-dir-move")),
-    [],
-  );
-});
-
-// Every mutation's first write is its own row, which a move's refusal
-// turns down: a capture-only re-key and a create (whose git work comes
-// before any other write) are refused, and git is left as it was.
-it("refuses a capture-only re-key and a create while a move owns the store", async () => {
-  const repo = box.repo("proj", { "README.md": "hi\n" });
-  const from = "aaaaaaaaaaaa";
-  const head = box.git(repo, "rev-parse", "HEAD").trim();
-  box.git(repo, "update-ref", `refs/shigomori/dirty/${from}`, head);
+// A change holds the lock shared, a move alone: a change is refused
+// while a move holds it, and a move waits out a change, then refuses.
+it("refuses a change while a move holds the lock, and a move while a change runs past its wait", async () => {
   const result = (await box.engine(
     Effect.gen(function* () {
-      const registry = yield* Registry.Registry;
-      const worktrees = yield* Worktrees.Worktrees;
-      const project = yield* registry.register({ name: "proj", path: repo });
-      yield* retireStore;
-      const rekeyed = yield* Effect.exit(
-        worktrees.rekey(project, from, join(box.home, "elsewhere", "fox")),
-      );
-      const created = yield* Effect.exit(
-        worktrees.create(
-          project,
-          { name: "fox", skipSetup: true },
-          { report: () => Effect.void, color: false },
-        ),
-      );
-      yield* reviveStore;
+      const lock = yield* DataDirLock.DataDirLock;
+      const refused = yield* lock
+        .alone(Effect.exit(lock.guard(Effect.void)), "1 second")
+        .pipe(Effect.map((exit) => Exit.isFailure(exit)));
+      const release = yield* Deferred.make<void>();
+      const holding = yield* Deferred.make<void>();
+      const change = yield* lock
+        .guard(
+          Deferred.succeed(holding, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+          ),
+        )
+        .pipe(Effect.forkChild);
+      yield* Deferred.await(holding);
+      const waited = yield* Effect.exit(lock.alone(Effect.void, "300 millis"));
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(change);
+      const after = yield* Effect.exit(lock.alone(Effect.void, "1 second"));
       return {
-        rekeyed: Exit.isFailure(rekeyed),
-        created: Exit.isFailure(created),
-        listed: (yield* worktrees.identities(project)).length,
+        refused,
+        waited: Exit.isFailure(waited),
+        after: Exit.isSuccess(after),
       };
     }),
-  )) as { rekeyed: boolean; created: boolean; listed: number };
-  assert.deepEqual(result, { rekeyed: true, created: true, listed: 1 });
-  assert.equal(
-    box.git(repo, "rev-parse", `refs/shigomori/dirty/${from}`).trim(),
-    head,
-  );
+  )) as { refused: boolean; waited: boolean; after: boolean };
+  assert.deepEqual(result, { refused: true, waited: true, after: true });
 });
 
-// A store left refusing with no journal: by a process that is gone, it
-// writes again at the next settle; by one still running, it keeps
-// refusing.
-it("lets a store a gone process left refusing write again, and keeps a live one's refusing", async () => {
-  const dataDir = box.side("engine");
-  const writes = () =>
-    box.engine(
-      Effect.flatMap(SqlClient.SqlClient, (sql) =>
-        // An insert, which a refusing store always turns down: an update
-        // that touches no row fires no trigger.
-        sql`INSERT INTO mutations (id, pid, started_at) VALUES ('probe', 1, 0)`.pipe(
-          Effect.andThen(sql`DELETE FROM mutations WHERE id = 'probe'`),
-          Effect.as(true),
-          Effect.orElseSucceed(() => false),
+// The lock is the kernel's: a process killed while it holds it holds
+// it no more, with no pid read to tell.
+it("lets a move take the lock a killed process held", async () => {
+  const lockFile = (await box.engine(
+    Effect.map(Paths.Paths, ({ pointerFile }) =>
+      join(pointerFile, "..", "data-dir.lock"),
+    ),
+  )) as string;
+  mkdirSync(join(lockFile, ".."), { recursive: true });
+  const holder = spawn(
+    process.execPath,
+    [
+      "-e",
+      `const { DatabaseSync } = require("node:sqlite");
+       const db = new DatabaseSync(${JSON.stringify(lockFile)});
+       db.exec("PRAGMA locking_mode = EXCLUSIVE");
+       db.prepare("SELECT count(*) FROM sqlite_schema").get();
+       console.log("held");
+       setInterval(() => {}, 1000);`,
+    ],
+    { stdio: ["ignore", "pipe", "inherit"] },
+  );
+  try {
+    await new Promise<void>((resolve) =>
+      holder.stdout.once("data", () => resolve()),
+    );
+    const refused = (await box.engine(
+      Effect.flatMap(DataDirLock.DataDirLock, (lock) =>
+        Effect.exit(lock.alone(Effect.void, "300 millis")),
+      ),
+    )) as Exit.Exit<void, unknown>;
+    assert.ok(Exit.isFailure(refused));
+    holder.kill("SIGKILL");
+    const taken = (await box.engine(
+      Effect.flatMap(DataDirLock.DataDirLock, (lock) =>
+        Effect.exit(lock.alone(Effect.void, "5 seconds")),
+      ),
+    )) as Exit.Exit<void, unknown>;
+    assert.ok(Exit.isSuccess(taken));
+  } finally {
+    holder.kill("SIGKILL");
+  }
+});
+
+// A process that found the data dir before a move took it elsewhere
+// makes no change there.
+it("refuses a change in a process whose data dir moved since it started", async () => {
+  const home = mkdtempSync(join(tmpdir(), "engine-lock-"));
+  try {
+    const exit = await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pointerFile } = yield* Paths.Paths;
+        mkdirSync(join(pointerFile, ".."), { recursive: true });
+        writeFileSync(pointerFile, `${join(home, "moved")}\n`);
+        const lock = yield* DataDirLock.DataDirLock;
+        return yield* Effect.exit(lock.guard(Effect.void));
+      }).pipe(
+        Effect.provide(
+          DataDirLock.layer(openNode).pipe(
+            Layer.provideMerge(Paths.layer("prod")),
+            Layer.provide(NodeServices.layer),
+            Layer.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({ env: { HOME: home } }),
+              ),
+            ),
+          ),
         ),
       ),
-    ) as Promise<boolean>;
-  const ownedBy = (pid: number) =>
-    box.engine(
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* retireStore;
-        yield* sql`UPDATE retired_by SET pid = ${pid}, started_at = 0`;
-      }),
     );
-  await ownedBy(process.ppid);
+    assert.ok(
+      Option.getOrUndefined(Exit.findErrorOption(exit)) instanceof
+        DataDirLock.DataDirMoved,
+    );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// A store left refusing with no journal (a move that died between its
+// refusal and its journal, or between its journal going and its store
+// writing again) writes again at the next settle.
+it("lets a store a move left refusing with no journal write again", async () => {
+  const dataDir = box.side("engine");
+  await box.engine(retireStore);
   await settleAt(dataDir);
-  assert.equal(await writes(), false);
-  await ownedBy(4_194_304);
-  await settleAt(dataDir);
-  assert.equal(await writes(), true);
+  assert.equal(await box.engine(retired), false);
+});
+
+// A process whose data dir a move has taken elsewhere leaves the move's
+// journal for the process the pointer leads to.
+it("leaves a move's journal at a folder the data dir has left", async () => {
+  await box.engine(Effect.void);
+  const old = join(box.home, "old-data");
+  mkdirSync(old);
+  writeFileSync(
+    join(old, JOURNAL),
+    JSON.stringify({
+      from: old,
+      to: join(box.home, "elsewhere"),
+      partial: null,
+      moved: [],
+    }),
+  );
+  await settleAt(old);
+  assert.ok(existsSync(join(old, JOURNAL)));
 });
 
 // A registered project whose folder is gone has nothing to repair, and
@@ -221,8 +273,6 @@ it("finishes a move past a registered project whose folder is gone", async () =>
       from: join(box.home, "moved-from"),
       to: dataDir,
       partial: null,
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [],
     }),
   );
@@ -245,8 +295,6 @@ it("keeps a copied move's old tree until the store is opened at the new place", 
     from: old,
     to: dataDir,
     partial: `${dataDir}.partial-x`,
-    pid: 4_194_304,
-    startedAt: 0,
     moved: [],
   };
   writeFileSync(join(old, JOURNAL), JSON.stringify(journal));

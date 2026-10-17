@@ -1,4 +1,5 @@
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -79,6 +80,9 @@ export class Paths extends Context.Service<
     // The pointer file read while finding the data dir, none when there
     // was none or SHIGOMORI_DATA_DIR made it moot.
     readonly pointer: Option.Option<PointerFile>;
+    // Where the data dir is found now, which a move committed since this
+    // process found it makes another place than `dataDir`.
+    readonly current: Effect.Effect<string>;
     readonly holdsState: (dir: string) => Effect.Effect<StateProbe>;
   }
 >()("sm/engine/Paths") {}
@@ -197,6 +201,10 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     return { dataDir: current, source: "default" as const, pointer };
   });
 
+  // The environment as this process found it, which a later read sees
+  // too.
+  const provider = yield* ConfigProvider.ConfigProvider;
+
   // A move a crash cut before its pointer moved: committed, and the data
   // dir found again where the move left it, before any process can make
   // a fresh store at the folder that left.
@@ -230,6 +238,11 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     legacyPointerFile,
     defaultDataDir,
     pointer: resolved.pointer,
+    // Its one failure, a retired variable, would have stopped the start.
+    current: Effect.map(resolve, ({ dataDir }) => dataDir).pipe(
+      Effect.provideService(ConfigProvider.ConfigProvider, provider),
+      Effect.orDie,
+    ),
     holdsState,
   });
 });

@@ -16,11 +16,14 @@
 // (the engine's rekey, `sm worktrees rekey`), and git's own worktree links are
 // re-pointed by `git worktree repair`.
 //
-// A move a crash cuts short is finished or undone at the next start
+// The move is the one change under way: it holds the data-folder lock
+// alone from its first step to its last (`DataDirLock`). A move a crash
+// cuts short is finished or undone at the next start
 // (resumeDataDirMove): the move keeps a journal in the data dir from
 // before its re-key to its end, and a copy to another volume goes into a
-// sibling of the destination, renamed in only once whole.
-import { cp, mkdir, rmdir } from "node:fs/promises";
+// sibling of the destination, flushed to disk and renamed in only once
+// whole.
+import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
@@ -34,8 +37,8 @@ import * as SqlClient from "effect/sql/SqlClient";
 import type * as Types from "effect/Types";
 import * as Ops from "./engineOps";
 import { dirtyRef } from "@shigomori/engine/Dirty";
+import { DataDirLock } from "@shigomori/engine/DataDirLock";
 import * as Git from "@shigomori/engine/Git";
-import { startOf } from "@shigomori/engine/processes";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import {
   clearDeleteInflight,
@@ -52,14 +55,12 @@ import {
   undoMove,
 } from "@shigomori/engine/dataDirMove";
 import {
-  CLAIMED,
   JOURNAL,
   type Journal,
   retireStore,
   reviveStore,
   writeJournal,
 } from "@shigomori/engine/dataDirMoveJournal";
-import { awaitMutations } from "@shigomori/engine/moveGuard";
 import {
   canonicalDataDirName,
   dataDir,
@@ -114,6 +115,44 @@ export const sessionPlace = Effect.try({
 const copyTree = (from: string, to: string) =>
   fsStep(() => cp(from, to, { recursive: true, verbatimSymlinks: true }));
 
+// A file or folder flushed to disk (on macOS, past the drive's cache).
+const flush = async (at: string) => {
+  const handle = await open(at, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+};
+
+const entryPath = (entry: {
+  readonly parentPath: string;
+  readonly name: string;
+}) => join(entry.parentPath, entry.name);
+const depth = (folder: string) => folder.split("/").length;
+
+// Every file and folder of the tree at `dir` flushed, each folder after
+// what it holds; a link is its folder's entry, flushed with it.
+const flushTree = (dir: string) =>
+  Effect.gen(function* () {
+    const entries = yield* fsStep(() =>
+      readdir(dir, { recursive: true, withFileTypes: true }),
+    );
+    yield* Effect.forEach(
+      entries.filter((entry) => entry.isFile()).map(entryPath),
+      (file) => fsStep(() => flush(file)),
+      { concurrency: 32, discard: true },
+    );
+    yield* Effect.forEach(
+      [
+        ...entries.filter((entry) => entry.isDirectory()).map(entryPath),
+        dir,
+      ].toSorted((a, b) => depth(b) - depth(a)),
+      (folder) => fsStep(() => flush(folder)),
+      { discard: true },
+    );
+  });
+
 const trimmed = (dir: string) => dir.replace(/\/+$/, "");
 
 export const moveDataDir = Effect.fnUntraced(function* <E, R>(
@@ -152,6 +191,11 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   const toDefault = newDir === place.defaultDataDir;
   const fs = yield* FileSystem.FileSystem;
   const git = yield* Git.Git;
+  // A file or folder flushed to disk (on macOS, past the drive's cache).
+  const flushed = (at: string) =>
+    Effect.scoped(
+      Effect.flatMap(fs.open(at, { flag: "r" }), (handle) => handle.sync),
+    ).pipe(Effect.mapError(callFailureOf));
   // git spells a path under a data folder reached through a link (/tmp,
   // /var/folders, a folder linked to another drive) by the link's
   // target, so a path counts as under it by either spelling.
@@ -189,23 +233,6 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         "out first.",
     });
   }
-  // An earlier move's journal is the only record of what it still owes:
-  // settled first, as a start settles it, and a move waits while it
-  // can't be, rather than write its own over it.
-  yield* resumeDataDirMove(oldDir).pipe(Effect.ignoreCause({ log: "Warn" }));
-  const left = yield* fs.readDirectory(oldDir).pipe(
-    Effect.map((names) =>
-      names.some((name) => name === JOURNAL || name.startsWith(CLAIMED)),
-    ),
-    Effect.orElseSucceed(() => true),
-  );
-  if (left) {
-    return yield* new DataDirMoveError({
-      reason:
-        "An earlier move of the data folder isn't finished or undone yet. " +
-        "It's tried again at every start; see the log for what stops it.",
-    });
-  }
   // Running scripts are reaped below (same semantics as nuke), but
   // in-flight destructive lifecycle work (worktree/project deletes,
   // delegated engine runs) is mid-write inside the data dir and can't be
@@ -217,34 +244,23 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         "command). Try again when it finishes.",
     });
   }
-  yield* fsStep(async () => {
-    await mkdir(parent, { recursive: true });
-    // Clear an existing empty placeholder before the rename. A non-empty
-    // directory is refused, never merged into.
-    await rmdir(newDir).catch((err: NodeJS.ErrnoException) => {
-      if (isENOENT(err)) return;
-      if (err.code === "ENOTEMPTY" || err.code === "EEXIST") {
-        throw new Error(`${newDir} already exists and is not empty.`);
-      }
-      throw err;
-    });
-  });
 
   // Where git will name the moved worktrees: by the destination's real
   // spelling, which their new ids hash.
+  yield* fsStep(() => mkdir(parent, { recursive: true }));
   const newReal = join(
     yield* fs.realPath(parent).pipe(Effect.orElseSucceed(() => parent)),
     place.dataDirName,
   );
 
   // Managed worktrees whose checkout sits under the data dir, as git
-  // lists them once the store refuses every other process's writes (a
-  // create, an adopt or a move in the terminal can't change them after):
-  // their ids are marked delete-inflight for the rest of the move
-  // (blocking a renderer script run from landing in a directory
-  // mid-move, exactly like the nuke flow), what they keep re-keyed, and
-  // their git links repaired afterwards. Listed before anything moves,
-  // because listing needs the old paths.
+  // lists them while the move holds the lock alone (a create, an adopt
+  // or a move anywhere can't change them after): their ids are marked
+  // delete-inflight for the rest of the move (blocking a renderer script
+  // run from landing in a directory mid-move, exactly like the nuke
+  // flow), what they keep re-keyed, and their git links repaired
+  // afterwards. Listed before anything moves, because listing needs the
+  // old paths.
   const plan = Effect.forEach(
     projects,
     (project) =>
@@ -298,11 +314,6 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     from: oldDir,
     to: newDir,
     partial: null,
-    pid: process.pid,
-    ...Option.match(yield* startOf(process.pid), {
-      onNone: () => ({}),
-      onSome: (startedAt) => ({ startedAt }),
-    }),
     moved: [],
   };
   // Gone already is gone.
@@ -317,7 +328,32 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   let retired = false;
   let journaled = false;
   let renamed = false;
-  yield* Effect.gen(function* () {
+  const move = Effect.gen(function* () {
+    // An earlier move's journal is the only record of what it still owes:
+    // settled first, as a start settles it, and a move waits while it
+    // can't be, rather than write its own over it.
+    yield* resumeDataDirMove(oldDir).pipe(Effect.ignoreCause({ log: "Warn" }));
+    const left = yield* fs
+      .exists(journalFile)
+      .pipe(Effect.orElseSucceed(() => true));
+    if (left) {
+      return yield* new DataDirMoveError({
+        reason:
+          "An earlier move of the data folder isn't finished or undone yet. " +
+          "It's tried again at every start; see the log for what stops it.",
+      });
+    }
+    yield* fsStep(() =>
+      // Clear an existing empty placeholder before the rename. A non-empty
+      // directory is refused, never merged into.
+      rmdir(newDir).catch((err: NodeJS.ErrnoException) => {
+        if (isENOENT(err)) return;
+        if (err.code === "ENOTEMPTY" || err.code === "EEXIST") {
+          throw new Error(`${newDir} already exists and is not empty.`);
+        }
+        throw err;
+      }),
+    );
     // Scripts running inside the worktrees we're about to move would
     // keep cwds pointing at the old location. Reap them first.
     yield* opts.killAllScripts;
@@ -331,27 +367,17 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         .makeDirectory(dirname(pointerFile), { recursive: true })
         .pipe(
           Effect.andThen(fs.writeFileString(pointerTmp, `${newDir}\n`)),
+          Effect.andThen(flushed(pointerTmp)),
           Effect.mapError(callFailureOf),
         );
       pointerStaged = true;
     }
 
-    // The store refusing every write but the move's, then every mutation
-    // already under way waited out, then the journal: from here a start
-    // that finds the journal with the pointer unmoved undoes the move, one
-    // that finds it at the new place finishes it.
+    // The store refusing every write but the move's, then the journal:
+    // from here a start that finds the journal with the pointer unmoved
+    // undoes the move, one that finds it at the new place finishes it.
     yield* retireStore.pipe(Effect.mapError(callFailureOf));
     retired = true;
-    if (
-      !(yield* awaitMutations("30 seconds").pipe(
-        Effect.orElseSucceed(() => false),
-      ))
-    ) {
-      return yield* new DataDirMoveError({
-        reason:
-          "Another change to the worktrees is still running (in the app or a terminal). Try again when it finishes.",
-      });
-    }
     yield* journalHere;
     journaled = true;
 
@@ -402,8 +428,10 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     yield* opts.beforeMove;
 
     // rename() can't cross volumes. Then the tree is copied into a
-    // sibling of the destination, renamed in once whole, the pointer
-    // committed, and the old tree removed.
+    // sibling of the destination, flushed whole, and renamed in. Either
+    // way the folders the rename changed are flushed before the pointer
+    // commits, so no power loss leaves a pointer naming a folder that
+    // isn't on disk.
     const sameVolume = yield* fs.rename(oldDir, newDir).pipe(
       Effect.as(true),
       Effect.catchIf(crossesVolumes, () => Effect.succeed(false)),
@@ -418,23 +446,39 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
             Effect.mapError(callFailureOf),
           )
         : opts.copy(oldDir, partial).pipe(Effect.mapError(callFailureOf));
+      yield* flushTree(partial);
       yield* fs
         .rename(journal.partial, newDir)
         .pipe(Effect.mapError(callFailureOf));
     }
     renamed = true;
+    yield* flushed(dirname(newDir));
+    if (sameVolume) yield* flushed(dirname(oldDir));
 
     // Point both readers (app boot, CLI) at the new location. Atomic
-    // rename so no reader can ever see a half-written path. Committed
-    // before the old copy is deleted: if that cleanup fails midway, the
-    // pointer already names the complete new copy. Leftovers beat a boot
-    // against a half-deleted data dir. Moving to the default removes the
-    // pointer instead, and the pre-2.0 pointer goes either way: exactly
-    // one file may ever redirect a boot.
+    // rename so no reader can ever see a half-written path, and flushed.
+    // Committed before the old copy is deleted: if that cleanup fails
+    // midway, the pointer already names the complete new copy. Moving to
+    // the default removes the pointer instead, and the pre-2.0 pointer
+    // goes either way: exactly one file may ever redirect a boot. A start
+    // that found the folder gone may have committed it first (Paths'
+    // rescue).
     yield* toDefault
       ? removeIfThere(pointerFile)
-      : fs.rename(pointerTmp, pointerFile).pipe(Effect.mapError(callFailureOf));
+      : fs.rename(pointerTmp, pointerFile).pipe(
+          Effect.catch((error) =>
+            Effect.flatMap(
+              fs
+                .readFileString(pointerFile)
+                .pipe(Effect.orElseSucceed(() => "")),
+              (now) =>
+                now.trim() === newDir ? Effect.void : Effect.fail(error),
+            ),
+          ),
+          Effect.mapError(callFailureOf),
+        );
     if (legacyPointerFile !== null) yield* removeIfThere(legacyPointerFile);
+    yield* flushed(dirname(pointerFile));
     // The store this process holds is the old place's: the first one to
     // open it at the new place removes the old tree, the journal, and lets
     // it write.
@@ -463,6 +507,8 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       }),
     ),
   );
+  const lock = yield* DataDirLock;
+  yield* lock.alone(move, "30 seconds");
 });
 
 // The store held still while a copy reads it: a write transaction open

@@ -9,25 +9,14 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { pidAlive, startOf, stillRunning } from "./processes.ts";
 import { MOVED } from "./storeErrors.ts";
 
 export const JOURNAL = "data-dir-move.json";
-// The journal a recovery took for itself, by its pid: renamed, so two
-// processes that start together never both act on it.
-export const CLAIMED = `${JOURNAL}.claimed-`;
 export const Journal = Schema.Struct({
   from: Schema.String,
   to: Schema.String,
   // The sibling a copy to another volume fills, null for a rename.
   partial: Schema.NullOr(Schema.String),
-  // The process making the move, and when it started (absent when ps
-  // couldn't say): while it runs, the store it retired keeps refusing
-  // writes. A journal from before either was written has neither, and
-  // its mover counts as running.
-  pid: Schema.optional(Schema.Finite),
-  startedAt: Schema.optional(Schema.Finite),
   moved: Schema.Array(
     Schema.Struct({
       projectId: Schema.String,
@@ -199,36 +188,12 @@ const tablesOf = (sql: SqlClient.SqlClient) =>
     (rows) => rows.map(({ name }) => name),
   );
 
-// This process as the store's records name it: its pid and its start,
-// so a pid the system handed on since reads as another process.
-export const thisProcess = Effect.gen(function* () {
-  const spawner = yield* Effect.serviceOption(
-    ChildProcessSpawner.ChildProcessSpawner,
-  );
-  const started = Option.isSome(spawner)
-    ? yield* startOf(process.pid).pipe(
-        Effect.provideService(
-          ChildProcessSpawner.ChildProcessSpawner,
-          spawner.value,
-        ),
-      )
-    : Option.none<number>();
-  return { pid: process.pid, startedAt: Option.getOrElse(started, () => 0) };
-});
-
 // The store made to refuse every write but its owner's (V3.md, Commit
-// points), the process that did so recorded: a mutation's own record may
-// still go (`mutations`, deleted as each ends), and the record of who
-// retired it is never refused.
+// points).
 export const retireStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const owner = yield* thisProcess;
-  yield* sql`INSERT OR REPLACE INTO retired_by (id, pid, started_at)
-    VALUES (1, ${owner.pid}, ${owner.startedAt})`;
   for (const table of yield* tablesOf(sql)) {
-    if (table === "retired_by") continue;
     for (const op of WRITES) {
-      if (table === "mutations" && op === "DELETE") continue;
       // Names can't be bound, and these are the store's own.
       yield* sql.unsafe(
         `CREATE TRIGGER IF NOT EXISTS "moved_${table}_${op}" BEFORE ${op} ON "${table}" BEGIN SELECT RAISE(ABORT, '${MOVED}'); END`,
@@ -237,29 +202,15 @@ export const retireStore = Effect.gen(function* () {
   }
 });
 
-// A store refusing writes for a process that is gone: what a move left
-// that died between making the store refuse and writing its journal, or
-// after removing its journal and before letting the store write again.
-export const orphanRetired = Effect.gen(function* () {
+// Whether the store refuses writes, as a move left it.
+export const retired = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const [owner] = yield* sql<{ pid: number; started_at: number }>`
-    SELECT pid, started_at FROM retired_by WHERE id = 1`;
-  if (owner === undefined) return false;
-  const spawner = yield* Effect.serviceOption(
-    ChildProcessSpawner.ChildProcessSpawner,
-  );
-  if (Option.isNone(spawner)) return !(yield* pidAlive(owner.pid));
-  return !(yield* stillRunning(owner.pid, owner.started_at).pipe(
-    Effect.provideService(
-      ChildProcessSpawner.ChildProcessSpawner,
-      spawner.value,
-    ),
-  ));
+  const triggers = yield* sql<{ name: string }>`SELECT name FROM sqlite_master
+    WHERE type = 'trigger' AND substr(name, 1, 6) = 'moved_' LIMIT 1`;
+  return triggers.length > 0;
 });
 
-// The store a move left let write again, for a move undone: in the
-// process that undoes it, and as the store opens beside the journal of a
-// move whose process is gone (Store.ts).
+// The store a move left let write again.
 export const reviveStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const triggers = yield* sql<{ name: string }>`SELECT name FROM sqlite_master
@@ -267,31 +218,4 @@ export const reviveStore = Effect.gen(function* () {
   for (const { name } of triggers) {
     yield* sql.unsafe(`DROP TRIGGER IF EXISTS "${name}"`);
   }
-  yield* sql`DELETE FROM retired_by`;
 });
-
-// The journal in `dir` of a move whose process is gone: a store opening
-// beside it is one a crash left retired. A live mover's, or none, is not.
-export const strandedJournal = (dir: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const journal = yield* fs.readFileString(path.join(dir, JOURNAL)).pipe(
-      Effect.map(Schema.decodeUnknownOption(JournalJson)),
-      Effect.orElseSucceed(() => Option.none<Journal>()),
-    );
-    if (Option.isNone(journal)) return false;
-    const spawner = yield* Effect.serviceOption(
-      ChildProcessSpawner.ChildProcessSpawner,
-    );
-    const { pid, startedAt } = journal.value;
-    if (pid === undefined) return false;
-    return !(yield* Option.isSome(spawner) && startedAt !== undefined
-      ? stillRunning(pid, startedAt).pipe(
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner.value,
-          ),
-        )
-      : pidAlive(pid));
-  });

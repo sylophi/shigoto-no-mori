@@ -12,8 +12,8 @@ import * as Migration from "../../src/Migration.ts";
 import * as Paths from "../../src/Paths.ts";
 import * as Store from "../../src/Store.ts";
 
-export const openNode: Store.OpenDatabase = (filename) =>
-  SqliteClient.make({ filename });
+export const openNode: Store.OpenDatabase = (filename, options) =>
+  SqliteClient.make({ filename, ...options });
 
 export const nodeStore = Store.layer(openNode).pipe(
   Layer.provide(Migration.layer),

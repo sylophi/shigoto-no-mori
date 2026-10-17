@@ -2476,3 +2476,43 @@ esac`,
     await ended;
   });
 });
+
+describe("a data-folder move under way", () => {
+  // The move holds the lock alone, as the app's does: a change on disk
+  // is refused before it starts, and a read still answers.
+  it("refuses a change on disk while a move holds the lock, and reads on", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await box.migrate("cli");
+    const made = await runAt(alpha, "--json", "worktrees", "create", "fox");
+    assert.equal(made.code, 0, made.stderr);
+    const fox = (made.doc as { worktree: { path: string } }).worktree.path;
+    const lockFile = join(
+      box.home,
+      ".config",
+      flavorNames("dev").configDir,
+      "data-dir.lock",
+    );
+    mkdirSync(dirname(lockFile), { recursive: true });
+    const move = new DatabaseSync(lockFile);
+    move.exec("PRAGMA locking_mode = EXCLUSIVE");
+    move.exec("CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)");
+    move.exec("INSERT OR REPLACE INTO held (id) VALUES (1)");
+    try {
+      const removed = await runAt(alpha, "rm", "fox");
+      assert.notEqual(removed.code, 0);
+      assert.match(removed.stderr, /The data folder is being moved/);
+      const created = await runAt(alpha, "worktrees", "create", "owl");
+      assert.match(created.stderr, /The data folder is being moved/);
+      const listed = await runAt(alpha, "--json", "list");
+      assert.equal(listed.code, 0, listed.stderr);
+    } finally {
+      move.close();
+    }
+    assert.ok(existsSync(fox));
+    const after = await runAt(alpha, "rm", "fox");
+    assert.equal(after.code, 0, after.stderr);
+  });
+});

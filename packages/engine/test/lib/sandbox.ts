@@ -26,6 +26,7 @@ import * as Bundle from "../../src/Bundle.ts";
 import * as CarryOver from "../../src/CarryOver.ts";
 import * as Config from "../../src/Config.ts";
 import * as Control from "../../src/Control.ts";
+import * as DataDirLock from "../../src/DataDirLock.ts";
 import * as Doctor from "../../src/Doctor.ts";
 import { errorDocument } from "../../src/errorDocument.ts";
 import * as Git from "../../src/Git.ts";
@@ -43,6 +44,7 @@ import * as Transfer from "../../src/Transfer.ts";
 import * as Usage from "../../src/Usage.ts";
 import { doctorLayer, migratingEngineLayer } from "../../src/layer.ts";
 import * as Migration from "../../src/Migration.ts";
+import * as Paths from "../../src/Paths.ts";
 import * as Store from "../../src/Store.ts";
 import { openNode } from "./nodeStore.ts";
 import * as Worktrees from "../../src/Worktrees.ts";
@@ -62,6 +64,7 @@ export type Engine =
   | Bundle.Bundle
   | CarryOver.CarryOver
   | Config.Config
+  | DataDirLock.DataDirLock
   | Git.Git
   | GitHub.GitHub
   | Icons.Icons
@@ -81,7 +84,8 @@ export type Engine =
   | WtFolder.WtFolder
   | WorktreeData.WorktreeData
   | SqlClient.SqlClient
-  | Migration.Migration;
+  | Migration.Migration
+  | Paths.Paths;
 
 // What the agent hooks run, as the installed binary names itself.
 export const HOOK_BINARY =
@@ -194,6 +198,7 @@ export function sandbox(
     migratingEngineLayer({
       flavor: "dev",
       store: Store.layer(openNode),
+      open: openNode,
       macfs: macfs(),
       sm: HOOK_BINARY,
     });

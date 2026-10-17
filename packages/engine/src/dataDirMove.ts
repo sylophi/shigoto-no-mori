@@ -1,9 +1,10 @@
 // The data-folder move's recovery and the steps of it the engine owns
 // (V3.md, Commit points): while a move's journal is in the data dir the
 // store refuses every write but the move's own, and every process that
-// opens the store settles the journal first or keeps refusing. The move
-// itself is the app's (app/host/lib/dataDirMove.ts); the journal and the
-// store's refusal are `dataDirMoveJournal.ts`'s.
+// comes up settles the journal first, holding the data-folder lock alone
+// (`DataDirLock`), or keeps refusing. The move itself is the app's
+// (app/host/lib/dataDirMove.ts); the journal and the store's refusal are
+// `dataDirMoveJournal.ts`'s.
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -13,18 +14,16 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import type * as Types from "effect/Types";
+import { DataDirLock } from "./DataDirLock.ts";
 import {
-  CLAIMED,
   JOURNAL,
   type Journal,
   JournalJson,
-  orphanRetired,
+  retired,
   retireStore,
   reviveStore,
-  strandedJournal,
   writeJournal,
 } from "./dataDirMoveJournal.ts";
-import { pidAlive } from "./processes.ts";
 import * as Git from "./Git.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
@@ -236,8 +235,7 @@ export const finishMove = (
   });
 
 // The journal gone, then the store writing again: a crash between leaves
-// a store refusing for a process that is gone, which the next settle lets
-// write (`orphanRetired`).
+// a store refusing with no journal, which the next settle lets write.
 const letGo = (file: string, doing: "undoing" | "finishing") =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -269,7 +267,7 @@ export const undoMove = (journal: Journal, at: string, file: string) =>
       const back = Effect.gen(function* () {
         // A `planned` entry's re-key may have run before a crash took its
         // mark: anything under its new id is its re-key's, since a move
-        // starts only with nothing there and nobody else writes after.
+        // starts only with nothing there and holds the lock alone after.
         if (state === "planned" && !(yield* keptUnderNewId(entry))) return;
         yield* rekeyBack(entry);
         entry.state = "returned";
@@ -307,93 +305,44 @@ export const undoMove = (journal: Journal, at: string, file: string) =>
     if (rekeyed && removed) yield* letGo(file, "undoing");
   });
 
-// The journal in `at` a recovery may take: the move's own, when its
-// mover is gone (or is this process, as a graph comes up, when no move of
-// its own can be under way), or one a recovery claimed whose process is
-// gone. Taken by renaming it to this process's claim, which only one
-// process can win. None when there is none to take, or another holds it.
-const claimJournal = (at: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const mine = path.join(at, `${CLAIMED}${process.pid}`);
-    const names = yield* fs
-      .readDirectory(at)
-      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
-    const claimed = names.filter((name) => name.startsWith(CLAIMED));
-    let from: string | undefined;
-    for (const name of claimed) {
-      const pid = Number(name.slice(CLAIMED.length));
-      if (pid === process.pid || !(yield* pidAlive(pid))) {
-        from = path.join(at, name);
-        break;
-      }
-      return Option.none<string>();
-    }
-    if (from === undefined && names.includes(JOURNAL)) {
-      const journal = Schema.decodeUnknownOption(JournalJson)(
-        yield* fs
-          .readFileString(path.join(at, JOURNAL))
-          .pipe(Effect.orElseSucceed(() => "")),
-      );
-      // One that can't be read stays as it is, for a look: it may be
-      // all that says what a move left.
-      if (Option.isNone(journal)) {
-        yield* Effect.logWarning(
-          `[data] a move journal at ${path.join(at, JOURNAL)} can't be read, kept for a look`,
-        );
-        return Option.none<string>();
-      }
-      if (journal.value.pid !== process.pid && !(yield* strandedJournal(at))) {
-        return Option.none<string>();
-      }
-      from = path.join(at, JOURNAL);
-    }
-    if (from === undefined) return Option.none<string>();
-    if (from === mine) return Option.some(mine);
-    const won = yield* fs.rename(from, mine).pipe(Effect.isSuccess);
-    return won ? Option.some(mine) : Option.none<string>();
-  });
-
-// A journal in the data dir `at` whose mover is gone, settled: finished
-// at its destination, undone at its source. A live mover's is its own,
-// and the store keeps refusing; one that can't be read is kept, and the
-// store keeps refusing too. With no journal, a store left refusing by a
-// process that is gone writes again.
+// The journal in the data dir `at` settled, by a process holding the
+// data-folder lock alone, so no move is under way but this process's
+// own: finished when the pointer leads to its destination, undone when
+// it still leads to its source, and left for the process the pointer
+// leads to when this one found the data dir before a move took it
+// elsewhere. One that can't be read is kept, and the store keeps
+// refusing. With no journal, a store a move left refusing writes again.
 export const resumeDataDirMove = (at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const claimed = yield* claimJournal(at);
-    if (Option.isNone(claimed)) {
-      const names = yield* fs
-        .readDirectory(at)
-        .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => [JOURNAL]));
-      const any =
-        names.includes(JOURNAL) ||
-        names.some((name) => name.startsWith(CLAIMED));
-      if (
-        !any &&
-        (yield* orphanRetired.pipe(Effect.orElseSucceed(() => false)))
-      ) {
+    const path = yield* Path.Path;
+    const file = path.join(at, JOURNAL);
+    const text = yield* fs.readFileString(file).pipe(
+      Effect.map(Option.some),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
+      Effect.orElseSucceed(() => Option.some("")),
+    );
+    if (Option.isNone(text)) {
+      if (yield* retired) {
         yield* settled(reviveStore, "letting the store write", "undoing");
       }
       return;
     }
-    const file = claimed.value;
-    const text = yield* fs.readFileString(file).pipe(Effect.option);
-    const journal = Option.flatMap(
-      text,
-      Schema.decodeUnknownOption(JournalJson),
-    );
+    const journal = Schema.decodeUnknownOption(JournalJson)(text.value);
     // Kept: it may be the only record of what a move left half done.
     if (Option.isNone(journal)) {
       return yield* Effect.logWarning(
         `[data] a move journal at ${file} can't be read, kept for a look`,
       );
     }
-    const path = yield* Path.Path;
     // The pointer may name the folder with a trailing slash.
-    if (path.resolve(journal.value.to) === path.resolve(at)) {
+    const now = path.resolve(yield* (yield* Paths.Paths).current);
+    if (now !== path.resolve(at)) {
+      return yield* Effect.logWarning(
+        `[data] the data folder is at ${now} now; the move's journal at ${file} is left for a start there`,
+      );
+    }
+    if (path.resolve(journal.value.to) === now) {
       yield* Effect.logInfo(
         `[data] finishing the move from ${journal.value.from}`,
       );
@@ -403,11 +352,24 @@ export const resumeDataDirMove = (at: string) =>
     yield* undoMove(journal.value, at, file);
   });
 
-// Every engine graph settles the data dir's journal as it comes up,
-// before anything reads a worktree by its id. A failure is a log line:
-// the store keeps refusing writes, and the next process tries again.
+// Every engine graph settles what a move left in its data dir as it
+// comes up, before anything reads a worktree by its id. A failure, or a
+// move under way that keeps the lock, is a log line: the store keeps
+// refusing writes, and the next process tries again.
 export const settleLayer = Layer.effectDiscard(
-  Effect.flatMap(Paths.Paths, ({ dataDir }) => resumeDataDirMove(dataDir)).pipe(
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const { dataDir } = yield* Paths.Paths;
+    const owed =
+      (yield* fs
+        .exists(path.join(dataDir, JOURNAL))
+        .pipe(Effect.orElseSucceed(() => true))) ||
+      (yield* retired.pipe(Effect.orElseSucceed(() => true)));
+    if (!owed) return;
+    const lock = yield* DataDirLock;
+    yield* lock.alone(resumeDataDirMove(dataDir), "10 seconds");
+  }).pipe(
     Effect.ignoreCause({
       log: "Warn",
       message: "[data] the unfinished move failed",

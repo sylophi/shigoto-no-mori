@@ -1,4 +1,5 @@
 import * as Context from "effect/Context";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -22,7 +23,6 @@ import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
 import { mirrorHistory } from "./migrations/mirrorHistory.ts";
 import { mirrorInvites } from "./migrations/mirrorInvites.ts";
 import { moving } from "./migrations/moving.ts";
-import { moveGuard } from "./migrations/moveGuard.ts";
 import { runningScripts } from "./migrations/runningScripts.ts";
 import { tables } from "./migrations/tables.ts";
 import { terminals } from "./migrations/terminals.ts";
@@ -61,12 +61,16 @@ const deniedFolder = (cause: unknown): StoreError | undefined =>
     ? new StoreError({ category: "read-only", cause })
     : undefined;
 
-// Opens the database file in WAL mode, with the driver of the process's
-// runtime: `@effect/sql-sqlite-node` in the host, `@effect/sql-sqlite-bun`
-// in the terminal binary (Bun's SQLite can't load extensions, which the
-// node driver asks for).
+// Opens a database file, in WAL mode unless `disableWAL`, with the
+// driver of the process's runtime: `@effect/sql-sqlite-node` in the host,
+// `@effect/sql-sqlite-bun` in the terminal binary (Bun's SQLite can't
+// load extensions, which the node driver asks for).
 export type OpenDatabase = (
   filename: string,
+  options?: {
+    readonly disableWAL?: boolean;
+    readonly busyTimeout?: Duration.Input;
+  },
 ) => Effect.Effect<
   SqlClient.SqlClient,
   SqlError,
@@ -105,7 +109,6 @@ const history = (platform: Platform, lenient: boolean) => ({
   "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
   "12_v2_import": v2Import,
   "13_moving": moving,
-  "14_move_guard": moveGuard,
 });
 
 // Whether the store holds what a 2.x data dir's files said: the files
