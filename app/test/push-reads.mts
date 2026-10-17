@@ -182,6 +182,30 @@ it("a read a mutation cancels for its optimistic write is not followed by a read
   client.clear();
 });
 
+it("an optimistic write over a shown answer survives a refresh's read and the one owed after it", async () => {
+  const client = new QueryClient();
+  const host = fakeHost();
+  const stop = watchHost(client, DEVICE, host.api);
+  const queryKey = keys.worktreePullRequest("p1", "feature");
+  const page = shownQuery(client, queryKey);
+  await sleep(150);
+  // A refresh's read out over the shown answer, and another push owing
+  // one more after it.
+  host.push("refsRefreshed", { projectId: "p1" });
+  await sleep(10);
+  host.push("refsRefreshed", { projectId: "p1" });
+  await sleep(10);
+  // A mutation's optimistic write: it cancels what is out and writes.
+  await client.cancelQueries({ queryKey });
+  client.setQueryData(queryKey, "optimistic");
+  await sleep(300);
+  assert.equal(page.counts.reads, 2, "read again under the optimistic write");
+  assert.equal(client.getQueryData(queryKey), "optimistic");
+  page.unsubscribe();
+  stop();
+  client.clear();
+});
+
 it("an ask that must reach a query no page reads (the device list) is kept when a page's refresh started the read and the page leaves", async () => {
   const client = new QueryClient();
   const queryKey = ["account", "devices"];
@@ -190,7 +214,7 @@ it("an ask that must reach a query no page reads (the device list) is kept when 
   refreshQueries(client, { queryKey });
   const query = client.getQueryCache().find({ queryKey, exact: true });
   assert.ok(query);
-  fetchAgain(query, false);
+  fetchAgain(client, query, false);
   page.unsubscribe();
   await sleep(400);
   assert.equal(page.counts.reads, 3, "the store's ask was dropped");

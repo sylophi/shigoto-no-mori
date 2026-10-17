@@ -116,6 +116,9 @@ export function createAppQueryClient(
     }),
     mutationCache: new MutationCache({
       onError: (err, _vars, _ctx, mutation) => {
+        // A read it joined was cancelled under it more times than
+        // throughCancel joins again: nothing went wrong to say.
+        if (isCancelledError(err)) return;
         // A command refusal (a remote host that hasn't granted this device
         // command access) is always worth surfacing plainly, ahead of the
         // silentError opt-out: the mutations that suppress the global toast

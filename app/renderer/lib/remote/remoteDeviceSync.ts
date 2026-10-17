@@ -202,7 +202,7 @@ function askListAgain(): void {
   const query = boundClient()
     .getQueryCache()
     .find({ queryKey: queryKeys.accountDevices(), exact: true });
-  if (query !== undefined) fetchAgain(query, false);
+  if (query !== undefined) fetchAgain(boundClient(), query, false);
 }
 
 // The list as the shared cache holds it, refetching only when it is
