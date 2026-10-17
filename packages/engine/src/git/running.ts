@@ -31,6 +31,10 @@ const NETWORK_SUBCOMMANDS = new Set([
   "ls-remote",
   "clone",
 ]);
+// A fetch that hasn't finished in five minutes is stuck (a remote that
+// stopped answering mid-transfer over ssh, which the stall limit can't
+// see): it ends, with its git, rather than holding its caller for good.
+const FETCH_DEADLINE = "5 minutes";
 const STALL_LIMIT = [
   "-c",
   "http.lowSpeedLimit=1000",
@@ -91,9 +95,6 @@ export const makeRunning = Effect.gen(function* () {
                     options.stdin === undefined
                       ? "ignore"
                       : Stream.make(encoder.encode(options.stdin)),
-                  // A git a signal stopped can't act on SIGTERM, and the
-                  // scope's close waits for it to exit.
-                  forceKillAfter: "3 seconds",
                 },
               ),
             )
@@ -129,7 +130,20 @@ export const makeRunning = Effect.gen(function* () {
           }
           return stdout;
         }),
-      ).pipe(SLOTTED_SUBCOMMANDS.has(slotKey) ? slots.withPermit : identity);
+      ).pipe(
+        subcommand === "fetch" && options.local !== true
+          ? Effect.timeoutOrElse({
+              duration: FETCH_DEADLINE,
+              orElse: () =>
+                Effect.fail(
+                  failed(null)(
+                    new Error("git fetch didn't finish within 5 minutes"),
+                  ),
+                ),
+            })
+          : identity,
+        SLOTTED_SUBCOMMANDS.has(slotKey) ? slots.withPermit : identity,
+      );
     });
 
   const run = runner("Git.run", (stdout, limit, tooLarge) =>

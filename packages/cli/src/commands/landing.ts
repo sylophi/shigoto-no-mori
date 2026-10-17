@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { refuseUnmigrated } from "../engine.ts";
+import { withoutCdFile } from "../handOver.ts";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import {
@@ -244,7 +245,7 @@ export const pr = Command.make("pr", target, (input) =>
     if (json) return yield* emit(doc);
     const url = text(doc["url"]);
     yield* Effect.callback<void, OpenFailed>((resume) => {
-      execFile("open", [url], (error) => {
+      execFile("open", [url], { env: withoutCdFile() }, (error) => {
         resume(
           error === null
             ? Effect.void

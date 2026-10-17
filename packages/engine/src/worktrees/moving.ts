@@ -19,7 +19,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { copyTree } from "../entries.ts";
-import { startOf, stillRunning } from "../processes.ts";
+import { startOf, stillRunning, UNKNOWN_BIRTH } from "../processes.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import { cleanPath, worktreeIdFromPath } from "../worktreeLayout.ts";
@@ -72,12 +72,22 @@ export const makeMoving = ({
       ChildProcessSpawner.ChildProcessSpawner,
       spawner,
     );
-    // This process as a move's record names it, read once.
-    const self = yield* Effect.cached(
-      Effect.map(withSpawner(startOf(process.pid)), (started) => ({
-        pid: process.pid,
-        started_at: Option.getOrElse(started, () => Date.now()),
-      })),
+    // This process as a move's record names it, read once it could be:
+    // a ps that failed is asked again at the next move, so one slow ps
+    // doesn't leave this process's records unknown for its life.
+    let known: { readonly pid: number; readonly started_at: number } | null =
+      null;
+    const self = Effect.suspend(() =>
+      known !== null
+        ? Effect.succeed(known)
+        : Effect.map(withSpawner(startOf(process.pid)), (started) => {
+            const owner = {
+              pid: process.pid,
+              started_at: Option.getOrElse(started, () => UNKNOWN_BIRTH),
+            };
+            if (Option.isSome(started)) known = owner;
+            return owner;
+          }),
     );
     // The folders this process is moving or resuming: a record it holds
     // is live only while one of them is under way, so one a defect left

@@ -17,7 +17,6 @@ import * as Lifecycle from "./Lifecycle.ts";
 import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
-import { CD_FILE_ENV } from "./shellHook.ts";
 import { scriptEnv, shellQuote } from "./Lifecycle.ts";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
@@ -216,7 +215,6 @@ const make = Effect.gen(function* () {
         const handle = yield* spawner.spawn(
           ChildProcess.make(program, [...args], {
             stdin: "ignore",
-            forceKillAfter: "3 seconds",
           }),
         );
         const [stdout, stderr, code] = yield* Effect.all(
@@ -480,7 +478,7 @@ const make = Effect.gen(function* () {
   });
 
   // A cold launch gets this environment, which the app rebuilds at
-  // startup, less the shell hook's directive file, as every launcher.
+  // startup.
   const app = Effect.gen(function* () {
     if (flavor === "dev") return yield* new NoDevApp();
     const code = yield* Effect.scoped(
@@ -490,9 +488,6 @@ const make = Effect.gen(function* () {
           // or moved.
           ChildProcess.make("open", ["-b", flavorNames(flavor).bundleId], {
             stdin: "ignore",
-            forceKillAfter: "3 seconds",
-            env: { [CD_FILE_ENV]: undefined },
-            extendEnv: true,
           }),
         ),
         (handle) => handle.exitCode,

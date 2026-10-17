@@ -389,8 +389,9 @@ interface Memory {
 // crash, a SIGKILL, a stuck start the shell killed): nothing else stops
 // it, and it keeps fronting the hostname onto a port anything local may
 // rebind. Run once as the next host starts (process/host.ts), before
-// this host's own connector can write the file. The process NAME is
-// checked first, so a recycled pid never takes out another process.
+// this host's own connector can write the file. The file names the
+// connector's pid and birth, and its process name is checked too, so a
+// recycled pid, another cloudflared's included, is never taken out.
 // When the app is never opened again, the orphan runs until it is
 // killed or the machine restarts.
 export const reapOrphanedConnector = (pidFile: string) =>
@@ -398,10 +399,19 @@ export const reapOrphanedConnector = (pidFile: string) =>
     const fs = yield* FileSystem.FileSystem;
     const raw = yield* fs.readFileString(pidFile).pipe(Effect.option);
     if (Option.isNone(raw)) return;
-    const pid = Number.parseInt(raw.value.trim(), 10);
+    const [pidText = "", bornText] = raw.value.trim().split(/\s+/);
+    const pid = Number.parseInt(pidText, 10);
+    const born = Number.parseInt(bornText ?? "", 10);
     // The same pid floor as scripts/process.ts safeKill: never signal
     // groups, self, or launchd on a corrupt file.
-    if (Number.isInteger(pid) && pid >= 2) {
+    if (
+      Number.isInteger(pid) &&
+      pid >= 2 &&
+      (yield* Processes.stillRunning(
+        pid,
+        Number.isInteger(born) ? born : Processes.UNKNOWN_BIRTH,
+      ))
+    ) {
       // Bounded: the host's boot waits on this.
       const name = yield* Processes.exec(
         "ps",
@@ -667,9 +677,22 @@ const make = (options: Options) =>
             yield* setStatus({ state: "starting", hostname });
             const path = yield* pidFile;
             if (path !== null) {
+              // The pid at once, so a host killed while ps answers still
+              // leaves the next one its connector to reap; then its birth.
               yield* fs
                 .writeFileString(path, `${child.pid}\n`)
                 .pipe(Effect.ignore);
+              const born = yield* Processes.startOf(child.pid).pipe(
+                Effect.provideService(
+                  ChildProcessSpawner.ChildProcessSpawner,
+                  spawner,
+                ),
+              );
+              if (Option.isSome(born)) {
+                yield* fs
+                  .writeFileString(path, `${child.pid} ${born.value}\n`)
+                  .pipe(Effect.ignore);
+              }
               yield* Effect.addFinalizer(() =>
                 fs.remove(path, { force: true }).pipe(Effect.ignore),
               );
