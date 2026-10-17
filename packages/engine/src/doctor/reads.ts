@@ -2,9 +2,12 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import * as Darwin from "../Darwin.ts";
+import { parsePortPoolDirs } from "../doctorParse.ts";
+import { findExecutable } from "../executables.ts";
 import { isNotFound } from "../platformErrors.ts";
 import { captureWithin } from "../processes.ts";
 
@@ -76,8 +79,34 @@ export const makeReads = Effect.gen(function* () {
       .readDirectory(dir)
       .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
 
+  // What port-pool says, asked once a pass for the ports check and every
+  // project's leases: off with the device's toggle, its program missing,
+  // why `port-pool list` failed, or the folders it holds leases for.
+  const portPoolListing = (enabled: boolean) =>
+    Effect.gen(function* () {
+      if (!enabled) return { kind: "off" } as const;
+      if (Option.isNone(yield* findExecutable("port-pool"))) {
+        return { kind: "missing" } as const;
+      }
+      const listed = yield* capture("port-pool", ["list"]).pipe(Effect.result);
+      if (Result.isFailure(listed)) {
+        return { kind: "failed", why: listed.failure.message } as const;
+      }
+      if (listed.success.code !== 0) {
+        return {
+          kind: "failed",
+          why: `exit status ${listed.success.code}`,
+        } as const;
+      }
+      return {
+        kind: "listed",
+        dirs: parsePortPoolDirs(listed.success.stdout),
+      } as const;
+    });
+
   return {
     capture,
+    portPoolListing,
     lstatIn,
     statOf,
     isDirectory,
@@ -90,3 +119,6 @@ export const makeReads = Effect.gen(function* () {
 });
 
 export type ReadsArea = Effect.Success<typeof makeReads>;
+export type PortPoolListing = Effect.Success<
+  ReturnType<ReadsArea["portPoolListing"]>
+>;

@@ -72,6 +72,7 @@ const make = Effect.gen(function* () {
   const leftoverChecks = yield* makeLeftoverChecks({ reads });
   const projectChecks = yield* makeProjectChecks({ reads, dataDirChecks });
   const checklist = yield* makeChecklist({
+    reads,
     environmentChecks,
     dataDirChecks,
     leftoverChecks,

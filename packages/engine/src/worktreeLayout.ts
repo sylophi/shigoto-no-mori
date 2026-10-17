@@ -74,6 +74,20 @@ const ownBases = (projectPath: string, place: DataDirPlace) => {
   ];
 };
 
+// A folder made beside a worktree while it is built, hidden and named
+// after it: a move's copy across volumes (`partial`), a create's
+// carry-over (`carry`).
+export const stagingName = (
+  worktree: string,
+  kind: "partial" | "carry",
+  tag: string,
+) => `.${worktree}.${kind}-${tag}`;
+
+// Whether a name beside the worktrees is one of those, which the doctor
+// doesn't count as a stray worktree.
+export const isStagingName = (name: string) =>
+  /^\..+\.(partial|carry)-[\w-]+$/.test(name);
+
 // How many levels from a worktree's parent up are ours, removed once a
 // last worktree leaves them empty: the project's folder under the
 // managed root, the in-project folder and `.shigomori`, or the drive's

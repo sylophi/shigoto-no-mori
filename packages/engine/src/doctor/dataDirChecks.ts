@@ -18,7 +18,6 @@ import type { ConfigDoc } from "../configDoc.ts";
 import {
   formatSize,
   launcherProgram,
-  parsePortPoolDirs,
   plural,
   pluralize,
   shellWord,
@@ -28,7 +27,7 @@ import { flavorNames } from "../flavor.ts";
 import * as Darwin from "../Darwin.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
-import { hashesOf, removeV2Files, v2Files } from "../v2Files.ts";
+import { heldV2Files, removeV2Files, v2Files } from "../v2Files.ts";
 import * as Registry from "../Registry.ts";
 import { acquireStagingLock } from "../stagingLock.ts";
 import { updaterFiles } from "../Updater.ts";
@@ -48,12 +47,12 @@ import {
   lstatMtime,
   repairable,
 } from "./documents.ts";
-import type { ReadsArea } from "./reads.ts";
+import type { PortPoolListing, ReadsArea } from "./reads.ts";
 
 // Terrier's registry is terrier's, and sm only merges it in, so this
 // says why merged projects might be missing.
-const checkTerrier = (device: ConfigDoc, listing: Terrier.TerrierListing) => {
-  if (device["terrier"] !== true) return [];
+const checkTerrier = (enabled: boolean, listing: Terrier.TerrierListing) => {
+  if (!enabled) return [];
   const line = check("Data dir", "terrier", "terrier");
   if (Option.isSome(listing.trouble)) {
     const { summary, advice } = listing.trouble.value;
@@ -141,7 +140,6 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const { home, dataDir, binaryName, flavor } = paths;
     const names = flavorNames(flavor);
     const {
-      capture,
       lstatIn,
       statOf,
       isDirectory,
@@ -427,19 +425,10 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const checkV2Files = Effect.gen(function* () {
       const files = yield* v2Files.pipe(Effect.provideContext(v2Context));
       if (files.length === 0) return [];
-      const sql = yield* SqlClient.SqlClient;
-      const [row] = yield* sql<{ files: string }>`
-        SELECT files FROM v2_import`.pipe(
-        Effect.orElseSucceed((): ReadonlyArray<{ files: string }> => []),
-      );
-      const verified: Record<string, unknown> =
-        row === undefined
-          ? {}
-          : (JSON.parse(row.files) as Record<string, unknown>);
-      const now = yield* hashesOf(files).pipe(Effect.provideContext(v2Context));
       // Only a file as the import verified it is the store's to replace.
-      const held = files.filter(
-        (file) => now[file] !== undefined && now[file] === verified[file],
+      const sql = yield* SqlClient.SqlClient;
+      const held = yield* heldV2Files(files).pipe(
+        Effect.provideContext(v2Context),
       );
       const kept = files.filter((file) => !held.includes(file));
       const shownOf = (list: ReadonlyArray<string>) =>
@@ -468,16 +457,10 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
               destructive: true,
               // Read again as it runs: a file v2 rewrote since the check
               // stays.
-              apply: Effect.gen(function* () {
-                const current = yield* hashesOf(held);
-                yield* removeV2Files(
-                  held.filter(
-                    (file) =>
-                      current[file] !== undefined &&
-                      current[file] === verified[file],
-                  ),
-                );
-              }).pipe(Effect.provideContext(v2Context)),
+              apply: Effect.flatMap(heldV2Files(held), removeV2Files).pipe(
+                Effect.provideContext(v2Context),
+                Effect.provideService(SqlClient.SqlClient, sql),
+              ),
             },
           ),
         );
@@ -606,11 +589,11 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     // port-pool leases are keyed by directory and live in port-pool's own
     // state. One whose directory is gone stays reserved forever. Reported,
     // never fixed: the state belongs to port-pool.
-    const checkPortAllocations = (device: ConfigDoc) =>
+    const checkPortAllocations = (listing: PortPoolListing) =>
       Effect.gen(function* () {
-        if (device["portPool"] !== true) return [];
+        if (listing.kind === "off") return [];
         const line = check("Data dir", "ports", "port pool");
-        if (Option.isNone(yield* findExecutable("port-pool"))) {
+        if (listing.kind === "missing") {
           return [
             line.warn(
               "enabled in config.json but `port-pool` isn't on PATH, so provisioning is skipped",
@@ -618,21 +601,15 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
             ),
           ];
         }
-        const listed = yield* capture("port-pool", ["list"]).pipe(
-          Effect.result,
-        );
-        if (Result.isFailure(listed) || listed.success.code !== 0) {
-          const why = Result.isFailure(listed)
-            ? listed.failure.message
-            : `exit status ${listed.success.code}`;
+        if (listing.kind === "failed") {
           return [
             line.warn(
-              `\`port-pool list\` failed: ${why}`,
+              `\`port-pool list\` failed: ${listing.why}`,
               "Run `port-pool list` by hand to see what it says.",
             ),
           ];
         }
-        const dirs = parsePortPoolDirs(listed.success.stdout);
+        const { dirs } = listing;
         let orphans = 0;
         for (const dir of dirs) {
           if (yield* isMissing(dir)) orphans++;

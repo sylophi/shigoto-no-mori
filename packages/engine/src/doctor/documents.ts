@@ -1,4 +1,8 @@
 // The doctor's document, findings and the pure helpers its areas share (EFFECT.md, section 2). `Doctor.ts` re-exports what consumers use.
+import type {
+  DoctorFinding,
+  DoctorReport,
+} from "@shigomori/contracts/modules/cli";
 import { RegistryFileSchema } from "@shigomori/contracts/schemas/dataDir";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -39,14 +43,10 @@ export type Group = "Environment" | "Data dir" | "Processes" | "Projects";
 
 // One line of the checklist. `detail` explains it, `fix` suggests what
 // to do (absent when there is nothing to suggest), and `repairable` says
-// the fix can apply a repair for it.
-export type Finding = {
+// the fix can apply a repair for it. The fields the app reads are the
+// contracts' (DoctorFindingSchema).
+export type Finding = DoctorFinding & {
   readonly group: Group;
-  readonly id: string;
-  readonly title: string;
-  readonly status: Status;
-  readonly detail: string;
-  readonly fix?: string;
   readonly repairable?: true;
 };
 
@@ -58,21 +58,15 @@ export type Repair = {
   readonly destructive: boolean;
 };
 
-export type DoctorDocument = {
+// The run as `sm doctor --json` prints it, the app's DoctorReport and
+// the rest. `repaired` holds the labels of the repairs that ran, and
+// `repairFailed` a "couldn't <label>: <why>" line for each that failed.
+export type DoctorDocument = Omit<DoctorReport, "checks"> & {
   readonly ok: boolean;
   readonly dataDir: string;
   readonly flavor: string;
   readonly version: string;
   readonly binary: string;
-  readonly summary: {
-    readonly ok: number;
-    readonly warn: number;
-    readonly fail: number;
-  };
-  // The labels of the repairs that ran, and a "couldn't <label>: <why>"
-  // line for each that failed.
-  readonly repaired: ReadonlyArray<string>;
-  readonly repairFailed: ReadonlyArray<string>;
   readonly checks: ReadonlyArray<Finding>;
 };
 
