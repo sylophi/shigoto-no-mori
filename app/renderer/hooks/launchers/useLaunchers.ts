@@ -37,10 +37,9 @@ export function useLauncherForProject(projectId: string | null) {
         ? ({ signal }) =>
             api.run(api.launchers.forProject({ projectId }), { signal })
         : skipToken,
-    // The order holds while the user works (a palette opened over the
-    // row reads the same list), and on window focus or reconnect; a visit
-    // after a few minutes reads it again, a tool installed meanwhile
-    // included.
+    // The order holds while the user works, and on window focus or
+    // reconnect; a visit after a few minutes reads it again, a tool
+    // installed meanwhile included.
     staleTime: LAUNCHER_ROW_STALE_MS,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -56,7 +55,7 @@ interface LaunchInput {
 
 export function useLaunch() {
   const { api } = useHostScope();
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: useLauncherForProject pins order for the route mount so the visible list doesn't reshuffle mid-interaction when bumpUseCount fires
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: useLauncherForProject holds its order for minutes so the visible list doesn't reshuffle mid-interaction when bumpUseCount fires
   return useMutation<void, Error, LaunchInput>({
     mutationFn: (input) => api.run(api.launchers.launch(input)),
     meta: { errorTitle: "Couldn't launch" },

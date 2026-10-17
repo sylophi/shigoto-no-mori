@@ -4,8 +4,9 @@ import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
 // As long as the host keeps the settings (GithubCli's MERGE_CONFIG_TTL),
-// and a null as long as it keeps gh's readiness (READINESS_TTL): gh
-// signed in, or a remote added, shows at the next focus after it.
+// and a null as long as it keeps gh's readiness (READINESS_TTL): a gh
+// sign-in shows at the next focus after it, a remote added once the
+// host's REPO_TTL has passed.
 const SETTINGS_STALE_MS = 60 * 60_000;
 const NOT_READY_STALE_MS = 30_000;
 
