@@ -193,11 +193,35 @@ export function apiFor(deviceId: string): RemoteDeviceApi {
 // Re-reads the shared list whether or not an observer is mounted (an
 // invalidation alone would refetch only under the account page). The
 // landing reconciles through the cache subscription. A failure is
-// swallowed there and the store keeps the last good list.
-function refetchDeviceList(): void {
-  void boundClient().refetchQueries({
-    queryKey: queryKeys.accountDevices(),
-  });
+// swallowed there and the store keeps the last good list. One read at a
+// time, never cancelling the one out: cancelling it sent the next, and
+// its caller (throughCancel) asked again, so a burst of hub pushes was
+// a burst of reads the hub answered with 429. A read already out (this
+// one's, the account page's, an invalidation's) may predate what asked,
+// so one more follows it as it settles, however many asked meanwhile.
+let listRead: Promise<unknown> | null = null;
+let readAgain = false;
+function askListAgain(): void {
+  if (listRead !== null) {
+    readAgain = true;
+    return;
+  }
+  // The query itself, not refetchQueries, which passes over a query no
+  // page reads that has never landed, a read of it out or not.
+  const query = boundClient()
+    .getQueryCache()
+    .find({ queryKey: queryKeys.accountDevices(), exact: true });
+  if (query === undefined) return;
+  if (query.state.fetchStatus === "fetching") readAgain = true;
+  listRead = query
+    .fetch(undefined, { cancelRefetch: false })
+    .catch(() => undefined)
+    .finally(() => {
+      listRead = null;
+      if (!readAgain) return;
+      readAgain = false;
+      askListAgain();
+    });
 }
 
 // The list as the shared cache holds it, refetching only when it is
@@ -241,7 +265,7 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   // A reconnect can follow an enroll or a revoke that happened while
   // the socket was down. This pass runs on the list as it stands, and
   // the refetch's landing runs the corrected one.
-  if (reconnected) refetchDeviceList();
+  if (reconnected) askListAgain();
   let list: readonly DeviceInfo[];
   try {
     list = await fetchDeviceList();
@@ -274,9 +298,7 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const hasUnknownOnline = [...online].some(
     (id) => id !== localDeviceId && !knownIds.has(id),
   );
-  if ((hasUnknownOnline || someoneLeft) && hubDriven) {
-    refetchDeviceList();
-  }
+  if ((hasUnknownOnline || someoneLeft) && hubDriven) askListAgain();
   // This machine is not a remote device to itself, so it is skipped.
   const others = list.filter((info) => info.deviceId !== localDeviceId);
   const devices = others.map((info) => buildEntry(info, current, online));
@@ -617,7 +639,7 @@ export function startRemoteDeviceSync(
         : syncedAccountId !== null && accountId !== syncedAccountId;
     syncedAccountId = accountId;
     if (leaving) leaveAccount(queryClient);
-    refetchDeviceList();
+    askListAgain();
   });
   void api.run(api.account.status()).then((status) => {
     if (syncedAccountId === undefined) {
