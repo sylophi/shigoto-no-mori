@@ -5,7 +5,7 @@
 // the --json document the Go sm printed, which a person's lines are read from.
 import { execFile } from "node:child_process";
 import * as Landing from "@shigomori/engine/Landing";
-import type * as Worktrees from "@shigomori/engine/Worktrees";
+import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -184,28 +184,24 @@ const landingReporter = Effect.gen(function* () {
 });
 
 // What a cleanup's failed document says, as Go said it.
-const failureOf = (doc: Doc) => {
-  const cleanup = doc["cleanupError"] as
-    | { readonly phase: string; readonly exitCode: number | null }
-    | undefined;
-  return cleanup !== undefined
-    ? `${cleanup.phase} ${cleanup.exitCode === null ? "failed to run" : `exited with code ${cleanup.exitCode}`}; worktree not removed`
-    : text(doc["error"]);
-};
+const failureOf = (doc: Landing.Document) =>
+  doc.cleanupError !== undefined
+    ? Worktrees.cleanupFailureWords(doc.cleanupError)
+    : (doc.error ?? "");
 
 // How land, done and rm --stack end, from the document: this checkout
 // removed or put back on the primary branch. The steps before it were
 // said as they happened (landingReporter).
-const reportCleanup = (doc: Doc, located: Worktrees.Located) =>
+const reportCleanup = (doc: Landing.Document, located: Worktrees.Located) =>
   Effect.gen(function* () {
     const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
-    const removed = doc["removed"] as Worktrees.Removed | undefined;
+    const { removed, worktree } = doc;
     // A shell standing in the removed folder is told where to go.
     const hint =
       removed !== undefined && cwdInside(removed.path)
         ? located.project.path
         : "";
-    if (doc["ok"] === false) {
+    if (doc.ok === false) {
       if (json) {
         yield* emit(doc);
         return yield* new ExitCode({ code: 1 });
@@ -217,9 +213,8 @@ const reportCleanup = (doc: Doc, located: Worktrees.Located) =>
     }
     const { dim, green } = styles(stdoutColor);
     const quiet = styles(stderrColor).dim;
-    const worktree = doc["worktree"] as Worktrees.WorktreeRow | undefined;
     if (worktree !== undefined) {
-      const deleted = text(doc["deletedBranch"]);
+      const deleted = doc.deletedBranch ?? "";
       return yield* out(
         green(`${worktree.name} is now on ${worktree.branch}`) +
           (deleted === "" ? "" : dim(` (deleted branch ${deleted})`)),
@@ -329,7 +324,7 @@ export const land = Command.make(
         yield* landingReporter,
       );
       // A stack a merge queue took: nothing to clean up yet.
-      if (doc["merged"] === undefined && doc["outcome"] !== undefined) {
+      if (doc.merged === undefined && doc.outcome !== undefined) {
         if (json) return yield* emit(doc);
         yield* mergeLine(docOutcome(doc), text(doc["title"]));
         return yield* note(

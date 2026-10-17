@@ -2,7 +2,10 @@
 // request a branch has. One runner under every lookup, so the install
 // check, the deadline and the reasons a lookup couldn't be made are the
 // same for each.
-import type { RepoMergeConfig } from "@shigomori/contracts/schemas/pullRequest";
+import {
+  isBranchsOwn,
+  type RepoMergeConfig,
+} from "@shigomori/contracts/schemas/pullRequest";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -602,12 +605,7 @@ const make = Effect.gen(function* () {
         checkedOutPullRequest(repo, branch),
       );
       for (const pr of prs) {
-        if (
-          pr.isCrossRepository !== true ||
-          pr.number === (yield* checkedOut)
-        ) {
-          return Option.some(pr);
-        }
+        if (isBranchsOwn(pr, yield* checkedOut)) return Option.some(pr);
       }
       return Option.none<A>();
     });
@@ -777,7 +775,7 @@ const make = Effect.gen(function* () {
     );
     const heads: Array<{ readonly number: number; readonly head: string }> = [];
     for (const row of rows.value) {
-      if (!row.isCrossRepository || row.number === (yield* checkedOut)) {
+      if (isBranchsOwn(row, yield* checkedOut)) {
         heads.push({ number: row.number, head: row.headRefOid });
       }
     }
