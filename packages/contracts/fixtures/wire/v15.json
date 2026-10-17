@@ -859,6 +859,12 @@
       "enabled": false
     }
   },
+  "menu:showAround": {
+    "payload": {
+      "x": 1.7976931348623135e308,
+      "y": -4e-323
+    }
+  },
   "migration:changed": {
     "payload": {
       "planned": false,
