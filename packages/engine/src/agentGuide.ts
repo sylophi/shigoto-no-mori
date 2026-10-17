@@ -3,7 +3,7 @@
 // `sm guide mcp` as its tools.
 import type { GuideHarness } from "@shigomori/contracts/modules/guide";
 import { shellQuote } from "./Lifecycle.ts";
-import { APP_REPO } from "./updateFeed.ts";
+import { APP_REPO } from "./flavor.ts";
 
 // Each harness's tool in the launcher catalog, which says whether its
 // CLI is installed.

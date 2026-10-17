@@ -90,6 +90,8 @@ export const update = Command.make(
         return yield* updater.finishInstall({
           running,
           appPid: /^[+-]?\d+$/.test(pid) ? Number(pid) : 0,
+          feedUrl: text(flags.feedUrl),
+          releasesUrl: text(flags.releasesUrl),
         });
       }
       const { json, stdoutColor, stderrColor, binaryName } =

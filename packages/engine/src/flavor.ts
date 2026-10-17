@@ -158,3 +158,10 @@ export const isV3Release = (version: string) =>
 // A release tag's flavor: a v3 release builds v3, anything else prod.
 export const flavorOfVersion = (version: string): "prod" | "v3" =>
   isV3Release(version) ? "v3" : "prod";
+
+// The app's repo on GitHub, which every flavor's releases are published
+// to (forge.config.ts) and read from: the update feeds, the changelog
+// and the guide's source link.
+export const APP_REPO_OWNER = "sylophi";
+export const APP_REPO_NAME = "shigoto-no-mori";
+export const APP_REPO = `${APP_REPO_OWNER}/${APP_REPO_NAME}`;

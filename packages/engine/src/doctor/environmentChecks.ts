@@ -19,6 +19,7 @@ import {
 } from "../shellHook.ts";
 import { type RunInput, check } from "./documents.ts";
 import type { ReadsArea } from "./reads.ts";
+import { bundleVersionArgs, isAsideName } from "../updater/documents.ts";
 
 export const makeEnvironmentChecks = ({
   reads,
@@ -127,20 +128,19 @@ export const makeEnvironmentChecks = ({
     const findAsideBundle = Effect.gen(function* () {
       for (const root of appRoots) {
         const [aside] = (yield* listDir(root))
-          .filter((name) => name.startsWith(`${names.appName}.app.old-`))
+          .filter((name) => isAsideName(`${names.appName}.app`, name))
           .toSorted();
         if (aside !== undefined) return Option.some(path.join(root, aside));
       }
       return Option.none<string>();
     });
 
-    // CFBundleShortVersionString, empty when it can't be read.
+    // Empty when it can't be read.
     const bundleVersion = (bundle: string) =>
-      capture("defaults", [
-        "read",
-        path.join(bundle, "Contents", "Info"),
-        "CFBundleShortVersionString",
-      ]).pipe(
+      capture(
+        "plutil",
+        bundleVersionArgs(path.join(bundle, "Contents", "Info.plist")),
+      ).pipe(
         Effect.map(({ stdout, code }) => (code === 0 ? stdout.trim() : "")),
         Effect.orElseSucceed(() => ""),
       );
