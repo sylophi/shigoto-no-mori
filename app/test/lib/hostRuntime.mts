@@ -20,7 +20,6 @@ import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
 import * as ScriptRuns from "../../host/lib/scripts/ScriptRuns.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
-import * as Terrier from "../../host/lib/Terrier.ts";
 import * as Sharing from "../../host/lib/Sharing.ts";
 import * as Moves from "../../host/lib/sync/Moves.ts";
 import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
@@ -62,7 +61,6 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(
       Layer.mergeAll(
         Ports.layer,
-        Terrier.layer,
         Worktrees.layer,
         Villagers.deviceLayer,
         Views.layer,

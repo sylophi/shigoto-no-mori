@@ -1,32 +1,20 @@
 // What the host reads across a project's checkouts, each answer cached
 // where it is slow to repeat: carry-over's and the folder pickers'
-// listings (worktrees/carryOver.ts), and the tidy page's facts and
-// disk sizes (worktrees/hygiene.ts).
+// listings (worktrees/carryOver.ts).
 import type {
   CarryOverCandidate,
   CarryOverStat,
-  WorktreeDiskUsage,
-  WorktreeHygiene,
 } from "@shigomori/contracts/schemas";
-import type {
-  UnknownProjectError,
-  UnknownWorktreeError,
-} from "@shigomori/contracts/errors";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import type { EngineCallError } from "./Engine";
 import type * as Git from "@shigomori/engine/Git";
-import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {
   type CarryOverCheckout,
   type FolderReadError,
   makeCarryOver,
 } from "./worktrees/carryOver";
-import { makeHygiene } from "./worktrees/hygiene";
-
-type EngineError = UnknownProjectError | UnknownWorktreeError | EngineCallError;
 
 export class Worktrees extends Context.Service<
   Worktrees,
@@ -59,28 +47,11 @@ export class Worktrees extends Context.Service<
     readonly ignoredPaths: (
       worktreePath: string,
     ) => Effect.Effect<string[], Git.GitError>;
-    // How stale each of the project's worktrees is, and whether its
-    // work already landed in the primary branch.
-    readonly hygiene: (
-      projectId: string,
-      projectPath: string,
-    ) => Effect.Effect<WorktreeHygiene[], EngineError | Git.GitError>;
-    readonly worktreeForDisk: (
-      projectId: string,
-      worktreeId: string,
-    ) => Effect.Effect<WorktreeIdentity, EngineError>;
-    // A whole directory walk, so asked one row at a time.
-    readonly diskUsage: (
-      projectId: string,
-      worktree: WorktreeIdentity,
-    ) => Effect.Effect<WorktreeDiskUsage, EngineError>;
   }
 >()("sm/host/Worktrees") {}
 
 const make = Effect.gen(function* () {
-  const carryOver = yield* makeCarryOver;
-  const hygiene = yield* makeHygiene;
-  return Worktrees.of({ ...carryOver, ...hygiene });
+  return Worktrees.of(yield* makeCarryOver);
 });
 
 export const layer = Layer.effect(Worktrees, make);

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, writeFileSync } from "node:fs";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, beforeEach, it } from "vitest";
@@ -120,4 +121,45 @@ it("lists terrier's projects as soon as the switch turns on", async () => {
     }),
   );
   assert.deepEqual(listed, [0, [repo], 0]);
+});
+
+// The Settings toggle's readiness and the listing are one reading of
+// `terrier ls --json`, the toggle on or off, asked again once invalidated.
+it("reads terrier's readiness from the listing's own probe, and asks again once invalidated", async () => {
+  const marker = `${box.home}/terrier-shape`;
+  box.fakeBin(
+    "terrier",
+    `if [ -f '${marker}' ]; then echo '{"projects":[]}'; else echo 'not json'; fi`,
+  );
+  const [before, after] = (await box.engine(
+    Effect.gen(function* () {
+      const terrier = yield* Terrier.Terrier;
+      const first = yield* terrier.readiness;
+      yield* Effect.sync(() => writeFileSync(marker, ""));
+      yield* terrier.invalidate;
+      return [first, yield* terrier.readiness];
+    }),
+  )) as [unknown, unknown];
+  assert.deepEqual(before, { installed: true, readable: false });
+  assert.deepEqual(after, { installed: true, readable: true });
+});
+
+it("drops a probe under way when invalidated, so the next ask reads terrier again", async () => {
+  const marker = `${box.home}/terrier-shape`;
+  const started = `${box.home}/terrier-started`;
+  box.fakeBin(
+    "terrier",
+    `touch '${started}'; if [ -f '${marker}' ]; then echo '{"projects":[]}'; else sleep 2; echo 'not json'; fi`,
+  );
+  const after = await box.engine(
+    Effect.gen(function* () {
+      const terrier = yield* Terrier.Terrier;
+      yield* Effect.forkChild(terrier.readiness);
+      while (!existsSync(started)) yield* Effect.sleep("20 millis");
+      writeFileSync(marker, "");
+      yield* terrier.invalidate;
+      return yield* terrier.readiness;
+    }),
+  );
+  assert.deepEqual(after, { installed: true, readable: true });
 });

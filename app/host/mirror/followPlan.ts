@@ -35,6 +35,7 @@
 // reads the peer's state with the mirror/ prefix taken off and sends
 // this side's with it put on, and everything else here (agreement,
 // divergence, the apply) works on one name per side.
+import { incomingRef } from "@shigomori/engine/Bundle";
 import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import {
   mirrorBranchFor,
@@ -157,7 +158,7 @@ export function refsToCarry(
       return { applied: false, reason: detachedReason };
     }
     wantRefs.push(`refs/heads/${head.branch}`);
-    sweep.push(`refs/shigomori/incoming/${head.branch}`);
+    sweep.push(incomingRef(head.branch));
   }
   if (indexRef !== null) {
     wantRefs.push(indexRef);

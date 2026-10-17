@@ -3,10 +3,15 @@
 // every checkout's .worktreeinclude names among its gitignored files,
 // looked up across the project's checkouts and applied best effort into
 // the new worktree, with directory symlinks hidden from git.
+import {
+  makeIgnoreMatcher,
+  normalizeRelPath,
+} from "@shigomori/contracts/git/gitPaths";
 import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import {
   type CarryOverEntry,
   isCarryOverEntry,
+  type WorktreeIncludeStatus,
 } from "@shigomori/contracts/schemas/config";
 import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
 import * as Context from "effect/Context";
@@ -60,6 +65,11 @@ export const WORKTREE_INCLUDE = ".worktreeinclude";
 export class CarryOver extends Context.Service<
   CarryOver,
   {
+    // The repo's .worktreeinclude as the Configure view shows it, across
+    // `checkouts` (their paths).
+    readonly includeStatus: (
+      checkouts: ReadonlyArray<string>,
+    ) => Effect.Effect<WorktreeIncludeStatus>;
     // Applies the project's carry-over to the worktree at `destination`,
     // looking in `checkouts` (the project's, the destination left out)
     // in order: the one on the `base` branch, the primary, the rest by
@@ -94,14 +104,6 @@ const includeEnabled = (settings: Readonly<Record<string, unknown>> | null) => {
     : PROJECT_CONFIG_DEFAULTS.useWorktreeInclude;
 };
 
-// Duplicate and trailing separators folded, as stored entries are
-// compared against git's output.
-const normalizeRelPath = (path: string) =>
-  path
-    .split("/")
-    .filter((part) => part !== "")
-    .join("/");
-
 const overlap = (a: string, b: string) =>
   a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 
@@ -118,21 +120,6 @@ const mergeCarryOver = (
       (entry) => !taken.some((path) => overlap(entry.path, path)),
     ),
   ];
-};
-
-// gitPaths.ts makeIgnoreMatcher: the path, its directory form, or a
-// fully ignored ancestor directory.
-const ignoreMatcher = (paths: ReadonlyArray<string>) => {
-  const set = new Set(paths);
-  return (relative: string) => {
-    if (relative === "") return false;
-    if (set.has(relative) || set.has(`${relative}/`)) return true;
-    const parts = relative.split("/");
-    for (let i = 1; i < parts.length; i++) {
-      if (set.has(`${parts.slice(0, i).join("/")}/`)) return true;
-    }
-    return false;
-  };
 };
 
 // Where entries are looked up, in order: the checkout on the base
@@ -167,24 +154,64 @@ const make = Effect.gen(function* () {
   const exists = (file: string) => entryExists(fs, file);
 
   // What a checkout's .worktreeinclude names among its gitignored files,
-  // always copied. None when the file isn't there.
-  const resolveInclude = (checkout: string) =>
+  // as git lists them (a folder with its trailing slash). None when the
+  // file isn't there.
+  const matchedIn = (checkout: string) =>
     Effect.gen(function* () {
       const includePath = path.join(checkout, WORKTREE_INCLUDE);
-      if (!(yield* exists(includePath))) return [];
+      if (!(yield* exists(includePath))) return Option.none<string[]>();
       const candidates = yield* git.listUntrackedMatching(
         checkout,
         includePath,
       );
-      if (candidates.length === 0) return [];
-      const isIgnored = ignoreMatcher(yield* git.listIgnoredPaths(checkout));
-      return candidates.flatMap((candidate): CarryOverEntry[] => {
-        const relative = candidate.replace(/\/$/, "");
-        return relative !== "" && isIgnored(relative) && isSafeRelPath(relative)
-          ? [{ path: relative, mode: "copy" }]
-          : [];
-      });
+      if (candidates.length === 0) return Option.some<string[]>([]);
+      const isIgnored = makeIgnoreMatcher(
+        yield* git.listIgnoredPaths(checkout),
+      );
+      return Option.some(
+        candidates.filter((candidate) =>
+          isIgnored(normalizeRelPath(candidate)),
+        ),
+      );
     });
+
+  // The entries a checkout's matches make, always copied.
+  const resolveInclude = (checkout: string) =>
+    Effect.map(matchedIn(checkout), (matched) =>
+      Option.getOrElse(matched, (): string[] => []).flatMap(
+        (candidate): CarryOverEntry[] => {
+          const relative = candidate.replace(/\/$/, "");
+          return relative !== "" && isSafeRelPath(relative)
+            ? [{ path: relative, mode: "copy" }]
+            : [];
+        },
+      ),
+    );
+
+  // What the Configure view shows of the file, every checkout's unioned
+  // as a create resolves them: whether any has one, and what they match.
+  // A checkout whose file git can't read matches nothing here; a create
+  // reports why.
+  const includeStatus = Effect.fn("CarryOver.includeStatus")(function* (
+    checkouts: ReadonlyArray<string>,
+  ) {
+    const each = yield* Effect.forEach(
+      checkouts,
+      (checkout) =>
+        matchedIn(checkout).pipe(
+          Effect.orElseSucceed(() => Option.some<string[]>([])),
+        ),
+      { concurrency: "unbounded" },
+    );
+    return {
+      fileExists: each.some(Option.isSome),
+      matchedPaths: [
+        ...new Set(
+          each.flatMap((matched) => Option.getOrElse(matched, () => [])),
+        ),
+      ],
+    } satisfies WorktreeIncludeStatus;
+  });
 
   // Every checkout's own .worktreeinclude, resolved against that
   // checkout's gitignore and unioned in source order. A broken file in
@@ -384,7 +411,7 @@ const make = Effect.gen(function* () {
     });
   }, Effect.scoped);
 
-  return CarryOver.of({ apply });
+  return CarryOver.of({ apply, includeStatus });
 });
 
 export const layer = Layer.effect(CarryOver, make);
