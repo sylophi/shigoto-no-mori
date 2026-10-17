@@ -525,15 +525,18 @@ const SIGNED_URL_REUSE_MS = 4 * 60_000;
 const signedUrls = new Map<string, { url: string; until: number }>();
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const ATTACHMENT_PATH = `/(?:user-attachments/assets|[\\w.-]+/[\\w.-]+/assets/\\d+)/(${UUID})`;
+// The attachment's authority, with an Enterprise Server's port if its
+// URL names one.
 const ATTACHED_IMAGE = new RegExp(
-  `(!\\[[^\\]]*\\]\\(\\s*<?|\\bsrc\\s*=\\s*["']?)https://([a-z0-9.-]+)${ATTACHMENT_PATH}`,
+  `(!\\[[^\\]]*\\]\\(\\s*<?|\\bsrc\\s*=\\s*["']?)https://([a-z0-9.-]+(?::\\d+)?)${ATTACHMENT_PATH}`,
   "gi",
 );
 const RENDERED_IMAGE = /<img\b[^>]*?\bsrc="(https:\/\/[^"]+)"/g;
 const ID = new RegExp(UUID, "i");
 const IS_ATTACHMENT = new RegExp(`^${ATTACHMENT_PATH}$`, "i");
 
-function withSignedImages(body: string, bodyHTML: string): string {
+// Exported for the pull-request-images proof.
+export function withSignedImages(body: string, bodyHTML: string): string {
   const now = Date.now();
   for (const [key, signed] of signedUrls) {
     if (signed.until <= now) signedUrls.delete(key);
@@ -553,10 +556,11 @@ function withSignedImages(body: string, bodyHTML: string): string {
     const id = ID.exec(url.pathname)?.[0]?.toLowerCase();
     const host = id === undefined ? undefined : hostOf.get(id);
     if (id === undefined || host === undefined) continue;
+    const hostname = host.replace(/:\d+$/, "");
     const loadable =
-      url.hostname === host
+      url.host === host.replace(/:443$/, "")
         ? !IS_ATTACHMENT.test(url.pathname)
-        : url.hostname.endsWith(`.${host}`) ||
+        : url.hostname.endsWith(`.${hostname}`) ||
           url.hostname.endsWith(".githubusercontent.com");
     const key = `${host}/${id}`;
     if (loadable && !signedUrls.has(key)) {

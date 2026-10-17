@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import {
   GITHUB_IMAGE_HOSTS,
   isAllowedImage,
@@ -8,12 +8,6 @@ import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useOutside } from "../outside.tsx";
 import { cn } from "../lib/utils.ts";
-
-const NO_HOSTS: readonly string[] = [];
-
-// The hosts the sanitize running now lets images load from: GitHub's
-// and the ones its caller named (contracts' predicates/imageHosts.ts).
-let imageHosts: readonly string[] = GITHUB_IMAGE_HOSTS;
 
 // What can load something into the page, by attribute. An element of
 // the first kind with a URL from elsewhere goes whole, any other loses
@@ -47,6 +41,8 @@ export const loadsFrom = (
     (url) => isLocal(url) || isAllowedImage(url, hosts),
   );
 
+const REMOTE_SRC = "data-remote-src";
+
 // Remote images load lazily and without a referrer: a long changelog
 // shouldn't pull every screenshot at once, and GitHub needn't learn
 // which page asked. An image GitHub signed for a few minutes (the
@@ -71,10 +67,23 @@ if (purify.isSupported) {
   purify.addHook("afterSanitizeAttributes", (node) => {
     node.removeAttribute("style");
     node.removeAttribute("background");
+    // An image on another https host is not loaded from it: its src
+    // waits under REMOTE_SRC for the caller's `remoteImage`.
+    const src = node.getAttribute("src");
+    if (
+      node.tagName === "IMG" &&
+      src !== null &&
+      !loadsFrom("src", src, GITHUB_IMAGE_HOSTS) &&
+      URL.parse(src)?.protocol === "https:"
+    ) {
+      node.setAttribute(REMOTE_SRC, src);
+      node.removeAttribute("src");
+      node.removeAttribute("srcset");
+    }
     for (const attribute of URL_ATTRIBUTES) {
       const value = node.getAttribute(attribute);
       if (value === null) continue;
-      if (loadsFrom(attribute, value, imageHosts)) continue;
+      if (loadsFrom(attribute, value, GITHUB_IMAGE_HOSTS)) continue;
       if (LOADERS.has(node.tagName)) {
         node.parentNode?.removeChild(node);
         return;
@@ -119,21 +128,15 @@ const RENDERED_CAP = 100;
 const withBreaks = new Map<string, string>();
 const withoutBreaks = new Map<string, string>();
 
-function htmlOf(
-  source: string,
-  hosts: readonly string[],
-  breaks: boolean,
-): string {
+function htmlOf(source: string, breaks: boolean): string {
   const rendered = breaks ? withBreaks : withoutBreaks;
-  const key = `${hosts.join(" ")}\n${source}`;
-  let html = rendered.get(key);
+  let html = rendered.get(source);
   if (html === undefined) {
-    imageHosts = [...GITHUB_IMAGE_HOSTS, ...hosts];
     html = purify.sanitize(
       marked.parse(source, { async: false, gfm: true, breaks }),
       { FORBID_TAGS: ["style", "form", "button"] },
     );
-    rendered.set(key, html);
+    rendered.set(source, html);
     if (rendered.size > RENDERED_CAP) {
       rendered.delete(rendered.keys().next().value ?? "");
     }
@@ -149,15 +152,16 @@ function htmlOf(
 // through the same web-URL-only door as every other link.
 export function Markdown({
   source,
-  imageHosts: hosts = NO_HOSTS,
+  remoteImage,
   className,
   images,
   breaks = true,
 }: {
   source: string;
-  // The hosts beside GitHub's its images may load from: the remotes'
-  // of the project it belongs to.
-  imageHosts?: readonly string[];
+  // An image on a host other than GitHub's, as a data: URL its
+  // project's device read (projects:remoteImage), which refuses any host
+  // but its remotes'. Without one, such an image stays blank.
+  remoteImage?: (url: string) => Promise<string>;
   className?: string;
   // Each line break a line break, as GitHub shows a comment. A file
   // is shown without, so prose wrapped in the source reflows.
@@ -168,7 +172,7 @@ export function Markdown({
   images?: Readonly<Record<string, string>>;
 }) {
   const { openUrl } = useOutside();
-  const html = purify.isSupported ? htmlOf(source, hosts, breaks) : "";
+  const html = purify.isSupported ? htmlOf(source, breaks) : "";
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!images) return;
@@ -177,6 +181,41 @@ export function Markdown({
       if (resolved !== undefined) img.src = resolved;
     }
   }, [html, images]);
+  // Each asked for as it nears the view, as lazily as a remote image
+  // loads (a long README shouldn't pull every screenshot at once), but a
+  // signed one at once, as a direct image loads: one under a fold would
+  // wait past its signature.
+  useEffect(() => {
+    if (!remoteImage) return;
+    let current = true;
+    const load = (img: Element) =>
+      remoteImage(img.getAttribute(REMOTE_SRC) ?? "").then(
+        (src) => {
+          if (current && img instanceof HTMLImageElement) img.src = src;
+        },
+        // Refused or unreadable: the image stays blank.
+        () => {},
+      );
+    const nearing = new IntersectionObserver(
+      (entries) => {
+        for (const { target, isIntersecting } of entries) {
+          if (!isIntersecting) continue;
+          nearing.unobserve(target);
+          void load(target);
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    for (const img of ref.current?.querySelectorAll(`img[${REMOTE_SRC}]`) ??
+      []) {
+      if (img.getAttribute(REMOTE_SRC)?.includes("?")) void load(img);
+      else nearing.observe(img);
+    }
+    return () => {
+      current = false;
+      nearing.disconnect();
+    };
+  }, [html, remoteImage]);
   if (!purify.isSupported) {
     return (
       <div

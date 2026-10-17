@@ -531,6 +531,9 @@ function hostHandlersFor(
       }
       return project;
     },
+    // Any image a description names on a remote's host, as a swatch.
+    "projects:remoteImage": () =>
+      `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120"><rect width="320" height="120" rx="12" fill="#7fb069"/></svg>')}`,
     "projects:cloneUrl": ({ projectId }) => {
       const identity = forest.projects.find(
         (project) => project.id === projectId,

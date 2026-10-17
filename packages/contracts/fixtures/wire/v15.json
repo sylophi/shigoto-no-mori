@@ -1774,6 +1774,13 @@
       "path": "ef"
     }
   },
+  "projects:remoteImage": {
+    "payload": {
+      "projectId": "p_01",
+      "url": "https://git.uni.example/storage/a.png"
+    },
+    "success": "data:image/png;base64,iVBORw=="
+  },
   "projects:remove": {
     "payload": {
       "id": ">s"
@@ -1937,9 +1944,6 @@
       "session": "n80D$PJ9Ebstno7q",
       "harness": "claude"
     }
-  },
-  "session:imageHosts": {
-    "success": ["e%", "\ud800"]
   },
   "session:migrationRetry": {},
   "session:quit": {

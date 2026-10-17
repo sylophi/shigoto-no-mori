@@ -186,7 +186,7 @@ export function FilesPartsScene() {
           reading={false}
           message={null}
         >
-          <MarkdownFileView source={readme} imageHosts={[]} />
+          <MarkdownFileView source={readme} />
         </FileViewerView>
       </Part>
       <Part label="An image">

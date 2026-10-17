@@ -15,7 +15,6 @@ import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import * as Tunnel from "@host/direct/Tunnel";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import { launchGuide } from "@host/lib/engineOps";
-import { projectImageHosts } from "@host/lib/projects/imageHosts";
 import { dirname } from "node:path";
 import * as HostFacts from "@host/lib/HostFacts";
 import {
@@ -121,7 +120,6 @@ export function startHost(options: {
           ),
         ),
       ),
-    imageHosts: () => onRoot(() => Graph.run(projectImageHosts)),
     quit: ({ hurried }) => Effect.sync(() => options.quit(hurried)),
   };
   registerLoopbackContract(sessionContract, session);

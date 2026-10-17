@@ -22,7 +22,7 @@ import { cn } from "../../lib/utils.ts";
 // which would move the pencil and unfold it again.
 export function DescriptionSectionView({
   description,
-  imageHosts,
+  remoteImage,
   expanded,
   onToggle,
   truncated,
@@ -31,8 +31,8 @@ export function DescriptionSectionView({
   pencilBeside = false,
 }: {
   description: string;
-  // The hosts beside GitHub's its images may load from (Markdown).
-  imageHosts?: readonly string[];
+  // An image on the project's remotes' hosts (Markdown).
+  remoteImage?: (url: string) => Promise<string>;
   expanded: boolean;
   onToggle: () => void;
   // The text runs past its few lines while folded. Open, nothing is
@@ -71,7 +71,7 @@ export function DescriptionSectionView({
               "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
           )}
         >
-          <Markdown source={description} imageHosts={imageHosts} />
+          <Markdown source={description} remoteImage={remoteImage} />
         </div>
         {pencilBeside && pencil}
       </div>

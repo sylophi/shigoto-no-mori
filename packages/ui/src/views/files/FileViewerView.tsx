@@ -133,17 +133,16 @@ export function CodeFileView({
 // for each one in the source, so prose wrapped there reflows.
 export function MarkdownFileView({
   source,
-  imageHosts,
+  remoteImage,
 }: {
   source: string;
-  // The hosts beside GitHub's its images may load from: the project's
-  // remotes'.
-  imageHosts: readonly string[];
+  // An image on the project's remotes' hosts (Markdown).
+  remoteImage?: (url: string) => Promise<string>;
 }) {
   return (
     <Markdown
       source={source}
-      imageHosts={imageHosts}
+      remoteImage={remoteImage}
       breaks={false}
       className="mx-auto max-w-3xl px-6 py-4"
     />

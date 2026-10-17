@@ -1,4 +1,5 @@
 import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
+import { fetchRemoteImage } from "@host/lib/projects/remoteImage";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { reorderProjects } from "@shared/reorder";
 import type { ViewHandlers } from "@shigomori/contracts/types";
@@ -307,4 +308,14 @@ export const projectsHandlers = {
 
   // The engine resolves icons through its shared cache (Icons.ts).
   icon: ({ projectId }) => Ops.projectIcon(projectId),
+
+  remoteImage: ({ projectId, url }) =>
+    Effect.gen(function* () {
+      const project = yield* findProject(projectId);
+      const remotes = yield* (yield* Git.Git).listRemoteEntries(project.path);
+      return yield* fetchRemoteImage(
+        remotes.map((remote) => remote.url),
+        url,
+      );
+    }),
 } satisfies EffectHandlers<typeof projectsContract, unknown, HostServices>;

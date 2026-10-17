@@ -347,3 +347,18 @@ it("an attached image on an Enterprise Server takes the media host's URL, which 
     assert.deepEqual(await load(media(id)), { status: 200, type: "image/png" });
   }
 });
+
+it("an attachment on an Enterprise Server that names its port takes its signed URL, on the media host or the Server's own authority", () => {
+  const server = "ghe.example.com:8443";
+  const shot = `https://${server}/user-attachments/assets/${PNG}`;
+  const older = `https://${server}/team07/game/assets/7/${LEGACY}`;
+  const media = `https://media.ghe.example.com/user/7/files/${PNG}?token=signed`;
+  const own = `https://${server}/storage/user/7/files/${LEGACY}?token=signed`;
+  assert.equal(
+    PullRequests.withSignedImages(
+      `![shot](${shot})\n\n![older](${older})`,
+      `<p><img src="${media}"></p><p><img src="${own}"></p>`,
+    ),
+    `![shot](${media})\n\n![older](${own})`,
+  );
+});

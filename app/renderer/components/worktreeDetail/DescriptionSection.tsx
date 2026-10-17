@@ -12,7 +12,7 @@ import {
   DescriptionEditorView,
   DescriptionSectionView,
 } from "@shigomori/ui/views/worktreeDetail/DescriptionSectionView.tsx";
-import { useProjectImageHosts } from "@/hooks/projects/useProjectImageHosts";
+import { useRemoteImage } from "@/hooks/projects/useRemoteImage";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useDescribeWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 
@@ -33,7 +33,7 @@ export function DescriptionSection({
   const saveKeys = useBinding("save");
   const describe = useDescribeWorktree("Couldn't save the description");
   const { canCommand } = useCommandAccess();
-  const imageHosts = useProjectImageHosts(worktree.projectId);
+  const remoteImage = useRemoteImage(worktree.projectId);
   // The PR's body or the worktree's own text, else the merged PR's
   // body it shows instead.
   const current = pullRequestBody ?? worktree.description ?? description;
@@ -68,7 +68,7 @@ export function DescriptionSection({
       // Folded again for a new text.
       key={description}
       description={description}
-      imageHosts={imageHosts}
+      remoteImage={remoteImage}
       onEdit={
         canCommand && hasWorktreeData(worktree)
           ? () => setDraft(current)
@@ -80,11 +80,11 @@ export function DescriptionSection({
 
 function DescriptionBody({
   description,
-  imageHosts,
+  remoteImage,
   onEdit,
 }: {
   description: string;
-  imageHosts: readonly string[];
+  remoteImage: (url: string) => Promise<string>;
   onEdit: (() => void) | undefined;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -97,7 +97,7 @@ function DescriptionBody({
   return (
     <DescriptionSectionView
       description={description}
-      imageHosts={imageHosts}
+      remoteImage={remoteImage}
       expanded={expanded}
       onToggle={() => setExpanded((open) => !open)}
       truncated={truncated}
