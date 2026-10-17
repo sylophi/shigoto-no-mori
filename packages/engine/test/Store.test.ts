@@ -178,7 +178,9 @@ it("leaves a file the store doesn't own its own error when it can't be read", as
   }
 });
 
-it("opens a store a data-folder move retired writable again only once its mover is gone", async () => {
+// Opening it never lets it write: the engine graph settles the journal
+// first, and that lets it write (dataDirMove.test.ts).
+it("opens a store a data-folder move retired still refusing writes, its mover gone or not", async () => {
   await query((sql) =>
     Effect.provideService(retireStore, SqlClient.SqlClient, sql),
   );
@@ -201,8 +203,7 @@ it("opens a store a data-folder move retired writable again only once its mover 
   // A move still under way: this process plays its mover.
   journal(process.pid);
   assert.equal(await writes(), false);
-  // A journal that names no mover (one from before they were written)
-  // keeps the store refusing until the host's resume undoes the move.
+  // A journal that names no mover (one from before they were written).
   write(JOURNAL, {
     from: dataDir,
     to: join(dataDir, "..", "elsewhere"),
@@ -211,7 +212,7 @@ it("opens a store a data-folder move retired writable again only once its mover 
   });
   assert.equal(await writes(), false);
   journal(4_194_304);
-  assert.equal(await writes(), true);
+  assert.equal(await writes(), false);
 });
 
 it("refuses a store a newer version of the app migrated, and writes nothing to it", async () => {

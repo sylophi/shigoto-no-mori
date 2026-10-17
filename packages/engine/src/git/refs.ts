@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import {
   BranchMovedError,
+  GitCommandError,
   RefUnreadable,
   UnknownRevisionError,
 } from "./documents.ts";
@@ -36,13 +37,27 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
     });
 
     // A ref's commit, none when it isn't there, and a failure when git
-    // can't tell: git answers a ref it can't open as missing, so its loose
-    // file still there, or a packed-refs it can't read, says it is not.
+    // can't tell: only `--verify --quiet`'s exit 1 means missing (a
+    // packed-refs git can't parse exits otherwise), and even then git
+    // answers a ref it can't open as missing, so its loose file still
+    // there, or a packed-refs it can't read, says it is not.
     const readRef = Effect.fn("Git.readRef")(function* (
       cwd: string,
       ref: string,
     ) {
-      const found = yield* refTip(cwd, ref);
+      const found = yield* run(cwd, [
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "--end-of-options",
+        ref,
+      ]).pipe(
+        Effect.map((out) => Option.some(out.trim())),
+        Effect.catchIf(
+          (error) => error instanceof GitCommandError && error.exitCode === 1,
+          () => Effect.succeed(Option.none<string>()),
+        ),
+      );
       if (Option.isSome(found)) return found;
       const [loose = "", packed = ""] = (yield* run(cwd, [
         "rev-parse",

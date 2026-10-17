@@ -28,7 +28,6 @@ import { terminals } from "./migrations/terminals.ts";
 import { unshelvedAt } from "./migrations/unshelvedAt.ts";
 import { v2Import } from "./migrations/v2Import.ts";
 import { wtFolder } from "./migrations/wtFolder.ts";
-import { reviveStore, strandedJournal } from "./dataDirMoveJournal.ts";
 import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import { StoreError, storeErrorOf, UNMIGRATED } from "./storeErrors.ts";
@@ -264,15 +263,9 @@ export const layer = (
         for (const file of [store, `${store}-wal`, `${store}-shm`]) {
           yield* fs.chmod(file, 0o600).pipe(Effect.ignore);
         }
+        // While a data-folder move's journal is here the store refuses
+        // writes, until the engine graph settles it (dataDirMove.ts).
         const client = yield* open(store);
-        // A copy across volumes a crash cut short left this store refusing
-        // writes; its journal is still here, its process gone, and the move
-        // is undone. While the mover runs the store keeps refusing them.
-        if (yield* strandedJournal(dataDir)) {
-          yield* reviveStore.pipe(
-            Effect.provideService(SqlClient.SqlClient, client),
-          );
-        }
         const owed = yield* owesImport(dataDir).pipe(
           Effect.provideService(SqlClient.SqlClient, client),
         );

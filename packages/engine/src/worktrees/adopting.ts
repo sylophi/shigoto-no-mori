@@ -75,6 +75,28 @@ export const makeAdopting = ({
             clone: true,
             replacing: worktree.id,
           });
+          // A commit made in the original since it was listed is in no
+          // ref the replacement holds: just before the removal its HEAD
+          // must still be the replacement's, or the adopt is taken back.
+          // (A commit in the moments between this read and the removal
+          // is left: V3.md, Commit points.)
+          const [original, replacement] = yield* Effect.all([
+            git.verifyRev(worktree.path, "HEAD").pipe(Effect.option),
+            git.verifyRev(added.made.path, "HEAD").pipe(Effect.option),
+          ]);
+          if (
+            Option.isNone(original) ||
+            Option.isNone(replacement) ||
+            original.value !== replacement.value
+          ) {
+            yield* Effect.ignore(
+              removeCheckout(project.path, added.made.path, true),
+            );
+            return yield* new WorktreeRefused({
+              reason: "adopt-moved",
+              subject: worktree.path,
+            });
+          }
           yield* removeCheckout(project.path, worktree.path, true).pipe(
             Effect.onError(() =>
               Effect.gen(function* () {

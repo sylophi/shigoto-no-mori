@@ -445,3 +445,41 @@ it("fails a re-key back whose capture can't be read, and carries it once it can"
   )) as { reason: string; back: boolean };
   assert.deepEqual(result, { reason: "failed", back: true });
 });
+
+// Sol's round 5: a packed-refs git can't parse is a failure too, never
+// a capture taken for none.
+it("fails a re-key back over a packed-refs git can't parse, and carries it once git can", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const fromPath = join(box.home, "here", "fox");
+      const toPath = join(box.home, "elsewhere", "fox");
+      const from = worktreeIdFromPath(fromPath);
+      const to = worktreeIdFromPath(toPath);
+      const head = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(repo, "update-ref", `refs/shigomori/dirty/${to}`, head);
+      box.git(repo, "pack-refs", "--all");
+      const packed = join(repo, ".git", "packed-refs");
+      const whole = readFileSync(packed, "utf8");
+      writeFileSync(packed, `${whole}garbage line\n`);
+      const first = yield* Effect.flip(
+        worktrees.rekey(project, to, fromPath, { expect: head, back: true }),
+      );
+      writeFileSync(packed, whole);
+      yield* worktrees.rekey(project, to, fromPath, {
+        expect: head,
+        back: true,
+      });
+      return {
+        reason: first.reason,
+        back:
+          box.git(repo, "rev-parse", `refs/shigomori/dirty/${from}`).trim() ===
+          head,
+      };
+    }),
+  )) as { reason: string; back: boolean };
+  assert.deepEqual(result, { reason: "failed", back: true });
+});

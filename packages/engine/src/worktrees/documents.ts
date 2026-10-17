@@ -495,6 +495,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "adopt-primary",
       "adopt-managed",
       "adopt-locked",
+      "adopt-moved",
     ]),
     // The name or path the refusal is about.
     subject: Schema.String,
@@ -554,6 +555,8 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         return "The primary checkout can't be converted";
       case "adopt-managed":
         return "Worktree is already shigomori-managed";
+      case "adopt-moved":
+        return `${this.subject} moved on to another commit while it was being adopted. Adopt it again.`;
       case "adopt-locked":
         return `${this.subject} is locked. Unlock it (git worktree unlock) to adopt it.`;
     }

@@ -974,3 +974,48 @@ it("an adopt whose removal leaves the original listed without a HEAD keeps the r
   );
   assert.deepEqual(result, { failed: true, held: true });
 });
+
+// Sol's round 5: a commit made in a detached original after it was
+// listed is held by no ref the replacement has, so the adopt is taken
+// back rather than remove the only checkout that holds it.
+it("an adopt whose original moved on after it was listed is taken back, the commit kept", async () => {
+  const outside = join(box.home, "outside", "otter");
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      box.git(repo, "worktree", "add", "-q", "--detach", outside);
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external?.detached);
+      // git that commits in the original as the replacement is added.
+      const real = box.git(repo, "--exec-path").trim();
+      box.fakeBin(
+        "git",
+        `case "$*" in *"worktree add"*) "${real}/git" -C "${outside}" commit -q --allow-empty -m late;; esac\nexec "${real}/git" "$@"`,
+      );
+      const refused = yield* worktrees
+        .adopt(
+          { project, worktree: external },
+          { force: false },
+          { report: () => Effect.void, color: false },
+        )
+        .pipe(Effect.flip);
+      process.env["PATH"] = path;
+      const listed = yield* worktrees.identities(project);
+      return {
+        reason: refused instanceof Worktrees.WorktreeRefused && refused.reason,
+        late: box.git(outside, "log", "-1", "--format=%s").trim(),
+        checkouts: listed.length,
+      };
+    }),
+  );
+  assert.deepEqual(result, {
+    reason: "adopt-moved",
+    late: "late",
+    checkouts: 2,
+  });
+});

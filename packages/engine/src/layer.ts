@@ -3,6 +3,7 @@
 // where the darwin helper (macfs) is, and the terminal `sm` the agent
 // hooks run. The updater talks HTTP through
 // fetch, the one client Node and Bun both have.
+import * as DataDirMove from "./dataDirMove.ts";
 import * as Agents from "./Agents.ts";
 import * as Bundle from "./Bundle.ts";
 import * as CarryOver from "./CarryOver.ts";
@@ -112,8 +113,13 @@ const services = (options: EngineOptions) =>
     Layer.provideMerge(childDefaults),
   );
 
+// A data-folder move's journal settled as the graph comes up, before
+// anything reads a worktree by its id (DataDirMove.settleLayer).
 export const engineLayer = (options: EngineOptions) =>
-  services(options).pipe(Layer.provideMerge(Paths.layer(options.flavor)));
+  DataDirMove.settleLayer.pipe(
+    Layer.provideMerge(services(options)),
+    Layer.provideMerge(Paths.layer(options.flavor)),
+  );
 
 // The engine of the process that migrates a 2.x data dir, the app's:
 // its moves into `wt/` made before anything else runs. Every other

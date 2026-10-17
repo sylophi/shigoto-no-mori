@@ -43,14 +43,10 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import { afterAll, beforeAll, it } from "vitest";
-import {
-  holdingStore,
-  moveDataDir,
-  resumeLayer,
-} from "../host/lib/dataDirMove.ts";
+import { holdingStore, moveDataDir } from "../host/lib/dataDirMove.ts";
+import { resumeDataDirMove } from "@shigomori/engine/dataDirMove";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
@@ -170,6 +166,10 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
   const crashed = await move;
   const partial = await Effect.runPromise(Deferred.await(copying));
 
+  writeFileSync(
+    "/tmp/merry-journal-dump0.txt",
+    readFileSync(join(engineDataDir, JOURNAL), "utf8"),
+  );
   assert.equal(
     await titleOf(identity.id),
     undefined,
@@ -178,8 +178,12 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
   assert.equal(existsSync(destination), false, "the copy fills a sibling");
   assert.equal(existsSync(partial), true);
 
+  writeFileSync(
+    "/tmp/merry-journal-dump.txt",
+    readFileSync(join(engineDataDir, JOURNAL), "utf8"),
+  );
   // The next start, the pointer where it was.
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(
     await titleOf(identity.id),
     "Fox",
@@ -227,7 +231,7 @@ it("a move whose copy landed but whose pointer was never written is undone, its 
     }).pipe(Effect.forkDetach),
   );
   await waitFor(() => existsSync(destination), "the copy renamed in");
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), "Fox");
   assert.equal(existsSync(destination), false, "the copy removed");
   assert.equal(existsSync(pointerFile), false, "no pointer committed");
@@ -256,7 +260,7 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
   });
   writeFileSync(join(old, JOURNAL), journal);
   writeFileSync(join(engineDataDir, JOURNAL), journal);
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), "Fox", "nothing re-keyed back");
   assert.equal(existsSync(old), false, "the old tree removed");
   assert.equal(
@@ -286,7 +290,7 @@ it("a finished move whose worktree links couldn't be repaired keeps its journal 
       ],
     }),
   );
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(
     existsSync(journal),
     true,
@@ -317,7 +321,7 @@ it("a kept journal of a copied move never deletes a folder made at the old place
       ],
     }),
   );
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(
     readFileSync(join(old, "new.txt"), "utf8"),
     "made after the move\n",
@@ -342,7 +346,7 @@ it("a copied move whose old tree couldn't be removed keeps its journal, and the 
   writeFileSync(join(old, JOURNAL), journal);
   writeFileSync(join(engineDataDir, JOURNAL), journal);
   chmodSync(stuck, 0o555);
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(join(old, JOURNAL)), true, "the old tree still ours");
   assert.equal(
     existsSync(join(engineDataDir, JOURNAL)),
@@ -350,7 +354,7 @@ it("a copied move whose old tree couldn't be removed keeps its journal, and the 
     "the journal kept with the old tree owed",
   );
   chmodSync(stuck, 0o755);
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(old), false, "the old tree removed");
   assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
 });
@@ -371,10 +375,10 @@ it("a finish that can't read the old tree's journal keeps its own, and finishes 
   writeFileSync(join(old, JOURNAL), journal);
   writeFileSync(join(engineDataDir, JOURNAL), journal);
   chmodSync(join(old, JOURNAL), 0o000);
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(join(engineDataDir, JOURNAL)), true);
   chmodSync(join(old, JOURNAL), 0o644);
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(existsSync(old), false);
   assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
 });
@@ -404,13 +408,13 @@ it("an undo reverses a planned entry its re-key reached, and never a returned on
   await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
   assert.equal(await titleOf(identity.id), undefined, "the re-key ran");
   journalAt("planned");
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), "Fox", "a planned re-key reversed");
   assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
 
   await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
   journalAt("returned");
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), undefined, "a returned entry left");
   assert.equal(await runHost(Ops.keptUnder(projectId, newId)), true);
   await runHost(
@@ -422,7 +426,7 @@ it("an undo reverses a planned entry its re-key reached, and never a returned on
 it("keeps a move journal it can't read, which may be all that says what a move left", async () => {
   const journal = join(engineDataDir, JOURNAL);
   writeFileSync(journal, "not a journal");
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(readFileSync(journal, "utf8"), "not a journal");
   rmSync(journal);
 });
@@ -617,9 +621,11 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
     assert.equal(found, destination);
     assert.equal(readFileSync(pointerFile, "utf8").trim(), destination);
   } finally {
-    // This process's data folder back where the other cases find it.
+    // This process's data folder back where the other cases find it,
+    // writing as a settled move leaves it.
     renameSync(destination, engineDataDir);
     rmSync(join(engineDataDir, "data-dir-move.json"), { force: true });
+    await runHost(reviveStore);
   }
 });
 
@@ -821,6 +827,35 @@ it("a move settles an earlier move's journal first, and waits while it can't", a
   );
   assert.equal(await tryMove("settled"), "stop before the folder moves");
   assert.equal(existsSync(journal), false);
+});
+
+// The owner's (a): from the journal's first write until it is gone the
+// store is the move's: another process's write (the terminal's) is
+// refused, and writes again once the move is undone.
+it("refuses another process's writes while a move's journal is out, and takes them again after", async () => {
+  const parent = join(elsewhere, "exclusive");
+  mkdirSync(parent);
+  let during = "";
+  const failed = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-exclusive", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      killAllScripts: Effect.void,
+      beforeMove: Effect.gen(function* () {
+        during = writeTheStore();
+        return yield* Effect.fail("stop before the folder moves");
+      }),
+    }).pipe(Effect.flip),
+  );
+  assert.equal(failed, "stop before the folder moves");
+  assert.match(during, /sm-data-folder-moved/);
+  assert.equal(writeTheStore(), "written");
+  assert.equal(existsSync(join(engineDataDir, JOURNAL)), false);
 });
 
 it.each([

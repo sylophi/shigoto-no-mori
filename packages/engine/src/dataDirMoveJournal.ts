@@ -45,6 +45,31 @@ export const Journal = Schema.Struct({
 export type Journal = typeof Journal.Type;
 export const JournalJson = Schema.fromJsonString(Journal);
 
+// The journal written whole into `dir`: beside itself, flushed to disk,
+// renamed in and the rename flushed, so neither a crash nor a lost
+// power leaves a journal half written or a step it records undone.
+export const writeJournal = (dir: string, journal: Journal) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const file = path.join(dir, JOURNAL);
+    const staged = `${file}.tmp`;
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handle = yield* fs.open(staged, { flag: "w", mode: 0o600 });
+        yield* handle.writeAll(
+          new TextEncoder().encode(Schema.encodeSync(JournalJson)(journal)),
+        );
+        yield* handle.sync;
+      }),
+    );
+    yield* fs.rename(staged, file);
+    // A folder's own flush, where the platform takes one.
+    yield* Effect.scoped(
+      Effect.flatMap(fs.open(dir, { flag: "r" }), (handle) => handle.sync),
+    ).pipe(Effect.ignore);
+  });
+
 // A rename whose folder landed but whose pointer never moved: the
 // pointer (or its absence) still names `named`, the folder that left,
 // which is gone, and the journal at the destination names it as its
