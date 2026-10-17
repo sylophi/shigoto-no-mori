@@ -2,6 +2,7 @@ import { Trash2 } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { Button } from "../../primitives/button.tsx";
 import { InlineError } from "../../primitives/inline-error.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { assertNever } from "../../lib/utils.ts";
 import { type CleanupError, type Worktree } from "@shigomori/contracts/schemas";
 import {
@@ -90,9 +91,11 @@ export function WorktreeDetailFooterView({
         {readOnlyNote === undefined ? (
           renderFooterContent(worktree, state, actions, agents, optionsMenu)
         ) : (
-          <span className="ml-auto text-xs text-muted-foreground">
-            {readOnlyNote}
-          </span>
+          <SimpleTooltip whenTruncated tip={readOnlyNote}>
+            <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">
+              {readOnlyNote}
+            </span>
+          </SimpleTooltip>
         )}
       </footer>
     </CollapsedThroughProvider>
