@@ -243,14 +243,18 @@ async function launch(
   let current = await start();
   const close = async () => {
     await current.stop();
-    // The app's own logs (the shell's and the host's trace), kept for a
-    // look at a walk that failed in CI, where its root goes with it.
+    // The app's own logs, kept for a look at a walk that failed in CI,
+    // where its root goes with it: the shell's under the walk's home,
+    // and the host's trace where Electron puts the logs folder, under
+    // the account's real home, which the walks' nuke clears at the end.
     const keep = process.env["SM_WALK_LOGS"];
     if (keep !== undefined && keep !== "") {
-      const walk = basename(expect.getState().testPath ?? root);
-      cpSync(join(home, "Library", "Logs"), join(keep, walk), {
-        recursive: true,
-      });
+      const walk = join(keep, basename(expect.getState().testPath ?? root));
+      cpSync(join(home, "Library", "Logs"), walk, { recursive: true });
+      const hostLogs = join(userInfo().homedir, "Library", "Logs", NAME);
+      if (existsSync(hostLogs)) {
+        cpSync(hostLogs, join(walk, "host"), { recursive: true });
+      }
     }
     rmSync(root, { recursive: true, force: true });
   };
