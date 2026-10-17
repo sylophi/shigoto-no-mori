@@ -112,7 +112,9 @@ export const isSyncConflictsError = Schema.is(SyncConflictsError);
 
 export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>()(
   "CommandRefusedError",
-  {},
+  // The peer that refused, which the asking client fills in: the
+  // refusing peer sends none.
+  { deviceId: Schema.optional(Schema.String) },
 ) {
   override get message(): string {
     return "this device is not permitted to run commands on the remote machine";
@@ -120,6 +122,15 @@ export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>
 }
 
 export const isCommandRefusedError = Schema.is(CommandRefusedError);
+
+// A refusal named for the device that refused, where the asker knows it.
+export const refusalNamed = <E>(
+  error: E,
+  deviceId: string,
+): E | CommandRefusedError =>
+  isCommandRefusedError(error) && error.deviceId === undefined
+    ? new CommandRefusedError({ deviceId })
+    : error;
 
 export class NotSharingError extends Schema.TaggedError<NotSharingError>()(
   "NotSharingError",

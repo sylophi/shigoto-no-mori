@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
@@ -54,6 +55,7 @@ function WorktreeFilesPage({
   // is granted by contract, and a verdict in flight counts as granted,
   // so only a peer that said no gets the note instead of the tree.
   const { canCommand } = useCommandAccess();
+  const deviceLabel = useScopedDeviceLabel();
   const { projectId, id: worktreeId } = worktree;
   const { path } = useSearch({ strict: false }) as { path?: string };
   const selected = path ?? null;
@@ -145,7 +147,7 @@ function WorktreeFilesPage({
       }
       body={
         !canCommand ? (
-          <FilesNoteView peerNote={peerFilesHiddenNote()} />
+          <FilesNoteView peerNote={peerFilesHiddenNote(deviceLabel)} />
         ) : phone ? (
           // No width beside the viewer on a phone: the tree is the page
           // until a file is picked, and a sheet after.

@@ -2,9 +2,9 @@ import { Trash2 } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { Button } from "../../primitives/button.tsx";
 import { InlineError } from "../../primitives/inline-error.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { assertNever } from "../../lib/utils.ts";
 import { type CleanupError, type Worktree } from "@shigomori/contracts/schemas";
-import { peerReadOnlyNote } from "../../lib/commandAccessCopy.ts";
 import {
   CollapsedThroughProvider,
   FooterVerbView,
@@ -48,10 +48,10 @@ export interface WorktreeDetailFooterProps {
   // Rows for the Options popover past the worktree's own switches (a
   // transfer used too rarely for a footer button of its own).
   options?: ReactNode;
-  // False when a remote host has not granted this client command
-  // access: the mutating affordances (shelve, delete) stay off, the
-  // rest of the page is the read-only mirror.
-  canMutate?: boolean;
+  // Set while a remote host has not granted this client command
+  // access: the mutating affordances (shelve, delete) stay off and the
+  // note stands in for them, the rest of the page the read-only mirror.
+  readOnlyNote?: string;
 }
 
 // The footer (WorktreeDetailFooter measures it): on a narrow pane the
@@ -62,7 +62,7 @@ export function WorktreeDetailFooterView({
   state,
   actions,
   leading,
-  canMutate = true,
+  readOnlyNote,
   agents,
   optionsMenu,
   footerRef,
@@ -88,12 +88,14 @@ export function WorktreeDetailFooterView({
             {leading}
           </div>
         )}
-        {canMutate ? (
+        {readOnlyNote === undefined ? (
           renderFooterContent(worktree, state, actions, agents, optionsMenu)
         ) : (
-          <span className="ml-auto text-xs text-muted-foreground">
-            {peerReadOnlyNote()}
-          </span>
+          <SimpleTooltip whenTruncated tip={readOnlyNote}>
+            <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">
+              {readOnlyNote}
+            </span>
+          </SimpleTooltip>
         )}
       </footer>
     </CollapsedThroughProvider>

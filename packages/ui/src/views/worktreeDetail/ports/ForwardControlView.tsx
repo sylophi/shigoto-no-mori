@@ -78,7 +78,7 @@ export function ForwardControlView({
   };
 
   // Why it can't be turned on, when it can't.
-  const switchTip = live || granted ? undefined : peerReadOnlyNote();
+  const switchTip = live || granted ? undefined : peerReadOnlyNote(deviceLabel);
 
   const state = describeState(
     pending,

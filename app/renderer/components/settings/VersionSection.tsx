@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useUpdater } from "@/hooks/system/useUpdater";
@@ -23,6 +24,7 @@ export function VersionSection({
   installed: string;
 }) {
   const { canCommand } = useCommandAccess();
+  const deviceLabel = useScopedDeviceLabel();
   const { state, check, isError, refetch } = useUpdater();
   // Which changelog is open: what the staged update brings, or all of it.
   const [changelog, setChangelog] = useState<"news" | "all" | null>(null);
@@ -31,6 +33,7 @@ export function VersionSection({
     <VersionSectionView
       version={version}
       canCommand={canCommand}
+      deviceLabel={deviceLabel}
       state={state}
       isError={isError}
       onRetry={() => void refetch()}
@@ -61,6 +64,7 @@ export function VersionSection({
 function RestartToUpdateButton({ version }: { version: string }) {
   const { remote } = useHostScope();
   const { canCommand } = useCommandAccess();
+  const deviceLabel = useScopedDeviceLabel();
   const { install } = useUpdater();
   const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
   return (
@@ -68,6 +72,7 @@ function RestartToUpdateButton({ version }: { version: string }) {
       version={version}
       remote={remote}
       canCommand={canCommand}
+      deviceLabel={deviceLabel}
       armed={confirm.armed}
       pending={install.isPending}
       onClick={() =>

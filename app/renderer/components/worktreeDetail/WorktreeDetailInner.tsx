@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import { DeviceChip } from "@/components/shared/DeviceChip";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
@@ -108,6 +110,7 @@ export function WorktreeDetailInner({
   // flashing a read-only page that turns editable a moment later (the
   // same rule PeerDeviceSettings and VersionSection follow).
   const { canCommand: granted } = useCommandAccess();
+  const deviceLabel = useScopedDeviceLabel();
   const { data: runtime } = useRuntimeInfo();
   const resident = useResident(worktree);
   const mirrorCopies = useMirrorCopies(worktree);
@@ -277,7 +280,7 @@ export function WorktreeDetailInner({
           worktree={worktree}
           state={footerState}
           actions={footerActions}
-          canMutate={granted}
+          readOnlyNote={granted ? undefined : peerReadOnlyNote(deviceLabel)}
           // The same verbs on either page: Files and the running mirror's
           // button, then the transfers. A new window on the page and
           // Transplant, used far less, are rows of the footer's Options

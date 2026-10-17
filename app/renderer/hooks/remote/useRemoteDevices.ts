@@ -12,7 +12,7 @@ import {
   useLocalDeviceIcon,
   useLocalDeviceName,
 } from "@/hooks/account/useAccount";
-import type { HostApi } from "@/hooks/remote/useHostScope";
+import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useHasLocalHost } from "@/lib/localHost";
 import { hostsProjects } from "@shigomori/ui/lib/deviceTraits.ts";
 import {
@@ -107,6 +107,11 @@ export function useDeviceIcon(deviceId: string): DeviceIcon {
 // to the reader.
 export function useRemoteDeviceLabel(deviceId: string): string {
   return useRemoteDevice(deviceId)?.label ?? "the device";
+}
+
+// The same for the device the caller's host scope reads.
+export function useScopedDeviceLabel(): string {
+  return useRemoteDeviceLabel(useHostScope().deviceId);
 }
 
 // Either party of a cross-device pair by name, where either may be

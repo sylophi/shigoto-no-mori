@@ -11,6 +11,7 @@ import {
   nameOf,
   scopeOf,
 } from "@shigomori/contracts/contract";
+import { refusalNamed } from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import type {
   EffectApi,
@@ -156,6 +157,11 @@ const make = Effect.gen(function* () {
         ...(clientsOf(hostModules, () => peer) as EffectApi<HostModule>),
         ...(streamsOf(() => peer) as Streams<HostModule>),
         ...runner,
+        run: (effect, options) =>
+          run(
+            Effect.mapError(effect, (error) => refusalNamed(error, deviceId)),
+            options,
+          ),
       };
     },
   });

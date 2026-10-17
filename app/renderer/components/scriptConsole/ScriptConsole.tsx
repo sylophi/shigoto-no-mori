@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import {
   type TerminalFeed,
   type TerminalScreen,
@@ -32,6 +33,7 @@ export function ScriptConsole({
     { follow: true },
   );
   const scriptRuns = useScriptRuns();
+  const deviceLabel = useScopedDeviceLabel();
   const { openUrl } = useOutside();
   const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
@@ -52,7 +54,7 @@ export function ScriptConsole({
       command={resolveCommand(slot, config, pkg)}
       state={state}
       busy={busy}
-      readOnlyNote={canRun ? null : peerOutputHiddenNote()}
+      readOnlyNote={canRun ? null : peerOutputHiddenNote(deviceLabel)}
       onRun={() => void start()}
       onStop={() => void stop()}
       onClear={!busy && state.hasOutput ? clear : null}
