@@ -26,7 +26,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, it } from "vitest";
+import { afterAll, beforeAll, it, vi } from "vitest";
 import {
   isConfigured,
   mergeServiceEnv,
@@ -40,17 +40,24 @@ import {
   syncHubDevice,
   updateDevice,
 } from "../shared/account/enroll.ts";
-import * as HttpClientError from "effect/http/HttpClientError";
 import {
   HubDeviceRevokedError,
   isHubRefusal,
 } from "@shigomori/contracts/hubApi";
 import {
-  HubRateLimitedError,
   TunnelProvisionDeniedError,
   createAccountService,
   isHubUnreachable,
 } from "../shared/account/service.ts";
+import {
+  CallFailureSchema,
+  callFailureOf,
+  HubRateLimitedError,
+  isHubRateLimitedError,
+} from "@shigomori/contracts/errors";
+import { createAppQueryClient } from "@/lib/queryClientOptions";
+import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { deriveAccountId } from "../shared/account/token.ts";
 import { deviceKeyPair, toBase64Url } from "../shared/crypto/deviceKey.ts";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
@@ -338,14 +345,125 @@ it("service: a refusal rejects with the hub's contract error", async () => {
   );
 });
 
-it("service: a rate-limited device list says so, not a decode error", async () => {
-  const { service } = stubService(() => new Response(null, { status: 429 }));
+// The rate limiter's answer, as the hub's Worker sends it.
+const rateLimited = () =>
+  new Response(null, { status: 429, headers: { "retry-after": "60" } });
+
+it("service: every call the hub's rate limiter turns away says so, with the hub's Retry-After, not a decode error", async () => {
+  const { service } = stubService(rateLimited);
+  const calls: Array<[string, () => Promise<unknown>]> = [
+    ["listDevices", () => service.listDevices("device-credential")],
+    [
+      "enroll",
+      () =>
+        service.enroll("session", {
+          deviceId: "device-uuid",
+          name: "Test Mac",
+          platform: "darwin",
+          icon: "laptop",
+          publicKey: "k".repeat(43),
+        }),
+    ],
+    ["revoke", () => service.revoke("device-credential", "dev-2")],
+    [
+      "update",
+      () => service.update("device-credential", "dev-2", { name: "x" }),
+    ],
+    [
+      "mintTicket",
+      () => service.mintTicket("device-credential", "a".repeat(32)),
+    ],
+    [
+      "provisionTunnel",
+      () => service.provisionTunnel("device-credential", 4000),
+    ],
+  ];
+  for (const [name, call] of calls) {
+    await assert.rejects(
+      call,
+      (error) =>
+        error instanceof HubRateLimitedError &&
+        error.retryAfterSeconds === 60 &&
+        error.message ===
+          "the hub is rate-limiting this device; try again in 60 s",
+      name,
+    );
+  }
+  const { service: bare } = stubService(
+    () => new Response(null, { status: 429 }),
+  );
   await assert.rejects(
-    () => service.listDevices("device-credential"),
+    () => bare.listDevices("device-credential"),
     (error) =>
       error instanceof HubRateLimitedError &&
-      error.message === "the hub is rate-limiting this device; retrying",
+      error.retryAfterSeconds === undefined &&
+      error.message ===
+        "the hub is rate-limiting this device; try again shortly",
   );
+});
+
+it("a device list the hub rate-limited is not asked again until its Retry-After passes, however many ask, and a rate-limited write is not replayed", async () => {
+  vi.useFakeTimers();
+  try {
+    const client = createAppQueryClient(() => undefined);
+    let asks = 0;
+    let limited = true;
+    // oxlint-disable-next-line shigomori/no-double-cast -- a stand-in with the one call the list makes
+    const api = {
+      run: async () => {
+        asks += 1;
+        if (limited) throw new HubRateLimitedError({ retryAfterSeconds: 60 });
+        return [];
+      },
+      account: { listDevices: () => undefined },
+    } as unknown as RendererApi;
+    const read = () =>
+      client
+        .fetchQuery({ ...accountDevicesQueryOptions(api), staleTime: 0 })
+        .then(
+          () => "listed",
+          (error: unknown) => error,
+        );
+    assert.ok((await read()) instanceof HubRateLimitedError);
+    assert.equal(asks, 1, "a rate-limited read was retried");
+    // A burst inside the hub's minute: answered with the stored refusal,
+    // and nothing asks the hub.
+    for (let push = 0; push < 10; push++) {
+      assert.ok((await read()) instanceof HubRateLimitedError);
+      await vi.advanceTimersByTimeAsync(5_000);
+    }
+    assert.equal(asks, 1, "the hub was asked inside its Retry-After");
+    limited = false;
+    await vi.advanceTimersByTimeAsync(10_000);
+    assert.equal(await read(), "listed");
+    assert.equal(asks, 2);
+    let writes = 0;
+    await client
+      .getMutationCache()
+      .build(client, {
+        mutationFn: async () => {
+          writes += 1;
+          throw new HubRateLimitedError({ retryAfterSeconds: 1 });
+        },
+        meta: { silentError: true },
+      })
+      .execute(undefined)
+      .catch(() => {});
+    await vi.advanceTimersByTimeAsync(10_000);
+    assert.equal(writes, 1, "a rate-limited write was replayed");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a rate-limited answer crosses the window's wire whole", () => {
+  const crossed = Schema.decodeUnknownSync(CallFailureSchema)(
+    Schema.encodeSync(CallFailureSchema)(
+      callFailureOf(new HubRateLimitedError({ retryAfterSeconds: 60 })),
+    ),
+  );
+  assert.ok(isHubRateLimitedError(crossed));
+  assert.equal(crossed.retryAfterSeconds, 60);
 });
 
 it("service: a rate-limited tunnel provision stays retryable, any other 4xx is a denial", async () => {
@@ -366,11 +484,7 @@ it("service: a rate-limited tunnel provision stays retryable, any other 4xx is a
   // way a denial does.
   await assert.rejects(
     () => provisionWith(429),
-    (error) =>
-      HttpClientError.isHttpClientError(error) &&
-      "response" in error.reason &&
-      error.reason.response.status === 429 &&
-      !isHubRefusal(error),
+    (error) => error instanceof HubRateLimitedError,
   );
 });
 

@@ -46,6 +46,13 @@
       },
       {
         "_tag": "NotSharingError"
+      },
+      {
+        "_tag": "HubRateLimitedError"
+      },
+      {
+        "_tag": "HubRateLimitedError",
+        "retryAfterSeconds": 60
       }
     ],
     "rejects": [
