@@ -1,7 +1,8 @@
 // The host beside GitHub's that images in a project's markdown may load
 // from: its remote's (contracts' predicates/imageHosts.ts), on the
-// device the page shows. Kept for the launch, as the remote rarely
-// moves; none until it is known.
+// device the page shows; none until it is known. A remote can change
+// mid-session, so an answer stands for minutes, and a failed read is
+// asked again.
 import { remoteHost } from "@shigomori/contracts/predicates/imageHosts";
 import { skipToken, useQuery } from "@tanstack/react-query";
 import { forestRead } from "@/hooks/remote/hostForestScope";
@@ -9,6 +10,8 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 const NONE: readonly string[] = [];
+// A remote added or changed shows within minutes.
+const CLONE_URL_STALE_MS = 5 * 60_000;
 
 export function useProjectImageHosts(projectId: string): readonly string[] {
   const { deviceId, api } = useHostScope();
@@ -25,8 +28,7 @@ export function useProjectImageHosts(projectId: string): readonly string[] {
       const host = url === null ? null : remoteHost(url);
       return host === null ? NONE : [host];
     },
-    retry: false,
-    staleTime: Infinity,
+    staleTime: CLONE_URL_STALE_MS,
     gcTime: Infinity,
     meta: { silentError: true },
   });
