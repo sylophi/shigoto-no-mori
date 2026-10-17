@@ -34,6 +34,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -42,6 +43,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as PlatformError from "effect/PlatformError";
 import * as FileSync from "@host/fileSync/FileSync";
 import * as MirrorDaemon from "../host/mirror/MirrorDaemon.ts";
+import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
 import { it } from "vitest";
 import { rawMirrorSession } from "./lib/mirrorFakes.mts";
 import { trackTest } from "./lib/vitestKit.mts";
@@ -130,21 +132,34 @@ async function harness() {
     logs.push(Array.isArray(message) ? message.join(" ") : String(message));
   });
   const runtime = ManagedRuntime.make(
-    MirrorDaemon.layer({
-      gatewayAddress: () => "127.0.0.1:1",
-      gatewayToken: () => "token",
-      dataDir: () => "unused",
-      onChange: () => {
-        changes.count += 1;
-      },
-    }).pipe(
+    MirrorDaemon.layer({ dataDir: () => "unused" }).pipe(
       Layer.provide(fakeFileSync),
+      Layer.provide(
+        Layer.succeed(
+          MirrorGateway.MirrorGateway,
+          MirrorGateway.MirrorGateway.of({
+            listening: Effect.succeed(
+              Option.some({ address: "127.0.0.1:1", token: "token" }),
+            ),
+            streamCount: Effect.succeed(0),
+          }),
+        ),
+      ),
       Layer.provide(Logger.layer([captured])),
       Layer.provideMerge(TestClock.layer()),
     ),
   );
   trackTest(() => runtime.dispose());
   await runtime.context();
+  runtime.runFork(
+    MirrorDaemon.MirrorDaemon.use((d) =>
+      Stream.runForEach(d.changes, () =>
+        Effect.sync(() => {
+          changes.count += 1;
+        }),
+      ),
+    ),
+  );
   const daemon = {
     status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
     failure: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.failure)),
