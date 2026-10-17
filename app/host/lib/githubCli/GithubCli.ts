@@ -16,7 +16,6 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EngineConfig from "@shigomori/engine/Config";
@@ -68,7 +67,7 @@ export class GithubCli extends Context.Service<
       cwd: string,
     ) => Effect.Effect<
       RepoMergeConfig | null,
-      Processes.CommandError | Schema.SchemaError
+      GitHub.GitHubCliError | GitHub.GitHubOutputError
     >;
     // The repo's one-line About, null for none, no GitHub remote or the
     // integration off. gh missing or signed out fails rather than reads
@@ -99,12 +98,6 @@ const KNOWN_HOSTS_TTL = Duration.hours(1);
 // every open, gh failing with "could not determine OWNER, REPO" each
 // time.
 const REPO_TTL = Duration.minutes(5);
-// gh couldn't read a repository's merge settings, which isn't kept.
-class MergeConfigUnread extends Schema.TaggedError<MergeConfigUnread>()(
-  "MergeConfigUnread",
-  {},
-) {}
-
 // Merge-button settings barely change within a session.
 const MERGE_CONFIG_TTL = Duration.hours(1);
 // An About is rarely edited, and one that is can wait this long.
@@ -217,16 +210,7 @@ const make = Effect.gen(function* () {
 
   // The engine's read at the host's gh deadline, kept only when it read.
   const mergeConfigs = yield* Cache.makeWith(
-    (cwd: string) =>
-      github
-        .repoMergeConfig(cwd, { timeout: GH_TIMEOUT_MS })
-        .pipe(
-          Effect.flatMap((found) =>
-            Option.isSome(found)
-              ? Effect.succeed(found.value)
-              : Effect.fail(new MergeConfigUnread()),
-          ),
-        ),
+    (cwd: string) => github.repoMergeConfig(cwd, { timeout: GH_TIMEOUT_MS }),
     { capacity: Infinity, timeToLive: answersFor(MERGE_CONFIG_TTL) },
   );
 

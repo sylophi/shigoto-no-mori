@@ -234,7 +234,7 @@ export class GitHub extends Context.Service<
     readonly repoMergeConfig: (
       repo: string,
       options?: { readonly timeout?: Duration.Input | undefined },
-    ) => Effect.Effect<Option.Option<RepoMergeConfig>>;
+    ) => Effect.Effect<RepoMergeConfig, GitHubCliError | GitHubOutputError>;
     // Where an open PR stands on its way to merging.
     readonly mergeProgress: (
       repo: string,
@@ -817,22 +817,23 @@ const make = Effect.gen(function* () {
         `query=${REPO_MERGE_QUERY}`,
       ],
       options,
-    ).pipe(Effect.option);
-    return Option.map(
-      Option.flatMap(stdout, repositoryOf),
-      (repository): RepoMergeConfig => ({
-        merge: repository.mergeCommitAllowed,
-        squash: repository.squashMergeAllowed,
-        rebase: repository.rebaseMergeAllowed,
-        autoMerge: repository.autoMergeAllowed,
-      }),
     );
+    const repository = repositoryOf(stdout);
+    if (Option.isNone(repository)) {
+      return yield* new GitHubOutputError({ command: "api graphql" });
+    }
+    return {
+      merge: repository.value.mergeCommitAllowed,
+      squash: repository.value.squashMergeAllowed,
+      rebase: repository.value.rebaseMergeAllowed,
+      autoMerge: repository.value.autoMergeAllowed,
+    } satisfies RepoMergeConfig;
   });
 
   const mergeSettings = Effect.fn("GitHub.mergeSettings")(function* (
     repo: string,
   ) {
-    const config = yield* repoMergeConfig(repo);
+    const config = yield* Effect.option(repoMergeConfig(repo));
     if (Option.isNone(config))
       return { allowed: MERGE_METHODS, autoMerge: false };
     return {
