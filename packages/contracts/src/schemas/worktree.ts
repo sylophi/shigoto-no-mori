@@ -4,6 +4,7 @@ import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,
 } from "./payloads.ts";
+import { WorktreeLayoutSchema } from "./config.ts";
 import { GitRefNameSchema, isRealBranch } from "./project.ts";
 
 // Hashes travel back into git argv, so hex keeps "--output=/tmp/x" out of
@@ -308,6 +309,24 @@ export const RelocateWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   destinationPath: Schema.NonEmptyString,
 });
+
+// A project's worktrees under a layout the location form proposes.
+export const RelocationPlanPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  layout: WorktreeLayoutSchema,
+  customPath: Schema.NullOr(Schema.String),
+});
+
+// Where a managed worktree would go under the proposed layout, and
+// whether it is there already, by the folder's identity on the host.
+export const RelocationPlanSchema = Schema.Array(
+  Schema.Struct({
+    worktreeId: Schema.String,
+    destination: Schema.String,
+    inPlace: Schema.Boolean,
+  }),
+);
+export type RelocationPlan = typeof RelocationPlanSchema.Type;
 
 export const RenameWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,

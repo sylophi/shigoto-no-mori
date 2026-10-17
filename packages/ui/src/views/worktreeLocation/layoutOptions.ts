@@ -9,7 +9,6 @@ import type { WorktreeLayout } from "@shigomori/contracts/schemas";
 // useDeviceLayout reads it.
 export type DeviceLayout = DeviceLayoutInputs & {
   homedir: string;
-  dataDirReal?: string;
 };
 
 export interface LayoutOption {

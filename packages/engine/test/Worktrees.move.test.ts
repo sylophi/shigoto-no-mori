@@ -2,10 +2,11 @@
 // lands, and what is kept under its id follows it, port-pool's lease
 // included (real git on a sandbox data dir).
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
+import * as Config from "../src/Config.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import * as WtFolder from "../src/WtFolder.ts";
@@ -155,4 +156,64 @@ it("refuses a rename of the primary, to a taken, reserved or unfit name", async 
   assert.match(await refused("fox", "a/b"), /not a valid worktree folder name/);
   assert.match(await refused("fox", " "), /not a valid worktree folder name/);
   assert.ok(existsSync(join(dataDir, "wt", "proj", "fox")));
+});
+
+// A custom base through a link: git lists its worktrees by the real
+// folder, and the base by the link is the same place.
+it("reads a worktree under a linked custom base as in place, and a move to its alias as no move", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const real = join(box.home, "trees");
+  const link = join(box.home, "trees-link");
+  mkdirSync(real);
+  symlinkSync(real, link);
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const config = yield* Config.Config;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const scope = {
+        kind: "project" as const,
+        projectId: project.id,
+        path: repo,
+      };
+      yield* config.set(scope, "worktreeLayout", "custom");
+      yield* config.set(scope, "customWorktreePath", real);
+      const made = yield* worktrees.create(
+        project,
+        { name: "fox", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      );
+      const fox = (yield* worktrees.identities(project)).find(
+        ({ id }) => id === made.worktree.id,
+      );
+      assert.ok(fox);
+      const linked = yield* worktrees.relocationPlan(project, {
+        worktreeLayout: "custom",
+        customWorktreePath: link,
+      });
+      const managed = yield* worktrees.relocationPlan(project, {
+        worktreeLayout: "managed-root",
+      });
+      const moved = yield* worktrees.move(
+        { project, worktree: fox },
+        join(link, "fox"),
+      );
+      return { linked, managed, moved: moved.worktree.path, at: fox.path };
+    }),
+  )) as {
+    linked: ReadonlyArray<{ inPlace: boolean }>;
+    managed: ReadonlyArray<{ inPlace: boolean; destination: string }>;
+    moved: string;
+    at: string;
+  };
+  assert.deepEqual(
+    result.linked.map(({ inPlace }) => inPlace),
+    [true],
+  );
+  assert.deepEqual(
+    result.managed.map(({ inPlace }) => inPlace),
+    [false],
+  );
+  assert.equal(result.moved, result.at, "the alias moved the worktree");
 });

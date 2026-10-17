@@ -5,6 +5,7 @@ import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import type { DeviceLayout } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+import { useRelocationPlan } from "@/hooks/worktrees/useRelocationPlan";
 import {
   isManagedWorktree,
   PROJECT_CONFIG_DEFAULTS,
@@ -12,7 +13,6 @@ import {
   type Worktree,
   type WorktreeLayout,
 } from "@shigomori/contracts/schemas";
-import { worktreePathFor } from "@shigomori/contracts/git/worktreeLayout";
 import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
 import { LocationFormView } from "@shigomori/ui/views/worktreeLocation/LocationFormView.tsx";
 
@@ -68,16 +68,8 @@ export function LocationForm({
     setSavedCustomPath(configCustomPath);
   }, [configLayout, configCustomPath, batchRunning]);
 
-  const layoutInputs = {
-    ...device,
-    layout,
-    projectPath,
-    customPath: customPath.trim() || null,
-  };
-
   // Custom layout with no folder picked yet has no resolvable
-  // destination. Without this guard, worktreeBaseFor falls back to
-  // managed-root and we'd compute a misleading toMove diff.
+  // destination, and nothing to plan.
   const customMissing = layout === "custom" && !customPath.trim();
 
   // Non-primary worktrees only. The primary checkout sits at projectPath
@@ -85,24 +77,24 @@ export function LocationForm({
   // move` works only on managed worktrees we created.
   const movable = worktrees.filter(isManagedWorktree);
 
-  const proposedFor = (worktree: Worktree): string =>
-    worktreePathFor(layoutInputs, worktree.name);
-
-  // Git spells a worktree's path with the data dir's links resolved, so
-  // one already in place under a linked data dir reads in either.
-  const inPlace = (worktree: Worktree): boolean => {
-    const proposed = proposedFor(worktree);
-    if (proposed === worktree.path) return true;
-    if (device.dataDirReal === undefined) return false;
-    // A hand-edited pointer may end the folder in a slash.
-    const dataDir = device.dataDir.replace(/\/+$/, "");
-    return (
-      proposed.startsWith(`${dataDir}/`) &&
-      worktree.path === `${device.dataDirReal}${proposed.slice(dataDir.length)}`
-    );
-  };
-
-  const toMove = customMissing ? [] : movable.filter((w) => !inPlace(w));
+  const plan = useRelocationPlan(
+    projectId,
+    layout,
+    customPath.trim() || null,
+    worktrees.map((worktree) => worktree.path),
+    !customMissing,
+  );
+  const planned = new Map(
+    (plan.data ?? []).map((entry) => [entry.worktreeId, entry]),
+  );
+  const toMove = customMissing
+    ? []
+    : movable.flatMap((worktree) => {
+        const entry = planned.get(worktree.id);
+        return entry === undefined || entry.inPlace
+          ? []
+          : [{ worktree, destination: entry.destination }];
+      });
 
   const layoutChanged =
     layout !== savedLayout || customPath.trim() !== savedCustomPath.trim();
@@ -115,8 +107,13 @@ export function LocationForm({
     return null;
   };
 
+  // Not while the plan is out: an apply then would save the layout and
+  // move nothing.
   const canSubmit =
-    (layoutChanged || toMove.length > 0) && !batchRunning && !customMissing;
+    (layoutChanged || toMove.length > 0) &&
+    !batchRunning &&
+    !customMissing &&
+    !plan.isFetching;
 
   const handleApply = async () => {
     const validationError = validateCustomPath();
@@ -154,12 +151,8 @@ export function LocationForm({
       }
     };
 
-    const queue = toMove.map((w) => ({
-      worktree: w,
-      destination: proposedFor(w),
-    }));
     await runBatch(
-      queue,
+      toMove,
       (q) => q.worktree.id,
       async ({ worktree, destination }) => {
         await relocate.mutateAsync({
@@ -189,10 +182,7 @@ export function LocationForm({
       customPath={customPath}
       customPathError={customPathError}
       onOpenPicker={() => setPickerOpen(true)}
-      toMove={toMove.map((worktree) => ({
-        worktree,
-        destination: proposedFor(worktree),
-      }))}
+      toMove={toMove}
       status={status}
       saveError={write.error?.message ?? null}
       canSubmit={canSubmit}

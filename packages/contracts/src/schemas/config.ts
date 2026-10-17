@@ -75,7 +75,7 @@ export const isCarryOverEntry = Schema.is(CarryOverEntrySchema);
 //   carried-over symlinked node_modules
 // - custom: <customWorktreePath>/<worktreeName>, which can collide with
 //   other repos
-const WorktreeLayoutSchema = Schema.Literals([
+export const WorktreeLayoutSchema = Schema.Literals([
   "managed-root",
   "in-project",
   "custom",
