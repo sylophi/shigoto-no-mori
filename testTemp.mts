@@ -5,14 +5,11 @@
 // `<temp>/sm-test/<family>/<id>/`, and points TMPDIR at it before any
 // test starts, so whatever a test, the code under it or a process it
 // spawns puts in the temp dir lands there. A run removes its folder as
-// it exits. One that never gets to (killed, a crash proof's SIGKILL, an
-// interrupted `pnpm test`) leaves a folder whose pid file names only
-// dead processes, and the next run of any family sweeps it, at its
-// start and at its end.
-//
-// `cache/` beside the families holds what outlives a run on purpose
-// (the proofs' sm and macfs binaries), swept once nothing has used an
-// entry for STALE_MS.
+// it exits, and `sm-test` with it once no other run is left. One that
+// never gets to (killed, a crash proof's SIGKILL, an interrupted
+// `pnpm test`) leaves a folder whose pid file names only dead
+// processes, and the next run of any family sweeps it, at its start
+// and at its end.
 import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
@@ -20,9 +17,9 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmdirSync,
   rmSync,
   statSync,
-  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,80 +27,92 @@ import { join } from "node:path";
 
 const RUN = "SM_TEST_RUN";
 const ROOT = "SM_TEST_ROOT";
-const STALE_MS = 2 * 60 * 60_000;
-
-// `<temp>/sm-test`, the system temp dir's even inside a run, where
-// TMPDIR is the run's folder.
-const testTempRoot = (): string =>
-  process.env[ROOT] ?? join(tmpdir(), "sm-test");
-
-// A folder for what outlives a run, `cache/<name>`, swept once unused
-// for STALE_MS. Asking for it is a use.
-export function testCacheDir(name: string): string {
-  const dir = join(testTempRoot(), "cache", name);
-  const now = new Date();
-  try {
-    utimesSync(dir, now, now);
-  } catch {}
-  return dir;
-}
+// How long a run folder with no pid in its file yet counts as one being
+// made.
+const UNCLAIMED_MS = 2 * 60 * 60_000;
 
 // Takes a run folder for `family` and points this process's TMPDIR at
 // it. Inside a run already (a runner that spawns vitest, whose config
 // calls this too), joins that run instead, so the run is held while
 // either process lives. Returns the run folder.
 export function ownTestTemp(family: string): string {
-  const owned = process.env[RUN];
-  if (owned !== undefined) {
-    appendFileSync(join(owned, "pid"), `\n${process.pid}`);
-    return owned;
-  }
-  const root = testTempRoot();
-  sweepTestTemp(root);
-  mkdirSync(join(root, family), { recursive: true });
-  const run = mkdtempSync(join(root, family, "r"));
-  writeFileSync(join(run, "pid"), String(process.pid));
+  const inherited = process.env[RUN];
+  if (inherited !== undefined && joinRun(inherited)) return inherited;
+  const root = process.env[ROOT] ?? join(tmpdir(), "sm-test");
+  sweep(root);
+  const run = claim(root, family);
   process.env[ROOT] = root;
   process.env[RUN] = run;
   process.env["TMPDIR"] = run;
   process.on("exit", () => {
-    remove(run);
-    sweepTestTemp(root);
+    if (!heldByOthers(run)) remove(run);
+    sweep(root);
   });
   return run;
 }
 
-// Removes every run folder whose process is gone, and every cache entry
-// unused for STALE_MS. A run folder with no pid in its file yet is one
-// being made, unless it is older than STALE_MS.
-function sweepTestTemp(root = testTempRoot()): void {
+// False when the run is gone: swept after its runner was killed.
+function joinRun(run: string): boolean {
+  try {
+    appendFileSync(join(run, "pid"), `\n${process.pid}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function claim(root: string, family: string): string {
+  // Another run's sweep may remove the family folder between the two.
+  for (;;) {
+    mkdirSync(join(root, family), { recursive: true });
+    try {
+      const run = mkdtempSync(join(root, family, "r"));
+      writeFileSync(join(run, "pid"), String(process.pid));
+      return run;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+}
+
+// Removes every run folder whose processes are gone, then the family
+// folders and `root` left empty.
+function sweep(root: string): void {
   const now = Date.now();
   for (const family of entries(root)) {
-    if (family === "cache") continue;
     for (const name of entries(join(root, family))) {
       const run = join(root, family, name);
       if (!held(run, now)) remove(run);
     }
+    removeIfEmpty(join(root, family));
   }
-  for (const name of entries(join(root, "cache"))) {
-    const entry = join(root, "cache", name);
-    if (olderThanStale(entry, now)) remove(entry);
-  }
+  removeIfEmpty(root);
 }
 
-function held(run: string, now: number): boolean {
+function pids(run: string): number[] {
   let text = "";
   try {
     text = readFileSync(join(run, "pid"), "utf8");
   } catch {}
   // 0 would signal this process's group.
-  const pids = text
+  return text
     .split("\n")
     .map(Number)
     .filter((pid) => Number.isInteger(pid) && pid > 0);
-  // Not yet written.
-  if (pids.length === 0) return !olderThanStale(run, now);
-  return pids.some(alive);
+}
+
+function held(run: string, now: number): boolean {
+  const listed = pids(run);
+  if (listed.length > 0) return listed.some(alive);
+  try {
+    return now - statSync(run).mtimeMs < UNCLAIMED_MS;
+  } catch {
+    return false;
+  }
+}
+
+function heldByOthers(run: string): boolean {
+  return pids(run).some((pid) => pid !== process.pid && alive(pid));
 }
 
 function alive(pid: number): boolean {
@@ -124,12 +133,10 @@ function remove(path: string): void {
   } catch {}
 }
 
-function olderThanStale(path: string, now: number): boolean {
+function removeIfEmpty(dir: string): void {
   try {
-    return now - statSync(path).mtimeMs > STALE_MS;
-  } catch {
-    return false;
-  }
+    rmdirSync(dir);
+  } catch {}
 }
 
 function entries(dir: string): string[] {

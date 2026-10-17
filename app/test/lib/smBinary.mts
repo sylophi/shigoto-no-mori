@@ -3,10 +3,9 @@
 // its sandbox's data dir, and reaches the same store from the terminal
 // binary where it sets things up or reads them back, as an agent in a
 // terminal beside the app would. The binary is built once per state of
-// its sources into the test cache (../../../testTemp.mts), keyed by a
-// hash of them, so the proofs after the first in a run (and later runs
-// on unchanged sources) skip the build. The darwin helper goes beside
-// it, where the binary looks.
+// its sources into the run's temp dir (../../../testTemp.mts), keyed by
+// a hash of them, so the proofs after the first in a run skip the
+// build. The darwin helper goes beside it, where the binary looks.
 //
 // covers: packages/cli/** packages/engine/src/** macfs/**
 import * as Schema from "effect/Schema";
@@ -20,6 +19,7 @@ import {
   readFileSync,
   renameSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -33,7 +33,6 @@ import {
 } from "@shigomori/contracts/schemas/project";
 import { createCliRunner, repoRoot, type CliRunner } from "./checkKit.mts";
 import { isOutsideGitVariable } from "../../../gitIsolation.ts";
-import { testCacheDir } from "../../../testTemp.mts";
 import { macfs as macfsBuild } from "../../../packages/engine/test/lib/macfs.ts";
 
 // What goes into the binary: the sources of the terminal, the engine
@@ -63,7 +62,7 @@ function hashInto(hash: ReturnType<typeof createHash>, rel: string): void {
 export function smBinaryPath(): string {
   const hash = createHash("sha256");
   for (const rel of SOURCES) hashInto(hash, rel);
-  return join(testCacheDir(`sm-${hash.digest("hex").slice(0, 16)}`), "sm");
+  return join(tmpdir(), `sm-proof-${hash.digest("hex").slice(0, 16)}`, "sm");
 }
 
 // The path of a binary built from the sources as they are now, building

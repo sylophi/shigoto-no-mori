@@ -68,8 +68,9 @@ Every run's temp files go in a folder of the run's own,
 point TMPDIR there before a test starts (`../../testTemp.mts`), so a
 proof needs no cleanup of its own for what a killed process leaves.
 The folder goes as the run exits, and a run killed before that leaves
-a folder the next run of any suite sweeps (`test-temp`). A build kept
-across runs goes in `testCacheDir`, as `lib/smBinary.mts` does.
+a folder the next run of any suite sweeps (`test-temp`). Nothing
+outlives a run, so a build the proofs share (`lib/smBinary.mts`) is
+made once per run.
 
 A case that waits on real git, processes or sockets runs slower on a
 loaded machine. One that fails under load and passes alone is waiting
