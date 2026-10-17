@@ -153,7 +153,7 @@ type mirrorPreface struct {
 	LocalWorktreeID string `json:"localWorktreeId,omitempty"`
 }
 
-// main/core/mirror/gateway.ts mints the value and exports this same name.
+// app/host/mirror/MirrorGateway.ts mints the value and exports this same name.
 const mirrorGatewayTokenEnv = "SM_MIRROR_GATEWAY_TOKEN"
 
 type mirrorGatewayHandler struct {

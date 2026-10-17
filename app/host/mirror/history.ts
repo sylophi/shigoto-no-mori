@@ -53,8 +53,6 @@ export type MirrorHistoryStore = {
   save: (events: Record<string, readonly MirrorEvent[]>) => void;
 };
 
-export type MirrorHistory = ReturnType<typeof createMirrorHistory>;
-
 export function createMirrorHistory(deps: {
   store: MirrorHistoryStore;
   now?: () => number;

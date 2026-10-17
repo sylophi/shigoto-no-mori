@@ -39,6 +39,8 @@ import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import { afterAll, beforeAll, it } from "vitest";
 import * as FileSync from "@host/fileSync/FileSync";
@@ -46,7 +48,7 @@ import * as PeerReach from "@host/ipc/PeerReach";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { findProjectAndWorktree } from "@host/lib/projects";
-import { createMirrorGateway } from "@host/mirror/gateway";
+import * as MirrorGateway from "@host/mirror/MirrorGateway";
 import { makeGitFollower } from "@host/mirror/gitFollow";
 import {
   listMirrorInvites,
@@ -227,23 +229,32 @@ it("the invitation loads under the copy's new id, and the boot's check keeps it"
 });
 
 it("a stream the runner opens by the v2 id is served from the copy's new folder", async () => {
-  const gateway = createMirrorGateway({
-    peerApiFor: () =>
-      PeerReach.make({
-        transportFor: () => toListener.transport,
-        channelsFor: () => toListener.channels,
-      }).calls(mirrorContract, LISTENER),
-    peerChannelsFor: () => toListener.channels,
-    log: () => {},
-  });
-  track(() => gateway.stop());
-  const [host, port] = (await gateway.start()).split(":");
+  const gateway = ManagedRuntime.make(
+    MirrorGateway.layer.pipe(
+      Layer.provide(
+        Layer.succeed(
+          PeerReach.PeerReach,
+          PeerReach.make({
+            transportFor: () => toListener.transport,
+            channelsFor: () => toListener.channels,
+          }),
+        ),
+      ),
+    ),
+  );
+  track(() => gateway.dispose());
+  const listening = Option.getOrThrow(
+    await gateway.runPromise(
+      MirrorGateway.MirrorGateway.use((gw) => gw.listening),
+    ),
+  );
+  const [host, port] = listening.address.split(":");
   // The runner's daemon, dialing the gateway for the session's stream.
   const socket = netConnect(Number(port), host);
   track(() => socket.destroy());
   socket.write(
     `${JSON.stringify({
-      token: gateway.token(),
+      token: listening.token,
       deviceId: LISTENER,
       projectId: COPY_PROJECT,
       worktreeId: v2Id,
