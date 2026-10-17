@@ -17,6 +17,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { basename, dirname, join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -184,6 +185,79 @@ it("waits out a change of its own process, and lets a change nested in one finis
     }),
   )) as { moved: boolean; nested: boolean; quick: boolean };
   assert.deepEqual(result, { moved: true, nested: true, quick: true });
+});
+
+// Two asking for the lock alone at once (two starts settling what a
+// crash left): one refused its reservation drops its connection, so it
+// holds no read that would keep the one reserved from committing, and
+// gets the lock in turn.
+it("lets the one reserved commit while another process asks for the lock alone", async () => {
+  const home = mkdtempSync(join(tmpdir(), "engine-lock-"));
+  try {
+    const lockFile = join(
+      home,
+      ".config",
+      flavorNames("dev").configDir,
+      "data-dir.lock",
+    );
+    const ask = () =>
+      new Promise<number | null>((resolve) => {
+        const child = spawn(
+          process.execPath,
+          [join(import.meta.dirname, "fixtures", "aloneChild.ts"), home],
+          { stdio: "inherit" },
+        );
+        child.once("exit", (code) => resolve(code));
+      });
+    // The lock's table made, as any start's settle leaves it.
+    assert.equal(await ask(), 0);
+    const first = new DatabaseSync(lockFile);
+    first.exec("PRAGMA locking_mode = EXCLUSIVE");
+    first.exec("BEGIN IMMEDIATE");
+    first.exec("INSERT OR REPLACE INTO held (id) VALUES (1)");
+    const second = ask();
+    // Long enough for the other to be asking.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    let committed = false;
+    for (let tries = 0; tries < 20 && !committed; tries += 1) {
+      try {
+        first.exec("COMMIT");
+        committed = true;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    first.close();
+    assert.equal(committed, true, "the one reserved committed");
+    assert.equal(await second, 0, "the other had it in turn");
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// A lock file that isn't a lock database refuses every move, and lets
+// the changes run, as one this user can't write does.
+it("lets a change run, and refuses a move, when the lock file isn't a database", async () => {
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const { pointerFile } = yield* Paths.Paths;
+      mkdirSync(dirname(pointerFile), { recursive: true });
+      writeFileSync(
+        join(dirname(pointerFile), "data-dir.lock"),
+        "x".repeat(4096),
+      );
+      const lock = yield* DataDirLock.DataDirLock;
+      const changed = yield* Effect.exit(lock.guard(Effect.void));
+      const moved = yield* Effect.exit(lock.alone(Effect.void, "200 millis"));
+      return {
+        changed: Exit.isSuccess(changed),
+        refusal: Option.getOrUndefined(Exit.findErrorOption(moved)),
+      };
+    }),
+  )) as { changed: boolean; refusal: unknown };
+  assert.equal(result.changed, true);
+  assert.ok(result.refusal instanceof DataDirLock.DataDirLockUnavailable);
+  assert.match(String(result.refusal), /not a database/);
 });
 
 // The lock is the kernel's: a process killed while it holds it holds

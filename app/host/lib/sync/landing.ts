@@ -419,8 +419,9 @@ const landIncoming = (
     return yield* lock
       .guard(landWhole(project, input, ctx, progress, move))
       .pipe(
-        Effect.catchTag(["DataDirMoving", "DataDirMoved"], (error) =>
-          Effect.fail(callFailureOf(error)),
+        Effect.catchTag(
+          ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
+          (error) => Effect.fail(callFailureOf(error)),
         ),
       );
   });
