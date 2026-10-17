@@ -10,9 +10,11 @@ export function useDetectedLaunchers() {
   return useQuery<readonly DetectedLauncher[]>({
     queryKey: keys.detectedLaunchers(),
     queryFn: ({ signal }) => api.run(api.launchers.detect(), { signal }),
-    // Detection spawns ~15 `which` calls; cache for the session. The
-    // answer only changes when the user installs/removes an app.
+    // Detection spawns ~15 `which` calls, and the answer only changes
+    // when the user installs or removes an app: kept between reads, and
+    // read again each time Settings shows the tools.
     staleTime: Number.POSITIVE_INFINITY,
+    refetchOnMount: "always",
     meta: { errorTitle: "Couldn't detect installed tools" },
   });
 }
@@ -24,6 +26,8 @@ interface LauncherForProjectResult {
   readonly hiddenCount: number;
 }
 
+const LAUNCHER_ROW_STALE_MS = 5 * 60_000;
+
 export function useLauncherForProject(projectId: string | null) {
   const { api, keys } = useHostScope();
   return useQuery<LauncherForProjectResult>({
@@ -33,11 +37,10 @@ export function useLauncherForProject(projectId: string | null) {
         ? ({ signal }) =>
             api.run(api.launchers.forProject({ projectId }), { signal })
         : skipToken,
-    // Lock the order for the lifetime of the route mount. The page picks
-    // up a fresh list when the user navigates in (refetchOnMount: "always"
-    // from the global default), but never reshuffles under them on window
-    // focus or reconnect.
-    staleTime: Number.POSITIVE_INFINITY,
+    // The order holds while the user works, and on window focus or
+    // reconnect; a visit after a few minutes reads it again, a tool
+    // installed meanwhile included.
+    staleTime: LAUNCHER_ROW_STALE_MS,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     meta: { errorTitle: "Couldn't load launchers" },
@@ -52,7 +55,7 @@ interface LaunchInput {
 
 export function useLaunch() {
   const { api } = useHostScope();
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: useLauncherForProject pins order for the route mount so the visible list doesn't reshuffle mid-interaction when bumpUseCount fires
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: useLauncherForProject holds its order for minutes so the visible list doesn't reshuffle mid-interaction when bumpUseCount fires
   return useMutation<void, Error, LaunchInput>({
     mutationFn: (input) => api.run(api.launchers.launch(input)),
     meta: { errorTitle: "Couldn't launch" },

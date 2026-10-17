@@ -16,9 +16,8 @@ export function usePackageScripts(
               signal,
             })
         : skipToken,
-    // Lock the sorted order for the route-mount's lifetime so a script
-    // bumping its use count doesn't reshuffle the list mid-interaction;
-    // matches useLauncherForProject.
+    // Lock the sorted order while cached so a script bumping its use
+    // count doesn't reshuffle the list mid-interaction.
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

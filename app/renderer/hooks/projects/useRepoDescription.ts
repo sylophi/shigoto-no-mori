@@ -4,9 +4,11 @@ import { useDeviceApi } from "@/hooks/remote/useDeviceApi";
 import { forestRead } from "@/hooks/remote/hostForestScope";
 import { queryKeysFor } from "@/lib/queryKeys";
 
-// A project's GitHub About text, scoped to (device, project) and kept
-// as the icon is (projectIconQueryOptions): once per launch, as the
-// host reads it.
+const DESCRIPTION_STALE_MS = 60 * 60_000;
+
+// A project's GitHub About text, scoped to (device, project). An answer
+// stands as long as the host keeps it (GithubCli's DESCRIPTION_TTL); a
+// failed read (gh signed out, the network) is asked again.
 export function repoDescriptionQueryOptions(
   projectId: string,
   scope: Pick<HostScope, "deviceId"> & { api: HostScope["api"] | undefined },
@@ -21,8 +23,7 @@ export function repoDescriptionQueryOptions(
             forestRead(deviceId, () =>
               api.run(api.githubCli.repoDescription({ projectId }), { signal }),
             ),
-    retry: false,
-    staleTime: Infinity,
+    staleTime: DESCRIPTION_STALE_MS,
     gcTime: Infinity,
     meta: { silentError: true },
   });
