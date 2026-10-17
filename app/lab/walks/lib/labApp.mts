@@ -250,10 +250,11 @@ async function launch(
     const keep = process.env["SM_WALK_LOGS"];
     if (keep !== undefined && keep !== "") {
       const walk = join(keep, basename(expect.getState().testPath ?? root));
-      cpSync(join(home, "Library", "Logs"), walk, { recursive: true });
-      const hostLogs = join(userInfo().homedir, "Library", "Logs", NAME);
-      if (existsSync(hostLogs)) {
-        cpSync(hostLogs, join(walk, "host"), { recursive: true });
+      for (const [from, to] of [
+        [join(home, "Library", "Logs"), walk],
+        [join(userInfo().homedir, "Library", "Logs", NAME), join(walk, "host")],
+      ] as const) {
+        if (existsSync(from)) cpSync(from, to, { recursive: true });
       }
     }
     rmSync(root, { recursive: true, force: true });

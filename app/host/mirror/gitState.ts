@@ -520,47 +520,20 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
   // refresh re-stats every entry against the (already mirrored) files
   // so unchanged ones do not read as modified. refresh exits non-zero
   // when files differ from the index, which is the ordinary dirty case.
+  // A read-tree that can't get the lock leaves the state half applied,
+  // the ref moved already, which the follower heals on its next look.
   yield* git.withIndexLock(
     worktree.path,
-    readTreeRetrying(worktree.path, state.indexTree).pipe(
-      Effect.andThen(
-        git.runLenient(worktree.path, ["update-index", "-q", "--refresh"]),
+    git
+      .run(worktree.path, ["read-tree", state.indexTree])
+      .pipe(
+        Effect.andThen(
+          git.runLenient(worktree.path, ["update-index", "-q", "--refresh"]),
+        ),
       ),
-    ),
   );
   return { applied: true } as ApplyGitStateResult;
 });
-
-// The pauses between read-tree attempts while another git process
-// holds the index lock. A `git status` outside the app takes the lock
-// for a moment to refresh, so a busy worktree (an editor's git
-// integration, a prompt) holds it often but briefly. By the time read-tree runs the
-// ref has moved already, so giving up here leaves the state half
-// applied: the follower heals that on its next look (it compares the
-// index alone when both sides already share a tip), but a short wait
-// usually saves the round.
-const INDEX_LOCK_BACKOFF_MS = [50, 100, 200, 400, 800];
-
-const readTreeRetrying = (worktreePath: string, tree: string) => {
-  const attempt = (n: number): Effect.Effect<void, Git.GitError, Git.Git> =>
-    Effect.flatMap(Git.Git, (git) =>
-      git.run(worktreePath, ["read-tree", tree]),
-    ).pipe(
-      Effect.asVoid,
-      Effect.catchIf(
-        (error) =>
-          INDEX_LOCK_BACKOFF_MS[n] !== undefined &&
-          error instanceof Git.GitCommandError &&
-          Git.stderrOf(error).includes("index.lock"),
-        () =>
-          Effect.andThen(
-            Effect.sleep(INDEX_LOCK_BACKOFF_MS[n] ?? 0),
-            attempt(n + 1),
-          ),
-      ),
-    );
-  return attempt(0);
-};
 
 // Fires when the worktree's index file is rewritten (a stage, an
 // unstage, a checkout, also git's own refreshes: the consumer compares

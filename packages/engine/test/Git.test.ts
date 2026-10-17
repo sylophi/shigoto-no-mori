@@ -87,6 +87,76 @@ it("a read leaves the index to the writes: status doesn't write back what it ref
   assert.equal(after.ino, before.ino);
 });
 
+// Each git's exit, as GIT_TRACE2_EVENT traced it to `trace`.
+const exits = (trace: string) =>
+  existsSync(trace)
+    ? readFileSync(trace, "utf8")
+        .split("\n")
+        .filter((line) => line.includes('"event":"exit"')).length
+    : 0;
+
+it("a write waits out the moment another git holds index.lock, and fails on one held for good", async () => {
+  const repo = seedRepo();
+  write(repo, "a.txt", "staged\n");
+  git(repo, "add", "a.txt");
+  const lock = join(repo, ".git", "index.lock");
+  writeFileSync(lock, "");
+  const waiting = join(tempDir("trace-"), "waiting");
+  const outcome = await withGit((g) =>
+    Effect.gen(function* () {
+      const resetting = yield* Effect.forkChild(
+        Effect.exit(
+          g.run(repo, ["reset", "-q", "--", "a.txt"], {
+            env: { GIT_TRACE2_EVENT: waiting },
+          }),
+        ),
+      );
+      while (exits(waiting) === 0) {
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      // Refused once; the other git lets go.
+      rmSync(lock);
+      while (resetting.pollUnsafe() === undefined) {
+        yield* TestClock.adjust("50 millis");
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      return yield* Fiber.join(resetting);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  assert.ok(Exit.isSuccess(outcome), "the reset ran once the lock was free");
+  assert.equal(exits(waiting), 2);
+  assert.equal(git(repo, "diff", "--cached", "--name-only").trim(), "");
+
+  git(repo, "add", "a.txt");
+  writeFileSync(lock, "");
+  const held = join(tempDir("trace-"), "held");
+  const failed = await withGit((g) =>
+    Effect.gen(function* () {
+      const resetting = yield* Effect.forkChild(
+        Effect.exit(
+          g.run(repo, ["reset", "-q", "--", "a.txt"], {
+            env: { GIT_TRACE2_EVENT: held },
+          }),
+        ),
+      );
+      while (resetting.pollUnsafe() === undefined) {
+        yield* TestClock.adjust("200 millis");
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      return yield* Fiber.join(resetting);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  rmSync(lock);
+  assert.ok(Exit.isFailure(failed), "a lock held for good still fails");
+  assert.equal(exits(held), 6, "the first try and five more");
+});
+
 it("a write held by the user's hook leaves the probes their slots", async () => {
   const repo = seedRepo();
   const head = rev(repo, "HEAD");
