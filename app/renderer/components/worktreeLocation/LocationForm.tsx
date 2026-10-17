@@ -123,9 +123,15 @@ export function LocationForm({
       return;
     }
     setCustomPathError(null);
-    const fresh = await plan.refetch();
-    if (!fresh.isSuccess) return;
-    const moves = movesOf(fresh.data);
+    // The plan asked again under the batch's flag, so the form holds
+    // still from the click; and moved by the plan alone, so a worktree
+    // made since the list was last pushed moves too.
+    const moves = async () => {
+      const fresh = await plan.refetch();
+      return fresh.isSuccess
+        ? fresh.data.filter((entry) => !entry.inPlace)
+        : null;
+    };
 
     // The config write runs as the batch's prepare step so the form
     // stays disabled across it and a write failure aborts the moves.
@@ -157,11 +163,11 @@ export function LocationForm({
 
     await runBatch(
       moves,
-      (q) => q.worktree.id,
-      async ({ worktree, destination }) => {
+      (entry) => entry.worktreeId,
+      async ({ worktreeId, destination }) => {
         await relocate.mutateAsync({
           projectId,
-          worktreeId: worktree.id,
+          worktreeId,
           destinationPath: destination,
         });
       },
