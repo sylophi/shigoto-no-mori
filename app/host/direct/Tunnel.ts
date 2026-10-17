@@ -674,9 +674,12 @@ const make = (options: Options) =>
               );
             }
             if (outcome === STOPPED_ROUTING) {
-              return yield* failAttempt(
+              // It ran healthy until then: its run counts toward the
+              // ladder's reset, as an exit's does.
+              yield* failAttempt(
                 `tunnel at ${hostname} stopped routing after a wake`,
               );
+              return (yield* elapsedMillis) - spawnedAt;
             }
             yield* failAttempt(outcome);
             return (yield* elapsedMillis) - spawnedAt;

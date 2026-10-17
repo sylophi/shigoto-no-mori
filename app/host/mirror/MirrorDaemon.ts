@@ -514,8 +514,7 @@ const make = (options: Options) =>
     // The daemon answers every op it reads, one it doesn't know with a
     // refusal, so a ping needs no verb of its own: any answer is the
     // daemon answering. Silence replaces it.
-    const checkResponsive = Effect.gen(function* () {
-      if (checking || killChild === null) return;
+    const pingOrReplace = Effect.gen(function* () {
       checking = true;
       const answered = yield* ask("ping", {}, PING_ANSWER_MS).pipe(
         Effect.as(true),
@@ -534,6 +533,10 @@ const make = (options: Options) =>
           checking = false;
         }),
       ),
+    );
+    // One check at a time: a second asked meanwhile joins nothing.
+    const checkResponsive = Effect.suspend(() =>
+      checking || killChild === null ? Effect.void : pingOrReplace,
     );
 
     const request = (op: string, fields: Record<string, unknown>) =>

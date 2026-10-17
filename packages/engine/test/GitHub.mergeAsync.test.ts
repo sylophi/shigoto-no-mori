@@ -116,7 +116,9 @@ const settled = Effect.promise(
 
 // The merge on its own fiber, the test clock moved two seconds at a
 // time (the poll's spacing) until it ends.
-const merging = (gh: ReturnType<typeof fakeGh>) =>
+// `jump` moves the clock past the whole budget at once, after the
+// first poll, rather than one poll at a time.
+const merging = (gh: ReturnType<typeof fakeGh>, jump = false) =>
   Effect.gen(function* () {
     const repo = box.repo("repo");
     box.git(repo, "remote", "add", "origin", "git@github.com:o/r.git");
@@ -130,6 +132,13 @@ const merging = (gh: ReturnType<typeof fakeGh>) =>
     );
     yield* waitUntil(() => gh.merges().length === 1);
     stepped.step(2 * 3_600_000);
+    if (jump) {
+      yield* settled;
+      // The budget is three minutes, and a poll's spacing two seconds.
+      yield* TestClock.adjust("3 minutes");
+      yield* settled;
+      yield* TestClock.adjust("2 seconds");
+    }
     while (fiber.pollUnsafe() === undefined) {
       yield* settled;
       const before = gh.calls().length;
@@ -150,7 +159,7 @@ it("a clock step spends none of the merge's budget, and a failed poll is asked a
 
 it("past its budget, the merge reports what the PR says, and asks once", async () => {
   const gh = fakeGh([PENDING]);
-  const outcome = await box.engine(merging(gh));
+  const outcome = await box.engine(merging(gh, true));
   assert.equal(outcome, "merged");
   assert.equal(gh.merges().length, 1);
   assert.ok(
