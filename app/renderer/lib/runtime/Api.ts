@@ -11,10 +11,7 @@ import {
   nameOf,
   scopeOf,
 } from "@shigomori/contracts/contract";
-import {
-  CommandRefusedError,
-  isCommandRefusedError,
-} from "@shigomori/contracts/errors";
+import { refusalNamed } from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import type {
   EffectApi,
@@ -162,11 +159,7 @@ const make = Effect.gen(function* () {
         ...runner,
         run: (effect, options) =>
           run(
-            Effect.mapError(effect, (error) =>
-              isCommandRefusedError(error)
-                ? new CommandRefusedError({ deviceId })
-                : error,
-            ),
+            Effect.mapError(effect, (error) => refusalNamed(error, deviceId)),
             options,
           ),
       };

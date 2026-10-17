@@ -239,7 +239,10 @@ function exhaustionError(
       errorMessageOf(error).includes("EHOSTUNREACH"),
   );
   if (unroutable.length > 0) {
-    const lan = unroutable.map(({ candidate }) => candidate.url).join(", ");
+    const lan = unroutable
+      .map(({ candidate }) => candidate.url)
+      .toSorted()
+      .join(", ");
     // Machines on different networks fail every LAN address this way
     // too, and there the tunnel is the path that mattered.
     const tunnel = failures.find(

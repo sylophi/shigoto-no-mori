@@ -171,6 +171,7 @@ function versionSection() {
     <VersionSectionView
       version={<BuildVersionLineView version={VERSION} commit={COMMIT} />}
       canCommand
+      deviceLabel="Thinkpad"
       state={STAGED}
       isError={false}
       onRetry={noop}
@@ -181,6 +182,7 @@ function versionSection() {
           version={STAGED.version}
           remote={false}
           canCommand
+          deviceLabel="Thinkpad"
           armed={false}
           pending={false}
           onClick={noop}
@@ -487,6 +489,7 @@ export function SettingsDialogsScene() {
               version={STAGED.version}
               remote={false}
               canCommand
+              deviceLabel="Thinkpad"
               armed={false}
               pending={false}
               onClick={noop}

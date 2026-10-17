@@ -67,10 +67,9 @@ export function ForwardAllButton({
               }),
             );
           } catch (error) {
-            // A refusal already surfaces centrally.
-            if (!isCommandRefusedError(error)) {
-              failures.push(describeForwardError(error, target, deviceLabel));
-            }
+            failures.push(describeForwardError(error, target, deviceLabel));
+            // The peer refuses every port alike.
+            if (isCommandRefusedError(error)) break;
           }
         }
         reportFailures("Couldn't forward", toStart.length, failures);

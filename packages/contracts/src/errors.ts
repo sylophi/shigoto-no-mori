@@ -123,6 +123,15 @@ export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>
 
 export const isCommandRefusedError = Schema.is(CommandRefusedError);
 
+// A refusal named for the device that refused, where the asker knows it.
+export const refusalNamed = <E>(
+  error: E,
+  deviceId: string,
+): E | CommandRefusedError =>
+  isCommandRefusedError(error) && error.deviceId === undefined
+    ? new CommandRefusedError({ deviceId })
+    : error;
+
 export class NotSharingError extends Schema.TaggedError<NotSharingError>()(
   "NotSharingError",
   {},
