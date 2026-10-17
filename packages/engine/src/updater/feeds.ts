@@ -1,6 +1,5 @@
 // The updater's feeds: the release list and the update feed, and the release this build is offered.
 import * as Clock from "effect/Clock";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -32,6 +31,7 @@ import {
   type UpdateInput,
   ZERO_VERSION,
   bodyText,
+  deadlineIn,
   discard,
   feedFailed,
   feedRequest,
@@ -99,8 +99,7 @@ export const makeFeeds = ({
       const { running } = input;
       const url = updateServerUrl(input);
       const failed = feedFailed("update-server");
-      const deadline =
-        (yield* Clock.currentTimeMillis) + Duration.toMillis(FEED_TIMEOUT);
+      const deadline = yield* deadlineIn(FEED_TIMEOUT);
       const response = yield* send(
         feedRequest(url, running),
         deadline,
@@ -197,7 +196,7 @@ export const makeFeeds = ({
             : {}),
         }),
       );
-      const deadline = now + Duration.toMillis(FEED_TIMEOUT);
+      const deadline = yield* deadlineIn(FEED_TIMEOUT);
       const response = yield* send(request, deadline, (cause) =>
         failed("unreachable", { cause }),
       );

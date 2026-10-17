@@ -145,6 +145,7 @@ import * as Logger from "effect/Logger";
 import * as Layer from "effect/Layer";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -2373,11 +2374,37 @@ async function tunnelHarness(deps: {
   };
   trackTest(() => (disposed ? undefined : runtime.dispose()));
   await runtime.context();
+  // The test clock with its wall clock moved by `stepWall` alone, for
+  // the runner a reconcile starts.
+  let wallOffset = 0;
+  const stepped = runtime.runSync(
+    TestClock.testClockWith((test) =>
+      Effect.succeed<Clock.Clock>({
+        ...test,
+        currentTimeMillisUnsafe: () =>
+          test.currentTimeMillisUnsafe() + wallOffset,
+        currentTimeMillis: Effect.sync(
+          () => test.currentTimeMillisUnsafe() + wallOffset,
+        ),
+      }),
+    ),
+  );
   return {
     spawned,
     reconcile: async (wanted: { port: number } | null) => {
-      await runtime.runPromise(onTunnel((tunnel) => tunnel.reconcile(wanted)));
+      await runtime.runPromise(
+        onTunnel((tunnel) => tunnel.reconcile(wanted)).pipe(
+          Effect.provideService(Clock.Clock, stepped),
+        ),
+      );
       await settleTunnel();
+    },
+    recheck: async () => {
+      await runtime.runPromise(onTunnel((tunnel) => tunnel.recheck));
+      await settleTunnel();
+    },
+    stepWall: (ms: number) => {
+      wallOffset += ms;
     },
     status: () => runtime.runSync(onTunnel((tunnel) => tunnel.status)),
     tunnelUrl: () => runtime.runSync(onTunnel((tunnel) => tunnel.tunnelUrl)),
@@ -2392,6 +2419,51 @@ async function tunnelHarness(deps: {
     dispose,
   };
 }
+
+it("cloudflared runner: a wake's recheck takes an up tunnel that no longer routes off the advertisement, brings it back on the same child once it routes, and replaces one that never does; a clock step spends none of the deadline", async () => {
+  let routes = true;
+  const tunnel = await tunnelHarness({
+    provision: async () => ({
+      hostname: "h.example.test",
+      connectorToken: "t",
+    }),
+    probe: () => routes,
+  });
+  await tunnel.reconcile({ port: 40100 });
+  await tunnel.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(tunnel.status().state, "up");
+
+  // A wake on a network still coming back: off, then back, same child.
+  routes = false;
+  await tunnel.recheck();
+  assert.equal(tunnel.status().state, "starting");
+  assert.equal(tunnel.tunnelUrl(), null);
+  await tunnel.advance(1_000);
+  routes = true;
+  await tunnel.advance(2_000);
+  assert.equal(tunnel.status().state, "up");
+  assert.equal(tunnel.spawned.length, 1);
+
+  // A stopped connector: alive, routing nothing. Two hours of wall
+  // clock step in, which the deadline doesn't count.
+  routes = false;
+  await tunnel.recheck();
+  tunnel.stepWall(2 * 3_600_000);
+  await tunnel.advance(TUNNEL_PROBE_DEADLINE_MS - 10_000);
+  assert.equal(tunnel.status().state, "starting");
+  assert.equal(tunnel.spawned.length, 1);
+  assert.equal(tunnel.spawned[0]?.killed, false);
+  await tunnel.advance(10_000 + TUNNEL_PROBE_SLOW_MS);
+  assert.equal(
+    tunnel.spawned[0]?.killed,
+    true,
+    "the stuck child was not ended",
+  );
+  routes = true;
+  await tunnel.advance(TUNNEL_BACKOFF_LADDER_MS[0] + 8_000);
+  assert.equal(tunnel.spawned.length, 2, "started again once");
+  assert.equal(tunnel.status().state, "up");
+});
 
 it("cloudflared runner: no-binary and unconfigured are typed terminal states, and the unconfigured verdict is cached for the process lifetime", async () => {
   // Missing binary: reported, and provisioning never even runs.

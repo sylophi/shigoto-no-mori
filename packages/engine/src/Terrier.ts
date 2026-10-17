@@ -160,7 +160,10 @@ const make = Effect.gen(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const handle = yield* spawner.spawn(
-          ChildProcess.make("terrier", [...args], { stdin: "ignore" }),
+          ChildProcess.make("terrier", [...args], {
+            stdin: "ignore",
+            forceKillAfter: "3 seconds",
+          }),
         );
         const [stdout, , code] = yield* Effect.all(
           [

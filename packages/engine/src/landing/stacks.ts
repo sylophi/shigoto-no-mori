@@ -1,9 +1,9 @@
 // Landing's stacks: the stacked pull requests a merge lands together, in order.
-import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import { elapsedMillis } from "../elapsed.ts";
 import { errorDocument } from "../errorDocument.ts";
 import * as GitHub from "../GitHub.ts";
 import type { MergeMethod, PullRequestSummary } from "../GitHub.ts";
@@ -219,7 +219,7 @@ export const makeStacks = ({
     // apart for twenty seconds at most; past that, the last answer.
     const mergedOrQueued = (repo: string, number: number) =>
       Effect.gen(function* () {
-        const deadline = (yield* Clock.currentTimeMillis) + SETTLE_TIMEOUT_MS;
+        const deadline = (yield* elapsedMillis) + SETTLE_TIMEOUT_MS;
         while (true) {
           const read = yield* github
             .mergeProgress(repo, number)
@@ -230,7 +230,7 @@ export const makeStacks = ({
           ) {
             return read;
           }
-          if ((yield* Clock.currentTimeMillis) >= deadline) return read;
+          if ((yield* elapsedMillis) >= deadline) return read;
           yield* Effect.sleep(Duration.seconds(1));
         }
       });
@@ -241,8 +241,8 @@ export const makeStacks = ({
     // is the real check.
     const settleMergeability = (repo: string, number: number) =>
       Effect.gen(function* () {
-        const deadline = (yield* Clock.currentTimeMillis) + SETTLE_TIMEOUT_MS;
-        while ((yield* Clock.currentTimeMillis) < deadline) {
+        const deadline = (yield* elapsedMillis) + SETTLE_TIMEOUT_MS;
+        while ((yield* elapsedMillis) < deadline) {
           const verdict = yield* github
             .mergeStateStatus(repo, number)
             .pipe(Effect.option);

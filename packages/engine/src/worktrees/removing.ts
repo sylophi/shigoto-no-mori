@@ -117,8 +117,9 @@ export const makeRemoving = ({
           while: (error) =>
             Predicate.hasProperty(error.cause, "code") &&
             error.cause.code === "ENOTEMPTY",
+          // Five seconds in tries, which no clock step shortens.
           schedule: Schedule.spaced("250 millis").pipe(
-            Schedule.upTo({ duration: "5 seconds" }),
+            Schedule.upTo({ times: 20 }),
           ),
         }),
       );

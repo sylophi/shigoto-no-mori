@@ -18,6 +18,7 @@ import {
   isHaltedStatus,
   MIRROR_LABEL_MODE,
 } from "@shigomori/contracts/modules/mirror";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import {
   beginTransfer,
@@ -29,6 +30,7 @@ import {
   requireRunningEngine,
 } from "./registry";
 import type { MirrorEngine } from "./MirrorEngine";
+import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
 
 export type TransferFilesResult = {
@@ -146,7 +148,10 @@ const waitSettled = (
   onProgress: (bytes: number, totalBytes: number) => void,
 ) =>
   Effect.gen(function* () {
-    const startedAt = Date.now();
+    // Elapsed time: a sleep or a clock step spends none of a ceiling.
+    const clock = yield* Clock.Clock;
+    const now = () => elapsedMillisUnsafe(clock);
+    const startedAt = now();
     let missingSince: number | null = null;
     let reportedBytes = -1;
     // When a side that had connected stopped being connected, so a
@@ -155,11 +160,11 @@ const waitSettled = (
     // peer never reached, instead of polling out the settle ceiling.
     let disconnectedSince: number | null = null;
     let everConnected = false;
-    while (Date.now() - startedAt < SETTLE_CEILING_MS) {
+    while (now() - startedAt < SETTLE_CEILING_MS) {
       const raw = yield* findSession(daemon, session);
       if (raw === undefined) {
-        missingSince ??= Date.now();
-        if (Date.now() - missingSince > MISSING_CEILING_MS) {
+        missingSince ??= now();
+        if (now() - missingSince > MISSING_CEILING_MS) {
           return failed("the transfer session was lost with the engine");
         }
       } else {
@@ -180,7 +185,7 @@ const waitSettled = (
         const connected = raw.local.connected && raw.remote.connected;
         if (
           raw.successfulCycles === 0 &&
-          Date.now() - startedAt > CONNECT_CEILING_MS &&
+          now() - startedAt > CONNECT_CEILING_MS &&
           (raw.lastError !== undefined || !connected)
         ) {
           return failed(
@@ -191,8 +196,8 @@ const waitSettled = (
           everConnected = true;
           disconnectedSince = null;
         } else if (everConnected) {
-          disconnectedSince ??= Date.now();
-          if (Date.now() - disconnectedSince > CONNECT_CEILING_MS) {
+          disconnectedSince ??= now();
+          if (now() - disconnectedSince > CONNECT_CEILING_MS) {
             return failed(
               raw.lastError ?? "the other device went away mid-transfer",
             );
@@ -204,6 +209,11 @@ const waitSettled = (
       }
       // A poll, by design.
       yield* Effect.sleep(POLL_MS);
+    }
+    // What the session says now decides, not the ceiling alone.
+    const last = yield* findSession(daemon, session);
+    if (last !== undefined && settled(last)) {
+      return { crossed: true, conflicts: last.conflicts.length };
     }
     return failed("the transfer did not settle in time");
   });

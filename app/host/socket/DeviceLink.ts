@@ -28,6 +28,7 @@
 // connection and in-flight caps, a failed-auth lockout, and hard
 // termination on every rejection and shutdown.
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
+import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import {
@@ -1007,7 +1008,7 @@ export const make = (options: {
             const { pull } = yield* socket.reader;
             while (true) {
               const frames = yield* pull;
-              connection.lastInboundAt = clock.currentTimeMillisUnsafe();
+              connection.lastInboundAt = elapsedMillisUnsafe(clock);
               for (const frame of frames) {
                 if (connection.dead) return;
                 const messages = decodeFrame(connection.parser, frame);
@@ -1160,7 +1161,7 @@ export const make = (options: {
                 deviceId: null,
                 connectionId: null,
                 inFlight: 0,
-                lastInboundAt: clock.currentTimeMillisUnsafe(),
+                lastInboundAt: elapsedMillisUnsafe(clock),
                 dead: false,
                 kill(code, reason) {
                   if (connection.dead) return;
@@ -1209,20 +1210,26 @@ export const make = (options: {
         // dropped it. Never a process on this machine: one that dies
         // closes its socket, and a wall clock that jumped over a sleep
         // would cut the app's own windows at every wake (V3.md, "Local
-        // links and liveness").
+        // links and liveness"). Silence is monotonic elapsed time, and a
+        // sweep that comes late (this host stopped, or its machine
+        // asleep) is no verdict: every peer's silence counts again from
+        // it, since frames waiting to be read may answer it.
         const livenessMs = opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
+        const sweepMs = Math.max(50, Math.floor(livenessMs / 4));
+        let lastSweep = elapsedMillisUnsafe(clock);
         if (!local)
           yield* Effect.sync(() => {
-            const now = clock.currentTimeMillisUnsafe();
+            const now = elapsedMillisUnsafe(clock);
+            const late = now - lastSweep > 2 * sweepMs;
+            lastSweep = now;
             for (const connection of connections.values()) {
-              if (now - connection.lastInboundAt > livenessMs) {
+              if (late) connection.lastInboundAt = now;
+              else if (now - connection.lastInboundAt > livenessMs) {
                 connection.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
               }
             }
           }).pipe(
-            Effect.repeat(
-              Schedule.spaced(Math.max(50, Math.floor(livenessMs / 4))),
-            ),
+            Effect.repeat(Schedule.spaced(sweepMs)),
             Effect.forkIn(scope),
           );
 
