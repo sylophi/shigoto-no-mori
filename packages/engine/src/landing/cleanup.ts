@@ -1,5 +1,7 @@
 // Landing's cleanup: the landed worktrees and branches going, past the removal guards, and the primary checkout catching up.
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import { errorDocument } from "../errorDocument.ts";
@@ -11,6 +13,7 @@ import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 import {
   type CatchUp,
+  DoneUnfinished,
   LandingRefused,
   type RemoveOptions,
   type Reporter,
@@ -195,30 +198,69 @@ export const makeCleanup = ({
     ) =>
       Effect.gen(function* () {
         // The checkout stays interruptible, since it runs the user's
-        // hooks; once it is done the delete follows uninterrupted, since an
-        // interrupt between them would leave the branch for good (a done
-        // again from the primary branch finds nothing to delete).
+        // hooks; the delete follows uninterrupted, since a done again from
+        // the primary branch finds nothing to delete. git moves HEAD before
+        // post-checkout runs, and the hook's failure is the checkout's, so
+        // a checkout that failed or was cut short in its hook may have
+        // freed the branch all the same: whenever HEAD is on the primary
+        // branch the delete runs, and the checkout's failure follows.
         const deleted = yield* Effect.uninterruptibleMask((restore) =>
-          restore(
-            git.checkoutBranch(
-              worktree.path,
-              target.primaryRef,
-              target.remotes,
-            ),
-          ).pipe(
-            Effect.andThen(
-              !deleteBranch || worktree.branch === target.primaryBranch
-                ? Effect.succeed(false)
-                : Effect.as(
-                    git.deleteBranch({
-                      repo: project.path,
-                      name: worktree.branch,
-                      force: true,
-                    }),
-                    true,
-                  ),
-            ),
-          ),
+          Effect.gen(function* () {
+            const checkedOut = yield* Effect.exit(
+              restore(
+                git.checkoutBranch(
+                  worktree.path,
+                  target.primaryRef,
+                  target.remotes,
+                ),
+              ),
+            );
+            // Read whatever the checkout said: a hook can move HEAD on,
+            // and a tag can share the branch's short name.
+            const freed = yield* git
+              .run(worktree.path, ["symbolic-ref", "--quiet", "HEAD"])
+              .pipe(
+                Effect.map(
+                  (out) => out.trim() === `refs/heads/${target.primaryBranch}`,
+                ),
+                Effect.orElseSucceed(() => false),
+              );
+            const deletes =
+              freed && deleteBranch && worktree.branch !== target.primaryBranch;
+            const removed = deletes
+              ? yield* Effect.exit(
+                  git.deleteBranch({
+                    repo: project.path,
+                    name: worktree.branch,
+                    force: true,
+                  }),
+                )
+              : Exit.void;
+            // Both failures are said, the checkout's first.
+            // Both failures said, the checkout's first, as one error, since
+            // a report shows a cause's first; an interrupt stays one.
+            if (Exit.isFailure(checkedOut)) {
+              if (Exit.isSuccess(removed)) {
+                return yield* Effect.failCause(checkedOut.cause);
+              }
+              if (Cause.hasInterruptsOnly(checkedOut.cause)) {
+                yield* Effect.logWarning(
+                  `The branch ${worktree.branch} couldn't be deleted`,
+                  removed.cause,
+                );
+                return yield* Effect.failCause(checkedOut.cause);
+              }
+              return yield* new DoneUnfinished({
+                branch: worktree.branch,
+                checkout: Cause.squash(checkedOut.cause),
+                delete: Cause.squash(removed.cause),
+              });
+            }
+            if (Exit.isFailure(removed)) {
+              return yield* Effect.failCause(removed.cause);
+            }
+            return deletes;
+          }),
         );
         if (target.remote === "") return { deleted };
         const pulled = yield* ffPull(
