@@ -878,11 +878,17 @@ export const rekeyWorktree = Effect.fnUntraced(function* (
   projectId: string,
   fromId: string,
   toPath: string,
+  options: { readonly back?: boolean } = {},
 ) {
   return yield* asChange(
     Effect.gen(function* () {
       const project = yield* projectById(projectId);
-      return yield* (yield* Worktrees.Worktrees).rekey(project, fromId, toPath);
+      return yield* (yield* Worktrees.Worktrees).rekey(
+        project,
+        fromId,
+        toPath,
+        options,
+      );
     }),
     { projectId },
   );

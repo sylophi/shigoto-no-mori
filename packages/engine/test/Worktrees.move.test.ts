@@ -304,3 +304,39 @@ it("fails a re-key whose dirty capture can't follow, and carries it when asked a
   assert.ok(result.refused);
   assert.ok(result.carried);
 });
+
+// A capture kept under the new id from before (an earlier worktree at
+// that path) is never written over: the re-key leaves the worktree's own
+// under its old id, and the re-key back, an undo's, leaves both as they
+// were.
+it("never writes a capture over one kept under the id it re-keys to, either way", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const fromPath = join(box.home, "here", "fox");
+      const toPath = join(box.home, "elsewhere", "fox");
+      const from = worktreeIdFromPath(fromPath);
+      const to = worktreeIdFromPath(toPath);
+      const own = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(repo, "commit", "-q", "--allow-empty", "-m", "stale");
+      const stale = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(repo, "update-ref", `refs/shigomori/dirty/${from}`, own);
+      box.git(repo, "update-ref", `refs/shigomori/dirty/${to}`, stale);
+      const forward = yield* Effect.flip(
+        worktrees.rekey(project, from, toPath),
+      );
+      yield* worktrees.rekey(project, to, fromPath, { back: true });
+      const tip = (id: string) =>
+        box.git(repo, "rev-parse", `refs/shigomori/dirty/${id}`).trim();
+      return {
+        occupied: forward.reason === "occupied",
+        own: tip(from) === own,
+        stale: tip(to) === stale,
+      };
+    }),
+  )) as { occupied: boolean; own: boolean; stale: boolean };
+  assert.deepEqual(result, { occupied: true, own: true, stale: true });
+});

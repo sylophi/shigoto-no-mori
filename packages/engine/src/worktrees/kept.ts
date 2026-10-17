@@ -33,19 +33,28 @@ export const makeKept = Effect.gen(function* () {
       )
       .pipe(Effect.orDie);
 
-  // A capture belongs to the worktree, not its old path. Whether it
-  // followed (or there was none).
+  // A capture belongs to the worktree, not its old path. It followed (or
+  // there was none), stayed because another is kept under `to` (never
+  // written over: a re-key back would otherwise put a stale one over the
+  // worktree's own), or failed to follow.
   const rekeyCapture = (project: RegisteredProject, from: string, to: string) =>
     Effect.gen(function* () {
       const capture = yield* git.refTip(project.path, dirtyRef(from));
-      if (Option.isNone(capture)) return true;
-      yield* git.updateRef({
-        repo: project.path,
-        ref: dirtyRef(to),
-        commit: capture.value,
-      });
+      if (Option.isNone(capture)) return "followed" as const;
+      const there = yield* git.refTip(project.path, dirtyRef(to));
+      if (Option.isSome(there) && there.value !== capture.value) {
+        return "occupied" as const;
+      }
+      if (Option.isNone(there)) {
+        yield* git.updateRef({
+          repo: project.path,
+          ref: dirtyRef(to),
+          commit: capture.value,
+          expected: "",
+        });
+      }
       yield* git.deleteRef(project.path, dirtyRef(from));
-      return true;
+      return "followed" as const;
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.as(
@@ -53,7 +62,7 @@ export const makeKept = Effect.gen(function* () {
             "A dirty capture's ref didn't follow its move",
             cause,
           ),
-          false,
+          "failed" as const,
         ),
       ),
     );
@@ -75,13 +84,18 @@ export const makeKept = Effect.gen(function* () {
     forgetRows,
     // Fails when the capture didn't follow, its rows carried, for the
     // caller to try again or say so: asked again it carries the capture.
-    rekey: (project: RegisteredProject, from: string, to: string) =>
+    rekey: (
+      project: RegisteredProject,
+      from: string,
+      to: string,
+      options: { readonly back?: boolean } = {},
+    ) =>
       Effect.andThen(
         rekeyRows(project, from, to),
-        Effect.flatMap(rekeyCapture(project, from, to), (followed) =>
-          followed
+        Effect.flatMap(rekeyCapture(project, from, to), (carried) =>
+          carried === "followed" || (carried === "occupied" && options.back)
             ? Effect.void
-            : Effect.fail(new CaptureNotCarried({ from, to })),
+            : Effect.fail(new CaptureNotCarried({ from, to, reason: carried })),
         ),
       ),
     forget: (project: RegisteredProject, worktreeId: string) =>

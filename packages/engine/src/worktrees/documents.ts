@@ -494,6 +494,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "move-in-progress",
       "adopt-primary",
       "adopt-managed",
+      "adopt-locked",
     ]),
     // The name or path the refusal is about.
     subject: Schema.String,
@@ -553,6 +554,8 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         return "The primary checkout can't be converted";
       case "adopt-managed":
         return "Worktree is already shigomori-managed";
+      case "adopt-locked":
+        return `${this.subject} is locked. Unlock it (git worktree unlock) to adopt it.`;
     }
   }
 }
@@ -565,14 +568,21 @@ export const cleanupFailureWords = (failure: {
   `${failure.phase} ${failure.exitCode === null ? "failed to run" : `exited with code ${failure.exitCode}`}; worktree not removed`;
 
 // A worktree's rows went to its new id but its dirty capture's ref
-// didn't follow: the capture is kept under the old id, and a re-key
-// asked again carries it.
+// didn't follow: the capture is kept under the old id. A re-key asked
+// again carries one that failed; one `occupied`, by another capture
+// under the new id, stays until that one is restored or dropped.
 export class CaptureNotCarried extends Schema.TaggedError<CaptureNotCarried>()(
   "CaptureNotCarried",
-  { from: Schema.String, to: Schema.String },
+  {
+    from: Schema.String,
+    to: Schema.String,
+    reason: Schema.Literals(["occupied", "failed"]),
+  },
 ) {
   override get message(): string {
-    return "A worktree's uncommitted changes didn't follow it to its new place; they are kept, and the next try carries them";
+    return this.reason === "occupied"
+      ? "A worktree's uncommitted changes didn't follow it to its new place, where other uncommitted changes are kept from before; both are kept"
+      : "A worktree's uncommitted changes didn't follow it to its new place; they are kept, and the next try carries them";
   }
 }
 

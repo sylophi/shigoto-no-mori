@@ -236,23 +236,23 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
     await runHost(Ops.listWorktreeIdentities({ projectId }))
   ).find((row) => row.path === fox);
   assert.ok(identity !== undefined);
-  // What a landed copy left: the old tree, and the journal at the new
-  // place, which the pointer names with a slash at its end.
+  // What a landed copy left: the old tree with the journal it was copied
+  // with, and that journal at the new place, which the pointer names with
+  // a slash at its end.
   const old = join(elsewhere, "old-data");
   mkdirSync(old);
-  writeFileSync(
-    join(engineDataDir, "data-dir-move.json"),
-    JSON.stringify({
-      from: old,
-      to: `${engineDataDir}/`,
-      partial: `${engineDataDir}.partial-x`,
-      pid: 4_194_304,
-      startedAt: 0,
-      moved: [
-        { projectId, oldPath: join(old, "wt", "repo", "fox"), newPath: fox },
-      ],
-    }),
-  );
+  const journal = JSON.stringify({
+    from: old,
+    to: `${engineDataDir}/`,
+    partial: `${engineDataDir}.partial-x`,
+    pid: 4_194_304,
+    startedAt: 0,
+    moved: [
+      { projectId, oldPath: join(old, "wt", "repo", "fox"), newPath: fox },
+    ],
+  });
+  writeFileSync(join(old, JOURNAL), journal);
+  writeFileSync(join(engineDataDir, JOURNAL), journal);
   await runHost(Effect.scoped(Layer.build(resumeLayer)));
   assert.equal(await titleOf(identity.id), "Fox", "nothing re-keyed back");
   assert.equal(existsSync(old), false, "the old tree removed");
@@ -290,6 +290,37 @@ it("a finished move whose worktree links couldn't be repaired keeps its journal 
     "the journal went with a repair owed",
   );
   rmSync(journal);
+});
+
+it("a kept journal of a copied move never deletes a folder made at the old place since", async () => {
+  const old = join(elsewhere, "old-data-remade");
+  mkdirSync(old);
+  writeFileSync(join(old, "new.txt"), "made after the move\n");
+  const journal = join(engineDataDir, JOURNAL);
+  writeFileSync(
+    journal,
+    JSON.stringify({
+      from: old,
+      to: engineDataDir,
+      partial: `${engineDataDir}.partial-x`,
+      pid: 4_194_304,
+      startedAt: 0,
+      moved: [
+        {
+          projectId,
+          oldPath: join(old, "wt", "repo", "gone"),
+          newPath: join(elsewhere, "not-a-worktree"),
+        },
+      ],
+    }),
+  );
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(
+    readFileSync(join(old, "new.txt"), "utf8"),
+    "made after the move\n",
+  );
+  rmSync(journal);
+  rmSync(old, { recursive: true });
 });
 
 it("keeps a move journal it can't read, which may be all that says what a move left", async () => {

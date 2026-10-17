@@ -814,3 +814,78 @@ it("a move git renamed deeper but couldn't record, linked relatively, is relinke
   );
   assert.deepEqual(result, { at: true, title: "the fox", records: 0 });
 });
+
+it("an adopt of a locked checkout is refused before anything is made", async () => {
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const outside = join(box.home, "outside", "otter");
+      box.git(repo, "worktree", "add", "-q", "--lock", "-b", "otter", outside);
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external?.locked);
+      const refused = yield* worktrees
+        .adopt(
+          { project, worktree: external },
+          { force: false },
+          { report: () => Effect.void, color: false },
+        )
+        .pipe(Effect.flip);
+      return {
+        reason: refused instanceof Worktrees.WorktreeRefused && refused.reason,
+        checkouts: (yield* worktrees.identities(project)).length,
+      };
+    }),
+  );
+  assert.deepEqual(result, { reason: "adopt-locked", checkouts: 2 });
+});
+
+// A removal of the external checkout that fails takes the replacement
+// back, so a later adopt finds the name free.
+it("an adopt whose removal fails takes its replacement back, and adopts when asked again", async () => {
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const outside = join(box.home, "outside", "otter");
+      box.git(repo, "worktree", "add", "-q", "-b", "otter", outside);
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external !== undefined);
+      // git that refuses to remove the external checkout, and only that.
+      const real = box.git(repo, "--exec-path").trim();
+      box.fakeBin(
+        "git",
+        `case "$*" in *"worktree remove"*"${outside}"*) echo "fatal: refused" >&2; exit 128;; esac\nexec "${real}/git" "$@"`,
+      );
+      const adopt = worktrees.adopt(
+        { project, worktree: external },
+        { force: false },
+        { report: () => Effect.void, color: false },
+      );
+      const failed = yield* Effect.result(adopt);
+      const between = (yield* worktrees.identities(project)).length;
+      process.env["PATH"] = path;
+      const adopted = yield* adopt;
+      return {
+        failed: Result.isFailure(failed),
+        between,
+        managed: !adopted.worktree.isExternal,
+        kept: existsSync(outside),
+      };
+    }),
+  );
+  assert.deepEqual(result, {
+    failed: true,
+    between: 2,
+    managed: true,
+    kept: false,
+  });
+});

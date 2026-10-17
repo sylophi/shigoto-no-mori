@@ -410,7 +410,11 @@ const writeWhole = (fs: FileSystem.FileSystem, file: string, text: string) =>
 const finishMove = (journal: Journal, at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    if (journal.partial !== null && resolve(journal.from) !== resolve(at)) {
+    if (
+      journal.partial !== null &&
+      resolve(journal.from) !== resolve(at) &&
+      (yield* ownJournalAt(journal.from, journal))
+    ) {
       yield* fsStep(() =>
         rm(journal.from, { recursive: true, force: true }).catch(
           () => undefined,
@@ -459,6 +463,23 @@ const finishMove = (journal: Journal, at: string) =>
     }
   });
 
+// Whether the folder at `dir` is this move's copy, by the journal it
+// carries: a folder made there since, or one a removal already took,
+// holds none.
+const ownJournalAt = (dir: string, journal: Journal) =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) =>
+    fs.readFileString(join(dir, JOURNAL)).pipe(
+      Effect.map(Schema.decodeUnknownOption(JournalJson)),
+      Effect.orElseSucceed(() => Option.none<Journal>()),
+      Effect.map(
+        (found) =>
+          Option.isSome(found) &&
+          found.value.from === journal.from &&
+          found.value.partial === journal.partial,
+      ),
+    ),
+  );
+
 // A reverse re-key or a removal that failed keeps the journal, for the
 // next start to finish the undo.
 const settled = <A, E, R>(step: Effect.Effect<A, E, R>, what: string) =>
@@ -477,7 +498,8 @@ const settled = <A, E, R>(step: Effect.Effect<A, E, R>, what: string) =>
 
 // A move that never landed, undone where the data still is (`at`): the
 // re-key reversed (a worktree never re-keyed has nothing under its new
-// id, which the re-key passes over), the partial copy removed, the
+// id, which the re-key passes over, and a capture that never left stays
+// over one kept under the new id from before), the partial copy removed, the
 // journal last.
 const undoMove = (journal: Journal, at: string) =>
   Effect.gen(function* () {
@@ -501,15 +523,9 @@ const undoMove = (journal: Journal, at: string) =>
       // A copy renamed in before the pointer moved: this move's own, as
       // the journal it carries says, and never the data the pointer
       // names.
-      const landed = yield* fs.readFileString(join(journal.to, JOURNAL)).pipe(
-        Effect.map(Schema.decodeUnknownOption(JournalJson)),
-        Effect.orElseSucceed(() => Option.none<Journal>()),
-      );
       if (
-        Option.isSome(landed) &&
-        landed.value.from === journal.from &&
-        landed.value.partial === journal.partial &&
-        resolve(journal.to) !== resolve(at)
+        resolve(journal.to) !== resolve(at) &&
+        (yield* ownJournalAt(journal.to, journal))
       ) {
         removed =
           (yield* settled(
@@ -566,6 +582,7 @@ const rekeyWorktrees = (moved: Journal["moved"], reverse: boolean) =>
             m.projectId,
             worktreeIdFromPath(m.newPath),
             m.oldPath,
+            { back: true },
           )
         : Ops.rekeyWorktree(
             m.projectId,

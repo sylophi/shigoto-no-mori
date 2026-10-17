@@ -2,8 +2,6 @@
 // and setup run again in a worktree.
 import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
 import * as Effect from "effect/Effect";
-import * as Path from "effect/Path";
-import * as Layout from "../Layout.ts";
 import * as Registry from "../Registry.ts";
 import { type Located, type Reporter, WorktreeRefused } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
@@ -24,11 +22,8 @@ export const makeAdopting = ({
 }) =>
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
-    const layout = yield* Layout.Layout;
-    const path = yield* Path.Path;
-    const { projectSettings, identities, row } = listing;
-    const { provision, createLifecycle, addWorktree, occupied, unreserved } =
-      creating;
+    const { projectSettings, row } = listing;
+    const { provision, createLifecycle, addWorktree } = creating;
     const { requireClean, removeCheckout } = removing;
 
     const adopt = Effect.fn("Worktrees.adopt")(function* (
@@ -49,40 +44,23 @@ export const makeAdopting = ({
           subject: "",
         });
       }
+      // git won't remove a locked checkout, which would leave both.
+      if (worktree.locked) {
+        return yield* new WorktreeRefused({
+          reason: "adopt-locked",
+          subject: worktree.path,
+        });
+      }
       // Adopting re-checks-out the branch tip, so what is uncommitted goes.
       yield* requireClean(worktree, options.force, "adopt", "adopting");
       const name = worktree.detached
         ? worktree.branch
         : sanitizeBranchForPath(worktree.branch);
-      // Refused before the wipe below: the add's own check runs after the
-      // old folder is gone.
-      if (name !== "") {
-        const clash = (yield* identities(project)).some(
-          (other) =>
-            other.id !== worktree.id &&
-            other.name.toLowerCase() === name.toLowerCase(),
-        );
-        if (clash) {
-          return yield* new WorktreeRefused({
-            reason: "name-taken",
-            subject: name,
-          });
-        }
-        // A folder at the managed place would refuse the add after the
-        // wipe too.
-        const place = path.join(yield* layout.worktreeBase(project), name);
-        if (yield* occupied(place)) {
-          return yield* new WorktreeRefused({
-            reason: "destination-taken",
-            subject: place,
-          });
-        }
-        yield* unreserved(place);
-      }
-      // The replacement first, then the checkout it replaces: a crash
-      // between leaves both on the branch, never neither, and the add
-      // claims its place as git makes it. A detached one's tip is the new
-      // checkout's HEAD from the add on.
+      // The replacement first, then the checkout it replaces, which the
+      // replacement goes again for if it can't: a crash between leaves
+      // both on the branch, never neither, and the add claims its place
+      // as git makes it. A detached one's tip is the new checkout's HEAD
+      // from the add on.
       const { made, found, cloned } = yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const added = yield* addWorktree(project, {
@@ -93,7 +71,13 @@ export const makeAdopting = ({
             clone: true,
             replacing: worktree.id,
           });
-          yield* removeCheckout(project.path, worktree.path, true);
+          yield* removeCheckout(project.path, worktree.path, true).pipe(
+            Effect.onError(() =>
+              Effect.ignore(
+                removeCheckout(project.path, added.made.path, true),
+              ),
+            ),
+          );
           yield* registry.setMark("shelved", worktree.id, false);
           // The checkout moved, so its id did too, like after a move.
           // An adopt takes only a clean checkout, so there is no capture

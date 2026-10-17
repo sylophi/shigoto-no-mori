@@ -233,9 +233,10 @@ export const makeRelocating = ({
         // Best effort from here: the entry already points at the new path.
         // A capture that didn't follow is said, and stays under the old id.
         for (const [from, now] of rekeys) {
-          if (!(yield* kept.rekeyCapture(relocated, from, now))) {
+          const carried = yield* kept.rekeyCapture(relocated, from, now);
+          if (carried !== "followed") {
             yield* Effect.logWarning(
-              new CaptureNotCarried({ from, to: now }).message,
+              new CaptureNotCarried({ from, to: now, reason: carried }).message,
             );
           }
         }
