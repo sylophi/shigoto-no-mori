@@ -141,8 +141,8 @@ function setGuideHarnesses(
   showing(() => guideHarnessesByWindow.set(windowId, harnesses));
 }
 
-// The Help menu's guide from a window's own control: its one harness
-// at once, the same push as the item's, or the items at the control.
+// The Help menu's guide from a window's own control: one harness gets
+// the item's own push.
 function showAround(
   windowId: number,
   at: { readonly x: number; readonly y: number },

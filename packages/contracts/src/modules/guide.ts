@@ -16,8 +16,7 @@ export const GUIDE_HARNESS_LABELS: Record<GuideHarness, string> = {
   codex: "Codex",
 };
 
-// The Help menu's item for a harness, which the sidebar's guide button
-// reads too.
+// The Help menu's item for a harness.
 export const showAroundLabel = (harness: GuideHarness): string =>
   `Show me around with ${GUIDE_HARNESS_LABELS[harness]}`;
 
