@@ -162,6 +162,7 @@ export class Git extends Context.Service<
       readonly ref: string;
       readonly remotes?: readonly string[] | undefined;
       readonly noCheckout?: boolean | undefined;
+      readonly force?: boolean | undefined;
     }) => Effect.Effect<void, GitError>;
     // Unforced, git refuses a dirty tree, untracked files included
     // whatever the user's status setting says.

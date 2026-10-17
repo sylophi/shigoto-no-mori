@@ -668,7 +668,9 @@ it("a resume undoes a copy git links relatively that a crash left before git was
   assert.deepEqual(result, { copy: false, original: true, records: 0 });
 });
 
-it("an adopt whose add fails keeps a detached checkout's commit", async () => {
+// The replacement is made before the checkout it replaces goes, so an
+// add that fails leaves the external checkout as it was.
+it("an adopt whose add fails leaves the checkout it would replace, a detached one's commit with it", async () => {
   const result = await box.engine(
     Effect.gen(function* () {
       const registry = yield* Registry.Registry;
@@ -700,15 +702,10 @@ it("an adopt whose add fails keeps a detached checkout's commit", async () => {
         )
         .pipe(Effect.result);
       process.env["PATH"] = path;
-      const kept = box
-        .git(
-          repo,
-          "for-each-ref",
-          "--format=%(objectname)",
-          "refs/shigomori/adopting",
-        )
-        .trim();
-      return { failed: Result.isFailure(failed), held: kept === tip };
+      return {
+        failed: Result.isFailure(failed),
+        held: box.git(outside, "rev-parse", "HEAD").trim() === tip,
+      };
     }),
   );
   assert.deepEqual(result, { failed: true, held: true });

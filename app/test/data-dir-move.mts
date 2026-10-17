@@ -262,6 +262,44 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
   );
 });
 
+it("a finished move whose worktree links couldn't be repaired keeps its journal for the next start", async () => {
+  const old = join(elsewhere, "old-data-unrepaired");
+  mkdirSync(old);
+  const journal = join(engineDataDir, JOURNAL);
+  writeFileSync(
+    journal,
+    JSON.stringify({
+      from: old,
+      to: engineDataDir,
+      partial: null,
+      pid: 4_194_304,
+      startedAt: 0,
+      moved: [
+        {
+          projectId,
+          oldPath: join(old, "wt", "repo", "gone"),
+          newPath: join(elsewhere, "not-a-worktree"),
+        },
+      ],
+    }),
+  );
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(
+    existsSync(journal),
+    true,
+    "the journal went with a repair owed",
+  );
+  rmSync(journal);
+});
+
+it("keeps a move journal it can't read, which may be all that says what a move left", async () => {
+  const journal = join(engineDataDir, JOURNAL);
+  writeFileSync(journal, "not a journal");
+  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  assert.equal(readFileSync(journal, "utf8"), "not a journal");
+  rmSync(journal);
+});
+
 it("a move that failed after the folder was let go never leaves the app running without it", () => {
   // Before the release, the app carries on where it was.
   assert.equal(

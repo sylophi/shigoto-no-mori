@@ -287,6 +287,9 @@ export const makeCreating = ({
         readonly base: string;
         readonly checkout: boolean;
         readonly clone: boolean;
+        // The worktree this one replaces (an adopt's), which still holds
+        // its name and branch until it goes.
+        readonly replacing?: string | undefined;
       },
     ) =>
       Effect.gen(function* () {
@@ -297,7 +300,9 @@ export const makeCreating = ({
           });
         }
         const existing = yield* identities(project);
-        const used = namesUsed(existing);
+        const used = namesUsed(
+          existing.filter(({ id }) => id !== input.replacing),
+        );
         if (input.name !== "" && used.has(input.name.toLowerCase())) {
           return yield* new WorktreeRefused({
             reason: "name-taken",
@@ -376,6 +381,7 @@ export const makeCreating = ({
             ref: input.base,
             remotes,
             noCheckout,
+            force: input.replacing !== undefined,
           });
         } else {
           yield* git.addWorktree({

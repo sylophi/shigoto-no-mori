@@ -13,6 +13,7 @@ import * as Git from "../Git.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as WorktreeData from "../WorktreeData.ts";
+import { CaptureNotCarried } from "./documents.ts";
 
 export const makeKept = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -72,10 +73,16 @@ export const makeKept = Effect.gen(function* () {
     rekeyRows,
     rekeyCapture,
     forgetRows,
+    // Fails when the capture didn't follow, its rows carried, for the
+    // caller to try again or say so: asked again it carries the capture.
     rekey: (project: RegisteredProject, from: string, to: string) =>
       Effect.andThen(
         rekeyRows(project, from, to),
-        rekeyCapture(project, from, to),
+        Effect.flatMap(rekeyCapture(project, from, to), (followed) =>
+          followed
+            ? Effect.void
+            : Effect.fail(new CaptureNotCarried({ from, to })),
+        ),
       ),
     forget: (project: RegisteredProject, worktreeId: string) =>
       Effect.andThen(

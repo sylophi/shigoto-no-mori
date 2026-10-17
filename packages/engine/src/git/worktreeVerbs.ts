@@ -92,6 +92,9 @@ export const makeWorktreeVerbs = ({
         readonly ref: string;
         readonly remotes?: readonly string[] | undefined;
         readonly noCheckout?: boolean | undefined;
+        // Checked out though another worktree has it, as an adopt's
+        // replacement made before the checkout it replaces goes.
+        readonly force?: boolean | undefined;
       }) {
         const { target, track } = yield* resolveCheckoutRef(
           input.repo,
@@ -102,6 +105,7 @@ export const makeWorktreeVerbs = ({
           "worktree",
           "add",
           ...(input.noCheckout ? ["--no-checkout"] : []),
+          ...(input.force ? ["--force"] : []),
           ...Option.match(track, {
             onNone: () => [],
             onSome: (name) => ["--track", "-b", name],

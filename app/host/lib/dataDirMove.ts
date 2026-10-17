@@ -424,22 +424,56 @@ const finishMove = (journal: Journal, at: string) =>
         m.newPath,
       ]);
     }
-    const projects = yield* Effect.orElseSucceed(freshProjects, () => []);
     const git = yield* Git.Git;
-    yield* Effect.forEach(
-      byProject,
-      ([projectId, paths]) => {
-        const project = projects.find((one) => one.id === projectId);
-        return project === undefined
-          ? Effect.void
-          : Effect.ignore(
-              git.run(project.path, ["worktree", "repair", ...paths]),
-            );
-      },
-      { concurrency: "unbounded", discard: true },
+    // A repair that failed (a repo unreadable for now) keeps the journal,
+    // so the next start repairs again; a project gone since has nothing
+    // to repair.
+    const repaired = yield* freshProjects.pipe(
+      Effect.flatMap((projects) =>
+        Effect.forEach(
+          byProject,
+          ([projectId, paths]) => {
+            const project = projects.find((one) => one.id === projectId);
+            return project === undefined
+              ? Effect.void
+              : Effect.asVoid(
+                  git.run(project.path, ["worktree", "repair", ...paths]),
+                );
+          },
+          { concurrency: "unbounded", discard: true },
+        ),
+      ),
+      Effect.as(true),
+      Effect.catchCause((cause) =>
+        Effect.as(
+          Effect.logWarning(
+            "[data] a moved worktree's link wasn't repaired; the move's journal is kept for the next start",
+            cause,
+          ),
+          false,
+        ),
+      ),
     );
-    yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
+    if (repaired) {
+      yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
+    }
   });
+
+// A reverse re-key or a removal that failed keeps the journal, for the
+// next start to finish the undo.
+const settled = <A, E, R>(step: Effect.Effect<A, E, R>, what: string) =>
+  step.pipe(
+    Effect.as(true),
+    Effect.catchCause((cause) =>
+      Effect.as(
+        Effect.logWarning(
+          `[data] undoing a data-folder move, ${what} failed; the journal is kept for the next start`,
+          cause,
+        ),
+        false,
+      ),
+    ),
+  );
 
 // A move that never landed, undone where the data still is (`at`): the
 // re-key reversed (a worktree never re-keyed has nothing under its new
@@ -454,10 +488,15 @@ const undoMove = (journal: Journal, at: string) =>
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );
-    yield* Effect.ignore(rekeyWorktrees(journal.moved, true));
+    const rekeyed = yield* settled(
+      rekeyWorktrees(journal.moved, true),
+      "the re-key back",
+    );
+    let removed = true;
     if (journal.partial !== null) {
-      yield* Effect.ignore(
+      removed = yield* settled(
         fs.remove(journal.partial, { recursive: true, force: true }),
+        "removing the partial copy",
       );
       // A copy renamed in before the pointer moved: this move's own, as
       // the journal it carries says, and never the data the pointer
@@ -472,12 +511,14 @@ const undoMove = (journal: Journal, at: string) =>
         landed.value.partial === journal.partial &&
         resolve(journal.to) !== resolve(at)
       ) {
-        yield* Effect.ignore(
-          fs.remove(journal.to, { recursive: true, force: true }),
-        );
+        removed =
+          (yield* settled(
+            fs.remove(journal.to, { recursive: true, force: true }),
+            "removing the landed copy",
+          )) && removed;
       }
     }
-    if (revived) {
+    if (revived && rekeyed && removed) {
       yield* Effect.ignore(fs.remove(join(at, JOURNAL), { force: true }));
     }
   });
@@ -494,9 +535,11 @@ const resumeDataDirMove = (at: string) =>
       .pipe(Effect.option);
     if (Option.isNone(text)) return;
     const journal = Schema.decodeUnknownOption(JournalJson)(text.value);
+    // Kept: it may be the only record of what a move left half done.
     if (Option.isNone(journal)) {
-      yield* Effect.logWarning("[data] an unreadable move journal, removed");
-      return yield* Effect.ignore(fs.remove(join(at, JOURNAL)));
+      return yield* Effect.logWarning(
+        `[data] an unreadable move journal at ${join(at, JOURNAL)}, kept for a look`,
+      );
     }
     // The pointer may name the folder with a trailing slash.
     if (resolve(journal.value.to) === resolve(at)) {

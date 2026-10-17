@@ -7,15 +7,19 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import * as WtFolder from "../src/WtFolder.ts";
+import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -258,4 +262,45 @@ it("prunes a removed worktree's folders under a linked data dir and a project li
   );
   assert.ok(existsSync(join(realDataDir, "wt")));
   assert.ok(!existsSync(join(realDataDir, "wt", "proj-link")));
+});
+
+// A dirty capture whose ref can't follow (a lock git left on it) fails
+// the re-key, its rows carried; asked again, the re-key carries it.
+it("fails a re-key whose dirty capture can't follow, and carries it when asked again", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const from = "aaaaaaaaaaaa";
+      const toPath = join(box.home, "elsewhere", "fox");
+      const head = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(repo, "update-ref", `refs/shigomori/dirty/${from}`, head);
+      const to = worktreeIdFromPath(toPath);
+      const lock = join(
+        repo,
+        ".git",
+        "refs",
+        "shigomori",
+        "dirty",
+        `${to}.lock`,
+      );
+      mkdirSync(join(repo, ".git", "refs", "shigomori", "dirty"), {
+        recursive: true,
+      });
+      writeFileSync(lock, "");
+      const first = yield* Effect.flip(worktrees.rekey(project, from, toPath));
+      rmSync(lock);
+      yield* worktrees.rekey(project, from, toPath);
+      return {
+        refused: Predicate.isTagged(first, "CaptureNotCarried"),
+        carried:
+          box.git(repo, "rev-parse", `refs/shigomori/dirty/${to}`).trim() ===
+          head,
+      };
+    }),
+  )) as { refused: boolean; carried: boolean };
+  assert.ok(result.refused);
+  assert.ok(result.carried);
 });

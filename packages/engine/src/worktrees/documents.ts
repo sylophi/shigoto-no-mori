@@ -564,6 +564,18 @@ export const cleanupFailureWords = (failure: {
 }) =>
   `${failure.phase} ${failure.exitCode === null ? "failed to run" : `exited with code ${failure.exitCode}`}; worktree not removed`;
 
+// A worktree's rows went to its new id but its dirty capture's ref
+// didn't follow: the capture is kept under the old id, and a re-key
+// asked again carries it.
+export class CaptureNotCarried extends Schema.TaggedError<CaptureNotCarried>()(
+  "CaptureNotCarried",
+  { from: Schema.String, to: Schema.String },
+) {
+  override get message(): string {
+    return "A worktree's uncommitted changes didn't follow it to its new place; they are kept, and the next try carries them";
+  }
+}
+
 // A cleanup script that failed during a removal, which left the worktree
 // in place. The run id ties the failure to the script's output.
 export class CleanupFailed extends Schema.TaggedError<CleanupFailed>()(

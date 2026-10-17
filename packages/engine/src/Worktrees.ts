@@ -26,6 +26,7 @@ import { makeMoving } from "./worktrees/moving.ts";
 import { makeAdopting } from "./worktrees/adopting.ts";
 import { makeRelocating } from "./worktrees/relocating.ts";
 import {
+  CaptureNotCarried,
   CleanupFailed,
   type Created,
   DescribeRefused,
@@ -53,6 +54,7 @@ import {
   type WorktreeRow,
 } from "./worktrees/documents.ts";
 export {
+  CaptureNotCarried,
   CleanupFailed,
   DescribeRefused,
   DirtyWorktree,
@@ -354,7 +356,7 @@ export class Worktrees extends Context.Service<
       project: RegisteredProject,
       from: string,
       toPath: string,
-    ) => Effect.Effect<string>;
+    ) => Effect.Effect<string, CaptureNotCarried>;
     // Points a project whose repo was moved or renamed by hand at where
     // it is now (an absolute path, any folder inside it will do), keeping
     // its id. The
