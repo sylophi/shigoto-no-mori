@@ -207,12 +207,15 @@ function askListAgain(): void {
 
 // The list as the shared cache holds it, refetching only when it is
 // missing or invalidated (staleTime Infinity says so, and fetchQuery
-// honours an invalidation regardless of it).
+// honours an invalidation regardless of it). Not retried: a pass waits
+// on it, and the next pass reads it again, so a rate-limited read
+// stalls no pass behind the hub's wait.
 function fetchDeviceList(): Promise<readonly DeviceInfo[]> {
   return throughCancel(() =>
     boundClient().fetchQuery({
       ...accountDevicesQueryOptions(pageApi()),
       staleTime: Infinity,
+      retry: false,
     }),
   );
 }

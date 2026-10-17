@@ -208,6 +208,8 @@ export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthentic
 // The hub's rate limiter turned a call away (a 429, which the hub's API
 // names no error for). `retryAfterSeconds` is the hub's Retry-After.
 // Only a read is asked again, after that wait; a write is not replayed.
+// Raised by the account service, which no peer-served call reaches, so
+// it never crosses a device link to an older build.
 export class HubRateLimitedError extends Schema.TaggedError<HubRateLimitedError>()(
   "HubRateLimitedError",
   { retryAfterSeconds: Schema.optional(Schema.Number) },

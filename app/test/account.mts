@@ -49,7 +49,12 @@ import {
   createAccountService,
   isHubUnreachable,
 } from "../shared/account/service.ts";
-import { HubRateLimitedError } from "@shigomori/contracts/errors";
+import {
+  CallFailureSchema,
+  callFailureOf,
+  HubRateLimitedError,
+  isHubRateLimitedError,
+} from "@shigomori/contracts/errors";
 import { createAppQueryClient } from "@/lib/queryClientOptions";
 import { deriveAccountId } from "../shared/account/token.ts";
 import { deviceKeyPair, toBase64Url } from "../shared/crypto/deviceKey.ts";
@@ -395,7 +400,7 @@ it("service: every call the hub's rate limiter turns away says so, with the hub'
   );
 });
 
-it("a rate-limited read is asked again after the hub's Retry-After, and a rate-limited write is not replayed", async () => {
+it("a rate-limited read is asked once more after the hub's Retry-After, and a rate-limited write is not replayed", async () => {
   vi.useFakeTimers();
   try {
     const client = createAppQueryClient();
@@ -408,13 +413,26 @@ it("a rate-limited read is asked again after the hub's Retry-After, and a rate-l
           throw new HubRateLimitedError({ retryAfterSeconds: 60 });
         return "listed";
       },
-      retry: client.getDefaultOptions().queries?.retry,
     });
     await vi.advanceTimersByTimeAsync(59_000);
     assert.equal(reads, 1, "asked again before the hub's Retry-After");
     await vi.advanceTimersByTimeAsync(1_000);
     assert.equal(await read, "listed");
     assert.equal(reads, 2);
+    // Turned away twice: the second answer is the read's.
+    let limited = 0;
+    const twice = client
+      .fetchQuery({
+        queryKey: ["devices", "again"],
+        queryFn: async () => {
+          limited += 1;
+          throw new HubRateLimitedError({ retryAfterSeconds: 60 });
+        },
+      })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    assert.ok((await twice) instanceof HubRateLimitedError);
+    assert.equal(limited, 2, "asked more than once more");
     let writes = 0;
     await client
       .getMutationCache()
@@ -432,6 +450,16 @@ it("a rate-limited read is asked again after the hub's Retry-After, and a rate-l
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("a rate-limited answer crosses the window's wire whole", () => {
+  const crossed = Schema.decodeUnknownSync(CallFailureSchema)(
+    Schema.encodeSync(CallFailureSchema)(
+      callFailureOf(new HubRateLimitedError({ retryAfterSeconds: 60 })),
+    ),
+  );
+  assert.ok(isHubRateLimitedError(crossed));
+  assert.equal(crossed.retryAfterSeconds, 60);
 });
 
 it("service: a rate-limited tunnel provision stays retryable, any other 4xx is a denial", async () => {

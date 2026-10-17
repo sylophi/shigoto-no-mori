@@ -79,7 +79,7 @@ function rateLimitedOf(error: unknown): HubRateLimitedError | undefined {
   const seconds = Number(error.reason.response.headers["retry-after"]);
   return new HubRateLimitedError({
     retryAfterSeconds:
-      Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined,
+      Number.isFinite(seconds) && seconds > 0 ? seconds : undefined,
   });
 }
 

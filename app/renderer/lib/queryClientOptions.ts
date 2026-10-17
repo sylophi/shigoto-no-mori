@@ -84,15 +84,16 @@ export function createAppQueryClient(
         // retries for everything else. A read cut by this machine's own
         // host going away asks again for as long as it takes: the ask
         // waits for the link to land on the host that replaces it.
-        // A read the hub's rate limiter turned away waits as long as the
-        // hub said; a mutation is never retried, so no write is replayed.
+        // A read the hub's rate limiter turned away is asked once more,
+        // after as long as the hub said; a mutation is never retried, so
+        // no write is replayed.
         retryDelay: (failureCount, error) =>
           isHubRateLimitedError(error) && error.retryAfterSeconds !== undefined
             ? error.retryAfterSeconds * 1000
             : Math.min(1000 * 2 ** failureCount, 30_000),
         retry: (failureCount, error) =>
           isOwnAppDrop(error) ||
-          (failureCount < 3 &&
+          (failureCount < (isHubRateLimitedError(error) ? 1 : 3) &&
             !isEntityGoneError(error) &&
             !isCommandRefusedError(error) &&
             !isNotSharingError(error)),
