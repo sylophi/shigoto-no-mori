@@ -71,8 +71,10 @@ export const layer = Layer.effect(
           ],
           Duration.millis(CAPTURE_TIMEOUT_MS),
         ).pipe(
-          Effect.flatMap(({ output }) =>
-            Effect.fromOption(hookPlaceOf(output)),
+          // A shell that failed, its logout files included, answered
+          // nothing to keep.
+          Effect.flatMap(({ output, code }) =>
+            Effect.fromOption(code === 0 ? hookPlaceOf(output) : Option.none()),
           ),
         ),
       { capacity: 1, timeToLive: answersFor(Duration.hours(1)) },
