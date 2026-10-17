@@ -147,6 +147,9 @@ export type RunOptions = {
   // external diff driver, a textconv). Output past the cap and a git
   // that never ran still fail.
   readonly anyExit?: boolean | undefined;
+  // A fetch from a file on this machine (a bundle), which no network can
+  // stall, so it has no deadline however long its index takes.
+  readonly local?: boolean | undefined;
   // The output cap, over DEFAULT_MAX_OUTPUT. Only the patch reads
   // raise it.
   readonly maxOutputBytes?: number | undefined;

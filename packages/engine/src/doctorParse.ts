@@ -1,7 +1,9 @@
 // The pure pieces of the doctor's checks: the parsers for what git, ps
 // and port-pool print, the words a finding counts with, and just enough
 // semver to tell an update file this build already is.
+import * as Option from "effect/Option";
 import { shellQuote } from "./Lifecycle.ts";
+import { parseLstart } from "./processes.ts";
 
 export const plural = (n: number) => (n === 1 ? "" : "s");
 
@@ -128,44 +130,14 @@ export const launcherProgram = (
 export const shellWord = (text: string) =>
   /[ \t'"$`\\]/.test(text) ? shellQuote(text) : text;
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-// "  1234 Mon Aug 17 18:42:41 2026": each pid's start time, local.
-const PS_LINE =
-  /^\s*(\d+)\s+\w{3}\s+(\w{3})\s+(\d+)\s+(\d+):(\d+):(\d+)\s+(\d{4})\s*$/;
-
+// "  1234 Sat Oct 17 03:21:24 2026": each pid's birth (`PS_BIRTH_ENV`).
 export const parseProcessTable = (stdout: string) => {
   const table = new Map<number, number>();
   for (const line of stdout.split("\n")) {
-    const match = PS_LINE.exec(line);
+    const match = /^\s*(\d+)\s+(.+)$/.exec(line);
     if (match === null) continue;
-    const [, pid, month, day, hours, minutes, seconds, year] = match;
-    const monthIndex = MONTHS.indexOf(month ?? "");
-    if (monthIndex < 0) continue;
-    table.set(
-      Number(pid),
-      new Date(
-        Number(year),
-        monthIndex,
-        Number(day),
-        Number(hours),
-        Number(minutes),
-        Number(seconds),
-      ).getTime(),
-    );
+    const born = parseLstart(match[2] ?? "");
+    if (Option.isSome(born)) table.set(Number(match[1]), born.value);
   }
   return table;
 };

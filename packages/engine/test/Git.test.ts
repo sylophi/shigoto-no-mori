@@ -32,6 +32,7 @@ import {
   stderrOf,
   UnknownRevisionError,
 } from "../src/Git.ts";
+import type * as Git from "../src/Git.ts";
 import { SPAWN_SLOTS } from "../src/git/documents.ts";
 import { LOG_FORMAT, parseLog } from "../src/gitParse.ts";
 import {
@@ -630,32 +631,37 @@ it("concurrent fetches of one repository all answer", async () => {
   assert.equal(fetches.length, 5);
 });
 
-it("a fetch whose remote stops answering ends at its deadline", async () => {
-  const repo = seedRepo();
-  // A remote that is reached and then says nothing, as a connection
-  // left half open does.
-  const reached = join(repo, ".git", "remote-reached");
-  git(repo, "config", "protocol.ext.allow", "always");
-  git(
-    repo,
-    "remote",
-    "add",
-    "origin",
-    `ext::sh -c touch% ${reached};% exec% sleep% 600`,
-  );
-  const exit = await withGit((g) =>
-    Effect.gen(function* () {
-      const fetching = yield* Effect.forkChild(g.fetchAll(repo));
-      while (!existsSync(reached)) {
-        yield* Effect.promise(
-          () => new Promise((done) => setTimeout(done, 20)),
-        );
-      }
-      yield* TestClock.adjust("5 minutes");
-      return yield* Fiber.await(fetching);
-    }).pipe(Effect.provide(TestClock.layer())),
-  );
-  assert.ok(Exit.isFailure(exit), "the fetch still waits");
+it("every fetch whose remote stops answering ends at its deadline, the project's and a sync's", async () => {
+  for (const fetch of [
+    (g: Git.Git["Service"], repo: string) => g.fetchAll(repo),
+    (g: Git.Git["Service"], repo: string) => g.pullRebaseOrMergeAndPush(repo),
+  ]) {
+    const repo = seedRepo();
+    // A remote that is reached and then says nothing, as a connection
+    // left half open does.
+    const reached = join(repo, ".git", "remote-reached");
+    git(repo, "config", "protocol.ext.allow", "always");
+    git(
+      repo,
+      "remote",
+      "add",
+      "origin",
+      `ext::sh -c touch% ${reached};% exec% sleep% 600`,
+    );
+    const exit = await withGit((g) =>
+      Effect.gen(function* () {
+        const fetching = yield* Effect.forkChild(fetch(g, repo));
+        while (!existsSync(reached)) {
+          yield* Effect.promise(
+            () => new Promise((done) => setTimeout(done, 20)),
+          );
+        }
+        yield* TestClock.adjust("5 minutes");
+        return yield* Fiber.await(fetching);
+      }).pipe(Effect.provide(TestClock.layer())),
+    );
+    assert.ok(Exit.isFailure(exit), "the fetch still waits");
+  }
 });
 
 it("publish needs a remote, and pushes the branch with tracking", async () => {

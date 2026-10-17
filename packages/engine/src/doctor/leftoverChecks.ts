@@ -5,7 +5,7 @@ import * as Path from "effect/Path";
 import { atoi, parseProcessTable, plural, pluralize } from "../doctorParse.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
-import { pidAlive } from "../processes.ts";
+import { pidAlive, PS_BIRTH_ENV } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
 import { SCRIPT_START_TOLERANCE_MS, check } from "./documents.ts";
 import type { ReadsArea } from "./reads.ts";
@@ -75,7 +75,7 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       const ps = yield* capture(
         "ps",
         ["-p", pids.join(","), "-o", "pid=,lstart="],
-        { LC_ALL: "C" },
+        PS_BIRTH_ENV,
       ).pipe(Effect.option);
       const live = parseProcessTable(
         Option.match(ps, { onNone: () => "", onSome: ({ stdout }) => stdout }),

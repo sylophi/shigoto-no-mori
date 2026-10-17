@@ -12,7 +12,7 @@ import * as Predicate from "effect/Predicate";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { atoi } from "./doctorParse.ts";
-import { pidAlive, startOf } from "./processes.ts";
+import { startOf, stillRunning, UNKNOWN_BIRTH } from "./processes.ts";
 
 // A stager is downloading an update, and owns the files in updates/.
 export class UpdateInProgress extends Schema.TaggedError<UpdateInProgress>()(
@@ -52,14 +52,11 @@ export const stagingHolder = Effect.fn("stagingHolder")(function* (
   // kill(0) and kill(-1) always "succeed".
   if (pid === undefined || pid < 2)
     return Option.some({ pid: 0, alive: false });
-  if (!(yield* pidAlive(pid))) return Option.some({ pid, alive: false });
   const recorded = startText === undefined ? undefined : atoi(startText);
-  if (recorded === undefined) return Option.some({ pid, alive: true });
-  const started = yield* startOf(pid);
-  // A few seconds' slack: ps counts in whole seconds.
-  const same =
-    Option.isNone(started) || Math.abs(started.value - recorded) <= 5000;
-  return Option.some({ pid, alive: same });
+  return Option.some({
+    pid,
+    alive: yield* stillRunning(pid, recorded ?? UNKNOWN_BIRTH),
+  });
 });
 
 // The pidfile, held by this process until the scope closes. A dead

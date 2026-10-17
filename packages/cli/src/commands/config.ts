@@ -16,6 +16,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
+import { withoutCdFile } from "../handOver.ts";
 import { rest } from "../here.ts";
 import { interactive } from "../prompt.ts";
 import { launcherVerb } from "./configLists.ts";
@@ -226,6 +227,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       });
       const ran = spawnSync("/bin/sh", ["-c", `${editor} "$0"`, file], {
         stdio: "inherit",
+        env: withoutCdFile(),
       });
       if (ran.status !== 0) {
         rmSync(dir, { recursive: true, force: true });

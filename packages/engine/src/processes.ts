@@ -4,9 +4,10 @@
 // caller ends it with its process group. The long-lived children
 // (cloudflared, the file-sync daemon, the scripts) hold their handles
 // themselves.
-import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
@@ -14,6 +15,37 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
 import { isMissingProgram } from "./platformErrors.ts";
+import { CD_FILE_ENV } from "./shellHook.ts";
+
+// How long a child has after its SIGTERM before it is SIGKILLed. Given
+// none, the platform's spawner waits a second and then on the exit for
+// good, so a child that ignores SIGTERM (a user's hook, a stuck helper)
+// held its caller's interrupt or timeout forever.
+const KILL_GRACE = "3 seconds";
+
+// What every child gets that its command doesn't say otherwise:
+// KILL_GRACE, and not the shell hook's directive file, which is the
+// terminal `sm`'s alone (an editor or a hook writing it would move the
+// user's shell).
+const withDefaults = (command: ChildProcess.Command): ChildProcess.Command =>
+  ChildProcess.isStandardCommand(command)
+    ? ChildProcess.make(command.command, command.args, {
+        ...command.options,
+        forceKillAfter: command.options.forceKillAfter ?? KILL_GRACE,
+        env: { ...command.options.env, [CD_FILE_ENV]: undefined },
+        extendEnv:
+          command.options.env === undefined || command.options.extendEnv,
+      })
+    : command;
+
+// The platform's spawner with those defaults, provided once by each
+// graph that spawns: the engine's (`layer.ts`) and the host's.
+export const childDefaults = Layer.effect(
+  ChildProcessSpawner.ChildProcessSpawner,
+  Effect.map(ChildProcessSpawner.ChildProcessSpawner, (inner) =>
+    ChildProcessSpawner.make((command) => inner.spawn(withDefaults(command))),
+  ),
+);
 
 // Signal 0 delivers nothing but still checks that the process exists.
 // EPERM means it exists and isn't ours.
@@ -29,45 +61,80 @@ const signalZero = (pid: number) => {
 // Whether a process with the pid exists, whoever owns it.
 export const pidAlive = (pid: number) => Effect.sync(() => signalZero(pid));
 
-// How long ago `pid` started, in seconds, from ps's elapsed time
-// ([[dd-]hh:]mm:ss); none when ps can't say.
-const ageOf = (pid: number) =>
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+// ps's `lstart` ("Sat Oct 17 03:21:24 2026"), as ps prints it under
+// PS_BIRTH_ENV, in epoch milliseconds; none for anything else.
+export const parseLstart = (text: string): Option.Option<number> => {
+  const match =
+    /^\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(\d{4})$/.exec(
+      text.trim(),
+    );
+  if (match === null) return Option.none();
+  const [, month = "", day, hours, minutes, seconds, year] = match;
+  const index = MONTHS.indexOf(month);
+  if (index < 0) return Option.none();
+  return Option.some(
+    DateTime.toEpochMillis(
+      DateTime.makeUnsafe({
+        year: Number(year),
+        month: index + 1,
+        day: Number(day),
+        hour: Number(hours),
+        minute: Number(minutes),
+        second: Number(seconds),
+      }),
+    ),
+  );
+};
+
+// What `ps -o lstart` runs under: UTC, so a zone or a daylight-saving
+// change doesn't move a birth, and C, so its names are English.
+export const PS_BIRTH_ENV = { TZ: "UTC", LC_ALL: "C" };
+
+// When `pid` was born, in epoch milliseconds to the second: the stamp
+// the kernel took at its fork, which no later clock step moves. None
+// when ps can't say.
+export const startOf = (pid: number) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const ran = yield* captureWithin(
       spawner,
       "ps",
-      ["-o", "etime=", "-p", String(pid)],
+      ["-o", "lstart=", "-p", String(pid)],
       "5 seconds",
+      { env: PS_BIRTH_ENV },
     ).pipe(Effect.option);
     if (Option.isNone(ran) || ran.value.code !== 0)
       return Option.none<number>();
-    const match = /^(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)$/.exec(
-      ran.value.output.trim(),
-    );
-    if (match === null) return Option.none<number>();
-    const [, days = "0", hours = "0", minutes = "0", seconds = "0"] = match;
-    return Option.some(
-      ((Number(days) * 24 + Number(hours)) * 60 + Number(minutes)) * 60 +
-        Number(seconds),
-    );
+    return parseLstart(ran.value.output);
   });
 
-// When `pid` started, in this machine's milliseconds, to the second;
-// none when ps can't say.
-export const startOf = (pid: number) =>
-  Effect.gen(function* () {
-    const age = yield* ageOf(pid);
-    const now = yield* Clock.currentTimeMillis;
-    return Option.map(age, (seconds) => now - seconds * 1000);
-  });
+// A record's birth when the process that wrote it couldn't read its own.
+export const UNKNOWN_BIRTH = 0;
 
-// Whether the process that recorded itself as `pid`, started at
-// `startedAt`, still runs: a live pid that started at another time is
-// another process the system handed the number to since.
+// Whether the process that recorded itself as `pid`, born at
+// `startedAt`, still runs: a live pid born at another time is another
+// process the system handed the number to since. A birth unknown on
+// either side counts as the same process, so nothing takes over the
+// work of an owner it can't tell is gone.
 export const stillRunning = (pid: number, startedAt: number) =>
   Effect.gen(function* () {
     if (pid < 2 || !(yield* pidAlive(pid))) return false;
+    if (startedAt === UNKNOWN_BIRTH) return true;
     const started = yield* startOf(pid);
     // A few seconds' slack: ps counts in whole seconds.
     return (
@@ -106,9 +173,6 @@ export const capture = (
       const handle = yield* spawner.spawn(
         ChildProcess.make(command, [...args], {
           stdin: "ignore",
-          // A command that ignores the scope's SIGTERM is killed after
-          // this, so a deadline is one.
-          forceKillAfter: "3 seconds",
           ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
           ...(options.env === undefined
             ? {}
@@ -303,8 +367,6 @@ export const exec = Effect.fn("exec")(function* (
         env: options.env,
         extendEnv: options.extendEnv,
         stdin: "ignore",
-        // A timeout's SIGTERM is waited on, so one ignored still ends.
-        forceKillAfter: "3 seconds",
       }),
     );
     const [stdout, stderr] = yield* Effect.all(
