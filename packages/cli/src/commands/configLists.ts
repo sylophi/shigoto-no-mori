@@ -51,7 +51,10 @@ const rewrite = (
 ) =>
   Effect.flatMap(Config.Config, (config) =>
     config.change(settings.scope, (doc) => {
-      const next = change(entries(doc, key));
+      const list = entries(doc, key);
+      const next = change(list);
+      // A verb that refused hands the list back as it was.
+      if (next === list) return doc;
       const { [key]: _, ...rest } = doc;
       return next.length === 0 ? rest : { ...rest, [key]: next };
     }),
