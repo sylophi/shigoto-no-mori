@@ -13,7 +13,7 @@ import * as Option from "effect/Option";
 import { thisProcess } from "./dataDirMoveJournal.ts";
 import { pidAlive, stillRunning } from "./processes.ts";
 
-export const asMutation = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+const asMutation = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     Effect.acquireUseRelease(
       Effect.gen(function* () {
