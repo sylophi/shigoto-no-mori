@@ -586,17 +586,26 @@ export const watchIndexFile = (
     let backstop: ReturnType<typeof setInterval> | null = null;
     // The index's stamp as of the last signal, read as each one fires.
     let seen: string | null = null;
+    // Null for a read that failed, which says nothing about a change.
     const stampOf = () =>
       stat(index).then(
         (info) => `${info.ino}:${info.mtimeMs}:${info.size}`,
-        () => "-",
+        (error: unknown) =>
+          error instanceof Error && "code" in error && error.code === "ENOENT"
+            ? "-"
+            : null,
       );
+    // From a signal's debounce until its stamp is read, so a beat in
+    // between doesn't take the old stamp for a change of its own.
+    let firing = false;
     const signal = () => {
       if (timer !== null) clearTimeout(timer);
+      firing = true;
       timer = setTimeout(() => {
         timer = null;
         void stampOf().then((stamp) => {
-          seen = stamp;
+          if (stamp !== null) seen = stamp;
+          firing = false;
           if (!stopped) onChange();
         });
       }, debounceMs);
@@ -614,7 +623,9 @@ export const watchIndexFile = (
         reading = true;
         void stampOf()
           .then((stamp) => {
-            if (seen !== null && stamp !== seen && timer === null) signal();
+            if (stamp !== null && seen !== null && stamp !== seen && !firing) {
+              signal();
+            }
           })
           .finally(() => {
             reading = false;

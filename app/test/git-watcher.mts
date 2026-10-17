@@ -24,7 +24,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
-import { mkdirSync, watch, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   isRelevantGitPath,
@@ -397,4 +397,53 @@ it("backstop: a working tree whose watch fails every time it starts is said chan
   await runtime.context();
   await waitFor(() => treeWatches >= 6, "the tree watch to be tried again");
   assert.deepEqual(edits, ["p1"], "said changed on every beat");
+});
+
+it("backstop: a project whose reading hangs holds the others up for its deadline at most, and is asked again only on a doubling wait", async () => {
+  const root = realpathSync(tempDir("sm-gitwatch-stall-", trackTest));
+  const repos = ["hangs", "fine"].map((name) => {
+    const repo = join(root, name);
+    git(root, "init", "-q", "-b", "main", repo);
+    writeFileSync(join(repo, "a.txt"), "one\n");
+    git(repo, "add", "a.txt");
+    git(repo, "commit", "-q", "-m", "one");
+    return repo;
+  });
+  const [hangs = "", fine = ""] = repos;
+  const changes: string[] = [];
+  let hangingReads = 0;
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: (projectId) => changes.push(projectId),
+      onFilesChanged: () => {},
+      projects: () => [
+        { id: "hangs", name: "hangs", path: hangs },
+        { id: "fine", name: "fine", path: fine },
+      ],
+      // Every event lost, and one project's reading never coming back,
+      // as on a volume that holds its opens.
+      watch: () => Stream.never,
+      gitState: (gitDir) =>
+        gitDir.startsWith(hangs)
+          ? Effect.suspend(() => {
+              hangingReads += 1;
+              return Effect.never;
+            })
+          : undefined,
+      backstop: "100 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  git(fine, "commit", "-q", "--allow-empty", "-m", "two");
+  await waitFor(
+    () => changes.includes("fine"),
+    "the other project's lost commit to be found",
+    15_000,
+  );
+  assert.ok(!changes.includes("hangs"));
+  assert.ok(
+    hangingReads <= 3,
+    `the hanging project was read ${hangingReads} times`,
+  );
 });
