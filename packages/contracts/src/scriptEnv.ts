@@ -4,7 +4,7 @@
 // terminals (host/lib/scripts) alike, and listed for the user
 // (ScriptEnvPopover), so the three can't drift apart.
 
-export const SCRIPT_ENV_KEYS = {
+const SCRIPT_ENV_KEYS = {
   SCRIPT_NAME: "SHIGOMORI_SCRIPT_NAME",
   WORKTREE_PATH: "SHIGOMORI_WORKTREE_PATH",
   WORKTREE_NAME: "SHIGOMORI_WORKTREE_NAME",
