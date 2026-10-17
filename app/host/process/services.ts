@@ -12,7 +12,6 @@ import type * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
 import type * as Sharing from "@host/lib/Sharing";
 import type * as Moves from "@host/lib/sync/Moves";
 import type * as Terminals from "@host/lib/terminals/Terminals";
-import type * as Terrier from "@host/lib/Terrier";
 import type * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import type * as Engine from "@host/lib/Engine";
 import type * as Views from "@host/lib/Views";
@@ -41,7 +40,6 @@ export type HostServices =
   | Sharing.Sharing
   | Moves.Moves
   | Terminals.Terminals
-  | Terrier.Terrier
   | Villagers.VillagerData
   | Worktrees.Worktrees
   | Engine.Services

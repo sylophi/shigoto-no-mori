@@ -64,6 +64,10 @@ export class BundleRefused extends Schema.TaggedError<BundleRefused>()(
 
 const SHIGOMORI_REFS = "refs/shigomori/";
 
+// Where a branch fetched from a peer lands: never the branch itself.
+export const INCOMING_PREFIX = `${SHIGOMORI_REFS}incoming/`;
+export const incomingRef = (branch: string) => `${INCOMING_PREFIX}${branch}`;
+
 const REF = /^refs\/[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const COMMIT = /^[0-9a-f]{4,64}$/;
 

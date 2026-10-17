@@ -23,14 +23,14 @@ import {
   refresh,
   relocateProject,
 } from "@host/lib/projects";
-import { readWorktreeIncludeStatus } from "@host/lib/worktrees/worktreeInclude";
+import * as CarryOver from "@shigomori/engine/CarryOver";
 import {
   clearProjectDeleteInflight,
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "@host/lib/scripts";
 import type { HostServices } from "@host/process/services";
-import * as Terrier from "@host/lib/Terrier";
+import * as Terrier from "@shigomori/engine/Terrier";
 import * as Worktrees from "@host/lib/Worktrees";
 import { expandHome } from "@shared/paths";
 import type * as Engine from "@host/lib/Engine";
@@ -289,8 +289,10 @@ export const projectsHandlers = {
     Effect.map(Ops.worktreeDestination(projectId), ({ name }) => name),
 
   worktreeIncludeStatus: ({ projectId }) =>
-    Effect.flatMap(checkoutsOf(projectId), (checkouts) =>
-      readWorktreeIncludeStatus(checkouts),
+    Effect.flatMap(
+      Effect.all([checkoutsOf(projectId), CarryOver.CarryOver]),
+      ([checkouts, carryOver]) =>
+        carryOver.includeStatus(checkouts.map(({ path }) => path)),
     ),
 
   carryOverListing: ({ projectId, relative, ruleIgnored }) =>

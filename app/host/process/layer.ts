@@ -38,7 +38,6 @@ import * as ScriptRuns from "@host/lib/scripts/ScriptRuns";
 import * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { terminalStart } from "@host/ipc/scriptRun";
-import * as Terrier from "@host/lib/Terrier";
 import * as Villagers from "@host/lib/VillagerData";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as GitWatcher from "@host/lib/GitWatcher";
@@ -231,11 +230,10 @@ const dataDirHolders = Layer.effect(
   }),
 );
 
-// What the host answers from caches: other tools' (gh, terrier and
+// What the host answers from caches: other tools' (gh and
 // port-pool), and its reads across a project's checkouts.
 const cachedAnswers = Layer.mergeAll(
   GithubCli.layer,
-  Terrier.layer,
   Ports.layer,
   Worktrees.layer,
 );

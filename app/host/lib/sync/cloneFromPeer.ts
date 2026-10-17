@@ -35,7 +35,8 @@ import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { pidAlive } from "@shigomori/engine/processes";
 import { expandHome } from "@shared/paths";
-import { incomingRefFor, type WorktreeSource } from "./sourceLink";
+import { incomingRef as incomingRefFor } from "@shigomori/engine/Bundle";
+import type { WorktreeSource } from "./sourceLink";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);

@@ -14,6 +14,7 @@ import {
 import { dirname, join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
+import * as CarryOver from "../src/CarryOver.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
@@ -92,4 +93,33 @@ it("leaves an entry whose copy fails out whole, and no staging behind", async ()
     result.beside.filter((entry) => entry.includes(".carry-")),
     [],
   );
+});
+
+// The Configure view's read and a create's resolve are one reading: the
+// matches as git lists them, across every checkout, whatever only one
+// of them has.
+it("shows what .worktreeinclude matches across checkouts, and none where no checkout has the file", async () => {
+  const repo = box.repo("proj", {
+    ".gitignore": "deps/\n.env\n",
+    ".worktreeinclude": "deps/\n",
+  });
+  mkdirSync(join(repo, "deps"), { recursive: true });
+  writeFileSync(join(repo, "deps", "index.js"), "lib\n");
+  const other = box.repo("other", { ".gitignore": ".env\n" });
+  writeFileSync(join(other, ".env"), "x\n");
+  writeFileSync(join(other, ".worktreeinclude"), ".env\n");
+  const bare = box.repo("bare", {});
+  const [both, none] = (await box.engine(
+    Effect.flatMap(Effect.service(CarryOver.CarryOver), (carryOver) =>
+      Effect.all([
+        carryOver.includeStatus([repo, other]),
+        carryOver.includeStatus([bare]),
+      ]),
+    ),
+  )) as [
+    { fileExists: boolean; matchedPaths: string[] },
+    { fileExists: boolean; matchedPaths: string[] },
+  ];
+  assert.deepEqual(both, { fileExists: true, matchedPaths: ["deps/", ".env"] });
+  assert.deepEqual(none, { fileExists: false, matchedPaths: [] });
 });

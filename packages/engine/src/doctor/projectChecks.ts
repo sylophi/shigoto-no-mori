@@ -23,6 +23,7 @@ import * as Git from "../Git.ts";
 import * as Layout from "../Layout.ts";
 import * as Paths from "../Paths.ts";
 import { errnoText, isNotFound } from "../platformErrors.ts";
+import { INCOMING_PREFIX } from "../Bundle.ts";
 import * as Registry from "../Registry.ts";
 import type { ListedProject, RegisteredProject } from "../Registry.ts";
 import { worktreeIdFromPath } from "../worktreeLayout.ts";
@@ -34,7 +35,6 @@ import { PORT_POOL_CONFIG, parsePortPoolConfig } from "../ports.ts";
 import { parsePortPoolDirs } from "../doctorParse.ts";
 import {
   type Entry,
-  INCOMING_PREFIX,
   INCOMING_REF_STALE_MS,
   MovedWorktreePending,
   type ProjectChecked,
