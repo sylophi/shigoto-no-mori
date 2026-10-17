@@ -9,12 +9,8 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { type AgentSession, anyWorking } from "../agentSessions.ts";
-import type { CarryOverReport } from "../CarryOver.ts";
-import type {
-  CloneFailed,
-  CloneReport,
-  CloneSource,
-} from "../CloneCheckout.ts";
+import type { CarryOverReport, Source } from "../CarryOver.ts";
+import type { CloneFailed, CloneReport } from "../CloneCheckout.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
 import type { WorktreeEntry } from "../gitParse.ts";
@@ -246,7 +242,7 @@ export type Reporter = {
 // How a new worktree's files were cloned: from which checkout, and how
 // the clone went or why it gave way to git's own checkout.
 export type Cloned = {
-  readonly from: CloneSource;
+  readonly from: Source;
   readonly outcome: Result.Result<CloneReport, CloneFailed>;
 };
 

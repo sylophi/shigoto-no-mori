@@ -100,6 +100,12 @@ export class Git extends Context.Service<
       args: readonly string[],
       options?: RunOptions,
     ) => Effect.Effect<string, GitError>;
+    // A file of the repository's git dir (`index`, `info/exclude`, a
+    // hook) as an absolute path, as git resolves it for `cwd`.
+    readonly gitPath: (
+      cwd: string,
+      name: string,
+    ) => Effect.Effect<string, GitError>;
     // What git printed, whatever its exit, for a read that has an answer
     // either way. A git that never ran answers empty, and output past
     // the cap still fails.
@@ -867,6 +873,7 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   return Git.of({
     run,
+    gitPath: running.gitPath,
     runLenient,
     withIndexLock: onIndex,
     ...operation,

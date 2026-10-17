@@ -199,7 +199,24 @@ export const makeRunning = Effect.gen(function* () {
       return lock.withPermit(task);
     });
 
-  return { run, runBytes, runLenient, succeeds, runChunked, onIndex };
+  // A file of the repository's git dir (`index`, `info/exclude`, a
+  // hook), as an absolute path: a linked worktree's own, or the common
+  // dir's, as git resolves it.
+  const gitPath = (cwd: string, name: string) =>
+    Effect.map(
+      run(cwd, ["rev-parse", "--path-format=absolute", "--git-path", name]),
+      (out) => out.trim(),
+    );
+
+  return {
+    run,
+    runBytes,
+    runLenient,
+    succeeds,
+    runChunked,
+    onIndex,
+    gitPath,
+  };
 });
 
 export type RunningArea = Effect.Success<typeof makeRunning>;
