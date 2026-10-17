@@ -24,7 +24,7 @@ import { ExitCode, UsageError } from "../errors.ts";
 import { given, here, projectAt, projectFlags, rest } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 import { interactive } from "../prompt.ts";
-import { handOver } from "../handOver.ts";
+import { handOver, withoutCdFile } from "../handOver.ts";
 import { pickProject, pickWorktree } from "../pickers.ts";
 
 // The wrapper's names, which init prints.
@@ -187,11 +187,7 @@ export const enter = (name: string, target: string, cdFile: string) =>
     yield* note(`Entering ${where}. Exit the shell to return.`);
     yield* handOver("shell", shell, [], {
       cwd: target,
-      env: {
-        ...process.env,
-        [CD_FILE_ENV]: undefined,
-        SHIGOMORI_WORKTREE: name,
-      },
+      env: { ...withoutCdFile(), SHIGOMORI_WORKTREE: name },
     });
   });
 

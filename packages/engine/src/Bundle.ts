@@ -212,7 +212,7 @@ const make = Effect.gen(function* () {
       bundle,
       ...specs,
     ];
-    yield* git.run(repo, fetch).pipe(
+    yield* git.run(repo, fetch, { local: true }).pipe(
       Effect.mapError(
         (error) =>
           new BundleRefused({

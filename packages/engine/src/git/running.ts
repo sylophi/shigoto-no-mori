@@ -131,7 +131,7 @@ export const makeRunning = Effect.gen(function* () {
           return stdout;
         }),
       ).pipe(
-        subcommand === "fetch"
+        subcommand === "fetch" && options.local !== true
           ? Effect.timeoutOrElse({
               duration: FETCH_DEADLINE,
               orElse: () =>

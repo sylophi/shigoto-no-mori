@@ -106,9 +106,8 @@ export const parseLstart = (text: string): Option.Option<number> => {
 export const PS_BIRTH_ENV = { TZ: "UTC", LC_ALL: "C" };
 
 // When `pid` was born, in epoch milliseconds to the second: the stamp
-// the kernel took at its fork, which no later clock step moves (ps's
-// elapsed time read against the wall clock now did). None when ps
-// can't say.
+// the kernel took at its fork, which no later clock step moves. None
+// when ps can't say.
 export const startOf = (pid: number) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;

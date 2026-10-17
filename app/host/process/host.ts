@@ -128,7 +128,7 @@ setInterval(beat, BEAT_EVERY_MS).unref();
 // the graph, whose Tunnel writes the file again.
 const reaped = Effect.runPromise(
   reapOrphanedConnector(tunnelPidFile()).pipe(
-    Effect.provide(NodeServices.layer),
+    Effect.provide(childDefaults.pipe(Layer.provideMerge(NodeServices.layer))),
   ),
 );
 
