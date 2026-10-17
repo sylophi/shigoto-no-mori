@@ -2685,10 +2685,13 @@ it("cloudflared runner: a transient failure while an unconfigured answer is wait
   await runner.reconcile({ port: 40100 });
   assert.equal(runner.status().state, "unconfigured");
   // A wake on a network still coming back: the ask fails, and the
-  // runner keeps waiting rather than stepping onto its error ladder.
+  // runner keeps waiting rather than stepping onto its error ladder,
+  // saying the tunnel is down rather than the hub unconfigured.
   await runner.recheck();
   assert.equal(asks, 2);
-  assert.equal(runner.status().state, "unconfigured");
+  assert.equal(runner.status().state, "error");
+  await runner.advance(TUNNEL_BACKOFF_LADDER_MS[0] * 4);
+  assert.equal(asks, 2, "the failed ask went onto the restart ladder");
   await runner.recheck();
   assert.equal(asks, 3);
   await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
@@ -2711,6 +2714,25 @@ it("cloudflared runner: a transient failure while an unconfigured answer is wait
     "a same-port reconcile restarted it",
   );
   assert.equal(runner.status().state, "up");
+});
+
+it("cloudflared runner: a denial after an unconfigured answer parks as a denial, not a wait", async () => {
+  let asks = 0;
+  const runner = await tunnelHarness({
+    provision: async () => {
+      asks += 1;
+      if (asks === 1) throw new HubTunnelUnconfiguredError();
+      throw new TunnelProvisionDeniedError("HTTP 401");
+    },
+  });
+  await runner.reconcile({ port: 40100 });
+  assert.equal(runner.status().state, "unconfigured");
+  await runner.recheck();
+  assert.equal(asks, 2);
+  assert.equal(runner.status().state, "error");
+  await runner.recheck();
+  await runner.advance(UNCONFIGURED_RETRY_MS * 2);
+  assert.equal(asks, 2, "a denial was asked again on a timer or a wake");
 });
 
 it("cloudflared runner: the readiness probe gates advertising (a failed attempt retries on the probe ladder), a post-ready crash restarts from the cached provision on the capped backoff, a port change re-provisions, a stop kills the child cleanly, and the token never reaches a status object", async () => {

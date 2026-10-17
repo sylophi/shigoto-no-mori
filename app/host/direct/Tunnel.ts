@@ -468,8 +468,8 @@ const make = (options: Options) =>
     // down signal, and a wake (`recheck`) the one time a live child is
     // asked again, since a sleep is what leaves a connector that is
     // running but routes nothing.
-    // Set while a child is up, or the runner waits out an unconfigured
-    // answer, for `recheck`.
+    // Set while a child is up, or the runner asks the Worker for a
+    // provision, for `recheck`.
     const rechecks = yield* Ref.make(Option.none<Queue.Queue<void>>());
 
     const probe = (hostname: string, fresh: boolean, spawnedAt: number) => {
@@ -530,14 +530,8 @@ const make = (options: Options) =>
     const park = Effect.never;
 
     // UNCONFIGURED_RETRY_MS, or a wake's recheck, whichever comes first.
-    const untilAskedAgain = Effect.gen(function* () {
-      const asked = yield* Queue.sliding<void>(1);
-      yield* Ref.set(rechecks, Option.some(asked));
-      yield* Effect.raceFirst(
-        Effect.sleep(UNCONFIGURED_RETRY_MS),
-        Queue.take(asked),
-      );
-    }).pipe(Effect.ensuring(Ref.set(rechecks, Option.none())));
+    const untilAskedAgain = (asked: Queue.Queue<void>) =>
+      Effect.raceFirst(Effect.sleep(UNCONFIGURED_RETRY_MS), Queue.take(asked));
 
     // One start attempt for `port`, from the binary to the child's
     // end. Answers how long the child ran, which the restart ladder
@@ -583,18 +577,31 @@ const make = (options: Options) =>
                     !(error.cause instanceof TunnelProvisionDeniedError)),
               ),
             );
+          // Held for every ask, so a wake that lands while one is out
+          // ends the wait after it.
+          const asked = yield* Queue.sliding<void>(1);
+          yield* Ref.set(rechecks, Option.some(asked));
           const provisioned = yield* options.provision(port).pipe(
             Effect.tapError((error) =>
               Effect.gen(function* () {
                 if (!(yield* waits(error))) return;
                 yield* Ref.set(waiting, true);
                 yield* remember({ unconfigured: true });
-                yield* setStatus({ state: "unconfigured", hostname: null });
-                yield* untilAskedAgain;
+                if (error.cause instanceof HubTunnelUnconfiguredError) {
+                  yield* setStatus({ state: "unconfigured", hostname: null });
+                } else {
+                  yield* setStatus({ state: "error", hostname: null });
+                  yield* Effect.logWarning(
+                    `[tunnel] tunnel start failed: ${errorWordsOf(error.cause)}, ` +
+                      "asking again with the hub's unconfigured answer",
+                  );
+                }
+                yield* untilAskedAgain(asked);
               }),
             ),
             Effect.retry({ while: waits }),
             Effect.result,
+            Effect.ensuring(Ref.set(rechecks, Option.none())),
           );
           yield* remember({ unconfigured: false });
           if (Result.isFailure(provisioned)) {
