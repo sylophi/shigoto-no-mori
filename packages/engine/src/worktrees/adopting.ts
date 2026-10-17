@@ -124,7 +124,7 @@ export const makeAdopting = ({
         project,
         made,
         found,
-        "",
+        Effect.succeed(""),
         false,
         reporter,
       );

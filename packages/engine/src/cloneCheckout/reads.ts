@@ -1,4 +1,5 @@
-// What a clone checkout reads: config, attributes' conversions, lstats, the umask, a file's blob id.
+// What a clone checkout reads: config, attributes' conversions,
+// lstats, the umask, a file's blob id.
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

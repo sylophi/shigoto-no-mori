@@ -1,4 +1,5 @@
-// The post-checkout hook a --no-checkout add skipped, run as git would have.
+// The post-checkout hook a --no-checkout add skipped, run as git
+// would have.
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";

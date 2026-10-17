@@ -143,8 +143,8 @@ export class Darwin extends Context.Service<
 
 export const isFailed = Schema.is(Failed);
 
-// lstat of paths relative to a root, by relative path, a path it
-// couldn't answer for left out.
+// lstat of paths relative to a root, keyed by the relative path. A path
+// the helper had no answer for has no key.
 export const lstatByPath = (
   darwin: Darwin["Service"],
   root: string,

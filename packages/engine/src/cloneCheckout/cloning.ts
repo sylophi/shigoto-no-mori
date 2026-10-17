@@ -1,4 +1,5 @@
-// The clone itself: the source's files cloned into the worktree, checked, and its index written.
+// The clone itself: the source's files cloned into the worktree,
+// checked, and its index written.
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";

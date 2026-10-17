@@ -237,13 +237,14 @@ export const makeCreating = ({
       });
 
     // What a new worktree goes through: carry-over, then the setup script
-    // and port-pool's provision. `baseBranch` is the local branch its base
-    // lands on ("" for none), which decides where carry-over looks first.
+    // and port-pool's provision. `baseBranch` reads the local branch its
+    // base lands on ("" for none), which decides where carry-over looks
+    // first.
     const createLifecycle = (
       project: RegisteredProject,
       worktree: WorktreeIdentity,
       checkouts: ReadonlyArray<WorktreeIdentity>,
-      baseBranch: string,
+      baseBranch: Effect.Effect<string>,
       skipSetup: boolean,
       reporter: Reporter,
     ) =>
@@ -338,14 +339,15 @@ export const makeCreating = ({
         yield* fs
           .makeDirectory(path.dirname(place), { recursive: true })
           .pipe(Effect.orDie);
-        // The base read once: the local branch it lands on (`origin/feat`
-        // is local `feat` where that exists), and the one a checkout
-        // tracks it with.
-        const resolved =
+        // The base read once, when something asks: the local branch it
+        // lands on (`origin/feat` is local `feat` where that exists), and
+        // the one a checkout tracks it with.
+        const resolved = yield* Effect.cached(
           input.base === ""
-            ? undefined
-            : yield* git.resolveCheckoutRef(project.path, input.base, remotes);
-        const baseBranch = resolved?.target ?? "";
+            ? Effect.succeed(undefined)
+            : git.resolveCheckoutRef(project.path, input.base, remotes),
+        );
+        const baseBranch = Effect.map(resolved, (base) => base?.target ?? "");
         // The checkout on the base branch, else the primary, else another:
         // where carry-over looks too.
         const source = input.clone
@@ -353,14 +355,17 @@ export const makeCreating = ({
               repo: project.path,
               checkouts: existing,
               destination: place,
-              baseBranch,
+              baseBranch: yield* baseBranch,
             })
           : Option.none<Source>();
         const noCheckout = Option.isSome(source);
         // The branch the add makes: a new one, or in checkout mode the local
         // branch it tracks a remote base with.
         const branch = input.checkout
-          ? Option.getOrElse(resolved?.track ?? Option.none<string>(), () => "")
+          ? Option.getOrElse(
+              (yield* resolved)?.track ?? Option.none<string>(),
+              () => "",
+            )
           : input.branch.trim() === ""
             ? name
             : input.branch.trim();

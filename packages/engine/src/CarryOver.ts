@@ -81,8 +81,9 @@ export class CarryOver extends Context.Service<
       readonly settings: Readonly<Record<string, unknown>> | null;
       readonly checkouts: ReadonlyArray<Source>;
       readonly destination: string;
-      // The local branch the new worktree's base lands on, "" for none.
-      readonly baseBranch: string;
+      // The local branch the new worktree's base lands on, "" for none,
+      // read only when carry-over has a source to rank.
+      readonly baseBranch: Effect.Effect<string>;
     }) => Effect.Effect<Option.Option<CarryOverReport>>;
   }
 >()("sm/engine/CarryOver") {}
@@ -333,7 +334,7 @@ const make = Effect.gen(function* () {
     readonly settings: Readonly<Record<string, unknown>> | null;
     readonly checkouts: ReadonlyArray<Source>;
     readonly destination: string;
-    readonly baseBranch: string;
+    readonly baseBranch: Effect.Effect<string>;
   }) {
     const manual = manualEntries(input.settings);
     let sources: ReadonlyArray<Source> = [];
@@ -343,7 +344,7 @@ const make = Effect.gen(function* () {
       sources = orderSources(
         input.checkouts,
         input.destination,
-        input.baseBranch,
+        yield* input.baseBranch,
       );
       if (includeEnabled(input.settings)) {
         const resolved = yield* resolveIncludes(sources);

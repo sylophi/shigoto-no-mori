@@ -15,7 +15,18 @@ import {
   type TreeEntry,
   verifiedRecord,
 } from "../gitIndex.ts";
-import { KEPT_FLAGS, maxOf, nanos } from "./documents.ts";
+
+// The flags a clone may keep: what a checkout's own files can carry
+// (compression, document tracking).
+const UF_COMPRESSED = 0x20;
+const UF_TRACKED = 0x40;
+const KEPT_FLAGS = UF_COMPRESSED | UF_TRACKED;
+
+const nanos = (sec: number, nsec: number) =>
+  BigInt(sec) * 1_000_000_000n + BigInt(nsec);
+
+const maxOf = (...values: bigint[]) =>
+  values.reduce((a, b) => (a > b ? a : b), 0n);
 
 // Names a case-insensitive disk takes for one are left to git, which
 // writes them in index order as a checkout does. APFS also folds
@@ -284,7 +295,6 @@ export const stale = (
   );
 };
 
-// A stale clone to read back, with the record that proves it.
 type ToHash = {
   readonly p: string;
   readonly entry: SourceEntry;

@@ -1,4 +1,5 @@
-// CloneCheckout's documents, errors and the pure helpers its areas share. `CloneCheckout.ts` re-exports what consumers use.
+// CloneCheckout's documents, errors and the pure helpers its areas
+// share. `CloneCheckout.ts` re-exports what consumers use.
 import * as Schema from "effect/Schema";
 import type { CheckoutConfig } from "../gitIndex.ts";
 
@@ -64,18 +65,6 @@ export class HookFailed extends Schema.TaggedError<HookFailed>()("HookFailed", {
     return "The post-checkout hook failed.";
   }
 }
-
-// The flags a clone may keep: what a checkout's own files can carry
-// (compression, document tracking).
-const UF_COMPRESSED = 0x20;
-const UF_TRACKED = 0x40;
-export const KEPT_FLAGS = UF_COMPRESSED | UF_TRACKED;
-
-export const nanos = (sec: number, nsec: number) =>
-  BigInt(sec) * 1_000_000_000n + BigInt(nsec);
-
-export const maxOf = (...values: bigint[]) =>
-  values.reduce((a, b) => (a > b ? a : b), 0n);
 
 // A clone the source no longer has, or isn't ours to read: git writes it
 // instead.

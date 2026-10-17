@@ -77,6 +77,17 @@ describe("caseCollisions", () => {
     assert.equal(collides("src/x.ts"), false);
   });
 
+  it("finds names that fold together below the top folder", () => {
+    const collides = caseCollisions([
+      tree("a/B/x"),
+      tree("a/b/y"),
+      tree("a/c"),
+    ]);
+    assert.equal(collides("a/B/x"), true);
+    assert.equal(collides("a/b/y"), true);
+    assert.equal(collides("a/c"), false);
+  });
+
   it("tells a file from a folder that differs only in case", () => {
     const collides = caseCollisions([tree("lib"), tree("LIB/x.ts")]);
     assert.equal(collides("lib"), true);
@@ -341,6 +352,7 @@ describe("the verify verdicts", () => {
     const one = (over: Partial<Parameters<typeof verdicts>[0]>) =>
       judge(["x"], over).rejected;
     const cases: Array<[string, string[]]> = [
+      ["not in the index", one({ bySourcePath: new Map() })],
       ["source gone", one({ sourceStats: new Map() })],
       ["clone gone", one({ cloneStats: new Map() })],
       ["xattrs unread", one({ sourceXattrs: new Map() })],
@@ -349,8 +361,12 @@ describe("the verify verdicts", () => {
         one({ sourceStats: new Map([["x", lstat("x", { ctimeSec: 101 })]]) }),
       ],
       [
-        "executable on disk",
+        "executable on disk, which the index's mode isn't",
         one({ sourceStats: new Map([["x", lstat("x", { mode: 0o100755 })]]) }),
+      ],
+      [
+        "group-writable on disk, which the umask doesn't make",
+        one({ sourceStats: new Map([["x", lstat("x", { mode: 0o100664 })]]) }),
       ],
       ["another umask", one({ mask: 0o002 })],
       [
@@ -364,6 +380,14 @@ describe("the verify verdicts", () => {
       [
         "not our clone",
         one({ cloneStats: new Map([["x", lstat("x", { mtimeNsec: 1 })]]) }),
+      ],
+      [
+        "a clone of another size",
+        one({ cloneStats: new Map([["x", lstat("x", { size: 4 })]]) }),
+      ],
+      [
+        "a clone of another mode",
+        one({ cloneStats: new Map([["x", lstat("x", { mode: 0o100755 })]]) }),
       ],
     ];
     for (const [name, rejected] of cases) {

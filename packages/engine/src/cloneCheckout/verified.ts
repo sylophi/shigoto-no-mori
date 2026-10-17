@@ -1,4 +1,5 @@
-// What clones proved about a source's files: the clone_verified table, read, kept and forgotten.
+// What clones proved about a source's files: the clone_verified
+// table, read, kept and forgotten.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
