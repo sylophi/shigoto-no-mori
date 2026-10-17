@@ -1482,6 +1482,54 @@ describe("projects relocate", () => {
   });
 });
 
+describe("projects relocate, asked again", () => {
+  it("carries a linked worktree's title when git already re-linked it, as after a relocate a crash cut short", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await box.migrate("cli");
+    const layout = await runAt(
+      alpha,
+      "projects",
+      "config",
+      "set",
+      "worktreeLayout",
+      "in-project",
+    );
+    assert.equal(layout.code, 0, layout.stderr);
+    const made = await runAt(alpha, "--json", "worktrees", "create", "fox");
+    assert.equal(made.code, 0, made.stderr);
+    const fox = (made.doc as { worktree: { path: string } }).worktree.path;
+    const titled = await runAt(fox, "worktrees", "describe", "-t", "Fox");
+    assert.equal(titled.code, 0, titled.stderr);
+    const moved = join(box.home, "gamma");
+    renameSync(alpha, moved);
+    // The repair a relocate runs first, as if it then crashed.
+    box.git(
+      moved,
+      "worktree",
+      "repair",
+      join(moved, fox.slice(alpha.length + 1)),
+    );
+    const relocated = await runAt(
+      box.home,
+      "projects",
+      "relocate",
+      "alpha",
+      moved,
+    );
+    assert.equal(relocated.code, 0, relocated.stderr);
+    const title = await runAt(
+      join(moved, fox.slice(alpha.length + 1)),
+      "--json",
+      "worktrees",
+      "describe",
+    );
+    assert.equal((title.doc as { title: string }).title, "Fox");
+  });
+});
+
 describe("worktrees rename", () => {
   it("moves the folder to its new name, and refuses what create would", async () => {
     const alpha = box.repo("alpha");

@@ -1,10 +1,9 @@
 // What the store keeps under a worktree's id (marks, the shelf, agent
-// sessions, its data, what clones proved about it) and its pending dirty
-// capture: carried to another id, or forgotten. What clones proved is
-// forgotten either way. The rows go in one
-// transaction, which a caller may widen to commit them with its own; the
-// capture's ref follows, since git isn't in the transaction, and a later
-// call finishes it.
+// sessions, its data) and its pending dirty capture: carried to another
+// id, or forgotten. What clones proved about the old id goes either way.
+// The rows go in one transaction, which a caller may widen to commit
+// them with its own; the capture's ref follows, since git isn't in the
+// transaction, and a later call finishes it.
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -22,8 +21,6 @@ export const makeKept = Effect.gen(function* () {
   const data = yield* WorktreeData.WorktreeData;
   const cloneCheckout = yield* CloneCheckout.CloneCheckout;
 
-  // What clones proved about the old checkout's files goes rather than
-  // follows: a copy to another volume gives every file a new stat.
   const rekeyRows = (project: RegisteredProject, from: string, to: string) =>
     sql
       .withTransaction(

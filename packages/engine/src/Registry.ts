@@ -187,6 +187,9 @@ export function keepUnlisted(
 const UUID_SHAPE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const idsIn = (found: ReadonlyArray<{ readonly worktree_id: string }>) =>
+  new Set(found.map(({ worktree_id }) => worktree_id));
+
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const fs = yield* FileSystem.FileSystem;
@@ -517,12 +520,11 @@ const make = Effect.gen(function* () {
     yield* sql`DELETE FROM agent_sessions WHERE worktree_id = ${worktreeId}`;
   }, Effect.orDie);
 
-  const idsIn = (rows: ReadonlyArray<{ readonly worktree_id: string }>) =>
-    new Set(rows.map(({ worktree_id }) => worktree_id));
   const keptIds = Effect.all({
     shelved: marked("shelved"),
     autoPull: marked("autoPull"),
-    agentSessions: Effect.map(agentSessions, (bound) => new Set(bound.keys())),
+    agentSessions: sql<{ worktree_id: string }>`
+      SELECT DISTINCT worktree_id FROM agent_sessions`.pipe(Effect.map(idsIn)),
     snapshots: sql<{ worktree_id: string }>`
       SELECT worktree_id FROM shelf_snapshots`.pipe(Effect.map(idsIn)),
     unshelved: sql<{ worktree_id: string }>`

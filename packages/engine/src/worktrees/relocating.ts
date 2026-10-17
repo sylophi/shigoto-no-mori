@@ -42,9 +42,12 @@ export const makeRelocating = ({
 
     // The linked worktrees that moved along with the repo: git lists them
     // at a path that is gone, and they sit at the same place relative to
-    // the repo's new path. Inside the repo, or beside it when a parent
-    // folder moved whole, each ancestor pair that still shares a name
-    // tried, nearest first. Old path to new.
+    // the repo's new path; or, once a repair ran (a relocate a crash cut
+    // short, asked again), git lists them there already and the old place
+    // is gone. Inside the repo, or beside it when a parent folder moved
+    // whole, each ancestor pair that still shares a name tried, nearest
+    // first. Old path to new. A pair whose old id kept nothing re-keys
+    // nothing.
     const movedAlong = (repo: string, oldPath: string) =>
       Effect.gen(function* () {
         const moved = new Map<string, string>();
@@ -61,10 +64,18 @@ export const makeRelocating = ({
           if (from === to || from === path.dirname(from)) break;
           pairs.push([from, to]);
         }
+        const exists = (at: string) =>
+          fs.exists(at).pipe(Effect.orElseSucceed(() => true));
         for (const entry of entries) {
-          if (
-            yield* fs.exists(entry.path).pipe(Effect.orElseSucceed(() => true))
-          ) {
+          if (yield* exists(entry.path)) {
+            for (const [from, to] of pairs) {
+              if (!entry.path.startsWith(`${to}/`)) continue;
+              const before = path.join(from, entry.path.slice(to.length + 1));
+              if (!(yield* exists(before))) {
+                moved.set(before, entry.path);
+                break;
+              }
+            }
             continue;
           }
           for (const [from, to] of pairs) {
