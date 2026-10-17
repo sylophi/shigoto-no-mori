@@ -1,6 +1,7 @@
 // Git's runner: a git process in a worktree, its spawn slots, and one index write at a time per worktree.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -17,6 +18,7 @@ import {
   encoder,
   decoder,
   identity,
+  stderrOf,
 } from "./documents.ts";
 import { readAll, readAllBytes } from "../processes.ts";
 
@@ -41,6 +43,47 @@ const STALL_LIMIT = [
   "-c",
   "http.lowSpeedTime=60",
 ];
+
+// The writes that take index.lock before they change anything, so one
+// refused because another git holds it changed nothing and is asked
+// again: the lock is held for moments, by a `git status` or a `git diff`
+// that writes back the index it refreshed (the app's own views read
+// with both) or another program's git. A command of several steps (a
+// stash, a merge, a rebase, a pull) can be refused after its first, and
+// isn't.
+const WAITS_FOR_INDEX = new Set([
+  "add",
+  "apply",
+  "checkout",
+  "commit",
+  "mv",
+  "read-tree",
+  "reset",
+  "restore",
+  "rm",
+  "switch",
+  "update-index",
+]);
+type RunError = GitCommandError | GitOutputTooLargeError;
+// git's own refusal, its first line. A post-checkout hook that prints
+// the same comes after the switch's "Switched to branch"; a pre-commit
+// hook's run again with its commit, which nothing recorded yet.
+const indexHeld = (error: RunError): boolean => {
+  if (!(error instanceof GitCommandError) || error.exitCode === null) {
+    return false;
+  }
+  const first = stderrOf(error).split("\n", 1)[0] ?? "";
+  return (
+    first.startsWith("fatal: Unable to create '") &&
+    first.endsWith("index.lock': File exists.")
+  );
+};
+const waitingForIndex = <A, R>(effect: Effect.Effect<A, RunError, R>) =>
+  Effect.retry(effect, {
+    schedule: Schedule.exponential("50 millis"),
+    times: 5,
+    while: indexHeld,
+  });
 
 export const makeRunning = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -72,7 +115,7 @@ export const makeRunning = Effect.gen(function* () {
       const limit = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT;
       const tooLarge = () =>
         new GitOutputTooLargeError({ subcommand, limitBytes: limit });
-      return yield* Effect.scoped(
+      const once = Effect.scoped(
         Effect.gen(function* () {
           const handle = yield* spawner
             .spawn(
@@ -144,6 +187,9 @@ export const makeRunning = Effect.gen(function* () {
           : identity,
         SLOTTED_SUBCOMMANDS.has(slotKey) ? slots.withPermit : identity,
       );
+      return yield* WAITS_FOR_INDEX.has(subcommand)
+        ? waitingForIndex(once)
+        : once;
     });
 
   const run = runner("Git.run", (stdout, limit, tooLarge) =>
