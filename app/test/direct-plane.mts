@@ -1840,6 +1840,62 @@ it("tunnel advertising: connectInfo carries a tunnel-kind candidate with its own
   );
 });
 
+it("the listener logs each peer it links, with the path it came in on", async () => {
+  const listener = await startDirectListener(trackTest);
+  const lines: string[] = [];
+  const info = console.info;
+  console.info = (...parts: unknown[]) => {
+    lines.push(parts.join(" "));
+  };
+  try {
+    const connection = await dial(listener);
+    trackTest(() => connection.close());
+  } finally {
+    console.info = info;
+  }
+  assert.deepEqual(
+    lines.filter((line) => line.startsWith("[link]")),
+    [`[link] ${DIALER} linked over lan from 127.0.0.1`],
+  );
+});
+
+it("connectInfo logs what an asker was offered when it changes, not at every ask", async () => {
+  let tunnel: string | null = null;
+  let port: number | null = 42017;
+  const connectInfo = makeConnectInfo({
+    listenerPort: () => port,
+    mintTickets: (_peer, kinds) => kinds.map((_kind, i) => `smpt_log_${i}`),
+    candidateAddresses: () => ["127.0.0.1", "fd00::1"],
+    tunnelUrl: () => tunnel,
+    acceptsCommands: () => false,
+    sharesData: () => true,
+  });
+  const all = {
+    dialableKinds: ["lan", "tunnel"],
+    connectionId: ONE_CONNECTION,
+  };
+  const lines: string[] = [];
+  const info = console.info;
+  console.info = (...parts: unknown[]) => {
+    lines.push(parts.join(" "));
+  };
+  try {
+    await connectInfo(DIALER, all);
+    await connectInfo(DIALER, all);
+    tunnel = "wss://sm-0123456789ab.sm.example.test";
+    await connectInfo(DIALER, all);
+    port = null;
+    await connectInfo(DIALER, all);
+  } finally {
+    console.info = info;
+  }
+  assert.deepEqual(lines, [
+    `[direct] ${DIALER} asked how to connect: offered lan`,
+    `[direct] ${DIALER} asked how to connect: offered lan, tunnel`,
+    `[direct] ${DIALER} asked how to connect: offered nothing to dial`,
+  ]);
+});
+
 it("a host just restarted: an ask only its tunnel could answer waits for the tunnel that is starting and carries it once it is up, while an ask it can answer now is answered at once", async () => {
   let tunnel: string | null = null;
   let comes: (up: boolean) => void = notYetSet;
