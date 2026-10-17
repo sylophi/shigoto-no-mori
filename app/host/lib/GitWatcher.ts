@@ -45,7 +45,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schedule from "effect/Schedule";
+import * as Predicate from "effect/Predicate";
 import * as Semaphore from "effect/Semaphore";
 import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
@@ -56,6 +56,8 @@ import { watchPath } from "@host/lib/watchPath";
 const DEBOUNCE_MS = 300;
 const EDIT_WINDOW = "1 second";
 const BACKSTOP = Duration.seconds(10);
+// A reading that takes longer is a volume that stalls.
+const STATE_READ_TIMEOUT = Duration.seconds(5);
 
 // Git-dir relative paths whose change means the project's git state
 // moved. Paths arrive with the platform separator and are normalized
@@ -175,32 +177,39 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
 
 // What a project's git directory says about the state its rows show,
 // read with no git: HEAD and each worktree's HEAD, packed-refs, every
-// loose ref (a ref is written by a rename into place, so a new stamp),
-// and which stopped-operation markers exist. Two equal readings mean
-// nothing the allowlist above cares about moved between them.
+// loose ref but a lock (a ref is written by a rename into place, so a
+// new inode), and which stopped-operation markers exist. Two equal
+// readings mean nothing the allowlist above cares about moved between
+// them. A file that isn't there reads as absent; any other failure (a
+// directory git removed mid-walk, a volume that stalls) fails the
+// reading, which the caller skips rather than read as a change.
+const isNotFound = (error: PlatformError.PlatformError) =>
+  Predicate.isTagged(error.reason, "NotFound");
+
 const gitStateOf = (gitDir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const stamp = (relative: string) =>
       fs.stat(path.join(gitDir, relative)).pipe(
-        Effect.map(
-          (info) =>
-            `${relative}@${Option.match(info.mtime, {
-              onNone: () => 0,
-              onSome: (date) => date.getTime(),
-            })}:${info.size}`,
-        ),
-        Effect.orElseSucceed(() => `${relative}@-`),
+        Effect.map((info) => {
+          const ino = Option.getOrElse(info.ino, () => 0);
+          const mtime = Option.match(info.mtime, {
+            onNone: () => 0,
+            onSome: (date) => date.getTime(),
+          });
+          return `${relative}@${ino}:${mtime}:${info.size}`;
+        }),
+        Effect.catchIf(isNotFound, () => Effect.succeed(`${relative}@-`)),
       );
     const read = (relative: string) =>
       fs
         .readFileString(path.join(gitDir, relative))
-        .pipe(Effect.orElseSucceed(() => ""));
+        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed("")));
     const listed = (relative: string, recursive: boolean) =>
       fs
         .readDirectory(path.join(gitDir, relative), { recursive })
-        .pipe(Effect.orElseSucceed((): string[] => []));
+        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed<string[]>([])));
     const worktrees = (yield* listed("worktrees", false)).toSorted();
     const dirs = ["", ...worktrees.map((name) => `worktrees/${name}/`)];
     const parts = [yield* stamp("packed-refs")];
@@ -215,6 +224,7 @@ const gitStateOf = (gitDir: string) =>
       }
     }
     for (const ref of (yield* listed("refs", true)).toSorted()) {
+      if (ref.endsWith(".lock")) continue;
       parts.push(yield* stamp(path.join("refs", ref)));
     }
     return parts.join("\n");
@@ -281,13 +291,30 @@ const make = (deps: GitWatcherDeps) =>
     const serial = yield* Semaphore.make(1);
     const watchOf = (path: string) =>
       deps.watch?.(path) ?? watchPath(fs, path, { recursive: true });
-    // Each watched project's git state as last seen, and the projects
-    // whose watch has heard a change not yet signalled (its debounce
-    // running), which the backstop leaves to it.
+    // Each watched project's git state as last seen. The projects whose
+    // watch has heard a change not yet signalled (its debounce running),
+    // by the beat it first heard one in, which the backstop leaves to it
+    // for a beat. And the projects whose reading stalled (a volume that
+    // hangs an open), left to their events until one arrives, so no beat
+    // piles another stuck read on the thread pool.
     const states = new Map<string, string>();
-    const hearing = new Set<string>();
-    const stateOf = (gitDir: string) =>
-      gitStateOf(gitDir).pipe(Effect.provide(platform));
+    const hearing = new Map<string, number>();
+    const stalled = new Set<string>();
+    let beats = 0;
+    const stateOf = (projectId: string, gitDir: string) =>
+      gitStateOf(gitDir).pipe(
+        Effect.provide(platform),
+        Effect.timeoutOption(STATE_READ_TIMEOUT),
+        Effect.tap((state) =>
+          Effect.sync(() => {
+            if (Option.isNone(state)) stalled.add(projectId);
+          }),
+        ),
+        Effect.orElseSucceed(() => Option.none<string>()),
+      );
+    // The working trees whose watch ended as it started, signalled once
+    // until one hears an event.
+    const failing = new Set<string>();
 
     // One working tree's edits: a burst's first change opens a window,
     // and the window's end is one signal, so a tree that never goes
@@ -296,6 +323,9 @@ const make = (deps: GitWatcherDeps) =>
     // of the project's trees starts again if the tree is back.
     const watchTree = (projectId: string, tree: string) =>
       watchOf(tree).pipe(
+        Stream.tap(() =>
+          Effect.sync(() => failing.delete(treeKey(projectId, tree))),
+        ),
         Stream.filter((event) => isWorkingTreeChange(event.path)),
         Stream.groupedWithin(Number.POSITIVE_INFINITY, EDIT_WINDOW),
         Stream.runForEach(() =>
@@ -326,7 +356,11 @@ const make = (deps: GitWatcherDeps) =>
             continue;
           }
           // Held, but its watch ended: edits since went unseen.
-          if (held.has(tree)) ended = true;
+          const key = treeKey(projectId, tree);
+          if (held.has(tree) && !failing.has(key)) {
+            ended = true;
+            failing.add(key);
+          }
           yield* FiberMap.run(
             treeWatches,
             treeKey(projectId, tree),
@@ -353,11 +387,17 @@ const make = (deps: GitWatcherDeps) =>
     ) =>
       watchOf(entry.gitDir).pipe(
         Stream.filter((event) => isRelevantGitPath(event.path)),
-        Stream.tap(() => Effect.sync(() => hearing.add(projectId))),
+        Stream.tap(() =>
+          Effect.sync(() => {
+            stalled.delete(projectId);
+            if (!hearing.has(projectId)) hearing.set(projectId, beats);
+          }),
+        ),
         Stream.debounce(DEBOUNCE_MS),
         Stream.runForEach(() =>
           Effect.gen(function* () {
-            states.set(projectId, yield* stateOf(entry.gitDir));
+            const state = yield* stateOf(projectId, entry.gitDir);
+            if (Option.isSome(state)) states.set(projectId, state.value);
             hearing.delete(projectId);
             deps.onChange(projectId);
           }).pipe(
@@ -381,7 +421,7 @@ const make = (deps: GitWatcherDeps) =>
         ),
       );
 
-    const reconcile = Effect.gen(function* () {
+    const reconcileNow = Effect.gen(function* () {
       const projects = yield* Effect.try(() =>
         (deps.projects ?? loadProjects)(),
       ).pipe(Effect.option);
@@ -421,17 +461,34 @@ const make = (deps: GitWatcherDeps) =>
         }
         // What moved that no event said: a watch that dropped an event,
         // or ended and was started again just above.
-        if (hearing.has(projectId)) continue;
-        const state = yield* stateOf(entry.gitDir);
+        if ((hearing.get(projectId) ?? -2) >= beats - 1) continue;
+        if (stalled.has(projectId)) continue;
+        const state = yield* stateOf(projectId, entry.gitDir);
+        if (Option.isNone(state)) continue;
         const last = states.get(projectId);
-        states.set(projectId, state);
-        if (last !== undefined && last !== state) deps.onChange(projectId);
+        states.set(projectId, state.value);
+        if (last !== undefined && last !== state.value) {
+          deps.onChange(projectId);
+        }
       }
-    }).pipe(serial.withPermits(1), Effect.withSpan("GitWatcher.reconcile"));
+    }).pipe(serial.withPermits(1));
+    const reconcile = reconcileNow.pipe(
+      Effect.withSpan("GitWatcher.reconcile"),
+    );
 
     yield* reconcile;
+    // Without a span: one every beat would crowd out the spans a restart's
+    // log reads back.
     yield* Effect.forkScoped(
-      reconcile.pipe(Effect.repeat(Schedule.spaced(deps.backstop ?? BACKSTOP))),
+      Effect.sleep(deps.backstop ?? BACKSTOP).pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            beats += 1;
+          }),
+        ),
+        Effect.andThen(reconcileNow),
+        Effect.forever,
+      ),
     );
     return GitWatcher.of({ reconcile });
   });

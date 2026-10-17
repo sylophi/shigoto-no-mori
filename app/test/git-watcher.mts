@@ -189,6 +189,8 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
         onChange: (projectId) => changes.push(projectId),
         onFilesChanged: (projectId) => edits.push(projectId),
         projects: () => projects,
+        // The events alone: the backstop's own proof is below.
+        backstop: "1 hour",
       }).pipe(Layer.provide(NodeServices.layer)),
     );
     await runtime.context();
@@ -365,4 +367,34 @@ it("the mirror's index watch: a stage whose event was lost still fires, once", a
   await waitFor(() => fired >= 1, "the lost stage to be found");
   await delay(600);
   assert.equal(fired, 1, "one signal per move, not per tick");
+});
+
+it("backstop: a working tree whose watch fails every time it starts is said changed once, not every beat", async () => {
+  const root = tempDir("sm-gitwatch-failing-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "one");
+  const edits: string[] = [];
+  let treeWatches = 0;
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: () => {},
+      onFilesChanged: (projectId) => edits.push(projectId),
+      projects: () => [{ id: "p1", name: "repo", path: repo }],
+      // A tree watch that ends as it starts, every time (a volume whose
+      // watch the user refused).
+      watch: (path) => {
+        if (path.endsWith(".git")) return Stream.never;
+        treeWatches += 1;
+        return Stream.empty;
+      },
+      backstop: "100 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  await waitFor(() => treeWatches >= 6, "the tree watch to be tried again");
+  assert.deepEqual(edits, ["p1"], "said changed on every beat");
 });

@@ -605,10 +605,20 @@ export const watchIndexFile = (
       void stampOf().then((stamp) => {
         seen ??= stamp;
       });
+      // A beat waits for the last one's read: one held by a volume that
+      // stalls must not be joined by another each beat, on a thread pool
+      // of four.
+      let reading = false;
       backstop = setInterval(() => {
-        void stampOf().then((stamp) => {
-          if (seen !== null && stamp !== seen && timer === null) signal();
-        });
+        if (reading) return;
+        reading = true;
+        void stampOf()
+          .then((stamp) => {
+            if (seen !== null && stamp !== seen && timer === null) signal();
+          })
+          .finally(() => {
+            reading = false;
+          });
       }, backstopMs);
       backstop.unref();
       try {
