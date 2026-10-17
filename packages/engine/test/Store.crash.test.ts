@@ -1,6 +1,6 @@
 // The import of a 2.x data dir killed at every point of its run: a
-// process opening the store is sent SIGKILL at a spread of moments
-// across a whole run's length, and the next open of each copy holds
+// process opening the store is killed just before one of its events (a
+// statement, a file removal), at a spread of them across a whole run, and the next open of each copy holds
 // exactly what an import that ran whole holds. The migrations commit
 // together, so a kill before the commit leaves nothing and the next
 // open imports; one after it leaves the import, and the v2 files go only
@@ -111,22 +111,38 @@ const contents = (dir: string) =>
     Effect.runPromise,
   );
 
-// The fixture's open of the store in a process of its own, killed after
-// `ms` (none: let it finish). Answers whether it finished.
-const openIn = (dir: string, ms?: number) =>
-  new Promise<boolean>((resolve) => {
+// The fixture's open of the store in a process of its own, which kills
+// itself just before its `killAt`th event, a statement or a file removal
+// (fixtures/killAt.ts; none: let it finish). Answers whether it finished,
+// the signal that ended it, and how many events a finished run made.
+const openIn = (dir: string, killAt?: number) =>
+  new Promise<{
+    readonly finished: boolean;
+    readonly signal: NodeJS.Signals | null;
+    readonly events: number;
+  }>((resolve) => {
     const child = spawn(
       process.execPath,
       [join(import.meta.dirname, "fixtures", "openStore.ts")],
-      { env: { ...process.env, SHIGOMORI_DATA_DIR: dir }, stdio: "ignore" },
+      {
+        env: {
+          ...process.env,
+          SHIGOMORI_DATA_DIR: dir,
+          SHIGOMORI_COUNT_EVENTS: "1",
+          ...(killAt === undefined
+            ? {}
+            : { SHIGOMORI_KILL_AT: String(killAt) }),
+        },
+        stdio: ["ignore", "pipe", "ignore"],
+      },
     );
-    const timer =
-      ms === undefined
-        ? undefined
-        : setTimeout(() => child.kill("SIGKILL"), ms);
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      resolve(code === 0);
+    let said = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      said += chunk.toString();
+    });
+    child.once("close", (code, signal) => {
+      const events = /^events (\d+)$/m.exec(said)?.[1];
+      resolve({ finished: code === 0, signal, events: Number(events ?? 0) });
     });
   });
 
@@ -138,31 +154,31 @@ const copy = (name: string) => {
 
 it("an import killed anywhere in its run is whole after the next open", async () => {
   const whole = copy("whole");
-  const started = Date.now();
-  assert.ok(await openIn(whole));
-  const length = Date.now() - started;
+  const { finished, events } = await openIn(whole);
+  assert.ok(finished);
+  assert.ok(events > 0, "the whole run counted no events");
   const reference = await contents(whole);
   assert.deepEqual(
     V2_FILES.filter((file) => existsSync(join(whole, file))),
     [],
     "a whole import deletes the files it verified",
   );
-  let cut = 0;
   const steps = 40;
   for (let step = 0; step < steps; step++) {
     const dir = copy(`cut-${step}`);
-    if (!(await openIn(dir, Math.round((length * step) / steps)))) cut += 1;
+    const killAt = 1 + Math.round((step * (events - 1)) / (steps - 1));
+    const cut = await openIn(dir, killAt);
+    assert.equal(cut.signal, "SIGKILL", `not killed at event ${killAt}`);
     const after = await contents(dir);
-    assert.deepEqual(after.held, reference.held, `killed at step ${step}`);
+    assert.deepEqual(after.held, reference.held, `killed at event ${killAt}`);
     const left = V2_FILES.filter((file) => existsSync(join(dir, file)));
     // Either the import never deleted (every file is there) or what is
     // left is what its verified record names, for the doctor.
     assert.ok(
       left.length === V2_FILES.length ||
         left.every((file) => after.deleted.includes(join(dir, file))),
-      `killed at step ${step}: ${JSON.stringify({ left, deleted: after.deleted })}`,
+      `killed at event ${killAt}: ${JSON.stringify({ left, deleted: after.deleted })}`,
     );
     rmSync(dir, { recursive: true, force: true });
   }
-  assert.ok(cut > steps / 2, `most runs were cut short (${cut} of ${steps})`);
 }, 300_000);
