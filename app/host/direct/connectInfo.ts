@@ -18,6 +18,7 @@ import {
 } from "@shigomori/contracts/modules/direct";
 import { candidateAddresses } from "@host/direct/addresses";
 import type { TicketPeer } from "@host/direct/tickets";
+import { log } from "@shared/log";
 
 const decodeConnectInfoInput = Schema.decodeUnknownSync(
   DirectConnectInfoInputSchema,
@@ -78,6 +79,19 @@ export function makeConnectInfo(
   deps: ConnectInfoDeps,
 ): (callerDeviceId: string, rawInput: unknown) => Promise<DirectConnectInfo> {
   const offer = offerFor(deps);
+  // What each asker was last told, so the log says when that changes
+  // and not at every rung of its keeper's ladder.
+  const told = new Map<string, string>();
+  const answered = (callerDeviceId: string, info: DirectConnectInfo) => {
+    const offered = info.available
+      ? `offered ${[...new Set(info.candidates.map((candidate) => candidate.kind))].join(", ")}`
+      : "offered nothing to dial";
+    if (told.get(callerDeviceId) !== offered) {
+      told.set(callerDeviceId, offered);
+      log.info(`[direct] ${callerDeviceId} asked how to connect: ${offered}`);
+    }
+    return info;
+  };
   return async (callerDeviceId, rawInput) => {
     const input = decodeConnectInfoInput(rawInput);
     const now = offer(callerDeviceId, input);
@@ -87,11 +101,14 @@ export function makeConnectInfo(
       deps.tunnelStartingThenUp === undefined ||
       deps.listenerPort() === null
     ) {
-      return now;
+      return answered(callerDeviceId, now);
     }
-    return (await deps.tunnelStartingThenUp(TUNNEL_HOLD_MS))
-      ? offer(callerDeviceId, input)
-      : now;
+    return answered(
+      callerDeviceId,
+      (await deps.tunnelStartingThenUp(TUNNEL_HOLD_MS))
+        ? offer(callerDeviceId, input)
+        : now,
+    );
   };
 }
 

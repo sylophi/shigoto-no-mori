@@ -664,6 +664,9 @@ export const make = (options: {
               }
               held.set(payload.connectionId, connection);
               byDevice.set(payload.deviceId, held);
+              log.info(
+                `[link] ${payload.deviceId} linked over ${connection.arrivalKind} from ${connection.ip}`,
+              );
             }
             connection.shell = shell;
             connection.deviceId = payload.deviceId;
