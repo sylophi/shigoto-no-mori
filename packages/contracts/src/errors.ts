@@ -205,6 +205,25 @@ export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthentic
   }
 }
 
+// The hub's rate limiter turned a call away (a 429, which the hub's API
+// names no error for). `retryAfterSeconds` is the hub's Retry-After,
+// which the device list waits out before asking again; nothing retries
+// it sooner, and a write is not replayed.
+// Raised by the account service, which no peer-served call reaches, so
+// it never crosses a device link to an older build.
+export class HubRateLimitedError extends Schema.TaggedError<HubRateLimitedError>()(
+  "HubRateLimitedError",
+  { retryAfterSeconds: Schema.optional(Schema.Number) },
+) {
+  override get message(): string {
+    return this.retryAfterSeconds === undefined
+      ? "the hub is rate-limiting this device; try again shortly"
+      : `the hub is rate-limiting this device; try again in ${this.retryAfterSeconds} s`;
+  }
+}
+
+export const isHubRateLimitedError = Schema.is(HubRateLimitedError);
+
 export const ContractErrorSchema = Schema.Union([
   UnknownProjectError,
   UnknownWorktreeError,
@@ -220,6 +239,7 @@ export const ContractErrorSchema = Schema.Union([
   LinkRefusedError,
   LinkUnauthenticatedError,
   ChannelRefusedError,
+  HubRateLimitedError,
 ]);
 
 export const isContractError = Schema.is(ContractErrorSchema);

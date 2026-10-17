@@ -4,8 +4,13 @@
 // "account" prefix (no host sentinel, see queryKeys.ts) and the changed
 // broadcast invalidates the whole prefix at once.
 import { refreshQueries } from "@/lib/askAgain";
+import {
+  type HubRateLimitedError,
+  isHubRateLimitedError,
+} from "@shigomori/contracts/errors";
 import { useEffect } from "react";
 import {
+  type QueryClient,
   queryOptions,
   useMutation,
   useQuery,
@@ -76,10 +81,36 @@ export function useLocalDeviceIcon(): DeviceIcon {
 // could only ever be corrected by this process's own account:changed
 // fan-out, which says nothing about a peer renaming itself or being
 // removed from the account elsewhere: the hub pushes neither.
+// A read the hub's rate limiter turned away is not asked again until the
+// hub's Retry-After has passed, whoever asks (a page, a push burst, the
+// device sync): each ask in that window would only draw another 429.
+// Kept per client, since a fetch of a query with no data clears its
+// error as it starts.
+const listRefusals = new WeakMap<
+  QueryClient,
+  { readonly until: number; readonly error: HubRateLimitedError }
+>();
+
 export const accountDevicesQueryOptions = (api: RendererApi) =>
   queryOptions<readonly DeviceInfo[]>({
     queryKey: queryKeys.accountDevices(),
-    queryFn: ({ signal }) => api.run(api.account.listDevices(), { signal }),
+    queryFn: async ({ signal, client }) => {
+      const refused = listRefusals.get(client);
+      if (refused !== undefined && Date.now() < refused.until) {
+        throw refused.error;
+      }
+      try {
+        return await api.run(api.account.listDevices(), { signal });
+      } catch (error) {
+        if (isHubRateLimitedError(error)) {
+          listRefusals.set(client, {
+            until: Date.now() + (error.retryAfterSeconds ?? 0) * 1000,
+            error,
+          });
+        }
+        throw error;
+      }
+    },
     // The registry renders the failure inline (DeviceRegistry), so no
     // toast on top.
     meta: { silentError: true },
