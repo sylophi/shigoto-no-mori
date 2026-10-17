@@ -235,6 +235,31 @@ it("lets the one reserved commit while another process asks for the lock alone",
   }
 });
 
+// A lock file that isn't a lock database refuses every move, and lets
+// the changes run, as one this user can't write does.
+it("lets a change run, and refuses a move, when the lock file isn't a database", async () => {
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const { pointerFile } = yield* Paths.Paths;
+      mkdirSync(dirname(pointerFile), { recursive: true });
+      writeFileSync(
+        join(dirname(pointerFile), "data-dir.lock"),
+        "x".repeat(4096),
+      );
+      const lock = yield* DataDirLock.DataDirLock;
+      const changed = yield* Effect.exit(lock.guard(Effect.void));
+      const moved = yield* Effect.exit(lock.alone(Effect.void, "200 millis"));
+      return {
+        changed: Exit.isSuccess(changed),
+        refusal: Option.getOrUndefined(Exit.findErrorOption(moved)),
+      };
+    }),
+  )) as { changed: boolean; refusal: unknown };
+  assert.equal(result.changed, true);
+  assert.ok(result.refusal instanceof DataDirLock.DataDirLockUnavailable);
+  assert.match(String(result.refusal), /not a database/);
+});
+
 // The lock is the kernel's: a process killed while it holds it holds
 // it no more, with no pid read to tell.
 it("lets a move take the lock a killed process held", async () => {

@@ -34,6 +34,35 @@ const askedFor = (within: Duration.Input) => ({
   times: Math.ceil(Duration.toMillis(Duration.fromInputUnsafe(within)) / 50),
 });
 
+// What SQLite said under a failure: node's driver carries `errcode`
+// and `errstr`, Bun's `code` and its message. Broken is a file that
+// isn't a database, or one SQLite reads as corrupt.
+const nativeOf = (error: unknown) => {
+  const cause =
+    error instanceof SqlError.SqlError &&
+    Predicate.hasProperty(error.reason, "cause")
+      ? error.reason.cause
+      : error;
+  const errcode =
+    Predicate.hasProperty(cause, "errcode") && typeof cause.errcode === "number"
+      ? cause.errcode & 0xff
+      : undefined;
+  const code = Predicate.hasProperty(cause, "code") ? cause.code : undefined;
+  return {
+    broken:
+      errcode === 26 ||
+      errcode === 11 ||
+      code === "SQLITE_NOTADB" ||
+      code === "SQLITE_CORRUPT",
+    words:
+      Predicate.hasProperty(cause, "errstr") && typeof cause.errstr === "string"
+        ? cause.errstr
+        : cause instanceof Error
+          ? cause.message
+          : String(error),
+  };
+};
+
 // A change refused while a move, or the recovery of one, is under way.
 class DataDirMoving extends Schema.TaggedError<DataDirMoving>()(
   "DataDirMoving",
@@ -195,11 +224,11 @@ export const layer = (open: OpenDatabase) =>
               // database at all, makes every move refuse too, so the
               // change runs. Any other failure is this process's alone,
               // and a move elsewhere may hold the lock.
-              const broken = /not a database|malformed/i.test(error.message);
-              if (!broken && (yield* lockWritable)) {
+              const native = nativeOf(error);
+              if (!native.broken && (yield* lockWritable)) {
                 return yield* new DataDirLockUnavailable({
                   file,
-                  reason: error.message,
+                  reason: native.words,
                 });
               }
               yield* Effect.logWarning(
@@ -303,12 +332,18 @@ export const layer = (open: OpenDatabase) =>
               Effect.catchTag(
                 "SqlError",
                 (error) =>
-                  new DataDirLockUnavailable({ file, reason: error.message }),
+                  new DataDirLockUnavailable({
+                    file,
+                    reason: nativeOf(error).words,
+                  }),
               ),
               Effect.catchTag(
                 "PlatformError",
                 (error) =>
-                  new DataDirLockUnavailable({ file, reason: error.message }),
+                  new DataDirLockUnavailable({
+                    file,
+                    reason: nativeOf(error).words,
+                  }),
               ),
             ),
             effect,
