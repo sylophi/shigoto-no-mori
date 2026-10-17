@@ -1,6 +1,6 @@
-// Crash recovery for spawned scripts. `runningScripts` in ./index.ts is
-// memory only, so the quit's reap in host/process/layer.ts covers a clean quit
-// and nothing else: a force quit, a crash, or an OOM leaves every dev
+// Crash recovery for spawned scripts. The runs (../Scripts.ts) are
+// memory only, so the quit's stop of every run covers a clean quit and
+// nothing else: a force quit, a crash, or an OOM leaves every dev
 // server running, reparented to launchd, still holding its port, with
 // no UI left to stop it.
 //
@@ -34,7 +34,7 @@ import { signalTree } from "./process";
 // latency. Generous enough for a loaded machine, still orders of
 // magnitude tighter than any plausible pid reuse.
 const START_TOLERANCE_MS = 5_000;
-// SIGTERM -> grace -> SIGKILL, same shape as killRecord in ./index.ts.
+// SIGTERM -> grace -> SIGKILL, same shape as a run's stop (./runs.ts).
 // Shorter than the interactive grace: this runs at boot, and a script
 // that ignores SIGTERM shouldn't hold the sweep open.
 const ORPHAN_GRACE_MS = 2_000;

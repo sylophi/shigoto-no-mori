@@ -24,11 +24,7 @@ import {
   relocateProject,
 } from "@host/lib/projects";
 import * as CarryOver from "@shigomori/engine/CarryOver";
-import {
-  clearProjectDeleteInflight,
-  killScriptsForProject,
-  markProjectDeleteInflight,
-} from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import type { HostServices } from "@host/process/services";
 import * as Terrier from "@shigomori/engine/Terrier";
 import * as Worktrees from "@host/lib/Worktrees";
@@ -218,32 +214,30 @@ export const projectsHandlers = {
         // only backstops a stale renderer list.
         return yield* new TerrierProjectError({ name: removed.name });
       }
-      // The inflight mark blocks a renderer script run from spawning
-      // into the project for the whole removal, so the reap below
-      // snapshots a set nothing can add to.
-      yield* Effect.acquireUseRelease(
-        Effect.sync(() => markProjectDeleteInflight(id)),
-        () =>
-          Effect.gen(function* () {
-            // Registry drop and per-project state deletion (the icon
-            // cache entry included) run in the engine, as `sm projects
-            // remove` runs them.
-            yield* Ops.removeProject(id);
-            // A path terrier also registers doesn't leave the sidebar:
-            // dropping the registry entry just demotes it to a
-            // terrier-sourced project, and when the id carries over
-            // (registration minted the deterministic terrier id) nothing
-            // is actually going away. Read from the list the removal
-            // left behind, so the answer is the engine's own, not a guess
-            // at its rule.
-            const survived = (yield* refresh).some((p) => p.id === id);
-            // Reap scripts running in this project's worktrees: once the
-            // id is gone the renderer has no UI left to stop them, and
-            // the per-worktree delete path (which would normally kill
-            // them) can't be reached for an unknown project.
-            if (!survived) yield* killScriptsForProject(id);
-          }),
-        () => Effect.sync(() => clearProjectDeleteInflight(id)),
+      // The mark blocks a renderer script run from spawning into the
+      // project for the whole removal, so the stop below snapshots a set
+      // nothing can add to.
+      const scripts = yield* Scripts.Scripts;
+      yield* scripts.removingProject(
+        id,
+        Effect.gen(function* () {
+          // Registry drop and per-project state deletion (the icon
+          // cache entry included) run in the engine, as `sm projects
+          // remove` runs them.
+          yield* Ops.removeProject(id);
+          // A path terrier also registers doesn't leave the sidebar:
+          // dropping the registry entry just demotes it to a
+          // terrier-sourced project, and when the id carries over
+          // (registration minted the deterministic terrier id) nothing
+          // is actually going away. Read from the list the removal
+          // left behind, so the answer is the engine's own, not a guess
+          // at its rule.
+          const survived = (yield* refresh).some((p) => p.id === id);
+          // Once the id is gone the renderer has no UI left to stop
+          // this project's scripts, and no per-worktree delete can
+          // reach an unknown project.
+          if (!survived) yield* scripts.stopProject(id);
+        }),
       );
     }),
 

@@ -29,13 +29,7 @@ import {
   findWorktreePath,
   listWorktrees,
 } from "@host/lib/projects";
-import {
-  assertWorktreeMutable,
-  getRunningScriptWorktrees,
-  killScriptsForWorktree,
-  withDeleteInflight,
-  withDeletesInflight,
-} from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import {
   retitleBranchPullRequest,
   refreshProjectPullRequests,
@@ -184,9 +178,9 @@ const refuseRunningWork = Effect.fn("worktrees.refuseRunningWork")(function* (
   verb: "move" | "rename",
 ) {
   const scripts =
-    getRunningScriptWorktrees().find(
-      (entry) => entry.worktreeId === worktree.id,
-    )?.scriptCount ?? 0;
+    (yield* Scripts.Scripts)
+      .worktrees()
+      .find((entry) => entry.worktreeId === worktree.id)?.scriptCount ?? 0;
   const open = yield* Stream.runHead((yield* Terminals).list);
   const terminals = Option.getOrElse(open, () => []).filter(({ owner, cwd }) =>
     owner.kind === "worktree"
@@ -344,6 +338,7 @@ export const worktreesHandlers = {
         return yield* Ops.describeWorktree(project.id, worktreeId);
       }
       yield* refuseRunningWork(worktree, "move");
+      const { withDeleteInflight } = yield* Scripts.Scripts;
       return yield* withDeleteInflight(
         worktreeId,
         "This worktree is already being removed or moved.",
@@ -363,6 +358,7 @@ export const worktreesHandlers = {
         return yield* Ops.describeWorktree(project.id, worktreeId);
       }
       yield* refuseRunningWork(worktree, "rename");
+      const { withDeleteInflight } = yield* Scripts.Scripts;
       return yield* withDeleteInflight(
         worktreeId,
         "This worktree is already being removed or moved.",
@@ -380,6 +376,8 @@ export const worktreesHandlers = {
       // A mirror's stop names its copy by the id it may have had before a
       // move.
       const worktreeId = yield* currentWorktreeId(projectId, named);
+      const { assertWorktreeMutable, withDeleteInflight, worktrees } =
+        yield* Scripts.Scripts;
       // Local delete kills scripts by design (withDeleteInflight reaps
       // them). The transplant orchestrator refuses instead, since its
       // teardown must never take down work still running on the source
@@ -387,7 +385,7 @@ export const worktreesHandlers = {
       // ignorant of the flag. "scripts-running" is a stable marker the
       // orchestrator and the UI match on, not prose.
       if (refuseRunningScripts) {
-        const running = getRunningScriptWorktrees().find(
+        const running = worktrees().find(
           (entry) => entry.worktreeId === worktreeId,
         );
         if (running !== undefined) {
@@ -469,6 +467,8 @@ export const worktreesHandlers = {
       if (!cleanup) return yield* new NoMergedLayerError();
       const ids = cleanup.worktrees.map((identity) => identity.id);
       const busy = "A worktree of this stack is already being removed.";
+      const { assertWorktreeMutable, withDeletesInflight, stopWorktree } =
+        yield* Scripts.Scripts;
       for (const id of ids) yield* assertWorktreeMutable(id, busy);
       for (const id of ids) {
         yield* HostPushes.push(worktreesContract, "removal", {
@@ -497,7 +497,7 @@ export const worktreesHandlers = {
             removed = result.removed;
             yield* Effect.forEach(
               removed.filter((id) => !ids.includes(id)),
-              killScriptsForWorktree,
+              stopWorktree,
               { concurrency: "unbounded", discard: true },
             );
           }),
@@ -855,6 +855,7 @@ export const worktreesHandlers = {
 } satisfies EffectHandlers<
   typeof worktreesContract,
   HandlerContext,
+  | Scripts.Scripts
   | Terminals
   | GithubCli
   | PeerReach

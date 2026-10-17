@@ -199,7 +199,12 @@ async function startLoopback(options: {
   registrar.view(controlContract, options.transfers);
   // One call of the shell's session, which only the shell's token opens.
   registrar.serveOne(sessionContract, "busy", () =>
-    Effect.succeed({ runningScripts: 0, inflightDeletes: 0 }),
+    Effect.succeed({
+      runningScripts: 0,
+      inflightDeletes: 0,
+      engineChanges: 0,
+      busyTerminals: 0,
+    }),
   );
   // The proof file's host services, which the handlers and transfers
   // answer on.
@@ -733,7 +738,12 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
   const answered = await callAfterHello(port, shellToken, "session:busy");
   assert.deepEqual(
     answered,
-    Exit.succeed({ runningScripts: 0, inflightDeletes: 0 }),
+    Exit.succeed({
+      runningScripts: 0,
+      inflightDeletes: 0,
+      engineChanges: 0,
+      busyTerminals: 0,
+    }),
   );
 });
 

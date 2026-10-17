@@ -18,6 +18,7 @@ import * as Engine from "../../host/lib/Engine.ts";
 import * as BackgroundFetch from "../../host/lib/BackgroundFetch.ts";
 import * as CliShell from "../../host/lib/cli/shell.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
+import * as Scripts from "../../host/lib/Scripts.ts";
 import * as ScriptRuns from "../../host/lib/scripts/ScriptRuns.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
@@ -58,7 +59,8 @@ const engine = Engine.layer({
 // (host/process/services.ts) are here too, for a proof that runs a
 // handler or serves one (runHost, hostContext).
 const runtime = ManagedRuntime.make(
-  Terminals.layer({ start: terminalStart }).pipe(
+  Scripts.layer({ hurried: () => false, env: () => process.env }).pipe(
+    Layer.provideMerge(Terminals.layer({ start: terminalStart })),
     Layer.provideMerge(
       Layer.mergeAll(
         Ports.layer,

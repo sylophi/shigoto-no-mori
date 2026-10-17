@@ -30,7 +30,7 @@ import {
   refreshProjectPullRequests,
 } from "@host/lib/githubCli/pullRequests";
 import { loadProjects } from "@host/lib/projects";
-import { runningScriptWorktreeIds } from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import type { broadcastAll } from "@host/process/wires";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
@@ -106,6 +106,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     });
     const ageOf = (at: Stamp) =>
       Math.max(now() - at.elapsed, clock.currentTimeMillisUnsafe() - at.wall);
+    const scripts = yield* Scripts.Scripts;
     // What a pass reaches, as the layer finds it.
     const context = yield* Effect.context<FetchServices>();
     const runs = yield* FiberSet.make();
@@ -136,7 +137,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         const identities = yield* Ops.listWorktreeIdentities({ projectId });
         const { pulled, failed } = yield* sweepAutoPull(
           identities,
-          runningScriptWorktreeIds(),
+          new Set(scripts.worktrees().map(({ worktreeId }) => worktreeId)),
         );
         for (const { worktree, commits } of pulled) {
           log.info(

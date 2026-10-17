@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
 import { runHost } from "./lib/hostRuntime.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
@@ -24,8 +25,7 @@ const Ops = await import("../host/lib/engineOps.ts");
 const listWorktrees = (projectId: string) =>
   runHost(Ops.listWorktrees(projectId));
 const { worktreesHandlers } = await import("../host/ipc/modules/worktrees.ts");
-const { killScriptsForWorktree, startScript } =
-  await import("../host/lib/scripts/index.ts");
+const { Scripts } = await import("../host/lib/Scripts.ts");
 
 it("refuses while a script runs there, then renames under a new id", async () => {
   const project = join(sandbox, "project");
@@ -38,19 +38,21 @@ it("refuses while a script runs there, then renames under a new id", async () =>
   assert.ok(row, "the worktree is listed");
 
   await runHost(
-    startScript({
-      command: 'node -e "setTimeout(() => {}, 30000)"',
-      slot: { kind: "package", name: "sleep" },
-      worktree: { id: row.id, name: "fox", branch: "fox", path: worktree },
-      project: { id: projectId, path: project, name: "project" },
-      scriptEnv: {
-        projectBranch: "main",
-        defaultBranch: "main",
-        title: "",
-        description: "",
-      },
-      notify: () => {},
-    }),
+    Effect.flatMap(Scripts, (scripts) =>
+      scripts.start({
+        command: 'node -e "setTimeout(() => {}, 30000)"',
+        slot: { kind: "package", name: "sleep" },
+        worktree: { id: row.id, name: "fox", branch: "fox", path: worktree },
+        project: { id: projectId, path: project, name: "project" },
+        scriptEnv: {
+          projectBranch: "main",
+          defaultBranch: "main",
+          title: "",
+          description: "",
+        },
+        notify: () => {},
+      }),
+    ),
   );
   try {
     await assert.rejects(
@@ -66,7 +68,9 @@ it("refuses while a script runs there, then renames under a new id", async () =>
     );
     assert.ok(existsSync(worktree), "a refused rename moves nothing");
   } finally {
-    await runHost(killScriptsForWorktree(row.id));
+    await runHost(
+      Effect.flatMap(Scripts, (scripts) => scripts.stopWorktree(row.id)),
+    );
   }
 
   const renamed = await runHost(

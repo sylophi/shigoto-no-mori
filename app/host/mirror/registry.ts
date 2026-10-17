@@ -2,7 +2,7 @@
 // the start orchestration writes on a session, the raw shapes the daemon
 // reports, and the sweeps over its sessions. Separate from the mirror
 // handler module so the worktree tombstone protocol
-// (host/lib/scripts/index.ts withDeleteInflight) can stop a worktree's
+// (host/lib/scripts/removing.ts) can stop a worktree's
 // mirrors without importing that module (which reaches sync, which
 // reaches worktrees).
 import * as Effect from "effect/Effect";
@@ -325,7 +325,7 @@ export const whileRecreating = <A, E, R>(
     () => Effect.sync(() => recreating.delete(session)),
   );
 
-// Worktrees an in-app delete or move is working on (host/lib/scripts
+// Worktrees an in-app delete or move is working on (Scripts
 // withDeletesInflight): their root vanishing is that mutation, whose
 // own follow-up stops or moves their mirrors, not a removal behind the
 // app's back. Counted, since a stack cleanup holds several at once.

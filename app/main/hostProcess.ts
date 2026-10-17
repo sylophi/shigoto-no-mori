@@ -116,7 +116,12 @@ const KILL_GRACE_MS = 5_000;
 const CLEAR_WITHIN_MS = 2_000;
 // How long a quit or an update waits to hear whether the host is busy.
 const BUSY_DEADLINE = "3 seconds";
-const IDLE = { runningScripts: 0, inflightDeletes: 0 } as const;
+const IDLE = {
+  runningScripts: 0,
+  inflightDeletes: 0,
+  engineChanges: 0,
+  busyTerminals: 0,
+} as const;
 
 let child: UtilityProcess | null = null;
 let quitting = false;

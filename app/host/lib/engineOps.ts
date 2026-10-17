@@ -79,11 +79,7 @@ import {
   ConvertRefusedError,
   isEntityGoneError,
 } from "@shigomori/contracts/errors";
-import {
-  clearCreateInflight,
-  cliScriptStream,
-  markCreateInflight,
-} from "@host/lib/scripts";
+import * as HostScripts from "@host/lib/Scripts";
 import { shellQuote } from "@host/lib/util/shellQuote";
 import { log } from "@shared/log";
 import {
@@ -124,7 +120,7 @@ function scriptEventOf(
 
 // A reporter that forwards the scripts a removal runs and nothing else.
 const scriptReporter = (
-  scripts: Effect.Success<ReturnType<typeof cliScriptStream>>,
+  scripts: HostScripts.LifecycleRuns,
 ): Landing.Reporter => ({
   report: (event) =>
     Effect.sync(() => {
@@ -180,7 +176,8 @@ const runStreamingCreate = Effect.fnUntraced(function* (
   // The worktree once "created" is in, or why the run ended before it.
   const made = yield* Deferred.make<Worktree, CreateFailure>();
   let created: Worktree | null = null;
-  const scripts = yield* cliScriptStream(notify.notifyScript);
+  const hostScripts = yield* HostScripts.Scripts;
+  const scripts = yield* hostScripts.lifecycleRuns(notify.notifyScript);
   // The host's create mark (which refuses a delete or move) opens and
   // closes with the phases the page disables its delete button on,
   // so the two agree. A run that dies mid-lifecycle never sends its
@@ -190,10 +187,10 @@ const runStreamingCreate = Effect.fnUntraced(function* (
     if (phase === "idle") {
       if (!phaseOpen) return;
       phaseOpen = false;
-      clearCreateInflight(id);
+      hostScripts.clearCreate(id);
     } else if (!phaseOpen) {
       phaseOpen = true;
-      markCreateInflight(id);
+      hostScripts.markCreate(id);
     }
     notify.notifyPhase({ projectId: project.id, worktreeId: id, phase });
   };
@@ -359,7 +356,9 @@ export const deleteWorktree = Effect.fnUntraced(function* (
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
   opts: { timeoutMs?: number } = {},
 ) {
-  const scripts = yield* cliScriptStream(notify.notifyScript);
+  const scripts = yield* (yield* HostScripts.Scripts).lifecycleRuns(
+    notify.notifyScript,
+  );
   const removal = Effect.gen(function* () {
     const located = yield* locate(project.id, input.worktreeId);
     return yield* (yield* Worktrees.Worktrees)
@@ -404,7 +403,9 @@ export const deleteStack = Effect.fnUntraced(function* (
   input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ) {
-  const scripts = yield* cliScriptStream(notify.notifyScript);
+  const scripts = yield* (yield* HostScripts.Scripts).lifecycleRuns(
+    notify.notifyScript,
+  );
   const doc = yield* asChange(
     Effect.gen(function* () {
       const located = yield* locate(project.id, input.worktreeId);
@@ -549,7 +550,7 @@ export const addProject = Effect.fnUntraced(function* (path: string) {
 });
 
 // The command that runs a worktree's script (package.json, justfile,
-// Makefile), and the SHIGOMORI_* values startScript can't derive, for
+// Makefile), and the SHIGOMORI_* values a run can't derive, for
 // the app's registry to spawn (it keeps owning streaming, cancel, and
 // quit-time reaping).
 // The engine picks the tool that runs it (the manager the lockfile
