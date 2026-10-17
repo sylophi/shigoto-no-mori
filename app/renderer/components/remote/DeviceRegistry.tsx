@@ -10,10 +10,7 @@
 // going away updates without a refetch.
 import { credentialRevoked } from "@shared/remote/supervisor";
 import { useIsMutating } from "@tanstack/react-query";
-import {
-  errorMessageOf,
-  isHubRateLimitedError,
-} from "@shigomori/contracts/errors";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import { isHubUnreachable } from "@shared/account/service";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
@@ -147,12 +144,9 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
         )
       }
       list={
-        // A first read the hub rate-limited waits its minute for the one
-        // more ask: say why meanwhile rather than load for that long.
-        devicesQuery.isLoading &&
-        !isHubRateLimitedError(devicesQuery.failureReason)
+        devicesQuery.isLoading
           ? { state: "loading" }
-          : devicesQuery.isError || devicesQuery.isLoading
+          : devicesQuery.isError
             ? {
                 state: "failed",
                 // Nothing when the banner above already named the
@@ -160,9 +154,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
                 // words and read as a second, separate problem.
                 message:
                   blockedMessage === null
-                    ? describeListError(
-                        devicesQuery.error ?? devicesQuery.failureReason,
-                      )
+                    ? describeListError(devicesQuery.error)
                     : null,
               }
             : {

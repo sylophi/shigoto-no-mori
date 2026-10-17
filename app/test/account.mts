@@ -56,6 +56,8 @@ import {
   isHubRateLimitedError,
 } from "@shigomori/contracts/errors";
 import { createAppQueryClient } from "@/lib/queryClientOptions";
+import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { deriveAccountId } from "../shared/account/token.ts";
 import { deviceKeyPair, toBase64Url } from "../shared/crypto/deviceKey.ts";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
@@ -400,39 +402,41 @@ it("service: every call the hub's rate limiter turns away says so, with the hub'
   );
 });
 
-it("a rate-limited read is asked once more after the hub's Retry-After, and a rate-limited write is not replayed", async () => {
+it("a device list the hub rate-limited is not asked again until its Retry-After passes, however many ask, and a rate-limited write is not replayed", async () => {
   vi.useFakeTimers();
   try {
-    const client = createAppQueryClient();
-    let reads = 0;
-    const read = client.fetchQuery({
-      queryKey: ["devices"],
-      queryFn: async () => {
-        reads += 1;
-        if (reads === 1)
-          throw new HubRateLimitedError({ retryAfterSeconds: 60 });
-        return "listed";
+    const client = createAppQueryClient(() => undefined);
+    let asks = 0;
+    let limited = true;
+    // oxlint-disable-next-line shigomori/no-double-cast -- a stand-in with the one call the list makes
+    const api = {
+      run: async () => {
+        asks += 1;
+        if (limited) throw new HubRateLimitedError({ retryAfterSeconds: 60 });
+        return [];
       },
-    });
-    await vi.advanceTimersByTimeAsync(59_000);
-    assert.equal(reads, 1, "asked again before the hub's Retry-After");
-    await vi.advanceTimersByTimeAsync(1_000);
-    assert.equal(await read, "listed");
-    assert.equal(reads, 2);
-    // Turned away twice: the second answer is the read's.
-    let limited = 0;
-    const twice = client
-      .fetchQuery({
-        queryKey: ["devices", "again"],
-        queryFn: async () => {
-          limited += 1;
-          throw new HubRateLimitedError({ retryAfterSeconds: 60 });
-        },
-      })
-      .catch((error: unknown) => error);
-    await vi.advanceTimersByTimeAsync(10 * 60_000);
-    assert.ok((await twice) instanceof HubRateLimitedError);
-    assert.equal(limited, 2, "asked more than once more");
+      account: { listDevices: () => undefined },
+    } as unknown as RendererApi;
+    const read = () =>
+      client
+        .fetchQuery({ ...accountDevicesQueryOptions(api), staleTime: 0 })
+        .then(
+          () => "listed",
+          (error: unknown) => error,
+        );
+    assert.ok((await read()) instanceof HubRateLimitedError);
+    assert.equal(asks, 1, "a rate-limited read was retried");
+    // A burst inside the hub's minute: answered with the stored refusal,
+    // and nothing asks the hub.
+    for (let push = 0; push < 10; push++) {
+      assert.ok((await read()) instanceof HubRateLimitedError);
+      await vi.advanceTimersByTimeAsync(5_000);
+    }
+    assert.equal(asks, 1, "the hub was asked inside its Retry-After");
+    limited = false;
+    await vi.advanceTimersByTimeAsync(10_000);
+    assert.equal(await read(), "listed");
+    assert.equal(asks, 2);
     let writes = 0;
     await client
       .getMutationCache()

@@ -80,20 +80,16 @@ export function createAppQueryClient(
         // an in-flight query) is deterministic, so retrying only keeps the
         // page waiting on an answer that cannot change. A command refusal
         // is deterministic too: the grant moves on the host's push, never
-        // on a retry, and so is a peer not sharing. Keep the default three
+        // on a retry, and so is a peer not sharing. A read the hub's rate
+        // limiter turned away waits out the hub's own word instead
+        // (accountDevicesQueryOptions). Keep the default three
         // retries for everything else. A read cut by this machine's own
         // host going away asks again for as long as it takes: the ask
         // waits for the link to land on the host that replaces it.
-        // A read the hub's rate limiter turned away is asked once more,
-        // after as long as the hub said; a mutation is never retried, so
-        // no write is replayed.
-        retryDelay: (failureCount, error) =>
-          isHubRateLimitedError(error) && error.retryAfterSeconds !== undefined
-            ? error.retryAfterSeconds * 1000
-            : Math.min(1000 * 2 ** failureCount, 30_000),
         retry: (failureCount, error) =>
           isOwnAppDrop(error) ||
-          (failureCount < (isHubRateLimitedError(error) ? 1 : 3) &&
+          (failureCount < 3 &&
+            !isHubRateLimitedError(error) &&
             !isEntityGoneError(error) &&
             !isCommandRefusedError(error) &&
             !isNotSharingError(error)),
