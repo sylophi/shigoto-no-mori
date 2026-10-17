@@ -1936,7 +1936,9 @@
   "session:busy": {
     "success": {
       "runningScripts": 3,
-      "inflightDeletes": 1
+      "inflightDeletes": 1,
+      "engineChanges": 2,
+      "busyTerminals": 1
     }
   },
   "session:guideLaunch": {

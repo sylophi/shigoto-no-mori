@@ -27,7 +27,7 @@ import * as Schema from "effect/Schema";
 import * as Ops from "./engineOps";
 import * as Git from "@shigomori/engine/Git";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
-import { clearDeleteInflight, markDeleteInflight } from "./scripts";
+import * as Scripts from "./Scripts";
 import { dataDir } from "@shared/paths";
 
 // How long one worktree's teardown may run during a nuke, as a move's
@@ -83,7 +83,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   readonly onProgress: (
     progress: NukeProgress,
   ) => Effect.Effect<void, never, P>;
-  // Every script's kill chain, waited for (host/lib/scripts).
+  // Every script's kill chain, waited for (Scripts.stopAll).
   readonly killAllScripts: Effect.Effect<void, never, R>;
   // Every terminal closed, none saved for the next start.
   readonly closeTerminals: Effect.Effect<void>;
@@ -133,8 +133,9 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
     { concurrency: "unbounded" },
   );
   const marked = perProject.flatMap(({ targets }) => targets.map((t) => t.id));
-  for (const id of marked) markDeleteInflight(id);
+  const scripts = yield* Scripts.Scripts;
   yield* Effect.gen(function* () {
+    yield* scripts.deleting(marked);
     let removed = 0;
     yield* onProgress({ phase: "worktrees", done: 0, total: marked.length });
     // One removal at a time within a project: each one rewrites the
@@ -170,13 +171,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
         }),
       { concurrency: "unbounded", discard: true },
     );
-  }).pipe(
-    Effect.ensuring(
-      Effect.sync(() => {
-        for (const id of marked) clearDeleteInflight(id);
-      }),
-    ),
-  );
+  }).pipe(Effect.scoped);
 
   yield* onProgress({ phase: "hooks" });
   left.push(...(yield* options.uninstall));

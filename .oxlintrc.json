@@ -67,7 +67,6 @@
     },
     {
       "files": [
-        "app/host/lib/scripts/index.ts",
         "app/main/hostProcess.ts",
         "packages/engine/src/worktrees/moving.ts",
         "app/host/lib/githubCli/pullRequests.ts",

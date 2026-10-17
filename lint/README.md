@@ -39,8 +39,8 @@ platform directly.
 `Date.now()` the time-and-liveness hardening is replacing, each taken
 off the list by the pull request that changes it:
 
-- Durable facts and process identity: `app/host/lib/scripts/index.ts`,
-  `app/main/hostProcess.ts`, `packages/engine/src/worktrees/moving.ts`.
+- Durable facts and process identity: `app/main/hostProcess.ts`,
+  `packages/engine/src/worktrees/moving.ts`.
 - In-memory TTLs and small gates:
   `app/host/lib/githubCli/pullRequests.ts`,
   `app/host/lib/sync/sourceLink.ts`, `app/host/mirror/gitFollow.ts`,

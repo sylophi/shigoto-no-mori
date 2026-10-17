@@ -19,14 +19,7 @@ import * as Shell from "@host/lib/Shell";
 import * as Loopback from "@host/socket/Loopback";
 import { refresh } from "@host/lib/projects";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
-import {
-  getInflightDeleteIds,
-  killAllScripts,
-  killScriptsForWorktree,
-  markShuttingDown,
-  signalAllScriptsBestEffort,
-} from "@host/lib/scripts";
-import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
+import * as Scripts from "@host/lib/Scripts";
 import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
@@ -76,25 +69,6 @@ import { hostFacts } from "./facts";
 import * as Graph from "./graph";
 import * as MigrationShell from "./migration";
 
-// What the user started through a script must not outlive the app,
-// orphaned to launchd. A delete in flight loses its cleanup scripts
-// first, which leaves the worktree directory whole. A hurried quit
-// signals and moves on: an update's installer is waiting on this
-// process to exit, and the data-folder move behind a relaunch has
-// already reaped. A script that ignores the signal may outlive it,
-// which an explicit update accepts.
-const scripts = (hurried: () => boolean) =>
-  onQuit(
-    "the scripts",
-    Effect.suspend(() => {
-      if (hurried()) return signalAllScriptsBestEffort;
-      return Effect.forEach(getInflightDeleteIds(), killScriptsForWorktree, {
-        concurrency: "unbounded",
-        discard: true,
-      }).pipe(Effect.andThen(killAllScripts({ graceMs: 1_500 })));
-    }),
-  );
-
 // The sweeps and watchers read the project list synchronously, from the
 // snapshot host/lib/projects keeps of the engine's list.
 const firstProjectList = Layer.effectDiscard(
@@ -143,7 +117,7 @@ function onExternalStateChange() {
   // The app's only chance to notice an `sm rm` run in a terminal, which
   // leaves a script the app started there running in a deleted cwd and
   // holding its port.
-  void Graph.run(reapScriptsForRemovedWorktrees())
+  void Graph.run(Effect.flatMap(Scripts.Scripts, (it) => it.reapRemoved))
     .then((removed) => {
       for (const worktree of removed) {
         broadcastAll(scriptsContract, "stoppedForRemovedWorktree", {
@@ -213,7 +187,10 @@ const mirrorGateway = lifetime(
 
 // New scripts are refused from the moment the quit begins, so none
 // starts after the reap at the end has looked.
-const scriptGate = onQuit("the script gate", Effect.sync(markShuttingDown));
+const scriptGate = onQuit(
+  "the script gate",
+  Effect.flatMap(Scripts.Scripts, (it) => it.refuseNew),
+);
 
 // What lets go of the data folder before a move takes it away: the
 // store, the updater's bridge and the loopback's address file.
@@ -284,7 +261,11 @@ const scriptsAndFoundation = (options: {
   // Every file-sync child, the daemon and the serve children a peer's
   // streams opened.
   FileSyncRunner.layer.pipe(
-    Layer.provideMerge(scripts(options.hurried)),
+    // What the user started through a script must not outlive the app,
+    // orphaned to launchd: its close stops every run.
+    Layer.provideMerge(
+      Scripts.layer({ hurried: options.hurried, env: () => process.env }),
+    ),
     // A crash, a force quit or an OOM skips the quit's reap, so what the
     // last run left running is reaped here. It claims the records before
     // any script can spawn, and kills in the background.

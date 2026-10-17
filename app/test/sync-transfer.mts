@@ -79,11 +79,7 @@ import * as Fiber from "effect/Fiber";
 import { hostContext, runHost, type Services } from "./lib/hostRuntime.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import * as Ops from "@host/lib/engineOps";
-import {
-  getRunningScriptWorktrees,
-  killScriptsForWorktree,
-  startScript,
-} from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
 import * as Git from "@shigomori/engine/Git";
 import { followDescription as followDescriptionOn } from "@host/lib/sync/worktreeDescription";
@@ -1109,8 +1105,9 @@ it("transplant (scripts running): the teardown refuses with the scripts-running 
   const wt5Id = worktreeIdFromPath(wt5Path);
   // A REAL long-lived script through the app's registry (the registry
   // is what the refusal flag consults), reaped in the finally below.
+  const scripts = await runHost(Scripts.Scripts);
   await runHost(
-    startScript({
+    scripts.start({
       command: 'node -e "setTimeout(() => {}, 30000)"',
       slot: { kind: "package", name: "sleep" },
       worktree: { id: wt5Id, name: "wt5", branch: "feature5", path: wt5Path },
@@ -1150,12 +1147,12 @@ it("transplant (scripts running): the teardown refuses with the scripts-running 
       "the source worktree must survive a refused teardown",
     );
     assert.equal(
-      getRunningScriptWorktrees().some((w) => w.worktreeId === wt5Id),
+      scripts.worktrees().some((w) => w.worktreeId === wt5Id),
       true,
       "the refused teardown must leave the source's scripts running",
     );
   } finally {
-    await runHost(killScriptsForWorktree(wt5Id));
+    await runHost(scripts.stopWorktree(wt5Id));
   }
 });
 

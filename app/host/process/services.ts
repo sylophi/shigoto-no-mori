@@ -8,6 +8,7 @@ import type * as FileSync from "@host/fileSync/FileSync";
 import type * as CliShell from "@host/lib/cli/shell";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
 import type * as Ports from "@host/lib/Ports";
+import type * as Scripts from "@host/lib/Scripts";
 import type * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import type * as ScriptRuns from "@host/lib/scripts/ScriptRuns";
 import type * as ScriptChanges from "@host/lib/scripts/ScriptChanges";
@@ -39,6 +40,7 @@ export type HostServices =
   | Views.Services
   | Ports.Ports
   | OrphanSweep.OrphanSweep
+  | Scripts.Scripts
   | ScriptRuns.ScriptRuns
   | ScriptChanges.ScriptChanges
   | Sharing.Sharing

@@ -40,7 +40,7 @@ import * as Views from "../host/lib/Views.ts";
 import * as Sharing from "../host/lib/Sharing.ts";
 import { listWorktrees } from "../host/lib/projects/index.ts";
 import { addProject } from "../host/lib/projects/index.ts";
-import { killAllScripts, startScript } from "../host/lib/scripts/index.ts";
+import * as Scripts from "../host/lib/Scripts.ts";
 import { sharedSettingsCopy } from "../host/lib/sharedSettings/store.ts";
 import { initDataDirAt } from "../shared/paths.ts";
 import type { MirrorEngine } from "../host/mirror/MirrorEngine.ts";
@@ -75,7 +75,11 @@ beforeAll(async () => {
   git(repo, "commit", "-q", "-m", "a");
 });
 afterAll(async () => {
-  await runHost(killAllScripts({ graceMs: 0 }));
+  await runHost(
+    Effect.flatMap(Scripts.Scripts, (scripts) =>
+      scripts.stopAll({ graceMs: 0 }),
+    ),
+  );
   await teardown();
 });
 
@@ -407,13 +411,15 @@ it("script runs: a run started shows, on scripts:changed", async () => {
       yield* quiet;
       const runId = yield* Effect.promise(() =>
         runHost(
-          startScript({
-            command: "sleep 60",
-            slot: { kind: "package", name: "views" },
-            worktree: { id: "wt", name: "wt", branch: "main", path: repo },
-            project: { id: "p", path: repo, name: "p" },
-            notify: () => {},
-          }),
+          Effect.flatMap(Scripts.Scripts, (scripts) =>
+            scripts.start({
+              command: "sleep 60",
+              slot: { kind: "package", name: "views" },
+              worktree: { id: "wt", name: "wt", branch: "main", path: repo },
+              project: { id: "p", path: repo, name: "p" },
+              notify: () => {},
+            }),
+          ),
         ),
       );
       yield* push(channel(scriptsContract, "changed"));

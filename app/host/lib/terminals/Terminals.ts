@@ -450,7 +450,13 @@ const make = <R>(options: {
       const scope = yield* Scope.fork(layerScope);
       return yield* Effect.gen(function* () {
         const pty = yield* spawn(
-          { command: null, cwd: terminal.cwd, env, ...size },
+          {
+            command: null,
+            cwd: terminal.cwd,
+            place: terminal.owner.kind === "worktree" ? "worktree" : "folder",
+            env,
+            ...size,
+          },
           () => STOPPING,
         ).pipe(
           Scope.provide(scope),

@@ -13,7 +13,7 @@ import * as Ops from "@host/lib/engineOps";
 import { leftIf, nukeEverything } from "@host/lib/nuke";
 import * as Terminals from "@host/lib/terminals/Terminals";
 import { moveDataDir, sessionPlace } from "@host/lib/dataDirMove";
-import { getBusyOperations, killAllScripts } from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import { busyRemoteRefusal } from "@shared/busy";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as HostPushes from "@host/lib/HostPushes";
@@ -79,6 +79,7 @@ export const runtimeHandlers = {
       const unattended = isRemoteCaller(ctx);
       const shell = yield* Shell.Shell;
       const holders = yield* DataDirHolders;
+      const scripts = yield* Scripts.Scripts;
       // One move at a time, now that the local window is no longer the
       // only caller: two would share the staged pointer file and undo
       // each other's re-key.
@@ -89,7 +90,7 @@ export const runtimeHandlers = {
       }
       if (unattended) {
         // It reaps every running script, and nobody here was asked.
-        const refusal = busyRemoteRefusal(getBusyOperations(), "move");
+        const refusal = busyRemoteRefusal(yield* scripts.busy, "move");
         if (refusal !== null) {
           return yield* new MoveRefusedError({ reason: refusal });
         }
@@ -98,7 +99,7 @@ export const runtimeHandlers = {
       let watchersStopped = false;
       yield* moveDataDir(parentDir, {
         place: yield* sessionPlace,
-        killAllScripts: killAllScripts(),
+        killAllScripts: scripts.stopAll(),
         movesUnderWay: (yield* Moves.Moves).underWay,
         beforeMove: Effect.suspend(() => {
           watchersStopped = true;
@@ -137,11 +138,12 @@ export const runtimeHandlers = {
     }),
 
   nuke: () =>
-    Effect.flatMap(Terminals.Terminals, (terminals) =>
-      nukeEverything({
+    Effect.gen(function* () {
+      const terminals = yield* Terminals.Terminals;
+      return yield* nukeEverything({
         onProgress: (progress) =>
           HostPushes.push(runtimeContract, "nukeProgress", progress),
-        killAllScripts: killAllScripts(),
+        killAllScripts: (yield* Scripts.Scripts).stopAll(),
         closeTerminals: terminals.closeEvery,
         uninstall: Effect.map(
           Effect.all([
@@ -153,8 +155,8 @@ export const runtimeHandlers = {
           ]),
           (lists) => lists.flat(),
         ),
-      }),
-    ),
+      });
+    }),
 } satisfies EffectHandlers<
   typeof runtimeContract,
   HandlerContext,

@@ -24,20 +24,30 @@ import { errorWordsOf } from "@host/lib/errorWords";
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { signalTree, signalTreeBestEffort } from "./process";
 
-// No process could be started: a missing login shell, or a PTY that
-// could not be allocated. The console shows the message.
+// No process could be started: a missing folder to start in or login
+// shell, or a PTY that could not be allocated. The console shows the
+// message.
 export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
   "PtySpawnError",
   {
     shell: Schema.String,
-    reason: Schema.Literals(["shell-missing", "failed"]),
+    cwd: Schema.String,
+    place: Schema.Literals(["worktree", "folder"]),
+    reason: Schema.Literals(["cwd-missing", "shell-missing", "failed"]),
     cause: Schema.Defect(),
   },
 ) {
   override get message(): string {
-    return this.reason === "shell-missing"
-      ? `Login shell not found: ${this.shell}`
-      : "The script's terminal could not be started.";
+    switch (this.reason) {
+      case "cwd-missing":
+        return this.place === "worktree"
+          ? `Worktree directory is missing: ${this.cwd}`
+          : `The folder is missing: ${this.cwd}`;
+      case "shell-missing":
+        return `Login shell not found: ${this.shell}`;
+      case "failed":
+        return "The script's terminal could not be started.";
+    }
   }
 }
 
@@ -46,6 +56,8 @@ export interface SpawnOptions {
   // interactive (a terminal's).
   readonly command: string | null;
   readonly cwd: string;
+  // Whether `cwd` is a worktree's, as the words for it missing say.
+  readonly place: "worktree" | "folder";
   readonly env: NodeJS.ProcessEnv;
   readonly cols: number;
   readonly rows: number;
@@ -109,15 +121,23 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
 ) {
   const { shell, args: shellArgs } = yield* (yield* Lifecycle.Lifecycle)
     .loginShell;
-  // node-pty's helper execs the shell in the child and exits 1 without
-  // a word if that fails, which would show as a bare "exit 1".
-  const there = yield* (yield* FileSystem.FileSystem)
-    .exists(shell)
-    .pipe(Effect.orElseSucceed(() => false));
-  if (!there) {
+  // node-pty's helper does the chdir and execs the shell in the child,
+  // and exits 1 without a word if either fails, which would show as a
+  // bare "exit 1".
+  const fs = yield* FileSystem.FileSystem;
+  const exists = (path: string) =>
+    fs.exists(path).pipe(Effect.orElseSucceed(() => false));
+  const missing = !(yield* exists(opts.cwd))
+    ? "cwd-missing"
+    : !(yield* exists(shell))
+      ? "shell-missing"
+      : null;
+  if (missing !== null) {
     return yield* new PtySpawnError({
       shell,
-      reason: "shell-missing",
+      cwd: opts.cwd,
+      place: opts.place,
+      reason: missing,
       cause: undefined,
     });
   }
@@ -166,7 +186,14 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         }
         return spawned;
       },
-      catch: (cause) => new PtySpawnError({ shell, reason: "failed", cause }),
+      catch: (cause) =>
+        new PtySpawnError({
+          shell,
+          cwd: opts.cwd,
+          place: opts.place,
+          reason: "failed",
+          cause,
+        }),
     }),
     (spawned) =>
       Effect.gen(function* () {

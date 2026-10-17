@@ -7,10 +7,9 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
-import { getBusyOperations } from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import * as Graph from "./graph";
 import type { HostServices } from "./services";
-import * as Terminals from "@host/lib/terminals/Terminals";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import * as Tunnel from "@host/direct/Tunnel";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
@@ -30,12 +29,6 @@ import {
   probeRemoteConnections,
   registerLoopbackContract,
 } from "./wires";
-
-// What a quit asks about: the terminals busy right now.
-const busyTerminals = () =>
-  Graph.run(Effect.flatMap(Terminals.Terminals, (it) => it.busy)).catch(
-    () => 0,
-  );
 
 // The root's own Promise work, for the session's calls.
 const onRoot = <A>(run: () => Promise<A>) =>
@@ -84,11 +77,7 @@ export function startHost(options: {
           ),
         ).catch(() => {});
       }),
-    busy: () =>
-      Effect.map(onRoot(busyTerminals), (terminals) => ({
-        ...getBusyOperations(),
-        busyTerminals: terminals,
-      })),
+    busy: () => Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy),
     updaterState: (state) =>
       Effect.flatMap(Shell.Shell, (shell) =>
         shell.updater.noteState(state),

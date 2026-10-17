@@ -1,7 +1,7 @@
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import { findProject } from "@host/lib/projects";
-import { startScript } from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import {
   readLaunchRow,
   readScriptOrder,
@@ -103,7 +103,7 @@ export const packageScriptsHandlers = {
         worktreeId,
         scriptName,
       });
-      const runId = yield* startScript({
+      const runId = yield* (yield* Scripts.Scripts).start({
         command,
         slot: { kind: "package", name: scriptName },
         worktree,

@@ -1,13 +1,17 @@
 // What a quit, a restart into an update or a data-folder move would
-// interrupt, in words: the host counts it (host/lib/scripts,
-// getBusyOperations) and the shell asks before going ahead
-// (main/electron/busyPrompt.ts). Both sides word it from the counts.
+// interrupt, in words: the host counts it (host/lib/Scripts.ts, busy)
+// and the shell asks before going ahead (main/electron/busyPrompt.ts).
+// Both sides word it from the counts.
 
 export type BusyOperations = {
+  // PTY runs and the engine's lifecycle runs alike.
   readonly runningScripts: number;
+  // Worktree deletes and moves, and project removals.
   readonly inflightDeletes: number;
-  // Terminals whose shell runs something, for a quit or a restart.
-  readonly busyTerminals?: number;
+  // Any other change the engine is making.
+  readonly engineChanges: number;
+  // Terminals whose shell runs something.
+  readonly busyTerminals: number;
 };
 
 export type BusyAction = "quit" | "restart";
@@ -35,8 +39,9 @@ function pluralize(n: number, singular: string, plural: string): string {
 function isBusy(busy: BusyOperations): boolean {
   return (
     busy.runningScripts > 0 ||
-    (busy.busyTerminals ?? 0) > 0 ||
-    busy.inflightDeletes > 0
+    busy.busyTerminals > 0 ||
+    busy.inflightDeletes > 0 ||
+    busy.engineChanges > 0
   );
 }
 
@@ -47,16 +52,25 @@ function runningWords(
 ): { subject: string; obj: string } | null {
   const parts = [
     [busy.runningScripts, "script", "scripts"],
-    [busy.busyTerminals ?? 0, "terminal", "terminals"],
+    [busy.busyTerminals, "terminal", "terminals"],
   ] as const;
   const named = parts
     .filter(([n]) => n > 0)
     .map(([n, one, many]) => `${n} ${pluralize(n, one, many)}`);
   if (named.length === 0) return null;
-  const total = busy.runningScripts + (busy.busyTerminals ?? 0);
+  const total = busy.runningScripts + busy.busyTerminals;
   return {
     subject: `${named.join(" and ")} ${pluralize(total, "is", "are")}`,
     obj: pluralize(total, "it", "them"),
+  };
+}
+
+// "1 change is", and the pronoun for it.
+function changeWords(busy: BusyOperations): { subject: string; obj: string } {
+  const n = busy.engineChanges;
+  return {
+    subject: pluralize(n, `${n} change is`, `${n} changes are`),
+    obj: pluralize(n, "it", "them"),
   };
 }
 
@@ -68,16 +82,17 @@ export function busyDetail(
 ): string | null {
   if (!isBusy(busy)) return null;
   const { gerund } = BUSY_COPY[action];
-  // Lifecycle deletes spawn a teardown script that lands in
-  // runningScripts, so prefer the script count to avoid double-counting
-  // the same operation when both are non-zero.
   const running = runningWords(busy);
   if (running !== null) {
     return `${running.subject} still running. ${gerund} now will stop ${running.obj}.`;
   }
   const n = busy.inflightDeletes;
-  const subject = pluralize(n, `${n} worktree is`, `${n} worktrees are`);
-  return `${subject} being removed. ${gerund} now will interrupt cleanup and may leave files behind.`;
+  if (n > 0) {
+    const subject = pluralize(n, `${n} worktree is`, `${n} worktrees are`);
+    return `${subject} being removed. ${gerund} now will interrupt cleanup and may leave files behind.`;
+  }
+  const changes = changeWords(busy);
+  return `${changes.subject} still being made. ${gerund} now will interrupt ${changes.obj}.`;
 }
 
 // The same verdict worded for ANOTHER device's screen, for an action a
@@ -100,5 +115,9 @@ export function busyRemoteRefusal(
     return `${running.subject} still running there. Stop ${running.obj} before ${verb}.`;
   }
   const n = busy.inflightDeletes;
-  return `${pluralize(n, `${n} worktree is`, `${n} worktrees are`)} still being removed there. Wait for that to finish before ${verb}.`;
+  if (n > 0) {
+    return `${pluralize(n, `${n} worktree is`, `${n} worktrees are`)} still being removed there. Wait for that to finish before ${verb}.`;
+  }
+  const changes = changeWords(busy);
+  return `${changes.subject} still being made there. Wait for ${changes.obj} to finish before ${verb}.`;
 }

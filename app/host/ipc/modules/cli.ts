@@ -14,7 +14,7 @@ import {
 } from "@host/lib/cli/shell";
 import * as Ops from "@host/lib/engineOps";
 import { loadProjects, refresh } from "@host/lib/projects";
-import { killScriptsForProject } from "@host/lib/scripts";
+import * as Scripts from "@host/lib/Scripts";
 import * as HostFacts from "@host/lib/HostFacts";
 import type { HostServices } from "@host/process/services";
 import * as Effect from "effect/Effect";
@@ -57,9 +57,10 @@ export const cliHandlers = {
         Ops.runDoctor(true, input),
       );
       const after = new Set((yield* refresh).map((p) => p.id));
+      const scripts = yield* Scripts.Scripts;
       yield* Effect.forEach(
         before.filter(({ id }) => !after.has(id)),
-        ({ id }) => killScriptsForProject(id),
+        ({ id }) => scripts.stopProject(id),
         { concurrency: "unbounded", discard: true },
       );
       return report;

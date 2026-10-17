@@ -24,7 +24,6 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { errorWordsOf } from "./errorWords";
-import { registerInflightContributor } from "./scripts";
 
 // The scope an engine run outlives its caller in: a create the app
 // navigates away from at "created" goes on to its setup here, and ends
@@ -34,6 +33,21 @@ export class EngineRuns extends Context.Service<
   { readonly scope: Scope.Scope }
 >()("sm/host/EngineRuns") {}
 
+type Ids = { readonly projectId?: string; readonly worktreeId?: string };
+
+// The engine changes under way (asChange), each with the project and
+// worktree it names, which the busy count reads (Scripts.busy).
+export class EngineChanges extends Context.Service<
+  EngineChanges,
+  {
+    readonly underWay: () => ReadonlyArray<Ids>;
+    readonly counted: <A, E, R>(
+      effect: Effect.Effect<A, E, R>,
+      ids: Ids,
+    ) => Effect.Effect<A, E, R>;
+  }
+>()("sm/host/EngineChanges") {}
+
 const open: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
 
@@ -41,6 +55,24 @@ const runsLayer = Layer.effect(
   EngineRuns,
   Effect.map(Effect.scope, (scope) => EngineRuns.of({ scope })),
 );
+
+const changesLayer = Layer.sync(EngineChanges, () => {
+  const changes = new Set<Ids>();
+  return EngineChanges.of({
+    underWay: () => [...changes],
+    counted: Effect.fn("EngineChanges.counted")(function* <A, E, R>(
+      effect: Effect.Effect<A, E, R>,
+      ids: Ids,
+    ) {
+      const change = { ...ids };
+      return yield* Effect.acquireUseRelease(
+        Effect.sync(() => changes.add(change)),
+        () => effect,
+        () => Effect.sync(() => changes.delete(change)),
+      );
+    }),
+  });
+});
 
 export const layer = (options: {
   readonly flavor: Flavor;
@@ -61,13 +93,13 @@ export const layer = (options: {
     Layer.provide(
       ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv())),
     ),
-    // The scope a run outlives its caller in (EngineRuns, below).
+    // The scope a run outlives its caller in (EngineRuns, above), and
+    // the changes under way.
     Layer.merge(runsLayer),
+    Layer.merge(changesLayer),
   );
 
 export type Services = Layer.Success<ReturnType<typeof layer>>;
-
-type Ids = { readonly projectId?: string; readonly worktreeId?: string };
 
 // An engine failure in the words `sm` prints for it.
 export class EngineCallError extends Schema.TaggedError<EngineCallError>()(
@@ -117,32 +149,22 @@ export const hostCallFailure = (error: unknown) => {
 };
 
 // `asCall` for an operation that changes something, counted while it
-// runs, and run only while no data-folder move can start (`DataDirLock`):
-// every change the host makes through the engine passes here.
+// runs (Scripts.busy), and run only while no data-folder move can start
+// (`DataDirLock`): every change the host makes through the engine passes
+// here.
 export const asChange = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   ids: Ids = {},
 ) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      changing += 1;
-    }),
-    () =>
+  Effect.flatMap(EngineChanges, (changes) =>
+    changes.counted(
       asCall(
         Effect.flatMap(DataDirLock.DataDirLock, (lock) => lock.guard(effect)),
         ids,
       ),
-    () =>
-      Effect.sync(() => {
-        changing -= 1;
-      }),
+      ids,
+    ),
   );
-
-// The engine operations under way that change something (a create, a
-// removal, a merge), which the busy and quit prompts count. Reads are
-// left out: they finish in moments and a quit may cut them short.
-let changing = 0;
-registerInflightContributor(() => changing);
 
 // The engine's view of where the host stands: nowhere, since a host
 // call names its project and worktree by id.
