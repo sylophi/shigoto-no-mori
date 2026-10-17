@@ -194,26 +194,31 @@ export const makeCleanup = ({
       deleteBranch: boolean,
     ) =>
       Effect.gen(function* () {
-        // The checkout and the delete run uninterrupted: an interrupt
-        // between them would leave the branch for good, since a done
-        // again from the primary branch finds nothing to delete.
-        const deleted = yield* Effect.uninterruptible(
-          Effect.gen(function* () {
-            yield* git.checkoutBranch(
+        // The checkout stays interruptible, since it runs the user's
+        // hooks; once it is done the delete follows uninterrupted, since an
+        // interrupt between them would leave the branch for good (a done
+        // again from the primary branch finds nothing to delete).
+        const deleted = yield* Effect.uninterruptibleMask((restore) =>
+          restore(
+            git.checkoutBranch(
               worktree.path,
               target.primaryRef,
               target.remotes,
-            );
-            if (!deleteBranch || worktree.branch === target.primaryBranch) {
-              return false;
-            }
-            yield* git.deleteBranch({
-              repo: project.path,
-              name: worktree.branch,
-              force: true,
-            });
-            return true;
-          }),
+            ),
+          ).pipe(
+            Effect.andThen(
+              !deleteBranch || worktree.branch === target.primaryBranch
+                ? Effect.succeed(false)
+                : Effect.as(
+                    git.deleteBranch({
+                      repo: project.path,
+                      name: worktree.branch,
+                      force: true,
+                    }),
+                    true,
+                  ),
+            ),
+          ),
         );
         if (target.remote === "") return { deleted };
         const pulled = yield* ffPull(
