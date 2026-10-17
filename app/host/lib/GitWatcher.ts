@@ -340,10 +340,12 @@ const make = (deps: GitWatcherDeps) =>
     const readOf = (projectId: string, projectPath: string) =>
       Effect.gen(function* () {
         if (yield* FiberMap.has(reads, projectId)) return "busy" as const;
+        // Never a second read in place of one already out.
         const fiber = yield* FiberMap.run(
           reads,
           projectId,
           readProject(projectPath),
+          { onlyIfMissing: true },
         );
         const read = yield* Fiber.join(fiber).pipe(
           Effect.timeoutOption(STEP_TIMEOUT),
@@ -433,7 +435,9 @@ const make = (deps: GitWatcherDeps) =>
               ? ("busy" as const)
               : yield* readOf(projectId, entry.projectPath);
             if (read === "late") stall(projectId);
-            if (typeof read !== "string") {
+            // A moved or missing git directory is the reconcile's: its
+            // apply ends this very watch.
+            if (typeof read !== "string" && read.gitDir === entry.gitDir) {
               yield* apply(projectId, entry.projectPath, read, false);
             }
             hearing.delete(projectId);
@@ -522,7 +526,9 @@ const make = (deps: GitWatcherDeps) =>
       for (const project of projects.value) {
         if ((stalled.get(project.id)?.until ?? -1) > beats) continue;
         const read = yield* readOf(project.id, project.path);
-        if (read === "busy" || read === "late") {
+        // A read still out is left to finish, a stuck one stalls.
+        if (read === "busy") continue;
+        if (read === "late") {
           stall(project.id);
           continue;
         }
