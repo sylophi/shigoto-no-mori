@@ -593,6 +593,41 @@ esac`,
     );
   });
 
+  // A hook that failed after the checkout freed the branch, and a
+  // delete that failed too: both are said, where a report showed one.
+  it("done says both a failed hook and a branch it couldn't delete", async () => {
+    const upstream = box.repo("upstream", { "README.md": "hi\n" });
+    const repo = join(box.home, "repo");
+    execFileSync("git", ["clone", "-q", upstream, repo]);
+    box.git(repo, "checkout", "-q", "-b", "fox");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "fox");
+    const head = box.git(repo, "rev-parse", "HEAD").trim();
+    mergedGh(`echo '[{"number":5,"headRefOid":"${head}"}]'`);
+    writeFileSync(
+      join(repo, ".git", "hooks", "post-checkout"),
+      "#!/bin/sh\necho 'the hook broke' >&2\nexit 1\n",
+      { mode: 0o755 },
+    );
+    writeFileSync(join(repo, ".git", "refs", "heads", "fox.lock"), "");
+    const said = (await box.engine(
+      Effect.gen(function* () {
+        yield* (yield* Registry.Registry).register({
+          name: "repo",
+          path: repo,
+        });
+        const worktrees = yield* Worktrees.Worktrees;
+        const located = yield* worktrees.resolve(
+          yield* worktrees.here(repo),
+          {},
+        );
+        return yield* (yield* Landing.Landing).done(located, { force: false });
+      }),
+    )) as { ok: boolean; error: string };
+    assert.equal(said.ok, false);
+    assert.match(said.error, /post-checkout|the hook broke|hook/);
+    assert.match(said.error, /fox couldn't be deleted/);
+  });
+
   // What decides the delete is where HEAD ends up, read in full: a hook
   // that moves it on keeps the branch, and a tag of the primary's name
   // doesn't hide that HEAD is on the primary.

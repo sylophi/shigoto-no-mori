@@ -27,6 +27,17 @@ export type Document = Readonly<Record<string, unknown>> & {
 
 // What landing won't do, the reason in its message. `numbers` and
 // `names` are the PRs, branches and paths the message names, in order.
+// A done whose checkout failed after it freed the branch, and whose
+// branch delete then failed too: both said, the checkout's first.
+export class DoneUnfinished extends Schema.TaggedError<DoneUnfinished>()(
+  "DoneUnfinished",
+  { branch: Schema.String, checkout: Schema.Defect(), delete: Schema.Defect() },
+) {
+  override get message(): string {
+    return `${errorDocument(this.checkout).error} The branch ${this.branch} couldn't be deleted either: ${errorDocument(this.delete).error}`;
+  }
+}
+
 export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
   "LandingRefused",
   {
@@ -274,6 +285,7 @@ export type MergeError =
   | MergeLostTrack;
 export type DoneError =
   | LandingRefused
+  | DoneUnfinished
   | MergeUnverified
   | Git.GitError
   | Git.BranchNotMergedError;

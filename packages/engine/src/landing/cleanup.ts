@@ -13,6 +13,7 @@ import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 import {
   type CatchUp,
+  DoneUnfinished,
   LandingRefused,
   type RemoveOptions,
   type Reporter,
@@ -236,12 +237,24 @@ export const makeCleanup = ({
                 )
               : Exit.void;
             // Both failures are said, the checkout's first.
+            // Both failures said, the checkout's first, as one error, since
+            // a report shows a cause's first; an interrupt stays one.
             if (Exit.isFailure(checkedOut)) {
-              return yield* Effect.failCause(
-                Exit.isFailure(removed)
-                  ? Cause.combine(checkedOut.cause, removed.cause)
-                  : checkedOut.cause,
-              );
+              if (Exit.isSuccess(removed)) {
+                return yield* Effect.failCause(checkedOut.cause);
+              }
+              if (Cause.hasInterruptsOnly(checkedOut.cause)) {
+                yield* Effect.logWarning(
+                  `The branch ${worktree.branch} couldn't be deleted`,
+                  removed.cause,
+                );
+                return yield* Effect.failCause(checkedOut.cause);
+              }
+              return yield* new DoneUnfinished({
+                branch: worktree.branch,
+                checkout: Cause.squash(checkedOut.cause),
+                delete: Cause.squash(removed.cause),
+              });
             }
             if (Exit.isFailure(removed)) {
               return yield* Effect.failCause(removed.cause);
