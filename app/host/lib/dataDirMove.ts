@@ -435,10 +435,17 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // way the folders the rename changed are flushed before the pointer
     // commits, so no power loss leaves a pointer naming a folder that
     // isn't on disk.
+    // A rename and its mark are one step: one a cancel cut short after
+    // the folder left would be undone where the data no longer is.
+    const landed = Effect.sync(() => {
+      renamed = true;
+    });
     const sameVolume = yield* fs.rename(oldDir, newDir).pipe(
+      Effect.andThen(landed),
       Effect.as(true),
       Effect.catchIf(crossesVolumes, () => Effect.succeed(false)),
       Effect.mapError(callFailureOf),
+      Effect.uninterruptible,
     );
     if (!sameVolume) {
       journal.partial = `${newDir}.partial-${suffix}`;
@@ -452,9 +459,12 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       yield* flushTree(partial);
       yield* fs
         .rename(journal.partial, newDir)
-        .pipe(Effect.mapError(callFailureOf));
+        .pipe(
+          Effect.andThen(landed),
+          Effect.mapError(callFailureOf),
+          Effect.uninterruptible,
+        );
     }
-    renamed = true;
     yield* flushed(dirname(newDir));
     if (sameVolume) yield* flushed(dirname(oldDir));
 

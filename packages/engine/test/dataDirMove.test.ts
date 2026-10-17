@@ -151,6 +151,41 @@ it("refuses a change while a move holds the lock, and a move while a change runs
   assert.deepEqual(result, { refused: true, waited: true, after: true });
 });
 
+// A move waits for a change of its own process's without stopping the
+// process (SQLite's own wait would), and a change nested in one already
+// holding the lock goes on while the move waits, rather than be left
+// half done.
+it("waits out a change of its own process, and lets a change nested in one finish", async () => {
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const lock = yield* DataDirLock.DataDirLock;
+      const inside = yield* Deferred.make<void>();
+      const nested = yield* Deferred.make<boolean>();
+      const change = yield* lock
+        .guard(
+          Effect.gen(function* () {
+            yield* Deferred.succeed(inside, undefined);
+            yield* Effect.sleep("200 millis");
+            const exit = yield* Effect.exit(lock.guard(Effect.void));
+            yield* Deferred.succeed(nested, Exit.isSuccess(exit));
+          }),
+        )
+        .pipe(Effect.forkChild);
+      yield* Deferred.await(inside);
+      const started = Date.now();
+      const moved = yield* Effect.exit(lock.alone(Effect.void, "3 seconds"));
+      const waited = Date.now() - started;
+      yield* Fiber.join(change);
+      return {
+        moved: Exit.isSuccess(moved),
+        nested: yield* Deferred.await(nested),
+        quick: waited < 1500,
+      };
+    }),
+  )) as { moved: boolean; nested: boolean; quick: boolean };
+  assert.deepEqual(result, { moved: true, nested: true, quick: true });
+});
+
 // The lock is the kernel's: a process killed while it holds it holds
 // it no more, with no pid read to tell.
 it("lets a move take the lock a killed process held", async () => {

@@ -376,12 +376,13 @@ const serve =
       return yield* (
         changesCode.has(channel)
           ? Effect.flatMap(DataDirLock, (lock) =>
-              Effect.scoped(
-                Effect.andThen(
-                  lock.held.pipe(Effect.mapError(callFailureOf)),
-                  call,
+              lock
+                .guard(call)
+                .pipe(
+                  Effect.catchTag(["DataDirMoving", "DataDirMoved"], (error) =>
+                    Effect.fail(callFailureOf(error)),
+                  ),
                 ),
-              ),
             )
           : call
       ).pipe(Effect.provideContext(context));

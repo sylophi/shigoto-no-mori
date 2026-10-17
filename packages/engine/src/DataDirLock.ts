@@ -12,7 +12,9 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Reactivity from "effect/reactivity/Reactivity";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -62,6 +64,12 @@ export class DataDirLockUnavailable extends Schema.TaggedError<DataDirLockUnavai
   }
 }
 
+// Whether the running change already holds the lock, so a change
+// nested in it joins even while a move of this process's waits.
+const Holding = Context.Reference<boolean>("sm/engine/DataDirLock/Holding", {
+  defaultValue: () => false,
+});
+
 export class DataDirLock extends Context.Service<
   DataDirLock,
   {
@@ -97,21 +105,34 @@ export const layer = (open: OpenDatabase) =>
       const file = path.join(dir, LOCK);
       // A connection in exclusive locking mode keeps the lock its first
       // read (shared) or write (its own) takes until it closes, with the
-      // scope it was opened in.
-      const hold = (busyTimeout: Duration.Input, write: boolean) =>
+      // scope it was opened in. A lock held elsewhere is asked for again
+      // every 50 ms up to `within`, not waited for in SQLite, whose wait
+      // under node:sqlite stops the whole process, so a change of this
+      // process's own could never end while its move waits.
+      const hold = (within: Duration.Input, write: boolean) =>
         Effect.gen(function* () {
           yield* fs.makeDirectory(dir, { recursive: true });
-          const sql = yield* open(file, { disableWAL: true, busyTimeout });
+          const sql = yield* open(file, { disableWAL: true, busyTimeout: 0 });
           yield* sql`PRAGMA locking_mode = EXCLUSIVE`;
-          if (write) {
-            yield* sql`CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)`;
-            yield* sql`INSERT OR REPLACE INTO held (id) VALUES (1)`;
-          } else {
-            yield* sql`SELECT count(*) FROM sqlite_schema`;
-          }
+          const take = write
+            ? Effect.andThen(
+                sql`CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)`,
+                sql`INSERT OR REPLACE INTO held (id) VALUES (1)`,
+              )
+            : sql`SELECT count(*) FROM sqlite_schema`;
+          yield* take.pipe(
+            Effect.retry({
+              while: (error) =>
+                Predicate.isTagged(error.reason, "LockTimeoutError"),
+              schedule: Schedule.spaced("50 millis"),
+              times: Math.ceil(
+                Duration.toMillis(Duration.fromInputUnsafe(within)) / 50,
+              ),
+            }),
+          );
         }).pipe(Effect.provideService(Reactivity.Reactivity, reactivity));
 
-      const take = Effect.gen(function* () {
+      const takeShared = Effect.gen(function* () {
         const taken = yield* hold(Duration.seconds(2), false).pipe(
           Effect.as("held" as const),
           Effect.catchReason("SqlError", "LockTimeoutError", () =>
@@ -147,27 +168,46 @@ export const layer = (open: OpenDatabase) =>
       // the last to end. No move can commit while it is held, so the
       // check stays true. A move of this process's own, waiting for the
       // changes under way, refuses new ones, which would otherwise keep
-      // joining.
+      // joining, but not one nested in a change already holding it,
+      // which would leave that change half done. A take refused by a move
+      // refuses the changes that queued while it was asked for or after,
+      // rather than each ask again in turn.
       const joining = yield* Semaphore.make(1);
       let holders = 0;
       let opened: Scope.Closeable | undefined;
       let moving = 0;
+      // Takes are numbered as they start; the first a change queued for
+      // is the one under way as it came, else the next.
+      let takes = 0;
+      let taking = false;
+      let refused = 0;
       const held = Effect.acquireRelease(
-        joining.withPermits(1)(
-          Effect.gen(function* () {
-            if (moving > 0) return yield* new DataDirMoving();
-            if (holders === 0) {
-              const scope = yield* Scope.make();
-              const exit = yield* Effect.exit(Scope.provide(take, scope));
-              if (Exit.isFailure(exit)) {
-                yield* Scope.close(scope, exit);
-                return yield* exit;
+        Effect.suspend(() => {
+          const queuedFor = taking ? takes : takes + 1;
+          return joining.withPermits(1)(
+            Effect.gen(function* () {
+              const nested = yield* Holding;
+              if (moving > 0 && !nested) return yield* new DataDirMoving();
+              if (holders === 0) {
+                if (refused >= queuedFor) return yield* new DataDirMoving();
+                takes += 1;
+                taking = true;
+                const scope = yield* Scope.make();
+                const exit = yield* Effect.exit(
+                  Scope.provide(takeShared, scope),
+                );
+                taking = false;
+                if (Exit.isFailure(exit)) {
+                  yield* Scope.close(scope, exit);
+                  refused = takes;
+                  return yield* exit;
+                }
+                opened = scope;
               }
-              opened = scope;
-            }
-            holders += 1;
-          }),
-        ),
+              holders += 1;
+            }),
+          );
+        }),
         () =>
           joining.withPermits(1)(
             Effect.gen(function* () {
@@ -183,7 +223,9 @@ export const layer = (open: OpenDatabase) =>
       const guard = Effect.fn("DataDirLock.guard")(function* <A, E, R>(
         effect: Effect.Effect<A, E, R>,
       ) {
-        return yield* Effect.scoped(Effect.andThen(held, effect));
+        return yield* Effect.scoped(
+          Effect.andThen(held, Effect.provideService(effect, Holding, true)),
+        );
       });
 
       const alone = Effect.fn("DataDirLock.alone")(function* <A, E, R>(

@@ -609,6 +609,70 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
   }
 });
 
+// A cancel that comes while the folder's own rename is under way: the
+// rename and its mark are one step, so the folder that landed is kept
+// whole, with the staged pointer the next start finds it by, and never
+// undone where the data no longer is.
+it("a cancel during the folder's rename keeps the landed folder and its staged pointer", async () => {
+  const parent = join(elsewhere, "same-volume-cancel");
+  const destination = join(parent, "moved");
+  const pointerFile = join(elsewhere, "config-5", "data-dir");
+  const renaming = Deferred.makeUnsafe<void>();
+  const move = runHost(
+    Effect.gen(function* () {
+      const real = yield* FileSystem.FileSystem;
+      const fs: FileSystem.FileSystem = {
+        ...real,
+        // The rename done, and its answer slow to come back.
+        rename: (from, to) =>
+          from === engineDataDir
+            ? real
+                .rename(from, to)
+                .pipe(
+                  Effect.andThen(Deferred.succeed(renaming, undefined)),
+                  Effect.andThen(Effect.sleep("300 millis")),
+                )
+            : real.rename(from, to),
+      };
+      return yield* moveDataDir(parent, {
+        place: {
+          dataDir: engineDataDir,
+          pointerFile,
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        beforeMove: Effect.void,
+        killAllScripts: Effect.void,
+      }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+    }).pipe(Effect.forkDetach),
+  );
+  const fiber = await move;
+  await Effect.runPromise(Deferred.await(renaming));
+  await Effect.runPromise(Fiber.interrupt(fiber));
+  try {
+    assert.ok(existsSync(join(destination, "data-dir-move.json")));
+    assert.equal(existsSync(engineDataDir), false, "the folder left");
+    const staged = readdirSync(dirname(pointerFile)).filter((entry) =>
+      entry.startsWith("data-dir.tmp."),
+    );
+    assert.equal(staged.length, 1, "the staged pointer stays");
+    const found = await Effect.runPromise(
+      rescueStrandedMove({
+        named: engineDataDir,
+        pointerFile,
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    assert.equal(found, destination);
+  } finally {
+    renameSync(destination, engineDataDir);
+    rmSync(join(engineDataDir, "data-dir-move.json"), { force: true });
+    await runHost(reviveStore);
+  }
+});
+
 it.each([
   ["reached through a link", "linked"],
   ["spelled with trailing slashes", "slashes"],

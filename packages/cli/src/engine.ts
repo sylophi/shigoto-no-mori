@@ -67,6 +67,18 @@ export const changing = <Name extends string, Input, ContextInput, E, R>(
   command: Command.Command<Name, Input, ContextInput, E, R>,
 ) => Command.provide(command, holdingLock);
 
+// `sm doctor`, which changes something only with `--fix`.
+export const changingWithFix = <
+  Name extends string,
+  Input extends { readonly fix: boolean },
+  ContextInput,
+  E,
+  R,
+>(
+  command: Command.Command<Name, Input, ContextInput, E, R>,
+) =>
+  Command.provide(command, (input) => (input.fix ? holdingLock : Layer.empty));
+
 // `sm doctor`'s, which opens the store inside each run, so a store that
 // won't open still gets its checklist.
 export const doctor = (flavor: Flavor) => doctorLayer({ flavor, open, macfs });
