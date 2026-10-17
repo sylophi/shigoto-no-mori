@@ -40,6 +40,7 @@
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberMap from "effect/FiberMap";
 import * as FileSystem from "effect/FileSystem";
@@ -349,9 +350,12 @@ const make = (deps: GitWatcherDeps) =>
         );
         const read = yield* Fiber.join(fiber).pipe(
           Effect.timeoutOption(STEP_TIMEOUT),
-          Effect.orElseSucceed(() => Option.none<ProjectRead>()),
+          Effect.exit,
         );
-        return Option.isSome(read) ? read.value : ("late" as const);
+        // A read that failed says nothing, and one a racing ask started
+        // first comes back interrupted: neither is a stall.
+        if (Exit.isFailure(read)) return "busy" as const;
+        return Option.isSome(read.value) ? read.value.value : ("late" as const);
       });
 
     const stall = (projectId: string) => {
@@ -474,6 +478,8 @@ const make = (deps: GitWatcherDeps) =>
           gitDirs.delete(projectId);
           states.delete(projectId);
           yield* FiberMap.remove(watches, projectId);
+          // The repository moved or went: its rows say otherwise.
+          if (signal) deps.onChange(projectId);
         }
         if (read.gitDir === null) return yield* dropTrees(projectId);
         // A worktree moved by `sm` writes the store, which reconciles.

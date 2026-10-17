@@ -24,7 +24,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
-import { mkdirSync, realpathSync, watch, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   isRelevantGitPath,
@@ -445,5 +445,33 @@ it("backstop: a project whose reading hangs holds another up once, for its deadl
   assert.ok(
     hangingReads <= 3,
     `the hanging project was read ${hangingReads} times`,
+  );
+});
+
+it("backstop: a repository whose git directory went, with its events lost, is signalled", async () => {
+  const root = tempDir("sm-gitwatch-gone-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "one");
+  const changes: string[] = [];
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: (projectId) => changes.push(projectId),
+      onFilesChanged: () => {},
+      projects: () => [{ id: "p1", name: "repo", path: repo }],
+      watch: () => Stream.never,
+      backstop: "100 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  await delay(400);
+  assert.equal(changes.length, 0, "a quiet repository was signalled");
+  rmSync(join(repo, ".git"), { recursive: true, force: true });
+  await waitFor(
+    () => changes.includes("p1"),
+    "the gone repository to be signalled",
   );
 });
