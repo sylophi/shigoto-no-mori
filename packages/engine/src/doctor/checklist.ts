@@ -20,13 +20,16 @@ import type { EnvironmentChecksArea } from "./environmentChecks.ts";
 import type { DataDirChecksArea } from "./dataDirChecks.ts";
 import type { LeftoverChecksArea } from "./leftoverChecks.ts";
 import type { ProjectChecksArea } from "./projectChecks.ts";
+import type { ReadsArea } from "./reads.ts";
 
 export const makeChecklist = ({
+  reads,
   environmentChecks,
   dataDirChecks,
   leftoverChecks,
   projectChecks,
 }: {
+  readonly reads: ReadsArea;
   readonly environmentChecks: EnvironmentChecksArea;
   readonly dataDirChecks: DataDirChecksArea;
   readonly leftoverChecks: LeftoverChecksArea;
@@ -92,6 +95,11 @@ export const makeChecklist = ({
             onSome: ({ registry }) => registry.status !== "fail",
           });
         const device = (yield* config.read({ kind: "device" })) ?? {};
+        const portPool = yield* Effect.cached(
+          reads
+            .portPoolListing(yield* config.device("portPool"))
+            .pipe(Effect.provideContext(platform)),
+        );
         const holder = yield* stagingHolder(stagingLock).pipe(
           Effect.provideService(
             ChildProcessSpawner.ChildProcessSpawner,
@@ -128,14 +136,14 @@ export const makeChecklist = ({
               ...(Option.isSome(files) ? [] : yield* checkV2Files),
               ...checkStagingLock(holder),
               ...(yield* checkUpdateLeftovers(input.version, holder)),
-              ...(yield* checkPortAllocations(device)),
+              ...(yield* checkPortAllocations(yield* portPool)),
               ...(yield* launcherFindings(
                 check("Data dir", "launchers", "launchers"),
                 device,
                 "config launcher rm",
                 "",
               )),
-              ...checkTerrier(device, listing),
+              ...checkTerrier(yield* config.device("terrier"), listing),
               ...(yield* checkDormantState(projects, complete, kept)),
             ]
           : [dir.entry];
@@ -146,6 +154,7 @@ export const makeChecklist = ({
             onNone: () => new Map<string, Entry>(),
             onSome: ({ projectFiles }) => projectFiles,
           }),
+          portPool,
         );
         // Last of the data dir's lines, once the projects' checkouts are
         // listed.

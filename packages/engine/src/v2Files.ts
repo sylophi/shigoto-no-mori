@@ -5,7 +5,10 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as SqlClient from "effect/sql/SqlClient";
 import * as Paths from "./Paths.ts";
 import { isAbsent } from "./platformErrors.ts";
 
@@ -67,6 +70,43 @@ export const sameHashes = (
 ) =>
   Object.keys(a).length === Object.keys(b).length &&
   Object.entries(a).every(([file, hash]) => b[file] === hash);
+
+// What a verified import found each file as, by its hash: the store's
+// record, which the doctor reads to tell a file the store holds.
+const VerifiedFiles = Schema.fromJsonString(
+  Schema.Record(Schema.String, Schema.String),
+);
+
+export const recordVerified = (hashes: Readonly<Record<string, string>>) =>
+  Effect.flatMap(
+    SqlClient.SqlClient,
+    (sql) => sql`INSERT OR REPLACE INTO v2_import (id, files)
+      VALUES (1, ${Schema.encodeSync(VerifiedFiles)(hashes)})`,
+  );
+
+// The ones of `files` the store holds: each as the import verified it,
+// unchanged since. None without a verified import, or with a record
+// that can't be read.
+export const heldV2Files = Effect.fnUntraced(function* (
+  files: ReadonlyArray<string>,
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const [row] = yield* sql<{ files: string }>`
+    SELECT files FROM v2_import`.pipe(
+    Effect.orElseSucceed((): ReadonlyArray<{ files: string }> => []),
+  );
+  const verified =
+    row === undefined
+      ? {}
+      : Option.getOrElse(
+          Schema.decodeUnknownOption(VerifiedFiles)(row.files),
+          () => ({}),
+        );
+  const now = yield* hashesOf(files);
+  return files.filter(
+    (file) => now[file] !== undefined && now[file] === verified[file],
+  );
+});
 
 // `files` deleted, and the projects' folders they leave empty.
 export const removeV2Files = (files: ReadonlyArray<string>) =>

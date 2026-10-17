@@ -26,13 +26,11 @@ import { errnoText, isNotFound } from "../platformErrors.ts";
 import { INCOMING_PREFIX } from "../Bundle.ts";
 import * as Registry from "../Registry.ts";
 import type { ListedProject, RegisteredProject } from "../Registry.ts";
-import { worktreeIdFromPath } from "../worktreeLayout.ts";
+import { isStagingName, worktreeIdFromPath } from "../worktreeLayout.ts";
 import * as Worktrees from "../Worktrees.ts";
 import { scriptOf, type WorktreeIdentity } from "../Worktrees.ts";
 import * as WtFolder from "../WtFolder.ts";
-import { findExecutable } from "../executables.ts";
 import { PORT_POOL_CONFIG, parsePortPoolConfig } from "../ports.ts";
-import { parsePortPoolDirs } from "../doctorParse.ts";
 import {
   type Entry,
   INCOMING_REF_STALE_MS,
@@ -48,7 +46,7 @@ import {
   mtimeOf,
   repairable,
 } from "./documents.ts";
-import type { ReadsArea } from "./reads.ts";
+import type { PortPoolListing, ReadsArea } from "./reads.ts";
 import type { DataDirChecksArea } from "./dataDirChecks.ts";
 
 export const makeProjectChecks = ({
@@ -203,7 +201,7 @@ export const makeProjectChecks = ({
             if (known.has(dir) || !isDirMode(entry.mode)) continue;
             // A move's partial copy or a create's carry-over staging, which
             // their processes or the next start clear.
-            if (/^\..+\.(partial|carry)-[\w-]+$/.test(name)) continue;
+            if (isStagingName(name)) continue;
             // A sibling project with the same folder name shares a managed
             // base, so only a stray whose metadata points back here counts.
             const repo = yield* git.locate(dir);
@@ -380,25 +378,14 @@ export const makeProjectChecks = ({
         return entries;
       });
 
-    // The worktrees port-pool covers (managed, with a port-pool config)
-    // that hold no lease: one a move's re-lease failed for, or whose
-    // provision did. The fix asks port-pool for one, at its path.
-    // The folders port-pool holds a lease for, symlinks resolved, read
-    // once a run; none when port-pool is off, missing or can't say (the
-    // ports check reports that).
-    const listAllocations = Effect.gen(function* () {
-      const device =
-        (yield* (yield* Config.Config).read({ kind: "device" })) ?? {};
-      if (device["portPool"] !== true) return Option.none();
-      if (Option.isNone(yield* findExecutable("port-pool"))) {
-        return Option.none();
-      }
-      const listed = yield* capture("port-pool", ["list"]).pipe(Effect.result);
-      if (Result.isFailure(listed) || listed.success.code !== 0) {
-        return Option.none();
-      }
+    // The folders port-pool holds leases for, each also as resolved,
+    // none when it couldn't say (the ports check reports why).
+    const allocationsOf = Effect.fnUntraced(function* (
+      listing: PortPoolListing,
+    ) {
+      if (listing.kind !== "listed") return Option.none();
       const leased = new Set<string>();
-      for (const dir of parsePortPoolDirs(listed.success.stdout)) {
+      for (const dir of listing.dirs) {
         leased.add(dir);
         const real = yield* realPath(dir);
         if (Option.isSome(real)) leased.add(real.value);
@@ -406,10 +393,13 @@ export const makeProjectChecks = ({
       return Option.some(leased as ReadonlySet<string>);
     });
 
+    // The worktrees port-pool covers (managed, with a port-pool config)
+    // that hold no lease: one a move's re-lease failed for, or whose
+    // provision did. The fix asks port-pool for one, at its path.
     const checkLeases = (
       project: ListedProject,
       identities: ReadonlyArray<WorktreeIdentity>,
-      allocations: typeof listAllocations,
+      allocations: Effect.Effect<Option.Option<ReadonlySet<string>>>,
     ) =>
       Effect.gen(function* () {
         const covered: WorktreeIdentity[] = [];
@@ -745,7 +735,7 @@ export const makeProjectChecks = ({
     const checkOneProject = (
       project: ListedProject,
       fileLine: Option.Option<Entry>,
-      allocations: typeof listAllocations,
+      allocations: Effect.Effect<Option.Option<ReadonlySet<string>>>,
     ) =>
       Effect.gen(function* () {
         const repo = yield* checkProjectRepo(project);
@@ -832,10 +822,13 @@ export const makeProjectChecks = ({
     const checkProjects = (
       projects: ReadonlyArray<ListedProject>,
       projectFiles: ReadonlyMap<string, Entry>,
+      portPool: Effect.Effect<PortPoolListing>,
     ) =>
       Effect.gen(function* () {
         // port-pool's leases, listed once for every project's check.
-        const allocations = yield* Effect.cached(listAllocations);
+        const allocations = yield* Effect.cached(
+          Effect.flatMap(portPool, allocationsOf),
+        );
         return yield* Effect.forEach(
           projects,
           (project) =>

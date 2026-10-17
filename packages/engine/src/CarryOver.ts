@@ -26,6 +26,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Darwin from "./Darwin.ts";
 import { copyFailure, copyTree, entryExists } from "./entries.ts";
+import { stagingName } from "./worktreeLayout.ts";
 import { pidAlive } from "./processes.ts";
 import * as Git from "./Git.ts";
 
@@ -364,7 +365,7 @@ const make = Effect.gen(function* () {
     // Beside the worktree, on its volume and out of git's sight. Any one a
     // crash left there (its process gone) goes first.
     const parent = path.dirname(input.destination);
-    const prefix = `.${path.basename(input.destination)}.carry-`;
+    const prefix = stagingName(path.basename(input.destination), "carry", "");
     for (const left of yield* fs
       .readDirectory(parent)
       .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []))) {

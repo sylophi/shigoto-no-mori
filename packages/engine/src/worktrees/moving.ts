@@ -22,7 +22,11 @@ import { copyTree } from "../entries.ts";
 import { startOf, stillRunning, UNKNOWN_BIRTH } from "../processes.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
-import { cleanPath, worktreeIdFromPath } from "../worktreeLayout.ts";
+import {
+  cleanPath,
+  stagingName,
+  worktreeIdFromPath,
+} from "../worktreeLayout.ts";
 import {
   type Located,
   UnknownWorktree,
@@ -223,7 +227,11 @@ export const makeMoving = ({
       Effect.gen(function* () {
         const partial = path.join(
           path.dirname(to),
-          `.${path.basename(to)}.partial-${(yield* Random.nextInt).toString(36)}`,
+          stagingName(
+            path.basename(to),
+            "partial",
+            (yield* Random.nextInt).toString(36),
+          ),
         );
         yield* sql`UPDATE moving SET partial = ${partial}
           WHERE from_path = ${from}`.pipe(Effect.orDie);
