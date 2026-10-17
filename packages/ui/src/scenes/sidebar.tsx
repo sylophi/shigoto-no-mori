@@ -40,6 +40,7 @@ import {
 import { SidebarTakeoverSlotView } from "../views/sidebar/SidebarTakeoverView.tsx";
 import {
   SidebarFooterView,
+  SidebarGuideButtonView,
   SidebarNavActionsView,
   SidebarViewToggleView,
 } from "../views/sidebar/SidebarFooterView.tsx";
@@ -534,13 +535,21 @@ export function SceneSidebar({
               />
             }
             actions={
-              <SidebarNavActionsView
-                hasLocalHost={hasLocalHost}
-                pathname={pathname}
-                live={{ label: "Live", dot: null }}
-                updateReady={false}
-                onNavigate={noop}
-              />
+              <>
+                {hasLocalHost && (
+                  <SidebarGuideButtonView
+                    label="Show me around with Claude Code"
+                    onClick={noop}
+                  />
+                )}
+                <SidebarNavActionsView
+                  hasLocalHost={hasLocalHost}
+                  pathname={pathname}
+                  live={{ label: "Live", dot: null }}
+                  updateReady={false}
+                  onNavigate={noop}
+                />
+              </>
             }
           />
         )}
