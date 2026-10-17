@@ -85,7 +85,11 @@ export const makeRunning = Effect.gen(function* () {
                   cwd,
                   // LC_ALL=C pins git's messages to English, so what the
                   // engine matches on and relays reads the same everywhere.
-                  env: { ...options.env, LC_ALL: "C" },
+                  // GIT_OPTIONAL_LOCKS=0 keeps a read from taking
+                  // index.lock: `git status` otherwise writes back the
+                  // index it refreshed, and a write running beside it (a
+                  // commit, a discard) fails on the lock.
+                  env: { ...options.env, LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0" },
                   extendEnv: true,
                   // In a process group of its own (the spawner's default), so
                   // closing the scope ends git with its hooks and its ssh.
