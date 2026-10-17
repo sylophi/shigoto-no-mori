@@ -27,7 +27,7 @@ The hub's envelopes and HTTP bodies (`src/hubProtocol.ts`) follow the same rule:
 
 The samples prove one direction: this build reads what the version's samples hold. The other, that an older build of the same version reads everything this one sends, is the rule a reviewer holds:
 
-- No bump: a new call (an older build answers a call it lacks with a defect for that call alone, and the link stays up), and a new optional field in a plain struct or a `loose` one, which an older build drops or keeps as it came. Nor any change to a `client` module's calls, which only a window and its own build's shell exchange.
+- No bump: a new call (an older build answers a call it lacks with a defect for that call alone, and the link stays up), and a new optional field in a plain struct or a `loose` one, which an older build drops or keeps as it came. Nor any change to a `client` module's calls, which only a window and its own build's shell exchange, or to `session`'s, which only a host and the shell that spawned it exchange (its samples are edited in place).
 - A bump: anything an older build decodes and would refuse or misread. A new field in a `strict` schema (strict refuses a key it does not model), a field or call removed or renamed, a type narrowed, a new literal or union member, a new error in `CallFailureSchema` (an older build cannot decode it), or a change to the encoding.
 
 To bump, raise `PROTOCOL_VERSION`, `git mv` the samples file to the new version's name, run `wire-fixtures`, and record the bump in `V3.md` while the branch lives. The hub deploys with the bump, since its floor is the version.
