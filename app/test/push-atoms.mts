@@ -465,6 +465,99 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   registry.dispose();
 });
 
+it("remote devices: a burst of hub pushes naming a device the list lacks reads the list one at a time, once more after the read out, and cancels none", async () => {
+  const { registry, queryClient, hubPush } = page();
+  queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
+  let asked = 0;
+  let cancelled = 0;
+  const account: Pick<RendererApi["account"], "status" | "listDevices"> = {
+    status: () => Effect.never,
+    listDevices: () =>
+      Effect.sync(() => {
+        asked += 1;
+      }).pipe(
+        Effect.andThen(Effect.sleep("100 millis")),
+        Effect.as([studio]),
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            cancelled += 1;
+          }),
+        ),
+      ),
+  };
+  // A roster naming a device the account list never has (one enrolled
+  // elsewhere, or a ghost), pushed as a churning roster pushes it.
+  const ghostly = status({ onlineDeviceIds: [PEER, "ghost"] });
+  const hubCalls: Pick<RendererApi["hub"], "status"> = {
+    status: () => Effect.succeed(ghostly),
+  };
+  const api = {
+    ...runtime,
+    deviceId: LOCAL,
+    account,
+    hub: hubCalls,
+    peerApi: noPeerApi,
+  } as RendererApi;
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  for (let push = 0; push < 25; push++) {
+    await hubPush(ghostly);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.equal(cancelled, 0, "a read cancelled by the next");
+  // 25 pushes over about 150 ms, each read 100 ms: the first, and one
+  // after each read a change came during.
+  assert.ok(asked >= 2 && asked <= 3, `the hub was asked ${asked} times`);
+  // A read someone else sent (the account page's) is out as the roster
+  // changes: it may predate the change, so one more follows it.
+  const before = asked;
+  void queryClient.refetchQueries({ queryKey: queryKeys.accountDevices() });
+  await hubPush(ghostly);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.equal(asked - before, 2, "the read out, then one after it");
+  assert.equal(cancelled, 0);
+  registry.dispose();
+});
+
+it("remote devices: an account change during the list's first read, which no page reads, waits for it and reads once more", async () => {
+  const { registry, queryClient } = page();
+  // Each push the sync listens to, by its key, to deliver by hand.
+  const handlers = new Map<string, (value: unknown) => void>();
+  let asked = 0;
+  const account: Pick<RendererApi["account"], "status" | "listDevices"> = {
+    status: () => Effect.never,
+    listDevices: () =>
+      Effect.sync(() => {
+        asked += 1;
+      }).pipe(Effect.andThen(Effect.sleep("100 millis")), Effect.as([studio])),
+  };
+  const ghostly = status({ onlineDeviceIds: [PEER, "ghost"] });
+  const hubCalls: Pick<RendererApi["hub"], "status"> = {
+    status: () => Effect.succeed(ghostly),
+  };
+  // oxlint-disable-next-line shigomori/no-double-cast -- a push stands for its key here, which listen keeps its handler under
+  const api = {
+    ...runtime,
+    pushes: (_module: unknown, key: string) => key,
+    listen: (key: string, onValue: (value: unknown) => void) => {
+      handlers.set(key, onValue);
+      return () => {};
+    },
+    deviceId: LOCAL,
+    account,
+    hub: hubCalls,
+    peerApi: noPeerApi,
+  } as unknown as RendererApi;
+  // The boot's pass starts the first read; an account change (an
+  // enroll, a rename) lands during it.
+  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  await waitFor(() => asked === 1, "the first read");
+  handlers.get("changed")?.({ accountId: "account" });
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.equal(asked, 2, `the first read, then one after it: ${asked}`);
+  registry.dispose();
+});
+
 it("remote devices: a peer that stops taking commands is refused before the device list's fetch lands", async () => {
   const { registry, queryClient, hubPush } = page();
   let latest = status();
