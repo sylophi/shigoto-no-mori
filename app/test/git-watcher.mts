@@ -12,7 +12,10 @@
 // reconcile dropping a project that left the registry, and the working
 // trees' watch: an edit in the main checkout or a linked worktree
 // lands as one files change, `.git` churn as none, and a worktree
-// added or removed is followed.
+// added or removed is followed. And the backstop: with the git
+// directory's events lost on purpose, a commit and a checkout are still
+// signalled, once each, a working tree whose watch ended is watched
+// again, and the mirror's index watch fires for a stage it never heard.
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
@@ -20,7 +23,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import { mkdirSync, watch, writeFileSync } from "node:fs";
+import * as Stream from "effect/Stream";
+import { mkdirSync, realpathSync, rmSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   isRelevantGitPath,
@@ -37,6 +41,9 @@ import {
   waitFor,
 } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
+import { runHost } from "./lib/hostRuntime.mts";
+import { watchIndexFile } from "../host/mirror/gitState.ts";
+import { EventEmitter } from "node:events";
 import { it } from "vitest";
 
 // The sandbox's git commands run under the scrubbed environment: this
@@ -182,6 +189,8 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
         onChange: (projectId) => changes.push(projectId),
         onFilesChanged: (projectId) => edits.push(projectId),
         projects: () => projects,
+        // The events alone: the backstop's own proof is below.
+        backstop: "1 hour",
       }).pipe(Layer.provide(NodeServices.layer)),
     );
     await runtime.context();
@@ -290,4 +299,179 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
     "a project dropped from the registry must not ping",
   );
   assert.deepEqual(edits, [], "nor report its edits");
+});
+
+it("backstop: a commit whose events were all lost is still signalled, once, and a working tree whose watch ended is watched again and its edits said unseen", async () => {
+  const root = tempDir("sm-gitwatch-backstop-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "one");
+  const changes: string[] = [];
+  const edits: string[] = [];
+  let treeWatches = 0;
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: (projectId) => changes.push(projectId),
+      onFilesChanged: (projectId) => edits.push(projectId),
+      projects: () => [{ id: "p1", name: "repo", path: repo }],
+      // Every event of the git directory lost, and the working tree's
+      // first watch ending as soon as it starts.
+      watch: (path) =>
+        path.endsWith(".git")
+          ? Stream.never
+          : treeWatches++ === 0
+            ? Stream.empty
+            : Stream.never,
+      backstop: "200 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  await waitFor(() => edits.length >= 1, "the ended tree watch to be noticed");
+  assert.ok(treeWatches >= 2, "the ended tree watch was not started again");
+  assert.deepEqual(edits, ["p1"]);
+  await delay(600);
+  assert.deepEqual(changes, [], "a tick with nothing moved signalled");
+  git(repo, "commit", "-q", "--allow-empty", "-m", "two");
+  await waitFor(() => changes.length >= 1, "the lost commit to be found");
+  await delay(600);
+  assert.deepEqual(changes, ["p1"], "one signal per move, not per tick");
+  git(repo, "checkout", "-q", "-b", "other");
+  await waitFor(() => changes.length >= 2, "the lost checkout to be found");
+});
+
+it("the mirror's index watch: a stage whose event was lost still fires, once", async () => {
+  const root = tempDir("sm-indexwatch-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "one");
+  // A watch that hears nothing.
+  // oxlint-disable-next-line shigomori/no-double-cast -- a watcher that never emits, for the one shape watchIndexFile uses
+  const deaf = (() =>
+    Object.assign(new EventEmitter(), {
+      close: () => {},
+    })) as unknown as typeof watch;
+  let fired = 0;
+  const stop = await runHost(
+    watchIndexFile(repo, () => fired++, { backstopMs: 200, watchDir: deaf }),
+  );
+  trackTest(stop);
+  await delay(600);
+  assert.equal(fired, 0, "a tick with nothing moved fired");
+  writeFileSync(join(repo, "b.txt"), "two\n");
+  git(repo, "add", "b.txt");
+  await waitFor(() => fired >= 1, "the lost stage to be found");
+  await delay(600);
+  assert.equal(fired, 1, "one signal per move, not per tick");
+});
+
+it("backstop: a working tree whose watch fails every time it starts is said changed once, not every beat", async () => {
+  const root = tempDir("sm-gitwatch-failing-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "one");
+  const edits: string[] = [];
+  let treeWatches = 0;
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: () => {},
+      onFilesChanged: (projectId) => edits.push(projectId),
+      projects: () => [{ id: "p1", name: "repo", path: repo }],
+      // A tree watch that ends as it starts, every time (a volume whose
+      // watch the user refused).
+      watch: (path) => {
+        if (path.endsWith(".git")) return Stream.never;
+        treeWatches += 1;
+        return Stream.empty;
+      },
+      backstop: "100 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  await waitFor(() => treeWatches >= 6, "the tree watch to be tried again");
+  assert.deepEqual(edits, ["p1"], "said changed on every beat");
+});
+
+it("backstop: a project whose reading hangs holds another up once, for its deadline, and is not read again while that read is out", async () => {
+  const root = realpathSync(tempDir("sm-gitwatch-stall-", trackTest));
+  const repos = ["hangs", "fine"].map((name) => {
+    const repo = join(root, name);
+    git(root, "init", "-q", "-b", "main", repo);
+    writeFileSync(join(repo, "a.txt"), "one\n");
+    git(repo, "add", "a.txt");
+    git(repo, "commit", "-q", "-m", "one");
+    return repo;
+  });
+  const [hangs = "", fine = ""] = repos;
+  const changes: string[] = [];
+  let hangingReads = 0;
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: (projectId) => changes.push(projectId),
+      onFilesChanged: () => {},
+      projects: () => [
+        { id: "hangs", name: "hangs", path: hangs },
+        { id: "fine", name: "fine", path: fine },
+      ],
+      // Every event lost, and one project's reading never coming back,
+      // as on a volume that holds its opens.
+      watch: () => Stream.never,
+      gitState: (gitDir) =>
+        gitDir.startsWith(hangs)
+          ? Effect.suspend(() => {
+              hangingReads += 1;
+              return Effect.never;
+            })
+          : undefined,
+      backstop: "100 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  git(fine, "commit", "-q", "--allow-empty", "-m", "two");
+  await waitFor(
+    () => changes.includes("fine"),
+    "the other project's lost commit to be found",
+    15_000,
+  );
+  assert.ok(!changes.includes("hangs"));
+  assert.ok(
+    hangingReads <= 3,
+    `the hanging project was read ${hangingReads} times`,
+  );
+});
+
+it("backstop: a repository whose git directory went, with its events lost, is signalled", async () => {
+  const root = tempDir("sm-gitwatch-gone-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "one");
+  const changes: string[] = [];
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: (projectId) => changes.push(projectId),
+      onFilesChanged: () => {},
+      projects: () => [{ id: "p1", name: "repo", path: repo }],
+      watch: () => Stream.never,
+      backstop: "100 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  await delay(400);
+  assert.equal(changes.length, 0, "a quiet repository was signalled");
+  rmSync(join(repo, ".git"), { recursive: true, force: true });
+  await waitFor(
+    () => changes.includes("p1"),
+    "the gone repository to be signalled",
+  );
 });
