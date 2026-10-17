@@ -2,7 +2,8 @@
 // repository: a script the app runs in the worktree refuses it, by
 // name, and once the script is stopped the folder moves to its new name
 // under a new id, with the page's row read back the way the app reads
-// it.
+// it. A call by the id from before the move (a stale window's, a
+// peer's) lands on the worktree it became and describes it.
 //
 // Run: pnpm test worktree-rename.
 import assert from "node:assert/strict";
@@ -83,4 +84,55 @@ it("refuses while a script runs there, then renames under a new id", async () =>
   const listed = new Set((await listWorktrees(projectId)).map((w) => w.id));
   assert.ok(listed.has(renamed.id));
   assert.ok(!listed.has(row.id));
+});
+
+it("a call by an id from before a move lands on the moved worktree and describes it", async () => {
+  const project = join(sandbox, "moved");
+  await git(sandbox, ["init", "-q", "-b", "main", project]);
+  await commitFile(project, "a.txt", "a\n", "seed");
+  const worktree = join(dataDir, "wt", basename(project), "badger");
+  await git(project, ["worktree", "add", "-q", "-b", "badger", worktree]);
+  const projectId = await fixture.projectIdOf(project);
+  const before = (await listWorktrees(projectId)).find(
+    (w) => w.path === worktree,
+  );
+  assert.ok(before, "the worktree is listed");
+  const renamed = await runHost(
+    worktreesHandlers.rename({
+      projectId,
+      worktreeId: before.id,
+      name: "stoat",
+    }),
+  );
+
+  const branched = await runHost(
+    worktreesHandlers.renameBranch({
+      projectId,
+      worktreeId: before.id,
+      newBranch: "stoat",
+    }),
+  );
+  assert.equal(branched.id, renamed.id);
+  assert.equal(branched.branch, "stoat");
+
+  const shelved = await runHost(
+    worktreesHandlers.setShelved({
+      projectId,
+      worktreeId: before.id,
+      shelved: true,
+    }),
+  );
+  assert.equal(shelved.id, renamed.id);
+  assert.equal(shelved.shelved, true);
+
+  const destination = join(dirname(worktree), "weasel");
+  const relocated = await runHost(
+    worktreesHandlers.relocate({
+      projectId,
+      worktreeId: before.id,
+      destinationPath: destination,
+    }),
+  );
+  assert.equal(relocated.path, destination);
+  assert.ok(!existsSync(renamed.path));
 });

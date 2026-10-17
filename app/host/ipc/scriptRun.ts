@@ -11,6 +11,7 @@ import {
 } from "@shigomori/contracts/errors";
 import { hasWorktreeData } from "@shigomori/contracts/schemas";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type {
   Project,
@@ -73,6 +74,18 @@ export function scriptEventNotifier(ctx: HandlerContext): NotifyScriptEvent {
   });
 }
 
+// What a create's run tells the calling window or peer as it goes.
+export function worktreeNotifiers(ctx: HandlerContext) {
+  return {
+    notifyPhase: ctx.notifier(worktreesContract, "lifecyclePhase"),
+    notifyCarryOverComplete: ctx.notifier(
+      worktreesContract,
+      "carryOverComplete",
+    ),
+    notifyScript: scriptEventNotifier(ctx),
+  };
+}
+
 // Where a terminal starts (host/lib/terminals): a worktree's in its
 // folder with its scripts' SHIGOMORI_* env, a device's with the app's
 // own. TERM and COLORTERM say what xterm in the renderer draws.
@@ -101,3 +114,7 @@ export const terminalStart = (owner: TerminalOwner) => {
     ),
   );
 };
+
+// The worktrees a project's terminals may stay in.
+export const terminalWorktrees = (projectId: string) =>
+  Ops.listWorktreeIdentities({ projectId });

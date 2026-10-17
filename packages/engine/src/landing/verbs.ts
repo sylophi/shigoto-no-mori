@@ -22,6 +22,20 @@ import type { PullRequestsArea } from "./pullRequests.ts";
 import type { StacksArea } from "./stacks.ts";
 import type { CleanupArea } from "./cleanup.ts";
 
+// A stack's removal, resolved and past its guards, which removeStack
+// carries out as it stands.
+export type StackRemoval = {
+  // What goes, in the order it goes: the other landed layers'
+  // worktrees, then this one.
+  readonly worktrees: ReadonlyArray<Worktrees.WorktreeIdentity>;
+  readonly located: Worktrees.Located;
+  readonly pr: PullRequestSummary;
+  readonly chain: ReadonlyArray<PullRequestSummary>;
+  readonly plan: Effect.Success<ReturnType<CleanupArea["planStackCleanup"]>>;
+  readonly target: Worktrees.PrimaryTarget;
+  readonly options: RemoveOptions;
+};
+
 export const makeVerbs = ({
   pullRequests,
   stacks,
@@ -418,10 +432,9 @@ export const makeVerbs = ({
       );
     });
 
-    const removeStack = Effect.fn("Landing.removeStack")(function* (
+    const planRemoveStack = Effect.fn("Landing.planRemoveStack")(function* (
       located: Worktrees.Located,
       options: RemoveOptions,
-      reporter: Reporter,
     ) {
       const { project } = located;
       const branch = yield* branchOf(located, "rm");
@@ -459,14 +472,29 @@ export const makeVerbs = ({
         options,
         lookups.target.remote,
       );
-      return yield* execStackCleanup(
+      return {
+        worktrees: [...plan.others, located.worktree],
         located,
         pr,
-        pr.state === "MERGED",
         chain,
         plan,
-        lookups.target,
+        target: lookups.target,
         options,
+      } satisfies StackRemoval;
+    });
+
+    const removeStack = Effect.fn("Landing.removeStack")(function* (
+      removal: StackRemoval,
+      reporter: Reporter,
+    ) {
+      return yield* execStackCleanup(
+        removal.located,
+        removal.pr,
+        removal.pr.state === "MERGED",
+        removal.chain,
+        removal.plan,
+        removal.target,
+        removal.options,
         {},
         reporter,
       );
@@ -548,5 +576,5 @@ export const makeVerbs = ({
       );
     });
 
-    return { pullRequest, merge, land, removeStack, done };
+    return { pullRequest, merge, land, planRemoveStack, removeStack, done };
   });

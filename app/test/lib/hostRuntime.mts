@@ -32,7 +32,7 @@ import * as Ports from "../../host/lib/Ports.ts";
 import { sandboxEngine } from "./sandboxEngine.mts";
 import * as Villagers from "../../host/lib/VillagerData.ts";
 import * as Worktrees from "../../host/lib/Worktrees.ts";
-import { terminalStart } from "../../host/ipc/scriptRun.ts";
+import { terminalStart, terminalWorktrees } from "../../host/ipc/scriptRun.ts";
 import * as HostStandIns from "./hostStandIns.mts";
 import { macfs } from "../../../packages/engine/test/lib/macfs.ts";
 
@@ -59,12 +59,19 @@ const engine = Engine.layer({
 // (host/process/services.ts) are here too, for a proof that runs a
 // handler or serves one (runHost, hostContext).
 const runtime = ManagedRuntime.make(
-  Scripts.layer({ hurried: () => false, env: () => process.env }).pipe(
-    Layer.provideMerge(Terminals.layer({ start: terminalStart })),
+  Worktrees.layer.pipe(
+    Layer.provideMerge(
+      Scripts.layer({ hurried: () => false, env: () => process.env }),
+    ),
+    Layer.provideMerge(
+      Terminals.layer({
+        start: terminalStart,
+        worktrees: terminalWorktrees,
+      }),
+    ),
     Layer.provideMerge(
       Layer.mergeAll(
         Ports.layer,
-        Worktrees.layer,
         Villagers.deviceLayer,
         Views.layer,
         Sharing.layer({ announce: () => {} }),

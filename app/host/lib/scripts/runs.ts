@@ -549,6 +549,8 @@ export const makeRuns = ({
       attach,
       list,
       worktrees,
+      runningIn: (worktreeId: string) =>
+        live().filter((record) => record.worktreeId === worktreeId).length,
       lifecycleRuns,
       stopWorktree: Effect.fn("Scripts.stopWorktree")((worktreeId: string) =>
         stopMatching((r) => r.worktreeId === worktreeId, "Worktree removed"),

@@ -6,10 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HostPushes from "@host/lib/HostPushes";
 import type { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
 import type { PeerReach } from "@host/ipc/PeerReach";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { GithubCli } from "@host/lib/githubCli/GithubCli";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -22,50 +19,21 @@ import type { Project } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {
-  currentWorktreeId,
   findProject,
   findProjectAndWorktree,
   findWorktreeIdentity,
   findWorktreePath,
   listWorktrees,
 } from "@host/lib/projects";
-import * as Scripts from "@host/lib/Scripts";
-import {
-  retitleBranchPullRequest,
-  refreshProjectPullRequests,
-} from "@host/lib/githubCli/pullRequests";
-import {
-  pullRequestStackFor,
-  stackCleanupFor,
-  trunkOf,
-} from "@shigomori/contracts/pullRequestStack";
-import {
-  isEntityGoneError,
-  UnknownWorktreeError,
-} from "@shigomori/contracts/errors";
+import type * as Scripts from "@host/lib/Scripts";
+import * as HostWorktrees from "@host/lib/Worktrees";
+import { retitleBranchPullRequest } from "@host/lib/githubCli/pullRequests";
+import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { readGitBlob, readWorktreeFile } from "@host/lib/worktrees/files";
-import { Terminals } from "@host/lib/terminals/Terminals";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
-import {
-  moveMirrorsOfWorktree,
-  stopMirrorsForWorktree,
-} from "@host/mirror/registry";
-import { scriptEventNotifier } from "../scriptRun";
+import type { Terminals } from "@host/lib/terminals/Terminals";
+import { scriptEventNotifier, worktreeNotifiers } from "../scriptRun";
 import * as Ops from "@host/lib/engineOps";
 import type * as Engine from "@host/lib/Engine";
-
-// Exported for the sync module's pull orchestration, whose createWorktree
-// call streams the same lifecycle events.
-export function notifierFor(ctx: HandlerContext) {
-  return {
-    notifyPhase: ctx.notifier(worktreesContract, "lifecyclePhase"),
-    notifyCarryOverComplete: ctx.notifier(
-      worktreesContract,
-      "carryOverComplete",
-    ),
-    notifyScript: scriptEventNotifier(ctx),
-  };
-}
 
 // The changes page's views of one worktree share this key prefix, so
 // a refresh reads them all.
@@ -120,82 +88,6 @@ const filesChanged = (projectId: string) =>
   Views.pushed(worktreesContract, "filesChanged", (changed) => {
     return changed.projectId === projectId;
   });
-
-// The transplant's teardown refused: scripts run in the worktree.
-class ScriptsRunningError extends Schema.TaggedError<ScriptsRunningError>()(
-  "ScriptsRunningError",
-  { scripts: Schema.Natural },
-) {
-  override get message(): string {
-    return `scripts-running: ${this.scripts} script(s) are running in this worktree`;
-  }
-}
-
-class NoMergedLayerError extends Schema.TaggedError<NoMergedLayerError>()(
-  "NoMergedLayerError",
-  {},
-) {
-  override get message(): string {
-    return "No merged layer of this stack has a worktree to remove.";
-  }
-}
-
-class PrimaryRelocateError extends Schema.TaggedError<PrimaryRelocateError>()(
-  "PrimaryRelocateError",
-  {},
-) {
-  override get message(): string {
-    return "The primary checkout can't be relocated";
-  }
-}
-
-const counted = (n: number, noun: string) =>
-  n === 0 ? [] : [`${n} ${noun}${n === 1 ? "" : "s"}`];
-
-class RunningWorkError extends Schema.TaggedError<RunningWorkError>()(
-  "RunningWorkError",
-  {
-    verb: Schema.Literals(["move", "rename"]),
-    name: Schema.String,
-    scripts: Schema.Natural,
-    terminals: Schema.Natural,
-  },
-) {
-  override get message(): string {
-    const running = [
-      ...counted(this.scripts, "script"),
-      ...counted(this.terminals, "terminal"),
-    ];
-    const one = this.scripts + this.terminals === 1;
-    return `Can't ${this.verb} ${this.name} while ${running.join(" and ")} ${one ? "is" : "are"} running there. Stop ${one ? "it" : "them"} first.`;
-  }
-}
-
-// The scripts and terminals running in a worktree hold its folder, so a
-// move or a rename waits until they are stopped.
-const refuseRunningWork = Effect.fn("worktrees.refuseRunningWork")(function* (
-  worktree: { id: string; name: string; path: string },
-  verb: "move" | "rename",
-) {
-  const scripts =
-    (yield* Scripts.Scripts)
-      .worktrees()
-      .find((entry) => entry.worktreeId === worktree.id)?.scriptCount ?? 0;
-  const open = yield* Stream.runHead((yield* Terminals).list);
-  const terminals = Option.getOrElse(open, () => []).filter(({ owner, cwd }) =>
-    owner.kind === "worktree"
-      ? owner.worktreeId === worktree.id
-      : isSameOrInside(cwd, worktree.path),
-  ).length;
-  if (scripts + terminals > 0) {
-    return yield* new RunningWorkError({
-      verb,
-      name: worktree.name,
-      scripts,
-      terminals,
-    });
-  }
-});
 
 export const worktreesViews: ViewHandlers<
   typeof worktreesContract,
@@ -298,7 +190,7 @@ export const worktreesHandlers = {
       Ops.createWorktree(
         project,
         { worktreeName, branchName, base, checkout, cloneFiles },
-        notifierFor(ctx),
+        worktreeNotifiers(ctx),
       ),
     ),
 
@@ -306,7 +198,12 @@ export const worktreesHandlers = {
   // it always got, so only an explicit false runs unforced.
   convertExternal: ({ projectId, worktreeId, force }, ctx) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      Ops.adoptWorktree(project, worktreeId, force !== false, notifierFor(ctx)),
+      Ops.adoptWorktree(
+        project,
+        worktreeId,
+        force !== false,
+        worktreeNotifiers(ctx),
+      ),
     ),
 
   relocationPlan: ({ projectId, layout, customPath }) =>
@@ -321,207 +218,29 @@ export const worktreesHandlers = {
       );
     }),
 
-  // `sm worktrees move` moves the checkout and carries what is keyed by
-  // its path-derived id to the new id. What lives in this process stays
-  // here: the running work it refuses, the tombstone that refuses a
-  // concurrent delete or move, and the mirrors rooted in it, re-opened
-  // on the new path.
-  relocate: ({ projectId, worktreeId, destinationPath }) =>
-    Effect.gen(function* () {
-      const { project, worktree } = yield* findProjectAndWorktree(
-        projectId,
-        worktreeId,
-      );
-      if (worktree.isPrimary) return yield* new PrimaryRelocateError();
-      // Already where it should be: refresh the row.
-      if (worktree.path === destinationPath) {
-        return yield* Ops.describeWorktree(project.id, worktreeId);
-      }
-      yield* refuseRunningWork(worktree, "move");
-      const { withDeleteInflight } = yield* Scripts.Scripts;
-      return yield* withDeleteInflight(
-        worktreeId,
-        "This worktree is already being removed or moved.",
-        Ops.moveWorktree(project, worktreeId, destinationPath),
-        (moved) => moveMirrorsOfWorktree(worktreeId, moved),
-      );
-    }),
+  relocate: (input) =>
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.relocate(input),
+    ),
 
-  // A move to the same parent under a new name, with a move's guards.
-  rename: ({ projectId, worktreeId, name }) =>
-    Effect.gen(function* () {
-      const { project, worktree } = yield* findProjectAndWorktree(
-        projectId,
-        worktreeId,
-      );
-      if (worktree.name === name) {
-        return yield* Ops.describeWorktree(project.id, worktreeId);
-      }
-      yield* refuseRunningWork(worktree, "rename");
-      const { withDeleteInflight } = yield* Scripts.Scripts;
-      return yield* withDeleteInflight(
-        worktreeId,
-        "This worktree is already being removed or moved.",
-        Ops.renameWorktree(project, worktreeId, name),
-        (renamed) => moveMirrorsOfWorktree(worktreeId, renamed),
-      );
-    }),
+  rename: (input) =>
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.rename(input),
+    ),
 
-  delete: (
-    { projectId, worktreeId: named, force, skipCleanup, refuseRunningScripts },
-    ctx,
-  ) =>
-    Effect.gen(function* () {
-      const project = yield* findProject(projectId);
-      // A mirror's stop names its copy by the id it may have had before a
-      // move.
-      const worktreeId = yield* currentWorktreeId(projectId, named);
-      const { assertWorktreeMutable, withDeleteInflight, worktrees } =
-        yield* Scripts.Scripts;
-      // Local delete kills scripts by design (withDeleteInflight reaps
-      // them). The transplant orchestrator refuses instead, since its
-      // teardown must never take down work still running on the source
-      // device. The lookup is app-registry-only, so the engine stays
-      // ignorant of the flag. "scripts-running" is a stable marker the
-      // orchestrator and the UI match on, not prose.
-      if (refuseRunningScripts) {
-        const running = worktrees().find(
-          (entry) => entry.worktreeId === worktreeId,
-        );
-        if (running !== undefined) {
-          return yield* new ScriptsRunningError({
-            scripts: running.scriptCount,
-          });
-        }
-      }
-      // The engine can't see the app's script registry, so the delete runs
-      // under the shared tombstone protocol (see withDeleteInflight).
-      // The engine drops the shelf and auto-pull marks with the worktree.
-      // The announcement brackets this call's run only. A second caller
-      // is refused up front (withDeleteInflight would refuse it the
-      // same way), so its "kept" cannot close the first one's removal
-      // under every viewer. The close carries the outcome, so a viewer
-      // drops the row exactly when the delete did.
-      const busy = "This worktree is already being removed.";
-      yield* assertWorktreeMutable(worktreeId, busy);
-      yield* HostPushes.push(worktreesContract, "removal", {
-        projectId,
-        worktreeId,
-        state: "removing",
-      });
-      let removed = false;
-      return yield* withDeleteInflight(
-        worktreeId,
-        busy,
-        Ops.deleteWorktree(
-          project,
-          { worktreeId, force, skipCleanup },
-          notifierFor(ctx),
-        ),
-        (outcome) =>
-          outcome.ok ? stopMirrorsForWorktree(worktreeId) : Effect.void,
-      ).pipe(
-        Effect.tap((result) =>
-          Effect.sync(() => {
-            removed = result.ok;
-          }),
-        ),
-        Effect.ensuring(
-          Effect.suspend(() =>
-            HostPushes.push(worktreesContract, "removal", {
-              projectId,
-              worktreeId,
-              state: removed ? "removed" : "kept",
-            }),
-          ),
-        ),
-      );
-    }),
+  delete: (input, ctx) =>
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.remove(input, scriptEventNotifier(ctx)),
+    ),
 
-  // The merged layers' worktrees of the stack `worktreeId` is in, as
-  // one removal. The set is read the way the page reads it (the PR map
-  // and the listing), off a fresh sweep of the PRs so it is what the
-  // engine, which resolves the stack against GitHub itself, finds landed
-  // too. Every worktree of the set is announced and guarded like a
-  // single delete, since the one engine call takes them all. One the engine
-  // took past the set (a layer that landed in the moment between) gets
-  // its scripts reaped and its removal announced once it is gone.
-  deleteStack: ({ projectId, worktreeId, force, skipCleanup }, ctx) =>
-    Effect.gen(function* () {
-      const project = yield* findProject(projectId);
-      const [identities, prs] = yield* Effect.all(
-        [
-          Ops.listWorktreeIdentities({ projectId }, { primaryRef: true }),
-          refreshProjectPullRequests(project.path),
-        ],
-        { concurrency: 2 },
-      );
-      const own = identities.find((identity) => identity.id === worktreeId);
-      if (!own) return yield* new UnknownWorktreeError({ worktreeId });
-      const stack = pullRequestStackFor(
-        Object.fromEntries(prs),
-        own.branch,
-        trunkOf(identities),
-      );
-      const cleanup = stack && stackCleanupFor(stack, identities);
-      if (!cleanup) return yield* new NoMergedLayerError();
-      const ids = cleanup.worktrees.map((identity) => identity.id);
-      const busy = "A worktree of this stack is already being removed.";
-      const { assertWorktreeMutable, withDeletesInflight, stopWorktree } =
-        yield* Scripts.Scripts;
-      for (const id of ids) yield* assertWorktreeMutable(id, busy);
-      for (const id of ids) {
-        yield* HostPushes.push(worktreesContract, "removal", {
-          projectId,
-          worktreeId: id,
-          state: "removing",
-        });
-      }
-      let removed: readonly string[] = [];
-      return yield* withDeletesInflight(
-        ids,
-        busy,
-        Ops.deleteStack(
-          project,
-          { worktreeId: cleanup.target.id, force, skipCleanup },
-          notifierFor(ctx),
-        ),
-        (outcome) =>
-          Effect.forEach(outcome.removed, stopMirrorsForWorktree, {
-            concurrency: "unbounded",
-            discard: true,
-          }),
-      ).pipe(
-        Effect.tap((result) =>
-          Effect.gen(function* () {
-            removed = result.removed;
-            yield* Effect.forEach(
-              removed.filter((id) => !ids.includes(id)),
-              stopWorktree,
-              { concurrency: "unbounded", discard: true },
-            );
-          }),
-        ),
-        Effect.ensuring(
-          Effect.suspend(() =>
-            Effect.forEach(
-              ids,
-              (id) =>
-                HostPushes.push(worktreesContract, "removal", {
-                  projectId,
-                  worktreeId: id,
-                  state: removed.includes(id) ? "removed" : "kept",
-                }),
-              { discard: true },
-            ),
-          ),
-        ),
-      );
-    }),
+  deleteStack: (input, ctx) =>
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.removeStack(input, scriptEventNotifier(ctx)),
+    ),
 
   setShelved: ({ projectId, worktreeId, shelved }) =>
-    mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
-      Ops.setShelved(project, worktreeId, shelved),
+    mutateAndDescribe({ projectId, worktreeId }, (target, project) =>
+      Ops.setShelved(project, target.id, shelved),
     ),
 
   // A flag flip only, like setShelved, answered with the refreshed row.
@@ -856,6 +575,7 @@ export const worktreesHandlers = {
   typeof worktreesContract,
   HandlerContext,
   | Scripts.Scripts
+  | HostWorktrees.Worktrees
   | Terminals
   | GithubCli
   | PeerReach
@@ -906,7 +626,6 @@ const primaryRefToSync = Effect.fnUntraced(function* (
   return primaryRef;
 });
 
-// A git read or write on the worktree's checkout.
 // A call on the engine's Git.
 const withGit = <A, E, R>(
   call: (git: Git.Git["Service"]) => Effect.Effect<A, E, R>,
@@ -922,7 +641,8 @@ const atPath = <A, E, R>(
 // freshly-described worktree (the engine's row) so the renderer can
 // replace its cached row in one round trip. The `With` form also hands
 // back what the action produced (a commit hash, a snapshot ref) for the
-// calls that have one.
+// calls that have one. The id resolved names the worktree throughout,
+// so a call by one it had before a move describes it too.
 const mutateAndDescribeWith = <T, E, R>(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
   action: (
@@ -938,7 +658,7 @@ const mutateAndDescribeWith = <T, E, R>(
     const result = yield* action(worktree, project);
     return {
       result,
-      worktree: yield* Ops.describeWorktree(project.id, worktreeId),
+      worktree: yield* Ops.describeWorktree(project.id, worktree.id),
     };
   });
 
