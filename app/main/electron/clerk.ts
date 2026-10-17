@@ -15,8 +15,7 @@
 import { flavor } from "../flavor";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { readFileSync, writeFile } from "node:fs";
-import { app, net, protocol } from "electron";
+import { net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import type { TokenStorage } from "@clerk/electron";
 import { clerkTokenStorage } from "./clerkTokenStorage";
@@ -133,51 +132,12 @@ function fileHandler(rendererDir: string): SchemeHandler {
   });
 }
 
-// How long a page's load waits on the host for its projects' image
-// hosts. At launch the window loads while the host starts, and takes
-// the list the last run heard (imageHostsFile) rather than wait.
-const IMAGE_HOSTS_WAIT_MS = 500;
-
-const imageHostsFile = () =>
-  path.join(app.getPath("userData"), "image-hosts.json");
-
-function lastImageHosts(): readonly string[] {
-  try {
-    const hosts: unknown = JSON.parse(readFileSync(imageHostsFile(), "utf8"));
-    return Array.isArray(hosts)
-      ? hosts.filter((host): host is string => typeof host === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-// Every response under the window's policy (contentPolicy.ts), its
-// image hosts asked of the host again as each page loads, so a project
-// added since shows its remote's images from the next load on.
-function underPolicy(
-  serve: SchemeHandler,
-  policyWith: (imageHosts: readonly string[]) => string,
-  imageHosts: () => Promise<readonly string[]>,
-): SchemeHandler {
-  let known = lastImageHosts();
+// Every response under the window's policy (contentPolicy.ts).
+function underPolicy(serve: SchemeHandler, policy: string): SchemeHandler {
   return async (request) => {
-    const { pathname } = new URL(request.url);
-    if (pathname === "/" || pathname.endsWith(".html")) {
-      const heard = await Promise.race([
-        imageHosts().catch(() => known),
-        new Promise<readonly string[]>((resolve) =>
-          setTimeout(() => resolve(known), IMAGE_HOSTS_WAIT_MS),
-        ),
-      ]);
-      if (heard.join(" ") !== known.join(" ")) {
-        known = heard;
-        writeFile(imageHostsFile(), JSON.stringify(known), () => {});
-      }
-    }
     const response = await serve(request);
     const headers = new Headers(response.headers);
-    headers.set("Content-Security-Policy", policyWith(known));
+    headers.set("Content-Security-Policy", policy);
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
@@ -194,20 +154,16 @@ function underPolicy(
 export function serveRendererOverScheme(
   target: { rendererDir: string } | { devServerUrl: string },
   clerkPublishableKey: string,
-  imageHosts: () => Promise<readonly string[]>,
 ): void {
   const dev = "devServerUrl" in target;
   protocol.handle(
     rendererScheme(),
     underPolicy(
       dev ? proxyHandler(target.devServerUrl) : fileHandler(target.rendererDir),
-      (hosts) =>
-        rendererContentPolicy({
-          clerkHost: clerkFrontendHost(clerkPublishableKey),
-          dev,
-          imageHosts: hosts,
-        }),
-      imageHosts,
+      rendererContentPolicy({
+        clerkHost: clerkFrontendHost(clerkPublishableKey),
+        dev,
+      }),
     ),
   );
 }

@@ -51,8 +51,6 @@ export const sessionContract = defineContract(
   invoke("guideLaunch", GuideLaunchSchema, VoidSchema),
   // Its progress comes as the move's did.
   invoke("migrationRetry", VoidSchema, VoidSchema),
-  // Hosts beside GitHub's that the window's images may load from.
-  invoke("imageHosts", VoidSchema, Schema.Array(Schema.String)),
   // A hurried quit (an update install, a relaunch) signals scripts
   // instead of waiting.
   invoke(

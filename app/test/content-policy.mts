@@ -1,10 +1,11 @@
 // Durable proof for the window's Content-Security-Policy
 // (main/electron/contentPolicy.ts): a packaged build runs the bundle
 // and Clerk's script alone, with no inline script or eval, connects to
-// the loopback and Clerk alone, and shows images from GitHub, Clerk and
-// the remotes' hosts alone; Clerk's host is the one its key
-// names; and the page has no inline script a policy without an inline
-// allowance would block (the vite-bundled module aside).
+// the loopback and Clerk alone, and shows images from GitHub and Clerk
+// alone (a remote's come as data: URLs, projects:remoteImage); Clerk's
+// host is the one its key names; and the page has no inline script a
+// policy without an inline allowance would block (the vite-bundled
+// module aside).
 //
 // Run: pnpm test content-policy.
 import assert from "node:assert/strict";
@@ -37,13 +38,9 @@ it("names the Clerk host its publishable key encodes, and none for a key that is
   assert.equal(clerkFrontendHost(keyFor("evil.com; script-src *")), null);
 });
 
-it("a packaged build runs no inline script or eval, connects to the loopback and Clerk alone, and shows images from GitHub, Clerk and the remotes' hosts alone", () => {
+it("a packaged build runs no inline script or eval, connects to the loopback and Clerk alone, and shows images from GitHub and Clerk alone, a remote's coming as data: URLs", () => {
   const policy = directives(
-    rendererContentPolicy({
-      clerkHost: "clerk.example.com",
-      dev: false,
-      imageHosts: ["git.uni.example"],
-    }),
+    rendererContentPolicy({ clerkHost: "clerk.example.com", dev: false }),
   );
   assert.deepEqual(policy.get("default-src"), ["'self'"]);
   const scripts = policy.get("script-src") ?? [];
@@ -55,7 +52,8 @@ it("a packaged build runs no inline script or eval, connects to the loopback and
     "https://clerk.example.com",
     "https://challenges.cloudflare.com",
   ]);
-  // Images from GitHub, Clerk's avatars and the remotes' hosts alone.
+  // Images from GitHub and Clerk's avatars alone, as in the web client:
+  // one on a project's remote's host comes as a data: URL.
   assert.deepEqual(policy.get("img-src"), [
     "'self'",
     "data:",
@@ -65,8 +63,6 @@ it("a packaged build runs no inline script or eval, connects to the loopback and
     "https://*.github.com",
     "https://githubusercontent.com",
     "https://*.githubusercontent.com",
-    "https://git.uni.example",
-    "https://*.git.uni.example",
   ]);
   assert.deepEqual(policy.get("media-src"), ["'self'", "data:"]);
   assert.deepEqual(policy.get("object-src"), ["'none'"]);

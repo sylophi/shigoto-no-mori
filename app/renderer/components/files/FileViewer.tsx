@@ -15,7 +15,7 @@ import {
   MarkdownFileView,
   MediaFileView,
 } from "@shigomori/ui/views/files/FileViewerView.tsx";
-import { useProjectImageHosts } from "@/hooks/projects/useProjectImageHosts";
+import { useRemoteImage } from "@/hooks/projects/useRemoteImage";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // The files page's pane: one file, read whole and highlighted by the
@@ -40,7 +40,7 @@ export function FileViewer({
     worktreeId,
     path,
   );
-  const imageHosts = useProjectImageHosts(projectId);
+  const remoteImage = useRemoteImage(projectId);
   const name = path.slice(path.lastIndexOf("/") + 1);
   // Kept from file to file, like an editor's preview pane.
   const [shown, setShown] = useState<FileShown>("preview");
@@ -78,7 +78,7 @@ export function FileViewer({
     >
       {text !== null && preview !== null && shown === "preview" ? (
         preview === "markdown" ? (
-          <MarkdownFileView source={text} imageHosts={imageHosts} />
+          <MarkdownFileView source={text} remoteImage={remoteImage} />
         ) : (
           // As an image, which runs none of the scripts an SVG can hold.
           <MediaFileView

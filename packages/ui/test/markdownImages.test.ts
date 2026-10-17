@@ -1,6 +1,7 @@
-// What a description's markdown may load (src/primitives/markdown.tsx):
-// every URL an attribute names, each candidate of a srcset included,
-// from GitHub or a host its caller registered.
+// Which URLs a description's markdown may load itself
+// (src/primitives/markdown.tsx), each candidate of a srcset included:
+// from the hosts it is given (GitHub's, in the window), or the page's
+// own origin.
 import assert from "node:assert/strict";
 import { GITHUB_IMAGE_HOSTS } from "@shigomori/contracts/predicates/imageHosts";
 import { it } from "vitest";

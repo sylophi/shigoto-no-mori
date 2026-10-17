@@ -229,7 +229,8 @@ function buildQueryKeys(deviceId: string) {
       host("githubCli", "repoMergeConfig", projectId),
     repoDescription: (projectId: string) =>
       host("githubCli", "repoDescription", projectId),
-    cloneUrl: (projectId: string) => host("projects", "cloneUrl", projectId),
+    remoteImage: (projectId: string, url: string) =>
+      host("projects", "remoteImage", projectId, url),
     pullRequestDiff: (projectId: string, number: number | undefined) =>
       host("githubCli", "pullRequestDiff", projectId, number),
     // The create pull request dialog's reads.
