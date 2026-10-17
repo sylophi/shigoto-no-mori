@@ -1,7 +1,7 @@
 // The darwin helper as macfs/ is now, built once per state of its
-// sources into the temp dir, for the tests and proofs that run the
-// Darwin service. No side effects on import, so the app's proofs can
-// take it without the sandbox's environment.
+// sources into the test cache (../../../../testTemp.mts), for the tests
+// and proofs that run the Darwin service. No side effects on import, so
+// the app's proofs can take it without the sandbox's environment.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -11,9 +11,9 @@ import {
   readFileSync,
   renameSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
+import { testCacheDir } from "../../../../testTemp.mts";
 
 const dir = join(import.meta.dirname, "..", "..", "..", "..", "macfs");
 let built: string | undefined;
@@ -33,8 +33,7 @@ export function macfs(): string {
     hash.update(readFileSync(join(dir, rel)));
   }
   const binary = join(
-    tmpdir(),
-    `macfs-${hash.digest("hex").slice(0, 16)}`,
+    testCacheDir(`macfs-${hash.digest("hex").slice(0, 16)}`),
     "macfs",
   );
   if (!existsSync(binary)) {

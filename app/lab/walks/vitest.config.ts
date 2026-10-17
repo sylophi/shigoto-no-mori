@@ -4,8 +4,10 @@
 import { join } from "node:path";
 import { defineConfig } from "vitest/config";
 import { isolateGit } from "../../../gitIsolation";
+import { ownTestTemp } from "../../../testTemp.mts";
 
 isolateGit();
+ownTestTemp("walks");
 
 export default defineConfig({
   root: join(import.meta.dirname, "..", ".."),
