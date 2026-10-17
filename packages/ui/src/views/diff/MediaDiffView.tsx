@@ -1,6 +1,7 @@
 import type { ReactNode, Ref } from "react";
 import { Loader2 } from "lucide-react";
 import type { WorktreeFile } from "@shigomori/contracts/schemas";
+import { Button } from "../../primitives/button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { cn } from "../../lib/utils.ts";
@@ -18,6 +19,7 @@ export function MediaDiffSideView({
   side,
   file,
   reading,
+  unnamed,
   sideRef,
 }: {
   side: "old" | "new";
@@ -25,6 +27,14 @@ export function MediaDiffSideView({
   // couldn't be read.
   file: WorktreeFile | undefined;
   reading: boolean;
+  // Set when the patch names the side's blob only in short (a pull
+  // request's diff from GitHub, its commits not fetched here), so it
+  // can't be read: what to do about it.
+  unnamed?: {
+    readonly onRetry: (() => void) | undefined;
+    // The ask is out.
+    readonly retrying: boolean;
+  };
   // Read once scrolled near: a patch that regenerates a hundred
   // screenshots would otherwise ship every one of them up front.
   sideRef?: Ref<HTMLDivElement>;
@@ -37,7 +47,27 @@ export function MediaDiffSideView({
         side === "old" ? "bg-rose-500/10" : "bg-green-500/10",
       )}
     >
-      {reading ? (
+      {unnamed ? (
+        <CenteredMessage className="flex-col gap-2 px-6 text-center">
+          <span>
+            Not shown: this needs the pull request&apos;s commits, which
+            couldn&apos;t be read here.
+          </span>
+          {unnamed.onRetry && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={unnamed.retrying}
+              onClick={unnamed.onRetry}
+            >
+              {unnamed.retrying && (
+                <Loader2 aria-hidden className="size-3.5 animate-spin" />
+              )}
+              Try again
+            </Button>
+          )}
+        </CenteredMessage>
+      ) : reading ? (
         <CenteredMessage>
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
         </CenteredMessage>
