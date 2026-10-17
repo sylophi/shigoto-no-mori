@@ -200,9 +200,7 @@ export const makeRemoving = ({
       yield* options.preflighted
         ? notPrimary(worktree)
         : removable(worktree, options.force);
-      const deleteBranchOnRemove = (yield* config
-        .get({ kind: "device" }, "deleteBranchOnRemove")
-        .pipe(Effect.orDie)).value;
+      const deleteBranchOnRemove = yield* config.device("deleteBranchOnRemove");
       // Never for an external worktree: no provision ever ran.
       let cleanupRan = false;
       if (!worktree.isExternal && !options.skipCleanup) {

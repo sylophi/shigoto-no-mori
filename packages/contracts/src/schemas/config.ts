@@ -52,6 +52,7 @@ const LauncherCommandSchema = Schema.Struct({
   command: Schema.NonEmptyString,
 });
 export type LauncherCommand = typeof LauncherCommandSchema.Type;
+export const isLauncherCommand = Schema.is(LauncherCommandSchema);
 
 // Files carried from the primary checkout into new worktrees: `symlink`
 // keeps state shared, `copy` snapshots.
@@ -66,6 +67,7 @@ const CarryOverEntrySchema = Schema.Struct({
   mode: Schema.Literals(["copy", "symlink"]),
 });
 export type CarryOverEntry = typeof CarryOverEntrySchema.Type;
+export const isCarryOverEntry = Schema.is(CarryOverEntrySchema);
 
 // - managed-root: <dataDir>/wt/<projectName>/<worktreeName>, the default
 // - in-project: <projectPath>/.shigomori/wt/<worktreeName>, inside the

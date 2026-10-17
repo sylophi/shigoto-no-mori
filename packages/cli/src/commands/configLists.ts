@@ -5,6 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute, relative, sep } from "node:path";
+import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import * as Config from "@shigomori/engine/Config";
 import type { ConfigDoc } from "@shigomori/engine/configDoc";
 import type * as Registry from "@shigomori/engine/Registry";
@@ -40,7 +41,9 @@ const isEntry = (value: unknown): value is Entry =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 // The list `key` changed by `change`, written back with the rest of the
-// settings as they were. An emptied list goes.
+// settings as they were, in one transaction: a verb decides what to do
+// from the list `change` is handed, never from an earlier read. An
+// emptied list goes.
 const rewrite = (
   settings: Settings,
   key: string,
@@ -48,7 +51,10 @@ const rewrite = (
 ) =>
   Effect.flatMap(Config.Config, (config) =>
     config.change(settings.scope, (doc) => {
-      const next = change(entries(doc, key));
+      const list = entries(doc, key);
+      const next = change(list);
+      // A verb that refused hands the list back as it was.
+      if (next === list) return doc;
       const { [key]: _, ...rest } = doc;
       return next.length === 0 ? rest : { ...rest, [key]: next };
     }),
@@ -144,31 +150,40 @@ export const launcherVerb = <E, R>(resolve: Effect.Effect<Settings, E, R>) =>
             if (rest.length !== 1 || ref === undefined) {
               return yield* usage(settings, "launcher rm <label-or-id>");
             }
-            const list = entries(
-              yield* config.read(settings.scope),
-              "launchers",
-            );
-            const matches = launcherMatches(list, ref);
-            const [index] = matches;
-            if (index === undefined) {
-              return yield* new NoSuchEntry({
-                problem: `No launcher matches ${JSON.stringify(ref)}.${suffix(settings)}`,
-              });
+            // Matched in the write's own read, so an edit landing
+            // between a read and the write can't shift what goes.
+            let outcome:
+              | { readonly removed: unknown }
+              | { readonly problem: string } = {
+              problem: "",
+            };
+            yield* rewrite(settings, "launchers", (list) => {
+              const matches = launcherMatches(list, ref);
+              const [index] = matches;
+              if (index === undefined) {
+                outcome = {
+                  problem: `No launcher matches ${JSON.stringify(ref)}.${suffix(settings)}`,
+                };
+                return list;
+              }
+              if (matches.length > 1) {
+                const ids = matches.map((at) => {
+                  const entry = list[at];
+                  const id = isEntry(entry) ? text(entry["id"]) : "";
+                  return id === "" ? "(no id, use `edit`)" : id;
+                });
+                outcome = {
+                  problem: `${matches.length} launchers are labeled ${JSON.stringify(ref)}. Remove by id: ${ids.join(", ")}.`,
+                };
+                return list;
+              }
+              outcome = { removed: list[index] };
+              return list.filter((_, at) => at !== index);
+            });
+            if ("problem" in outcome) {
+              return yield* new NoSuchEntry({ problem: outcome.problem });
             }
-            if (matches.length > 1) {
-              const ids = matches.map((at) => {
-                const entry = list[at];
-                const id = isEntry(entry) ? text(entry["id"]) : "";
-                return id === "" ? "(no id, use `edit`)" : id;
-              });
-              return yield* new NoSuchEntry({
-                problem: `${matches.length} launchers are labeled ${JSON.stringify(ref)}. Remove by id: ${ids.join(", ")}.`,
-              });
-            }
-            const removed = list[index];
-            yield* rewrite(settings, "launchers", (all) =>
-              all.filter((_, at) => at !== index),
-            );
+            const { removed } = outcome;
             return yield* report(
               settings,
               { removed },
@@ -209,12 +224,10 @@ const carryOverPath = (project: Registry.ListedProject, raw: string) =>
       }
       path = inside;
     }
-    if (path.startsWith("/") || path.includes("\0")) {
-      return yield* outsideRoot();
-    }
-    const parts = path.split(/[/\\]/);
-    if (parts.includes("..")) return yield* outsideRoot();
-    const kept = parts.filter((part) => part !== "" && part !== ".");
+    if (!isSafeRelPath(path)) return yield* outsideRoot();
+    const kept = path
+      .split(/[/\\]/)
+      .filter((part) => part !== "" && part !== ".");
     if (kept.length === 0) return yield* outsideRoot();
     return kept.join("/");
   });
@@ -295,18 +308,15 @@ export const carryOverVerb = <E, R>(
                 `warning: ${path} doesn't currently exist in the primary checkout or any worktree`,
               );
             }
-            const list = entries(
-              yield* config.read(settings.scope),
-              "carryOver",
-            );
-            const updated = list.some(same(path));
-            yield* rewrite(settings, "carryOver", (all) =>
-              updated
+            let updated = false;
+            yield* rewrite(settings, "carryOver", (all) => {
+              updated = all.some(same(path));
+              return updated
                 ? all.map((entry) =>
                     same(path)(entry) ? { ...(entry as Entry), mode } : entry,
                   )
-                : [...all, { path, mode }],
-            );
+                : [...all, { path, mode }];
+            });
             return yield* report(
               settings,
               { entry: { path, mode } },
@@ -320,18 +330,16 @@ export const carryOverVerb = <E, R>(
               return yield* usage(settings, "carryover rm <path>");
             }
             const path = yield* carryOverPath(project, raw);
-            const list = entries(
-              yield* config.read(settings.scope),
-              "carryOver",
-            );
-            if (!list.some(same(path))) {
+            let held = false;
+            yield* rewrite(settings, "carryOver", (all) => {
+              held = all.some(same(path));
+              return all.filter((entry) => !same(path)(entry));
+            });
+            if (!held) {
               return yield* new NoSuchEntry({
                 problem: `No carry-over entry for ${JSON.stringify(path)}.${suffix(settings)}`,
               });
             }
-            yield* rewrite(settings, "carryOver", (all) =>
-              all.filter((entry) => !same(path)(entry)),
-            );
             return yield* report(
               settings,
               { removed: path },

@@ -50,7 +50,7 @@ import {
   type CreateWorktreeResult,
   type DeleteStackResult,
   DetectedLauncherSchema,
-  type GlobalConfig,
+  type DeviceSettingsPatch,
   LauncherEntrySchema,
   type MergeOutcome,
   MergeOutcomeSchema,
@@ -604,33 +604,17 @@ export const packageScriptLaunch = Effect.fnUntraced(function* (args: {
   );
 });
 
-// Whole-document config writes, the same write path the terminal's
-// plumbing `write --data` verbs run (validation, the atomic merge, and
-// the in-project exclude side effect for project config). The payloads
-// were already parsed at the IPC boundary. The merge is NOT a plain
-// overlay: for every REGISTERED key the payload omits it CLEARS that
-// key (that is how a settings save serializes a default by omission),
-// so only UNREGISTERED keys the payload does not carry survive
-// untouched. A caller must therefore hand a COMPLETE base or a
-// registered key it left out is written away. A null clears any key.
-// Callers invalidate the TTL caches themselves.
-//
-// globalConfig carries device fields only, which the narrowed
-// GlobalConfigSchema enforces at the IPC boundary. The keep-unregistered
-// half of the merge is what keeps any legacy client keys (theme,
-// doubutsu) intact when a device-only payload lands.
-export const writeGlobalConfig = Effect.fnUntraced(function* (
-  config: ClearingWrite<GlobalConfig>,
+// The Settings form's save, and a peer's: the engine's patch, in one
+// transaction with the terminal's own writes.
+export const patchGlobalConfig = Effect.fnUntraced(function* (
+  patch: DeviceSettingsPatch,
 ) {
   yield* asChange(
     Effect.flatMap(EngineConfig.Config, (engineConfig) =>
-      engineConfig.write({ kind: "device" }, config),
+      engineConfig.patch(patch),
     ),
   );
 });
-
-// A config write payload where null clears the key.
-export type ClearingWrite<T> = { -readonly [K in keyof T]?: T[K] | null };
 
 // The renderer hands the whole project document and clears a field by
 // leaving it out, so every field the schema models goes in the payload,

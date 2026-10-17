@@ -1,3 +1,4 @@
+import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -55,11 +56,10 @@ const make = Effect.gen(function* () {
     // The device's drive setting matters only for a managed root a
     // project's own drive could hold.
     const onDrive =
-      (settings.worktreeLayout ?? "managed-root") === "managed-root" &&
+      (settings.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout) ===
+        "managed-root" &&
       layout.projectDriveBase(project.path, place) !== undefined
-        ? (yield* config
-            .get({ kind: "device" }, "managedOnProjectDrive")
-            .pipe(Effect.orDie)).value === true
+        ? yield* config.device("managedOnProjectDrive")
         : false;
     return layout.worktreeBase(
       project.path,

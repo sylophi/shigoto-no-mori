@@ -735,6 +735,21 @@ describe(
       assert.equal((await runAt(box.home, "--json", "config", "edit")).code, 2);
     });
 
+    it("refuses an edit when the settings changed while the editor was open, and keeps the edit", async () => {
+      box.write("registry.json", { projects: [] });
+      await box.migrate("cli");
+      // Another save lands while the editor is open.
+      box.fakeBin(
+        "busy-editor",
+        `'${built}' config set portPool true >/dev/null; printf '{"launchScripts": false}' > "$1"`,
+      );
+      await inTerminal(["config", "edit"], [], { EDITOR: "busy-editor" });
+      const kept = await runAt(box.home, "config", "get", "portPool");
+      assert.equal(kept.stdout, "true\n");
+      const unchanged = await runAt(box.home, "config", "get", "launchScripts");
+      assert.equal(unchanged.stdout, "true\n");
+    });
+
     it("leaves no process behind when a case fails with the menu up", async () => {
       await projects();
       await assert.rejects(

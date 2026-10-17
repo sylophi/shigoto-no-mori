@@ -9,7 +9,10 @@
 // The integration is on for a directory when the global toggle is, the
 // binary is on PATH, and the config file parses as JSON with a
 // schemaVersion field. Richer validation is left to port-pool itself.
-import type { WorktreePort } from "@shigomori/contracts/schemas";
+import {
+  DEVICE_SETTINGS_DEFAULTS,
+  type WorktreePort,
+} from "@shigomori/contracts/schemas";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -183,7 +186,9 @@ const make = Effect.gen(function* () {
     );
 
   const portPoolEnabled = read(Ops.readGlobalConfig()).pipe(
-    Effect.map((config) => config.portPool === true),
+    Effect.map(
+      (config) => config.portPool ?? DEVICE_SETTINGS_DEFAULTS.portPool,
+    ),
   );
 
   // The toggle first, before anything forks git: off is the default.

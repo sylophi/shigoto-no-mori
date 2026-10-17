@@ -4,14 +4,7 @@
 // writes go through the engine's Config (host/lib/engineOps.ts), the
 // same the terminal's `sm config` uses.
 import { errorWordsOf } from "@host/lib/errorWords";
-import * as Semaphore from "effect/Semaphore";
 import { log } from "@shared/log";
-
-// INVARIANT: every host-side global-config write runs its whole
-// read-modify-write under this lock. Today that is the
-// `writeDeviceSettings` patch handler, which serves this window's save
-// and every peer's, so two saves cannot interleave and lose an update.
-export const globalConfigWrites = Semaphore.makeUnsafe(1);
 
 // Config-change reconcilers. Every change path (the IPC write, and a
 // terminal write the store watcher notices) ends in globalConfigChanged,

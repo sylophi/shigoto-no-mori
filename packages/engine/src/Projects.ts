@@ -125,12 +125,6 @@ const make = Effect.gen(function* () {
   const worktrees = yield* Worktrees.Worktrees;
   const { binaryName } = yield* Paths.Paths;
 
-  const deviceOn = (key: string) =>
-    config.get({ kind: "device" }, key).pipe(
-      Effect.map(({ value }) => value === true),
-      Effect.orElseSucceed(() => false),
-    );
-
   // What a project starts with: auto-pull on its primary per the
   // autoPullNew setting, its default branch, and a `<pm> install` setup
   // script per autoPopulateInstall. A repo without a default branch
@@ -139,8 +133,8 @@ const make = Effect.gen(function* () {
   const seedOf = (primaryPath: string) =>
     Effect.all(
       [
-        deviceOn("autoPullNew"),
-        deviceOn("autoPopulateInstall"),
+        config.device("autoPullNew"),
+        config.device("autoPopulateInstall"),
         // git's and the folder's answers are hints: one that fails seeds
         // nothing of its own.
         git
