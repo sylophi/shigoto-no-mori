@@ -14,6 +14,11 @@ pre-commit:
         jobs:
           - name: typecheck
             run: pnpm run typecheck
+          # Unused files, exports and dependencies across every workspace,
+          # which CI checks too: about two seconds for the whole repo, run
+          # alongside the typecheck, so here rather than at the push.
+          - name: knip
+            run: pnpm run check:knip
           - name: lint
             run: node_modules/.bin/oxlint --no-error-on-unmatched-pattern {staged_files}
           # format and lint only see staged files, so a change to the

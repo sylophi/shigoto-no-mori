@@ -39,8 +39,6 @@ export const makeBranches = ({
       remoteRefExists,
       resolveCheckoutRef,
     } = worktreeVerbs;
-    // --- branches and remotes ---
-
     const branchRefs = Effect.fn("Git.branchRefs")(function* (repo: string) {
       return parseBranchRefs(
         yield* run(repo, [
@@ -260,5 +258,3 @@ export const makeBranches = ({
       listIgnoreRules,
     };
   });
-
-export type BranchesArea = Effect.Success<ReturnType<typeof makeBranches>>;

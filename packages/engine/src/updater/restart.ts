@@ -26,8 +26,6 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
       status: statusPath,
     } = files.at;
     const { appAlive, readStatus, writeShared } = files;
-    // --- the running app ---
-
     // The handed-off install restarts the app. Success is updater.json
     // naming a new pid and a new version: a failed swap relaunching the old
     // bundle mustn't read as "updated X -> X". An error the old pid

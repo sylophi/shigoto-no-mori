@@ -68,38 +68,43 @@ export const acquireStagingLock = Effect.fn("acquireStagingLock")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  // One try: taken, or a dead holder's file cleared for the next.
+  const attempt = Effect.gen(function* () {
+    // Only an existing file is someone else's: a folder that can't be
+    // written, or a full disk, says so.
+    const self = yield* startOf(process.pid);
+    const taken = yield* fs
+      .writeFileString(
+        file,
+        Option.isSome(self)
+          ? `${process.pid} ${self.value}\n`
+          : `${process.pid}\n`,
+        { flag: "wx", mode: 0o644 },
+      )
+      .pipe(
+        Effect.as(true),
+        Effect.catchIf(
+          (error) => Predicate.isTagged(error.reason, "AlreadyExists"),
+          () => Effect.succeed(false),
+        ),
+      );
+    if (taken) return true;
+    const holder = yield* stagingHolder(file);
+    if (Option.isSome(holder) && holder.value.alive) {
+      return yield* new UpdateInProgress({ pid: holder.value.pid });
+    }
+    const stale = `${file}.stale-${process.pid}`;
+    yield* fs
+      .rename(file, stale)
+      .pipe(Effect.andThen(fs.remove(stale)), Effect.ignore);
+    return false;
+  });
   const take = Effect.gen(function* () {
     yield* fs.makeDirectory(path.dirname(file), { recursive: true });
-    for (let attempt = 0; attempt < 3; attempt++) {
-      // Only an existing file is someone else's: a folder that can't be
-      // written, or a full disk, says so.
-      const self = yield* startOf(process.pid);
-      const taken = yield* fs
-        .writeFileString(
-          file,
-          Option.isSome(self)
-            ? `${process.pid} ${self.value}\n`
-            : `${process.pid}\n`,
-          { flag: "wx", mode: 0o644 },
-        )
-        .pipe(
-          Effect.as(true),
-          Effect.catchIf(
-            (error) => Predicate.isTagged(error.reason, "AlreadyExists"),
-            () => Effect.succeed(false),
-          ),
-        );
-      if (taken) return;
-      const holder = yield* stagingHolder(file);
-      if (Option.isSome(holder) && holder.value.alive) {
-        return yield* new UpdateInProgress({ pid: holder.value.pid });
-      }
-      const stale = `${file}.stale-${process.pid}`;
-      yield* fs
-        .rename(file, stale)
-        .pipe(Effect.andThen(fs.remove(stale)), Effect.ignore);
-    }
-    return yield* new StagingLockUnavailable({ path: file });
+    const taken = yield* attempt.pipe(
+      Effect.repeat({ until: (done) => done, times: 2 }),
+    );
+    if (!taken) return yield* new StagingLockUnavailable({ path: file });
   });
   yield* Effect.acquireRelease(take, () => fs.remove(file).pipe(Effect.ignore));
 });

@@ -31,8 +31,6 @@ export const makeWithoutStore = ({
       checkUpdateLeftovers,
     } = dataDirChecks;
     const { checkEnvironment, checkOrphanTunnel } = checklist;
-    // --- without the store ---
-
     // The checks that need no state: the environment, the data dir's own
     // lines (locks and what an update left) and a tunnel a crash left
     // running. `failed` says the store wouldn't open, which is a line of
@@ -72,7 +70,3 @@ export const makeWithoutStore = ({
 
     return { checkWithoutState };
   });
-
-export type WithoutStoreArea = Effect.Success<
-  ReturnType<typeof makeWithoutStore>
->;

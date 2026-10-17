@@ -210,8 +210,8 @@ func TestPrivateSizeOfAClone(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "source"), strings.Repeat("x", 1<<16), 0o644)
 	macfs(t, "", "clone", filepath.Join(root, "source"), filepath.Join(root, "clone"))
-	lines := macfs(t, "clone\x00gone", "privsize", "-stdin", root)
-	if lines["clone"]["bytes"] != float64(0) {
+	lines := macfs(t, "clone\x00gone", "lstat", "-stdin", "-private", root)
+	if lines["clone"]["privateBytes"] != float64(0) {
 		t.Fatalf("clone: %v", lines["clone"])
 	}
 	if code := errorCode(lines["gone"]); code != "ENOENT" {

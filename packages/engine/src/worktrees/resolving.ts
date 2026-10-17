@@ -280,5 +280,3 @@ export const makeResolving = ({ listing }: { readonly listing: ListingArea }) =>
       resolve,
     };
   });
-
-export type ResolvingArea = Effect.Success<ReturnType<typeof makeResolving>>;

@@ -44,7 +44,6 @@ import {
   check,
   isStoreImportError,
 } from "./doctor/documents.ts";
-export { MovedWorktreePending, WorktreesNotMoved } from "./doctor/documents.ts";
 export type {
   DoctorDocument,
   Finding,

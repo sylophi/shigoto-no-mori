@@ -200,5 +200,3 @@ export const makeDescribing = ({
 
     return { setShelved, setAutoPull, description, describe };
   });
-
-export type DescribingArea = Effect.Success<ReturnType<typeof makeDescribing>>;

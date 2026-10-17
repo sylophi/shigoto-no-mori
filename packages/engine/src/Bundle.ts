@@ -73,7 +73,7 @@ const COMMIT = /^[0-9a-f]{4,64}$/;
 
 // A full ref git takes without question: no `..`, `//`, trailing slash
 // or .lock.
-export const validRef = (ref: string) =>
+const validRef = (ref: string) =>
   REF.test(ref) &&
   !ref.includes("..") &&
   !ref.includes("//") &&

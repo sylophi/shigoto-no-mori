@@ -7,8 +7,6 @@ import type { FilesArea } from "./files.ts";
 export const makeSignatures = ({ files }: { readonly files: FilesArea }) =>
   Effect.sync(() => {
     const { run } = files;
-    // --- signatures ---
-
     const signerOf = Effect.fn("Updater.signerOf")(function* (bundle: string) {
       const shown = yield* run("codesign", ["-dvv", "--", bundle]);
       if (!shown.ok) {

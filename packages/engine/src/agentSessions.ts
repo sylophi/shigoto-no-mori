@@ -120,7 +120,7 @@ export function canonicalJson(value: unknown): string {
 // carries no call id, so the call is its tool and input, which its
 // PostToolUse repeats. A question's PostToolUse adds the answers to
 // it, so those are left out.
-export function toolWait(event: AgentEvent): string {
+function toolWait(event: AgentEvent): string {
   let input = event.toolInput;
   if (
     event.toolName === "AskUserQuestion" &&
@@ -154,7 +154,7 @@ function waitAsk(entry: string) {
 
 // How long the text a session keeps may run, in characters: a line for
 // a title or a prompt's call, a few for a closing message.
-export const AGENT_LINE_MAX = 120;
+const AGENT_LINE_MAX = 120;
 export const AGENT_MESSAGE_MAX = 400;
 
 // A value of a tool's input, whose shape is the tool's own: its text,

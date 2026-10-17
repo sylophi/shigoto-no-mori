@@ -384,9 +384,6 @@ export const importFiles = (lenient: boolean) =>
     }
   });
 
-// The store's import migration.
-export const importJson = importFiles(false);
-
 // One key of registry.json read as a hint, for a migration that comes
 // after the import: the file stays where it is, so a table added later
 // takes its key from it the way the import took the others. Absent,

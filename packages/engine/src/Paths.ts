@@ -29,7 +29,7 @@ export type StateProbe = "present" | "absent" | "unreadable";
 // default under the home directory.
 export type DataDirSource = "env" | "pointer" | "legacy" | "default";
 
-export class RetiredRootVariable extends Schema.TaggedError<RetiredRootVariable>()(
+class RetiredRootVariable extends Schema.TaggedError<RetiredRootVariable>()(
   "RetiredRootVariable",
   {},
 ) {

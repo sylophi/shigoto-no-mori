@@ -103,7 +103,6 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
       Option.fromNullishOr(appStatusOf(value)),
     );
 
-    // The running app instance, when there is one.
     const runningApp = Effect.gen(function* () {
       const status = yield* readStatus;
       if (Option.isNone(status) || !(yield* appAlive(status.value.pid))) {

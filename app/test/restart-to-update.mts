@@ -15,6 +15,7 @@
 //     reaches the button in its words, for the toast.
 //
 // Run: pnpm test restart-to-update.
+import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -89,7 +90,7 @@ async function startHost(
         registrar,
         deviceId: () => "this-device",
         appVersion: "9.9.9",
-        file: () => join(dataDir, Loopback.LOOPBACK_FILE),
+        file: () => join(dataDir, LOOPBACK_FILE),
         services: Effect.succeed(host),
       }).pipe(
         Layer.provide(

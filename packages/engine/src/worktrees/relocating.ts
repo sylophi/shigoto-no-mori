@@ -267,5 +267,3 @@ export const makeRelocating = ({
 
     return { relocateProject, relocationPlan };
   });
-
-export type RelocatingArea = Effect.Success<ReturnType<typeof makeRelocating>>;

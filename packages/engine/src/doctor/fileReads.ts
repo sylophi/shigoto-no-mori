@@ -40,8 +40,6 @@ export const makeFileReads = ({
       registryLine,
       registeredLine,
     } = dataDirChecks;
-    // --- the 2.x files, while the store can't import them ---
-
     const stateFile = path.join(dataDir, "state.json");
 
     // A JSON file the store imports, read as Go read it.
@@ -236,5 +234,3 @@ export const makeFileReads = ({
 
     return { readFiles };
   });
-
-export type FileReadsArea = Effect.Success<ReturnType<typeof makeFileReads>>;

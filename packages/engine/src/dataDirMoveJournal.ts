@@ -139,7 +139,7 @@ export const rescueStrandedMove = (input: {
 // A data folder a move landed whose pointer couldn't be made to lead to
 // it: every process refuses to start rather than make a fresh one where
 // the pointer still leads.
-export class DataDirStranded extends Schema.TaggedError<DataDirStranded>()(
+class DataDirStranded extends Schema.TaggedError<DataDirStranded>()(
   "DataDirStranded",
   {
     from: Schema.String,

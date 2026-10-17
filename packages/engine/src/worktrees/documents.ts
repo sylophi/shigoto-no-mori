@@ -110,7 +110,7 @@ export type IdentityRow = {
 };
 
 // The divergence of HEAD from a ref.
-export type Sync = { readonly ahead: number; readonly behind: number };
+type Sync = { readonly ahead: number; readonly behind: number };
 
 // `sm worktrees status --json`: one worktree's card.
 export type StatusCard = {
@@ -644,7 +644,7 @@ export const externalWorktreeName = (
 // What Go's unicode.IsSpace calls space, which its TrimSpace trims.
 // JavaScript's trim differs at the edges: it keeps U+0085 and drops
 // U+FEFF.
-export const GO_SPACE_START =
+const GO_SPACE_START =
   /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/;
 export const GO_SPACE_END =
   /[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/;

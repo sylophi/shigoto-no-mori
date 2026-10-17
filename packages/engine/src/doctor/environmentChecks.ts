@@ -38,8 +38,6 @@ export const makeEnvironmentChecks = ({
     const cdFile = yield* envVar(CD_FILE_ENV);
 
     const { capture, statOf, realPath, listDir } = reads;
-    // --- environment ---
-
     const checkGit = Effect.gen(function* () {
       const line = check("Environment", "git", "git");
       const version = yield* git.run(home, ["--version"]).pipe(Effect.option);

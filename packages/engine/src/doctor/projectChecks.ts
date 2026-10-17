@@ -72,8 +72,6 @@ export const makeProjectChecks = ({
       readText,
     } = reads;
     const { launcherFindings } = dataDirChecks;
-    // --- projects ---
-
     const unregisterHint = (project: ListedProject) =>
       project.source === "terrier"
         ? `\`terrier rm ${project.name}\``

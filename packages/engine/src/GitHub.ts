@@ -106,7 +106,7 @@ export class GitHubOutputError extends Schema.TaggedError<GitHubOutputError>()(
 }
 
 // The merge methods GitHub knows, in the order a pick falls back on.
-export const MERGE_METHODS = ["merge", "squash", "rebase"] as const;
+const MERGE_METHODS = ["merge", "squash", "rebase"] as const;
 export type MergeMethod = (typeof MERGE_METHODS)[number];
 
 // The repo's merge settings: the methods its merge button offers, in
@@ -419,7 +419,6 @@ const summaryOf = (row: Row): PullRequestSummary => ({
     : {}),
 });
 
-// gh's array of rows, none when it is something else.
 const rowsOf = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Array(Row)),
 );

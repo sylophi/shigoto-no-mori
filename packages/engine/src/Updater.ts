@@ -49,9 +49,6 @@ import {
 } from "./updater/documents.ts";
 export {
   AppStillRunning,
-  BadUpdateUrl,
-  DownloadFailed,
-  FeedFailed,
   HandoffFailed,
   InvalidAppPid,
   NotInBundle,
@@ -59,7 +56,6 @@ export {
   RateLimited,
   RelaunchFailed,
   SignatureRejected,
-  StagingFailed,
   SwapFailed,
   UpdatesUnavailable,
   causeText,

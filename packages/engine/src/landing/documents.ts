@@ -189,7 +189,7 @@ export class MergeLostTrack extends Schema.TaggedError<MergeLostTrack>()(
 // it, or auto-merge is armed and GitHub lands it once its requirements
 // are met. The last two leave the PR open, and merge and land wait on
 // them (awaitMerge).
-export type Outcome = "merged" | "queued" | "auto-merge";
+type Outcome = "merged" | "queued" | "auto-merge";
 
 export type MergeOutcome = {
   readonly method: MergeMethod;

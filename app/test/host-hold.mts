@@ -30,6 +30,7 @@
 //     loopback.json another host published stays.
 //
 // Run: pnpm test host-hold.
+import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -210,7 +211,7 @@ async function startHost(dataDir: string, clock?: Clock.Clock) {
         registrar,
         deviceId: () => "this-device",
         appVersion: "9.9.9",
-        file: () => join(dataDir, Loopback.LOOPBACK_FILE),
+        file: () => join(dataDir, LOOPBACK_FILE),
         services: Effect.succeed(host),
       }).pipe(
         Layer.provide(

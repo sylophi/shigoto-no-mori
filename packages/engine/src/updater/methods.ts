@@ -56,8 +56,6 @@ export const makeMethods = ({
     const { stageUpdate } = staging;
     const { installStaged } = swap;
     const { waitForRestart, appendInstallLog, noteInstallFailure } = restart;
-    // --- the methods ---
-
     // open hands the app launchd's environment, not ours, so a data dir
     // the environment chose (a test run's) is passed on, or the app
     // would come back on the default one; and a test build's update
@@ -237,5 +235,3 @@ export const makeMethods = ({
 
     return { check, stage, update, finishInstall };
   });
-
-export type MethodsArea = Effect.Success<ReturnType<typeof makeMethods>>;

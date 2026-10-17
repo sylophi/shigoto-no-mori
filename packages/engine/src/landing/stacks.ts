@@ -27,8 +27,6 @@ export const makeStacks = ({
   Effect.gen(function* () {
     const github = yield* GitHub.GitHub;
     const { refuse } = pullRequests;
-    // --- stacks ---
-
     // What a stack's merge or cleanup reads first, at once: the trunk, the
     // page of PRs and, for a merge, GitHub's stack object. A failure is
     // reported in that order, whichever came back first.

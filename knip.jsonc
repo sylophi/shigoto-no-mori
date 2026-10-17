@@ -50,7 +50,9 @@
     "packages/ui": {
       "includeEntryExports": true,
     },
+    // Its exports map makes every module an entry, like the contracts'.
     "packages/engine": {
+      "includeEntryExports": true,
       // Run by path from the store's test, in a process of its own.
       "entry": ["test/fixtures/*.ts"],
     },

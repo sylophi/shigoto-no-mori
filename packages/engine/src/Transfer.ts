@@ -131,7 +131,7 @@ export class StopUnconfirmed extends Schema.TaggedError<StopUnconfirmed>()(
 }
 
 // The app's answer isn't the shape this build reads.
-export class UnreadableAnswer extends Schema.TaggedError<UnreadableAnswer>()(
+class UnreadableAnswer extends Schema.TaggedError<UnreadableAnswer>()(
   "UnreadableAnswer",
   { channel: Schema.String, cause: Schema.Defect() },
 ) {
