@@ -65,6 +65,7 @@ import {
 import { strict } from "@shigomori/contracts/schemas/strict";
 import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
+import { incomingRef } from "@shigomori/engine/Bundle";
 import * as Git from "@shigomori/engine/Git";
 import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
@@ -361,11 +362,6 @@ const decodeTipAnswer = Schema.decodeUnknownSync(TipAnswerSchema);
 const decodeCapture = Schema.decodeUnknownSync(SyncCaptureSchema);
 const decodeCloneFacts = Schema.decodeUnknownSync(CloneFactsSchema);
 
-// Where a fetched branch lands: never the branch itself.
-export function incomingRefFor(branch: string): string {
-  return `refs/shigomori/incoming/${branch}`;
-}
-
 // Where a fetched ref lands: capture and index refs keep their name,
 // branch refs land under refs/shigomori/incoming/<branch>. Never a
 // local branch: `sm bundle unpack` enforces the refs/shigomori/
@@ -373,7 +369,7 @@ export function incomingRefFor(branch: string): string {
 function landingRefspec(ref: string): string {
   const dst = ref.startsWith("refs/shigomori/")
     ? ref
-    : incomingRefFor(ref.slice("refs/heads/".length));
+    : incomingRef(ref.slice("refs/heads/".length));
   return `${ref}:${dst}`;
 }
 

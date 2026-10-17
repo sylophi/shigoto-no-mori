@@ -1,15 +1,16 @@
+import type { TerrierReadiness } from "@shigomori/contracts/schemas/terrier";
+import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Paths from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
+import { captureWithin, exec, stderrOf } from "./processes.ts";
 import { terrierProjectId } from "./terrierId.ts";
 
 // Terrier (github.com/dittofleet/terrier) is an external registry of
@@ -41,10 +42,27 @@ export type TerrierProject = {
   readonly source: "terrier";
 };
 
+// terrier refused an add, in its words.
+export class TerrierAddError extends Schema.TaggedError<TerrierAddError>()(
+  "TerrierAddError",
+  { reason: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `terrier add failed: ${this.reason}`;
+  }
+}
+
 export class Terrier extends Context.Service<
   Terrier,
   {
     readonly listing: Effect.Effect<TerrierListing>;
+    // Whether terrier is installed, and whether `terrier ls --json`
+    // answers in the shape read here: the Settings toggle's readiness.
+    readonly readiness: Effect.Effect<TerrierReadiness>;
+    // Registers a repo in terrier. Already registered is a success there.
+    readonly add: (path: string) => Effect.Effect<void, TerrierAddError>;
+    // The next ask reads terrier again, for a toggle just flipped.
+    readonly invalidate: Effect.Effect<void>;
   }
 >()("sm/engine/Terrier") {}
 
@@ -154,33 +172,21 @@ const make = Effect.gen(function* () {
   const { expandHome, binaryName } = yield* Paths.Paths;
 
   // terrier's stdout, failing on a spawn error, a nonzero exit or a
-  // wedge: the listing runs before every command. stderr is drained so
-  // a chatty terrier can't stall on a full pipe.
+  // wedge: the listing runs before every command.
   const output = (args: ReadonlyArray<string>) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const handle = yield* spawner.spawn(
-          ChildProcess.make("terrier", [...args], {
-            stdin: "ignore",
-          }),
-        );
-        const [stdout, , code] = yield* Effect.all(
-          [
-            handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
-            Stream.runDrain(handle.stderr),
-            handle.exitCode,
-          ],
-          { concurrency: 3 },
-        );
-        if (code !== 0) {
-          return yield* new TerrierCommandFailed({ args: [...args], code });
-        }
-        return stdout;
-      }),
-    ).pipe(Effect.timeout("10 seconds"));
+    captureWithin(spawner, "terrier", args, "10 seconds").pipe(
+      Effect.flatMap((ran) =>
+        ran.code === 0
+          ? Effect.succeed(ran.output)
+          : Effect.fail(
+              new TerrierCommandFailed({ args: [...args], code: ran.code }),
+            ),
+      ),
+    );
 
-  const read = Effect.gen(function* () {
-    const listed = yield* output(["ls", "--json"]).pipe(
+  // What `terrier ls --json` answered, toggle or not.
+  const probe = Effect.gen(function* () {
+    return yield* output(["ls", "--json"]).pipe(
       Effect.flatMap(parseListing),
       Effect.map((paths) => ({ kind: "listed" as const, paths })),
       Effect.catchIf(
@@ -196,7 +202,7 @@ const make = Effect.gen(function* () {
           }),
         TerrierUnreadable: ({ reason }) =>
           Effect.succeed({ kind: "unreadable" as const, reason }),
-        TimeoutError: () =>
+        CommandTimedOut: () =>
           Effect.succeed({
             kind: "unreadable" as const,
             reason: "signal: killed",
@@ -208,6 +214,9 @@ const make = Effect.gen(function* () {
           }),
       }),
     );
+  });
+
+  const listingOf = (listed: Effect.Success<typeof probe>): TerrierListing => {
     if (listed.kind === "missing") {
       return trouble(
         "enabled in config.json but `terrier` isn't on PATH, so no terrier projects are listed",
@@ -227,20 +236,51 @@ const make = Effect.gen(function* () {
       return expanded.startsWith("/") ? [expanded] : [];
     });
     return { paths, trouble: Option.none() };
-  }).pipe(Effect.orDie, Effect.withSpan("Terrier.listing"));
+  };
 
   // terrier's answer is kept briefly, so a listing's several asks share
   // one spawn and a long-lived host still sees terrier change. The switch
   // is read on every ask, so a view re-read as it flips lists the
   // projects it brings or takes.
-  const listed = yield* Effect.cachedWithTTL(read, "10 seconds");
+  // One entry, keyed by nothing: a Cache rather than a cached effect
+  // because invalidating it also drops a probe under way, which may have
+  // started before terrier was installed or its toggle flipped.
+  const cache = yield* Cache.make({
+    lookup: (_: void) => probe,
+    capacity: 1,
+    timeToLive: "10 seconds",
+  });
+  const answered = Cache.get(cache, undefined);
+  const invalidate = Cache.invalidateAll(cache);
   return Terrier.of({
     listing: Effect.gen(function* () {
       if (!(yield* config.device("terrier"))) {
         return { paths: [], trouble: Option.none() };
       }
-      return yield* listed;
-    }).pipe(Effect.orDie),
+      return listingOf(yield* answered);
+    }).pipe(Effect.orDie, Effect.withSpan("Terrier.listing")),
+    readiness: Effect.map(answered, (listed) => ({
+      installed: listed.kind !== "missing",
+      readable: listed.kind === "listed",
+    })).pipe(Effect.orDie, Effect.withSpan("Terrier.readiness")),
+    add: Effect.fn("Terrier.add")(function* (path: string) {
+      yield* exec("terrier", ["add", "--", path], {
+        timeout: "10 seconds",
+      }).pipe(
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.catchTags({
+          CommandError: (cause) =>
+            Effect.fail(
+              new TerrierAddError({
+                reason:
+                  stderrOf(cause).replace(/^Error: /, "") || cause.message,
+                cause,
+              }),
+            ),
+        }),
+      );
+    }),
+    invalidate,
   });
 });
 

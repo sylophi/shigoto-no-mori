@@ -19,7 +19,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Struct from "effect/Struct";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as Agents from "@shigomori/engine/Agents";
 import * as Bundle from "@shigomori/engine/Bundle";
@@ -27,7 +26,6 @@ import * as Dirty from "@shigomori/engine/Dirty";
 import * as Doctor from "@shigomori/engine/Doctor";
 import { codeOf } from "@shigomori/engine/errorDocument";
 import type { MergeMethod } from "@shigomori/engine/GitHub";
-import * as Hygiene from "@shigomori/engine/Hygiene";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Identity from "@shigomori/engine/Identity";
 import * as Landing from "@shigomori/engine/Landing";
@@ -70,7 +68,6 @@ import {
   type Worktree,
   type WorktreeCarryOverComplete,
   type WorktreeDescription,
-  WorktreeDiskUsageSchema,
   WorktreeIdentitySchema,
   WorktreeLifecyclePhaseSchema,
   type WorktreeLifecyclePhase,
@@ -1096,25 +1093,6 @@ export const readProjectConfig = Effect.fnUntraced(function* (
     { projectId },
   );
   return decodeProjectConfig(stored);
-});
-
-const decodeDiskUsage = Schema.decodeUnknownSync(
-  WorktreeDiskUsageSchema.mapFields(Struct.omit(["worktreeId"])),
-);
-
-// One directory's disk footprint and what removing it would free,
-// stepping over the `exclude` directories (nested worktrees, measured as
-// rows of their own). Unreadable entries come back as `partial`.
-export const diskUsage = Effect.fnUntraced(function* (
-  path: string,
-  exclude: string[],
-) {
-  const usage = yield* asCall(
-    Effect.flatMap(Hygiene.Hygiene, (hygiene) =>
-      hygiene.measure(path, exclude),
-    ),
-  );
-  return decodeDiskUsage(usage);
 });
 
 const decodeLauncherRow = Schema.decodeUnknownSync(

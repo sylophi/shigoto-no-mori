@@ -23,6 +23,8 @@ import {
 } from "@shared/pullCollision";
 import { type Project, type Worktree } from "@shigomori/contracts/schemas";
 import * as Ops from "@host/lib/engineOps";
+import { incomingRef as incomingRefFor } from "@shigomori/engine/Bundle";
+import { dirtyRef } from "@shigomori/engine/Dirty";
 import * as Git from "@shigomori/engine/Git";
 import {
   addProject,
@@ -34,7 +36,6 @@ import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
 import { MoveCancelledError } from "@host/lib/sync/Moves";
 import {
   attachLinkFarEnd,
-  incomingRefFor,
   linkSource,
   type ProgressFrame,
   type WorktreeSource,
@@ -63,11 +64,6 @@ class CloneUnregisteredError extends Schema.TaggedError<CloneUnregisteredError>(
     return `Cloned into ${this.path}, but couldn't add it as a project: ${this.reason}`;
   }
 }
-
-// The ref the engine's dirty capture lands a worktree's uncommitted
-// state under (Dirty.ts owns the name on that side).
-const dirtyRefFor = (worktreeId: string) =>
-  `refs/shigomori/dirty/${worktreeId}`;
 
 // Where a landing would refuse. Updating an existing branch is out of
 // scope, so a held one refuses with the state the user can act on.
@@ -259,7 +255,7 @@ export const landWorktree = (
     const tipIsLocal = yield* git.hasCommit(project.path, branchTip);
     const wantRefs = [
       ...(tipIsLocal ? [] : [`refs/heads/${branch}`]),
-      ...(captured ? [dirtyRefFor(sourceWorktreeId)] : []),
+      ...(captured ? [dirtyRef(sourceWorktreeId)] : []),
     ];
     const incomingRef = incomingRefFor(branch);
     return yield* Effect.gen(function* () {
@@ -485,8 +481,8 @@ const landIncoming = (
     let dirtyApplied = false;
     const { capture } = input;
     if (capture !== undefined) {
-      const sourceDirtyRef = dirtyRefFor(capture.sourceWorktreeId);
-      const localDirtyRef = dirtyRefFor(worktree.id);
+      const sourceDirtyRef = dirtyRef(capture.sourceWorktreeId);
+      const localDirtyRef = dirtyRef(worktree.id);
       const git = yield* Git.Git;
       yield* git.updateRef({
         repo: project.path,

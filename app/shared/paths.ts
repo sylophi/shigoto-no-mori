@@ -12,7 +12,6 @@
 // script launched from the packaged app's script runner would boot the
 // dev build, see the packaged app's data dir here, and quietly operate
 // on real data.
-import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -143,13 +142,6 @@ export function expandHome(path: string): string {
 export function toAbsolute(path: string): string {
   const expanded = expandHome(path);
   return isAbsolute(expanded) ? expanded : resolve(expanded);
-}
-
-export function pathExists(target: string): Promise<boolean> {
-  return lstat(target).then(
-    () => true,
-    () => false,
-  );
 }
 
 export function isENOENT(error: unknown): boolean {

@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Hygiene from "../src/Hygiene.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
@@ -147,4 +148,33 @@ it("tells merged, squash-merged, unique, detached and primary work apart", async
       },
     ],
   );
+});
+
+// The page's per-row size: a worktree by its id, its nested worktrees
+// left to their own rows, and an id the project doesn't hold refused.
+it("sizes a worktree by its id, leaving nested worktrees to their own rows", async () => {
+  const { repo, tree } = seedProject({ "a.txt": "a\n" });
+  const fox = tree("fox");
+  writeFileSync(join(fox, "big.bin"), Buffer.alloc(256 * 1024, 1));
+  const project = { id: "P1", name: "repo", path: repo };
+  const [primary, nested, unknown] = (await box.engine(
+    Effect.flatMap(Effect.service(Hygiene.Hygiene), (hygiene) =>
+      Effect.all([
+        hygiene.diskUsage(project, worktreeIdFromPath(repo)),
+        hygiene.diskUsage(project, worktreeIdFromPath(fox)),
+        Effect.flip(hygiene.diskUsage(project, "nope")),
+      ]),
+    ),
+  )) as [
+    { worktreeId: string; bytes: number },
+    { worktreeId: string; bytes: number },
+    unknown,
+  ];
+  assert.equal(primary.worktreeId, worktreeIdFromPath(repo));
+  assert.ok(nested.bytes >= 256 * 1024, String(nested.bytes));
+  assert.ok(
+    primary.bytes < nested.bytes,
+    "the primary counted its nested worktree",
+  );
+  assert.ok(Predicate.isTagged(unknown, "UnknownWorktree"), String(unknown));
 });

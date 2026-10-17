@@ -237,8 +237,6 @@ export const INCOMING_REF_STALE_MS = 60 * 60 * 1000;
 // ps reports a start time to the second, stamped just after spawn.
 export const SCRIPT_START_TOLERANCE_MS = 5_000;
 
-export const INCOMING_PREFIX = "refs/shigomori/incoming/";
-
 // A JSON file the store imports, read as an object.
 export const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),

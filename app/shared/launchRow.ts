@@ -1,6 +1,6 @@
-// One script on or off a launch row list, used by both the host (the
-// stored write) and the renderer (the optimistic cache write), so the
-// two agree. Returns the same array when nothing changes.
+// One script on or off a launch row list, for the renderer's optimistic
+// cache write; the stored write is the engine's (Scripts.setOnLaunchRow).
+// Returns the same array when nothing changes.
 export function withLaunchRowScript(
   launchRow: readonly string[],
   scriptName: string,

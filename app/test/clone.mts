@@ -37,7 +37,7 @@ const { flatMap } = Effect;
 const Exit = await import("effect/Exit");
 const Fiber = await import("effect/Fiber");
 const Deferred = await import("effect/Deferred");
-const { Terrier } = await import("../host/lib/Terrier.ts");
+const { Terrier } = await import("@shigomori/engine/Terrier");
 const { freshProjects } = await import("../host/lib/projects/index.ts");
 // The checkout's path, as the project it was registered as.
 const cloneRepo = (url: string, parentDir: string, name: string) =>

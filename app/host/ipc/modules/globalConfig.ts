@@ -3,7 +3,7 @@ import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
 import { globalConfigChanged } from "@host/lib/config/global";
-import * as Terrier from "@host/lib/Terrier";
+import * as Terrier from "@shigomori/engine/Terrier";
 import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
