@@ -589,45 +589,46 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     // port-pool leases are keyed by directory and live in port-pool's own
     // state. One whose directory is gone stays reserved forever. Reported,
     // never fixed: the state belongs to port-pool.
-    const checkPortAllocations = (listing: PortPoolListing) =>
-      Effect.gen(function* () {
-        if (listing.kind === "off") return [];
-        const line = check("Data dir", "ports", "port pool");
-        if (listing.kind === "missing") {
-          return [
-            line.warn(
-              "enabled in config.json but `port-pool` isn't on PATH, so provisioning is skipped",
-              "Install port-pool, or turn the toggle off in the app's Settings.",
-            ),
-          ];
-        }
-        if (listing.kind === "failed") {
-          return [
-            line.warn(
-              `\`port-pool list\` failed: ${listing.why}`,
-              "Run `port-pool list` by hand to see what it says.",
-            ),
-          ];
-        }
-        const { dirs } = listing;
-        let orphans = 0;
-        for (const dir of dirs) {
-          if (yield* isMissing(dir)) orphans++;
-        }
-        if (orphans === 0) {
-          return [
-            line.ok(
-              `${dirs.length} allocation${plural(dirs.length)}, all pointing at directories that exist`,
-            ),
-          ];
-        }
+    const checkPortAllocations = Effect.fnUntraced(function* (
+      listing: PortPoolListing,
+    ) {
+      if (listing.kind === "off") return [];
+      const line = check("Data dir", "ports", "port pool");
+      if (listing.kind === "missing") {
         return [
           line.warn(
-            `${orphans} of ${dirs.length} allocations point at directories that are gone, so those ports stay reserved`,
-            `Run \`port-pool prune\` (it owns that state, so ${binaryName} won't touch it).`,
+            "enabled in config.json but `port-pool` isn't on PATH, so provisioning is skipped",
+            "Install port-pool, or turn the toggle off in the app's Settings.",
           ),
         ];
-      });
+      }
+      if (listing.kind === "failed") {
+        return [
+          line.warn(
+            `\`port-pool list\` failed: ${listing.why}`,
+            "Run `port-pool list` by hand to see what it says.",
+          ),
+        ];
+      }
+      const { dirs } = listing;
+      let orphans = 0;
+      for (const dir of dirs) {
+        if (yield* isMissing(dir)) orphans++;
+      }
+      if (orphans === 0) {
+        return [
+          line.ok(
+            `${dirs.length} allocation${plural(dirs.length)}, all pointing at directories that exist`,
+          ),
+        ];
+      }
+      return [
+        line.warn(
+          `${orphans} of ${dirs.length} allocations point at directories that are gone, so those ports stay reserved`,
+          `Run \`port-pool prune\` (it owns that state, so ${binaryName} won't touch it).`,
+        ),
+      ];
+    });
 
     // Custom launchers fire and forget through /bin/sh, so one whose
     // program isn't installed fails with nothing on screen.

@@ -87,25 +87,26 @@ export const recordVerified = (hashes: Readonly<Record<string, string>>) =>
 // The ones of `files` the store holds: each as the import verified it,
 // unchanged since. None without a verified import, or with a record
 // that can't be read.
-export const heldV2Files = (files: ReadonlyArray<string>) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const [row] = yield* sql<{ files: string }>`
-      SELECT files FROM v2_import`.pipe(
-      Effect.orElseSucceed((): ReadonlyArray<{ files: string }> => []),
-    );
-    const verified =
-      row === undefined
-        ? {}
-        : Option.getOrElse(
-            Schema.decodeUnknownOption(VerifiedFiles)(row.files),
-            () => ({}),
-          );
-    const now = yield* hashesOf(files);
-    return files.filter(
-      (file) => now[file] !== undefined && now[file] === verified[file],
-    );
-  });
+export const heldV2Files = Effect.fnUntraced(function* (
+  files: ReadonlyArray<string>,
+) {
+  const sql = yield* SqlClient.SqlClient;
+  const [row] = yield* sql<{ files: string }>`
+    SELECT files FROM v2_import`.pipe(
+    Effect.orElseSucceed((): ReadonlyArray<{ files: string }> => []),
+  );
+  const verified =
+    row === undefined
+      ? {}
+      : Option.getOrElse(
+          Schema.decodeUnknownOption(VerifiedFiles)(row.files),
+          () => ({}),
+        );
+  const now = yield* hashesOf(files);
+  return files.filter(
+    (file) => now[file] !== undefined && now[file] === verified[file],
+  );
+});
 
 // `files` deleted, and the projects' folders they leave empty.
 export const removeV2Files = (files: ReadonlyArray<string>) =>

@@ -378,26 +378,24 @@ export const makeProjectChecks = ({
         return entries;
       });
 
+    // The folders port-pool holds leases for, each also as resolved,
+    // none when it couldn't say (the ports check reports why).
+    const allocationsOf = Effect.fnUntraced(function* (
+      listing: PortPoolListing,
+    ) {
+      if (listing.kind !== "listed") return Option.none();
+      const leased = new Set<string>();
+      for (const dir of listing.dirs) {
+        leased.add(dir);
+        const real = yield* realPath(dir);
+        if (Option.isSome(real)) leased.add(real.value);
+      }
+      return Option.some(leased as ReadonlySet<string>);
+    });
+
     // The worktrees port-pool covers (managed, with a port-pool config)
     // that hold no lease: one a move's re-lease failed for, or whose
     // provision did. The fix asks port-pool for one, at its path.
-    // The folders port-pool holds a lease for, symlinks resolved, read
-    // once a run; none when port-pool is off, missing or can't say (the
-    // ports check reports that).
-    // The folders port-pool holds leases for, each also as resolved,
-    // none when it couldn't say.
-    const allocationsOf = (listing: PortPoolListing) =>
-      Effect.gen(function* () {
-        if (listing.kind !== "listed") return Option.none();
-        const leased = new Set<string>();
-        for (const dir of listing.dirs) {
-          leased.add(dir);
-          const real = yield* realPath(dir);
-          if (Option.isSome(real)) leased.add(real.value);
-        }
-        return Option.some(leased as ReadonlySet<string>);
-      });
-
     const checkLeases = (
       project: ListedProject,
       identities: ReadonlyArray<WorktreeIdentity>,

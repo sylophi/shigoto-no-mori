@@ -82,27 +82,26 @@ export const makeReads = Effect.gen(function* () {
   // What port-pool says, asked once a pass for the ports check and every
   // project's leases: off with the device's toggle, its program missing,
   // why `port-pool list` failed, or the folders it holds leases for.
-  const portPoolListing = (enabled: boolean) =>
-    Effect.gen(function* () {
-      if (!enabled) return { kind: "off" } as const;
-      if (Option.isNone(yield* findExecutable("port-pool"))) {
-        return { kind: "missing" } as const;
-      }
-      const listed = yield* capture("port-pool", ["list"]).pipe(Effect.result);
-      if (Result.isFailure(listed)) {
-        return { kind: "failed", why: listed.failure.message } as const;
-      }
-      if (listed.success.code !== 0) {
-        return {
-          kind: "failed",
-          why: `exit status ${listed.success.code}`,
-        } as const;
-      }
+  const portPoolListing = Effect.fnUntraced(function* (enabled: boolean) {
+    if (!enabled) return { kind: "off" } as const;
+    if (Option.isNone(yield* findExecutable("port-pool"))) {
+      return { kind: "missing" } as const;
+    }
+    const listed = yield* capture("port-pool", ["list"]).pipe(Effect.result);
+    if (Result.isFailure(listed)) {
+      return { kind: "failed", why: listed.failure.message } as const;
+    }
+    if (listed.success.code !== 0) {
       return {
-        kind: "listed",
-        dirs: parsePortPoolDirs(listed.success.stdout),
+        kind: "failed",
+        why: `exit status ${listed.success.code}`,
       } as const;
-    });
+    }
+    return {
+      kind: "listed",
+      dirs: parsePortPoolDirs(listed.success.stdout),
+    } as const;
+  });
 
   return {
     capture,
