@@ -508,6 +508,14 @@ it("remote devices: a burst of hub pushes naming a device the list lacks reads t
   // 25 pushes over about 150 ms, each read 100 ms: the first, and one
   // after each read a change came during.
   assert.ok(asked >= 2 && asked <= 3, `the hub was asked ${asked} times`);
+  // A read someone else sent (the account page's) is out as the roster
+  // changes: it may predate the change, so one more follows it.
+  const before = asked;
+  void queryClient.refetchQueries({ queryKey: queryKeys.accountDevices() });
+  await hubPush(ghostly);
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  assert.equal(asked - before, 2, "the read out, then one after it");
+  assert.equal(cancelled, 0);
   registry.dispose();
 });
 

@@ -193,22 +193,12 @@ export function apiFor(deviceId: string): RemoteDeviceApi {
 // Re-reads the shared list whether or not an observer is mounted (an
 // invalidation alone would refetch only under the account page). The
 // landing reconciles through the cache subscription. A failure is
-// swallowed there and the store keeps the last good list. A read
-// already out is joined, not cancelled: cancelling it sent the next,
-// and its caller (throughCancel) asked again, so a burst of hub pushes
-// was a burst of reads the hub answered with 429.
-function refetchDeviceList(): void {
-  void boundClient().refetchQueries(
-    { queryKey: queryKeys.accountDevices() },
-    { cancelRefetch: false },
-  );
-}
-
-// The re-read a roster asks for (a device the list doesn't know, one
-// that left): one at a time, and a roster that changes while one is out
-// asks for one more after it settles, however many times it changed. A
-// read already out may predate the change, so it is not trusted to
-// answer it, and it is never cancelled.
+// swallowed there and the store keeps the last good list. One read at a
+// time, never cancelling the one out: cancelling it sent the next, and
+// its caller (throughCancel) asked again, so a burst of hub pushes was
+// a burst of reads the hub answered with 429. A read already out (this
+// one's, the account page's, an invalidation's) may predate what asked,
+// so one more follows it as it settles, however many asked meanwhile.
 let listRead: Promise<unknown> | null = null;
 let readAgain = false;
 function askListAgain(): void {
@@ -216,6 +206,10 @@ function askListAgain(): void {
     readAgain = true;
     return;
   }
+  const out =
+    boundClient().getQueryState(queryKeys.accountDevices())?.fetchStatus ===
+    "fetching";
+  if (out) readAgain = true;
   listRead = boundClient()
     .refetchQueries(
       { queryKey: queryKeys.accountDevices() },
@@ -270,7 +264,7 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   // A reconnect can follow an enroll or a revoke that happened while
   // the socket was down. This pass runs on the list as it stands, and
   // the refetch's landing runs the corrected one.
-  if (reconnected) refetchDeviceList();
+  if (reconnected) askListAgain();
   let list: readonly DeviceInfo[];
   try {
     list = await fetchDeviceList();
@@ -644,7 +638,7 @@ export function startRemoteDeviceSync(
         : syncedAccountId !== null && accountId !== syncedAccountId;
     syncedAccountId = accountId;
     if (leaving) leaveAccount(queryClient);
-    refetchDeviceList();
+    askListAgain();
   });
   void api.run(api.account.status()).then((status) => {
     if (syncedAccountId === undefined) {
