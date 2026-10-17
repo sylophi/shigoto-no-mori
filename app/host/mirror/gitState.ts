@@ -560,29 +560,85 @@ const readTreeRetrying = (worktreePath: string, tree: string) => {
 // unstage, a checkout, also git's own refreshes: the consumer compares
 // trees to tell them apart). Returns the stop function. Resolves the
 // git dir once. A worktree whose git dir moves is a removed worktree.
+// The watch's event is a hint: every `backstopMs` the index's stamp is
+// read too, and one that moved with no event (a dropped one, a watch
+// that errored and ended) fires as well.
 export const watchIndexFile = (
   worktreePath: string,
   onChange: () => void,
-  debounceMs = 300,
+  // Test seams. Real callers take the defaults.
+  {
+    debounceMs = 300,
+    backstopMs = 10_000,
+    watchDir = watch,
+  }: {
+    readonly debounceMs?: number;
+    readonly backstopMs?: number;
+    readonly watchDir?: typeof watch;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const gitDir = yield* (yield* Git.Git).gitDir(worktreePath);
+    const index = join(gitDir, "index");
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let watcher: ReturnType<typeof watch> | null = null;
+    let backstop: ReturnType<typeof setInterval> | null = null;
+    // The index's stamp as of the last signal, read as each one fires.
+    let seen: string | null = null;
+    // Null for a read that failed, which says nothing about a change.
+    const stampOf = () =>
+      stat(index).then(
+        (info) => `${info.ino}:${info.mtimeMs}:${info.size}`,
+        (error: unknown) =>
+          error instanceof Error && "code" in error && error.code === "ENOENT"
+            ? "-"
+            : null,
+      );
+    // From a signal's debounce until its stamp is read, so a beat in
+    // between doesn't take the old stamp for a change of its own.
+    let firing = false;
+    const signal = () => {
+      if (timer !== null) clearTimeout(timer);
+      firing = true;
+      timer = setTimeout(() => {
+        timer = null;
+        void stampOf().then((stamp) => {
+          if (stamp !== null) seen = stamp;
+          firing = false;
+          if (!stopped) onChange();
+        });
+      }, debounceMs);
+    };
     const start = () => {
+      void stampOf().then((stamp) => {
+        seen ??= stamp;
+      });
+      // A beat waits for the last one's read: one held by a volume that
+      // stalls must not be joined by another each beat, on a thread pool
+      // of four.
+      let reading = false;
+      backstop = setInterval(() => {
+        if (reading) return;
+        reading = true;
+        void stampOf()
+          .then((stamp) => {
+            if (stamp !== null && seen !== null && stamp !== seen && !firing) {
+              signal();
+            }
+          })
+          .finally(() => {
+            reading = false;
+          });
+      }, backstopMs);
+      backstop.unref();
       try {
-        watcher = watch(gitDir, { persistent: false });
+        watcher = watchDir(gitDir, { persistent: false });
       } catch {
         return;
       }
       watcher.on("change", (_event, file) => {
-        if (file !== "index") return;
-        if (timer !== null) clearTimeout(timer);
-        timer = setTimeout(() => {
-          timer = null;
-          onChange();
-        }, debounceMs);
+        if (file === "index") signal();
       });
       watcher.on("error", () => {});
     };
@@ -601,6 +657,7 @@ export const watchIndexFile = (
       stopped = true;
       Effect.runFork(Fiber.interrupt(waiting));
       if (timer !== null) clearTimeout(timer);
+      if (backstop !== null) clearInterval(backstop);
       watcher?.close();
     };
   });
