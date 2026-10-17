@@ -39,8 +39,6 @@ platform directly.
 `Date.now()` the time-and-liveness hardening is replacing, each taken
 off the list by the pull request that changes it:
 
-- Operations that survive suspension: `app/host/mirror/oneShot.ts`,
-  `app/main/electron/updater.ts`.
 - Durable facts and process identity: `app/host/lib/scripts/index.ts`,
   `app/main/hostProcess.ts`, `packages/engine/src/worktrees/moving.ts`.
 - In-memory TTLs and small gates:

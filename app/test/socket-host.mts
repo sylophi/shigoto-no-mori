@@ -55,6 +55,7 @@ import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
@@ -1394,6 +1395,36 @@ it("liveness: the host cuts a linked peer that falls silent past the timeout", a
   const raw = await rawLink(track, listener, { pingInterval: 60_000 });
   const exit = await raw.hello();
   assert.ok(Exit.isSuccess(exit));
+  assert.equal(await raw.closed, 1001);
+});
+
+it("liveness: the host's cut of a silent peer is monotonic, and a sweep that came late (the host stopped, then continued) is a fresh observation, not a verdict", async () => {
+  const track = trackTest;
+  const clock = testClock();
+  const { wall, sleep, stop } = sleepingClock(clock);
+  const { listener } = await listen(track, {
+    start: { livenessTimeoutMs: 300 },
+    provide: Layer.succeed(Clock.Clock, wall),
+  });
+  const raw = await rawLink(track, listener, { pingInterval: 60_000 });
+  assert.ok(Exit.isSuccess(await raw.hello()));
+  let cut = false;
+  void raw.closed.then(() => (cut = true));
+  const sweeps = async (count: number) => {
+    for (let turn = 0; turn < count; turn++) await clock.advance(75);
+    await delay(20);
+  };
+  // The host stopped for ten seconds: its first sweep after is late.
+  stop(10_000);
+  await sweeps(2);
+  // And the wall clock stepped two hours either way, monotonic time still.
+  sleep(2 * 3_600_000);
+  await sweeps(1);
+  sleep(-4 * 3_600_000);
+  await sweeps(1);
+  assert.equal(cut, false, "a late sweep or a clock step cut the peer");
+  // Silent on on-time sweeps: cut.
+  await sweeps(4);
   assert.equal(await raw.closed, 1001);
 });
 
