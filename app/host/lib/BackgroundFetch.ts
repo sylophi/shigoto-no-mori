@@ -33,6 +33,7 @@ import { loadProjects } from "@host/lib/projects";
 import { runningScriptWorktreeIds } from "@host/lib/scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import type { broadcastAll } from "@host/process/wires";
+import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
 
 // Skip if a fetch finished within this window. Short enough that rapid
@@ -49,7 +50,11 @@ const FRESHNESS_MS = 3_000;
 const SWEEP_INTERVAL_MS = 60_000;
 
 // A peer's request keeps the timer ticking this long, so a peer that
-// renews once per interval never sees it lapse.
+// renews once per interval never sees it lapse. The lease is monotonic
+// elapsed time (`@shigomori/engine/elapsed`), which no clock step ends.
+// The windows above go stale by whichever clock reads older: a sleep
+// (which macOS's monotonic clock skips) or a forward step costs a fetch
+// at most, and a backward step holds none back.
 const ATTENTION_LEASE_MS = 2 * SWEEP_INTERVAL_MS;
 
 export class BackgroundFetch extends Context.Service<
@@ -93,15 +98,23 @@ export interface Options {
 const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
+    const now = () => elapsedMillisUnsafe(clock);
+    type Stamp = { readonly elapsed: number; readonly wall: number };
+    const stamp = (): Stamp => ({
+      elapsed: now(),
+      wall: clock.currentTimeMillisUnsafe(),
+    });
+    const ageOf = (at: Stamp) =>
+      Math.max(now() - at.elapsed, clock.currentTimeMillisUnsafe() - at.wall);
     // What a pass reaches, as the layer finds it.
     const context = yield* Effect.context<FetchServices>();
     const runs = yield* FiberSet.make();
     // Signals from outside any effect (the shell's focus report).
     const inbox =
       yield* Queue.unbounded<Effect.Effect<void, never, FetchServices>>();
-    const lastFetchedAt = new Map<string, number>();
+    const lastFetchedAt = new Map<string, Stamp>();
     const fetchInFlight = new Map<string, Deferred.Deferred<boolean>>();
-    const lastPullRequestSweepAt = new Map<string, number>();
+    const lastPullRequestSweepAt = new Map<string, Stamp>();
     // Projects whose last fetch attempt failed, so a run of failures warns once.
     const failingProjects = new Set<string>();
     // Per project, the worktrees whose auto-pull failed on the last sweep,
@@ -109,7 +122,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     // worktree that stops failing (pulled, skipped, unmarked, removed)
     // drops out, and its next failure warns again.
     const failingAutoPulls = new Map<string, ReadonlySet<string>>();
-    let attendedUntil = 0;
+    let attendedUntil = -Infinity;
     // Whether a window of this machine is focused, as the shell reports it.
     let windowFocused = false;
 
@@ -163,7 +176,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
             const git = yield* Git.Git;
             const before = yield* git.snapshotRemoteRefs(projectPath);
             yield* git.fetchAll(projectPath);
-            lastFetchedAt.set(projectId, clock.currentTimeMillisUnsafe());
+            lastFetchedAt.set(projectId, stamp());
             failingProjects.delete(projectId);
             const after = yield* git.snapshotRemoteRefs(projectPath);
             if (before !== after) {
@@ -204,8 +217,8 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
       maxAgeMs = FRESHNESS_MS,
     ) =>
       Effect.suspend(() => {
-        const ts = lastFetchedAt.get(projectId) ?? 0;
-        if (clock.currentTimeMillisUnsafe() - ts < maxAgeMs)
+        const fetchedAt = lastFetchedAt.get(projectId);
+        if (fetchedAt !== undefined && ageOf(fetchedAt) < maxAgeMs)
           return Effect.succeed(false);
         const running = fetchInFlight.get(projectId);
         if (running) return Deferred.await(running);
@@ -223,10 +236,10 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
 
     const sweepProjectPullRequests = (projectId: string, projectPath: string) =>
       Effect.suspend(() => {
-        const ts = lastPullRequestSweepAt.get(projectId) ?? 0;
-        if (clock.currentTimeMillisUnsafe() - ts < SWEEP_INTERVAL_MS)
+        const sweptAt = lastPullRequestSweepAt.get(projectId);
+        if (sweptAt !== undefined && ageOf(sweptAt) < SWEEP_INTERVAL_MS)
           return Effect.void;
-        lastPullRequestSweepAt.set(projectId, clock.currentTimeMillisUnsafe());
+        lastPullRequestSweepAt.set(projectId, stamp());
         const before = readCachedProjectPullRequests(projectPath);
         return refreshProjectPullRequests(projectPath).pipe(
           Effect.tap((after) =>
@@ -286,7 +299,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         Effect.andThen(
           Effect.sleep(SWEEP_INTERVAL_MS),
           Effect.suspend(() =>
-            windowFocused || clock.currentTimeMillisUnsafe() < attendedUntil
+            windowFocused || now() < attendedUntil
               ? sweepProjects()
               : Effect.void,
           ),
@@ -324,7 +337,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         renewal: boolean,
       ) {
         if (!renewal) rereadRows();
-        attendedUntil = clock.currentTimeMillisUnsafe() + ATTENTION_LEASE_MS;
+        attendedUntil = now() + ATTENTION_LEASE_MS;
         yield* sweepProjects(SWEEP_INTERVAL_MS);
         return { leaseMs: ATTENTION_LEASE_MS };
       }, Effect.provide(context)),

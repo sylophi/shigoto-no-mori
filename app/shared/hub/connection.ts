@@ -55,6 +55,7 @@ import {
   supervise,
 } from "@shared/remote/supervisor";
 import { log } from "@shared/log";
+import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { deviceKeyPair } from "@shared/crypto/deviceKey";
 import type { KeyPair } from "@shared/crypto/noise";
 
@@ -76,8 +77,13 @@ const TERMINATE_GRACE_MS = 1_500;
 // proves the hub alive as well as a pong does), and the timeout runs
 // from the OLDEST unanswered ping, never from the last frame, so a
 // background tab whose timers the browser throttles is not misjudged
-// dead by its own slow cadence. A probe (a wake from sleep, a tab
-// coming back) pings now and judges within PROBE_TIMEOUT_MS instead.
+// dead by its own slow cadence. The timeout is monotonic elapsed time,
+// and a ping past it is only the cue for a fresh one: the verdict is
+// that ping going unanswered for PROBE_TIMEOUT_MS, so a timer that ran
+// late (a stopped process, a sleep) condemns nothing by itself. A
+// probe (a wake from sleep, a tab coming back) is that fresh ping at
+// once. A hidden tab's timers can stretch that window to about a
+// minute, so it finds a dead socket that much later.
 const PING_INTERVAL_MS = 15_000;
 const PING_TIMEOUT_MS = 40_000;
 
@@ -216,6 +222,7 @@ export const make = (
 ): Effect.Effect<HubConnection, never, Scope.Scope> =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
+    const clock = yield* Clock.Clock;
     const lifecycle = yield* Semaphore.make(1);
     const intervalMs = deps.ping?.intervalMs ?? PING_INTERVAL_MS;
     const timeoutMs = deps.ping?.timeoutMs ?? PING_TIMEOUT_MS;
@@ -372,14 +379,28 @@ export const make = (
           },
         });
 
-        // The oldest ping still unanswered.
+        // The oldest ping still unanswered, on the monotonic clock.
         let pingSentAt: number | null = null;
+        // Inbound frames so far: a probe is answered by any frame after
+        // its own ping, whatever the clocks did meanwhile.
+        let framesSeen = 0;
+        // When the last frame came, on both clocks, so a death can tell a
+        // sleep (wall time ran on, monotonic stood still) from silence.
+        let lastFrame = {
+          wall: clock.currentTimeMillisUnsafe(),
+          elapsed: elapsedMillisUnsafe(clock),
+        };
 
         socket.onMessage((text) => {
           if (dead) return;
           // Any inbound message proves the hub alive. A pong is not an
           // envelope, so it stops here.
           pingSentAt = null;
+          framesSeen += 1;
+          lastFrame = {
+            wall: clock.currentTimeMillisUnsafe(),
+            elapsed: elapsedMillisUnsafe(clock),
+          };
           if (text === HUB_PONG) return;
           // Wrap so a throw cannot escape into the platform's event
           // delivery and become an uncaught exception.
@@ -433,7 +454,18 @@ export const make = (
         // minute.
         const declareDead = Effect.sync(() => {
           if (dead) return;
-          log.info("[hub] the socket stopped answering its pings");
+          // macOS's monotonic clock stops while the machine sleeps, so
+          // the wall time it lags since the last frame is the sleep (or a
+          // forward clock step, which only this line can mistake for one).
+          const sleptMs =
+            clock.currentTimeMillisUnsafe() -
+            lastFrame.wall -
+            (elapsedMillisUnsafe(clock) - lastFrame.elapsed);
+          log.info(
+            sleptMs >= 60_000
+              ? `[hub] woke after ${Math.round(sleptMs / 60_000)} min, and the socket had not lived through it`
+              : "[hub] the socket stopped answering its pings",
+          );
           dead = true;
           tearDownLink();
           onClose(null);
@@ -443,20 +475,34 @@ export const make = (
         });
         // A ping the wire refused is left to the close that follows.
         const sendPing = Effect.try(() => socket.send(HUB_PING)).pipe(
-          Effect.andThen(Clock.currentTimeMillis),
-          Effect.map((now) => {
-            if (pingSentAt === null) pingSentAt = now;
-          }),
+          Effect.andThen(
+            Effect.sync(() => {
+              if (pingSentAt === null) pingSentAt = elapsedMillisUnsafe(clock);
+            }),
+          ),
           Effect.ignore,
         );
-        // One beat: a ping when none is outstanding, else the verdict on
-        // the oldest one. Answers whether the socket is still alive.
+        // A fresh observation: a ping now, and whether any frame arrives
+        // within the probe window. What an older ping went unanswered
+        // through (a sleep, a stopped process whose timers ran before its
+        // reads) is no verdict on its own.
+        const answersNow = Effect.gen(function* () {
+          const before = framesSeen;
+          pingSentAt = null;
+          yield* sendPing;
+          yield* Effect.sleep(probeTimeoutMs);
+          return framesSeen !== before;
+        });
+        // One beat: a ping when none is outstanding, and for one past its
+        // timeout, a fresh observation before the verdict. Answers
+        // whether the socket is still alive.
         const beat = Effect.gen(function* () {
           if (pingSentAt === null) {
             yield* sendPing;
             return true;
           }
-          return (yield* Clock.currentTimeMillis) - pingSentAt < timeoutMs;
+          if (elapsedMillisUnsafe(clock) - pingSentAt < timeoutMs) return true;
+          return yield* answersNow;
         });
         // Enforced from the first ping on purpose (no "seen a pong yet"
         // latch): a socket that dies right after the accept must still
@@ -478,13 +524,8 @@ export const make = (
         );
         const run = yield* FiberSet.makeRuntime<never>();
         let probing = false;
-        const probe = Effect.gen(function* () {
-          yield* sendPing;
-          const sentAt = yield* Clock.currentTimeMillis;
-          yield* Effect.sleep(probeTimeoutMs);
-          // Any frame since the probe went out is the answer.
-          if (pingSentAt !== null && pingSentAt <= sentAt) yield* declareDead;
-        }).pipe(
+        const probe = answersNow.pipe(
+          Effect.flatMap((answered) => (answered ? Effect.void : declareDead)),
           Effect.ensuring(
             Effect.sync(() => {
               probing = false;
@@ -573,10 +614,11 @@ export const make = (
         ),
 
       probe: () => {
-        // A live socket gets its verdict within the probe's window, and a
-        // supervisor waiting out its backoff dials now.
-        if (live !== null) live.probe();
-        else current?.supervisor.dialNow();
+        // A live socket gets its verdict within the probe's window, a
+        // supervisor waiting out its backoff dials now, and either way
+        // the uptime the ladder reads starts again here.
+        live?.probe();
+        current?.supervisor.dialNow();
       },
 
       status: () => {
