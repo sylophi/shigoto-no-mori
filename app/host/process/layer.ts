@@ -325,7 +325,6 @@ export const layer = (options: {
     // served streams feed.
     Layer.provideMerge(mirrorChangesLayer),
     Layer.provideMerge(remotePlanes),
-    // The listener and its tunnel follow the device's settings.
     Layer.provideMerge(followDeviceSettings(Effect.promise(refreshDirectHost))),
     // The cloudflared child, fronting the device link's listener.
     Layer.provideMerge(tunnelLayer()),

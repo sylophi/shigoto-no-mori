@@ -1,42 +1,42 @@
 // Durable proof that the device's settings reach what follows them
 // wherever they are written (host/process/wires.ts followDeviceSettings):
-// a write through the engine's Config, as `sm config edit` makes it in
-// a terminal, reconciles the direct listener. Only the Settings form's
-// write did before, and directConnections isn't on the form.
+// the terminal `sm`'s write, on a connection of its own, reaches the
+// follower the host's graph reconciles the direct listener with.
 //
 // Run: pnpm test device-settings.
 import assert from "node:assert/strict";
-import * as EngineConfig from "@shigomori/engine/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { it } from "vitest";
 import { followDeviceSettings } from "@host/process/wires";
-import { waitFor } from "./lib/checkKit.mts";
-import { runHost } from "./lib/hostRuntime.mts";
+import { createCliRunner, waitFor } from "./lib/checkKit.mts";
+import { engineDataDir, runHost } from "./lib/hostRuntime.mts";
+import { builtSm } from "./lib/smBinary.mts";
 
-it("a device setting written from the terminal reconciles the listener", async () => {
-  let reconciled = 0;
+it("a device setting the terminal writes reaches what follows the settings", async () => {
+  const { sm } = createCliRunner(builtSm(), {
+    ...process.env,
+    SHIGOMORI_DATA_DIR: engineDataDir,
+  });
+  let followed = 0;
   await runHost(
     Effect.scoped(
       Effect.gen(function* () {
         yield* Layer.build(
           followDeviceSettings(
             Effect.sync(() => {
-              reconciled += 1;
+              followed += 1;
             }),
           ),
         );
-        const config = yield* EngineConfig.Config;
-        // As `sm config edit` saves it.
-        yield* config.change({ kind: "device" }, (doc) => ({
-          ...doc,
-          directConnections: false,
-        }));
         yield* Effect.promise(() =>
-          waitFor(() => reconciled > 0, "the listener reconciled"),
+          sm("config", "write", "--data", '{"directConnections":false}'),
+        );
+        yield* Effect.promise(() =>
+          waitFor(() => followed > 0, "the settings followed"),
         );
       }),
     ),
   );
-  assert.ok(reconciled > 0);
+  assert.ok(followed > 0);
 });

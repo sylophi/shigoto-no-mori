@@ -451,13 +451,12 @@ const listenerPortPath = () => join(hostFacts().userDataPath, "direct-port");
 // Reconciles the listener with the account and the device's config: run
 // from refreshHubConnection's tail and on every device settings change
 // (followDeviceSettings), so the directConnections opt-out applies
-// without a restart. The
-// config read runs inside the binding's serialized lifecycle. Dual-stack
-// ("::") because connectInfo advertises IPv6 candidates too, on the
-// port it listened on last (listenerPort.ts), read back from status.
-// accountId rides the opts as an identity field, so an account switch
-// restarts the listener and drops every socket authed under the old
-// account.
+// without a restart. The config read runs inside the binding's
+// serialized lifecycle. Dual-stack ("::") because connectInfo
+// advertises IPv6 candidates too, on the port it listened on last
+// (listenerPort.ts), read back from status. accountId rides the opts as
+// an identity field, so an account switch restarts the listener and
+// drops every socket authed under the old account.
 export async function refreshDirectHost(): Promise<void> {
   await Graph.run(
     Effect.flatMap(DeviceLink.DeviceLink, (link) =>
