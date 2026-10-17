@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "typecheck": "astro check",
-    "build": "astro check && astro build",
-    "preview": "astro preview",
+    "dev": "NODE_COMPILE_CACHE=$PWD/node_modules/.cache/node-compile-cache astro dev",
+    "typecheck": "NODE_COMPILE_CACHE=$PWD/node_modules/.cache/node-compile-cache astro check",
+    "build": "NODE_COMPILE_CACHE=$PWD/node_modules/.cache/node-compile-cache astro check && NODE_COMPILE_CACHE=$PWD/node_modules/.cache/node-compile-cache astro build",
+    "preview": "NODE_COMPILE_CACHE=$PWD/node_modules/.cache/node-compile-cache astro preview",
     "og": "node scripts/og.mts"
   },
   "dependencies": {

@@ -56,6 +56,7 @@ import type { AddressInfo } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { ownTestTemp } from "../../testTemp.mts";
 
 const OPEN_WITHIN_MS = 60_000;
 const QUIT_WITHIN_MS = 20_000;
@@ -85,6 +86,9 @@ if (
   process.exit(2);
 }
 const bundle: string = argument;
+// The launches' temp files, the app's own with them, in a folder of
+// this run's (../../testTemp.mts).
+ownTestTemp("smoke");
 const appName = basename(bundle, ".app");
 const executableIn = (app: string) => join(app, "Contents", "MacOS", appName);
 const logs = join(homedir(), "Library", "Logs", appName);

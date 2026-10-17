@@ -63,6 +63,15 @@ repositories under the temp dir and runs git there, through
 `sandboxGit` or `scrubProcessGitEnv` (`lib/checkKit.mts`), which also
 cut off the global and system git config.
 
+Every run's temp files go in a folder of the run's own,
+`$TMPDIR/sm-test/<family>/<id>/`: the runner and each vitest config
+point TMPDIR there before a test starts (`../../testTemp.mts`), so a
+proof needs no cleanup of its own for what a killed process leaves.
+The folder goes as the run exits, and a run killed before that leaves
+a folder the next run of any suite sweeps (`test-temp`). Nothing
+outlives a run, so a build the proofs share (`lib/smBinary.mts`) is
+made once per run.
+
 A case that waits on real git, processes or sockets runs slower on a
 loaded machine. One that fails under load and passes alone is waiting
 on a deadline too short for that: give it one that fits, or wait on

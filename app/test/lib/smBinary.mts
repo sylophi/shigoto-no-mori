@@ -3,9 +3,9 @@
 // its sandbox's data dir, and reaches the same store from the terminal
 // binary where it sets things up or reads them back, as an agent in a
 // terminal beside the app would. The binary is built once per state of
-// its sources into the temp dir, keyed by a hash of them, so the proofs
-// after the first in a run (and later runs on unchanged sources) skip
-// the build. The darwin helper goes beside it, where the binary looks.
+// its sources into the run's temp dir (../../../testTemp.mts), keyed by
+// a hash of them, so the proofs after the first in a run skip the
+// build. The darwin helper goes beside it, where the binary looks.
 //
 // covers: packages/cli/** packages/engine/src/** macfs/**
 import * as Schema from "effect/Schema";
