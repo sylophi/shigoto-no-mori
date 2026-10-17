@@ -48,8 +48,9 @@ const STALL_LIMIT = [
 // refused because another git holds it changed nothing and is asked
 // again: the lock is held for moments, by a `git status` or a `git diff`
 // that writes back the index it refreshed (the app's own views read
-// with both) or another program's git. A command of several steps (a stash, a merge, a
-// rebase, a pull) can be refused after its first, and isn't.
+// with both) or another program's git. A command of several steps (a
+// stash, a merge, a rebase, a pull) can be refused after its first, and
+// isn't.
 const WAITS_FOR_INDEX = new Set([
   "add",
   "apply",
@@ -64,8 +65,9 @@ const WAITS_FOR_INDEX = new Set([
   "update-index",
 ]);
 type RunError = GitCommandError | GitOutputTooLargeError;
-// git's own refusal, its first line: a hook's output that says the same
-// comes after git changed something (a checkout's "Switched to branch").
+// git's own refusal, its first line. A post-checkout hook that prints
+// the same comes after the switch's "Switched to branch"; a pre-commit
+// hook's run again with its commit, which nothing recorded yet.
 const indexHeld = (error: RunError): boolean => {
   if (!(error instanceof GitCommandError) || error.exitCode === null) {
     return false;
