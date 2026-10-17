@@ -19,6 +19,7 @@ import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterAll, it } from "vitest";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
+import { parseRemoteUrl } from "@host/lib/githubCli/remote";
 import { runHost } from "./lib/hostRuntime.mts";
 import {
   installFakeGh,
@@ -71,4 +72,14 @@ it("a repo on an Enterprise host is read from it", async () => {
     await runHost(Effect.flatMap(GithubCli, (cli) => cli.mergeConfig(repo))),
     { merge: false, squash: true, rebase: false, autoMerge: true },
   );
+});
+
+it("reads a remote's host in any case, as gh's known hosts are kept", () => {
+  for (const url of [
+    "git@GitHub.com:owner/repo.git",
+    "ssh://git@SSH.GitHub.com/owner/repo",
+    "https://GITHUB.COM/owner/repo",
+  ]) {
+    assert.equal(parseRemoteUrl(url)?.host, "github.com", url);
+  }
 });

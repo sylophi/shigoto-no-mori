@@ -33,8 +33,11 @@ export function ghHostsPath(): string {
 // github.com, so we'd hide PR data for valid repos if we matched the
 // raw host. The same `ssh.<host>` shape works for GHE setups that
 // expose 443 the same way, so the normalization isn't github.com-specific.
+// Lowercased, as gh's known hosts are (ghKnownHosts): `GitHub.com` in a
+// remote is github.com.
 function normalizeHost(host: string): string {
-  return host.startsWith("ssh.") ? host.slice(4) : host;
+  const lower = host.toLowerCase();
+  return lower.startsWith("ssh.") ? lower.slice(4) : lower;
 }
 
 // Parses a git remote URL into host/owner/repo. Accepts ssh shorthand
