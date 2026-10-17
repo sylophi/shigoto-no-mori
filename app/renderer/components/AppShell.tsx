@@ -141,6 +141,7 @@ export function AppShell() {
         )
       }
       tabBar={<PhoneTabBar />}
+      statusBarEdge={phone && isTabRoute(pathname)}
       band={
         hasLocalHost && (
           <>
@@ -189,7 +190,9 @@ function ForestKeepalive() {
 // not the page, so in a browser tab the page wears the root's
 // background, kept in step as the theme changes (the boot script paints
 // it first). A phone's bottom edge is the tab bar, so there the canvas
-// continues its card, and the rubber band at the top of a fixed shell,
+// continues its card (Safari tints its top strip from that same colour
+// unless a fixed element covers the top edge: AppShellView's
+// statusBarEdge), and the rubber band at the top of a fixed shell,
 // which reads as a broken layout, is off. The desktop window stays
 // transparent.
 function usePageCanvas(phone: boolean): void {

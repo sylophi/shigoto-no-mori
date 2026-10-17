@@ -28,6 +28,12 @@ interface AppShellViewProps {
   // (PhoneBackBarView), and its tab bar (PhoneTabBarView).
   backBar?: ReactNode;
   tabBar?: ReactNode;
+  // The strip Safari on iOS tints its status bar from: a fixed element
+  // on top along the top edge, at least about 6px tall, else the body,
+  // the card a stacked page's back bar wants. A tab page gives it the
+  // canvas it opens on (doubutsu.css: a page header's band). A picture
+  // of a window has no status bar to tint.
+  statusBarEdge?: boolean;
   // Mounted between the sidebar and the page (the update toast) and
   // after the page (the app-wide overlays, laid over the whole window).
   toasts?: ReactNode;
@@ -49,6 +55,7 @@ export function AppShellView({
   onResizeStart,
   backBar,
   tabBar,
+  statusBarEdge,
   toasts,
   overlays,
   band,
@@ -69,6 +76,13 @@ export function AppShellView({
         className,
       )}
     >
+      {statusBarEdge && (
+        <div
+          aria-hidden
+          data-slot="phone-top-edge"
+          className="pointer-events-none fixed inset-x-0 top-0 z-50 h-[max(--spacing(3),env(safe-area-inset-top))] bg-background"
+        />
+      )}
       {!phone && sidebar !== null && (
         <>
           <div style={{ width: sidebarWidth }} className="shrink-0">
