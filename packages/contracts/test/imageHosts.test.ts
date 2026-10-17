@@ -6,26 +6,9 @@ import { it } from "vitest";
 import {
   GITHUB_IMAGE_HOSTS,
   isAllowedImage,
-  remoteHost,
 } from "../src/predicates/imageHosts.ts";
 
 const known = [...GITHUB_IMAGE_HOSTS, "git.uni.example"];
-
-it("names the host of an https, ssh or scp-like remote", () => {
-  assert.equal(
-    remoteHost("https://git.uni.example/lab/repo.git"),
-    "git.uni.example",
-  );
-  assert.equal(
-    remoteHost("git@git.uni.example:lab/repo.git"),
-    "git.uni.example",
-  );
-  assert.equal(
-    remoteHost("ssh://git@Git.Uni.Example:2222/lab/repo"),
-    "git.uni.example",
-  );
-  assert.equal(remoteHost("/Users/me/repo"), null);
-});
 
 it("lets an image load from GitHub or a registered remote's host, and refuses any other", () => {
   for (const src of [

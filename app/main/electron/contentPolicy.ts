@@ -25,10 +25,6 @@ export function clerkFrontendHost(publishableKey: string): string | null {
 export function rendererContentPolicy(options: {
   readonly clerkHost: string | null;
   readonly dev: boolean;
-  // The hosts beside GitHub's that images may load from: this machine's
-  // projects' remotes (contracts' predicates/imageHosts.ts), each with
-  // its subdomains.
-  readonly imageHosts: readonly string[];
 }): string {
   const clerk =
     options.clerkHost === null ? [] : [`https://${options.clerkHost}`];
@@ -43,14 +39,16 @@ export function rendererContentPolicy(options: {
       "'unsafe-inline'",
       ...dev("https://fonts.googleapis.com"),
     ],
-    // Clerk's avatars, and a description's images from GitHub or a
-    // remote's host, as the page's markdown allows them.
+    // Clerk's avatars, and a description's images from GitHub. One on a
+    // project's remote's host comes as a data: URL its device read
+    // (projects:remoteImage), as in the web client, whose policy is
+    // static.
     "img-src": [
       "'self'",
       "data:",
       "blob:",
       "https://img.clerk.com",
-      ...[...GITHUB_IMAGE_HOSTS, ...options.imageHosts].flatMap((host) => [
+      ...GITHUB_IMAGE_HOSTS.flatMap((host) => [
         `https://${host}`,
         `https://*.${host}`,
       ]),

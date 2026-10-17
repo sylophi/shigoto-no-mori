@@ -29,7 +29,7 @@ import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { type HostFailure, host, hostBusyForQuit } from "./hostProcess";
+import { type HostFailure, hostBusyForQuit } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
 import {
   dataDir,
@@ -295,7 +295,6 @@ app.on("ready", async () => {
           ),
         },
     clerkPublishableKey(),
-    () => Effect.runPromise(host().imageHosts()),
   );
   // The rebuilt environment (module top), before the first spawn.
   await shellEnvReady;

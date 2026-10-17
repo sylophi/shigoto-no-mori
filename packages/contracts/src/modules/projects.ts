@@ -114,4 +114,13 @@ export const projectsContract = defineContract(
     remote: true,
     gated: false,
   }),
+  // An image the project's markdown names on one of its remotes' hosts,
+  // read by the device holding the project, as a data: URL. A window
+  // loads only GitHub's image hosts itself (its policy names no other).
+  invoke(
+    "remoteImage",
+    Schema.Struct({ ...ProjectScopedPayloadSchema.fields, url: Schema.String }),
+    Schema.String,
+    { remote: true, gated: false },
+  ),
 );
