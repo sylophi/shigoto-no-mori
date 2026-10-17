@@ -8,12 +8,14 @@
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Paths from "./Paths.ts";
 import type { OpenDatabase } from "./Store.ts";
 
@@ -109,7 +111,7 @@ export const layer = (open: OpenDatabase) =>
           }
         }).pipe(Effect.provideService(Reactivity.Reactivity, reactivity));
 
-      const held = Effect.gen(function* () {
+      const take = Effect.gen(function* () {
         const taken = yield* hold(Duration.seconds(2), false).pipe(
           Effect.as("held" as const),
           Effect.catchReason("SqlError", "LockTimeoutError", () =>
@@ -130,10 +132,53 @@ export const layer = (open: OpenDatabase) =>
         );
         if (taken === "busy") return yield* new DataDirMoving();
         const now = yield* paths.current;
-        if (path.resolve(now) !== path.resolve(paths.dataDir)) {
+        if (
+          path.resolve(now) !== path.resolve(paths.dataDir) ||
+          !(yield* fs
+            .exists(paths.dataDir)
+            .pipe(Effect.orElseSucceed(() => true)))
+        ) {
           return yield* new DataDirMoved({ to: now });
         }
       });
+
+      // The process's one shared hold: taken and checked by the first
+      // change, joined by the others in the order they came, let go by
+      // the last to end. No move can commit while it is held, so the
+      // check stays true. A move of this process's own, waiting for the
+      // changes under way, refuses new ones, which would otherwise keep
+      // joining.
+      const joining = yield* Semaphore.make(1);
+      let holders = 0;
+      let opened: Scope.Closeable | undefined;
+      let moving = 0;
+      const held = Effect.acquireRelease(
+        joining.withPermits(1)(
+          Effect.gen(function* () {
+            if (moving > 0) return yield* new DataDirMoving();
+            if (holders === 0) {
+              const scope = yield* Scope.make();
+              const exit = yield* Effect.exit(Scope.provide(take, scope));
+              if (Exit.isFailure(exit)) {
+                yield* Scope.close(scope, exit);
+                return yield* exit;
+              }
+              opened = scope;
+            }
+            holders += 1;
+          }),
+        ),
+        () =>
+          joining.withPermits(1)(
+            Effect.gen(function* () {
+              holders -= 1;
+              if (holders > 0 || opened === undefined) return;
+              const scope = opened;
+              opened = undefined;
+              yield* Scope.close(scope, Exit.void);
+            }),
+          ),
+      );
 
       const guard = Effect.fn("DataDirLock.guard")(function* <A, E, R>(
         effect: Effect.Effect<A, E, R>,
@@ -145,6 +190,7 @@ export const layer = (open: OpenDatabase) =>
         effect: Effect.Effect<A, E, R>,
         within: Duration.Input,
       ) {
+        moving += 1;
         return yield* Effect.scoped(
           Effect.andThen(
             hold(within, true).pipe(
@@ -163,6 +209,12 @@ export const layer = (open: OpenDatabase) =>
               ),
             ),
             effect,
+          ),
+        ).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              moving -= 1;
+            }),
           ),
         );
       });

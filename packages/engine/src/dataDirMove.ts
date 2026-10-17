@@ -305,18 +305,26 @@ export const undoMove = (journal: Journal, at: string, file: string) =>
     if (rekeyed && removed) yield* letGo(file, "undoing");
   });
 
-// The journal in the data dir `at` settled, by a process holding the
-// data-folder lock alone, so no move is under way but this process's
-// own: finished when the pointer leads to its destination, undone when
-// it still leads to its source, and left for the process the pointer
-// leads to when this one found the data dir before a move took it
-// elsewhere. One that can't be read is kept, and the store keeps
-// refusing. With no journal, a store a move left refusing writes again.
+// What a move left in the data dir `at` settled, by a process holding
+// the data-folder lock alone, so no move is under way but this process's
+// own, and only while the data dir is still found at `at`: what one this
+// process found before a move took it elsewhere is left for the process
+// the pointer leads to. A journal is finished when the pointer leads to
+// its destination and undone when it still leads to its source; one that
+// can't be read is kept, and the store keeps refusing. With no journal,
+// a store a move left refusing writes again.
 export const resumeDataDirMove = (at: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const file = path.join(at, JOURNAL);
+    // The pointer may name the folder with a trailing slash.
+    const now = path.resolve(yield* (yield* Paths.Paths).current);
+    if (now !== path.resolve(at)) {
+      return yield* Effect.logWarning(
+        `[data] the data folder is at ${now} now; what a move left at ${at} is left for a start there`,
+      );
+    }
     const text = yield* fs.readFileString(file).pipe(
       Effect.map(Option.some),
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
@@ -333,13 +341,6 @@ export const resumeDataDirMove = (at: string) =>
     if (Option.isNone(journal)) {
       return yield* Effect.logWarning(
         `[data] a move journal at ${file} can't be read, kept for a look`,
-      );
-    }
-    // The pointer may name the folder with a trailing slash.
-    const now = path.resolve(yield* (yield* Paths.Paths).current);
-    if (now !== path.resolve(at)) {
-      return yield* Effect.logWarning(
-        `[data] the data folder is at ${now} now; the move's journal at ${file} is left for a start there`,
       );
     }
     if (path.resolve(journal.value.to) === now) {
@@ -368,7 +369,7 @@ export const settleLayer = Layer.effectDiscard(
       (yield* retired.pipe(Effect.orElseSucceed(() => true)));
     if (!owed) return;
     const lock = yield* DataDirLock;
-    yield* lock.alone(resumeDataDirMove(dataDir), "10 seconds");
+    yield* lock.alone(resumeDataDirMove(dataDir), "2 seconds");
   }).pipe(
     Effect.ignoreCause({
       log: "Warn",

@@ -27,6 +27,7 @@ import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
+import type { Project } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -221,18 +222,6 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
           : `Can't move the data folder inside itself (${oldDir}).`,
     });
   }
-  // Same trap as nukeEverything: a project repo registered from inside
-  // the data dir would be dragged along, breaking its recorded path.
-  const projects = yield* freshProjects;
-  const trapped = findProjectInsideDataDir(projects, spellings);
-  if (trapped) {
-    return yield* new DataDirMoveError({
-      reason:
-        `Refusing to move: project "${trapped.name}" lives inside ` +
-        `${oldDir} and would be moved with it. Move the repository ` +
-        "out first.",
-    });
-  }
   // Running scripts are reaped below (same semantics as nuke), but
   // in-flight destructive lifecycle work (worktree/project deletes,
   // delegated engine runs) is mid-write inside the data dir and can't be
@@ -261,48 +250,49 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // flow), what they keep re-keyed, and their git links repaired
   // afterwards. Listed before anything moves, because listing needs the
   // old paths.
-  const plan = Effect.forEach(
-    projects,
-    (project) =>
-      Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
-        Effect.map((identities) =>
-          identities.flatMap((i): Array<Entry & { oldId: string }> => {
-            const under = underOld(i.path);
-            if (i.isPrimary || under === undefined) return [];
-            return [
-              {
-                oldId: i.id,
-                projectId: project.id,
-                oldPath: i.path,
-                newPath: join(
-                  newReal,
-                  i.path.slice(under.length).replace(/^[/\\]/, ""),
-                ),
-                capture: null,
-                state: "planned",
-              },
-            ];
-          }),
-        ),
-        // A project whose folder is gone has nothing to carry; one that is
-        // there but can't be listed refuses the move, or its worktrees
-        // would land with what they kept left under their old ids.
-        Effect.catch(() =>
-          Effect.flatMap(
-            fs.exists(project.path).pipe(Effect.orElseSucceed(() => true)),
-            (there) =>
-              there
-                ? Effect.fail(
-                    new DataDirMoveError({
-                      reason: `Couldn't list the worktrees of "${project.name}", so what they keep couldn't follow them. Try again.`,
-                    }),
-                  )
-                : Effect.succeed([]),
+  const plan = (projects: ReadonlyArray<Project>) =>
+    Effect.forEach(
+      projects,
+      (project) =>
+        Ops.listWorktreeIdentities({ projectId: project.id }).pipe(
+          Effect.map((identities) =>
+            identities.flatMap((i): Array<Entry & { oldId: string }> => {
+              const under = underOld(i.path);
+              if (i.isPrimary || under === undefined) return [];
+              return [
+                {
+                  oldId: i.id,
+                  projectId: project.id,
+                  oldPath: i.path,
+                  newPath: join(
+                    newReal,
+                    i.path.slice(under.length).replace(/^[/\\]/, ""),
+                  ),
+                  capture: null,
+                  state: "planned",
+                },
+              ];
+            }),
+          ),
+          // A project whose folder is gone has nothing to carry; one that is
+          // there but can't be listed refuses the move, or its worktrees
+          // would land with what they kept left under their old ids.
+          Effect.catch(() =>
+            Effect.flatMap(
+              fs.exists(project.path).pipe(Effect.orElseSucceed(() => true)),
+              (there) =>
+                there
+                  ? Effect.fail(
+                      new DataDirMoveError({
+                        reason: `Couldn't list the worktrees of "${project.name}", so what they keep couldn't follow them. Try again.`,
+                      }),
+                    )
+                  : Effect.succeed([]),
+            ),
           ),
         ),
-      ),
-    { concurrency: "unbounded" },
-  ).pipe(Effect.map((lists) => lists.flat()));
+      { concurrency: "unbounded" },
+    ).pipe(Effect.map((lists) => lists.flat()));
 
   const suffix = (yield* Random.nextInt).toString(36);
   // The pointer is written beside itself under a name of its own, then
@@ -354,6 +344,19 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         throw err;
       }),
     );
+    // Same trap as nukeEverything: a project repo registered from inside
+    // the data dir would be dragged along, breaking its recorded path.
+    // Read holding the lock, so no project is added after.
+    const projects = yield* freshProjects;
+    const trapped = findProjectInsideDataDir(projects, spellings);
+    if (trapped) {
+      return yield* new DataDirMoveError({
+        reason:
+          `Refusing to move: project "${trapped.name}" lives inside ` +
+          `${oldDir} and would be moved with it. Move the repository ` +
+          "out first.",
+      });
+    }
     // Scripts running inside the worktrees we're about to move would
     // keep cwds pointing at the old location. Reap them first.
     yield* opts.killAllScripts;
@@ -382,7 +385,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     journaled = true;
 
     // The listing's own writes (an idle worktree shelved) are the move's.
-    const entries = yield* asMoveOwner(plan);
+    const entries = yield* asMoveOwner(plan(projects));
     // Nothing may be kept under an id a worktree is about to take: the
     // undo reads anything there as its own re-key's.
     for (const entry of entries) {

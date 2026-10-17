@@ -2478,8 +2478,9 @@ esac`,
 });
 
 describe("a data-folder move under way", () => {
-  // The move holds the lock alone, as the app's does: a change on disk
-  // is refused before it starts, and a read still answers.
+  // The move holds the lock alone, as the app's does: a change on disk,
+  // the doctor's repairs among them, is refused before it starts, and a
+  // read still answers.
   it("refuses a change on disk while a move holds the lock, and reads on", async () => {
     const alpha = box.repo("alpha");
     box.write("registry.json", {
@@ -2506,6 +2507,8 @@ describe("a data-folder move under way", () => {
       assert.match(removed.stderr, /The data folder is being moved/);
       const created = await runAt(alpha, "worktrees", "create", "owl");
       assert.match(created.stderr, /The data folder is being moved/);
+      const fixed = await runAt(alpha, "doctor", "--fix", "--yes");
+      assert.match(fixed.stderr, /The data folder is being moved/);
       const listed = await runAt(alpha, "--json", "list");
       assert.equal(listed.code, 0, listed.stderr);
     } finally {

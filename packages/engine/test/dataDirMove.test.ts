@@ -11,11 +11,13 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
@@ -28,6 +30,7 @@ import { afterEach, beforeEach, it } from "vitest";
 import * as DataDirLock from "../src/DataDirLock.ts";
 import { finishMove, resumeDataDirMove } from "../src/dataDirMove.ts";
 import { JOURNAL, retired, retireStore } from "../src/dataDirMoveJournal.ts";
+import { flavorNames } from "../src/flavor.ts";
 import * as Paths from "../src/Paths.ts";
 import * as Registry from "../src/Registry.ts";
 import * as WorktreeData from "../src/WorktreeData.ts";
@@ -192,6 +195,17 @@ it("lets a move take the lock a killed process held", async () => {
   }
 });
 
+// The lock and the Paths of a process whose home is `home`, with no
+// data dir override.
+const lockAtHome = (home: string) =>
+  DataDirLock.layer(openNode).pipe(
+    Layer.provideMerge(Paths.layer("dev")),
+    Layer.provide(NodeServices.layer),
+    Layer.provide(
+      ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME: home } })),
+    ),
+  );
+
 // A process that found the data dir before a move took it elsewhere
 // makes no change there.
 it("refuses a change in a process whose data dir moved since it started", async () => {
@@ -204,24 +218,60 @@ it("refuses a change in a process whose data dir moved since it started", async 
         writeFileSync(pointerFile, `${join(home, "moved")}\n`);
         const lock = yield* DataDirLock.DataDirLock;
         return yield* Effect.exit(lock.guard(Effect.void));
-      }).pipe(
-        Effect.provide(
-          DataDirLock.layer(openNode).pipe(
-            Layer.provideMerge(Paths.layer("prod")),
-            Layer.provide(NodeServices.layer),
-            Layer.provide(
-              ConfigProvider.layer(
-                ConfigProvider.fromEnv({ env: { HOME: home } }),
-              ),
-            ),
-          ),
-        ),
-      ),
+      }).pipe(Effect.provide(lockAtHome(home))),
     );
     assert.ok(
       Option.getOrUndefined(Exit.findErrorOption(exit)) instanceof
         DataDirLock.DataDirMoved,
     );
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+// A rename a crash cut before its pointer moved: the folder this
+// process found is gone, and the journal at the new place names it. The
+// change is refused, and the pointer committed for the next start.
+it("refuses a change after a rename a crash cut before its pointer moved", async () => {
+  const home = mkdtempSync(join(tmpdir(), "engine-lock-"));
+  // The data dir this process found as it started.
+  mkdirSync(join(home, flavorNames("dev").dataDir));
+  try {
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const { pointerFile, dataDir } = yield* Paths.Paths;
+        const moved = join(home, "ext", basename(dataDir));
+        mkdirSync(join(home, "ext"));
+        mkdirSync(dirname(pointerFile), { recursive: true });
+        writeFileSync(`${pointerFile}.tmp.x`, `${moved}\n`);
+        writeFileSync(
+          join(dataDir, JOURNAL),
+          JSON.stringify({
+            from: dataDir,
+            to: moved,
+            partial: null,
+            moved: [],
+          }),
+        );
+        renameSync(dataDir, moved);
+        const lock = yield* DataDirLock.DataDirLock;
+        const exit = yield* Effect.exit(lock.guard(Effect.void));
+        return {
+          refused:
+            Option.getOrUndefined(Exit.findErrorOption(exit)) instanceof
+            DataDirLock.DataDirMoved,
+          pointer: readFileSync(pointerFile, "utf8").trim(),
+          moved,
+          recreated: existsSync(dataDir),
+        };
+      }).pipe(Effect.provide(lockAtHome(home))),
+    );
+    assert.deepEqual(result, {
+      refused: true,
+      pointer: result.moved,
+      moved: result.moved,
+      recreated: false,
+    });
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

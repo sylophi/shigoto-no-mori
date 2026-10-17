@@ -44,9 +44,11 @@
 //
 // covers: app/host/process/wires.ts
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import * as Paths from "@shigomori/engine/Paths";
 import { reconcileOnLastPort, rememberedPort } from "@host/direct/listenerPort";
 import { mintHexId } from "@host/lib/hexId";
 import { MAX_MESSAGE_BYTES } from "@host/socket/boundedMessages";
@@ -444,6 +446,37 @@ it("calls: a read answers with its result, and a failure crosses as its contract
   assert.ok(plain instanceof RemoteCallError);
   assert.equal(plain.message, "boom");
   assert.equal(plain.code, "EBOOM");
+});
+
+// A call that changes code runs only while no data-folder move can
+// start: one is refused while a move holds the lock alone, and a read
+// still answers.
+it("calls: one that changes code is refused while a data-folder move holds the lock, and a read answers", async () => {
+  const track = trackTest;
+  const lockFile = await runHost(
+    Effect.map(Paths.Paths, ({ pointerFile }) =>
+      join(dirname(pointerFile), "data-dir.lock"),
+    ),
+  );
+  mkdirSync(dirname(lockFile), { recursive: true });
+  const { listener } = await listen(track);
+  listener.setAccepts(true);
+  const connection = await dialListener(track, listener);
+  const move = new DatabaseSync(lockFile);
+  move.exec("PRAGMA locking_mode = EXCLUSIVE");
+  move.exec("CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)");
+  move.exec("INSERT OR REPLACE INTO held (id) VALUES (1)");
+  try {
+    const refused = await rejection(
+      invoke(connection, "git:refreshProject", { projectId: "plain" }),
+    );
+    assert.match(String(refused), /The data folder is being moved/);
+    assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
+      leaseMs: 5,
+    });
+  } finally {
+    move.close();
+  }
 });
 
 const has = (pushes: unknown[], projectId: string) =>

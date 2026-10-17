@@ -178,6 +178,9 @@ export const doctorLayer = (options: {
     Layer.provide(
       Layer.mergeAll(Git.layer, Darwin.layer(options.macfs), Migration.layer),
     ),
+    // `--fix` prunes and moves worktrees, which a data-folder move holds
+    // still.
+    Layer.merge(DataDirLock.layer(options.open)),
     Layer.provideMerge(Paths.layer(options.flavor)),
     Layer.provideMerge(childDefaults),
   );
