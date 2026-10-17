@@ -99,6 +99,12 @@ const KNOWN_HOSTS_TTL = Duration.hours(1);
 // every open, gh failing with "could not determine OWNER, REPO" each
 // time.
 const REPO_TTL = Duration.minutes(5);
+// gh couldn't read a repository's merge settings, which isn't kept.
+class MergeConfigUnread extends Schema.TaggedError<MergeConfigUnread>()(
+  "MergeConfigUnread",
+  {},
+) {}
+
 // Merge-button settings barely change within a session.
 const MERGE_CONFIG_TTL = Duration.hours(1);
 // An About is rarely edited, and one that is can wait this long.
@@ -218,7 +224,7 @@ const make = Effect.gen(function* () {
           Effect.flatMap((found) =>
             Option.isSome(found)
               ? Effect.succeed(found.value)
-              : Effect.fail("unread" as const),
+              : Effect.fail(new MergeConfigUnread()),
           ),
         ),
     { capacity: Infinity, timeToLive: answersFor(MERGE_CONFIG_TTL) },
