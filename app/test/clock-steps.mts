@@ -3,8 +3,10 @@
 // (an NTP correction), a sleep as macOS has one (the wall clock runs
 // on, monotonic time and every timer stand still, then a wake), and a
 // stopped process (both clocks run on, no timer runs), on a TestClock
-// (lib/checkKit.mts, `sleepingClock`). Covers the hub
-// socket's pings and wake probe (shared/hub/connection.ts), the
+// (lib/checkKit.mts, `sleepingClock`). Covers the links' liveness
+// (shared/remote/liveness.ts), its one-shot question (the mirror
+// daemon's ping, the watchdog's rounds, a quit's busy ask) and the hub
+// socket's pings and wake probe on it (shared/hub/connection.ts), the
 // supervisor's and the direct keeper's uptime (shared/remote/
 // supervisor.ts, shared/hub/directKeeper.ts), and a window's renewal of
 // a peer's attention after one failed ask (renderer/lib/remote/
@@ -14,6 +16,7 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import { afterEach, it, vi } from "vitest";
 import { NotSharingError } from "@shigomori/contracts/errors";
@@ -33,6 +36,7 @@ import {
   supervise,
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
+import { answerWithin, watchLiveness } from "@shared/remote/liveness";
 import { log } from "@shared/log";
 import { makeSweepRenewals } from "@/lib/remote/remoteSweep";
 import { entryAt, sleepingClock, testClock } from "./lib/checkKit.mts";
@@ -210,6 +214,99 @@ it("hub socket: a ping past its timeout whose answer a stopped process had no tu
   hub.setAnswering(false);
   await clock.advance(15_000 + 40_000 + 5_000 + 15_000);
   assert.ok(hub.tickets() >= 2, "a dead socket is still found");
+});
+
+it("liveness: a probe set aside by a late turn is interrupted, so a hidden page's minute-late turns against a peer that never answers leave one ping out, not one per turn", async () => {
+  const clock = clocks();
+  let out = 0;
+  let most = 0;
+  let deaths = 0;
+  madeOn(
+    clock.context,
+    watchLiveness({
+      ping: Effect.acquireUseRelease(
+        Effect.sync(() => {
+          out += 1;
+          most = Math.max(most, out);
+        }),
+        () => Effect.never,
+        () =>
+          Effect.sync(() => {
+            out -= 1;
+          }),
+      ),
+      heard: () => 0,
+      intervalMs: 15_000,
+      timeoutMs: 40_000,
+      probeTimeoutMs: 5_000,
+      dead: Effect.sync(() => {
+        deaths += 1;
+      }),
+    }),
+  );
+  // Ten minutes of a throttled page: whatever a timer asked for, it
+  // runs about a minute late.
+  for (let turn = 0; turn < 120; turn++) {
+    clock.stop(55_000);
+    await clock.advance(5_000);
+  }
+  assert.equal(most, 1, "probes piled up");
+  assert.equal(deaths, 0, "judged on a turn it had no time to hear in");
+  // Its turns on time again, the silent peer is found.
+  await clock.advance(45_000);
+  assert.equal(deaths, 1, "the silent peer was never judged");
+});
+
+it("liveness: one question whose limit came late, by a stop or a sleep, is asked again rather than answered none, and silence through a limit this end ran is none", async () => {
+  const clock = clocks();
+  const asks = (onTime: () => void) => {
+    let asked = 0;
+    // The answer waits unread until the question is asked again.
+    const ask = Effect.suspend(() =>
+      ++asked === 1
+        ? Effect.sync(onTime).pipe(Effect.andThen(Effect.never))
+        : Effect.succeed("here"),
+    );
+    return Effect.runPromiseWith(clock.context)(answerWithin(ask, 10_000));
+  };
+  for (const pause of [clock.stop, clock.sleep]) {
+    const answered = asks(() => pause(60_000));
+    await clock.advance(10_000);
+    const answer = await answered;
+    assert.ok(Option.isSome(answer) && Exit.isSuccess(answer.value));
+  }
+  const silent = Effect.runPromiseWith(clock.context)(
+    answerWithin(Effect.never, 10_000),
+  );
+  await clock.advance(10_000);
+  assert.ok(Option.isNone(await silent));
+});
+
+it("hub socket: a wake's probe whose answer a stopped process had no turn to read asks again rather than judge (O07)", async () => {
+  const { clock, hub, connection } = await connectedHub();
+  // The wake's probe goes out, and the process stops before it reads
+  // the answer; on SIGCONT the probe's timer runs first.
+  hub.setAnswering(false);
+  connection.probe();
+  await clock.advance(1_000);
+  clock.stop(60_000);
+  hub.setAnswering(true);
+  await clock.advance(30_000);
+  assert.equal(connection.status().socket.phase, "connected");
+  assert.equal(hub.tickets(), 1);
+});
+
+it("hub socket: the fresh probe a ping past its timeout asks, stopped inside its window before its answer is read, asks again rather than judge (O07)", async () => {
+  const { clock, hub, connection } = await connectedHub();
+  // The first beat's ping goes unanswered, and 40 s on a fresh one asks.
+  hub.setAnswering(false);
+  await clock.advance(15_000 + 40_000);
+  await clock.advance(1_000);
+  clock.stop(60_000);
+  hub.setAnswering(true);
+  await clock.advance(30_000);
+  assert.equal(connection.status().socket.phase, "connected");
+  assert.equal(hub.tickets(), 1);
 });
 
 function flapping() {

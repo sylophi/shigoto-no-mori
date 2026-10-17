@@ -14,7 +14,13 @@
 // adapter, and everything account flavored (deviceId, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts.
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { HELLO_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "@shared/remote/link";
+import {
+  HELLO_TIMEOUT_MS,
+  PING_INTERVAL_MS,
+  PING_TIMEOUT_MS,
+  PROBE_TIMEOUT_MS,
+} from "@shared/remote/link";
+import { watchLiveness } from "@shared/remote/liveness";
 import { newConnectionId, RemoteConnectError } from "@shared/remote/deviceLink";
 import {
   createHubLink,
@@ -43,8 +49,6 @@ import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FiberSet from "effect/FiberSet";
-import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import {
@@ -70,22 +74,13 @@ const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 const TERMINATE_GRACE_MS = 1_500;
 
 // A websocket over a NAT, a tunnel edge or a laptop that just slept can
-// die without either end seeing a close, so the socket sends the hub's
-// ping (HUB_PING, which the Durable Object answers without waking) on
-// this interval and gives the socket up when a ping stays unanswered
-// for the timeout. ANY inbound frame answers it (a relay or presence
-// proves the hub alive as well as a pong does), and the timeout runs
-// from the OLDEST unanswered ping, never from the last frame, so a
-// background tab whose timers the browser throttles is not misjudged
-// dead by its own slow cadence. The timeout is monotonic elapsed time,
-// and a ping past it is only the cue for a fresh one: the verdict is
-// that ping going unanswered for PROBE_TIMEOUT_MS, so a timer that ran
-// late (a stopped process, a sleep) condemns nothing by itself. A
-// probe (a wake from sleep, a tab coming back) is that fresh ping at
-// once. A hidden tab's timers can stretch that window to about a
-// minute, so it finds a dead socket that much later.
-const PING_INTERVAL_MS = 15_000;
-const PING_TIMEOUT_MS = 40_000;
+// die without either end seeing a close, so the socket is watched as a
+// device link is (shared/remote/liveness.ts, on link.ts's timings): the
+// hub's ping (HUB_PING, which the Durable Object answers without
+// waking) as the probe, and ANY inbound frame as its answer, a relay or
+// presence proving the hub alive as well as a pong does. A probe (a
+// wake from sleep, a tab coming back) is a fresh ping at once. A hidden
+// tab's turns all come late, so it judges nothing until it comes back.
 
 // Test seams for the pings' timing. Real callers take the defaults.
 type PingOptions = {
@@ -379,8 +374,6 @@ export const make = (
           },
         });
 
-        // The oldest ping still unanswered, on the monotonic clock.
-        let pingSentAt: number | null = null;
         // Inbound frames so far: a probe is answered by any frame after
         // its own ping, whatever the clocks did meanwhile.
         let framesSeen = 0;
@@ -395,7 +388,6 @@ export const make = (
           if (dead) return;
           // Any inbound message proves the hub alive. A pong is not an
           // envelope, so it stops here.
-          pingSentAt = null;
           framesSeen += 1;
           lastFrame = {
             wall: clock.currentTimeMillisUnsafe(),
@@ -473,70 +465,26 @@ export const make = (
           killSocket(socket);
           notifyChange();
         });
-        // A ping the wire refused is left to the close that follows.
-        const sendPing = Effect.try(() => socket.send(HUB_PING)).pipe(
-          Effect.andThen(
-            Effect.sync(() => {
-              if (pingSentAt === null) pingSentAt = elapsedMillisUnsafe(clock);
-            }),
-          ),
-          Effect.ignore,
-        );
-        // A fresh observation: a ping now, and whether any frame arrives
-        // within the probe window. What an older ping went unanswered
-        // through (a sleep, a stopped process whose timers ran before its
-        // reads) is no verdict on its own.
-        const answersNow = Effect.gen(function* () {
-          const before = framesSeen;
-          pingSentAt = null;
-          yield* sendPing;
-          yield* Effect.sleep(probeTimeoutMs);
-          return framesSeen !== before;
-        });
-        // One beat: a ping when none is outstanding, and for one past its
-        // timeout, a fresh observation before the verdict. Answers
-        // whether the socket is still alive.
-        const beat = Effect.gen(function* () {
-          if (pingSentAt === null) {
-            yield* sendPing;
-            return true;
-          }
-          if (elapsedMillisUnsafe(clock) - pingSentAt < timeoutMs) return true;
-          return yield* answersNow;
-        });
         // Enforced from the first ping on purpose (no "seen a pong yet"
         // latch): a socket that dies right after the accept must still
         // be found, and the cost of that is only that a Worker
         // predating the pair (which drops pings as malformed envelopes)
         // is redialed once a minute until it is redeployed, so the
-        // Worker deploys first (hub/README.md).
-        yield* Effect.sleep(intervalMs).pipe(
-          Effect.andThen(
-            beat.pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced(intervalMs),
-                while: (alive) => alive,
-              }),
-            ),
+        // Worker deploys first (hub/README.md). A ping the wire refused
+        // is left to the close that follows.
+        const liveness = yield* watchLiveness({
+          ping: Effect.try(() => socket.send(HUB_PING)).pipe(
+            Effect.andThen(Effect.never),
           ),
-          Effect.andThen(declareDead),
-          Effect.forkScoped,
-        );
-        const run = yield* FiberSet.makeRuntime<never>();
-        let probing = false;
-        const probe = answersNow.pipe(
-          Effect.flatMap((answered) => (answered ? Effect.void : declareDead)),
-          Effect.ensuring(
-            Effect.sync(() => {
-              probing = false;
-            }),
-          ),
-        );
+          heard: () => framesSeen,
+          intervalMs,
+          timeoutMs,
+          probeTimeoutMs,
+          dead: declareDead,
+        });
         return {
           probe: () => {
-            if (dead || probing) return;
-            probing = true;
-            run(probe);
+            if (!dead) liveness.probe();
           },
           remoteDeviceId: "",
           remoteAppVersion: "",

@@ -120,7 +120,8 @@ export type DeviceConnection = {
   close(): void;
   // Asks the peer to answer NOW, within PROBE_TIMEOUT_MS: on a wake from
   // sleep or a tab coming back, so a link that died meanwhile is found
-  // out in seconds. One that fails it drops like any other.
+  // out in seconds. One that fails it drops like any other. Nothing on
+  // the loopback, whose host the shell's watchdog judges.
   probe(): void;
   remoteDeviceId: string;
   remoteAppVersion: string;
@@ -358,15 +359,17 @@ export const dialDevice = (
     yield* call("link:ping", undefined).pipe(
       Effect.mapError(() => connectError("the peer did not answer the ping")),
     );
-    if (options.expectedDeviceId !== options.localDeviceId) {
-      yield* watchLiveness({
-        ping: call("link:ping", undefined),
-        heard: cuttable.heard,
-        intervalMs: PING_INTERVAL_MS,
-        timeoutMs: PING_TIMEOUT_MS,
-        dead: Effect.sync(cuttable.cut),
-      }).pipe(Effect.forkScoped);
-    }
+    const liveness =
+      options.expectedDeviceId === options.localDeviceId
+        ? { probe: () => {} }
+        : yield* watchLiveness({
+            ping: call("link:ping", undefined),
+            heard: cuttable.heard,
+            intervalMs: PING_INTERVAL_MS,
+            timeoutMs: PING_TIMEOUT_MS,
+            probeTimeoutMs: PROBE_TIMEOUT_MS,
+            dead: Effect.sync(cuttable.cut),
+          });
 
     const channels = createChannelMux({
       call: (tag, payload) => Effect.asVoid(call(tag, payload)),
@@ -383,14 +386,7 @@ export const dialDevice = (
       link,
       transport: linkTransport(link, runFork),
       channels,
-      probe: () => {
-        runFork(
-          call("link:ping", undefined).pipe(
-            Effect.timeout(PROBE_TIMEOUT_MS),
-            Effect.catchCause(() => Deferred.succeed(dropped, undefined)),
-          ),
-        );
-      },
+      probe: liveness.probe,
       remoteDeviceId: welcome.deviceId,
       remoteAppVersion: welcome.appVersion,
       dropped: Deferred.await(dropped),
