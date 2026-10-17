@@ -335,7 +335,7 @@ export class Worktrees extends Context.Service<
     readonly relink: (
       project: RegisteredProject,
       moved: ReadonlyMap<string, string>,
-    ) => Effect.Effect<void, Git.GitError>;
+    ) => Effect.Effect<void, Git.GitError | CaptureNotCarried>;
     // Whether anything is kept under an id (marks, sessions, the shelf,
     // its data, a dirty capture), the capture read strictly.
     readonly keptUnder: (
@@ -455,7 +455,7 @@ const make = Effect.gen(function* () {
     relocateProject: mutation(relocateProject),
     deletesBranch: removing.deletesBranch,
     relocationPlan,
-    relink,
+    relink: mutation(relink),
     checkRemovable: Effect.fn("Worktrees.checkRemovable")(function* (
       located: Located,
       force: boolean,
