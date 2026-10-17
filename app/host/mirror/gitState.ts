@@ -520,15 +520,21 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
   // refresh re-stats every entry against the (already mirrored) files
   // so unchanged ones do not read as modified. refresh exits non-zero
   // when files differ from the index, which is the ordinary dirty case.
-  yield* readTreeRetrying(worktree.path, state.indexTree);
-  yield* git.runLenient(worktree.path, ["update-index", "-q", "--refresh"]);
+  yield* git.withIndexLock(
+    worktree.path,
+    readTreeRetrying(worktree.path, state.indexTree).pipe(
+      Effect.andThen(
+        git.runLenient(worktree.path, ["update-index", "-q", "--refresh"]),
+      ),
+    ),
+  );
   return { applied: true } as ApplyGitStateResult;
 });
 
 // The pauses between read-tree attempts while another git process
-// holds the index lock. Any `git status` takes the lock for a moment
-// to refresh, so a busy worktree (an editor's git integration, a
-// prompt) holds it often but briefly. By the time read-tree runs the
+// holds the index lock. A `git status` outside the app takes the lock
+// for a moment to refresh, so a busy worktree (an editor's git
+// integration, a prompt) holds it often but briefly. By the time read-tree runs the
 // ref has moved already, so giving up here leaves the state half
 // applied: the follower heals that on its next look (it compares the
 // index alone when both sides already share a tip), but a short wait

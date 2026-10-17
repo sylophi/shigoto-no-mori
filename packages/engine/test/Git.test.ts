@@ -8,7 +8,9 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { once } from "node:events";
@@ -69,6 +71,20 @@ it("a failure carries git's own words, in English, and its exit code", async () 
   assert.equal(error.exitCode, 1);
   assert.match(stderrOf(error), /did not match any file\(s\) known to git/);
   assert.equal(error.message, "git checkout exited with 1.");
+});
+
+it("a read leaves the index to the writes: status doesn't write back what it refreshed", async () => {
+  const repo = seedRepo();
+  // Touched, not changed: a refresh would record the new stat info.
+  const later = new Date(Date.now() + 60_000);
+  utimesSync(join(repo, "a.txt"), later, later);
+  const index = join(repo, ".git", "index");
+  const before = statSync(index);
+  const changed = await withGit((service) => service.status(repo));
+  assert.deepEqual(changed, []);
+  const after = statSync(index);
+  assert.equal(after.mtimeMs, before.mtimeMs);
+  assert.equal(after.ino, before.ino);
 });
 
 it("a write held by the user's hook leaves the probes their slots", async () => {
