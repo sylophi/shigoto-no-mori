@@ -118,15 +118,20 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       const busy = "A worktree of this stack is already being removed.";
       for (const id of ids) yield* scripts.assertWorktreeMutable(id, busy);
       for (const id of ids) yield* announce(project.id, id, "removing");
-      let removed: readonly string[] = [];
+      // Each as it goes, so an interrupt between two removals announces
+      // the one already gone as removed.
+      const removed = new Set<string>();
       return yield* scripts
         .withDeletesInflight(
           ids,
           busy,
-          Ops.deleteStack(project, removal, { notifyScript }).pipe(
+          Ops.deleteStack(project, removal, {
+            notifyScript,
+            removedOther: (id) => void removed.add(id),
+          }).pipe(
             Effect.tap((outcome) =>
               Effect.sync(() => {
-                removed = outcome.removed;
+                for (const id of outcome.removed) removed.add(id);
               }),
             ),
           ),
@@ -141,7 +146,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                   announce(
                     project.id,
                     id,
-                    removed.includes(id) ? "removed" : "kept",
+                    removed.has(id) ? "removed" : "kept",
                   ),
                 { discard: true },
               ),

@@ -415,17 +415,25 @@ export const planStack = Effect.fnUntraced(function* (
 // The worktrees a stack's plan names, removed together. The document
 // lists them: the worktree itself under `removed`, the others under
 // `stack.removed`, and on a cleanup failure whatever went before it.
+// `removedOther` hears each of the others as it goes, so a removal cut
+// short still tells what went.
 export const deleteStack = Effect.fnUntraced(function* (
   project: Project,
   removal: Landing.StackRemoval,
-  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+  notify: Pick<WorktreeOperationNotifiers, "notifyScript"> & {
+    readonly removedOther: (worktreeId: string) => void;
+  },
 ) {
   const scripts = yield* (yield* HostScripts.Scripts).lifecycleRuns(
     notify.notifyScript,
   );
   const doc = yield* asChange(
     Effect.flatMap(Landing.Landing, (landing) =>
-      landing.removeStack(removal, scriptReporter(scripts)),
+      landing.removeStack(removal, {
+        ...scriptReporter(scripts),
+        removedOther: (removed) =>
+          Effect.sync(() => notify.removedOther(removed.id)),
+      }),
     ),
     { projectId: project.id, worktreeId: removal.located.worktree.id },
   ).pipe(Effect.ensuring(Effect.sync(scripts.end)));

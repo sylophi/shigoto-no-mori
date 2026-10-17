@@ -155,7 +155,9 @@ const pr = (number: number, head: string, base: string, state: string) =>
   });
 
 // gh answers from the files the stack below writes: a branch's PRs, the
-// project's list, a PR's head.
+// project's list (the host's PR map reads it with its own fields, and is
+// told bear is still open, so a pick of the host's own takes fox alone),
+// a PR's head.
 let answers: string;
 beforeAll(() => {
   answers = join(root, "gh");
@@ -167,6 +169,7 @@ d='${answers}'
 case "$*" in
   "--version"*|"auth "*) echo ok;;
   "pr list --state all --head "*) cat "$d/head-$(echo "$*" | sed 's/.*--head \\([^ ]*\\).*/\\1/')";;
+  "pr list --state all --limit 200 --json number,url"*) cat "$d/host-list";;
   "pr list --state all --limit 200 "*) cat "$d/list";;
   "pr view "*" --json headRefOid") cat "$d/view-$3";;
   *) echo "unexpected gh $*" >&2; exit 1;;
@@ -214,6 +217,10 @@ const stackOf = async (
   writeFileSync(
     join(answers, "list"),
     `[${pr(4, "bear", "main", "MERGED")},${foxPr}]`,
+  );
+  writeFileSync(
+    join(answers, "host-list"),
+    `[${pr(4, "bear", "main", "OPEN")},${foxPr}]`,
   );
   for (const [number, worktree] of [
     [4, bear],
@@ -323,16 +330,28 @@ it("a removal that fails partway announces what went and what stayed", async () 
   assert.equal(await marks(), 0);
 });
 
-it("an interrupt after the marks announces every planned worktree kept and clears the marks", async () => {
-  const { bear, fox, run, listed, ran, removeStack } = await stackOf("cut", {
-    // Held until let go, which an interrupt that waited for it would.
-    teardown: `while [ ! -f '${join(root, "cut-run", "go")}' ]; do sleep 0.05; done`,
+// Cuts the stack's removal in while `blocked`'s teardown runs: the
+// teardown waits for a `go` file, and the release half a second after
+// the interrupt keeps the test from hanging if the interrupt waits for
+// the teardown.
+const interruptDuring = async (name: string, blocked: "bear" | "fox") => {
+  const go = join(root, `${name}-run`, "go");
+  const stack = await stackOf(name, {
+    teardown: `if [ "$n" = ${blocked} ]; then while [ ! -f '${go}' ]; do sleep 0.05; done; fi`,
   });
-  const fiber = Effect.runForkWith(await hostContext())(removeStack());
-  await waitFor(() => ran().length === 1, "bear's teardown to start");
+  const fiber = Effect.runForkWith(await hostContext())(stack.removeStack());
+  await waitFor(
+    () => stack.ran().at(-1) === `${blocked} stopped`,
+    `${blocked}'s teardown to start`,
+  );
   const interrupted = Effect.runPromise(Fiber.interrupt(fiber));
-  setTimeout(() => writeFileSync(join(run, "go"), ""), 500);
+  setTimeout(() => writeFileSync(go, ""), 500);
   await interrupted;
+  return stack;
+};
+
+it("an interrupt before anything went announces every planned worktree kept and clears the marks", async () => {
+  const { bear, fox, listed, ran } = await interruptDuring("cut", "bear");
   assert.deepEqual(ran(), ["bear stopped"]);
   assert.deepEqual(announced, [
     `${bear.id} removing`,
@@ -342,6 +361,20 @@ it("an interrupt after the marks announces every planned worktree kept and clear
   ]);
   const left = await listed();
   assert.ok(left.includes(bear.id) && left.includes(fox.id), String(left));
+  assert.equal(await marks(), 0);
+});
+
+it("an interrupt after one layer went announces it removed and the rest kept", async () => {
+  const { bear, fox, listed, ran } = await interruptDuring("cut-later", "fox");
+  assert.deepEqual(ran(), ["bear stopped", "fox stopped"]);
+  assert.deepEqual(announced, [
+    `${bear.id} removing`,
+    `${fox.id} removing`,
+    `${bear.id} removed`,
+    `${fox.id} kept`,
+  ]);
+  const left = await listed();
+  assert.ok(!left.includes(bear.id) && left.includes(fox.id), String(left));
   assert.equal(await marks(), 0);
 });
 
