@@ -14,10 +14,19 @@ export interface FakeGitHub {
   readonly ghLog: string;
   // Points the repo's origin at the stand-in.
   wire(repo: string, git: (cwd: string, ...args: string[]) => string): void;
-  // Records the pull request gh describes: `head` into `base`.
+  // Records the pull request gh describes: `head` into `base`. With
+  // `unfetchableHead`, GitHub names a head commit no remote serves, as
+  // for a network that can't reach it: the app falls back to `gh pr
+  // diff`, which names blobs in short as GitHub's does.
   openPullRequest(
     git: (cwd: string, ...args: string[]) => string,
-    options: { repo: string; head: string; base: string; title: string },
+    options: {
+      repo: string;
+      head: string;
+      base: string;
+      title: string;
+      unfetchableHead?: boolean;
+    },
   ): void;
 }
 
@@ -57,6 +66,12 @@ if (args[0] === "pr" && args[1] === "list") {
   out(pr && (head === null || head === pr.headRefName) ? [pr] : []);
   process.exit(0);
 }
+if (args[0] === "pr" && args[1] === "diff" && pr?.diffRange && String(args[2]) === String(pr.number)) {
+  process.stdout.write(
+    require("node:child_process").execFileSync("git", ["diff", ...pr.diffRange], { encoding: "utf8" }),
+  );
+  process.exit(0);
+}
 if (args[0] === "pr" && args[1] === "view" && pr && String(args[2]) === String(pr.number)) {
   out(pr);
   process.exit(0);
@@ -78,7 +93,7 @@ process.exit(1);
       git(repo, "fetch", "-q", "origin");
       git(repo, "branch", "-q", "-u", "origin/main", "main");
     },
-    openPullRequest(git, { repo, head, base, title }) {
+    openPullRequest(git, { repo, head, base, title, unfetchableHead }) {
       const oid = (ref: string) => git(repo, "rev-parse", ref).trim();
       writeFileSync(
         state,
@@ -96,7 +111,8 @@ process.exit(1);
           baseRefName: base,
           headRefName: head,
           baseRefOid: oid(base),
-          headRefOid: oid(head),
+          headRefOid: unfetchableHead ? "f".repeat(40) : oid(head),
+          ...(unfetchableHead && { diffRange: [oid(base), oid(head)] }),
           author: { login: "walk" },
           updatedAt: "2026-10-10T10:00:00Z",
           createdAt: "2026-10-10T10:00:00Z",

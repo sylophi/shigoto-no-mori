@@ -50,6 +50,7 @@ export function PullRequestDiff() {
   return (
     <DiffPage
       diff={diff}
+      retryMedia={() => void diff.refetch()}
       onBack={goBack}
       worktree={worktree}
       title={<PullRequestDiffTitleView title={pr.title} number={pr.number} />}
