@@ -449,6 +449,10 @@ it("mirrors: the daemon coming up, on mirror:changed", async () => {
     noteEvent: () => {},
     forgetHistory: () => {},
     moveHistory: () => {},
+    localProjectChanged: () => {},
+    peerProjectChanged: () => {},
+    peerWorktreeChanged: () => {},
+    leaveAccount: Effect.void,
   });
   await watch(mirrorViews.watch(undefined), ({ first, next, push }) =>
     Effect.gen(function* () {

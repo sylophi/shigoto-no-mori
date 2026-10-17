@@ -3,7 +3,7 @@
 // both directions through the whole production chain, with nothing on
 // the sync path doubled. The dialer runs the REAL mirror daemon (a
 // freshly built file-sync engine, Mutagen inside) behind the REAL
-// gateway (host/mirror/gateway.ts). The gateway dials the listener's REAL
+// gateway (host/mirror/MirrorGateway.ts). The gateway dials the listener's REAL
 // mirror:openStream over a REAL direct websocket (brokered by the stub
 // device hub exactly as production does, test/lib/directBoot.mts),
 // the listener's handler spawns a REAL `file-sync serve` for a REAL registered
@@ -82,6 +82,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Scope from "effect/Scope";
 import * as FileSync from "@host/fileSync/FileSync";
@@ -119,7 +121,7 @@ import {
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as MirrorDaemon from "../host/mirror/MirrorDaemon.ts";
-import { createMirrorGateway } from "../host/mirror/gateway.ts";
+import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
 import { fileEquals, makeTracker, repoRoot, waitFor } from "./lib/checkKit.mts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { cliSandbox } from "./lib/cliSandbox.mts";
@@ -164,12 +166,16 @@ const fileSyncDataDir = join(sandbox, "file-sync-data");
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-// The gateway's facts the daemon is handed, once it has them, as the host
-// hands them over (host/process/handlers.ts).
-function listening<T>(value: T | null): T {
-  if (value === null) throw new Error("mirror gateway is not listening");
-  return value;
-}
+// Where the gateway listens, once it has bound.
+const gatewayAddress = async () => {
+  const listening = await gateway.runPromise(
+    MirrorGateway.MirrorGateway.use((gw) => gw.listening),
+  );
+  assert.ok(Option.isSome(listening), "the mirror gateway is not listening");
+  return listening.value.address;
+};
+const gatewayStreams = () =>
+  gateway.runSync(MirrorGateway.MirrorGateway.use((gw) => gw.streamCount));
 
 // The pids of the serve children the listener's handler spawned, observed through
 // the FileSync service production uses, so "no child spawned" and
@@ -252,8 +258,7 @@ let dialerProjectId: string;
 let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
 let toListener: DirectWire["toListener"];
-let mirrorOverWire: PeerReach.PeerCalls<typeof mirrorContract>;
-let gateway: ReturnType<typeof createMirrorGateway>;
+let gateway: ManagedRuntime.ManagedRuntime<MirrorGateway.MirrorGateway, never>;
 let runtime: ManagedRuntime.ManagedRuntime<MirrorDaemon.MirrorDaemon, never>;
 let createInput: MirrorCreateInput;
 let hubBaseline: number;
@@ -348,10 +353,6 @@ beforeAll(async () => {
       [mirrorContract, mirrorHandlers],
     ],
   }));
-  mirrorOverWire = PeerReach.make({
-    transportFor: () => toListener.transport,
-    channelsFor: () => toListener.channels,
-  }).calls(mirrorContract, LISTENER);
   // Every peer reach of the dialer's host code (the follower's sync and mirror
   // calls, its source links) rides the same session.
   standInPeers({
@@ -362,12 +363,20 @@ beforeAll(async () => {
 
   // The dialer's half: the real gateway over the real peer client, the real
   // daemon on the freshly built binary.
-  gateway = createMirrorGateway({
-    peerApiFor: () => mirrorOverWire,
-    peerChannelsFor: () => toListener.channels,
-    log: () => {},
-  });
-  track(() => gateway.stop());
+  gateway = ManagedRuntime.make(
+    MirrorGateway.layer.pipe(
+      Layer.provide(
+        Layer.succeed(
+          PeerReach.PeerReach,
+          PeerReach.make({
+            transportFor: () => toListener.transport,
+            channelsFor: () => toListener.channels,
+          }),
+        ),
+      ),
+    ),
+  );
+  track(() => gateway.dispose());
 });
 
 afterAll(async () => {
@@ -376,20 +385,25 @@ afterAll(async () => {
 });
 
 it("gateway bound and the real mirror daemon reported ready", async () => {
-  await gateway.start();
-  assert.match(listening(gateway.address()), /^127\.0\.0\.1:\d+$/);
+  assert.match(await gatewayAddress(), /^127\.0\.0\.1:\d+$/);
   runtime = ManagedRuntime.make(
-    MirrorDaemon.layer({
-      gatewayAddress: () => listening(gateway.address()),
-      gatewayToken: () => listening(gateway.token()),
-      dataDir: () => fileSyncDataDir,
-      onChange: () => {
-        changes++;
-        onSnapshot?.();
-      },
-    }).pipe(Layer.provideMerge(fileSync), Layer.provide(NodeServices.layer)),
+    MirrorDaemon.layer({ dataDir: () => fileSyncDataDir }).pipe(
+      Layer.provideMerge(fileSync),
+      Layer.provide(Layer.succeedContext(await gateway.context())),
+      Layer.provide(NodeServices.layer),
+    ),
   );
   track(() => runtime.dispose());
+  runtime.runFork(
+    MirrorDaemon.MirrorDaemon.use((d) =>
+      Stream.runForEach(d.changes, () =>
+        Effect.sync(() => {
+          changes++;
+          onSnapshot?.();
+        }),
+      ),
+    ),
+  );
   await waitFor(
     () => daemon.status() === "running",
     "the daemon to report ready",
@@ -402,7 +416,7 @@ it("gateway refuses a local process that cannot present its token", async () => 
   // so the preface token is what separates our own daemon from one
   // that merely found the port and would otherwise drive file
   // transfers against peer devices.
-  const [host, port] = listening(gateway.address()).split(":");
+  const [host, port] = (await gatewayAddress()).split(":");
   const answer = await new Promise<string>((resolve, reject) => {
     const socket = netConnect(Number(port), host, () => {
       socket.write(
@@ -426,7 +440,7 @@ it("gateway refuses a local process that cannot present its token", async () => 
     "an untokened local process opened a mirror stream",
   );
   assert.equal(
-    gateway.streamCount(),
+    gatewayStreams(),
     0,
     "the refused connection was bridged anyway",
   );
@@ -1663,5 +1677,5 @@ it("daemon stop is clean and the gateway holds no streams", async () => {
   assert.equal(status, "running");
   await runtime.dispose();
   await delay(50);
-  assert.equal(gateway.streamCount(), 0);
+  assert.equal(gatewayStreams(), 0);
 });

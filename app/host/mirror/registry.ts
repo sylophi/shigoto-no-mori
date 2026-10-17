@@ -568,6 +568,9 @@ export const endMirrorsWithPeers = (
     );
   });
 
+export const LEFT_ACCOUNT_DETAIL =
+  "This device left the account. The copy stays as a worktree.";
+
 export const COPY_GONE_DETAIL =
   "The copy on the other device was deleted or moved";
 

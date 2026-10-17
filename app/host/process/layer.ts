@@ -40,17 +40,17 @@ import { repairCliLinks } from "@host/lib/cli/install";
 import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";
 import * as FileSyncRunner from "@host/fileSync/runner";
+import * as MirrorGateway from "@host/mirror/MirrorGateway";
 import {
   announceProjectChanged,
   mirrorChangesLayer,
+  mirrorDaemonChangesLayer,
   mirrorDaemonLayer,
-  mirrorLayer,
+  mirrorEngineLayer,
   mirrorSessionsNow,
   portForwardsLayer,
   rootServices,
   scriptsChangedLayer,
-  startMirrorGateway,
-  stopMirrorGateway,
 } from "./handlers";
 import {
   broadcastAll,
@@ -63,7 +63,7 @@ import {
   followDeviceSettings,
   refreshDirectHost,
 } from "./wires";
-import { lifetime, onQuit, starts } from "@shared/lifetimes";
+import { onQuit, starts } from "@shared/lifetimes";
 import * as Migration from "@shigomori/engine/Migration";
 import { hostFacts } from "./facts";
 import * as Graph from "./graph";
@@ -172,17 +172,15 @@ const gitWatcher = logged(
 // layer, below.
 const remotePlanes = logged("the device hub", remotePlanesLayer);
 
-// The mirror engine: the git follower, the daemon, and the gateway the
-// daemon dials peers through. The daemon resumes persisted sessions the
-// moment it is up, so it starts with the app. The sessions it resumes
-// are swept for a device on no account once the shell's first account
-// report lands (handlers.ts noAccountSweep).
-const mirrorFollower = logged("the mirror follower", mirrorLayer);
-const mirrorDaemon = mirrorDaemonLayer;
-const mirrorGateway = lifetime(
-  "the mirror gateway",
-  Effect.promise(startMirrorGateway),
-  stopMirrorGateway,
+// The mirror engine: the git follower and the threads, the daemon, and
+// the gateway the daemon dials peers through. The daemon resumes
+// persisted sessions the moment it is up, so it starts with the app.
+// The sessions it resumes are swept for a device on no account once the
+// shell's first account report lands (handlers.ts noAccountSweep).
+const mirrors = mirrorEngineLayer.pipe(
+  Layer.provideMerge(mirrorDaemonChangesLayer),
+  Layer.provideMerge(mirrorDaemonLayer),
+  Layer.provideMerge(MirrorGateway.layer),
 );
 
 // New scripts are refused from the moment the quit begins, so none
@@ -230,8 +228,8 @@ const foundation = (
     Layer.provideMerge(Views.layer),
     Layer.provideMerge(pushesLayer),
     Layer.provideMerge(EngineStoreChanges.layer),
-    // What the root provides from its own wiring: the peers' reach,
-    // the mirror engine and the account.
+    // What the root provides from its own wiring: the peers' reach, the
+    // mirror signals and the account's peers.
     Layer.provideMerge(rootServices),
     // This device's id, which the wires above name themselves by, read
     // from the store once.
@@ -259,9 +257,6 @@ const scriptsAndFoundation = (options: {
   // Every file-sync child, the daemon and the serve children a peer's
   // streams opened.
   FileSyncRunner.layer.pipe(
-    // The worktree moves and removals, around the scripts and terminals
-    // they stop and refuse for, and the carry-over reads.
-    Layer.provideMerge(Worktrees.layer),
     // What the user started through a script must not outlive the app,
     // orphaned to launchd: its close stops every run.
     Layer.provideMerge(
@@ -305,9 +300,11 @@ export const layer = (options: {
     // address first as it stops, so a terminal run during the quit
     // reads "not running" instead of dialing a closing listener.
     Layer.provideMerge(loopbackLayer()),
-    Layer.provideMerge(mirrorFollower),
-    Layer.provideMerge(mirrorDaemon),
-    Layer.provideMerge(mirrorGateway),
+    // The worktree moves and removals, around the scripts and terminals
+    // they stop and refuse for and the mirrors they carry or end, and the
+    // carry-over reads.
+    Layer.provideMerge(Worktrees.layer),
+    Layer.provideMerge(mirrors),
     // The mirror's changed push, which the engine above and the
     // served streams feed.
     Layer.provideMerge(mirrorChangesLayer),

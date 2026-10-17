@@ -14,15 +14,20 @@
 // streams against peer devices. So the preface carries a token minted
 // at bind and handed to the daemon through its environment, never
 // argv, which every account can read from `ps`.
-//
-// Electron-free on purpose, like the port-forward engine: the mirror
-// check drives this exact gateway over a real direct wire.
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import { createServer, type Server, type Socket } from "node:net";
+import * as Exit from "effect/Exit";
+import * as FiberSet from "effect/FiberSet";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import { createServer, type Socket } from "node:net";
 import { errorWordsOf } from "@host/lib/errorWords";
-import type { mirrorContract } from "@shigomori/contracts/modules/mirror";
-import type { PeerCalls } from "@host/ipc/PeerReach";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import * as PeerReach from "@host/ipc/PeerReach";
 import { WorktreeIdSchema } from "@shigomori/contracts/schemas";
 import { mintHexId } from "@host/lib/hexId";
 import { secretsMatch } from "@host/lib/util/secretCompare";
@@ -32,33 +37,37 @@ import {
   type BridgedConn,
   bridgeSocket,
   listenLoopback,
-  type PeerChannels,
 } from "@host/portForward/bridge";
 import { log } from "@shared/log";
-
-const isWorktreeId = Schema.is(WorktreeIdSchema);
 
 // file-sync/engine.go reads this exact name.
 export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
 
-export type MirrorPeerApi = Pick<
-  PeerCalls<typeof mirrorContract>,
-  "openStream"
->;
-
-// The preface's shape (file-sync/engine.go mirrorPreface), reduced to
-// the fields the gateway acts on. Validated by hand rather than Schema:
-// this is a loopback line from our own child.
-type Preface = {
-  token: string;
-  deviceId: string;
-  projectId: string;
-  worktreeId: string;
-  // This device's own worktree for the session, when the daemon named
-  // it (see engine.go mirrorParamLocalWorktreeID). Passed on so the
-  // peer's serving list can name the local copy.
-  localWorktreeId: string | undefined;
-};
+// The preface (file-sync/engine.go mirrorPreface), reduced to the
+// fields the gateway acts on. A token that is not a string is checked
+// as an empty one, so it is refused as a bad token.
+const PrefaceSchema = Schema.fromJsonString(
+  Schema.Struct({
+    token: Schema.optional(
+      Schema.String.pipe(
+        Schema.catchDecoding(() => Effect.succeed(Option.some(""))),
+      ),
+    ),
+    deviceId: Schema.NonEmptyString,
+    projectId: Schema.NonEmptyString,
+    worktreeId: WorktreeIdSchema,
+    // This device's own worktree for the session, when the daemon named
+    // it (see engine.go mirrorParamLocalWorktreeID). Passed on so the
+    // peer's serving list can name the local copy. One that is not a
+    // worktree id is left out, not refused.
+    localWorktreeId: Schema.optional(
+      WorktreeIdSchema.pipe(
+        Schema.catchDecoding(() => Effect.succeed(Option.none())),
+      ),
+    ),
+  }),
+);
+const decodePreface = Schema.decodeUnknownResult(PrefaceSchema);
 
 // A preface is a short JSON line. Anything longer is not our daemon.
 const PREFACE_LIMIT_BYTES = 8 * 1024;
@@ -70,39 +79,10 @@ const PREFACE_TIMEOUT_MS = 10_000;
 // it shares with the port forwards to the same device, so it takes
 // what the forwards leave.
 const MAX_STREAMS = MAX_CHANNELS_PER_LINK - MAX_CONNS_PER_DEVICE;
-
-function parsePreface(line: string): Preface {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(line);
-  } catch {
-    throw new Error("bad preface");
-  }
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("bad preface");
-  }
-  const record = parsed as Record<string, unknown>;
-  const field = (key: string) =>
-    typeof record[key] === "string" ? (record[key] as string) : "";
-  const localWorktreeId = field("localWorktreeId");
-  const preface = {
-    token: field("token"),
-    deviceId: field("deviceId"),
-    projectId: field("projectId"),
-    worktreeId: field("worktreeId"),
-    localWorktreeId: isWorktreeId(localWorktreeId)
-      ? localWorktreeId
-      : undefined,
-  };
-  if (
-    preface.deviceId === "" ||
-    preface.projectId === "" ||
-    !isWorktreeId(preface.worktreeId)
-  ) {
-    throw new Error("bad preface");
-  }
-  return preface;
-}
+// A bind that fails (a loopback oddity) is tried again this often
+// rather than given up on: the daemon waits on its own restart ladder
+// and picks the address up once bound.
+const BIND_RETRY = "30 seconds";
 
 // Reads bytes until the first newline. Whatever follows it belongs to
 // the stream and is handed back untouched.
@@ -152,19 +132,29 @@ function readPreface(
   });
 }
 
-export function createMirrorGateway(deps: {
-  peerApiFor: (deviceId: string) => MirrorPeerApi;
-  peerChannelsFor: (deviceId: string) => PeerChannels;
-  log?: (message: string) => void;
-}) {
-  const warn = deps.log ?? ((message: string) => log.warn(message));
-  let server: Server | null = null;
-  let address: string | null = null;
-  // Minted per bind, so a token cannot outlive the listener it opened.
-  let token: string | null = null;
-  const streams = new Set<BridgedConn>();
+// Where the daemon dials and the token it presents, for one bind.
+export type MirrorGatewayAddress = {
+  readonly address: string;
+  readonly token: string;
+};
 
-  function handleConnection(socket: Socket): void {
+export class MirrorGateway extends Context.Service<
+  MirrorGateway,
+  {
+    // The listener's address and token, none until a bind has
+    // succeeded. The daemon reads it at each spawn.
+    readonly listening: Effect.Effect<Option.Option<MirrorGatewayAddress>>;
+    readonly streamCount: Effect.Effect<number>;
+  }
+>()("sm/host/MirrorGateway") {}
+
+const make = Effect.gen(function* () {
+  const reach = yield* PeerReach.PeerReach;
+  const listening = yield* Ref.make(Option.none<MirrorGatewayAddress>());
+  const streams = new Set<BridgedConn>();
+  const run = yield* FiberSet.makeRuntimePromise<never>();
+
+  const handleConnection = (token: string) => (socket: Socket) => {
     // 'close' always follows 'error'. The listener must exist or the
     // error is an uncaught throw.
     socket.on("error", () => {});
@@ -174,24 +164,23 @@ export function createMirrorGateway(deps: {
     }
     readPreface(socket).then(
       ({ line, carried }) => {
-        let preface: Preface;
-        try {
-          preface = parsePreface(line);
-        } catch (error) {
-          socket.end(`error ${errorWordsOf(error)}\n`);
-          return;
-        }
-        if (!secretsMatch(preface.token, token ?? "")) {
-          // Nothing legitimate reaches here, so log it.
-          warn("[mirror] gateway refused a connection with a bad token");
+        const decoded = decodePreface(line);
+        if (Result.isFailure(decoded)) {
           socket.end("error bad preface\n");
           return;
         }
-        const api = deps.peerApiFor(preface.deviceId);
+        const preface = decoded.success;
+        if (!secretsMatch(preface.token ?? "", token)) {
+          // Nothing legitimate reaches here, so log it.
+          log.warn("[mirror] gateway refused a connection with a bad token");
+          socket.end("error bad preface\n");
+          return;
+        }
+        const api = reach.calls(mirrorContract, preface.deviceId);
         const conn = bridgeSocket(socket, {
-          channels: deps.peerChannelsFor(preface.deviceId),
+          channels: reach.channels(preface.deviceId),
           open: (channelId) =>
-            Effect.runPromise(
+            run(
               api.openStream({
                 projectId: preface.projectId,
                 worktreeId: preface.worktreeId,
@@ -208,7 +197,7 @@ export function createMirrorGateway(deps: {
             socket.write("ok\n");
           },
           onOpenFailed: (error) => {
-            warn(
+            log.warn(
               `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorWordsOf(error)}`,
             );
             socket.write(`error ${errorWordsOf(error).replace(/\n/g, " ")}\n`);
@@ -220,39 +209,59 @@ export function createMirrorGateway(deps: {
         streams.add(conn);
       },
       (error: unknown) => {
-        warn(`[mirror] gateway: ${errorWordsOf(error)}`);
+        log.warn(`[mirror] gateway: ${errorWordsOf(error)}`);
         socket.destroy();
       },
     );
-  }
-
-  // Binds the loopback listener on an ephemeral port and resolves its
-  // host:port, the address the daemon is spawned with.
-  async function start(): Promise<string> {
-    if (address !== null) return address;
-    const listener = createServer({ allowHalfOpen: true });
-    listener.on("connection", handleConnection);
-    listener.on("error", () => {});
-    const port = await listenLoopback(listener, 0);
-    server = listener;
-    token = mintHexId();
-    address = `127.0.0.1:${port}`;
-    return address;
-  }
-
-  function stop(): void {
-    server?.close();
-    server = null;
-    address = null;
-    token = null;
-    for (const conn of streams) conn.destroy();
-  }
-
-  return {
-    start,
-    stop,
-    address: () => address,
-    token: () => token,
-    streamCount: () => streams.size,
   };
-}
+
+  // The loopback listener on an ephemeral port, held until the layer
+  // closes. Acquired whole, so a close while it binds waits for the
+  // bind and then releases it.
+  const bind = Effect.acquireRelease(
+    Effect.tryPromise(async () => {
+      // Minted per bind, so a token cannot outlive the listener it opened.
+      const token = mintHexId();
+      const listener = createServer(
+        { allowHalfOpen: true },
+        handleConnection(token),
+      );
+      listener.on("error", () => {});
+      const port = await listenLoopback(listener, 0);
+      return { listener, address: `127.0.0.1:${port}`, token };
+    }),
+    ({ listener }) =>
+      Effect.gen(function* () {
+        yield* Ref.set(listening, Option.none());
+        listener.close();
+        for (const conn of streams) conn.destroy();
+      }),
+  ).pipe(
+    Effect.flatMap(({ address, token }) =>
+      Ref.set(listening, Option.some({ address, token })),
+    ),
+    Effect.tapError((error) =>
+      Effect.logWarning(
+        `[mirror] gateway failed to bind, retrying: ${errorWordsOf(error.cause)}`,
+      ),
+    ),
+  );
+
+  // The first bind is part of the layer's start, so the daemon above
+  // it spawns with an address; a failed one is retried in the layer's
+  // scope, which ends the retry and any bind it has under way.
+  if (Exit.isFailure(yield* Effect.exit(bind))) {
+    yield* bind.pipe(
+      Effect.retry(Schedule.spaced(BIND_RETRY)),
+      Effect.delay(BIND_RETRY),
+      Effect.forkScoped,
+    );
+  }
+
+  return MirrorGateway.of({
+    listening: Ref.get(listening),
+    streamCount: Effect.sync(() => streams.size),
+  });
+});
+
+export const layer = Layer.effect(MirrorGateway, make);

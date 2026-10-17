@@ -1,6 +1,6 @@
 // The mirror daemon as the mirror surfaces use it (registry.ts,
-// sessions.ts, the handlers), which the root provides from the daemon
-// service, the git follower and the threads (host/process/handlers.ts).
+// sessions.ts, the handlers), with the git follower and the threads
+// over it (MirrorEngineLayer.ts).
 import type {
   MirrorDaemonStatus,
   MirrorEvent,
@@ -60,8 +60,10 @@ export class MirrorEngine extends Context.Service<
     readonly create: (
       input: MirrorCreateInput,
     ) => Effect.Effect<string, MirrorError>;
-    // Ends a session and opens a fresh one in its place, whatever hangs
-    // off the old id (the git follower's agreement) carried across.
+    // Opens a fresh session in place of one, whatever hangs off the old
+    // id (the git follower's agreement) carried across. The old one is
+    // paused while the new one is made, resumed if that fails, and
+    // ended once it is up.
     readonly recreate: (
       session: string,
       input: MirrorCreateInput,
@@ -88,5 +90,17 @@ export class MirrorEngine extends Context.Service<
     readonly forgetHistory: (localWorktreeId: string) => void;
     // Moves a worktree's thread to the id it has after a move.
     readonly moveHistory: (from: string, to: string) => void;
+    // A project's git state moved here, or on a peer, or a worktree a
+    // peer serves: the git follower looks at the sessions it touches.
+    readonly localProjectChanged: (projectId: string) => void;
+    readonly peerProjectChanged: (deviceId: string, projectId: string) => void;
+    readonly peerWorktreeChanged: (
+      deviceId: string,
+      projectId: string,
+      worktreeId: string,
+    ) => void;
+    // This device left its account: every mirror and transfer ends,
+    // copies kept, for as long as the sweep's bound allows.
+    readonly leaveAccount: Effect.Effect<void>;
   }
 >()("sm/host/MirrorEngine") {}

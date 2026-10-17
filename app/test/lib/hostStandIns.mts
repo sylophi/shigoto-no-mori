@@ -82,6 +82,11 @@ const standIns = Layer.mergeAll(
       noteEvent: (id, kind, detail) => mirror.noteEvent(id, kind, detail),
       forgetHistory: (id) => mirror.forgetHistory(id),
       moveHistory: (from, to) => mirror.moveHistory(from, to),
+      localProjectChanged: (id) => mirror.localProjectChanged(id),
+      peerProjectChanged: (peer, id) => mirror.peerProjectChanged(peer, id),
+      peerWorktreeChanged: (peer, projectId, worktreeId) =>
+        mirror.peerWorktreeChanged(peer, projectId, worktreeId),
+      leaveAccount: Effect.suspend(() => mirror.leaveAccount),
     }),
   ),
   Layer.succeed(
