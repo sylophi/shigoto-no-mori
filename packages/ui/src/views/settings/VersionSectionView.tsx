@@ -40,6 +40,7 @@ export function BuildVersionLineView({
 export function VersionSectionView({
   version,
   canCommand,
+  deviceLabel,
   state,
   isError,
   onRetry,
@@ -54,6 +55,8 @@ export function VersionSectionView({
   // Checking and installing are commands, so on a peer both wait for
   // its grant.
   canCommand: boolean;
+  // The device the section is for, which the read-only note names.
+  deviceLabel: string;
   // The updater's state, null before the first read lands.
   state: UpdaterState | null;
   isError: boolean;
@@ -69,7 +72,7 @@ export function VersionSectionView({
   const kind = state?.kind ?? "idle";
   const ready = state?.kind === "ready" ? state : null;
   const busy = kind === "checking" || kind === "downloading";
-  const blockedTip = canCommand ? undefined : peerReadOnlyNote("this device");
+  const blockedTip = canCommand ? undefined : peerReadOnlyNote(deviceLabel);
   // No state to show: the first read failed. Over a wire that is
   // still dialing, or on a peer build without the channel, the error
   // looks the same, so say only what is known and offer a retry.
@@ -160,6 +163,7 @@ export function RestartToUpdateButtonView({
   version,
   remote,
   canCommand,
+  deviceLabel,
   armed,
   pending,
   onClick,
@@ -167,15 +171,14 @@ export function RestartToUpdateButtonView({
   version: string;
   remote: boolean;
   canCommand: boolean;
+  deviceLabel: string;
   // A remote restart asked for once.
   armed: boolean;
   pending: boolean;
   onClick: () => void;
 }) {
   return (
-    <SimpleTooltip
-      tip={canCommand ? undefined : peerReadOnlyNote("this device")}
-    >
+    <SimpleTooltip tip={canCommand ? undefined : peerReadOnlyNote(deviceLabel)}>
       <Button
         size="sm"
         disabled={pending || !canCommand}

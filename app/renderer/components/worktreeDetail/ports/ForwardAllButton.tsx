@@ -1,5 +1,6 @@
 // A peer's port list's bulk actions (ForwardAllButtonView), one
 // forward at a time.
+import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useMutation } from "@tanstack/react-query";
 import {
   errorMessageOf,
@@ -35,6 +36,7 @@ export function ForwardAllButton({
   granted: boolean;
 }) {
   const api = useApi();
+  const deviceLabel = useRemoteDeviceLabel(deviceId);
   const { forwards } = usePortForwards(deviceId);
   const configQuery = useClientConfig();
   const forwarded = new Set(forwards.map((forward) => forward.remotePort));
@@ -65,10 +67,9 @@ export function ForwardAllButton({
               }),
             );
           } catch (error) {
-            // A refusal already surfaces centrally.
-            if (!isCommandRefusedError(error)) {
-              failures.push(describeForwardError(error, target));
-            }
+            failures.push(describeForwardError(error, target, deviceLabel));
+            // The peer refuses every port alike.
+            if (isCommandRefusedError(error)) break;
           }
         }
         reportFailures("Couldn't forward", toStart.length, failures);
@@ -98,7 +99,7 @@ export function ForwardAllButton({
   const canStart = granted && toStart.length > 0;
   // Why Start is off, if it is. Stop is never off for a reason of its own.
   const startBlocker = !granted
-    ? peerReadOnlyNote()
+    ? peerReadOnlyNote(deviceLabel)
     : toStart.length === 0
       ? "No ports to forward"
       : undefined;

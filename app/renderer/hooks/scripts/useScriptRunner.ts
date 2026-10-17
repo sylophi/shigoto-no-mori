@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import { useDeviceRunningScripts } from "@/hooks/live/useLiveActivity";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -50,6 +51,7 @@ export function useScriptRunner(
   const { api, deviceId } = useHostScope();
   const store = useScriptRuns();
   const { canCommand: canRun } = useCommandAccess();
+  const deviceLabel = useScopedDeviceLabel();
   const key = scriptKey(worktree.projectId, worktree.id, slot);
   const held = useScriptRunState(key);
   const listed = useDeviceRunningScripts(deviceId, api)?.find(
@@ -146,7 +148,7 @@ export function useScriptRunner(
     state,
     busy,
     canRun,
-    disabledReason: canRun ? undefined : peerReadOnlyNote(),
+    disabledReason: canRun ? undefined : peerReadOnlyNote(deviceLabel),
     start,
     stop,
     clear,

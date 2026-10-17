@@ -13,7 +13,11 @@ import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
 import * as Context from "effect/Context";
-import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
+import {
+  type CallFailure,
+  callFailureOf,
+  refusalNamed,
+} from "@shigomori/contracts/errors";
 import {
   callOf,
   callsOf,
@@ -80,7 +84,7 @@ export const make = (reach: {
                   signal,
                   span: Option.getOrUndefined(span),
                 }),
-              catch: callFailureOf,
+              catch: (error) => refusalNamed(callFailureOf(error), deviceId),
             }),
           );
       }

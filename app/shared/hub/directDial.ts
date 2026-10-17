@@ -203,7 +203,9 @@ const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
 // a user can act on: a peer that advertised no tunnel (no tunnel
 // candidate among the retired ones) is reachable from its own network
 // only, and EHOSTUNREACH on a LAN address is macOS refusing the app
-// Local Network access far more often than a routing problem.
+// Local Network access far more often than a routing problem, unless
+// the machines are on different networks, which this end cannot tell,
+// so that hint names the addresses tried and the tunnel's failure.
 //
 // Still a RemoteConnectError carrying the last candidate's close code,
 // and never blocked: a blocked failure is the attempt's refusal and
@@ -231,15 +233,26 @@ function exhaustionError(
       "The peer offered no tunnel endpoint, so it can only be reached from its own local network.",
     );
   }
-  if (
-    failures.some(
-      ({ candidate, error }) =>
-        candidate.kind === "lan" &&
-        errorMessageOf(error).includes("EHOSTUNREACH"),
-    )
-  ) {
+  const unroutable = failures.filter(
+    ({ candidate, error }) =>
+      candidate.kind === "lan" &&
+      errorMessageOf(error).includes("EHOSTUNREACH"),
+  );
+  if (unroutable.length > 0) {
+    const lan = unroutable
+      .map(({ candidate }) => candidate.url)
+      .toSorted()
+      .join(", ");
+    // Machines on different networks fail every LAN address this way
+    // too, and there the tunnel is the path that mattered.
+    const tunnel = failures.find(
+      ({ candidate }) => candidate.kind === "tunnel",
+    );
     hints.push(
-      "No route to host: if both machines share a network, macOS may be denying this app Local Network access (System Settings > Privacy & Security > Local Network).",
+      `No route to ${lan}: if both machines share a network, macOS may be denying this app Local Network access (System Settings > Privacy & Security > Local Network).` +
+        (tunnel === undefined
+          ? ""
+          : ` If they don't, the tunnel was the path, and it failed: ${errorMessageOf(tunnel.error)}.`),
     );
   }
   const last = failures[failures.length - 1]?.error;
