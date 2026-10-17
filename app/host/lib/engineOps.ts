@@ -9,6 +9,7 @@
 // against the shared schemas, so drift fails loudly here instead of
 // surfacing as undefined-flavored breakage in the renderer.
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { childDefaults } from "@shigomori/engine/processes";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -1218,6 +1219,7 @@ export const runDoctor = Effect.fnUntraced(function* (
       : Effect.provide(
           Effect.service(Doctor.Doctor),
           Doctor.layer.pipe(
+            Layer.provide(childDefaults),
             Layer.provide(NodeServices.layer),
             Layer.provide(
               ConfigProvider.layerAdd(

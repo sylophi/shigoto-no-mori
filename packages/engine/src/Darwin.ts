@@ -193,7 +193,6 @@ const make = (binary: string) =>
                   stdin: paths
                     ? Stream.make(encoder.encode(paths.join("\0")))
                     : "ignore",
-                  forceKillAfter: "3 seconds",
                 },
               ),
             )

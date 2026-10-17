@@ -7,6 +7,7 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { childDefaults } from "@shigomori/engine/processes";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -93,6 +94,7 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(FileSync.layer(() => null)),
     Layer.provideMerge(GithubCli.layer),
     Layer.provideMerge(engine),
+    Layer.provideMerge(childDefaults),
     Layer.provideMerge(NodeServices.layer),
   ),
 );

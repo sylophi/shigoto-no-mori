@@ -44,6 +44,7 @@ import * as Usage from "./Usage.ts";
 import * as WorktreeData from "./WorktreeData.ts";
 import * as Worktrees from "./Worktrees.ts";
 import * as WtFolder from "./WtFolder.ts";
+import { childDefaults } from "./processes.ts";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 
@@ -107,6 +108,7 @@ const services = (options: EngineOptions) =>
     ),
     Layer.provideMerge(Git.layer),
     Layer.provideMerge(options.store),
+    Layer.provideMerge(childDefaults),
   );
 
 export const engineLayer = (options: EngineOptions) =>
@@ -165,4 +167,5 @@ export const doctorLayer = (options: {
       Layer.mergeAll(Git.layer, Darwin.layer(options.macfs), Migration.layer),
     ),
     Layer.provideMerge(Paths.layer(options.flavor)),
+    Layer.provideMerge(childDefaults),
   );

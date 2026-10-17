@@ -137,14 +137,10 @@ const make = Effect.gen(function* () {
   // no $SHELL at all. /bin/sh only when neither names one.
   const accountShell = spawner
     .string(
-      ChildProcess.make(
-        "/bin/sh",
-        [
-          "-c",
-          `dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null || getent passwd "$(id -u)" | cut -d: -f7`,
-        ],
-        { forceKillAfter: "3 seconds" },
-      ),
+      ChildProcess.make("/bin/sh", [
+        "-c",
+        `dscl . -read "/Users/$(id -un)" UserShell 2>/dev/null || getent passwd "$(id -u)" | cut -d: -f7`,
+      ]),
     )
     .pipe(
       // Cached for the service's life, so a lookup that never answers
@@ -192,10 +188,6 @@ const make = Effect.gen(function* () {
               // reaches the whole tree, and what the script leaves running
               // in the background (a dev database) outlives it.
               detached: false,
-              // A script that ignores the scope's SIGTERM (a teardown
-              // the caller's deadline stopped) is killed after this, so
-              // the deadline holds.
-              forceKillAfter: "3 seconds",
               extendEnv: true,
               env: {
                 ...scriptEnv(context, scriptName(slot)),

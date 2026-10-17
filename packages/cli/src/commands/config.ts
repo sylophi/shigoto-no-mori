@@ -9,6 +9,7 @@ import {
   keyDescriptions,
 } from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
+import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -226,6 +227,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       });
       const ran = spawnSync("/bin/sh", ["-c", `${editor} "$0"`, file], {
         stdio: "inherit",
+        env: { ...process.env, [CD_FILE_ENV]: undefined },
       });
       if (ran.status !== 0) {
         rmSync(dir, { recursive: true, force: true });

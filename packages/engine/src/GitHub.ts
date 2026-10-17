@@ -509,7 +509,6 @@ const make = Effect.gen(function* () {
             ChildProcess.make("gh", [...args], {
               cwd,
               stdin: "ignore",
-              forceKillAfter: "3 seconds",
               ...(host === null
                 ? {}
                 : { env: { GH_HOST: host }, extendEnv: true }),

@@ -930,12 +930,9 @@ describe("the parsers", () => {
     }
   });
 
-  it("reads each pid's start time from ps", () => {
+  it("reads each pid's birth from ps, printed in UTC", () => {
     const table = parseProcessTable("  4242 Mon Aug 17 18:42:41 2026\nnoise\n");
-    assert.deepEqual(
-      [...table],
-      [[4242, new Date(2026, 7, 17, 18, 42, 41).getTime()]],
-    );
+    assert.deepEqual([...table], [[4242, Date.UTC(2026, 7, 17, 18, 42, 41)]]);
   });
 
   it("sizes in the units Go's sm prints, and ranks versions", () => {

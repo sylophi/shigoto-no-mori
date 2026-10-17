@@ -3,13 +3,7 @@ import { SyncConflictsError } from "@shigomori/contracts/errors";
 import * as Cache from "effect/Cache";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import {
-  GitCommandError,
-  GitRefusedError,
-  NoRemoteError,
-} from "./documents.ts";
-
-const FETCH_DEADLINE = "5 minutes";
+import { GitRefusedError, NoRemoteError } from "./documents.ts";
 import type { GitIndexArea } from "./gitIndex.ts";
 import type { MergingArea } from "./merging.ts";
 import type { OperationArea } from "./operation.ts";
@@ -38,25 +32,10 @@ export const makeRemote = ({
     // --- the remote ---
 
     // Overlapping callers share the one in flight, and nothing is kept
-    // after it. One that hasn't finished in five minutes is stuck (a
-    // remote that stopped answering mid-transfer over ssh): it ends,
-    // with its git, rather than holding every later caller of the
-    // project's fetch.
+    // after it.
     const fetches = yield* Cache.make({
       lookup: (repo: string) =>
-        run(repo, ["fetch", "--all", "--quiet", "--prune"]).pipe(
-          Effect.timeoutOrElse({
-            duration: FETCH_DEADLINE,
-            orElse: () =>
-              Effect.fail(
-                new GitCommandError({
-                  subcommand: "fetch",
-                  exitCode: null,
-                  cause: new Error("git fetch didn't finish within 5 minutes"),
-                }),
-              ),
-          }),
-        ),
+        run(repo, ["fetch", "--all", "--quiet", "--prune"]),
       capacity: Number.POSITIVE_INFINITY,
       timeToLive: 0,
     });

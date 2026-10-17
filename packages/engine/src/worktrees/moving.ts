@@ -19,7 +19,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { findExecutable } from "../executables.ts";
 import * as Git from "../Git.ts";
 import { copyTree } from "../entries.ts";
-import { startOf, stillRunning } from "../processes.ts";
+import { startOf, stillRunning, UNKNOWN_BIRTH } from "../processes.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import { cleanPath, worktreeIdFromPath } from "../worktreeLayout.ts";
@@ -76,7 +76,7 @@ export const makeMoving = ({
     const self = yield* Effect.cached(
       Effect.map(withSpawner(startOf(process.pid)), (started) => ({
         pid: process.pid,
-        started_at: Option.getOrElse(started, () => Date.now()),
+        started_at: Option.getOrElse(started, () => UNKNOWN_BIRTH),
       })),
     );
     // The folders this process is moving or resuming: a record it holds

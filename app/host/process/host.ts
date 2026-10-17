@@ -7,6 +7,7 @@
 import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { childDefaults } from "@shigomori/engine/processes";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -203,6 +204,7 @@ async function main(): Promise<void> {
           openSpans,
         }),
       ),
+      Layer.provideMerge(childDefaults),
       Layer.provideMerge(NodeServices.layer),
     ),
   );
