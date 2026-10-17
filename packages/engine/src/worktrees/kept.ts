@@ -13,6 +13,7 @@ import * as Git from "../Git.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as WorktreeData from "../WorktreeData.ts";
+import { CaptureNotCarried } from "./documents.ts";
 
 export const makeKept = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -32,19 +33,37 @@ export const makeKept = Effect.gen(function* () {
       )
       .pipe(Effect.orDie);
 
-  // A capture belongs to the worktree, not its old path. Whether it
-  // followed (or there was none).
-  const rekeyCapture = (project: RegisteredProject, from: string, to: string) =>
+  // A capture belongs to the worktree, not its old path. It followed (or
+  // there was none to carry), stayed because another is kept under `to`
+  // (never written over: a re-key back would otherwise put a stale one
+  // over the worktree's own), stayed because it isn't the one `expect`
+  // names by its commit (null: none), or failed to follow.
+  const rekeyCapture = (
+    project: RegisteredProject,
+    from: string,
+    to: string,
+    expect?: string | null,
+  ) =>
     Effect.gen(function* () {
-      const capture = yield* git.refTip(project.path, dirtyRef(from));
-      if (Option.isNone(capture)) return true;
-      yield* git.updateRef({
-        repo: project.path,
-        ref: dirtyRef(to),
-        commit: capture.value,
-      });
-      yield* git.deleteRef(project.path, dirtyRef(from));
-      return true;
+      const capture = yield* git.readRef(project.path, dirtyRef(from));
+      if (expect !== undefined && Option.getOrNull(capture) !== expect) {
+        return "changed" as const;
+      }
+      if (Option.isNone(capture)) return "followed" as const;
+      const there = yield* git.readRef(project.path, dirtyRef(to));
+      if (Option.isSome(there) && there.value !== capture.value) {
+        return "occupied" as const;
+      }
+      if (Option.isNone(there)) {
+        yield* git.updateRef({
+          repo: project.path,
+          ref: dirtyRef(to),
+          commit: capture.value,
+          expected: "",
+        });
+      }
+      yield* git.deleteRef(project.path, dirtyRef(from), capture.value);
+      return "followed" as const;
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.as(
@@ -52,7 +71,7 @@ export const makeKept = Effect.gen(function* () {
             "A dirty capture's ref didn't follow its move",
             cause,
           ),
-          false,
+          "failed" as const,
         ),
       ),
     );
@@ -68,14 +87,52 @@ export const makeKept = Effect.gen(function* () {
       )
       .pipe(Effect.orDie);
 
+  // Whether anything is kept under `worktreeId`: its marks, sessions,
+  // shelf or data rows, or a dirty capture, read strictly.
+  const keptUnder = Effect.fn("Worktrees.keptUnder")(function* (
+    project: RegisteredProject,
+    worktreeId: string,
+  ) {
+    const rows = Object.values(yield* registry.keptIds).some((ids) =>
+      ids.has(worktreeId),
+    );
+    const described = (yield* data.kept).some(
+      (row) => row.projectId === project.id && row.worktreeId === worktreeId,
+    );
+    const capture = yield* git.readRef(project.path, dirtyRef(worktreeId));
+    return rows || described || Option.isSome(capture);
+  });
+
   return {
+    keptUnder,
     rekeyRows,
     rekeyCapture,
     forgetRows,
-    rekey: (project: RegisteredProject, from: string, to: string) =>
+    // Fails when the capture didn't follow, its rows carried, for the
+    // caller to try again or say so: asked again it carries the capture.
+    // A re-key `back` (an undo) leaves a capture that changed or one kept
+    // under `to` where it is, and succeeds.
+    rekey: (
+      project: RegisteredProject,
+      from: string,
+      to: string,
+      options: {
+        readonly expect?: string | null;
+        readonly back?: boolean;
+      } = {},
+    ) =>
       Effect.andThen(
         rekeyRows(project, from, to),
-        rekeyCapture(project, from, to),
+        Effect.flatMap(
+          rekeyCapture(project, from, to, options.expect),
+          (carried) =>
+            carried === "followed" ||
+            (options.back === true && carried !== "failed")
+              ? Effect.void
+              : Effect.fail(
+                  new CaptureNotCarried({ from, to, reason: carried }),
+                ),
+        ),
       ),
     forget: (project: RegisteredProject, worktreeId: string) =>
       Effect.andThen(

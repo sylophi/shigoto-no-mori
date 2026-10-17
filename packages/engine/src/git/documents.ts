@@ -52,6 +52,16 @@ export class UnknownRevisionError extends Schema.TaggedError<UnknownRevisionErro
   }
 }
 
+// A ref git can't open, which it answers as one that isn't there.
+export class RefUnreadable extends Schema.TaggedError<RefUnreadable>()(
+  "RefUnreadable",
+  { ref: Schema.String },
+) {
+  override get message(): string {
+    return `git can't read ${this.ref}.`;
+  }
+}
+
 // A move git would make that the app refuses, in words for the person
 // who asked: an operation under way, conflicts left, nothing to do.
 export class GitRefusedError extends Schema.TaggedError<GitRefusedError>()(

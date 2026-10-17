@@ -3,6 +3,7 @@
 // node:sqlite. The terminal opens the same database file with Bun's
 // driver, and SQLite serializes the two processes' writes.
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
+import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { migratingEngineLayer } from "@shigomori/engine/layer";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
@@ -33,6 +34,9 @@ export class EngineRuns extends Context.Service<
   { readonly scope: Scope.Scope }
 >()("sm/host/EngineRuns") {}
 
+const open: Store.OpenDatabase = (filename, options) =>
+  SqliteClient.make({ filename, ...options });
+
 const runsLayer = Layer.effect(
   EngineRuns,
   Effect.map(Effect.scope, (scope) => EngineRuns.of({ scope })),
@@ -47,7 +51,8 @@ export const layer = (options: {
 }) =>
   migratingEngineLayer({
     ...options,
-    store: Store.layer((filename) => SqliteClient.make({ filename })),
+    store: Store.layer(open),
+    open,
   }).pipe(
     // The environment as it is when the graph is built: after the
     // launch has rebuilt it from the login shell (shared/shellEnv.ts).
@@ -112,7 +117,8 @@ export const hostCallFailure = (error: unknown) => {
 };
 
 // `asCall` for an operation that changes something, counted while it
-// runs.
+// runs, and run only while no data-folder move can start (`DataDirLock`):
+// every change the host makes through the engine passes here.
 export const asChange = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   ids: Ids = {},
@@ -121,7 +127,11 @@ export const asChange = <A, E, R>(
     Effect.sync(() => {
       changing += 1;
     }),
-    () => asCall(effect, ids),
+    () =>
+      asCall(
+        Effect.flatMap(DataDirLock.DataDirLock, (lock) => lock.guard(effect)),
+        ids,
+      ),
     () =>
       Effect.sync(() => {
         changing -= 1;

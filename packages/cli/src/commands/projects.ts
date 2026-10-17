@@ -16,6 +16,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
+import { changing } from "../engine.ts";
 import * as Flag from "effect/cli/Flag";
 import { Cancelled, UsageError } from "../errors.ts";
 import {
@@ -309,7 +310,10 @@ const remove = Command.make(
         ? emit({ ok: true, removed: project.name, path: project.path })
         : out(`removed ${project.name} (${project.path})`);
     }),
-).pipe(Command.withDescription("Remove a project. Its checkouts stay on disk"));
+).pipe(
+  Command.withDescription("Remove a project. Its checkouts stay on disk"),
+  changing,
+);
 
 // For a repo moved or renamed by hand: the last positional is where it
 // is now, the project before it.
@@ -344,7 +348,7 @@ const relocate = Command.make(
             styles(stdoutColor).green(`relocated ${row.name} to ${row.path}`),
           );
     }),
-).pipe(Command.withDescription("Point a project at its moved repo"));
+).pipe(Command.withDescription("Point a project at its moved repo"), changing);
 
 const reorder = Command.make(
   "reorder",

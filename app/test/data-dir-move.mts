@@ -26,10 +26,12 @@
 // Run: pnpm test data-dir-move.
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   symlinkSync,
@@ -41,15 +43,13 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
 import { afterAll, beforeAll, it } from "vitest";
-import {
-  holdingStore,
-  moveDataDir,
-  resumeLayer,
-} from "../host/lib/dataDirMove.ts";
+import { holdingStore, moveDataDir } from "../host/lib/dataDirMove.ts";
+import { resumeDataDirMove } from "@shigomori/engine/dataDirMove";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Paths from "@shigomori/engine/Paths";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
   JOURNAL,
   rescueStrandedMove,
@@ -117,6 +117,16 @@ const acrossVolumes = (
         : real.rename(from, to),
 });
 
+// A journal a case left in the data dir cleared, and the store writing
+// again, as a settled move leaves them.
+const clearJournal = async () => {
+  rmSync(join(engineDataDir, JOURNAL), { force: true });
+  await runHost(reviveStore);
+};
+
+// A journal still in the data dir.
+const journalLeft = () => existsSync(join(engineDataDir, JOURNAL));
+
 const titleOf = (worktreeId: string) =>
   runHost(Ops.describeWorktree(projectId, worktreeId)).then(
     (row) => row.title,
@@ -167,6 +177,10 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
   const crashed = await move;
   const partial = await Effect.runPromise(Deferred.await(copying));
 
+  writeFileSync(
+    "/tmp/merry-journal-dump0.txt",
+    readFileSync(join(engineDataDir, JOURNAL), "utf8"),
+  );
   assert.equal(
     await titleOf(identity.id),
     undefined,
@@ -175,19 +189,19 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
   assert.equal(existsSync(destination), false, "the copy fills a sibling");
   assert.equal(existsSync(partial), true);
 
+  writeFileSync(
+    "/tmp/merry-journal-dump.txt",
+    readFileSync(join(engineDataDir, JOURNAL), "utf8"),
+  );
   // The next start, the pointer where it was.
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(
     await titleOf(identity.id),
     "Fox",
     "the title back under the worktree's own id",
   );
   assert.equal(existsSync(partial), false, "the partial copy removed");
-  assert.equal(
-    readdirSync(engineDataDir).includes("data-dir-move.json"),
-    false,
-    "the journal removed",
-  );
+  assert.equal(journalLeft(), false, "the journal removed");
   assert.equal(existsSync(pointerFile), false, "no pointer committed");
   await Effect.runPromise(Fiber.interrupt(crashed));
 });
@@ -224,7 +238,7 @@ it("a move whose copy landed but whose pointer was never written is undone, its 
     }).pipe(Effect.forkDetach),
   );
   await waitFor(() => existsSync(destination), "the copy renamed in");
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), "Fox");
   assert.equal(existsSync(destination), false, "the copy removed");
   assert.equal(existsSync(pointerFile), false, "no pointer committed");
@@ -236,30 +250,169 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
     await runHost(Ops.listWorktreeIdentities({ projectId }))
   ).find((row) => row.path === fox);
   assert.ok(identity !== undefined);
-  // What a landed copy left: the old tree, and the journal at the new
-  // place, which the pointer names with a slash at its end.
+  // What a landed copy left: the old tree with the journal it was copied
+  // with, and that journal at the new place, which the pointer names with
+  // a slash at its end.
   const old = join(elsewhere, "old-data");
   mkdirSync(old);
+  const journal = JSON.stringify({
+    from: old,
+    to: `${engineDataDir}/`,
+    partial: `${engineDataDir}.partial-x`,
+    moved: [
+      { projectId, oldPath: join(old, "wt", "repo", "fox"), newPath: fox },
+    ],
+  });
+  writeFileSync(join(old, JOURNAL), journal);
+  writeFileSync(join(engineDataDir, JOURNAL), journal);
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(await titleOf(identity.id), "Fox", "nothing re-keyed back");
+  assert.equal(existsSync(old), false, "the old tree removed");
+  assert.equal(journalLeft(), false);
+});
+
+it("a finished move whose worktree links couldn't be repaired keeps its journal for the next start", async () => {
+  const old = join(elsewhere, "old-data-unrepaired");
+  mkdirSync(old);
+  const journal = join(engineDataDir, JOURNAL);
   writeFileSync(
-    join(engineDataDir, "data-dir-move.json"),
+    journal,
     JSON.stringify({
       from: old,
-      to: `${engineDataDir}/`,
-      partial: `${engineDataDir}.partial-x`,
-      pid: 4_194_304,
-      startedAt: 0,
+      to: engineDataDir,
+      partial: null,
       moved: [
-        { projectId, oldPath: join(old, "wt", "repo", "fox"), newPath: fox },
+        {
+          projectId,
+          oldPath: join(old, "wt", "repo", "gone"),
+          newPath: join(elsewhere, "not-a-worktree"),
+        },
       ],
     }),
   );
-  await runHost(Effect.scoped(Layer.build(resumeLayer)));
-  assert.equal(await titleOf(identity.id), "Fox", "nothing re-keyed back");
-  assert.equal(existsSync(old), false, "the old tree removed");
-  assert.equal(
-    readdirSync(engineDataDir).includes("data-dir-move.json"),
-    false,
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(journalLeft(), true, "the journal went with a repair owed");
+  await clearJournal();
+});
+
+it("a kept journal of a copied move never deletes a folder made at the old place since", async () => {
+  const old = join(elsewhere, "old-data-remade");
+  mkdirSync(old);
+  writeFileSync(join(old, "new.txt"), "made after the move\n");
+  const journal = join(engineDataDir, JOURNAL);
+  writeFileSync(
+    journal,
+    JSON.stringify({
+      from: old,
+      to: engineDataDir,
+      partial: `${engineDataDir}.partial-x`,
+      moved: [
+        {
+          projectId,
+          oldPath: join(old, "wt", "repo", "gone"),
+          newPath: join(elsewhere, "not-a-worktree"),
+        },
+      ],
+    }),
   );
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(
+    readFileSync(join(old, "new.txt"), "utf8"),
+    "made after the move\n",
+  );
+  await clearJournal();
+  rmSync(old, { recursive: true });
+});
+
+it("a copied move whose old tree couldn't be removed keeps its journal, and the next start removes it", async () => {
+  const old = join(elsewhere, "old-data-stuck");
+  const stuck = join(old, "stuck");
+  mkdirSync(stuck, { recursive: true });
+  writeFileSync(join(stuck, "file"), "");
+  const journal = JSON.stringify({
+    from: old,
+    to: engineDataDir,
+    partial: `${engineDataDir}.partial-stuck`,
+    moved: [],
+  });
+  writeFileSync(join(old, JOURNAL), journal);
+  writeFileSync(join(engineDataDir, JOURNAL), journal);
+  chmodSync(stuck, 0o555);
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(existsSync(join(old, JOURNAL)), true, "the old tree still ours");
+  assert.equal(journalLeft(), true, "the journal kept with the old tree owed");
+  chmodSync(stuck, 0o755);
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(existsSync(old), false, "the old tree removed");
+  assert.equal(journalLeft(), false);
+});
+
+// Sol's round 4: an old tree whose journal can't be read can't be told
+// for this move's, so the finish keeps its own until it can.
+it("a finish that can't read the old tree's journal keeps its own, and finishes once it can", async () => {
+  const old = join(elsewhere, "old-data-unread");
+  mkdirSync(old);
+  const journal = JSON.stringify({
+    from: old,
+    to: engineDataDir,
+    partial: `${engineDataDir}.partial-unread`,
+    moved: [],
+  });
+  writeFileSync(join(old, JOURNAL), journal);
+  writeFileSync(join(engineDataDir, JOURNAL), journal);
+  chmodSync(join(old, JOURNAL), 0o000);
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(journalLeft(), true);
+  chmodSync(join(old, JOURNAL), 0o644);
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(existsSync(old), false);
+  assert.equal(journalLeft(), false);
+});
+
+// Sol's round 4: an undo reverses by each entry's mark. A `planned` entry
+// whose re-key ran before a crash took its mark is reversed; a
+// `returned` one never again, whatever is under its new id since.
+it("an undo reverses a planned entry its re-key reached, and never a returned one", async () => {
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  const newPath = join(elsewhere, "marks", "wt", "repo", "fox");
+  const newId = worktreeIdFromPath(newPath);
+  const journalAt = (state: string) =>
+    writeFileSync(
+      join(engineDataDir, JOURNAL),
+      JSON.stringify({
+        from: engineDataDir,
+        to: join(elsewhere, "marks-never-landed"),
+        partial: null,
+        moved: [{ projectId, oldPath: fox, newPath, capture: null, state }],
+      }),
+    );
+  await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
+  assert.equal(await titleOf(identity.id), undefined, "the re-key ran");
+  journalAt("planned");
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(await titleOf(identity.id), "Fox", "a planned re-key reversed");
+  assert.equal(journalLeft(), false);
+
+  await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
+  journalAt("returned");
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(await titleOf(identity.id), undefined, "a returned entry left");
+  assert.equal(await runHost(Ops.keptUnder(projectId, newId)), true);
+  await runHost(
+    Ops.rekeyWorktree(projectId, newId, fox, { expect: null, back: true }),
+  );
+  assert.equal(await titleOf(identity.id), "Fox");
+});
+
+it("keeps a move journal it can't read, which may be all that says what a move left", async () => {
+  const journal = join(engineDataDir, JOURNAL);
+  writeFileSync(journal, "not a journal");
+  await runHost(resumeDataDirMove(engineDataDir));
+  assert.equal(readFileSync(journal, "utf8"), "not a journal");
+  await clearJournal();
 });
 
 it("a move that failed after the folder was let go never leaves the app running without it", () => {
@@ -333,8 +486,6 @@ function landed(at: string, from: string, partial: string | null = null): void {
       from,
       to: at,
       partial,
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [],
     }),
   );
@@ -381,8 +532,6 @@ it("finds a data folder whose move a crash cut before its pointer moved", async 
       from: defaultDataDir,
       to: custom,
       partial: "x",
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [],
     }),
   );
@@ -452,9 +601,75 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
     assert.equal(found, destination);
     assert.equal(readFileSync(pointerFile, "utf8").trim(), destination);
   } finally {
-    // This process's data folder back where the other cases find it.
+    // This process's data folder back where the other cases find it,
+    // writing as a settled move leaves it.
     renameSync(destination, engineDataDir);
     rmSync(join(engineDataDir, "data-dir-move.json"), { force: true });
+    await runHost(reviveStore);
+  }
+});
+
+// A cancel that comes while the folder's own rename is under way: the
+// rename and its mark are one step, so the folder that landed is kept
+// whole, with the staged pointer the next start finds it by, and never
+// undone where the data no longer is.
+it("a cancel during the folder's rename keeps the landed folder and its staged pointer", async () => {
+  const parent = join(elsewhere, "same-volume-cancel");
+  const destination = join(parent, "moved");
+  const pointerFile = join(elsewhere, "config-5", "data-dir");
+  const renaming = Deferred.makeUnsafe<void>();
+  const move = runHost(
+    Effect.gen(function* () {
+      const real = yield* FileSystem.FileSystem;
+      const fs: FileSystem.FileSystem = {
+        ...real,
+        // The rename done, and its answer slow to come back.
+        rename: (from, to) =>
+          from === engineDataDir
+            ? real
+                .rename(from, to)
+                .pipe(
+                  Effect.andThen(Deferred.succeed(renaming, undefined)),
+                  Effect.andThen(Effect.sleep("300 millis")),
+                )
+            : real.rename(from, to),
+      };
+      return yield* moveDataDir(parent, {
+        place: {
+          dataDir: engineDataDir,
+          pointerFile,
+          legacyPointerFile: null,
+          defaultDataDir: join(elsewhere, "home", ".sm"),
+          dataDirName: "moved",
+        },
+        beforeMove: Effect.void,
+        killAllScripts: Effect.void,
+      }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+    }).pipe(Effect.forkDetach),
+  );
+  const fiber = await move;
+  await Effect.runPromise(Deferred.await(renaming));
+  await Effect.runPromise(Fiber.interrupt(fiber));
+  try {
+    assert.ok(existsSync(join(destination, "data-dir-move.json")));
+    assert.equal(existsSync(engineDataDir), false, "the folder left");
+    const staged = readdirSync(dirname(pointerFile)).filter((entry) =>
+      entry.startsWith("data-dir.tmp."),
+    );
+    assert.equal(staged.length, 1, "the staged pointer stays");
+    const found = await Effect.runPromise(
+      rescueStrandedMove({
+        named: engineDataDir,
+        pointerFile,
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+      }).pipe(Effect.provide(NodeServices.layer)),
+    );
+    assert.equal(found, destination);
+  } finally {
+    renameSync(destination, engineDataDir);
+    rmSync(join(engineDataDir, "data-dir-move.json"), { force: true });
+    await runHost(reviveStore);
   }
 });
 
@@ -520,6 +735,171 @@ it.each([
   },
 );
 
+const ref = (id: string) => `refs/shigomori/dirty/${id}`;
+
+// A move undone before its folder moved carries back the dirty capture
+// its re-key carried; one kept under a new id from before refuses the
+// move before anything moves.
+it.each([
+  ["one kept under the new id refuses the move", false],
+  ["its own comes back", true],
+])("a move and its undo and a capture: %s", async (_name, own) => {
+  const repo = join(elsewhere, "repo");
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  const parent = join(elsewhere, `captures-${String(own)}`);
+  mkdirSync(parent);
+  const newId = worktreeIdFromPath(
+    join(realpathSync(parent), "moved", "wt", "repo", "fox"),
+  );
+  const head = git(repo, "rev-parse", "HEAD").trim();
+  git(repo, "update-ref", ref(own ? identity.id : newId), head);
+  const failed = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(
+          elsewhere,
+          `config-captures-${String(own)}`,
+          "data-dir",
+        ),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      // The re-key is done by now: an own capture is under the new id.
+      beforeMove: Effect.gen(function* () {
+        const tip = git(
+          repo,
+          "for-each-ref",
+          "--format=%(objectname)",
+          ref(newId),
+        ).trim();
+        assert.equal(tip, head);
+        return yield* Effect.fail("stop before the folder moves");
+      }),
+      killAllScripts: Effect.void,
+    }).pipe(Effect.flip),
+  );
+  if (own) assert.equal(failed, "stop before the folder moves");
+  else assert.match(String(failed), /Something is still kept/);
+  const tip = (id: string) =>
+    git(repo, "for-each-ref", "--format=%(objectname)", ref(id)).trim();
+  assert.deepEqual(
+    { own: tip(identity.id), kept: tip(newId) },
+    own ? { own: head, kept: "" } : { own: "", kept: head },
+  );
+  git(repo, "update-ref", "-d", ref(own ? identity.id : newId));
+});
+
+// Sol's round 3: a capture made while the scripts are killed, before the
+// journal, is the one the move carries and an undo brings back.
+it("a capture made while a move kills the scripts comes back with its undo", async () => {
+  const repo = join(elsewhere, "repo");
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  const parent = join(elsewhere, "captures-late");
+  mkdirSync(parent);
+  const newId = worktreeIdFromPath(
+    join(realpathSync(parent), "moved", "wt", "repo", "fox"),
+  );
+  const head = git(repo, "rev-parse", "HEAD").trim();
+  const failed = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-captures-late", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      killAllScripts: Effect.sync(() => {
+        git(repo, "update-ref", ref(identity.id), head);
+      }),
+      beforeMove: Effect.fail("stop before the folder moves"),
+    }).pipe(Effect.flip),
+  );
+  assert.equal(failed, "stop before the folder moves");
+  const tip = (id: string) =>
+    git(repo, "for-each-ref", "--format=%(objectname)", ref(id)).trim();
+  assert.deepEqual(
+    { own: tip(identity.id), moved: tip(newId) },
+    { own: head, moved: "" },
+  );
+  git(repo, "update-ref", "-d", ref(identity.id));
+});
+
+// Sol's round 3: a move never writes its journal over one still owed.
+it("a move settles an earlier move's journal first, and waits while it can't", async () => {
+  const journal = join(engineDataDir, JOURNAL);
+  const place = (name: string) => ({
+    dataDir: engineDataDir,
+    pointerFile: join(elsewhere, `config-${name}`, "data-dir"),
+    legacyPointerFile: null,
+    defaultDataDir: join(elsewhere, "home", ".sm"),
+    dataDirName: "moved",
+  });
+  const tryMove = (name: string) => {
+    const parent = join(elsewhere, name);
+    mkdirSync(parent);
+    return runHost(
+      moveDataDir(parent, {
+        place: place(name),
+        killAllScripts: Effect.void,
+        beforeMove: Effect.fail("stop before the folder moves"),
+      }).pipe(Effect.flip),
+    );
+  };
+  writeFileSync(journal, "not a journal");
+  assert.match(String(await tryMove("unsettled")), /isn't finished or undone/);
+  assert.equal(readFileSync(journal, "utf8"), "not a journal");
+  // One a start can settle: a move to elsewhere that never landed.
+  writeFileSync(
+    journal,
+    JSON.stringify({
+      from: engineDataDir,
+      to: join(elsewhere, "never-landed"),
+      partial: null,
+      moved: [],
+    }),
+  );
+  assert.equal(await tryMove("settled"), "stop before the folder moves");
+  assert.equal(journalLeft(), false);
+});
+
+// The owner's (a): from the journal's first write until it is gone the
+// store is the move's: another process's write (the terminal's) is
+// refused, and writes again once the move is undone.
+it("refuses another process's writes while a move's journal is out, and takes them again after", async () => {
+  const parent = join(elsewhere, "exclusive");
+  mkdirSync(parent);
+  let during = "";
+  const failed = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-exclusive", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      killAllScripts: Effect.void,
+      beforeMove: Effect.gen(function* () {
+        during = writeTheStore();
+        return yield* Effect.fail("stop before the folder moves");
+      }),
+    }).pipe(Effect.flip),
+  );
+  assert.equal(failed, "stop before the folder moves");
+  assert.match(during, /sm-data-folder-moved/);
+  assert.equal(writeTheStore(), "written");
+  assert.equal(journalLeft(), false);
+});
+
 it.each([
   ["", "alias"],
   ["///", "alias-slashes"],
@@ -545,3 +925,34 @@ it.each([
     assert.equal(existsSync(join(elsewhere, `${name}-to`)), false);
   },
 );
+
+// Every change the host makes through the engine passes the data-folder
+// lock: one is refused while a move holds it alone.
+it("refuses a change of the host's while a move holds the lock", async () => {
+  const identity = (
+    await runHost(Ops.listWorktreeIdentities({ projectId }))
+  ).find((row) => row.path === fox);
+  assert.ok(identity !== undefined);
+  const lockFile = await runHost(
+    Effect.map(Paths.Paths, ({ pointerFile }) =>
+      join(dirname(pointerFile), "data-dir.lock"),
+    ),
+  );
+  mkdirSync(dirname(lockFile), { recursive: true });
+  const move = new DatabaseSync(lockFile);
+  move.exec("PRAGMA locking_mode = EXCLUSIVE");
+  move.exec("CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)");
+  move.exec("INSERT OR REPLACE INTO held (id) VALUES (1)");
+  try {
+    const refused = await runHost(
+      Ops.writeWorktreeDescription(projectId, identity.id, { title: "Owl" }),
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.match(String(refused), /The data folder is being moved/);
+  } finally {
+    move.close();
+  }
+  assert.equal(await titleOf(identity.id), "Fox");
+});

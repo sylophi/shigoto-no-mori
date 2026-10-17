@@ -43,7 +43,7 @@ import { engineLayer } from "../src/layer.ts";
 import * as Migration from "../src/Migration.ts";
 import * as Registry from "../src/Registry.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
-import { nodeStore } from "./lib/nodeStore.ts";
+import { nodeStore, openNode } from "./lib/nodeStore.ts";
 import { macfs, type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -813,6 +813,7 @@ describe("the data dir found by pointer", () => {
       engineLayer({
         flavor: "dev",
         store: nodeStore,
+        open: openNode,
         macfs: macfs(),
         sm: "smd",
       }).pipe(

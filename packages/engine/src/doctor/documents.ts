@@ -120,6 +120,7 @@ export class WorktreesNotMoved extends Schema.TaggedError<WorktreesNotMoved>()(
 }
 
 type RepairError =
+  | Worktrees.CaptureNotCarried
   | WorktreesNotMoved
   | LeaseRefused
   | CommandTimedOut

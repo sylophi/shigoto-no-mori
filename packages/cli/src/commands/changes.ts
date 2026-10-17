@@ -13,7 +13,8 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
-import { refuseUnmigrated } from "../engine.ts";
+import * as DataDirLock from "@shigomori/engine/DataDirLock";
+import { changing, refuseUnmigrated } from "../engine.ts";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import {
@@ -122,23 +123,30 @@ export const create = Command.make(
       const agentSession = Option.isSome(caller)
         ? yield* agents.starting(caller.value)
         : undefined;
-      const created = yield* (yield* Worktrees.Worktrees).create(
-        project,
-        {
-          name: Option.getOrUndefined(given(input.name)),
-          branch: Option.getOrUndefined(given(input.branch)),
-          base: Option.getOrUndefined(given(input.base)),
-          checkout: input.checkout,
-          skipSetup: input.noSetup,
-          agentSession,
-          clone: !input.noClone,
-        },
-        yield* reporter(
-          (worktree) =>
-            `created ${cyan(worktree.name)} (branch ${cyan(worktree.branch)})`,
-        ),
+      // The change alone holds the data-folder lock, not the shell
+      // after it.
+      const lock = yield* DataDirLock.DataDirLock;
+      const { created, code } = yield* lock.guard(
+        Effect.gen(function* () {
+          const made = yield* (yield* Worktrees.Worktrees).create(
+            project,
+            {
+              name: Option.getOrUndefined(given(input.name)),
+              branch: Option.getOrUndefined(given(input.branch)),
+              base: Option.getOrUndefined(given(input.base)),
+              checkout: input.checkout,
+              skipSetup: input.noSetup,
+              agentSession,
+              clone: !input.noClone,
+            },
+            yield* reporter(
+              (worktree) =>
+                `created ${cyan(worktree.name)} (branch ${cyan(worktree.branch)})`,
+            ),
+          );
+          return { created: made, code: yield* finish(made) };
+        }),
       );
-      const code = yield* finish(created);
       // Into the new worktree, as `sm cd` goes: a subshell, or the
       // caller's own shell through the hook. A failed script's 3 wins
       // over how that shell ends.
@@ -193,6 +201,7 @@ export const adopt = Command.make(
 ).pipe(
   Command.withDescription("Make an external worktree a managed one"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );
 
 export const setup = Command.make(
@@ -237,6 +246,7 @@ export const setup = Command.make(
 ).pipe(
   Command.withDescription("Run a worktree's setup again"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );
 
 export const rm = Command.make(
@@ -306,6 +316,7 @@ export const rm = Command.make(
 ).pipe(
   Command.withDescription("Remove a worktree, its teardown first"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );
 
 type Moved = {
@@ -398,6 +409,7 @@ export const move = Command.make(
 ).pipe(
   Command.withDescription("Move a worktree's folder"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );
 
 export const rename = Command.make(
@@ -436,6 +448,7 @@ export const rename = Command.make(
 ).pipe(
   Command.withDescription("Rename a worktree's folder"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );
 
 // The app's plumbing for a folder about to move: what is kept under one
@@ -481,4 +494,5 @@ export const rekey = Command.make(
 ).pipe(
   Command.withDescription("Carry a worktree's data to its next path"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );

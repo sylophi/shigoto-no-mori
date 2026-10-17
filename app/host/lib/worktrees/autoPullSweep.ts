@@ -15,6 +15,8 @@
 // the upstream now tracks, refuse on. A worktree with a script the
 // app started in it is left alone too: the tree moving under a running
 // dev server is the one way a pull the user never clicked could bite.
+// So is a data-folder move, which the pull waits out by skipping.
+import { DataDirLock } from "@shigomori/engine/DataDirLock";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -53,6 +55,7 @@ export const autoPullWorktree = Effect.fnUntraced(function* (
   if (counts.behind === 0) return skipped("synced");
   if (counts.ahead > 0) return skipped("ahead");
   if (options.busy) return skipped("busy");
+  const lock = yield* DataDirLock;
   return yield* Effect.gen(function* () {
     const git = yield* Git.Git;
     if (yield* git.hasUncommittedOrUntracked(worktree.path)) {
@@ -61,6 +64,10 @@ export const autoPullWorktree = Effect.fnUntraced(function* (
     yield* git.fastForwardToUpstream(worktree.path);
     return { kind: "pulled", commits: counts.behind } as AutoPullOutcome;
   }).pipe(
+    lock.guard,
+    Effect.catchTag(["DataDirMoving", "DataDirMoved"], () =>
+      Effect.succeed(skipped("busy")),
+    ),
     Effect.catch((error) =>
       Effect.succeed<AutoPullOutcome>({
         kind: "failed",

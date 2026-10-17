@@ -3,6 +3,8 @@
 // against a link to the source (move.ts), a send asks the peer to run
 // it (sync:receiveWorktree, landForSender below) against a link the
 // sender answers on. The source's side is sourceLink.ts.
+import { callFailureOf } from "@shigomori/contracts/errors";
+import { DataDirLock } from "@shigomori/engine/DataDirLock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -407,6 +409,27 @@ const landIncoming = (
   },
   ctx: HandlerContext,
   progress: (frame: Pick<SyncPullProgress, "step" | "createPhase">) => void,
+  move: Scope.Scope,
+) =>
+  Effect.gen(function* () {
+    // The create, the capture's ref and its apply, held as one change
+    // while no data-folder move can start: a move between them would
+    // carry the worktree to its new id and leave the ref under the old.
+    const lock = yield* DataDirLock;
+    return yield* lock
+      .guard(landWhole(project, input, ctx, progress, move))
+      .pipe(
+        Effect.catchTag(["DataDirMoving", "DataDirMoved"], (error) =>
+          Effect.fail(callFailureOf(error)),
+        ),
+      );
+  });
+
+const landWhole = (
+  project: Project,
+  input: Parameters<typeof landIncoming>[1],
+  ctx: HandlerContext,
+  progress: Parameters<typeof landIncoming>[3],
   move: Scope.Scope,
 ) =>
   Effect.gen(function* () {

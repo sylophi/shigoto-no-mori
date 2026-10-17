@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
+import { changing } from "../engine.ts";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
 import { absolute, given, projectFlags, resolveProject } from "../here.ts";
@@ -98,4 +99,7 @@ export const bundle = Command.make(
         ? emit({ ok: true, fetched })
         : out(green(`fetched ${fetched.length} ref(s) from ${from}`));
     }),
-).pipe(Command.withDescription("Make or unpack a git bundle (app plumbing)"));
+).pipe(
+  Command.withDescription("Make or unpack a git bundle (app plumbing)"),
+  changing,
+);

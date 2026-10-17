@@ -26,6 +26,7 @@ import { makeMoving } from "./worktrees/moving.ts";
 import { makeAdopting } from "./worktrees/adopting.ts";
 import { makeRelocating } from "./worktrees/relocating.ts";
 import {
+  CaptureNotCarried,
   CleanupFailed,
   type Created,
   DescribeRefused,
@@ -53,6 +54,7 @@ import {
   type WorktreeRow,
 } from "./worktrees/documents.ts";
 export {
+  CaptureNotCarried,
   CleanupFailed,
   DescribeRefused,
   DirtyWorktree,
@@ -331,7 +333,13 @@ export class Worktrees extends Context.Service<
     readonly relink: (
       project: RegisteredProject,
       moved: ReadonlyMap<string, string>,
-    ) => Effect.Effect<void, Git.GitError>;
+    ) => Effect.Effect<void, Git.GitError | CaptureNotCarried>;
+    // Whether anything is kept under an id (marks, sessions, the shelf,
+    // its data, a dirty capture), the capture read strictly.
+    readonly keptUnder: (
+      project: RegisteredProject,
+      worktreeId: string,
+    ) => Effect.Effect<boolean, Git.GitError | Git.RefUnreadable>;
     // Where each managed worktree would go under `proposed` layout
     // settings, and whether it is there already, by the folder's identity.
     readonly relocationPlan: (
@@ -350,11 +358,16 @@ export class Worktrees extends Context.Service<
     >;
     // Carries what is kept under `from` to the id a checkout at `toPath`
     // (absolute) will have, ahead of moving it there. Answers that id.
+    // `expect` names the dirty capture to carry by its commit (null:
+    // none), as its caller saw it: a different one under `from` fails the
+    // re-key (`changed`). `back` is an undo's, which leaves a changed one,
+    // or one kept at `toPath`'s id, where it is.
     readonly rekey: (
       project: RegisteredProject,
       from: string,
       toPath: string,
-    ) => Effect.Effect<string>;
+      options?: { readonly expect?: string | null; readonly back?: boolean },
+    ) => Effect.Effect<string, CaptureNotCarried>;
     // Points a project whose repo was moved or renamed by hand at where
     // it is now (an absolute path, any folder inside it will do), keeping
     // its id. The
@@ -433,6 +446,7 @@ const make = Effect.gen(function* () {
     interruptedMoves: interrupted,
     rekey,
     forgetKept: kept.forgetRows,
+    keptUnder: kept.keptUnder,
     relocateProject,
     deletesBranch: removing.deletesBranch,
     relocationPlan,

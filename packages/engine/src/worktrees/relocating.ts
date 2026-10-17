@@ -18,7 +18,11 @@ import {
   isManagedPath,
   worktreeIdFromPath,
 } from "../worktreeLayout.ts";
-import { RelocateRefused, type WorktreeIdentity } from "./documents.ts";
+import {
+  CaptureNotCarried,
+  RelocateRefused,
+  type WorktreeIdentity,
+} from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
 import type { KeptArea } from "./kept.ts";
 import type { MovingArea } from "./moving.ts";
@@ -227,8 +231,14 @@ export const makeRelocating = ({
           )
           .pipe(Effect.catchTags({ SqlError: Effect.die }));
         // Best effort from here: the entry already points at the new path.
+        // A capture that didn't follow is said, and stays under the old id.
         for (const [from, now] of rekeys) {
-          yield* kept.rekeyCapture(relocated, from, now);
+          const carried = yield* kept.rekeyCapture(relocated, from, now);
+          if (carried !== "followed") {
+            yield* Effect.logWarning(
+              new CaptureNotCarried({ from, to: now, reason: carried }).message,
+            );
+          }
         }
         yield* rehomeManaged(relocated, project.path);
       }

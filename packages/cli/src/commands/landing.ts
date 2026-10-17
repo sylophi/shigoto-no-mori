@@ -11,7 +11,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
-import { refuseUnmigrated } from "../engine.ts";
+import { changing, refuseUnmigrated } from "../engine.ts";
 import { withoutCdFile } from "../handOver.ts";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
@@ -302,6 +302,7 @@ export const merge = Command.make(
 ).pipe(
   Command.withDescription("Merge a worktree's pull request"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );
 
 export const land = Command.make(
@@ -338,6 +339,7 @@ export const land = Command.make(
 ).pipe(
   Command.withDescription("Merge a worktree's pull request and clean up"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );
 
 export const done = Command.make(
@@ -366,6 +368,7 @@ export const done = Command.make(
 ).pipe(
   Command.withDescription("Put a checkout back on the primary branch"),
   Command.provideEffectDiscard(refuseUnmigrated),
+  changing,
 );
 
 // rm --stack: the cleanup half of a stack land.

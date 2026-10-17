@@ -3,6 +3,8 @@
 // where the darwin helper (macfs) is, and the terminal `sm` the agent
 // hooks run. The updater talks HTTP through
 // fetch, the one client Node and Bun both have.
+import * as DataDirLock from "./DataDirLock.ts";
+import * as DataDirMove from "./dataDirMove.ts";
 import * as Agents from "./Agents.ts";
 import * as Bundle from "./Bundle.ts";
 import * as CarryOver from "./CarryOver.ts";
@@ -51,6 +53,8 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 type EngineOptions = {
   readonly flavor: Flavor;
   readonly store: ReturnType<typeof Store.layer>;
+  // The driver's open, which the data-folder lock's database takes too.
+  readonly open: Store.OpenDatabase;
   readonly macfs: string;
   readonly sm: string;
 };
@@ -107,13 +111,20 @@ const services = (options: EngineOptions) =>
         MirrorInvites.layer,
       ),
     ),
-    Layer.provideMerge(Git.layer),
+    Layer.provideMerge(
+      Layer.mergeAll(Git.layer, DataDirLock.layer(options.open)),
+    ),
     Layer.provideMerge(options.store),
     Layer.provideMerge(childDefaults),
   );
 
+// A data-folder move's journal settled as the graph comes up, before
+// anything reads a worktree by its id (DataDirMove.settleLayer).
 export const engineLayer = (options: EngineOptions) =>
-  services(options).pipe(Layer.provideMerge(Paths.layer(options.flavor)));
+  DataDirMove.settleLayer.pipe(
+    Layer.provideMerge(services(options)),
+    Layer.provideMerge(Paths.layer(options.flavor)),
+  );
 
 // The engine of the process that migrates a 2.x data dir, the app's:
 // its moves into `wt/` made before anything else runs. Every other
@@ -167,6 +178,9 @@ export const doctorLayer = (options: {
     Layer.provide(
       Layer.mergeAll(Git.layer, Darwin.layer(options.macfs), Migration.layer),
     ),
+    // `--fix` prunes and moves worktrees, which a data-folder move holds
+    // still.
+    Layer.merge(DataDirLock.layer(options.open)),
     Layer.provideMerge(Paths.layer(options.flavor)),
     Layer.provideMerge(childDefaults),
   );

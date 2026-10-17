@@ -2,6 +2,7 @@
 // layer graph (layer.ts) below the wires that serve them, and the
 // platform the graph runs on.
 import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as FileSync from "@host/fileSync/FileSync";
 import type * as CliShell from "@host/lib/cli/shell";
@@ -31,6 +32,7 @@ import type * as PortForwards from "@host/portForward/PortForwards";
 export type HostServices =
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem
+  | Path.Path
   | FileSync.FileSync
   | GithubCli.GithubCli
   | CliShell.HookShell

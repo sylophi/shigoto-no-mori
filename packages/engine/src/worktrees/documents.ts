@@ -494,6 +494,8 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "move-in-progress",
       "adopt-primary",
       "adopt-managed",
+      "adopt-locked",
+      "adopt-moved",
     ]),
     // The name or path the refusal is about.
     subject: Schema.String,
@@ -553,6 +555,10 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         return "The primary checkout can't be converted";
       case "adopt-managed":
         return "Worktree is already shigomori-managed";
+      case "adopt-moved":
+        return `${this.subject} moved on to another commit, or couldn't be read, while it was being adopted. Both checkouts are kept; remove the one you don't need.`;
+      case "adopt-locked":
+        return `${this.subject} is locked. Unlock it (git worktree unlock) to adopt it.`;
     }
   }
 }
@@ -563,6 +569,31 @@ export const cleanupFailureWords = (failure: {
   readonly exitCode: number | null;
 }) =>
   `${failure.phase} ${failure.exitCode === null ? "failed to run" : `exited with code ${failure.exitCode}`}; worktree not removed`;
+
+// A worktree's rows went to its new id but its dirty capture's ref
+// didn't follow: the capture is kept under the old id. A re-key asked
+// again carries one that failed; one `occupied`, by another capture
+// under the new id, stays until that one is restored or dropped; one
+// `changed` since the caller looked stays for the caller to look again.
+export class CaptureNotCarried extends Schema.TaggedError<CaptureNotCarried>()(
+  "CaptureNotCarried",
+  {
+    from: Schema.String,
+    to: Schema.String,
+    reason: Schema.Literals(["occupied", "changed", "failed"]),
+  },
+) {
+  override get message(): string {
+    switch (this.reason) {
+      case "occupied":
+        return "A worktree's uncommitted changes didn't follow it to its new place, where other uncommitted changes are kept from before; both are kept";
+      case "changed":
+        return "A worktree's uncommitted changes were captured again while it moved; they are kept where they were";
+      case "failed":
+        return "A worktree's uncommitted changes didn't follow it to its new place; they are kept, and the next try carries them";
+    }
+  }
+}
 
 // A cleanup script that failed during a removal, which left the worktree
 // in place. The run id ties the failure to the script's output.
