@@ -228,8 +228,8 @@ const foundation = (
     Layer.provideMerge(Views.layer),
     Layer.provideMerge(pushesLayer),
     Layer.provideMerge(EngineStoreChanges.layer),
-    // What the root provides from its own wiring: the peers' reach,
-    // the mirror engine and the account.
+    // What the root provides from its own wiring: the peers' reach, the
+    // mirror signals and the account's peers.
     Layer.provideMerge(rootServices),
     // This device's id, which the wires above name themselves by, read
     // from the store once.

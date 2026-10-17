@@ -166,7 +166,10 @@ const make = (options: {
               (_, exit) =>
                 Exit.isSuccess(exit)
                   ? Effect.void
-                  : Effect.ignore(daemon.resume(session)),
+                  : Effect.ignoreCause(daemon.resume(session), {
+                      log: "Warn",
+                      message: "[mirror] the paused session didn't resume",
+                    }),
             );
             // An old session already gone by now was ended all the same.
             yield* fromDaemon(daemon.terminate(session)).pipe(
