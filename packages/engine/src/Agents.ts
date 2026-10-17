@@ -39,7 +39,6 @@ import type { GuideHarness } from "@shigomori/contracts/modules/guide";
 import {
   cloneSourceCommand,
   GUIDE_LAUNCHERS,
-  GUIDE_OPENING,
   guideCommand,
   guideInstructions,
   SOURCE_URL,
@@ -639,7 +638,7 @@ const make = (binary: string) =>
       );
       yield* open.inTerminal(
         folder,
-        `${before}${guideCommand({ ...input, sm, dataDir, prompt: GUIDE_OPENING })}`,
+        `${before}${guideCommand({ ...input, sm, dataDir })}`,
       );
     });
 

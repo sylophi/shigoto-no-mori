@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { navContract } from "@shigomori/contracts/modules/nav";
-import { useGuideHarnesses } from "@/hooks/useGuide";
-import { notifyError } from "@/lib/toast";
+import { startGuide, useGuideHarnesses } from "@/hooks/useGuide";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // The Help menu's guides: this device's harnesses go to the menu, and
@@ -18,13 +17,9 @@ export function GuideMenu() {
   }, [api, shown]);
   useEffect(
     () =>
-      api.listen(api.pushes(navContract, "showAround"), (harness) => {
-        void api
-          .run(api.guide.start({ harness }))
-          .catch((error: unknown) =>
-            notifyError("Couldn't open the guide", error),
-          );
-      }),
+      api.listen(api.pushes(navContract, "showAround"), (harness) =>
+        startGuide(api, harness),
+      ),
     [api],
   );
   return null;

@@ -546,10 +546,6 @@
     "kind": "invoke",
     "scope": "client"
   },
-  "menu:showAround": {
-    "kind": "invoke",
-    "scope": "client"
-  },
   "migration:changed": {
     "kind": "push",
     "scope": "client",

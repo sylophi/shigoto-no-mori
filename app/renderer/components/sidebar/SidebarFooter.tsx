@@ -1,9 +1,8 @@
 // The sidebar's footer (SidebarFooterView): the layout toggle, and the
 // app-level actions. A hostless client has no local tree to arrange,
 // so its bar carries the toggle and the page-nav cluster.
-import { showAroundLabel } from "@shigomori/contracts/modules/guide";
 import { useBinding } from "@/hooks/ui/useKeymap";
-import { useGuideHarnesses } from "@/hooks/useGuide";
+import { startGuide, useGuideHarnesses } from "@/hooks/useGuide";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useMarkAgentsWaiting } from "@/hooks/config/useSidebarMarks";
 import { useLiveCount } from "@/hooks/live/useLiveActivity";
@@ -18,7 +17,7 @@ import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
 import {
   SidebarFooterView,
-  SidebarGuideButtonView,
+  SidebarGuideMenuView,
   SidebarNavActionsView,
   SidebarViewToggleView,
 } from "@shigomori/ui/views/sidebar/SidebarFooterView.tsx";
@@ -42,8 +41,8 @@ export function SidebarFooter({
   const running = useLiveCount();
   const waiting = useWaitingAgents().length;
   const needsYou = useMarkAgentsWaiting() && waiting > 0;
+  const harnesses = useGuideHarnesses() ?? [];
   const api = useApi();
-  const [harness, ...more] = useGuideHarnesses() ?? [];
   return (
     <SidebarFooterView
       onDoneArranging={
@@ -58,12 +57,10 @@ export function SidebarFooter({
       }
       actions={
         <>
-          {harness !== undefined && (
-            <SidebarGuideButtonView
-              label={
-                more.length === 0 ? showAroundLabel(harness) : "Show me around"
-              }
-              onClick={(at) => void api.run(api.menu.showAround(at))}
+          {harnesses.length > 0 && (
+            <SidebarGuideMenuView
+              harnesses={harnesses}
+              onPick={(harness) => startGuide(api, harness)}
             />
           )}
           <SidebarNavActionsView

@@ -10,8 +10,9 @@ import {
   isGuideHarness,
 } from "@shigomori/contracts/modules/guide";
 import { useHasLocalHost } from "@/lib/localHost";
+import { notifyError } from "@/lib/toast";
 import { queryKeys, queryKeysFor } from "@/lib/queryKeys";
-import { useApi } from "@/lib/runtime/pageApi";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 export function useGuide(): GuideState | null {
   const api = useApi();
@@ -47,4 +48,12 @@ export function useGuideHarnesses(): GuideHarness[] | undefined {
   return data?.flatMap(({ id, detected }) =>
     detected && isGuideHarness(id) ? [id] : [],
   );
+}
+
+// Opens a harness guiding this window (its shell's guide:start), for
+// the Help menu's items and the sidebar's guide menu alike.
+export function startGuide(api: RendererApi, harness: GuideHarness): void {
+  void api
+    .run(api.guide.start({ harness }))
+    .catch((error: unknown) => notifyError("Couldn't open the guide", error));
 }

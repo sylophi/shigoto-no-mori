@@ -14,6 +14,19 @@ import {
 } from "lucide-react";
 import type { SidebarView } from "@shigomori/contracts/schemas";
 import {
+  GUIDE_HARNESS_LABELS,
+  GUIDE_QUESTION,
+  type GuideHarness,
+} from "@shigomori/contracts/modules/guide";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "../../primitives/dropdown-menu.tsx";
+import {
   SegmentedControl,
   type SegmentedOption,
 } from "../../primitives/segmented-control.tsx";
@@ -158,29 +171,48 @@ export function SidebarNavActionsView({
   );
 }
 
-// The guide, as the Help menu names it. The click hands over where the
-// button is, for a menu of several agents to open there.
-export function SidebarGuideButtonView({
-  label,
-  onClick,
+// The guide's menu, opening up from the footer: what the guide is for,
+// and an item for each agent installed here.
+export function SidebarGuideMenuView({
+  harnesses,
+  onPick,
 }: {
-  label: string;
-  onClick: (at: { x: number; y: number }) => void;
+  harnesses: readonly GuideHarness[];
+  onPick: (harness: GuideHarness) => void;
 }) {
   return (
-    <SimpleTooltip tip={label}>
-      <button
-        type="button"
-        onClick={(event) => {
-          const { left, top } = event.currentTarget.getBoundingClientRect();
-          onClick({ x: left, y: top });
-        }}
-        aria-label={label}
-        className={SIDEBAR_ICON_BUTTON}
-      >
-        <CircleQuestionMark className="size-3.5" />
-      </button>
-    </SimpleTooltip>
+    <DropdownMenu>
+      <SimpleTooltip tip={GUIDE_QUESTION}>
+        <DropdownMenuTrigger
+          aria-label={GUIDE_QUESTION}
+          className={SIDEBAR_ICON_BUTTON}
+        >
+          <CircleQuestionMark className="size-3.5" />
+        </DropdownMenuTrigger>
+      </SimpleTooltip>
+      <DropdownMenuContent side="top" sideOffset={6}>
+        <SidebarGuideMenuItemsView harnesses={harnesses} onPick={onPick} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function SidebarGuideMenuItemsView({
+  harnesses,
+  onPick,
+}: {
+  harnesses: readonly GuideHarness[];
+  onPick: (harness: GuideHarness) => void;
+}) {
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>{GUIDE_QUESTION}</DropdownMenuLabel>
+      {harnesses.map((harness) => (
+        <DropdownMenuItem key={harness} onClick={() => onPick(harness)}>
+          {GUIDE_HARNESS_LABELS[harness]}
+        </DropdownMenuItem>
+      ))}
+    </DropdownMenuGroup>
   );
 }
 
