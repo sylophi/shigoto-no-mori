@@ -6,6 +6,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import type { ScriptEnvInput } from "@shigomori/contracts/scriptEnv";
 import * as Schema from "effect/Schema";
+import type { MarkKind } from "./marks";
 
 // A script that can't start here now, in words for the console.
 export class ScriptRefusedError extends Schema.TaggedError<ScriptRefusedError>()(
@@ -27,6 +28,14 @@ export class WorktreeBusyError extends Schema.TaggedError<WorktreeBusyError>()(
     return this.reason;
   }
 }
+
+// The mark a mutation of worktrees runs under (removing.ts): what it
+// does to them, and the words it refuses another mutation already under
+// way with, or none for a removal that must happen.
+export type Mark = {
+  readonly kind: MarkKind;
+  readonly busy: string | undefined;
+};
 
 // Where a run's events go: the calling window's or peer's notifier.
 export type NotifyScriptEvent = ((payload: ScriptEvent) => void) & {

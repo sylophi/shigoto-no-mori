@@ -6,24 +6,39 @@ import { WorktreeSettingUpError } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import { WorktreeBusyError } from "./documents";
 
+// What a worktree's mark is for: a removal, or a move (a rename, a
+// relocate, a data-folder move) that keeps it under another path.
+export type MarkKind = "remove" | "move";
+
 export const makeMarks = Effect.sync(() => {
-  // Ref-counted: overlapping deleters can mark the same worktree (a
-  // per-worktree delete racing a nuke that lists it too), and the mark
-  // must hold until the last one finishes.
-  const deletes = new Map<string, number>();
+  // Ref-counted per kind: overlapping deleters can mark the same worktree
+  // (a per-worktree delete racing a nuke that lists it too), and the
+  // mark must hold until the last one finishes.
+  const deletes = new Map<string, Record<MarkKind, number>>();
   // Past the engine's "created" document, not yet exited.
   const creates = new Set<string>();
   const projectRemovals = new Set<string>();
   let quitting = false;
 
-  const markDelete = (worktreeId: string) =>
-    deletes.set(worktreeId, (deletes.get(worktreeId) ?? 0) + 1);
-  const clearDelete = (worktreeId: string) => {
-    const count = deletes.get(worktreeId);
-    if (count === undefined) return;
-    if (count <= 1) deletes.delete(worktreeId);
-    else deletes.set(worktreeId, count - 1);
+  const markDelete = (worktreeId: string, kind: MarkKind) => {
+    const counts = deletes.get(worktreeId) ?? { remove: 0, move: 0 };
+    counts[kind] += 1;
+    deletes.set(worktreeId, counts);
   };
+  const clearDelete = (worktreeId: string, kind: MarkKind) => {
+    const counts = deletes.get(worktreeId);
+    if (counts === undefined || counts[kind] === 0) return;
+    counts[kind] -= 1;
+    if (counts.remove + counts.move === 0) deletes.delete(worktreeId);
+  };
+  // A worktree both removed and moved reads as removed.
+  const kindOf = (worktreeId: string): MarkKind | undefined => {
+    const counts = deletes.get(worktreeId);
+    if (counts === undefined) return undefined;
+    return counts.remove > 0 ? "remove" : "move";
+  };
+  const counted = (kind: MarkKind) =>
+    [...deletes.keys()].filter((id) => kindOf(id) === kind).length;
 
   // Refuses a delete or move of a worktree something is already working
   // in: another delete or move (with the caller's busy message), or its
@@ -41,10 +56,12 @@ export const makeMarks = Effect.sync(() => {
 
   const deleting = Effect.fn("Scripts.deleting")(function* (
     worktreeIds: readonly string[],
+    kind: MarkKind,
   ) {
     yield* Effect.acquireRelease(
-      Effect.sync(() => worktreeIds.forEach(markDelete)),
-      () => Effect.sync(() => worktreeIds.forEach(clearDelete)),
+      Effect.sync(() => worktreeIds.forEach((id) => markDelete(id, kind))),
+      () =>
+        Effect.sync(() => worktreeIds.forEach((id) => clearDelete(id, kind))),
     );
   });
 
@@ -70,11 +87,13 @@ export const makeMarks = Effect.sync(() => {
   const refusal = (worktreeId: string, projectId: string): string | null =>
     quitting
       ? "App is shutting down; refusing to start a new script."
-      : deletes.has(worktreeId)
+      : kindOf(worktreeId) === "remove"
         ? "This worktree is being deleted."
-        : projectRemovals.has(projectId)
-          ? "This project is being removed."
-          : null;
+        : kindOf(worktreeId) === "move"
+          ? "This worktree is being moved."
+          : projectRemovals.has(projectId)
+            ? "This project is being removed."
+            : null;
 
   return {
     assertMutable,
@@ -87,7 +106,8 @@ export const makeMarks = Effect.sync(() => {
       quitting = true;
     }),
     deleteIds: (): ReadonlySet<string> => new Set(deletes.keys()),
-    removals: () => deletes.size + projectRemovals.size,
+    removals: () => counted("remove") + projectRemovals.size,
+    moves: () => counted("move"),
     underRemoval: (ids: {
       readonly projectId?: string;
       readonly worktreeId?: string;

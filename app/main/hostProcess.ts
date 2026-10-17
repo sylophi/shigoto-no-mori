@@ -119,6 +119,7 @@ const BUSY_DEADLINE = "3 seconds";
 const IDLE = {
   runningScripts: 0,
   inflightDeletes: 0,
+  inflightMoves: 0,
   engineChanges: 0,
   busyTerminals: 0,
 } as const;

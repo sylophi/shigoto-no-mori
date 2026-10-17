@@ -11,13 +11,9 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as Agents from "@shigomori/engine/Agents";
@@ -42,10 +38,8 @@ import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as WtFolder from "@shigomori/engine/WtFolder";
 import {
   AgentHarnessStatusListSchema,
-  CarryOverReportSchema,
   CleanupErrorSchema,
   type CleanupError,
-  type CreateWorktreeResult,
   type DeleteStackResult,
   DetectedLauncherSchema,
   type DeviceSettingsPatch,
@@ -58,76 +52,32 @@ import {
   ProjectIconSchema,
   ProjectRowSchema,
   ProjectSchema,
-  type ScriptEvent,
-  ScriptEventSchema,
   type ShigomoriConfig,
   ShigomoriConfigSchema,
   type ShigomoriWorktreeData,
   StoredGlobalConfigSchema,
   StoredShigomoriConfigSchema,
-  type Worktree,
-  type WorktreeCarryOverComplete,
   type WorktreeDescription,
   WorktreeIdentitySchema,
-  WorktreeLifecyclePhaseSchema,
-  type WorktreeLifecyclePhase,
   WorktreeSchema,
 } from "@shigomori/contracts/schemas";
 import { DoctorReportSchema } from "@shigomori/contracts/modules/cli";
 import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
-import {
-  ConvertRefusedError,
-  isEntityGoneError,
-} from "@shigomori/contracts/errors";
-import * as HostScripts from "@host/lib/Scripts";
+import { ConvertRefusedError } from "@shigomori/contracts/errors";
 import { shellQuote } from "@host/lib/util/shellQuote";
-import { log } from "@shared/log";
 import {
   asCall,
   asChange,
+  changing,
   EngineCallError,
-  EngineRuns,
   engineFailure,
   locate,
   projectById,
   type Services,
 } from "./Engine";
 
-// Renderer-bound emit callbacks supplied by the IPC handler, fed from
-// the engine's lifecycle events.
-interface WorktreeOperationNotifiers {
-  notifyPhase: (payload: WorktreeLifecyclePhase) => void;
-  notifyCarryOverComplete: (payload: WorktreeCarryOverComplete) => void;
-  notifyScript: (payload: ScriptEvent) => void;
-}
-
 const decodeWorktree = Schema.decodeUnknownSync(WorktreeSchema);
-const decodeCarryOverReport = Schema.decodeUnknownSync(CarryOverReportSchema);
 const decodeCleanupError = Schema.decodeUnknownSync(CleanupErrorSchema);
-const decodeScriptEvent = Schema.decodeUnknownSync(ScriptEventSchema);
-const decodePhase = Schema.decodeUnknownSync(
-  WorktreeLifecyclePhaseSchema.fields.phase,
-);
-
-// A "script" event, as the script event it carries (the event tag
-// itself is the reporter's, not the payload's).
-function scriptEventOf(
-  event: Extract<Worktrees.WorktreeEvent, { event: "script" }>,
-): ScriptEvent {
-  const { event: _event, ...scriptEvent } = event;
-  return decodeScriptEvent(scriptEvent);
-}
-
-// A reporter that forwards the scripts a removal runs and nothing else.
-const scriptReporter = (
-  scripts: HostScripts.LifecycleRuns,
-): Landing.Reporter => ({
-  report: (event) =>
-    Effect.sync(() => {
-      if (event.event === "script") scripts.forward(scriptEventOf(event));
-    }),
-  color: true,
-});
 
 const quiet: Landing.Reporter = { report: () => Effect.void, color: true };
 
@@ -142,180 +92,51 @@ function guardRefusal(error: unknown): ConvertRefusedError | null {
   return null;
 }
 
-// Streamed create/adopt: answer on the "created" event (the app
-// navigates immediately) and keep forwarding lifecycle events to the
-// renderer until the run ends, the run going on in the engine's scope
-// (EngineRuns). resolveOn "exit" waits out the WHOLE run instead
-// (carry-over and setup included) for callers that sequence more work
-// after the create, like the pull orchestration's dirty apply; a
-// post-created failure still answers with the worktree, matching the
-// early answer where such failures only surface as lifecycle events.
-//
-// `cancelled` (a move's cancel) interrupts the run, but only once the
-// "created" event is in: the worktree exists from that point and the
-// caller can remove it, where an interrupt during `git worktree add`
-// would leave a half-made checkout nobody can name. What precedes
-// "created" is that one git command, so the wait is short. A run
-// cancelled after "created" answers with the worktree like any run
-// whose lifecycle step failed, and the caller knows its own cancel to
-// roll back.
-type CreateFailure = ConvertRefusedError | ReturnType<typeof engineFailure>;
+type Ids = { projectId: string; worktreeId?: string };
 
-const runStreamingCreate = Effect.fnUntraced(function* (
-  start: (
-    reporter: Worktrees.Reporter,
-  ) => Effect.Effect<unknown, unknown, Services>,
-  project: Project,
-  worktreeId: string | undefined,
-  notify: WorktreeOperationNotifiers,
-  resolveOn: "created" | "exit" = "created",
-  cancelled: Effect.Effect<void> = Effect.never,
-) {
-  const { scope } = yield* EngineRuns;
-  const ids = { projectId: project.id, worktreeId };
-  // The worktree once "created" is in, or why the run ended before it.
-  const made = yield* Deferred.make<Worktree, CreateFailure>();
-  let created: Worktree | null = null;
-  const hostScripts = yield* HostScripts.Scripts;
-  const scripts = yield* hostScripts.lifecycleRuns(notify.notifyScript);
-  // The host's create mark (which refuses a delete or move) opens and
-  // closes with the phases the page disables its delete button on,
-  // so the two agree. A run that dies mid-lifecycle never sends its
-  // "idle", so the end closes an open phase itself.
-  let phaseOpen = false;
-  const setPhase = (id: string, phase: WorktreeLifecyclePhase["phase"]) => {
-    if (phase === "idle") {
-      if (!phaseOpen) return;
-      phaseOpen = false;
-      hostScripts.clearCreate(id);
-    } else if (!phaseOpen) {
-      phaseOpen = true;
-      hostScripts.markCreate(id);
-    }
-    notify.notifyPhase({ projectId: project.id, worktreeId: id, phase });
-  };
-  const onEvent = (event: Worktrees.WorktreeEvent) => {
-    switch (event.event) {
-      case "created": {
-        created = decodeWorktree(event.worktree);
-        Deferred.doneUnsafe(made, Exit.succeed(created));
-        break;
-      }
-      case "phase": {
-        if (!created) break;
-        setPhase(created.id, decodePhase(event.phase));
-        break;
-      }
-      case "carryOver": {
-        if (!created) break;
-        notify.notifyCarryOverComplete({
-          projectId: project.id,
-          worktreeId: created.id,
-          report: decodeCarryOverReport(event.report),
-        });
-        break;
-      }
-      case "script":
-        scripts.forward(scriptEventOf(event));
-        break;
-    }
-  };
-  const reporter: Worktrees.Reporter = {
-    report: (event) =>
-      Effect.sync(() => {
-        // A schema mismatch before "created" fails the whole call;
-        // after it the caller has its answer, so it is logged instead
-        // of lost.
-        try {
-          onEvent(event);
-        } catch (error) {
-          if (created === null) {
-            Deferred.doneUnsafe(made, Exit.fail(engineFailure(error, ids)));
-          } else {
-            log.warn("[engine] mid-run event failed validation", error);
-          }
-        }
-      }),
-    color: true,
-  };
-  const run = asChange(Effect.result(start(reporter)), ids).pipe(
-    Effect.onExit((exit) =>
-      Effect.sync(() => {
-        scripts.end();
-        // Before the run ends, so a caller sequencing work after it (a
-        // rollback that deletes it) finds the mark cleared.
-        if (created !== null) {
-          setPhase(created.id, "idle");
-          return;
-        }
-        const failure: CreateFailure =
-          Exit.isSuccess(exit) && Result.isFailure(exit.value)
-            ? (guardRefusal(exit.value.failure) ??
-              engineFailure(exit.value.failure, ids))
-            : new EngineCallError({
-                reason: "The worktree was not created.",
-                cause: Exit.isFailure(exit) ? exit.cause : undefined,
-              });
-        Deferred.doneUnsafe(made, Exit.fail(failure));
-      }),
+// A create's or an adopt's run, as a change, its guard's refusal kept.
+const asCreate = <A, E, R>(effect: Effect.Effect<A, E, R>, ids: Ids) =>
+  changing(effect, ids).pipe(
+    Effect.mapError(
+      (error) => guardRefusal(error) ?? engineFailure(error, ids),
     ),
   );
-  const fiber = yield* Effect.forkIn(run, scope);
-  // A cancel reaches the run once "created" is in, while it runs.
-  yield* cancelled.pipe(
-    Effect.andThen(Deferred.await(made)),
-    Effect.andThen(Fiber.interrupt(fiber)),
-    Effect.ignore,
-    Effect.raceFirst(Fiber.await(fiber)),
-    Effect.forkIn(scope),
-  );
-  const worktree = yield* Deferred.await(made);
-  if (resolveOn === "exit") yield* Fiber.await(fiber);
-  return { worktree } satisfies CreateWorktreeResult;
-});
 
+// The engine's create, every event of its run to `reporter`
+// (host/lib/worktrees/creating.ts reads them).
 export const createWorktree = (
   project: Project,
   input: {
-    worktreeName?: string;
-    branchName?: string;
-    base?: string;
-    checkout?: boolean;
+    worktreeName?: string | undefined;
+    branchName?: string | undefined;
+    base?: string | undefined;
+    checkout?: boolean | undefined;
     // false has git write every tracked file instead of cloning them.
-    cloneFiles?: boolean;
+    cloneFiles?: boolean | undefined;
     // Leave the project's setup script out (carry-over and port
     // provision still run): a mirror or transplant told not to set
     // the copy up.
-    skipSetup?: boolean;
+    skipSetup?: boolean | undefined;
   },
-  notify: WorktreeOperationNotifiers,
-  opts: {
-    resolveOn?: "created" | "exit";
-    cancelled?: Effect.Effect<void>;
-  } = {},
+  reporter: Worktrees.Reporter,
 ) =>
-  runStreamingCreate(
-    (reporter) =>
-      Effect.gen(function* () {
-        const registered = yield* projectById(project.id);
-        return yield* (yield* Worktrees.Worktrees).create(
-          registered,
-          {
-            name: input.worktreeName || undefined,
-            branch: input.branchName || undefined,
-            base: input.base || undefined,
-            checkout: input.checkout,
-            skipSetup: input.skipSetup,
-            clone: input.cloneFiles !== false,
-          },
-          reporter,
-        );
-      }),
-    project,
-    undefined,
-    notify,
-    opts.resolveOn,
-    opts.cancelled,
+  asCreate(
+    Effect.gen(function* () {
+      const registered = yield* projectById(project.id);
+      return yield* (yield* Worktrees.Worktrees).create(
+        registered,
+        {
+          name: input.worktreeName || undefined,
+          branch: input.branchName || undefined,
+          base: input.base || undefined,
+          checkout: input.checkout,
+          skipSetup: input.skipSetup,
+          clone: input.cloneFiles !== false,
+        },
+        reporter,
+      );
+    }),
+    { projectId: project.id },
   );
 
 // force only once the user has seen the changes the convert wipes.
@@ -325,40 +146,38 @@ export const adoptWorktree = (
   project: Project,
   worktreeId: string,
   force: boolean,
-  notify: WorktreeOperationNotifiers,
+  reporter: Worktrees.Reporter,
 ) =>
-  runStreamingCreate(
-    (reporter) =>
-      Effect.gen(function* () {
-        const located = yield* locate(project.id, worktreeId);
-        return yield* (yield* Worktrees.Worktrees).adopt(
-          located,
-          { force },
-          reporter,
-        );
-      }),
-    project,
-    worktreeId,
-    notify,
+  asCreate(
+    Effect.gen(function* () {
+      const located = yield* locate(project.id, worktreeId);
+      return yield* (yield* Worktrees.Worktrees).adopt(
+        located,
+        { force },
+        reporter,
+      );
+    }),
+    { projectId: project.id, worktreeId },
   );
 
 // A removal's account of a cleanup script that failed, which left the
 // worktree in place.
-type Removal =
+export type Removal =
   | { ok: true; cleanupError?: undefined }
   | { ok: false; cleanupError: CleanupError };
 
-// A cancelled move's rollback puts each cleanup script on a clock
-// (timeoutMs).
+// The engine's removal, the scripts it runs to `reporter`, each cleanup
+// script on a clock of `cleanupWithin` ms when given.
 export const deleteWorktree = Effect.fnUntraced(function* (
   project: Project,
-  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
-  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
-  opts: { timeoutMs?: number } = {},
+  input: {
+    worktreeId: string;
+    force?: boolean | undefined;
+    skipCleanup?: boolean | undefined;
+    cleanupWithin?: number | undefined;
+  },
+  reporter: Worktrees.Reporter,
 ) {
-  const scripts = yield* (yield* HostScripts.Scripts).lifecycleRuns(
-    notify.notifyScript,
-  );
   const removal = Effect.gen(function* () {
     const located = yield* locate(project.id, input.worktreeId);
     return yield* (yield* Worktrees.Worktrees)
@@ -368,11 +187,11 @@ export const deleteWorktree = Effect.fnUntraced(function* (
           force: input.force === true,
           keepBranch: false,
           skipCleanup: input.skipCleanup === true,
-          ...(opts.timeoutMs === undefined
+          ...(input.cleanupWithin === undefined
             ? {}
-            : { cleanupWithin: opts.timeoutMs }),
+            : { cleanupWithin: input.cleanupWithin }),
         },
-        scriptReporter(scripts),
+        reporter,
       )
       .pipe(
         Effect.as<Removal>({ ok: true }),
@@ -390,7 +209,7 @@ export const deleteWorktree = Effect.fnUntraced(function* (
   return yield* asChange(removal, {
     projectId: project.id,
     worktreeId: input.worktreeId,
-  }).pipe(Effect.ensuring(Effect.sync(scripts.end)));
+  });
 });
 
 // The merged layers of a stack under the worktree `worktreeId` names,
@@ -420,23 +239,18 @@ export const planStack = Effect.fnUntraced(function* (
 export const deleteStack = Effect.fnUntraced(function* (
   project: Project,
   removal: Landing.StackRemoval,
-  notify: Pick<WorktreeOperationNotifiers, "notifyScript"> & {
-    readonly removedOther: (worktreeId: string) => void;
-  },
+  reporter: Worktrees.Reporter,
+  removedOther: (worktreeId: string) => void,
 ) {
-  const scripts = yield* (yield* HostScripts.Scripts).lifecycleRuns(
-    notify.notifyScript,
-  );
   const doc = yield* asChange(
     Effect.flatMap(Landing.Landing, (landing) =>
       landing.removeStack(removal, {
-        ...scriptReporter(scripts),
-        removedOther: (removed) =>
-          Effect.sync(() => notify.removedOther(removed.id)),
+        ...reporter,
+        removedOther: (removed) => Effect.sync(() => removedOther(removed.id)),
       }),
     ),
     { projectId: project.id, worktreeId: removal.located.worktree.id },
-  ).pipe(Effect.ensuring(Effect.sync(scripts.end)));
+  );
   const removed = removedIdsOf(doc);
   if (doc.ok === true) {
     return { ok: true, removed } satisfies DeleteStackResult;
@@ -462,41 +276,6 @@ function removedIdsOf(doc: Landing.Document): string[] {
   if (doc.removed) ids.push(doc.removed.id);
   return ids;
 }
-
-// A removal that must happen (a nuke, the rollback of a failed or
-// cancelled move): forced, so the port-pool lease is released and the
-// teardown runs like any removal, and when that cleanup fails, again
-// without it, since leaving the worktree behind is not an option. A
-// cancelled move's rollback puts the cleanup on a clock too
-// (opts.timeoutMs): the user is cancelling something that hung, and a
-// teardown script that hangs the same way must not hold the cancel.
-export const forceRemoveWorktree = Effect.fnUntraced(function* (
-  project: Project,
-  worktreeId: string,
-  opts: { timeoutMs?: number } = {},
-) {
-  const silent = { notifyScript: () => {} };
-  // A cleanup the clock stopped reads as a cleanup failure. A worktree
-  // that is not there is not retried.
-  const result = yield* deleteWorktree(
-    project,
-    { worktreeId, force: true },
-    silent,
-    opts,
-  ).pipe(
-    Effect.catchIf(
-      (error) => !isEntityGoneError(error),
-      () => Effect.succeed({ ok: false as const }),
-    ),
-  );
-  if (!result.ok) {
-    yield* deleteWorktree(
-      project,
-      { worktreeId, force: true, skipCleanup: true },
-      silent,
-    );
-  }
-});
 
 // Forced: the app's cleanup box appears in merged-PR context, so the UI
 // has already gated mergedness.

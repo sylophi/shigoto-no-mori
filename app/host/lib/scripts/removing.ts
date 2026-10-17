@@ -1,15 +1,18 @@
-// What a worktree going takes with it: the tombstone protocol an in-app
-// delete or move runs under, and the reap of scripts whose worktree was
-// removed from outside the app.
+// What a worktree or a project going takes with it: the tombstone
+// protocol an in-app delete or move runs under, the reap of scripts whose
+// worktree was removed from outside the app, and the reap of a project's
+// scripts and terminals once it is gone.
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import type { Project } from "@shigomori/contracts/schemas";
+import * as Registry from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { holdRootChecks } from "@host/mirror/registry";
 import * as Ops from "../engineOps";
-import { loadProjects } from "../projects";
+import { loadProjects, refresh } from "../projects";
 import { Terminals } from "../terminals/Terminals";
-import type { RunningScriptWorktree } from "./documents";
+import type { Mark, RunningScriptWorktree } from "./documents";
 import type { Marks } from "./marks";
 import type { Runs } from "./runs";
 
@@ -24,10 +27,13 @@ export const makeRemoving = ({
     const terminals = yield* Terminals;
     const fs = yield* FileSystem.FileSystem;
     const worktrees = yield* Worktrees.Worktrees;
+    const registry = yield* Registry.Registry;
 
     // The protocol over the worktrees one mutation removes or moves (a
     // stack cleanup removes several): refuse a concurrent mutation of any
-    // of them or one still being created, mark them, stop their scripts
+    // of them or one still being created (in `mark.busy`'s words; a
+    // removal that must happen, with none, overlaps one under way), mark
+    // them with what the mutation does to them, stop their scripts
     // before the mutation (a dev server would otherwise outlive its
     // worktree or keep running in the old path), deal with their mirrors
     // after it, and always clear the marks. The mirrors go after, not
@@ -41,14 +47,15 @@ export const makeRemoving = ({
     const withDeletesInflight = Effect.fn("Scripts.withDeletesInflight")(
       function* <A, E, R, E2, R2>(
         worktreeIds: readonly string[],
-        busyMessage: string,
+        mark: Mark,
         run: Effect.Effect<A, E, R>,
         mirrorsAfter: (result: A) => Effect.Effect<unknown, E2, R2>,
       ) {
-        for (const id of worktreeIds) {
-          yield* marks.assertMutable(id, busyMessage);
+        const { busy } = mark;
+        if (busy !== undefined) {
+          for (const id of worktreeIds) yield* marks.assertMutable(id, busy);
         }
-        yield* marks.deleting(worktreeIds);
+        yield* marks.deleting(worktreeIds, mark.kind);
         // The roots vanish under the mutation: the mirror bookkeeping
         // leaves them to `mirrorsAfter` rather than read a move as a
         // removal.
@@ -162,14 +169,44 @@ export const makeRemoving = ({
       );
     }).pipe(Effect.withSpan("Scripts.reapRemoved"));
 
+    // A project gone takes its scripts and terminals, whoever removed it:
+    // the app (projects.remove), the doctor's repair, or a terminal's `sm
+    // projects remove`, which the store's change tells
+    // (host/process/layer.ts). Gone is what a fresh list no longer names,
+    // so one a removal kept (terrier still registers it) keeps them, and a
+    // list that can't be read takes nothing.
+    // It re-reads the list the sync readers (the git watcher, the fetch
+    // sweep) hold.
+    const reapRemovedProjects = Effect.gen(function* () {
+      const listed = yield* refresh.pipe(
+        Effect.map((projects) => new Set(projects.map(({ id }) => id))),
+        Effect.option,
+        Effect.provideService(Registry.Registry, registry),
+      );
+      if (Option.isSome(listed)) {
+        const gone = new Set(
+          runs
+            .worktrees()
+            .map(({ projectId }) => projectId)
+            .filter((id) => !listed.value.has(id)),
+        );
+        yield* Effect.forEach(gone, runs.stopProject, {
+          concurrency: "unbounded",
+          discard: true,
+        });
+      }
+      yield* terminals.closeMissing;
+    }).pipe(Effect.withSpan("Scripts.reapRemovedProjects"));
+
     return {
       withDeletesInflight,
+      reapRemovedProjects,
       withDeleteInflight: <A, E, R, E2, R2>(
         worktreeId: string,
-        busyMessage: string,
+        mark: Mark,
         run: Effect.Effect<A, E, R>,
         mirrorsAfter: (result: A) => Effect.Effect<unknown, E2, R2>,
-      ) => withDeletesInflight([worktreeId], busyMessage, run, mirrorsAfter),
+      ) => withDeletesInflight([worktreeId], mark, run, mirrorsAfter),
       reapRemoved,
     };
   });

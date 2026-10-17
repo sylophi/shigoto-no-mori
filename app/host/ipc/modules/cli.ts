@@ -13,7 +13,6 @@ import {
   uninstallShellIntegration,
 } from "@host/lib/cli/shell";
 import * as Ops from "@host/lib/engineOps";
-import { loadProjects, refresh } from "@host/lib/projects";
 import * as Scripts from "@host/lib/Scripts";
 import * as HostFacts from "@host/lib/HostFacts";
 import type { HostServices } from "@host/process/services";
@@ -45,24 +44,16 @@ export const cliHandlers = {
   shellUninstall: () => uninstallShellIntegration,
   doctor: () =>
     Effect.flatMap(doctorInput, (input) => Ops.runDoctor(false, input)),
-  // A repair can unregister a project whose directory is gone. The
-  // sync readers (the git watcher, the fetch sweep) hold the snapshot,
-  // and, as with projects.remove, scripts still running in a project
-  // that left have no UI left to stop them. Re-read whatever the report
-  // says: a repair that failed halfway can still have unregistered.
+  // A repair can unregister a project whose directory is gone, which
+  // takes its scripts and terminals, whatever the report says: a repair
+  // that failed halfway can still have unregistered.
   doctorFix: () =>
-    Effect.gen(function* () {
-      const before = loadProjects();
-      const report = yield* Effect.flatMap(doctorInput, (input) =>
-        Ops.runDoctor(true, input),
-      );
-      const after = new Set((yield* refresh).map((p) => p.id));
-      const scripts = yield* Scripts.Scripts;
-      yield* Effect.forEach(
-        before.filter(({ id }) => !after.has(id)),
-        ({ id }) => scripts.stopProject(id),
-        { concurrency: "unbounded", discard: true },
-      );
-      return report;
-    }),
+    Effect.flatMap(doctorInput, (input) => Ops.runDoctor(true, input)).pipe(
+      Effect.ensuring(
+        Effect.flatMap(
+          Scripts.Scripts,
+          (scripts) => scripts.reapRemovedProjects,
+        ),
+      ),
+    ),
 } satisfies EffectHandlers<typeof cliContract, unknown, HostServices>;

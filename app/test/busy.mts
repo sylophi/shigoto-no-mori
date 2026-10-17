@@ -14,7 +14,11 @@
 //   - a tombstone interrupted or dead leaves no mark behind: the
 //     worktree can be deleted and run in again,
 //   - a peer's data-folder move is refused over a terminal running a
-//     job, in the words a quit would ask with.
+//     job, in the words a quit would ask with,
+//   - a move under its mark reads as a worktree being moved, not
+//     removed, and refuses a run there in those words,
+//   - an auto-pull's fast-forward, which holds the data-folder lock,
+//     counts as a change while it runs.
 //
 // Run: pnpm test busy.
 import assert from "node:assert/strict";
@@ -38,7 +42,9 @@ import { worktreesHandlers } from "../host/ipc/modules/worktrees.ts";
 import { asChange } from "../host/lib/Engine.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
+import { autoPullWorktree } from "../host/lib/worktrees/autoPullSweep.ts";
 import * as Scripts from "../host/lib/Scripts.ts";
+import * as HostWorktrees from "../host/lib/Worktrees.ts";
 import * as Terminals from "../host/lib/terminals/Terminals.ts";
 import { busyDetail, busyRemoteRefusal } from "../shared/busy.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
@@ -98,7 +104,11 @@ it("a create's setup script reads as a script running", async () => {
       },
     }),
   );
-  await runHost(Ops.createWorktree(project, { worktreeName: "fox" }, quiet));
+  await runHost(
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.create({ projectId: project.id, worktreeName: "fox" }, quiet),
+    ),
+  );
   try {
     await waitFor(() => existsSync(started), "the setup script to start");
     assert.equal(
@@ -117,9 +127,15 @@ it("a create's setup script reads as a script running", async () => {
 it("one delete reads as one worktree being removed", async () => {
   await runHost(Ops.writeProjectConfig(project.id, { defaultBranch: "main" }));
   const { worktree } = await runHost(
-    Ops.createWorktree(project, { worktreeName: "otter" }, quiet, {
-      resolveOn: "exit",
-    }),
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.create(
+        { projectId: project.id, worktreeName: "otter" },
+        quiet,
+        {
+          resolveOn: "exit",
+        },
+      ),
+    ),
   );
   // Holds a `git status` while `slow` exists, then lets git scan the
   // tree itself.
@@ -183,6 +199,7 @@ it("any other engine change reads as a change being made", () => {
   const one = {
     runningScripts: 0,
     inflightDeletes: 0,
+    inflightMoves: 0,
     engineChanges: 1,
     busyTerminals: 0,
   };
@@ -246,7 +263,10 @@ it("a peer's data-folder move is refused over a busy terminal", async () => {
 
 it("a tombstone interrupted or dead leaves no mark behind", async () => {
   const worktree = { id: "gone-wt", name: "gone", branch: "gone", path: root };
-  const busyWords = "This worktree is already being removed.";
+  const mark = {
+    kind: "remove",
+    busy: "This worktree is already being removed.",
+  } as const;
   await runHost(
     Effect.gen(function* () {
       const scripts = yield* Scripts.Scripts;
@@ -254,7 +274,7 @@ it("a tombstone interrupted or dead leaves no mark behind", async () => {
       const interrupted = yield* Effect.forkChild(
         scripts.withDeleteInflight(
           worktree.id,
-          busyWords,
+          mark,
           Deferred.succeed(inside, undefined).pipe(
             Effect.andThen(Effect.never),
           ),
@@ -269,7 +289,7 @@ it("a tombstone interrupted or dead leaves no mark behind", async () => {
       const died = yield* Effect.exit(
         scripts.withDeleteInflight(
           worktree.id,
-          busyWords,
+          mark,
           Effect.die("the mutation died"),
           () => Effect.void,
         ),
@@ -278,7 +298,7 @@ it("a tombstone interrupted or dead leaves no mark behind", async () => {
       assert.equal((yield* scripts.busy).inflightDeletes, 0);
 
       // Neither a delete nor a run is refused there now.
-      yield* scripts.assertWorktreeMutable(worktree.id, busyWords);
+      yield* scripts.assertWorktreeMutable(worktree.id, mark.busy);
       yield* scripts.start({
         command: "exit 0",
         slot: { kind: "package", name: "after" },
@@ -288,4 +308,97 @@ it("a tombstone interrupted or dead leaves no mark behind", async () => {
       });
     }),
   );
+});
+
+it("a move under its mark reads as a worktree being moved, and a run there is refused in those words", async () => {
+  const worktree = {
+    id: "moving-wt",
+    name: "moving",
+    branch: "moving",
+    path: root,
+  };
+  await waitFor(
+    async () => busyDetail(await busy(), "quit") === null,
+    "the last proof's run to end",
+  );
+  await runHost(
+    Effect.gen(function* () {
+      const scripts = yield* Scripts.Scripts;
+      const inside = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const moving = yield* Effect.forkChild(
+        scripts.withDeleteInflight(
+          worktree.id,
+          { kind: "move", busy: "This worktree is already being moved." },
+          Deferred.succeed(inside, undefined).pipe(
+            Effect.andThen(Deferred.await(release)),
+          ),
+          () => Effect.void,
+        ),
+      );
+      yield* Deferred.await(inside);
+      const counted = yield* scripts.busy;
+      assert.equal(
+        busyDetail(counted, "quit"),
+        "1 worktree is being moved. Quitting now will interrupt it.",
+      );
+      assert.equal(
+        busyRemoteRefusal(counted, "move"),
+        "1 worktree is still being moved there. Wait for that to finish before moving the data folder.",
+      );
+      const refused = yield* Effect.flip(
+        scripts.start({
+          command: "exit 0",
+          slot: { kind: "package", name: "during" },
+          worktree,
+          project: { id: project.id, path: repo, name: "repo" },
+          notify: () => {},
+        }),
+      );
+      assert.equal(refused.message, "This worktree is being moved.");
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(moving);
+    }),
+  );
+  assert.equal(busyDetail(await busy(), "quit"), null);
+});
+
+it("an auto-pull's fast-forward counts as a change while it runs", async () => {
+  const origin = join(root, "pull-origin.git");
+  const seed = join(root, "pull-seed");
+  const pulling = join(root, "pulling");
+  git(root, "init", "-q", "--bare", "-b", "main", origin);
+  git(root, "clone", "-q", repo, seed);
+  git(seed, "push", "-q", origin, "HEAD:main");
+  git(root, "clone", "-q", origin, pulling);
+  writeFileSync(join(seed, "b.txt"), "b\n");
+  git(seed, "add", "b.txt");
+  git(seed, "commit", "-q", "-m", "b");
+  git(seed, "push", "-q", origin, "HEAD:main");
+  git(pulling, "fetch", "-q");
+  // Holds the pull's `git status` while `slow` exists.
+  const slow = join(root, "pull.slow");
+  const holding = join(root, "pull.holding");
+  const hook = join(root, "pull-fsmonitor");
+  writeFileSync(
+    hook,
+    `#!/bin/sh\n[ -f '${slow}' ] || exit 1\ntouch '${holding}'\nwhile [ -f '${slow}' ]; do sleep 0.05; done\nexit 1\n`,
+  );
+  chmodSync(hook, 0o755);
+  git(pulling, "config", "core.fsmonitor", hook);
+  writeFileSync(slow, "");
+  const pull = runHost(
+    autoPullWorktree(
+      { projectId: "pulling", id: "pulling", path: pulling, detached: false },
+      { busy: false },
+    ),
+  );
+  try {
+    await waitFor(() => existsSync(holding), "the pull's status check");
+    assert.equal((await busy()).engineChanges, 1);
+  } finally {
+    rmSync(slow);
+  }
+  assert.deepEqual(await pull, { kind: "pulled", commits: 1 });
+  assert.equal((await busy()).engineChanges, 0);
 });

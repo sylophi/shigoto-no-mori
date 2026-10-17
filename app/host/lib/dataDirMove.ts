@@ -228,7 +228,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // safely killed or moved under. Refuse instead.
   const scripts = yield* Scripts.Scripts;
   const busy = yield* scripts.busy;
-  if (busy.inflightDeletes + busy.engineChanges > 0) {
+  if (busy.inflightDeletes + busy.inflightMoves + busy.engineChanges > 0) {
     return yield* new DataDirMoveError({
       reason:
         "Another operation is still running (worktree delete or CLI " +
@@ -405,7 +405,10 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         });
       }
     }
-    yield* scripts.deleting(entries.map(({ oldId }) => oldId));
+    yield* scripts.deleting(
+      entries.map(({ oldId }) => oldId),
+      "move",
+    );
     // Each moved worktree with its dirty capture as it is now, read
     // strictly: the forward re-key carries that capture or fails, and an
     // undo carries back that one.

@@ -15,7 +15,9 @@
 //   - a project whose worktrees can't be read for a moment keeps its
 //     terminals through the sweep a delete ends with, while the deleted
 //     worktree's terminal closes, and the delete's mirror follow-up and
-//     its "removed" announcement still happen.
+//     its "removed" announcement still happen,
+//   - a project gone takes its scripts and terminals, whether the app
+//     removed it or a terminal's `sm projects remove` did.
 //
 // Run: pnpm test worktree-removals.
 import assert from "node:assert/strict";
@@ -33,10 +35,12 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, it } from "vitest";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
+import { projectsHandlers } from "../host/ipc/modules/projects.ts";
 import { worktreesHandlers } from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import * as Scripts from "../host/lib/Scripts.ts";
+import * as HostWorktrees from "../host/lib/Worktrees.ts";
 import * as Terminals from "../host/lib/terminals/Terminals.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -107,7 +111,11 @@ const create = async (
 ): Promise<Worktree> =>
   (
     await runHost(
-      Ops.createWorktree(project, input, quiet, { resolveOn: "exit" }),
+      Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+        worktrees.create({ projectId: project.id, ...input }, quiet, {
+          resolveOn: "exit",
+        }),
+      ),
     )
   ).worktree;
 
@@ -441,6 +449,49 @@ it("a project unreadable for a moment keeps its terminals through a delete's swe
       Effect.flatMap(Terminals.Terminals, (terminals) =>
         terminals.close(owlTerminal.terminalId).pipe(Effect.ignore),
       ),
+    );
+  }
+});
+
+const running = (worktree: Worktree) =>
+  runHost(
+    Effect.map(Scripts.Scripts, (scripts) => scripts.runningIn(worktree.id)),
+  );
+
+it("a project gone takes its scripts and terminals, removed in the app or from a terminal", async () => {
+  for (const [name, remove] of [
+    // `sm projects remove` in a terminal: the engine's removal alone,
+    // which the store's change tells the app of.
+    [
+      "left-terminal",
+      (project: Project) =>
+        runHost(
+          Effect.andThen(
+            Ops.removeProject(project.id),
+            Effect.flatMap(
+              Scripts.Scripts,
+              (scripts) => scripts.reapRemovedProjects,
+            ),
+          ),
+        ),
+    ],
+    [
+      "left-app",
+      (project: Project) =>
+        runHost(projectsHandlers.remove({ id: project.id })),
+    ],
+  ] as const) {
+    const { project } = await repoAt(name);
+    const lynx = await create(project, { worktreeName: "lynx" });
+    const pid = join(root, `${name}.pid`);
+    await runIn(project, lynx, pid);
+    await waitFor(() => existsSync(pid), "the script to start");
+    const { terminalId } = await open(project, lynx);
+    await remove(project);
+    assert.equal(await running(lynx), 0, `${name}: its script was stopped`);
+    assert.ok(
+      !(await openIds()).includes(terminalId),
+      `${name}: its terminal closed`,
     );
   }
 });

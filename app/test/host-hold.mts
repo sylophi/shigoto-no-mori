@@ -72,6 +72,7 @@ import { sleepingClock, testClock, waitFor } from "./lib/checkKit.mts";
 const IDLE = {
   runningScripts: 0,
   inflightDeletes: 0,
+  inflightMoves: 0,
   engineChanges: 0,
   busyTerminals: 0,
 };

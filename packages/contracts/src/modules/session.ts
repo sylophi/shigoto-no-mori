@@ -30,6 +30,7 @@ const BusyOperationsSchema = strict(
   Schema.Struct({
     runningScripts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     inflightDeletes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    inflightMoves: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     engineChanges: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     busyTerminals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }),

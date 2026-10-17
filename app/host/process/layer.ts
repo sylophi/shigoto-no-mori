@@ -111,9 +111,10 @@ function onExternalStateChange() {
       ),
     ),
   ).catch(() => {});
-  // A worktree or project gone takes its terminals with it.
+  // A worktree or project gone takes its terminals with it, and a
+  // project its scripts.
   void Graph.runIfUp(
-    Effect.flatMap(Terminals.Terminals, (terminals) => terminals.closeMissing),
+    Effect.flatMap(Scripts.Scripts, (scripts) => scripts.reapRemovedProjects),
   );
   // The app's only chance to notice an `sm rm` run in a terminal, which
   // leaves a script the app started there running in a deleted cwd and

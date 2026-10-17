@@ -229,7 +229,12 @@ it("an auto-pull worktree stays shelved through a fast-forward, not through a co
   await git(box.seed, ["push", "-q", "origin", "feature"]);
   await git(box.worktree, ["fetch", "-q"]);
   const outcome = await autoPullWorktree(
-    { path: box.worktree, detached: false },
+    {
+      projectId: box.projectRef.id,
+      id: box.id,
+      path: box.worktree,
+      detached: false,
+    },
     { busy: false },
   );
   assert.equal(outcome.kind, "pulled");

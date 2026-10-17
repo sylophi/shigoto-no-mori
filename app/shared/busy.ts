@@ -6,8 +6,10 @@
 export type BusyOperations = {
   // PTY runs and the engine's lifecycle runs alike.
   readonly runningScripts: number;
-  // Worktree deletes and moves, and project removals.
+  // Worktree deletes, and project removals.
   readonly inflightDeletes: number;
+  // Worktree moves and renames, the data-folder move's included.
+  readonly inflightMoves: number;
   // Any other change the engine is making.
   readonly engineChanges: number;
   // Terminals whose shell runs something.
@@ -41,6 +43,7 @@ function isBusy(busy: BusyOperations): boolean {
     busy.runningScripts > 0 ||
     busy.busyTerminals > 0 ||
     busy.inflightDeletes > 0 ||
+    busy.inflightMoves > 0 ||
     busy.engineChanges > 0
   );
 }
@@ -65,6 +68,14 @@ function runningWords(
   };
 }
 
+// "1 worktree is", and the pronoun for it.
+function worktreeWords(n: number): { subject: string; obj: string } {
+  return {
+    subject: pluralize(n, `${n} worktree is`, `${n} worktrees are`),
+    obj: pluralize(n, "it", "them"),
+  };
+}
+
 // "1 change is", and the pronoun for it.
 function changeWords(busy: BusyOperations): { subject: string; obj: string } {
   const n = busy.engineChanges;
@@ -86,10 +97,13 @@ export function busyDetail(
   if (running !== null) {
     return `${running.subject} still running. ${gerund} now will stop ${running.obj}.`;
   }
-  const n = busy.inflightDeletes;
-  if (n > 0) {
-    const subject = pluralize(n, `${n} worktree is`, `${n} worktrees are`);
+  if (busy.inflightDeletes > 0) {
+    const { subject } = worktreeWords(busy.inflightDeletes);
     return `${subject} being removed. ${gerund} now will interrupt cleanup and may leave files behind.`;
+  }
+  if (busy.inflightMoves > 0) {
+    const { subject, obj } = worktreeWords(busy.inflightMoves);
+    return `${subject} being moved. ${gerund} now will interrupt ${obj}.`;
   }
   const changes = changeWords(busy);
   return `${changes.subject} still being made. ${gerund} now will interrupt ${changes.obj}.`;
@@ -114,9 +128,11 @@ export function busyRemoteRefusal(
   if (running !== null) {
     return `${running.subject} still running there. Stop ${running.obj} before ${verb}.`;
   }
-  const n = busy.inflightDeletes;
-  if (n > 0) {
-    return `${pluralize(n, `${n} worktree is`, `${n} worktrees are`)} still being removed there. Wait for that to finish before ${verb}.`;
+  if (busy.inflightDeletes > 0) {
+    return `${worktreeWords(busy.inflightDeletes).subject} still being removed there. Wait for that to finish before ${verb}.`;
+  }
+  if (busy.inflightMoves > 0) {
+    return `${worktreeWords(busy.inflightMoves).subject} still being moved there. Wait for that to finish before ${verb}.`;
   }
   const changes = changeWords(busy);
   return `${changes.subject} still being made there. Wait for ${changes.obj} to finish before ${verb}.`;

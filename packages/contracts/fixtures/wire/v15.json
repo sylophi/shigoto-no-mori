@@ -1937,6 +1937,7 @@
     "success": {
       "runningScripts": 3,
       "inflightDeletes": 1,
+      "inflightMoves": 1,
       "engineChanges": 2,
       "busyTerminals": 1
     }

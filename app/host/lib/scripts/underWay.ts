@@ -24,8 +24,9 @@ export const makeUnderWay = ({
         (busyTerminals): BusyOperations => ({
           runningScripts: runs.count(),
           inflightDeletes: marks.removals(),
-          // An engine change on a worktree or project being removed is
-          // that removal, counted once.
+          inflightMoves: marks.moves(),
+          // An engine change on a worktree or project being removed or
+          // moved is that removal or move, counted once.
           engineChanges: engineChanges
             .underWay()
             .filter((ids) => !marks.underRemoval(ids)).length,

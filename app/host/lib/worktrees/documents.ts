@@ -1,6 +1,12 @@
-// What the Worktrees service's moves and removals (../Worktrees.ts)
-// share.
+// What the Worktrees service's areas (../Worktrees.ts) share.
+import {
+  type ScriptEvent,
+  ScriptEventSchema,
+} from "@shigomori/contracts/schemas";
+import type * as EngineWorktrees from "@shigomori/engine/Worktrees";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type * as Scripts from "../Scripts";
 
 const counted = (n: number, noun: string) =>
   n === 0 ? [] : [`${n} ${noun}${n === 1 ? "" : "s"}`];
@@ -36,3 +42,35 @@ export class ScriptsRunningError extends Schema.TaggedError<ScriptsRunningError>
     return `scripts-running: ${this.scripts} script(s) are running in this worktree`;
   }
 }
+
+const decodeScriptEvent = Schema.decodeUnknownSync(ScriptEventSchema);
+
+// A "script" event of an engine run, as the script event it carries (the
+// event tag itself is the reporter's, not the payload's).
+export function scriptEventOf(
+  event: Extract<EngineWorktrees.WorktreeEvent, { event: "script" }>,
+): ScriptEvent {
+  const { event: _event, ...scriptEvent } = event;
+  return decodeScriptEvent(scriptEvent);
+}
+
+// `use` given a reporter that books the lifecycle scripts an engine run
+// reports (Scripts.lifecycleRuns), their events to `notify`, and
+// forwards nothing else.
+export const bookingScripts = <A, E, R>(
+  scripts: Scripts.Scripts["Service"],
+  notify: Scripts.NotifyScriptEvent,
+  use: (reporter: EngineWorktrees.Reporter) => Effect.Effect<A, E, R>,
+) =>
+  Effect.acquireUseRelease(
+    scripts.lifecycleRuns(notify),
+    (runs) =>
+      use({
+        report: (event) =>
+          Effect.sync(() => {
+            if (event.event === "script") runs.forward(scriptEventOf(event));
+          }),
+        color: true,
+      }),
+    (runs) => Effect.sync(runs.end),
+  );
