@@ -27,7 +27,6 @@ const owner = pathToFileURL(join(repoRoot, "testTemp.mts")).href;
 const ENDS = {
   exit: "",
   kill: 'process.kill(process.pid, "SIGKILL");',
-  // A folder left read only, holding one that can't even be listed.
   lockedKill: `
 mkdirSync(join(tmpdir(), "locked", "sealed"), { recursive: true });
 writeFileSync(join(tmpdir(), "locked", "sealed", "file"), "");
