@@ -4,10 +4,9 @@
 // on, monotonic time and every timer stand still, then a wake), and a
 // stopped process (both clocks run on, no timer runs), on a TestClock
 // (lib/checkKit.mts, `sleepingClock`). Covers the links' liveness
-// (shared/remote/liveness.ts) and its one-shot question (the mirror
-// daemon's ping, the watchdog's rounds, a quit's busy ask), the hub
-// socket's pings and wake probe
-// on it (shared/hub/connection.ts), the
+// (shared/remote/liveness.ts), its one-shot question (the mirror
+// daemon's ping, the watchdog's rounds, a quit's busy ask) and the hub
+// socket's pings and wake probe on it (shared/hub/connection.ts), the
 // supervisor's and the direct keeper's uptime (shared/remote/
 // supervisor.ts, shared/hub/directKeeper.ts), and a window's renewal of
 // a peer's attention after one failed ask (renderer/lib/remote/
@@ -245,12 +244,17 @@ it("liveness: a probe set aside by a late turn is interrupted, so a hidden page'
       }),
     }),
   );
-  for (let turn = 0; turn < 10; turn++) {
-    clock.stop(45_000);
-    await clock.advance(15_000);
+  // Ten minutes of a throttled page: whatever a timer asked for, it
+  // runs about a minute late.
+  for (let turn = 0; turn < 120; turn++) {
+    clock.stop(55_000);
+    await clock.advance(5_000);
   }
   assert.equal(most, 1, "probes piled up");
   assert.equal(deaths, 0, "judged on a turn it had no time to hear in");
+  // Its turns on time again, the silent peer is found.
+  await clock.advance(45_000);
+  assert.equal(deaths, 1, "the silent peer was never judged");
 });
 
 it("liveness: one question whose limit came late, by a stop or a sleep, is asked again rather than answered none, and silence through a limit this end ran is none", async () => {

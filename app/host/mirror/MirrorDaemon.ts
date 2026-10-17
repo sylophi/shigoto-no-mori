@@ -124,9 +124,9 @@ const RESTART_LADDER_MS: readonly [number, ...number[]] = [
 const REQUEST_TIMEOUT_MS = 120_000;
 // A request still waiting this long asks whether the daemon answers at
 // all, and one that doesn't answer a ping within PING_ANSWER_MS of the
-// host running is replaced. Its reader answers a ping at once whatever else it is
-// running (requests run beside it, file-sync/engine.go), so silence
-// means a stopped or hung process, not a slow create.
+// host running is replaced. Its reader answers a ping at once whatever
+// else it is running (requests run beside it, file-sync/engine.go), so
+// silence means a stopped or hung process, not a slow create.
 const STALL_CHECK_MS = 30_000;
 const PING_ANSWER_MS = 10_000;
 

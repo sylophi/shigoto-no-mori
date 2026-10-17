@@ -1453,10 +1453,11 @@ it("liveness: a dialer cuts a peer only on a probe it had the whole timeout to a
     assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
       leaseMs: 5,
     });
-  // A hidden page: each turn a minute late, ten times over.
-  for (let turn = 0; turn < 10; turn++) {
-    stop(45_000);
-    await clock.advance(15_000);
+  // Ten minutes of a throttled page: whatever a timer asked for, it
+  // runs about a minute late.
+  for (let turn = 0; turn < 120; turn++) {
+    stop(55_000);
+    await clock.advance(5_000);
   }
   await answers();
   assert.equal(closed, 0, "a link cut on a probe it had no turn to answer");
