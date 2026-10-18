@@ -52,31 +52,36 @@ export const keptAnswers = Effect.fnUntraced(function* <K, A, E, R>(
   const lookups = yield* FiberSet.make();
   const entries = new Map<K, Entry<A, E>>();
 
-  const start = (key: K, at: Stamp) => {
-    const entry: Entry<A, E> = {
-      at,
-      result: Deferred.makeUnsafe<A, E>(),
-      keptMs: null,
-    };
-    entries.set(key, entry);
-    const run = Effect.updateContext(
-      lookup(key),
-      (input: Context.Context<never>) => Context.merge(context, input),
-    ).pipe(
-      Effect.onExit((exit) =>
-        Effect.sync(() => {
-          entry.keptMs = Exit.isSuccess(exit) ? answerMs : failureMs;
-          if (entry.keptMs === 0 && entries.get(key) === entry) {
-            entries.delete(key);
-          }
-          Deferred.doneUnsafe(entry.result, exit);
-        }),
-      ),
-    );
-    return Effect.as(FiberSet.run(lookups, run), entry);
-  };
+  // Settled by the lookup's fiber however it ends: interrupted with the
+  // layer, or never started on a set already closed, included.
+  const start = (key: K, at: Stamp) =>
+    Effect.gen(function* () {
+      const entry: Entry<A, E> = {
+        at,
+        result: Deferred.makeUnsafe<A, E>(),
+        keptMs: null,
+      };
+      entries.set(key, entry);
+      const fiber = yield* FiberSet.run(
+        lookups,
+        Effect.updateContext(lookup(key), (input: Context.Context<never>) =>
+          Context.merge(context, input),
+        ),
+      );
+      fiber.addObserver((exit) => {
+        entry.keptMs = Exit.isSuccess(exit) ? answerMs : failureMs;
+        if (entry.keptMs === 0 && entries.get(key) === entry) {
+          entries.delete(key);
+        }
+        Deferred.doneUnsafe(entry.result, exit);
+      });
+      return entry;
+    });
 
   return {
+    // The entry is set and its lookup started in one uninterruptible
+    // step: an asker interrupted between the two would leave an entry
+    // nothing settles, which every later get would wait on.
     get: (key: K): Effect.Effect<A, E> =>
       Clock.clockWith((clock) =>
         Effect.suspend(() => {
@@ -87,7 +92,10 @@ export const keptAnswers = Effect.fnUntraced(function* <K, A, E, R>(
             (entry.keptMs === null || ageOf(entry.at, now) < entry.keptMs);
           return fresh ? Effect.succeed(entry) : start(key, now);
         }),
-      ).pipe(Effect.flatMap((entry) => Deferred.await(entry.result))),
+      ).pipe(
+        Effect.uninterruptible,
+        Effect.flatMap((entry) => Deferred.await(entry.result)),
+      ),
     invalidate: (key: K): Effect.Effect<void> =>
       Effect.sync(() => {
         entries.delete(key);
