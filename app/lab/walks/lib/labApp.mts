@@ -21,6 +21,7 @@ import { basename, join } from "node:path";
 import { expect } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
+import { walkFailed } from "./failed.mts";
 
 const APP_DIR = join(import.meta.dirname, "..", "..", "..");
 const NAME = "Shigoto no Mori (lab)";
@@ -246,19 +247,37 @@ async function launch(
   let current = await start();
   const close = async () => {
     await current.stop();
-    // The app's own logs, kept for a look at a walk that failed in CI,
-    // where its root goes with it: the shell's under the walk's home,
-    // and the host's trace where Electron puts the logs folder, under
-    // the account's real home, which the walks' nuke clears at the end.
-    const keep = process.env["SM_WALK_LOGS"];
-    if (keep !== undefined && keep !== "") {
-      const walk = join(keep, basename(expect.getState().testPath ?? root));
-      for (const [from, to] of [
-        [join(home, "Library", "Logs"), walk],
-        [join(userInfo().homedir, "Library", "Logs", NAME), join(walk, "host")],
-      ] as const) {
-        if (existsSync(from)) cpSync(from, to, { recursive: true });
+    const walk = basename(expect.getState().testPath ?? root);
+    // The app's own logs: the shell's under the walk's home, and the
+    // host's trace where Electron puts the logs folder, under the
+    // account's real home, which the walks' nuke clears at the end.
+    const logs = [
+      [join(home, "Library", "Logs"), "shell"],
+      [join(userInfo().homedir, "Library", "Logs", NAME), "host"],
+    ] as const;
+    const copyLogs = (to: string) => {
+      for (const [from, name] of logs) {
+        if (existsSync(from)) cpSync(from, join(to, name), { recursive: true });
       }
+    };
+    // Every walk's, for a look at one that failed in CI, where its root
+    // goes with it.
+    const keep = process.env["SM_WALK_LOGS"];
+    if (keep !== undefined && keep !== "") copyLogs(join(keep, walk));
+    // A failed walk's root, its repos, data folder and the logs, kept
+    // where SM_WALK_FAILURES names (a folder in the checkout by default).
+    if (walkFailed()) {
+      copyLogs(join(root, "logs"));
+      const failures =
+        process.env["SM_WALK_FAILURES"] ??
+        join(APP_DIR, "lab", "walks", "failures");
+      const kept = join(
+        failures,
+        `${walk.replace(/\.walk\.mts$/, "")}-${new Date().toISOString().replace(/[:.]/g, "-")}`,
+      );
+      mkdirSync(failures, { recursive: true });
+      cpSync(root, kept, { recursive: true, verbatimSymlinks: true });
+      console.error(`[walks] ${walk} failed: its root and logs are at ${kept}`);
     }
     rmSync(root, { recursive: true, force: true });
   };

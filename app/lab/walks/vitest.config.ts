@@ -14,6 +14,7 @@ export default defineConfig({
   test: {
     include: ["lab/walks/*.walk.mts"],
     globalSetup: ["lab/walks/lib/teardown.mts"],
+    setupFiles: ["lab/walks/lib/setup.mts"],
     pool: "forks",
     fileParallelism: false,
     // A runner under load takes seconds to land what a click asked
