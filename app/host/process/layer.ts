@@ -26,6 +26,7 @@ import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as CliShell from "@host/lib/cli/shell";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
+import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
 import * as Views from "@host/lib/Views";
 import * as Ports from "@host/lib/Ports";
 import * as ScriptRuns from "@host/lib/scripts/ScriptRuns";
@@ -207,10 +208,10 @@ const dataDirHolders = Layer.effect(
   }),
 );
 
-// What the host answers from caches: other tools' (gh and
-// port-pool) and the login shell's config place.
+// What the host answers from caches: other tools' (gh, its PR maps
+// and port-pool) and the login shell's config place.
 const cachedAnswers = Layer.mergeAll(
-  GithubCli.layer,
+  PullRequestMaps.layer.pipe(Layer.provideMerge(GithubCli.layer)),
   CliShell.layer,
   Ports.layer,
 );

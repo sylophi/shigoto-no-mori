@@ -7,6 +7,7 @@ import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as FileSync from "@host/fileSync/FileSync";
 import type * as CliShell from "@host/lib/cli/shell";
 import type * as GithubCli from "@host/lib/githubCli/GithubCli";
+import type * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
 import type * as Ports from "@host/lib/Ports";
 import type * as Scripts from "@host/lib/Scripts";
 import type * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
@@ -36,6 +37,7 @@ export type HostServices =
   | Path.Path
   | FileSync.FileSync
   | GithubCli.GithubCli
+  | PullRequestMaps.PullRequestMaps
   | CliShell.HookShell
   | Views.Services
   | Ports.Ports

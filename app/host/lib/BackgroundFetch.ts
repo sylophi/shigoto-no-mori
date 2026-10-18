@@ -6,12 +6,12 @@
 // spawn per project every minute that nobody reads, and whoever
 // returns (this window on focus, a peer on its focus or its session
 // landing) asks for a pass at that moment. Broadcasts refsRefreshed
-// and projectPullRequestsRefreshed when a pass changed something so
-// the renderer, local or peer, can invalidate.
+// when a pass moved a ref; the PR map announces its own changes
+// (PullRequestMaps).
+import type { Project } from "@shigomori/contracts/schemas";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Git from "@shigomori/engine/Git";
@@ -23,12 +23,7 @@ import * as Queue from "effect/Queue";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
-import type * as GithubCli from "@host/lib/githubCli/GithubCli";
-import {
-  pullRequestMapsEqual,
-  readCachedProjectPullRequests,
-  refreshProjectPullRequests,
-} from "@host/lib/githubCli/pullRequests";
+import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
 import { loadProjects } from "@host/lib/projects";
 import * as Scripts from "@host/lib/Scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
@@ -83,10 +78,7 @@ export class BackgroundFetch extends Context.Service<
   }
 >()("sm/host/BackgroundFetch") {}
 
-type FetchServices =
-  | Engine.Services
-  | GithubCli.GithubCli
-  | ChildProcessSpawner.ChildProcessSpawner;
+type FetchServices = Engine.Services | ChildProcessSpawner.ChildProcessSpawner;
 
 // What a pass tells: the pushes on every wire, and a ref move the app
 // made itself, announced as the git watcher announces any.
@@ -107,6 +99,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     const ageOf = (at: Stamp) =>
       Math.max(now() - at.elapsed, clock.currentTimeMillisUnsafe() - at.wall);
     const scripts = yield* Scripts.Scripts;
+    const pullRequests = yield* PullRequestMaps.PullRequestMaps;
     // What a pass reaches, as the layer finds it.
     const context = yield* Effect.context<FetchServices>();
     const runs = yield* FiberSet.make();
@@ -235,30 +228,13 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         );
       });
 
-    const sweepProjectPullRequests = (projectId: string, projectPath: string) =>
+    const sweepProjectPullRequests = (project: Project) =>
       Effect.suspend(() => {
-        const sweptAt = lastPullRequestSweepAt.get(projectId);
+        const sweptAt = lastPullRequestSweepAt.get(project.id);
         if (sweptAt !== undefined && ageOf(sweptAt) < SWEEP_INTERVAL_MS)
           return Effect.void;
-        lastPullRequestSweepAt.set(projectId, stamp());
-        const before = readCachedProjectPullRequests(projectPath);
-        return refreshProjectPullRequests(projectPath).pipe(
-          Effect.tap((after) =>
-            Effect.sync(() => {
-              if (!pullRequestMapsEqual(before, after)) {
-                broadcastAll(
-                  githubCliContract,
-                  "projectPullRequestsRefreshed",
-                  {
-                    projectId,
-                  },
-                );
-              }
-            }),
-          ),
-          // PR data is decorative; swallow.
-          Effect.ignore,
-        );
+        lastPullRequestSweepAt.set(project.id, stamp());
+        return Effect.asVoid(pullRequests.refresh(project));
       });
 
     // One pass over every project. The timer and the window-focus handler
@@ -276,10 +252,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
                 runs,
                 maybeFetchProject(project.id, project.path, refsMaxAgeMs),
               ),
-              FiberSet.run(
-                runs,
-                sweepProjectPullRequests(project.id, project.path),
-              ),
+              FiberSet.run(runs, sweepProjectPullRequests(project)),
             ],
             { discard: true },
           ),

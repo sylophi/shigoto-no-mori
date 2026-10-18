@@ -5,6 +5,8 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   CommitHashSchema,
+  type MergeMethod,
+  type Project,
   PullRequestSchema,
 } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
@@ -14,8 +16,9 @@ import {
   stdoutOf,
 } from "@shigomori/engine/processes";
 import { gh, trimGhError } from "./exec";
-import { evictProjectPullRequests } from "./pullRequests";
+import * as Ops from "../engineOps";
 import { GithubCli } from "./GithubCli";
+import * as PullRequestMaps from "./PullRequestMaps";
 import { remoteNameForUrl } from "./remote";
 
 // A GitHub action that didn't go through, in words the renderer shows
@@ -29,6 +32,13 @@ export class GhActionError extends Schema.TaggedError<GhActionError>()(
   }
 }
 
+// The gate every action passes before it asks gh.
+export const ghReady = Effect.gen(function* () {
+  if ((yield* (yield* GithubCli).unavailableReason) !== null) {
+    return yield* new GhActionError({ reason: "GitHub CLI isn't ready" });
+  }
+});
+
 // Every action here shares one policy: gate on readiness, then fail
 // with a trimmed message the renderer can show inline. `fallback`
 // covers a gh that failed without a word.
@@ -41,9 +51,7 @@ export const runGh = Effect.fnUntraced(function* (
     timeout?: number;
   },
 ) {
-  if ((yield* (yield* GithubCli).unavailableReason) !== null) {
-    return yield* new GhActionError({ reason: "GitHub CLI isn't ready" });
-  }
+  yield* ghReady;
   const { stdout } = yield* gh(args, {
     cwd: opts.cwd,
     maxBuffer: opts.maxBuffer,
@@ -187,17 +195,36 @@ const fetchPullRequestCommits = Effect.fnUntraced(function* (
 });
 
 // Flips a PR between draft and ready for review. `gh pr ready` toggles
-// to ready; `--undo` flips back to draft. Both call paths invalidate
-// the sidebar cache because isDraft is part of the slim PullRequest.
+// to ready; `--undo` flips back to draft.
 export const setPullRequestDraft = Effect.fn("GithubActions.setDraft")(
-  function* (opts: { cwd: string; number: number; draft: boolean }) {
-    const { cwd, number, draft } = opts;
+  function* (opts: {
+    project: PullRequestMaps.ProjectRef;
+    number: number;
+    draft: boolean;
+  }) {
+    const { project, number, draft } = opts;
     const args = ["pr", "ready", String(number)];
     if (draft) args.push("--undo");
-    yield* runGh(args, { cwd, fallback: "gh pr ready failed" });
-    evictProjectPullRequests(cwd);
+    yield* runGh(args, { cwd: project.path, fallback: "gh pr ready failed" });
+    yield* (yield* PullRequestMaps.PullRequestMaps).moved(project);
   },
 );
+
+// The engine runs the gh merge and keeps the method for next time. An
+// armed or queued PR is still open, and the map doesn't carry either
+// flag, so only a landed merge moves it.
+export const mergePullRequest = Effect.fn("GithubActions.merge")(function* (
+  project: Project,
+  number: number,
+  method: MergeMethod,
+  options: { stack?: boolean },
+) {
+  const result = yield* Ops.mergePullRequest(project, number, method, options);
+  if (result.outcome === "merged") {
+    yield* (yield* PullRequestMaps.PullRequestMaps).moved(project);
+  }
+  return result;
+});
 
 // Turns an armed auto-merge off again, so the PR waits for a person.
 // The slim PullRequest doesn't carry the flag, so the sidebar cache
@@ -301,18 +328,19 @@ function reposOf(stdout: string): string[] | null {
 // current branch there. GitHub swaps the
 // characters a repo name can't hold for dashes on its own.
 export const publishRepo = Effect.fn("GithubActions.publish")(function* (opts: {
-  cwd: string;
+  project: PullRequestMaps.ProjectRef;
   owner: string | undefined;
   visibility: "private" | "public";
 }) {
-  const name = basename(opts.cwd);
+  const cwd = opts.project.path;
+  const name = basename(cwd);
   yield* runGh(
     [
       "repo",
       "create",
       `--${opts.visibility}`,
       "--source",
-      opts.cwd,
+      cwd,
       "--remote",
       "origin",
       "--push",
@@ -322,9 +350,9 @@ export const publishRepo = Effect.fn("GithubActions.publish")(function* (opts: {
     ],
     // The push moves the whole history, so it gets far longer than a
     // read does.
-    { cwd: opts.cwd, fallback: "Couldn't publish to GitHub", timeout: 300_000 },
+    { cwd, fallback: "Couldn't publish to GitHub", timeout: 300_000 },
   );
   // A read since the create cached the repo as not on GitHub.
-  yield* (yield* GithubCli).evictRepo(opts.cwd);
-  evictProjectPullRequests(opts.cwd);
+  yield* (yield* GithubCli).evictRepo(cwd);
+  yield* (yield* PullRequestMaps.PullRequestMaps).moved(opts.project);
 });

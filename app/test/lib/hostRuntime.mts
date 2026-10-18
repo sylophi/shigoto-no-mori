@@ -18,6 +18,7 @@ import * as Engine from "../../host/lib/Engine.ts";
 import * as BackgroundFetch from "../../host/lib/BackgroundFetch.ts";
 import * as CliShell from "../../host/lib/cli/shell.ts";
 import * as GithubCli from "../../host/lib/githubCli/GithubCli.ts";
+import * as PullRequestMaps from "../../host/lib/githubCli/PullRequestMaps.ts";
 import * as Scripts from "../../host/lib/Scripts.ts";
 import * as ScriptRuns from "../../host/lib/scripts/ScriptRuns.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
@@ -72,6 +73,7 @@ const runtime = ManagedRuntime.make(
     Layer.provideMerge(
       Layer.mergeAll(
         Ports.layer,
+        PullRequestMaps.layer,
         Villagers.deviceLayer,
         Views.layer,
         Sharing.layer({ announce: () => {} }),
