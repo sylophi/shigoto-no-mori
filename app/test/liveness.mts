@@ -10,6 +10,8 @@ import {
   CRASH_LOOP,
   FATAL_RELAUNCH,
   decide,
+  GONE_TOGETHER_MS,
+  rendererGone,
 } from "../main/core/liveness/rateLimit.ts";
 import { it } from "vitest";
 import { lastOf } from "./lib/checkKit.mts";
@@ -92,4 +94,56 @@ it("fatal relaunch resets once the window elapses", () => {
 it("the limiter constants are sane", () => {
   assert.ok(CRASH_LOOP.max > 0 && CRASH_LOOP.windowMs > 0);
   assert.ok(FATAL_RELAUNCH.max > 0 && FATAL_RELAUNCH.windowMs > 0);
+});
+
+// A renderer gone outside the app's own teardown comes back, whatever
+// killed it: a SIGTERM from another tool reads "killed" like our own
+// quit does, and a window left on it stays blank.
+it("a renderer gone recreates its window unless the app is tearing it down", () => {
+  assert.equal(
+    rendererGone({ ownTeardown: false, recent: [], now: 1_000 }).verdict,
+    "recreate",
+  );
+  const torn = rendererGone({ ownTeardown: true, recent: [500], now: 1_000 });
+  assert.equal(torn.verdict, "ignore");
+  assert.deepEqual(torn.recent, [500], "a teardown spends none of the budget");
+});
+
+it("a renderer gone again and again gives up past the crash-loop budget", () => {
+  let recent: number[] = [];
+  const verdicts: string[] = [];
+  for (let i = 0; i <= CRASH_LOOP.max; i++) {
+    const next = rendererGone({
+      ownTeardown: false,
+      recent,
+      now: 1_000 + i * GONE_TOGETHER_MS,
+    });
+    verdicts.push(next.verdict);
+    recent = next.recent;
+  }
+  assert.deepEqual(verdicts, [
+    ...Array.from({ length: CRASH_LOOP.max }, () => "recreate"),
+    "give-up",
+  ]);
+});
+
+it("every window gone in one kill spends the budget once", () => {
+  let recent: number[] = [];
+  for (let window = 0; window < CRASH_LOOP.max + 3; window++) {
+    const next = rendererGone({
+      ownTeardown: false,
+      recent,
+      now: 1_000 + window * 10,
+    });
+    assert.equal(next.verdict, "recreate", `window ${window + 1} came back`);
+    recent = next.recent;
+  }
+  assert.deepEqual(recent, [1_000]);
+  const later = rendererGone({
+    ownTeardown: false,
+    recent,
+    now: 1_000 + GONE_TOGETHER_MS,
+  });
+  assert.equal(later.verdict, "recreate");
+  assert.equal(later.recent.length, 2, "a later one counts again");
 });

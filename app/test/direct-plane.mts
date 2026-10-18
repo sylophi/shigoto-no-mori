@@ -147,6 +147,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
+import * as PlatformError from "effect/PlatformError";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
@@ -2486,13 +2487,14 @@ it("cloudflared deciders are pure and disciplined: the tunnel ladder caps throug
 });
 
 // A cloudflared child the stub spawner started: what it was given, and
-// `exit` to play it dying. `killed` is its scope closing while it ran.
+// `exit` to play it dying, by a signal from outside when given one.
+// `killed` is its scope closing while it ran.
 type StubTunnelChild = {
   readonly args: readonly string[];
   readonly env: Record<string, string | undefined> | undefined;
   readonly detached: boolean | undefined;
   killed: boolean;
-  exit: () => void;
+  exit: (signal?: NodeJS.Signals) => void;
 };
 
 const onTunnel = <A, E>(
@@ -2525,13 +2527,13 @@ async function tunnelHarness(deps: {
       if (!ChildProcess.isStandardCommand(command)) {
         return yield* Effect.die("a piped command");
       }
-      const exit = yield* Deferred.make<number>();
+      const exit = yield* Deferred.make<number | NodeJS.Signals>();
       const child: StubTunnelChild = {
         args: command.args,
         env: command.options.env,
         detached: command.options.detached,
         killed: false,
-        exit: () => Effect.runSync(Deferred.succeed(exit, 1)),
+        exit: (signal) => Effect.runSync(Deferred.succeed(exit, signal ?? 1)),
       };
       spawned.push(child);
       yield* Effect.addFinalizer(() =>
@@ -2543,8 +2545,20 @@ async function tunnelHarness(deps: {
       );
       return ChildProcessSpawner.makeHandle({
         pid: ChildProcessSpawner.ProcessId(1000 + spawned.length),
+        // A signal's death fails the exit code, as the platform's does.
         exitCode: Deferred.await(exit).pipe(
-          Effect.map(ChildProcessSpawner.ExitCode),
+          Effect.flatMap((ended) =>
+            typeof ended === "number"
+              ? Effect.succeed(ChildProcessSpawner.ExitCode(ended))
+              : Effect.fail(
+                  PlatformError.systemError({
+                    _tag: "Unknown",
+                    module: "ChildProcess",
+                    method: "exitCode",
+                    description: `Process interrupted due to receipt of signal: '${ended}'`,
+                  }),
+                ),
+          ),
         ),
         isRunning: Deferred.isDone(exit).pipe(Effect.map((done) => !done)),
         kill: () => Effect.void,
@@ -2915,6 +2929,27 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
   assert.equal(runner.tunnelUrl(), null);
   await runner.advance(10 * 60_000);
   assert.equal(spawned.length, 3, "a stopped runner respawned");
+});
+
+it("cloudflared runner: one killed by a signal from outside (another tool's pkill) is started again on the ladder", async () => {
+  const runner = await tunnelHarness({
+    provision: async () => ({
+      hostname: "sm-feedfacecafe.sm.example.test",
+      connectorToken: "token",
+    }),
+  });
+  const { spawned } = runner;
+  await runner.reconcile({ port: 40100 });
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(runner.status().state, "up");
+  entryAt(spawned, 0).exit("SIGTERM");
+  await runner.advance(0);
+  assert.equal(runner.status().state, "error");
+  await runner.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
+  assert.equal(spawned.length, 2, "not started again after a signal");
+  await runner.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+  assert.equal(runner.status().state, "up");
+  await runner.dispose();
 });
 
 it("cloudflared runner: a never-ready child's restart re-provisions (its token may be dead), a probed-ready child's crash reuses the cache, a stable run resets the ladder, and a not-yet-routable child of a FRESH record is kept and probed on until the long deadline, while a reused tunnel that never routes is killed and re-provisioned at the short one", async () => {
