@@ -4,8 +4,8 @@
 // engine's create and delete, and a REAL login shell.
 //
 // Asserts:
-//   - a create's setup script reads as one script running, not as a
-//     worktree being removed,
+//   - a create's setup reads as a script running and a new worktree
+//     being made, not as a worktree being removed,
 //   - one delete, held at its status check by an fsmonitor hook, reads
 //     as one worktree being removed, not two, and its own engine change
 //     is not counted again as a change,
@@ -53,6 +53,7 @@ import * as Terminals from "../host/lib/terminals/Terminals.ts";
 import {
   type BusyOperations,
   busyDetail,
+  busyRefusal,
   busyRemoteRefusal,
 } from "../shared/busy.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
@@ -121,7 +122,7 @@ it("a create's setup script reads as a script running", async () => {
     await waitFor(() => existsSync(started), "the setup script to start");
     assert.equal(
       busyDetail(await busy(), "quit"),
-      "1 script is still running. Quitting now will stop it.",
+      "1 script is still running and a new worktree is still being made. Quitting now will interrupt them.",
     );
   } finally {
     rmSync(held);
@@ -176,7 +177,7 @@ it("one delete reads as one worktree being removed", async () => {
     assert.deepEqual(counted.engineChanges, []);
     assert.equal(
       busyDetail(await busy(), "quit"),
-      "1 worktree is being removed. Quitting now will interrupt cleanup and may leave files behind.",
+      "A worktree is still being removed. Quitting now will interrupt cleanup and may leave files behind.",
     );
   } finally {
     rmSync(slow);
@@ -222,6 +223,41 @@ const busyWith = (...engineChanges: BusyOperations["engineChanges"]) => ({
   busyTerminals: 0,
 });
 
+it("the calls a person starts that run git past a moment are named, and a page's refresh as it opens isn't", () => {
+  assert.deepEqual(
+    Object.fromEntries(
+      [
+        "worktrees:switchToPrimaryAndDeleteBranch",
+        "githubCli:resolvePullRequestCheckout",
+        "worktrees:checkoutBranch",
+        "worktrees:continueOperation",
+        "worktrees:stashChanges",
+        "worktrees:applyStash",
+        "worktrees:restoreStash",
+        "worktrees:pullAndPush",
+        "sync:receiveBundle",
+        "git:fetchProject",
+        "git:refreshProject",
+        "worktrees:setShelved",
+      ].map((channel) => [channel, changeKindOf(channel) ?? null]),
+    ),
+    {
+      "worktrees:switchToPrimaryAndDeleteBranch": "finish",
+      "githubCli:resolvePullRequestCheckout": "fetch",
+      "worktrees:checkoutBranch": "checkout",
+      "worktrees:continueOperation": "commit",
+      "worktrees:stashChanges": "stash",
+      "worktrees:applyStash": "unstash",
+      "worktrees:restoreStash": "unstash",
+      "worktrees:pullAndPush": "pullAndPush",
+      "sync:receiveBundle": "receive",
+      "git:fetchProject": "fetch",
+      "git:refreshProject": null,
+      "worktrees:setShelved": null,
+    },
+  );
+});
+
 it("the words name the git work under way", () => {
   assert.equal(
     busyDetail(busyWith("commit"), "quit"),
@@ -237,7 +273,43 @@ it("the words name the git work under way", () => {
   );
   assert.equal(
     busyRemoteRefusal(busyWith("push", "pull", "pull"), "move"),
-    "3 git operations are still being made there: 2 pulls and a push. Wait for them to finish before moving the data folder.",
+    "2 pulls and a push are still being made there. Wait for them to finish before moving the data folder.",
+  );
+  assert.equal(
+    busyDetail(busyWith("pull", "fetch", "create"), "quit"),
+    "3 operations are still being made: a pull, a fetch and a new worktree. Quitting now will interrupt them.",
+  );
+  assert.equal(
+    busyDetail(busyWith("pull", "push", "commit"), "quit"),
+    "3 git operations are still being made: a pull, a push and a commit. Quitting now will interrupt them.",
+  );
+  assert.equal(
+    busyDetail(busyWith("land", "send", "finish", "pullRequest"), "quit"),
+    "A branch is still being finished, a pull request is still being opened, a worktree is still being sent and a worktree is still arriving. Quitting now will interrupt them.",
+  );
+});
+
+it("every kind of work under way is named in one sentence", () => {
+  const mixed = {
+    ...busyWith("pull"),
+    busyTerminals: 1,
+    inflightDeletes: 1,
+  };
+  assert.equal(
+    busyDetail(mixed, "quit"),
+    "1 terminal is still running, a worktree is still being removed and a pull is still being made. Quitting now will interrupt them and may leave files behind.",
+  );
+  assert.equal(
+    busyDetail({ ...busyWith("pull"), busyTerminals: 1 }, "restart"),
+    "1 terminal is still running and a pull is still being made. Restarting now will interrupt them.",
+  );
+  assert.equal(
+    busyRemoteRefusal(mixed, "quit"),
+    "1 terminal is still running there, a worktree is still being removed and a pull is still being made. Stop or wait for them before quitting.",
+  );
+  assert.equal(
+    busyRefusal(busyWith("move")),
+    "A worktree is still being moved. Try again when it finishes.",
   );
 });
 
@@ -432,11 +504,11 @@ it("a move under its mark reads as a worktree being moved, and a run there is re
       const counted = yield* scripts.busy;
       assert.equal(
         busyDetail(counted, "quit"),
-        "1 worktree is being moved. Quitting now will interrupt it.",
+        "A worktree is still being moved. Quitting now will interrupt it.",
       );
       assert.equal(
         busyRemoteRefusal(counted, "move"),
-        "1 worktree is still being moved there. Wait for that to finish before moving the data folder.",
+        "A worktree is still being moved there. Wait for it to finish before moving the data folder.",
       );
       const refused = yield* Effect.flip(
         scripts.start({

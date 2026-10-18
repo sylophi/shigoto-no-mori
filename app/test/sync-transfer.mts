@@ -84,6 +84,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { hostContext, runHost, type Services } from "./lib/hostRuntime.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
+import { EngineChanges } from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import * as Scripts from "@host/lib/Scripts";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
@@ -159,6 +160,11 @@ const offerSource = <T, E>(
   openOnPeer: (channelId: string) => Effect.Effect<T, E, PeerReach>,
 ) => runHost(offer(LISTENER, project, worktreeId, openOnPeer));
 const repoIdentityOf = (path: string) => runHost(Ops.repoIdentity(path));
+// The kinds of change counted now (Scripts.busy words them).
+const changesUnderWay = async () =>
+  (
+    await runHost(Effect.map(EngineChanges, (changes) => changes.underWay()))
+  ).map(({ kind }) => kind);
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
 // wrappers, and the engine on the sandbox's data dir
@@ -1733,6 +1739,11 @@ describe("cancelMove", () => {
     cancelledPull.catch(() => {});
     const pullSetupPid = await setupStarted();
     assert.equal(processAlive(pullSetupPid), true);
+    assert.deepEqual(
+      await changesUnderWay(),
+      ["bring"],
+      "the pull counts as one move for its whole run, its landing in it",
+    );
     const cancelledAt = Date.now();
     assert.deepEqual(
       await runHost(
@@ -1790,6 +1801,12 @@ describe("cancelMove", () => {
     );
     cancelledSend.catch(() => {});
     const sendSetupPid = await setupStarted();
+    // Both devices share this process, so the peer's landing is counted
+    // here too: what this side adds is the send.
+    assert.ok(
+      (await changesUnderWay()).includes("send"),
+      "the send counts for its whole run",
+    );
     assert.deepEqual(
       await runHost(
         syncHandlers.cancelMove({ sourceWorktreeId: wtCancel2Id }, pullCtx),

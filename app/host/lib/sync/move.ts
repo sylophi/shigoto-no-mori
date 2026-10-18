@@ -30,6 +30,7 @@ import {
   peerWorktree,
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
+import { EngineChanges } from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
@@ -197,9 +198,19 @@ export const pullWorktree = (
     }),
   );
   return Effect.flatMap(Moves.Moves, (moves) =>
-    moves.run(ctx, sourceWorktreeId, pull),
+    moves.run(ctx, sourceWorktreeId, counted(pull, {}, "bring")),
   );
 };
+
+// A move this device runs, counted for its whole run as work a quit
+// waits on (Scripts.busy), its landing's change joining it. It holds no
+// data-folder lock: a data-folder move refuses while a move runs.
+const counted = <A, E, R>(
+  move: Effect.Effect<A, E, R>,
+  ids: { readonly projectId?: string; readonly worktreeId?: string },
+  kind: "bring" | "send",
+) =>
+  Effect.flatMap(EngineChanges, (changes) => changes.counted(move, ids, kind));
 
 // The title and description's carry is never fatal to the move.
 const describeFailureLogged = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -267,6 +278,12 @@ export const sendWorktree = (
 ) => {
   const send = sendWorktreeEffect(input, ctx, mirror).pipe(
     Effect.scoped,
+    (sending) =>
+      counted(
+        sending,
+        { projectId: input.projectId, worktreeId: input.worktreeId },
+        "send",
+      ),
     Effect.withSpan("Sync.send", {
       attributes: {
         ...moveAttributes("send", input.targetDeviceId),

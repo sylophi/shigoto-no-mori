@@ -291,6 +291,7 @@ export const finishWorktree = Effect.fnUntraced(function* (
       return yield* (yield* Landing.Landing).done(located, { force: true });
     }),
     { projectId: project.id, worktreeId },
+    "finish",
   );
   return decodeWorktree(doc["worktree"]);
 });

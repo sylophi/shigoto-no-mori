@@ -70,58 +70,208 @@ function runningWords(
   };
 }
 
-// "1 worktree is", and the pronoun for it.
-function worktreeWords(n: number): { subject: string; obj: string } {
-  return {
-    subject: pluralize(n, `${n} worktree is`, `${n} worktrees are`),
-    obj: pluralize(n, "it", "them"),
-  };
-}
-
-// Each kind of change as one of it and as several, in the order they
-// are listed.
-const CHANGE_NOUNS: ReadonlyArray<readonly [ChangeKind, string, string]> = [
-  ["pull", "a pull", "pulls"],
-  ["push", "a push", "pushes"],
-  ["fetch", "a fetch", "fetches"],
-  ["commit", "a commit", "commits"],
-  ["merge", "a merge", "merges"],
-  ["pullRequest", "a pull request", "pull requests"],
-  ["autoPull", "an auto-pull", "auto-pulls"],
-  ["create", "a new worktree", "new worktrees"],
-  ["land", "an incoming worktree", "incoming worktrees"],
-  ["move", "a worktree move", "worktree moves"],
-  ["remove", "a worktree removal", "worktree removals"],
+// What each kind of change is, as one and as several, and what it is
+// still doing, in the order a sentence names them. The worktrees a
+// removal or a move marks share the removal's and the move's words.
+const CHANGE_WORDS: ReadonlyArray<{
+  readonly kind: ChangeKind;
+  readonly one: string;
+  readonly many: string;
+  readonly doing: string;
+  readonly git: boolean;
+}> = [
+  {
+    kind: "remove",
+    one: "a worktree",
+    many: "worktrees",
+    doing: "being removed",
+    git: false,
+  },
+  {
+    kind: "move",
+    one: "a worktree",
+    many: "worktrees",
+    doing: "being moved",
+    git: false,
+  },
+  {
+    kind: "pull",
+    one: "a pull",
+    many: "pulls",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "push",
+    one: "a push",
+    many: "pushes",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "pullAndPush",
+    one: "a pull and push",
+    many: "pulls and pushes",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "fetch",
+    one: "a fetch",
+    many: "fetches",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "commit",
+    one: "a commit",
+    many: "commits",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "merge",
+    one: "a merge",
+    many: "merges",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "checkout",
+    one: "a checkout",
+    many: "checkouts",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "stash",
+    one: "a stash",
+    many: "stashes",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "autoPull",
+    one: "an auto-pull",
+    many: "auto-pulls",
+    doing: "being made",
+    git: true,
+  },
+  {
+    kind: "create",
+    one: "a new worktree",
+    many: "new worktrees",
+    doing: "being made",
+    git: false,
+  },
+  {
+    kind: "unstash",
+    one: "a stash",
+    many: "stashes",
+    doing: "being applied",
+    git: true,
+  },
+  {
+    kind: "finish",
+    one: "a branch",
+    many: "branches",
+    doing: "being finished",
+    git: true,
+  },
+  {
+    kind: "pullRequest",
+    one: "a pull request",
+    many: "pull requests",
+    doing: "being opened",
+    git: false,
+  },
+  {
+    kind: "send",
+    one: "a worktree",
+    many: "worktrees",
+    doing: "being sent",
+    git: false,
+  },
+  {
+    kind: "bring",
+    one: "a worktree",
+    many: "worktrees",
+    doing: "being brought here",
+    git: false,
+  },
+  {
+    kind: "land",
+    one: "a worktree",
+    many: "worktrees",
+    doing: "arriving",
+    git: false,
+  },
+  {
+    kind: "receive",
+    one: "a bundle of commits",
+    many: "bundles of commits",
+    doing: "arriving",
+    git: true,
+  },
 ];
 
 const capitalized = (words: string) =>
   words.charAt(0).toUpperCase() + words.slice(1);
 
-// "A pull is", "2 pulls are", or "3 git operations are" with what they
-// are (": 2 pulls and a push"), and the pronoun for them.
-function changeWords(busy: BusyOperations): {
-  subject: string;
-  which: string;
-  obj: string;
-} {
-  const named = CHANGE_NOUNS.flatMap(([kind, one, many]) => {
-    const n = busy.engineChanges.filter((change) => change === kind).length;
-    return n === 0 ? [] : [n === 1 ? one : `${n} ${many}`];
-  });
-  const n = busy.engineChanges.length;
-  const obj = pluralize(n, "it", "them");
-  if (named.length === 1) {
-    return {
-      subject: `${capitalized(named[0] ?? "")} ${pluralize(n, "is", "are")}`,
-      which: "",
-      obj,
-    };
+// "a, b and c".
+const listed = (parts: readonly string[]) =>
+  parts.length < 2
+    ? (parts[0] ?? "")
+    : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1) ?? ""}`;
+
+// Everything under way as one clause each, the ones doing the same
+// thing as one ("2 pulls and a push are still being made", "3
+// operations are still being made: …" past two), how many there are,
+// and whether any is a running script or terminal, a removal, or
+// something else.
+function underWay(busy: BusyOperations) {
+  const clauses: string[] = [];
+  const running = runningWords(busy);
+  if (running !== null) clauses.push(`${running.subject} still running`);
+  const marked: Partial<Record<ChangeKind, number>> = {
+    remove: busy.inflightDeletes,
+    move: busy.inflightMoves,
+  };
+  const groups = new Map<
+    string,
+    { parts: string[]; n: number; git: boolean }
+  >();
+  for (const words of CHANGE_WORDS) {
+    const n =
+      (marked[words.kind] ?? 0) +
+      busy.engineChanges.filter((kind) => kind === words.kind).length;
+    if (n === 0) continue;
+    const group = groups.get(words.doing) ?? { parts: [], n: 0, git: true };
+    group.parts.push(n === 1 ? words.one : `${n} ${words.many}`);
+    group.n += n;
+    group.git &&= words.git;
+    groups.set(words.doing, group);
   }
-  const last = named.at(-1) ?? "";
+  for (const [doing, { parts, n, git }] of groups) {
+    clauses.push(
+      parts.length > 2
+        ? `${n} ${git ? "git operations" : "operations"} are still ${doing}: ${listed(parts)}`
+        : `${listed(parts)} ${pluralize(n, "is", "are")} still ${doing}`,
+    );
+  }
+  const total =
+    busy.runningScripts +
+    busy.busyTerminals +
+    [...groups.values()].reduce((sum, group) => sum + group.n, 0);
+  const removing = groups.has("being removed");
   return {
-    subject: `${n} git operations are`,
-    which: `: ${named.slice(0, -1).join(", ")} and ${last}`,
-    obj,
+    clauses,
+    obj: pluralize(total, "it", "them"),
+    runningOnly: running !== null && groups.size === 0,
+    removingOnly: removing && running === null && groups.size === 1,
+    removing,
+    others: groups.size > 0,
+    running: running !== null,
   };
 }
 
@@ -133,20 +283,13 @@ export function busyDetail(
 ): string | null {
   if (!isBusy(busy)) return null;
   const { gerund } = BUSY_COPY[action];
-  const running = runningWords(busy);
-  if (running !== null) {
-    return `${running.subject} still running. ${gerund} now will stop ${running.obj}.`;
-  }
-  if (busy.inflightDeletes > 0) {
-    const { subject } = worktreeWords(busy.inflightDeletes);
-    return `${subject} being removed. ${gerund} now will interrupt cleanup and may leave files behind.`;
-  }
-  if (busy.inflightMoves > 0) {
-    const { subject, obj } = worktreeWords(busy.inflightMoves);
-    return `${subject} being moved. ${gerund} now will interrupt ${obj}.`;
-  }
-  const changes = changeWords(busy);
-  return `${changes.subject} still being made${changes.which}. ${gerund} now will interrupt ${changes.obj}.`;
+  const what = underWay(busy);
+  const then = what.runningOnly
+    ? `stop ${what.obj}`
+    : what.removingOnly
+      ? "interrupt cleanup and may leave files behind"
+      : `interrupt ${what.obj}${what.removing ? " and may leave files behind" : ""}`;
+  return `${capitalized(listed(what.clauses))}. ${gerund} now will ${then}.`;
 }
 
 // The same verdict worded for ANOTHER device's screen, for an action a
@@ -164,16 +307,21 @@ export function busyRemoteRefusal(
     quit: "quitting",
     move: "moving the data folder",
   }[action];
-  const running = runningWords(busy);
-  if (running !== null) {
-    return `${running.subject} still running there. Stop ${running.obj} before ${verb}.`;
-  }
-  if (busy.inflightDeletes > 0) {
-    return `${worktreeWords(busy.inflightDeletes).subject} still being removed there. Wait for that to finish before ${verb}.`;
-  }
-  if (busy.inflightMoves > 0) {
-    return `${worktreeWords(busy.inflightMoves).subject} still being moved there. Wait for that to finish before ${verb}.`;
-  }
-  const changes = changeWords(busy);
-  return `${changes.subject} still being made there${changes.which}. Wait for ${changes.obj} to finish before ${verb}.`;
+  const what = underWay(busy);
+  const [first = "", ...rest] = what.clauses;
+  const there = capitalized(listed([`${first} there`, ...rest]));
+  const then = what.runningOnly
+    ? `Stop ${what.obj}`
+    : what.running
+      ? "Stop or wait for them"
+      : `Wait for ${what.obj} to finish`;
+  return `${there}. ${then} before ${verb}.`;
+}
+
+// Why a change of this device's own can't start while the work under
+// way runs (the data-folder move), or null when nothing does.
+export function busyRefusal(busy: BusyOperations): string | null {
+  if (!isBusy(busy)) return null;
+  const what = underWay(busy);
+  return `${capitalized(listed(what.clauses))}. Try again when ${what.obj === "it" ? "it finishes" : "they finish"}.`;
 }
