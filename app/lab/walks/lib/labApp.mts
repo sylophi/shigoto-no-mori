@@ -23,6 +23,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { expect } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
+import { devProfileNameSuffix } from "../../../shared/packaging/appName.mts";
 import { walkFailed } from "./failed.mts";
 
 const APP_DIR = join(import.meta.dirname, "..", "..", "..");
@@ -57,11 +58,15 @@ export interface Lab {
   readonly home: string;
   readonly dataDir: string;
   readonly page: Page;
+  // The window's debugging port, for a weblab session to attach to a
+  // walk held at a breakpoint.
+  readonly debugPort: number;
   // git in `cwd`, as the walk's own terminal would run it.
   git(cwd: string, ...args: string[]): string;
   // The bundle's terminal command on this lab's data folder.
   sm(...args: string[]): string;
   // Quits the app as a person does and starts it again on the same root.
+  // Not for a walk's devices: the quit goes to every instance of the build.
   restart(): Promise<void>;
   // The app's processes: its main one first, then every helper it
   // started, each with its command line.
@@ -76,13 +81,21 @@ export interface Lab {
 }
 
 export interface LabOptions {
-  // Makes the walk's repos under `reposDir`, before the app starts.
-  readonly seed: (reposDir: string, git: Lab["git"]) => void;
+  // Makes the walk's repos under `reposDir`, before the app starts, and
+  // what else of the user's they need in `home`.
+  readonly seed: (reposDir: string, git: Lab["git"], home: string) => void;
   // The gh on the login shell's PATH, or one made in the walk's root.
   readonly gh?: string | ((root: string) => string);
   // The data folder reached through a symlink, as /tmp, /var/folders or
   // a folder linked to another drive put it.
   readonly linkedDataDir?: boolean;
+  // A further device on this machine: its own userData, so its own
+  // single-instance lock and hub credential (shared/packaging/appName.mts).
+  readonly profile?: string;
+  // More of the app's environment (a hub to enroll with): at launch, and
+  // from the login shell's startup files too, since the app rebuilds its
+  // environment from them and may read these before or after.
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 // The walks remove the build's saved windows and, at the end, its whole
@@ -132,7 +145,17 @@ const KEPT_FAILURES = 5;
 const KEPT_STAMP = /-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)$/;
 const stampOf = (date: Date) => date.toISOString().replace(/[:.]/g, "-");
 
-function keepFailed(root: string): void {
+// Where the app's host keeps its trace: a folder named for the app, whose
+// name a profile adds to (shared/packaging/appName.mts).
+const hostLogsOf = (profile: string | undefined) =>
+  join(
+    userInfo().homedir,
+    "Library",
+    "Logs",
+    `${NAME}${profile === undefined ? "" : devProfileNameSuffix(profile)}`,
+  );
+
+function keepFailed(root: string, profile: string | undefined): void {
   const failures = process.env["SM_WALK_FAILURES"];
   if (failures === undefined || failures === "") return;
   const walk = basename(expect.getState().testPath ?? root);
@@ -144,12 +167,12 @@ function keepFailed(root: string): void {
   }
   const kept = join(
     failures,
-    `${walk.replace(/\.walk\.mts$/, "")}-${stampOf(new Date())}`,
+    `${walk.replace(/\.walk\.mts$/, "")}${profile === undefined ? "" : `-${profile}`}-${stampOf(new Date())}`,
   );
   try {
     mkdirSync(failures, { recursive: true });
     cpSync(root, kept, { recursive: true, verbatimSymlinks: true });
-    const host = join(userInfo().homedir, "Library", "Logs", NAME);
+    const host = hostLogsOf(profile);
     if (existsSync(host))
       cpSync(host, join(kept, "host-logs"), { recursive: true });
     console.error(`[walks] ${walk} failed: its root and logs are at ${kept}`);
@@ -210,14 +233,19 @@ function inCheckout(path: string): boolean {
 }
 
 export async function bootLab(options: LabOptions): Promise<Lab> {
-  const bundle = labBundle();
-  const executable = join(bundle, "Contents", "MacOS", NAME);
   refuseRunningLab();
+  return launchLab(options);
+}
+
+// bootLab without the refusal, for the devices of one walk, which run
+// side by side as profiles once the walk has refused someone else's.
+export async function launchLab(options: LabOptions): Promise<Lab> {
+  const executable = join(labBundle(), "Contents", "MacOS", NAME);
   const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-walk-")));
   try {
     return await launch(root, options, executable);
   } catch (cause) {
-    keepFailed(root);
+    keepFailed(root, options.profile);
     rmSync(root, { recursive: true, force: true });
     throw cause;
   }
@@ -243,7 +271,14 @@ async function launch(
   );
   // The app rebuilds its environment from the login shell, after
   // path_helper has set PATH, so the fake gh goes in from the rc files.
-  const rc = `export PATH="${bin}:$PATH"\nexport GH_CONFIG_DIR="${join(home, ".gh")}"\n`;
+  const rc = [
+    `export PATH="${bin}:$PATH"`,
+    `export GH_CONFIG_DIR="${join(home, ".gh")}"`,
+    ...Object.entries(options.env ?? {}).map(
+      ([key, value]) => `export ${key}="${value}"`,
+    ),
+    "",
+  ].join("\n");
   writeFileSync(join(home, ".zshrc"), rc);
   writeFileSync(join(home, ".bash_profile"), rc);
   const gh = options.gh ?? NO_GITHUB_GH;
@@ -258,6 +293,10 @@ async function launch(
     LOGNAME: process.env["LOGNAME"],
     SHELL: process.env["SHELL"],
     GIT_CONFIG_NOSYSTEM: "1",
+    ...(options.profile === undefined
+      ? {}
+      : { SHIGOMORI_PROFILE: options.profile }),
+    ...options.env,
   };
   const git: Lab["git"] = (cwd, ...args) =>
     execFileSync("git", args, { cwd, env, encoding: "utf8" });
@@ -268,19 +307,23 @@ async function launch(
     });
 
   // The windows a previous walk left open would reopen on its pages.
+  const userData = join(
+    userInfo().homedir,
+    "Library",
+    "Application Support",
+    NAME,
+  );
   rmSync(
-    join(
-      userInfo().homedir,
-      "Library",
-      "Application Support",
-      NAME,
-      "windows.json",
-    ),
-    { force: true },
+    options.profile === undefined
+      ? join(userData, "windows.json")
+      : join(userData, "profiles", options.profile),
+    { recursive: true, force: true },
   );
 
-  options.seed(reposDir, git);
-  sm("projects", "add", reposDir, "--all", "--yes");
+  options.seed(reposDir, git, home);
+  if (readdirSync(reposDir).length > 0) {
+    sm("projects", "add", reposDir, "--all", "--yes");
+  }
 
   const start = async () => {
     const port = await freeLoopbackPort();
@@ -327,7 +370,7 @@ async function launch(
       await page.waitForFunction(
         () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
       );
-      return { run, page, stop };
+      return { run, page, stop, port };
     } catch (cause) {
       await stop();
       throw cause;
@@ -343,16 +386,29 @@ async function launch(
     // home, which the walks' nuke clears at the end.
     const keep = process.env["SM_WALK_LOGS"];
     if (keep !== undefined && keep !== "") {
-      const walk = join(keep, basename(expect.getState().testPath ?? root));
+      const walk = join(
+        keep,
+        basename(expect.getState().testPath ?? root),
+        options.profile ?? "",
+      );
       for (const [from, to] of [
         [join(home, "Library", "Logs"), walk],
-        [join(userInfo().homedir, "Library", "Logs", NAME), join(walk, "host")],
+        [hostLogsOf(options.profile), join(walk, "host")],
       ] as const) {
         if (existsSync(from)) cpSync(from, to, { recursive: true });
       }
     }
-    if (walkFailed()) keepFailed(root);
+    if (walkFailed()) keepFailed(root, options.profile);
     rmSync(root, { recursive: true, force: true });
+    // A device's own folders, which the walks' nuke leaves: it clears the
+    // build's, and a profile's are named for it.
+    if (options.profile !== undefined) {
+      rmSync(join(userData, "profiles", options.profile), {
+        recursive: true,
+        force: true,
+      });
+      rmSync(hostLogsOf(options.profile), { recursive: true, force: true });
+    }
   };
   const restart = async () => {
     await current.run.browser?.close().catch(() => {});
@@ -371,6 +427,9 @@ async function launch(
     dataDir,
     get page() {
       return current.page;
+    },
+    get debugPort() {
+      return current.port;
     },
     git,
     sm,
