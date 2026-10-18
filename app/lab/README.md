@@ -37,7 +37,8 @@ list are shared by the whole machine, not per worktree.
 - **Touch only what carries your tag**: profiles, devices, and
   processes (match on your worktree path, never on `Electron`). An
   unknown device on the account may be another session's live test.
-- **Debugging ports are examples.** Use any free ones.
+- **Debugging ports are examples.** Use any free ones, the same in a
+  session's `attach`, `address` and `start`.
 - **Give the fake host this worktree's port.** Each worktree has its
   own ports in `.env.ports` (port-pool). weblab uses whatever already
   answers at an address, so a session pointed at another worktree's

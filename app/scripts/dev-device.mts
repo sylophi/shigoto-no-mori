@@ -4,15 +4,13 @@
 //   pnpm device <profile> [--fresh] [--clone-login]
 //
 // The window runs as the dev profile <profile> (scripts/lib/devProfile.mts)
-// with Chromium's debugging port open on $PORT, the port weblab hands
-// the command it starts (weblab attaches there, so it wins), else on
-// SHIGOMORI_DEBUG_PORT. The first window of a worktree is the primary
-// (`pnpm start`: the build, the renderer's vite server, deep links). A
-// window launched while that vite server answers is a peer on the
-// primary's build (scripts/dev-peer.mts). Without port-pool the
-// renderer has no fixed port to probe, so every window starts as a
-// primary. SIGINT and SIGTERM go to the window's tree, which is how
-// weblab stops it when the last session on it ends.
+// with Chromium's debugging port open on SHIGOMORI_DEBUG_PORT. The first
+// window of a worktree is the primary (`pnpm start`: the build, the
+// renderer's vite server, deep links). A window launched while that vite
+// server answers is a peer on the primary's build (scripts/dev-peer.mts).
+// Without port-pool the renderer has no fixed port to probe, so every
+// window starts as a primary. SIGINT and SIGTERM go to the window's
+// tree, which is how weblab stops it when the last session on it ends.
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -48,11 +46,7 @@ try {
   process.exit(1);
 }
 
-const debugPort = process.env.PORT || process.env.SHIGOMORI_DEBUG_PORT;
-if (debugPort) process.env.SHIGOMORI_DEBUG_PORT = debugPort;
-// PORT stays out of the app's environment: the project scripts it runs
-// inherit that, and many dev servers listen on PORT.
-delete process.env.PORT;
+const debugPort = process.env.SHIGOMORI_DEBUG_PORT;
 
 // The probe below reads the renderer's port from .env.ports, which an
 // older checkout may not hold yet (`pnpm start` runs this too).
