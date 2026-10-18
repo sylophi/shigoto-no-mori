@@ -54,6 +54,7 @@ jobs:
         run: pnpm walks
         env:
           SM_WALK_LOGS: ${{ runner.temp }}/walk-logs
+          SM_WALK_FAILURES: ${{ runner.temp }}/walk-logs/failures
 
       - name: Keep the app's logs of a failed walk
         if: failure()

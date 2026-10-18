@@ -14,7 +14,15 @@ pnpm walks changes                  # the walks whose file names match
 ```
 
 Each walk starts a fresh app on a temp root of its own, removed
-afterwards. The root holds a home with a git identity, a fake `gh`
+afterwards, unless the walk failed (its boot, a hook or a case): then
+the root is kept under `SM_WALK_FAILURES`, by default
+`app/lab/walks/failures/`, which goes with the checkout. It holds the
+shell's `main.log` and trace under `home/Library/Logs`, and the host's
+trace beside it in `host-logs`, which every walk of the run appends to.
+CI keeps every walk's logs (`SM_WALK_LOGS`) and a failed walk's root,
+and uploads them when one fails.
+
+The root holds a home with a git identity, a fake `gh`
 first on the login shell's PATH, and none of the user's shell hooks
 (the app rebuilds its environment from `$HOME`'s startup files). It
 also holds a data folder and the walk's repos, registered through the
