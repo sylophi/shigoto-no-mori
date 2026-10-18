@@ -31,14 +31,16 @@ type HostRestarts = typeof HostRestartsSchema.Type;
 // The shell's count of host restarts, against which each landing tells
 // whether this window lived through one. The count as the window opens
 // is the baseline, asked until the shell answers and before any
-// landing's: without it, a first ask that failed made the next landing's
-// count the baseline, and that restart went unsaid.
+// landing's.
 export const followHostRestarts = (ask: Effect.Effect<HostRestarts, unknown>) =>
   Effect.gen(function* () {
     const turn = yield* Semaphore.make(1);
     let seen = 0;
     const baseline = turn.withPermits(1)(
       ask.pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("the shell's host restart count", error),
+        ),
         Effect.retry(Schedule.spaced("1 second")),
         Effect.tap(({ count }) =>
           Effect.sync(() => {
@@ -55,7 +57,7 @@ export const followHostRestarts = (ask: Effect.Effect<HostRestarts, unknown>) =>
             if (count > seen && reason !== null) {
               hostRestarted.publish({ reason });
             }
-            seen = Math.max(seen, count);
+            seen = count;
           }),
         ),
         Effect.ignore,

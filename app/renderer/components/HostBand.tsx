@@ -7,8 +7,7 @@ import { hostAnswering, hostRestarted } from "@/lib/runtime/hostAnswering";
 const RESTARTED_SHOWS_MS = 10_000;
 
 // The band over the page while this machine's host is away, and for a
-// moment after the shell started it again, saying why (the reads its
-// going cut are asked again by askAgainOnHostReturn).
+// moment after the shell started it again, saying why.
 export function HostBand() {
   const answering = useExternalStore(hostAnswering);
   const restarted = useExternalStore(hostRestarted);

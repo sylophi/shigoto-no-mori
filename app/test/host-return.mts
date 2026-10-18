@@ -31,28 +31,32 @@ const drop = () => new RemoteDisconnectedError(true);
 it("a restart is said though the window's first ask of the count failed", async () => {
   const clock = testClock();
   // The shell's count: the first ask fails (the port not yet up), the
-  // next answer the count as the window opened, then one restart.
-  const answers: (number | Error)[] = [new Error("not yet"), 2, 3];
+  // next is the count as the window opened, the first landing's the
+  // same, and a later one's after a restart.
+  const answers: (number | Error)[] = [new Error("not yet"), 2, 2, 3];
   const ask = Effect.suspend(() => {
     const next = answers.shift() ?? 3;
     return typeof next === "number"
       ? Effect.succeed({ count: next, reason: SILENT })
       : Effect.fail(next);
   });
+  const run = (effect: Effect.Effect<void, unknown>) =>
+    Effect.runFork(effect.pipe(Effect.provide(clock.context)));
   hostRestarted.publish(null);
   const restarts = await Effect.runPromise(
     followHostRestarts(ask).pipe(Effect.provide(clock.context)),
   );
-  const baseline = Effect.runFork(
-    restarts.baseline.pipe(Effect.provide(clock.context)),
-  );
-  // A landing asked while the baseline waits on its retry waits its turn.
-  const landed = Effect.runFork(
-    restarts.landed.pipe(Effect.provide(clock.context)),
-  );
+  const baseline = run(restarts.baseline);
+  // A landing asked while the baseline waits on its retry waits its
+  // turn, and its count is the window's own: no restart.
+  const first = run(restarts.landed);
+  await clock.settle();
+  assert.equal(hostRestarted.get(), null);
   await clock.advance(1_000);
   await Effect.runPromise(Fiber.join(baseline));
-  await Effect.runPromise(Fiber.join(landed));
+  await Effect.runPromise(Fiber.join(first));
+  assert.equal(hostRestarted.get(), null);
+  await Effect.runPromise(Fiber.join(run(restarts.landed)));
   assert.deepEqual(hostRestarted.get(), { reason: SILENT });
 });
 
@@ -84,7 +88,9 @@ it("the reads the host's going cut are asked again as it answers", async () => {
   hostAnswering.publish(false);
   askAgainOnHostReturn(client, page.signal);
   await waitFor(
-    () => reads.gaveUp === 1 && reads.retrying === 1,
+    () =>
+      client.getQueryState(["gave-up"])?.status === "error" &&
+      client.getQueryState(["retrying"])?.fetchFailureReason != null,
     "both reads cut",
   );
 
