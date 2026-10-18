@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { navContract } from "@shigomori/contracts/modules/nav";
 import { startGuide, useGuideHarnesses } from "@/hooks/useGuide";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -8,13 +8,15 @@ import { useApi } from "@/lib/runtime/pageApi";
 export function GuideMenu() {
   const api = useApi();
   const harnesses = useGuideHarnesses();
+  // Once per list: `harnesses` is a fresh array per render.
   const shown = harnesses?.join(",");
-  useEffect(() => {
-    if (harnesses !== undefined) {
-      void api.run(api.menu.setGuideHarnesses(harnesses));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per list: `harnesses` is a fresh array per render.
-  }, [api, shown]);
+  const tellMenu = useEffectEvent(() => {
+    if (harnesses === undefined) return;
+    // A menu that didn't take it keeps the last list it had, which the
+    // next one replaces.
+    void api.run(api.menu.setGuideHarnesses(harnesses)).catch(() => {});
+  });
+  useEffect(() => tellMenu(), [api, shown]);
   useEffect(
     () =>
       api.listen(api.pushes(navContract, "showAround"), (harness) =>
