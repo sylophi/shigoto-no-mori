@@ -132,15 +132,15 @@ export function buildPaletteEntries({
   const entryKeyOf = (rowKey: string) => folds.get(rowKey) ?? rowKey;
   // A mirrored pair's visits on either side count for its one entry.
   const lastVisit = new Map<string, number>();
-  for (const [rowKey, at] of Object.entries(visits)) {
+  for (const [rowKey, order] of Object.entries(visits)) {
     const key = entryKeyOf(rowKey);
-    lastVisit.set(key, Math.max(lastVisit.get(key) ?? 0, at));
+    lastVisit.set(key, Math.max(lastVisit.get(key) ?? 0, order));
   }
-  const visitedAt = (entry: PaletteEntry) => lastVisit.get(entry.key) ?? 0;
+  const visitOrder = (entry: PaletteEntry) => lastVisit.get(entry.key) ?? 0;
   const sorted = entries.toSorted(
     (a, b) =>
       Number(a.sunk) - Number(b.sunk) ||
-      visitedAt(b) - visitedAt(a) ||
+      visitOrder(b) - visitOrder(a) ||
       worktreeLastActivityAt(b.worktree) - worktreeLastActivityAt(a.worktree) ||
       a.worktree.name.localeCompare(b.worktree.name),
   );

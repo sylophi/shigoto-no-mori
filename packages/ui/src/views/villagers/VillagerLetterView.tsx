@@ -1,4 +1,5 @@
 import { type CSSProperties, useState } from "react";
+import { useToday } from "../../hooks/useToday.ts";
 import { stationeryFor } from "../../lib/villagers/stationery.ts";
 import { StationeryPrintView } from "./StationeryPrintView.tsx";
 import { cn } from "../../lib/utils.ts";
@@ -199,11 +200,9 @@ function Stamp({
   tint: string;
   ink: string;
 }) {
-  const [today] = useState(() =>
-    new Date()
-      .toLocaleDateString(undefined, { month: "short", day: "numeric" })
-      .toUpperCase(),
-  );
+  const today = useToday()
+    .toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    .toUpperCase();
   return (
     <>
       <span

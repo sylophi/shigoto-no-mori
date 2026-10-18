@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { type Deadline, deadlineIn, deadlinePassed } from "@/lib/deadline";
 
 // Two-step confirm sentinels. Lower for reversible-ish ops (removing a
 // project from the list); higher for destructive ones (delete worktree,
@@ -25,6 +26,9 @@ export function useConfirmTwice(timeoutMs = 2_500) {
 export function useConfirmTwiceKeyed(timeoutMs = 2_500) {
   const [armedKey, setArmedKey] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
+  // The arm the second click is checked against. The timer only draws
+  // it away: a hidden window's timers run late, and a sleep stops them.
+  const armRef = useRef<{ key: string; until: Deadline } | null>(null);
 
   useEffect(() => {
     return () => {
@@ -37,18 +41,21 @@ export function useConfirmTwiceKeyed(timeoutMs = 2_500) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    armRef.current = null;
     setArmedKey(null);
   };
 
   const trigger = (key: string, action: () => void) => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    if (armedKey === key) {
-      setArmedKey(null);
+    const arm = armRef.current;
+    if (arm?.key === key && !deadlinePassed(arm.until)) {
+      reset();
       action();
       return;
     }
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    armRef.current = { key, until: deadlineIn(timeoutMs) };
     setArmedKey(key);
-    timerRef.current = window.setTimeout(() => setArmedKey(null), timeoutMs);
+    timerRef.current = window.setTimeout(reset, timeoutMs);
   };
 
   return { armedKey, trigger, reset };
