@@ -9,11 +9,7 @@ import {
   type SidebarDeviceBadge,
 } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import { useLocateProject } from "./LocateProjectPicker";
-import {
-  ProjectGroupActions,
-  useGroupMembers,
-  useIconMember,
-} from "./ProjectGroupActions";
+import { ProjectGroupActions, useProjectGroup } from "./ProjectGroupActions";
 import { ProjectHeaderView } from "@shigomori/ui/views/sidebar/ProjectHeaderView.tsx";
 import { ProjectRowView } from "@shigomori/ui/views/sidebar/ProjectRowView.tsx";
 import type { RemoteProjectMember } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
@@ -93,8 +89,7 @@ export function ProjectRow({
   // One of the list, to go into.
   const pickable = !arrangeMode && !expanded && !missing;
   // This machine first, then every peer holding the same repo.
-  const group = useGroupMembers(members, local ? project : undefined);
-  const iconMember = useIconMember(group, local);
+  const { group, icon } = useProjectGroup({ project, local, members });
   const { relocating, onLocate, picker } = useLocateProject(
     group,
     project,
@@ -133,13 +128,7 @@ export function ProjectRow({
       header={
         <ProjectHeaderView
           project={project}
-          icon={
-            <ProjectIcon
-              projectId={iconMember?.project.id ?? project.id}
-              name={project.name}
-              deviceId={iconMember?.deviceId}
-            />
-          }
+          icon={<ProjectIcon {...icon} name={project.name} />}
           badges={
             marks.deviceBadges && <DeviceBadgeClusterView devices={devices} />
           }

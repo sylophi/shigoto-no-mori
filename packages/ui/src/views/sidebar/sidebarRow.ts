@@ -10,10 +10,16 @@ import type {
 } from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView.tsx";
 
-// The shelves the inbox view folds shut by default, and the tree's
-// (GroupShelf) among them. The live box has no header, so it isn't in
-// this union.
-export type InboxShelf = "agentWorking" | "shelved" | "merged" | "hidden";
+// The shelves the inbox view folds shut by default, in order, and the
+// tree's (GroupShelf) among them. The live box has no header, so it
+// isn't one.
+export const INBOX_SHELVES = [
+  "agentWorking",
+  "shelved",
+  "merged",
+  "hidden",
+] as const;
+export type InboxShelf = (typeof INBOX_SHELVES)[number];
 
 // Each shelf's name, as its fold reads it.
 export const SHELF_LABELS: Record<InboxShelf, string> = {
