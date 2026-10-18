@@ -503,8 +503,11 @@ async function updateInstalled(
   const binary = readdirSync(resources).find((name) => /^sm\w*$/.test(name));
   if (binary === undefined) throw new Error(`no sm binary in ${resources}`);
   const signedIn = () => {
+    // On the app's own data folder: the run's config folder holds no
+    // pointer to it.
     const devices = spawnSync(join(resources, binary), ["--json", "devices"], {
       encoding: "utf8",
+      env: { ...process.env, SHIGOMORI_DATA_DIR: dataDir },
     });
     return devices.status === 0 && devices.stdout.includes('"thisDevice"');
   };

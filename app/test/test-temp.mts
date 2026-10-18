@@ -14,7 +14,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { it } from "vitest";
@@ -45,7 +45,7 @@ import { join } from "node:path";
 import { ownTestTemp } from ${JSON.stringify(owner)};
 const run = ownTestTemp("proof");
 writeFileSync(join(tmpdir(), "left"), "");
-console.log(run + "\\n" + tmpdir());
+console.log(run + "\\n" + tmpdir() + "\\n" + process.env.XDG_CONFIG_HOME);
 ${ENDS[end]}
 `;
   const env: NodeJS.ProcessEnv = { ...process.env, SM_TEST_ROOT: root };
@@ -64,9 +64,9 @@ function runTo(
   joining?: string,
 ) {
   const { stdout } = spawnSync(...launch(root, end, joining));
-  const [run = "", tmp = ""] = stdout.trim().split("\n");
+  const [run = "", tmp = "", config = ""] = stdout.trim().split("\n");
   assert.notEqual(run, "", "the run printed no folder");
-  return { run, tmp };
+  return { run, tmp, config };
 }
 
 async function holdingRun(root: string, joining?: string) {
@@ -78,8 +78,8 @@ async function holdingRun(root: string, joining?: string) {
   };
   trackTest(kill);
   const [out] = await once(child.stdout, "data");
-  const [run = "", tmp = ""] = String(out).trim().split("\n");
-  return { run, tmp, kill };
+  const [run = "", tmp = "", config = ""] = String(out).trim().split("\n");
+  return { run, tmp, config, kill };
 }
 
 it("a run's TMPDIR is its folder, which goes as the run exits", () => {
@@ -88,6 +88,29 @@ it("a run's TMPDIR is its folder, which goes as the run exits", () => {
   assert.equal(tmp, run);
   assert.ok(run.startsWith(join(root, "proof")));
   assert.equal(existsSync(root), false);
+});
+
+it("a run's config folder is its own, with pnpm's settings the user's", async () => {
+  const root = tempDir("sm-test-temp-", trackTest);
+  const { run, config, kill } = await holdingRun(root);
+  try {
+    assert.equal(config, join(run, "config"));
+    const pnpm = join(config, "pnpm");
+    if (existsSync(pnpm)) assert.ok(lstatSync(pnpm).isSymbolicLink());
+  } finally {
+    await kill();
+  }
+});
+
+it("a process joining a run shares its config folder", async () => {
+  const root = tempDir("sm-test-temp-", trackTest);
+  const held = await holdingRun(root);
+  try {
+    const joined = runTo(root, "exit", held.run);
+    assert.equal(joined.config, held.config);
+  } finally {
+    await held.kill();
+  }
 });
 
 it("a killed run's folder is swept by the next run", () => {

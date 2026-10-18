@@ -15,6 +15,7 @@ import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
   chmodSync,
+  existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -23,9 +24,10 @@ import {
   rmdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 const RUN = "SM_TEST_RUN";
@@ -34,16 +36,20 @@ const ROOT = "SM_TEST_ROOT";
 // made.
 const UNCLAIMED_MS = 2 * 60 * 60_000;
 
-// Takes a run folder for `family` and points this process's TMPDIR at
-// it. Inside a run already (a runner that spawns vitest, whose config
+// Takes a run folder for `family` and points this process's TMPDIR and
+// XDG_CONFIG_HOME at it. Inside a run already (a runner that spawns vitest, whose config
 // calls this too), joins that run instead, so the run is held while
 // either process lives. Returns the run folder.
 export function ownTestTemp(family: string): string {
   const inherited = process.env[RUN];
-  if (inherited !== undefined && joinRun(inherited)) return inherited;
+  if (inherited !== undefined && joinRun(inherited)) {
+    process.env["XDG_CONFIG_HOME"] = join(inherited, "config");
+    return inherited;
+  }
   const root = process.env[ROOT] ?? join(tmpdir(), "sm-test");
   sweep(root);
   const run = claim(root, family);
+  const userConfig = process.env["XDG_CONFIG_HOME"];
   process.env[ROOT] = root;
   process.env[RUN] = run;
   process.env["TMPDIR"] = run;
@@ -53,12 +59,36 @@ export function ownTestTemp(family: string): string {
   // app, so a run's move or settle stalled another's changes.
   const config = join(run, "config");
   mkdirSync(config, { recursive: true });
+  linkPackageManagers(config, userConfig);
   process.env["XDG_CONFIG_HOME"] = config;
   process.on("exit", () => {
     if (!heldByOthers(run)) remove(run);
     sweep(root);
   });
   return run;
+}
+
+// pnpm and Bun read their global settings (the release cooldown,
+// ignore-scripts) from XDG_CONFIG_HOME once it is set, so the run's
+// folder links the user's own back in, or an install inside a run would
+// go without them.
+function linkPackageManagers(config: string, userConfig?: string): void {
+  const home = homedir();
+  const sources: Record<string, string> = {
+    pnpm:
+      userConfig !== undefined
+        ? join(userConfig, "pnpm")
+        : process.platform === "darwin"
+          ? join(home, "Library", "Preferences", "pnpm")
+          : join(home, ".config", "pnpm"),
+    ".bunfig.toml":
+      userConfig !== undefined && existsSync(join(userConfig, ".bunfig.toml"))
+        ? join(userConfig, ".bunfig.toml")
+        : join(home, ".bunfig.toml"),
+  };
+  for (const [name, source] of Object.entries(sources)) {
+    if (existsSync(source)) symlinkSync(source, join(config, name));
+  }
 }
 
 // False when the run is gone: swept after its runner was killed.
