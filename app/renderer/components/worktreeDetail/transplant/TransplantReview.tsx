@@ -60,8 +60,7 @@ function ChangedFiles({
   worktree: Worktree;
   project: Project;
 }) {
-  // Git status rather than a patch, so untracked files are listed too:
-  // the page under the dialog's own view of the changes.
+  // Git status rather than a patch, so untracked files are listed too.
   const {
     data: changed,
     isPending,

@@ -154,7 +154,6 @@ export function useDiscardHunks() {
   );
 }
 
-// The tree's views read now, for a call that moved it.
 export function useRefreshTree() {
   const { api } = useHostScope();
   return (scope: { projectId: string; worktreeId: string }) =>

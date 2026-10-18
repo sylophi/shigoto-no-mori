@@ -51,14 +51,14 @@ import {
 
 // Where the pull would refuse at step 2 (host/lib/sync/landing.ts
 // refuseLandingCollision): the landing device already has the branch,
-// checked out in a worktree or merely existing, or a branch in its way,
-// or already has a worktree under the folder name the copy would take. Read under
-// DestinationScope. Both lists are the ordinary cached ones, so the
-// row and the footer asking the same question cost one read between
-// them. The disk half of the folder rule (a stray folder that is no
-// worktree) is the host's alone. With no landing project yet (a flow
-// to a peer before its pick) nothing is read and nothing refuses. The
-// branch asked about is the one the copy lands on (pullLandingBranch).
+// checked out in a worktree or merely existing, or a branch in its way, or
+// already has a worktree under the folder name the copy would take. Read
+// under DestinationScope. Both lists are the ordinary cached ones, so the
+// row and the footer asking the same question cost one read between them.
+// The disk half of the folder rule (a stray folder that is no worktree) is
+// the host's alone. With no landing project yet (a flow to a peer before
+// its pick) nothing is read and nothing refuses. The branch asked about is
+// the one the copy lands on (pullLandingBranch).
 function useLocalCollision(
   localProject: Project | undefined,
   worktree: Worktree,
@@ -73,10 +73,7 @@ function useLocalCollision(
   const { data: worktrees } = useWorktrees(localProject?.id ?? null);
   const landingBranch = pullLandingBranch(worktree);
   const held = branches?.local.includes(landingBranch) ?? false;
-  const inTheWay =
-    branches === undefined
-      ? undefined
-      : branchInTheWay(landingBranch, branches.local);
+  const inTheWay = branchInTheWay(landingBranch, branches?.local ?? []);
   const holder = held
     ? worktrees?.find((entry) => entry.branch === landingBranch)
     : undefined;
