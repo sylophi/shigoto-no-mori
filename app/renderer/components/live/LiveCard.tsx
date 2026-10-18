@@ -2,6 +2,7 @@
 // draws them). The card is scoped to the device holding the worktree,
 // so its runner and the dialogs it opens drive that device as the
 // worktree's page would.
+import { capitalized } from "@shigomori/contracts/words";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -283,7 +284,7 @@ function WorktreeHeader({
         pending
           ? null
           : unreachable
-            ? `${deviceName} is out of reach`
+            ? `${capitalized(deviceName)} is out of reach`
             : [worktree?.name, project?.name].filter(Boolean).join(" in ")
       }
       renderLink={

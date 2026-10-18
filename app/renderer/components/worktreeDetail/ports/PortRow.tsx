@@ -3,6 +3,7 @@
 import type { ComponentProps } from "react";
 import type { PortForwardWorktree } from "@shigomori/contracts/modules/portForward";
 import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { ForwardControl } from "./ForwardControl";
 import {
   forwardBandClass,
@@ -14,15 +15,17 @@ export function PortRow({
   worktree,
   granted,
   ...props
-}: Omit<ComponentProps<typeof PortRowView>, "forward"> & {
+}: Omit<ComponentProps<typeof PortRowView>, "forward" | "deviceLabel"> & {
   deviceId: string;
   worktree: PortForwardWorktree;
   granted: boolean;
 }) {
   const canForwardPorts = useCanForwardPorts();
+  const deviceLabel = useRemoteDeviceLabel(deviceId);
   return (
     <PortRowView
       {...props}
+      deviceLabel={deviceLabel}
       forward={
         props.remote &&
         canForwardPorts && (

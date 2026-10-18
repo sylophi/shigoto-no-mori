@@ -3,6 +3,7 @@
 // branch that must run ahead of the silentError opt-out are platform
 // independent, and hand-copying them is exactly how the web boot once
 // dropped the refusal branch, so both boots build their client here.
+import { UNNAMED_DEVICE } from "@shigomori/ui/lib/deviceRoster.ts";
 import {
   isCancelledError,
   MutationCache,
@@ -133,7 +134,7 @@ export function createAppQueryClient(
             err.deviceId === undefined
               ? undefined
               : deviceLabelOf(err.deviceId);
-          notifyError(peerReadOnlyNote(label ?? "the other device"), err);
+          notifyError(peerReadOnlyNote(label ?? UNNAMED_DEVICE), err);
           return;
         }
         if (mutation.meta?.silentError) return;

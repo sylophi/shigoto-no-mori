@@ -5,16 +5,19 @@ import { SectionHeading } from "../../primitives/section-heading.tsx";
 // for a section with nothing else to show.
 export function PeerReadErrorView({
   what,
+  device,
   message,
   heading,
 }: {
   what: string;
+  // The peer, by name.
+  device: string;
   message: string;
   heading?: string;
 }) {
   const note = (
     <p className="text-xs text-muted-foreground select-text">
-      Couldn&apos;t check {what} on that device: {message}
+      Couldn&apos;t check {what} on {device}: {message}
     </p>
   );
   if (heading === undefined) return note;

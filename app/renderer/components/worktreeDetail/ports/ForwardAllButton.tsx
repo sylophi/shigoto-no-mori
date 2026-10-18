@@ -1,5 +1,12 @@
-// A peer's port list's bulk actions (ForwardAllButtonView), one
-// forward at a time.
+// A peer's port list's bulk actions (ForwardAllButtonView). A port with
+// nothing listening yet is started too: the engine binds the forward
+// anyway and it reaches the server once one comes up. Each start lands
+// on the local port the row remembers (preferredLocalPort), so the bulk
+// action and the switches agree on where a port goes. Starts run one at
+// a time: each opens a probe channel on the peer, and the order makes a
+// local-port collision between two rows deterministic. The rows reflect
+// the outcome live off the engine's broadcast. Failures fold into one
+// toast per action rather than one per port.
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -16,6 +23,7 @@ import {
 } from "@/hooks/remote/usePortForwards";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { notifyError } from "@/lib/toast";
+import { pluralize } from "@shigomori/contracts/words";
 import {
   type ForwardAllMode,
   ForwardAllButtonView,
@@ -47,6 +55,8 @@ export function ForwardAllButton({
   const bulk = useMutation({
     mutationFn: async (action: Mode) => {
       const failures: string[] = [];
+      let started = 0;
+      let refusal: string | undefined;
       if (action === "start") {
         for (const entry of toStart) {
           const target = {
@@ -66,13 +76,25 @@ export function ForwardAllButton({
                 ...target,
               }),
             );
+            started += 1;
           } catch (error) {
-            failures.push(describeForwardError(error, target, deviceLabel));
-            // The peer refuses every port alike.
-            if (isCommandRefusedError(error)) break;
+            const reason = describeForwardError(error, target, deviceLabel);
+            // The peer refuses every port alike: the rest go unasked.
+            if (isCommandRefusedError(error)) {
+              refusal = reason;
+              break;
+            }
+            failures.push(reason);
           }
         }
-        reportFailures("Couldn't forward", toStart.length, failures);
+        // A refusal is why the rest went unforwarded, whatever failed
+        // before it.
+        reportFailures(
+          "Couldn't forward",
+          toStart.length,
+          refusal === undefined ? failures.length : toStart.length - started,
+          refusal ?? failures[0],
+        );
       } else {
         for (const forward of toStop) {
           try {
@@ -84,7 +106,12 @@ export function ForwardAllButton({
             failures.push(errorMessageOf(error));
           }
         }
-        reportFailures("Couldn't stop forwarding", toStop.length, failures);
+        reportFailures(
+          "Couldn't stop forwarding",
+          toStop.length,
+          failures.length,
+          failures[0],
+        );
       }
     },
   });
@@ -122,17 +149,20 @@ export function ForwardAllButton({
   );
 }
 
-// One toast for the whole action: the single failure in the engine's
-// words, several as a count with the first reason under it.
+// One toast for the whole action, with its reason under it: the port,
+// every one of them, or how many of them did not go.
 function reportFailures(
   title: string,
   total: number,
-  failures: string[],
+  failed: number,
+  reason: string | undefined,
 ): void {
-  if (failures.length === 0) return;
-  if (failures.length === 1) {
-    notifyError(`${title} the port`, failures[0]);
-  } else {
-    notifyError(`${title} ${failures.length} of ${total} ports`, failures[0]);
-  }
+  if (failed === 0) return;
+  const which =
+    total === 1
+      ? "the port"
+      : failed === total
+        ? `the ${pluralize(total, "port")}`
+        : `${failed} of ${pluralize(total, "port")}`;
+  notifyError(`${title} ${which}`, reason);
 }

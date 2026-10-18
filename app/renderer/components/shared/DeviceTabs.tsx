@@ -3,6 +3,7 @@
 // pages, the tidy page) leads its header with one tab per device
 // (DeviceTabBarView) and mounts its body under the picked device's
 // HostScope, so the page needs no remote-awareness of its own.
+import { capitalized } from "@shigomori/contracts/words";
 import { useState, type ReactNode } from "react";
 import {
   DeviceTabNoteView,
@@ -195,7 +196,7 @@ export function DeviceTabPanel({
   }
   const offline = tab.api === undefined || tab.block === "offline";
   const note = offline
-    ? `${tab.label} is offline, and ${subject} loads when it reconnects.`
+    ? `${capitalized(tab.label)} is offline, and ${subject} loads when it reconnects.`
     : tab.block === "no-grant"
       ? peerReadOnlyNote(tab.label)
       : null;

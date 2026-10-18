@@ -21,6 +21,7 @@ import { SectionHeading } from "../../primitives/section-heading.tsx";
 // its runtime info, so the new path shows up on its own.
 export function DataLocationSectionView({
   remote,
+  deviceLabel,
   root,
   home,
   moving,
@@ -35,6 +36,8 @@ export function DataLocationSectionView({
 }: {
   // A peer's folder: its app restarts, not this window.
   remote: boolean;
+  // The scope's device by name, for the copy under a remote scope.
+  deviceLabel: string;
   // The data folder, null until the runtime info lands.
   root: string | null;
   home: string | null;
@@ -54,7 +57,7 @@ export function DataLocationSectionView({
   picker: ReactNode;
 }) {
   // Whose app the copy below is talking about.
-  const there = remote ? " on that device" : "";
+  const there = remote ? ` on ${deviceLabel}` : "";
   return (
     <section className="space-y-3">
       {/* The overlay stands in for a window that is about to go away.
@@ -118,8 +121,8 @@ export function DataLocationSectionView({
       {remote && busy && (
         <p className="text-xs text-muted-foreground">
           {moving
-            ? "Moving the data folder on that device…"
-            : "Moved. The new location shows once that device is back."}
+            ? `Moving the data folder on ${deviceLabel}…`
+            : `Moved. The new location shows once ${deviceLabel} is back.`}
         </p>
       )}
       {picker}
