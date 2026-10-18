@@ -1,7 +1,5 @@
-// Every walk file's: a case that failed is noted for its lab's close.
+// Every walk file's: what each case came to, for its lab's close.
 import { afterEach } from "vitest";
-import { noteWalkFailed } from "./failed.mts";
+import { noteCase } from "./failed.mts";
 
-afterEach(({ task }) => {
-  if (task.result?.state === "fail") noteWalkFailed();
-});
+afterEach(({ task }) => noteCase(task.result?.state));

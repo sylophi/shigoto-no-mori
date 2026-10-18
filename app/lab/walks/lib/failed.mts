@@ -1,8 +1,10 @@
-// Whether a walk of this file failed, which setup.mts hears, for its
-// lab's close to keep what it left (labApp.mts).
+// Set by setup.mts, read by labApp.mts's close. A walk none of whose
+// cases ran failed in a hook (its beforeAll), which skipped them all.
+let ran = 0;
 let failed = false;
 
-export const noteWalkFailed = (): void => {
-  failed = true;
+export const noteCase = (state: string | undefined): void => {
+  ran += 1;
+  if (state === "fail") failed = true;
 };
-export const walkFailed = (): boolean => failed;
+export const walkFailed = (): boolean => failed || ran === 0;

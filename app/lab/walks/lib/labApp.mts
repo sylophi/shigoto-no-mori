@@ -120,6 +120,33 @@ function appPids(app: number | undefined): { pid: number; command: string }[] {
   return found;
 }
 
+// A failed walk's root (its repos, data folder and home with the
+// shell's logs), with the host's trace beside it, kept under
+// SM_WALK_FAILURES. A copy that fails says so and keeps what it got.
+function keepFailed(root: string): void {
+  const walk = basename(expect.getState().testPath ?? root);
+  const failures =
+    process.env["SM_WALK_FAILURES"] ??
+    join(APP_DIR, "lab", "walks", "failures");
+  const kept = join(
+    failures,
+    `${walk.replace(/\.walk\.mts$/, "")}-${new Date().toISOString().replace(/[:.]/g, "-")}`,
+  );
+  try {
+    mkdirSync(failures, { recursive: true });
+    cpSync(root, kept, { recursive: true, verbatimSymlinks: true });
+    const host = join(userInfo().homedir, "Library", "Logs", NAME);
+    if (existsSync(host))
+      cpSync(host, join(kept, "host-logs"), { recursive: true });
+    console.error(`[walks] ${walk} failed: its root and logs are at ${kept}`);
+  } catch (error) {
+    console.error(
+      `[walks] ${walk} failed, and keeping its root at ${kept} did too:`,
+      error,
+    );
+  }
+}
+
 export async function bootLab(options: LabOptions): Promise<Lab> {
   const bundle = labBundle();
   const executable = join(bundle, "Contents", "MacOS", NAME);
@@ -128,6 +155,7 @@ export async function bootLab(options: LabOptions): Promise<Lab> {
   try {
     return await launch(root, options, executable);
   } catch (cause) {
+    keepFailed(root);
     rmSync(root, { recursive: true, force: true });
     throw cause;
   }
@@ -143,7 +171,7 @@ async function launch(
   const dataDir = join(root, options.linkedDataDir ? "linked" : "", "data");
   if (options.linkedDataDir) {
     mkdirSync(join(root, "actual"));
-    symlinkSync(join(root, "actual"), join(root, "linked"));
+    symlinkSync("actual", join(root, "linked"));
   }
   const reposDir = join(root, "repos");
   for (const dir of [home, bin, reposDir]) mkdirSync(dir, { recursive: true });
@@ -247,38 +275,21 @@ async function launch(
   let current = await start();
   const close = async () => {
     await current.stop();
-    const walk = basename(expect.getState().testPath ?? root);
-    // The app's own logs: the shell's under the walk's home, and the
-    // host's trace where Electron puts the logs folder, under the
-    // account's real home, which the walks' nuke clears at the end.
-    const logs = [
-      [join(home, "Library", "Logs"), "shell"],
-      [join(userInfo().homedir, "Library", "Logs", NAME), "host"],
-    ] as const;
-    const copyLogs = (to: string) => {
-      for (const [from, name] of logs) {
-        if (existsSync(from)) cpSync(from, join(to, name), { recursive: true });
-      }
-    };
     // Every walk's, for a look at one that failed in CI, where its root
-    // goes with it.
+    // goes with it: the shell's under the walk's home, and the host's
+    // trace where Electron puts the logs folder, under the account's real
+    // home, which the walks' nuke clears at the end.
     const keep = process.env["SM_WALK_LOGS"];
-    if (keep !== undefined && keep !== "") copyLogs(join(keep, walk));
-    // A failed walk's root, its repos, data folder and the logs, kept
-    // where SM_WALK_FAILURES names (a folder in the checkout by default).
-    if (walkFailed()) {
-      copyLogs(join(root, "logs"));
-      const failures =
-        process.env["SM_WALK_FAILURES"] ??
-        join(APP_DIR, "lab", "walks", "failures");
-      const kept = join(
-        failures,
-        `${walk.replace(/\.walk\.mts$/, "")}-${new Date().toISOString().replace(/[:.]/g, "-")}`,
-      );
-      mkdirSync(failures, { recursive: true });
-      cpSync(root, kept, { recursive: true, verbatimSymlinks: true });
-      console.error(`[walks] ${walk} failed: its root and logs are at ${kept}`);
+    if (keep !== undefined && keep !== "") {
+      const walk = join(keep, basename(expect.getState().testPath ?? root));
+      for (const [from, to] of [
+        [join(home, "Library", "Logs"), walk],
+        [join(userInfo().homedir, "Library", "Logs", NAME), join(walk, "host")],
+      ] as const) {
+        if (existsSync(from)) cpSync(from, to, { recursive: true });
+      }
     }
+    if (walkFailed()) keepFailed(root);
     rmSync(root, { recursive: true, force: true });
   };
   const restart = async () => {
