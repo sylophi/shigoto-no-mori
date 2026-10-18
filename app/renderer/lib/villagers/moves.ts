@@ -78,9 +78,10 @@ export function startVillagerMoves(
   api: RendererApi,
   queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
+  signal: AbortSignal,
 ): void {
   started = { api, queryClient, registry };
-  onWorktreeLists(({ key, deviceId, list }) => {
+  const stop = onWorktreeLists(({ key, deviceId, list }) => {
     if (list === null) {
       lastSeen.delete(key);
       return;
@@ -100,6 +101,7 @@ export function startVillagerMoves(
     pending.set(deviceId, moves);
     settle();
   });
+  signal.addEventListener("abort", stop, { once: true });
 }
 
 // Keeps moves from being told until the returned release is called,

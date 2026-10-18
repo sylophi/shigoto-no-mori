@@ -15,6 +15,7 @@ import {
   isHubRateLimitedError,
   isNoDirectConnectionError,
   isNotSharingError,
+  isPeerRefusal,
 } from "@shigomori/contracts/errors";
 import { isOwnAppDrop } from "@shared/remote/rpcTransport";
 import { notifyError } from "@/lib/toast";
@@ -91,8 +92,7 @@ export function createAppQueryClient(
           (failureCount < 3 &&
             !isHubRateLimitedError(error) &&
             !isEntityGoneError(error) &&
-            !isCommandRefusedError(error) &&
-            !isNotSharingError(error)),
+            !isPeerRefusal(error)),
       },
     },
     queryCache: new QueryCache({
