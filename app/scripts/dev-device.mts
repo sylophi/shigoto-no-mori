@@ -6,11 +6,10 @@
 // The window runs as the dev profile <profile> (scripts/lib/devProfile.mts)
 // with Chromium's debugging port open on SHIGOMORI_DEBUG_PORT. The first
 // window of a worktree is the primary (`pnpm start`: the build, the
-// renderer's vite server, deep links). A
-// window launched while that vite server answers is a peer on the
-// primary's build (scripts/dev-peer.mts). Without port-pool the
-// renderer has no fixed port to probe, so every window starts as a
-// primary. SIGINT and SIGTERM go to the window's tree, which is how
+// renderer's vite server, deep links). A window launched while that vite
+// server answers is a peer on the primary's build (scripts/dev-peer.mts).
+// Without port-pool the renderer has no fixed port to probe, so every
+// window starts as a primary. SIGINT and SIGTERM go to the window's tree, which is how
 // weblab stops it when the last session on it ends.
 import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
