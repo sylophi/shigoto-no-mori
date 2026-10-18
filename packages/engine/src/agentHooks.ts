@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { canonicalJson } from "./agentSessions.ts";
-import { shellQuote } from "./Lifecycle.ts";
+import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 // One hook entry: the event, an optional matcher, and whether it runs

@@ -1,5 +1,5 @@
 import { lifecycleSlot } from "@shigomori/contracts/schemas";
-import { lifecycleCommand } from "@shigomori/engine/Worktrees";
+import { lifecycleCommand } from "@shigomori/contracts/lifecycleScripts";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";

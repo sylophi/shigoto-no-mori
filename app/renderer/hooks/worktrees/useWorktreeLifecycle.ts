@@ -41,8 +41,8 @@ import { useApi } from "@/lib/runtime/pageApi";
 import { toast } from "@/lib/toast";
 
 // The phase as the detail page's banner reads it. The pull dialogs
-// word the same phases as steps of their own run (transplant/
-// PullProgress.tsx rows, pullSteps.ts headlines).
+// word the same phases as steps of their own run (flow/PullProgress.tsx
+// rows, pullSteps.ts headlines).
 export const CREATE_PHASE_LABEL = {
   carryOver: "Carrying over files...",
   setup: "Setting up...",
@@ -207,9 +207,10 @@ export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
       const removals = pushes("removal").pipe(
         Stream.tap((removal) =>
           heard("removal", () => {
-            const next = withRemoval(state, removal);
-            if (next === state) return;
-            state = next;
+            state = withRemoval(state, removal);
+            // Every removal, a close whose start this atom never heard
+            // included (a peer's session started over, a reload
+            // mid-delete): what it forgets it forgets once.
             if (queryClient !== null) {
               followRemoval(queryClient, registry, deviceId, removal);
             }

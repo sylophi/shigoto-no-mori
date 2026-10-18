@@ -18,7 +18,7 @@ import {
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 import { guideCommand } from "@shigomori/engine/agentGuide";
-import { shellQuote } from "@shigomori/engine/Lifecycle";
+import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import type { Page } from "playwright-core";
 import { DevApp } from "../reliability/devApp.mts";
 import { pageApi, withPageApi } from "../reliability/pageApi.mts";

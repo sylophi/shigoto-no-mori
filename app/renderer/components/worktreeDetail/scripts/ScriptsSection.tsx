@@ -1,9 +1,11 @@
+import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
+import { lifecycleCommand } from "@shigomori/contracts/lifecycleScripts";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
-import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
+import { slotToParam } from "@/store/scriptSlot";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { PackageScripts } from "./PackageScripts";
 import { ScriptRow } from "./ScriptRow";
@@ -30,39 +32,27 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
     worktree.id,
   );
 
-  const setupCommand = config?.scripts?.setup?.trim() ?? "";
-  const teardownCommand = config?.scripts?.teardown?.trim() ?? "";
   const pkgHasScripts = pkg && Object.keys(pkg.scripts).length > 0;
-
-  const lifecycleRows: { slot: ScriptSlot; label: string; command: string }[] =
-    [];
-  if (setupCommand) {
-    lifecycleRows.push({
-      slot: { kind: "setup" },
-      label: "Setup",
-      command: setupCommand,
-    });
-  }
-  if (portPoolActive) {
-    const quotedPath = worktreeQuotedPath(worktree.path);
-    lifecycleRows.push({
-      slot: { kind: "portPool", phase: "provision" },
-      label: "Port-pool provision",
-      command: `port-pool provision ${quotedPath}`,
-    });
-    lifecycleRows.push({
-      slot: { kind: "portPool", phase: "release" },
-      label: "Port-pool release",
-      command: `port-pool release ${quotedPath}`,
-    });
-  }
-  if (teardownCommand) {
-    lifecycleRows.push({
-      slot: { kind: "teardown" },
-      label: "Teardown",
-      command: teardownCommand,
-    });
-  }
+  const lifecycleSlots: { slot: LifecycleSlot; label: string }[] = [
+    { slot: { kind: "setup" }, label: "Setup" },
+    ...(portPoolActive
+      ? ([
+          {
+            slot: { kind: "portPool", phase: "provision" },
+            label: "Port-pool provision",
+          },
+          {
+            slot: { kind: "portPool", phase: "release" },
+            label: "Port-pool release",
+          },
+        ] as const)
+      : []),
+    { slot: { kind: "teardown" }, label: "Teardown" },
+  ];
+  const lifecycleRows = lifecycleSlots.flatMap(({ slot, label }) => {
+    const command = lifecycleCommand(slot, config, worktree.path);
+    return command === "" ? [] : [{ slot, label, command }];
+  });
   return (
     <ScriptsSectionView
       loading={configLoading || pkgLoading}
@@ -90,8 +80,4 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
       }
     />
   );
-}
-
-function worktreeQuotedPath(path: string): string {
-  return `'${path.replace(/'/g, `'\\''`)}'`;
 }

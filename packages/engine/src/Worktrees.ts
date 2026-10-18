@@ -71,9 +71,7 @@ export {
   cleanupErrorOf,
   cleanupFailureWords,
   isShelfable,
-  lifecycleCommand,
   projectsHint,
-  scriptOf,
   trimGoSpace,
 } from "./worktrees/documents.ts";
 export type {

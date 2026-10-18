@@ -49,7 +49,7 @@ import {
   parseAgentEvent,
 } from "./agentSessions.ts";
 import { envVar } from "./environment.ts";
-import { shellQuote } from "./Lifecycle.ts";
+import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Launchers from "./Launchers.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";

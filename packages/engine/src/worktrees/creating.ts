@@ -1,5 +1,6 @@
 // Worktrees' creating: a new worktree's name and folder, its checkout,
 // and the setup that runs in it (carry-over, the setup script, ports).
+import { lifecycleCommand } from "@shigomori/contracts/lifecycleScripts";
 import { isValidWorktreeDirName } from "@shigomori/contracts/predicates/worktreeDirName";
 import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
 import * as Cause from "effect/Cause";
@@ -29,7 +30,6 @@ import {
   type WorktreeIdentity,
   WorktreeRefused,
   isPrimaryKeyword,
-  lifecycleCommand,
   namesUsed,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";

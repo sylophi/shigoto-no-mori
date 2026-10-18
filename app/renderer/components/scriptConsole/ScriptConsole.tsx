@@ -10,7 +10,7 @@ import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { peerOutputHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { assertNever } from "@shigomori/ui/lib/utils.ts";
+import { lifecycleCommand } from "@shigomori/contracts/lifecycleScripts";
 import type { ScriptSlot } from "@/store/scriptSlot";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ScriptConsoleView } from "@shigomori/ui/views/scriptConsole/ScriptConsoleView.tsx";
@@ -51,7 +51,11 @@ export function ScriptConsole({
   };
   return (
     <ScriptConsoleView
-      command={resolveCommand(slot, config, pkg)}
+      command={
+        slot.kind === "package"
+          ? (pkg?.scripts[slot.name] ?? "")
+          : lifecycleCommand(slot, config, worktree.path)
+      }
       state={state}
       busy={busy}
       readOnlyNote={canRun ? null : peerOutputHiddenNote(deviceLabel)}
@@ -75,26 +79,4 @@ export function ScriptConsole({
       }
     />
   );
-}
-
-function resolveCommand(
-  slot: ScriptSlot,
-  config:
-    | { scripts?: { setup?: string; teardown?: string } }
-    | null
-    | undefined,
-  pkg: { scripts: Record<string, string> } | null | undefined,
-): string {
-  switch (slot.kind) {
-    case "setup":
-      return config?.scripts?.setup ?? "";
-    case "teardown":
-      return config?.scripts?.teardown ?? "";
-    case "portPool":
-      return "";
-    case "package":
-      return pkg?.scripts[slot.name] ?? "";
-    default:
-      return assertNever(slot);
-  }
 }

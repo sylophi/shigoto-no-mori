@@ -89,8 +89,6 @@ function buildQueryKeys(deviceId: string) {
 
     worktreeData: (projectId: string | null, worktreeId: string | null) =>
       host("worktreeData", projectId, worktreeId),
-    worktreeChanges: (projectId: string, worktreeId: string) =>
-      host("worktreeChanges", projectId, worktreeId),
     // The ignored files a transfer leaves behind on a source worktree
     // (sync:ignoredPaths), read by the transplant dialog.
     worktreeIgnored: (projectId: string, worktreeId: string) =>
