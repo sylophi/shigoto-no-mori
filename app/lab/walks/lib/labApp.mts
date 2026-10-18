@@ -23,6 +23,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { expect } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
+import { devProfileNameSuffix } from "../../../shared/packaging/appName.mts";
 import { walkFailed } from "./failed.mts";
 
 const APP_DIR = join(import.meta.dirname, "..", "..", "..");
@@ -144,7 +145,17 @@ const KEPT_FAILURES = 5;
 const KEPT_STAMP = /-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)$/;
 const stampOf = (date: Date) => date.toISOString().replace(/[:.]/g, "-");
 
-function keepFailed(root: string): void {
+// Where the app's host keeps its trace: a folder named for the app, whose
+// name a profile adds to (shared/packaging/appName.mts).
+const hostLogsOf = (profile: string | undefined) =>
+  join(
+    userInfo().homedir,
+    "Library",
+    "Logs",
+    `${NAME}${profile === undefined ? "" : devProfileNameSuffix(profile)}`,
+  );
+
+function keepFailed(root: string, profile: string | undefined): void {
   const failures = process.env["SM_WALK_FAILURES"];
   if (failures === undefined || failures === "") return;
   const walk = basename(expect.getState().testPath ?? root);
@@ -156,12 +167,12 @@ function keepFailed(root: string): void {
   }
   const kept = join(
     failures,
-    `${walk.replace(/\.walk\.mts$/, "")}-${stampOf(new Date())}`,
+    `${walk.replace(/\.walk\.mts$/, "")}${profile === undefined ? "" : `-${profile}`}-${stampOf(new Date())}`,
   );
   try {
     mkdirSync(failures, { recursive: true });
     cpSync(root, kept, { recursive: true, verbatimSymlinks: true });
-    const host = join(userInfo().homedir, "Library", "Logs", NAME);
+    const host = hostLogsOf(profile);
     if (existsSync(host))
       cpSync(host, join(kept, "host-logs"), { recursive: true });
     console.error(`[walks] ${walk} failed: its root and logs are at ${kept}`);
@@ -234,7 +245,7 @@ export async function launchLab(options: LabOptions): Promise<Lab> {
   try {
     return await launch(root, options, executable);
   } catch (cause) {
-    keepFailed(root);
+    keepFailed(root, options.profile);
     rmSync(root, { recursive: true, force: true });
     throw cause;
   }
@@ -375,16 +386,29 @@ async function launch(
     // home, which the walks' nuke clears at the end.
     const keep = process.env["SM_WALK_LOGS"];
     if (keep !== undefined && keep !== "") {
-      const walk = join(keep, basename(expect.getState().testPath ?? root));
+      const walk = join(
+        keep,
+        basename(expect.getState().testPath ?? root),
+        options.profile ?? "",
+      );
       for (const [from, to] of [
         [join(home, "Library", "Logs"), walk],
-        [join(userInfo().homedir, "Library", "Logs", NAME), join(walk, "host")],
+        [hostLogsOf(options.profile), join(walk, "host")],
       ] as const) {
         if (existsSync(from)) cpSync(from, to, { recursive: true });
       }
     }
-    if (walkFailed()) keepFailed(root);
+    if (walkFailed()) keepFailed(root, options.profile);
     rmSync(root, { recursive: true, force: true });
+    // A device's own folders, which the walks' nuke leaves: it clears the
+    // build's, and a profile's are named for it.
+    if (options.profile !== undefined) {
+      rmSync(join(userData, "profiles", options.profile), {
+        recursive: true,
+        force: true,
+      });
+      rmSync(hostLogsOf(options.profile), { recursive: true, force: true });
+    }
   };
   const restart = async () => {
     await current.run.browser?.close().catch(() => {});

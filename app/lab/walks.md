@@ -38,9 +38,9 @@ else.
 
 - **After every landing on release/v3**, in the `Walks` workflow
   (`.github/workflows/walks.yml`), which packages the lab build on a
-  macOS runner and runs every walk: about 8 minutes of walks (the
-  cross-device ones about a minute and a half of that) and 1 of
-  packaging, too long for every pull request. It checks out the whole
+  macOS runner and runs every walk: about 13 minutes of walks (the
+  cross-device ones about 6 of that, where a laptop takes a minute and
+  a half) and 1 of packaging, too long for every pull request. It checks out the whole
   history, since the cross-device walks' project is this repository
   at a pinned commit. It can also be started
   by hand (`workflow_dispatch`). A regression shows within the hour

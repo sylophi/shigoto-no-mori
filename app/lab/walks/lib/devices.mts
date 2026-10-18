@@ -10,10 +10,9 @@ import {
   launchLab,
   refuseRunningLab,
 } from "./labApp.mts";
-import { type LabHub, startLabHub } from "./labHub.mts";
+import { startLabHub } from "./labHub.mts";
 
 export interface Devices {
-  readonly hub: LabHub;
   // Another device on the account, enrolled and online with the rest,
   // named `walk-<name>` (its window's device name ends in "[walk-<name>]").
   add(name: string, seed: LabOptions["seed"]): Promise<Lab>;
@@ -89,10 +88,21 @@ export async function startDevices(): Promise<Devices> {
     if (at >= 0) running.splice(at, 1);
     await lab.close();
   };
+  // Every device and the hub, whatever one of them throws on the way.
   const close = async () => {
-    for (const { lab } of running.toReversed()) await lab.close();
+    const closing = running.toReversed();
     running.length = 0;
+    const results = [];
+    for (const { lab } of closing)
+      results.push(
+        await lab.close().then(
+          () => null,
+          (error: unknown) => error,
+        ),
+      );
     await hub.stop();
+    const failed = results.find((error) => error !== null);
+    if (failed !== undefined) throw failed;
   };
-  return { hub, add, remove, close };
+  return { add, remove, close };
 }

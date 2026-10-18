@@ -41,23 +41,29 @@ beforeAll(async () => {
   b = await devices.add("b", blank);
   for (const lab of [a, b]) lab.sm("config", "set", "doubutsuNames", "true");
 }, 5 * 60_000);
-// A walk that failed may leave its dialog open over the next one's
-// clicks.
+// A walk that failed may leave its menu or dialog open over the next
+// one's clicks.
 afterEach(async () => {
   for (const lab of [a, b]) {
     if (lab === undefined) continue;
-    const dialogs = lab.page.getByRole("dialog");
-    for (let open = await dialogs.count(); open > 0; open -= 1) {
+    const open = lab.page.locator('[role="dialog"], [role="menu"]');
+    for (let tries = 0; tries < 6; tries += 1) {
+      const count = await open.count();
+      if (count === 0) break;
       await lab.page.keyboard.press("Escape");
-      await dialogs
-        .nth(open - 1)
-        .waitFor({ state: "detached", timeout: 5_000 });
+      await expect
+        .poll(() => open.count(), { timeout: 2_000 })
+        .toBeLessThan(count)
+        .catch(() => {});
     }
   }
 });
 afterAll(async () => {
-  await devices?.close();
-  await origin?.stop();
+  try {
+    await devices?.close();
+  } finally {
+    await origin?.stop();
+  }
 });
 
 // ---- What a person does.
@@ -102,7 +108,12 @@ const openPeerWorktree = async (page: Page, device: string, name: string) => {
     name: REAL_NAME,
     exact: true,
   });
-  if (await project.isVisible()) await project.click();
+  if (
+    (await project.isVisible()) &&
+    (await project.getAttribute("aria-expanded")) !== "true"
+  ) {
+    await project.click();
+  }
   await sidebar(page)
     .getByRole("button", { name: new RegExp(`^${name} ${name} On `) })
     .click();
@@ -135,7 +146,7 @@ const pickDevice = async (page: Page, dialog: Locator, device: string) => {
       .catch(() => false);
     if (shown) break;
   }
-  await item.click();
+  if (!named.test((await button.textContent()) ?? "")) await item.click();
   await expect
     .poll(async () => (await button.textContent()) ?? "")
     .toMatch(named);

@@ -101,13 +101,23 @@ export async function startLabHub(): Promise<LabHub> {
   child.stderr.on("data", (chunk: Buffer) => {
     stderr = (stderr + chunk.toString()).slice(-4000);
   });
+  // The whole group, workerd with wrangler, whether or not wrangler is
+  // still there; a group already gone is no error.
+  const signal = (name: NodeJS.Signals) => {
+    if (child.pid === undefined) return;
+    try {
+      process.kill(-child.pid, name);
+    } catch {}
+  };
+  // Detached, it hears no Ctrl-C of the run's: the run's exit takes it.
+  const onExit = () => signal("SIGKILL");
+  process.once("exit", onExit);
   const stop = async () => {
-    if (!exited && child.pid !== undefined) {
-      process.kill(-child.pid, "SIGTERM");
-      await waitFor(() => exited, "the lab hub to stop", 10_000).catch(() => {
-        if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
-      });
-    }
+    process.off("exit", onExit);
+    signal("SIGTERM");
+    await waitFor(() => exited, "the lab hub to stop", 10_000).catch(() =>
+      signal("SIGKILL"),
+    );
     rmSync(root, { recursive: true, force: true });
   };
   const url = `http://127.0.0.1:${port}`;
