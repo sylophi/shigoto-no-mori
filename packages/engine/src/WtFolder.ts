@@ -9,6 +9,7 @@
 // first start's
 // moves are reported to the migration as they go (Migration.ts), and
 // a start that resumes them counts the ones made before.
+import { listed, plural } from "@shigomori/contracts/words";
 import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Cause from "effect/Cause";
@@ -103,11 +104,7 @@ const closeFirst = (inside: ReadonlyArray<Working>) => {
   const named = [...pids].map(
     ([command, of]) => `${command} (${of.join(", ")})`,
   );
-  const listed =
-    named.length === 1
-      ? named[0]
-      : `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
-  return `close ${listed}, which ${inside.length === 1 ? "runs" : "run"} in it`;
+  return `close ${listed(named)}, which ${plural(inside.length, "runs", "run")} in it`;
 };
 
 // git's first line, without its "fatal:" and trailing punctuation.
@@ -157,14 +154,14 @@ const make = Effect.gen(function* () {
         SELECT from_path, to_path, project_id, error FROM wt_moves
         WHERE from_path = ${fromPath} AND moved = 0`;
       if (row === undefined) return;
-      const listed = yield* worktrees.identities(project).pipe(Effect.result);
-      if (Result.isFailure(listed)) {
-        return yield* failed(fromPath, why(listed.failure));
+      const known = yield* worktrees.identities(project).pipe(Effect.result);
+      if (Result.isFailure(known)) {
+        return yield* failed(fromPath, why(known.failure));
       }
       // git spells a path with its symlinks resolved.
       const at = (p: string) =>
         Effect.map(fs.realPath(p).pipe(Effect.orElseSucceed(() => p)), (real) =>
-          listed.success.find((id) => id.path === p || id.path === real),
+          known.success.find((id) => id.path === p || id.path === real),
         );
       const from = yield* at(row.from_path);
       if (from !== undefined) {

@@ -31,7 +31,7 @@ import {
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { ModalShell } from "../../primitives/modal-shell.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import { changeKey, type ChangedFile } from "@shigomori/contracts/schemas";

@@ -2,7 +2,7 @@
 // install, and the repairs that can put it right.
 import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Doctor from "@shigomori/engine/Doctor";
-import { plural } from "@shigomori/engine/doctorParse";
+import { pluralize } from "@shigomori/contracts/words";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Effect from "effect/Effect";
 import * as Command from "effect/cli/Command";
@@ -92,7 +92,7 @@ const render = (doc: Doctor.DoctorDocument, fix: boolean) =>
     }
     const { ok, warn, fail } = doc.summary;
     const parts = [`${ok} ok`];
-    if (warn > 0) parts.push(yellow(`${warn} warning${plural(warn)}`));
+    if (warn > 0) parts.push(yellow(pluralize(warn, "warning")));
     if (fail > 0) parts.push(red(`${fail} failed`));
     yield* out(parts.join(", "));
     const repairable = doc.checks.filter((check) => check.repairable).length;

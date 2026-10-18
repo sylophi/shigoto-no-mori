@@ -15,7 +15,7 @@ import { RowTag } from "../../primitives/row-tag.tsx";
 import { Skeleton } from "../../primitives/skeleton.tsx";
 import { TONE_PILL } from "../../primitives/status-dot.tsx";
 import { useOutside } from "../../outside.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import {
   FlowBodyView,
   FlowFooterView,

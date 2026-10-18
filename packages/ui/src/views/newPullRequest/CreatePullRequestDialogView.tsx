@@ -18,7 +18,7 @@ import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { TONE_PILL } from "../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import type { Attachment } from "../../lib/pullRequestAttachments.ts";
 import {
   FlowBodyView,

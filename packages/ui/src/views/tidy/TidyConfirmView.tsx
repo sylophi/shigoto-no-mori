@@ -6,7 +6,7 @@ import { formatBytes } from "../../lib/formatBytes.ts";
 import type { TidySummary } from "./tidyModel.ts";
 import { TidyEntryTitleView } from "./TidyEntryTitleView.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { plural, pluralize } from "@shigomori/contracts/words";
 
 interface TidyConfirmProps {
   summary: TidySummary;
@@ -93,7 +93,7 @@ export function TidyConfirmView({
             Unsaved work will be destroyed
           </p>
           <p className="mt-2 leading-relaxed">
-            {risky.length} of these {risky.length === 1 ? "is" : "are"} not safe
+            {risky.length} of these {plural(risky.length, "is", "are")} not safe
             to remove:{" "}
             {risky
               .map((entry) => `${entry.project.name}/${entry.worktree.name}`)

@@ -1,3 +1,4 @@
+import { plural } from "@shigomori/contracts/words";
 import { ChevronRight, FileDiff } from "lucide-react";
 import { DiffStats } from "../../primitives/diff-stats.tsx";
 
@@ -17,7 +18,7 @@ export function DiffButtonView({
   onClick: () => void;
   words?: boolean;
 }) {
-  const fileNoun = changedFiles === 1 ? "file" : "files";
+  const fileNoun = plural(changedFiles, "file");
   return (
     <button
       type="button"

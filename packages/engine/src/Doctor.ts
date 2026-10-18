@@ -17,6 +17,7 @@
 // The terminal's `sm doctor` must answer when the store can't open
 // (`standalone`): the checks that read only files and programs still
 // run, and the file the store refused is named as Go named it.
+import { pluralize } from "@shigomori/contracts/words";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -137,7 +138,7 @@ const migrated = (imported: boolean) =>
     const n = worktrees?.moved ?? 0;
     return [
       ...(imported ? ["imported the projects and settings from v2"] : []),
-      ...(n === 0 ? [] : [`moved ${n} worktree${n === 1 ? "" : "s"} into wt/`]),
+      ...(n === 0 ? [] : [`moved ${pluralize(n, "worktree")} into wt/`]),
     ];
   });
 

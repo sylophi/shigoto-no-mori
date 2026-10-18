@@ -4,9 +4,14 @@
 import type { RuntimeInfo, WorktreeLayout } from "../schemas/index.ts";
 import { PROJECT_CONFIG_DEFAULTS } from "../schemas/projectConfigDefaults.ts";
 
+// The folder worktrees live in under each root: short, since agents and
+// people read and type these paths all day. The engine's layout names
+// it by this too.
+export const WORKTREES_DIR = "wt";
+
 // Also appended to the primary's `.git/info/exclude`.
 const IN_PROJECT_ROOT_DIR = ".shigomori";
-const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/wt`;
+const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/${WORKTREES_DIR}`;
 
 // The whole subtree, as destructive flows guarding against it want.
 // The engine's isManagedPath uses parent equality instead.
@@ -48,7 +53,12 @@ export function projectDriveBaseFor(
 ): string | null {
   const volume = externalVolumeRoot(projectPath);
   if (volume === undefined || dataDir.startsWith(`${volume}/`)) return null;
-  return joinPath(volume, canonicalDataDirName, "wt", lastSegment(projectPath));
+  return joinPath(
+    volume,
+    canonicalDataDirName,
+    WORKTREES_DIR,
+    lastSegment(projectPath),
+  );
 }
 
 export function managedDriveBaseFor(
@@ -108,7 +118,7 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
     const driveBase = managedDriveBaseFor(projectPath, inputs);
     if (driveBase !== null) return driveBase;
   }
-  return joinPath(dataDir, "wt", lastSegment(projectPath));
+  return joinPath(dataDir, WORKTREES_DIR, lastSegment(projectPath));
 }
 
 export function worktreePathFor(

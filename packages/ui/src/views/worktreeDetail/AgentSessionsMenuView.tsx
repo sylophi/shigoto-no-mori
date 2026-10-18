@@ -12,10 +12,10 @@ import { IconButton } from "../../primitives/icon-button.tsx";
 import { RelativeDate } from "../../primitives/relative-date.tsx";
 import { StatusDot, TONE_TEXT } from "../../primitives/status-dot.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { harnessLabel } from "@shigomori/contracts/harnesses";
 import {
   AGENT_STATE_VIEW,
   agentSessionsState,
-  harnessLabel,
   waitingSession,
 } from "../../lib/agentSessions.ts";
 import { needLine, needView, stateLabel } from "../../lib/agentNeeds.ts";

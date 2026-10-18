@@ -13,7 +13,7 @@ import { Kbd } from "../../primitives/kbd.tsx";
 import type { Binding } from "../../lib/keymap.ts";
 import { Textarea } from "../../primitives/textarea.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
 

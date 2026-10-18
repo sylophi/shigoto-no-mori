@@ -33,7 +33,7 @@ import type {
   CommitActions,
   CommitRewrite,
 } from "../../../lib/commitRewrite.ts";
-import { pluralize } from "../../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 

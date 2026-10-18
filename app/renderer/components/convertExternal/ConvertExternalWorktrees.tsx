@@ -1,4 +1,4 @@
-import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
+import { adoptedDirName } from "@shigomori/contracts/predicates/worktreeDirName";
 import { useState } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { tildify } from "@shigomori/contracts/projectPaths";
@@ -17,13 +17,6 @@ import {
 import { ConvertExternalView } from "@shigomori/ui/views/convertExternal/ConvertExternalView.tsx";
 import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 import { isConvertRefusedError } from "@shigomori/contracts/errors";
-
-// For detached HEADs `worktree.branch` is a short SHA. Pass it
-// through unchanged so the managed worktree gets a hash-named dir.
-// (isRealBranch only filters the UNKNOWN_BRANCH sentinel, which we
-// never see here.)
-const proposedName = (worktree: Worktree): string =>
-  worktree.detached ? worktree.branch : sanitizeBranchForPath(worktree.branch);
 
 export function ConvertExternalWorktrees() {
   return (
@@ -61,7 +54,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
     return tildify(
       worktreePathFor(
         layoutInputsFor(config ?? null, project.path, device),
-        proposedName(worktree) || "(generated name)",
+        adoptedDirName(worktree) || "(generated name)",
       ),
       home,
     );

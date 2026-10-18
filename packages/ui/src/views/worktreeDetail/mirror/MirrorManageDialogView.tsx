@@ -45,7 +45,7 @@ import {
 import { InlineError } from "../../../primitives/inline-error.tsx";
 import { MirrorConflictsChipView } from "../MirrorConflictsView.tsx";
 import { peerReadOnlyNote } from "../../../lib/commandAccessCopy.ts";
-import { pluralize } from "../../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
 import {
   getBrowseLeafSegment,

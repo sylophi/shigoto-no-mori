@@ -4,7 +4,7 @@ import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import type { RowStatus } from "../../primitives/row-status.tsx";
 import type { DeviceLayout } from "./layoutOptions.ts";
 import type { Worktree, WorktreeLayout } from "@shigomori/contracts/schemas";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { LayoutOptionItemView } from "./LayoutOptionItemView.tsx";
 import { LAYOUT_OPTIONS } from "./layoutOptions.ts";
 import { WorktreeMoveDetailsView } from "../shared/WorktreeMoveDetailsView.tsx";

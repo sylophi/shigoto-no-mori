@@ -24,7 +24,7 @@ import { PinnedMarkView } from "../shared/PinnedMarkView.tsx";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { useNow } from "../../hooks/useNow.ts";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import { cn } from "../../lib/utils.ts";
 import type { Project } from "@shigomori/contracts/schemas";

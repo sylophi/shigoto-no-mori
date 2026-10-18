@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { SectionHeading } from "../../primitives/section-heading.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 
 interface TidyGroupHeadingProps {
   project: Project;

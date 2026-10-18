@@ -4,7 +4,7 @@
 // error can never vanish from the web tree without a trace.
 import { useEffect } from "react";
 import { toast } from "@/lib/toast";
-import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 
 // A peer whose projects could not be read, after the retries: listed,
 // and never reached.

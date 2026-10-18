@@ -1,6 +1,6 @@
 import { RelativeDate } from "../../primitives/relative-date.tsx";
 import { DiffStats } from "../../primitives/diff-stats.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 
 // What the diff pages say under (or as) their titles, each page's
 // container handing over its counts and names.

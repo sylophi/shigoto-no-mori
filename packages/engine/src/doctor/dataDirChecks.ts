@@ -1,4 +1,5 @@
 // The doctor's data dir checks: where it is, its settings and registry, the store, the updater's leftovers.
+import { plural, pluralize } from "@shigomori/contracts/words";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import { parse } from "semver";
 import * as Clock from "effect/Clock";
@@ -15,13 +16,7 @@ import * as Stream from "effect/Stream";
 import * as Config from "../Config.ts";
 import { storedProblem } from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
-import {
-  formatSize,
-  launcherProgram,
-  plural,
-  pluralize,
-  shellWord,
-} from "../doctorParse.ts";
+import { formatSize, launcherProgram, shellWord } from "../doctorParse.ts";
 import { findExecutable } from "../executables.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Darwin from "../Darwin.ts";
@@ -61,7 +56,7 @@ const checkTerrier = (enabled: boolean, listing: Terrier.TerrierListing) => {
   const count = listing.paths.length;
   return [
     line.ok(
-      `${count} registered repo${plural(count)} merged into the project list`,
+      `${pluralize(count, "registered repo")} merged into the project list`,
     ),
   ];
 };
@@ -92,17 +87,17 @@ const checkDormantState = (
     if (first === undefined) {
       return [
         line.ok(
-          `${stored.size} state dir${plural(stored.size)}, each belonging to a project`,
+          `${pluralize(stored.size, "state dir")}, each belonging to a project`,
         ),
       ];
     }
     const n = dormant.length;
     const extra = n - 1;
-    const label = `${n} dormant project state${plural(n)}`;
+    const label = pluralize(n, "dormant project state");
     return [
       repairable(
         line.warn(
-          `${n} state ${pluralize(n, "dir belongs", "dirs belong")} to no project (${first}${extra > 0 ? ` and ${extra} more` : ""})`,
+          `${n} state ${plural(n, "dir belongs", "dirs belong")} to no project (${first}${extra > 0 ? ` and ${extra} more` : ""})`,
           "Harmless: it reconnects if terrier lists the repo again (re-added, or the terrier toggle back on). Otherwise delete it.",
         ),
         {
@@ -323,7 +318,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
           `Check ${tildify(configFile, home)} against the app's Settings.`,
         );
       }
-      return line.ok(`valid, ${keys} key${plural(keys)}`);
+      return line.ok(`valid, ${pluralize(keys, "key")}`);
     };
 
     const registryLine = check("Data dir", "registry", "registry.json");
@@ -341,12 +336,12 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       ).length;
       if (malformed > 0) {
         return registryLine.warn(
-          `${malformed} registry ${pluralize(malformed, "entry is", "entries are")} missing an id or path`,
+          `${malformed} registry ${plural(malformed, "entry is", "entries are")} missing an id or path`,
           `Remove the incomplete entries from ${tildify(file, home)}.`,
         );
       }
       return registryLine.ok(
-        `valid, ${projects.length} project${plural(projects.length)} registered`,
+        `valid, ${pluralize(projects.length, "project")} registered`,
       );
     };
 
@@ -398,7 +393,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       const locks = yield* findStaleLocks;
       const [first] = locks;
       if (first === undefined) return line.ok("no stale lock files");
-      const label = `${locks.length} stale lock file${plural(locks.length)}`;
+      const label = pluralize(locks.length, "stale lock file");
       const extra = locks.length - 1;
       return repairable(
         line.warn(
@@ -442,7 +437,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         );
       }
       if (held.length > 0) {
-        const label = `${held.length} v2 file${plural(held.length)}`;
+        const label = pluralize(held.length, "v2 file");
         entries.push(
           repairable(
             line.warn(
@@ -616,7 +611,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (orphans === 0) {
         return [
           line.ok(
-            `${dirs.length} allocation${plural(dirs.length)}, all pointing at directories that exist`,
+            `${pluralize(dirs.length, "allocation")}, all pointing at directories that exist`,
           ),
         ];
       }
@@ -706,16 +701,14 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
           return marked.size > 0
             ? [
                 line.ok(
-                  `${marked.size} worktree${plural(marked.size)} marked, all still present`,
+                  `${pluralize(marked.size, "worktree")} marked, all still present`,
                 ),
               ]
             : [];
         }
         const parts = [
-          ...(leftover > 0 ? [`${leftover} mark${plural(leftover)}`] : []),
-          ...(dataFiles > 0
-            ? [`${dataFiles} data file${plural(dataFiles)}`]
-            : []),
+          ...(leftover > 0 ? [pluralize(leftover, "mark")] : []),
+          ...(dataFiles > 0 ? [pluralize(dataFiles, "data file")] : []),
         ];
         return [
           line.warn(

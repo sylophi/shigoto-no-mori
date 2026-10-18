@@ -1,4 +1,5 @@
 // What the Worktrees service's areas (../Worktrees.ts) share.
+import { pluralize } from "@shigomori/contracts/words";
 import {
   type ScriptEvent,
   ScriptEventSchema,
@@ -9,7 +10,7 @@ import * as Schema from "effect/Schema";
 import type * as Scripts from "../Scripts";
 
 const counted = (n: number, noun: string) =>
-  n === 0 ? [] : [`${n} ${noun}${n === 1 ? "" : "s"}`];
+  n === 0 ? [] : [pluralize(n, noun)];
 
 // The scripts and terminals running in a worktree hold its folder.
 export class RunningWorkError extends Schema.TaggedError<RunningWorkError>()(
