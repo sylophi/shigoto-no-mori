@@ -23,22 +23,15 @@ import type { RegisteredProject } from "./Registry.ts";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Worktrees from "./Worktrees.ts";
 
-// A folder's measure: `bytes` is its footprint, what `du` reports
-// (allocated blocks, each inode once). `reclaimableBytes` is what
-// removing it would free, usually far less: pnpm imports packages as
-// clones of its store (or hard links), and carry-over clones from the
-// primary, so most of a node_modules shares its blocks with copies
-// outside the worktree. A hard-linked inode counts only when every link
-// is inside, and each inode only its private blocks.
-export type DiskUsage = {
-  readonly bytes: number;
-  readonly reclaimableBytes: number;
-  // The newest mtime (epoch ms) outside the folders that change without
-  // anyone working (ACTIVITY_EXCLUDED), null when nothing was datable.
-  readonly lastActivityAt: number | null;
-  // An entry couldn't be read, so the totals are floors.
-  readonly partial: boolean;
-};
+// A folder's measure, the contract's for a worktree without its id.
+// `bytes` is its footprint, what `du` reports (allocated blocks, each
+// inode once). `reclaimableBytes` is what removing it would free,
+// usually far less: pnpm imports packages as clones of its store (or
+// hard links), and carry-over clones from the primary, so most of a
+// node_modules shares its blocks with copies outside the worktree. A
+// hard-linked inode counts only when every link is inside, and each
+// inode only its private blocks.
+export type DiskUsage = Omit<WorktreeDiskUsage, "worktreeId">;
 
 export class Hygiene extends Context.Service<
   Hygiene,

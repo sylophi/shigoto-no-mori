@@ -29,28 +29,9 @@ import { copyFailure, copyTree, entryExists } from "./entries.ts";
 import { stagingName } from "./worktreeLayout.ts";
 import { pidAlive } from "./processes.ts";
 import * as Git from "./Git.ts";
+import type { CarryOverReport } from "@shigomori/contracts/schemas/worktree";
 
-type CarryOverFailure = {
-  readonly path: string;
-  readonly reason: string;
-  // The checkout the failure is about, when it isn't the primary.
-  readonly source?: string;
-};
-
-// The report `sm --json` prints for the carry-over step. `sourced` names
-// the entries found in a checkout other than the primary, and whether a
-// symlink entry was copied instead (links only ever target the primary,
-// since a sibling can be torn down).
-export type CarryOverReport = {
-  readonly applied: number;
-  readonly failures: ReadonlyArray<CarryOverFailure>;
-  readonly includeFailures?: ReadonlyArray<CarryOverFailure>;
-  readonly sourced?: ReadonlyArray<{
-    readonly path: string;
-    readonly source: string;
-    readonly copiedInstead?: true;
-  }>;
-};
+type CarryOverFailure = CarryOverReport["failures"][number];
 
 // A checkout a new worktree's files may come from: carry-over's, and
 // the clone checkout's.

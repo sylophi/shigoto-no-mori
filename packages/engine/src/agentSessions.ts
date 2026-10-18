@@ -2,6 +2,7 @@
 // one event moves it to, and the text the app shows of it. Agents.ts
 // stores the sessions and reads the events.
 import { createHash } from "node:crypto";
+import type { AgentSession as WireSession } from "@shigomori/contracts/schemas/worktree";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -9,29 +10,13 @@ import * as SchemaTransformation from "effect/SchemaTransformation";
 
 // A session's states: working through a turn, waiting on the user
 // mid-turn (a permission prompt), or idle (the turn ended).
-export type AgentState = "working" | "waiting" | "idle";
+export type AgentState = WireSession["state"];
 
-// One session bound to a worktree, in the order `sm --json` writes it.
-// Harness is "claude", "codex", or whatever a harness without built-in
-// support names itself.
-export type AgentSession = {
-  readonly harness: string;
-  readonly session: string;
-  readonly state: AgentState;
-  // When the state last changed, in ms.
-  readonly at: number;
-  // The permission prompts it waits on, oldest first, each its call
-  // (toolWait), its tool and what it asks (waitEntry).
+// One session bound to a worktree: the contract's, and the permission
+// prompts it waits on, oldest first, each its call (toolWait), its tool
+// and what it asks (waitEntry), which are kept and never sent.
+export type AgentSession = WireSession & {
   readonly waits?: ReadonlyArray<string>;
-  // What the session is about: its custom title, else its first prompt.
-  readonly title?: string;
-  // What it waits on while waiting: the newest open prompt's tool, and
-  // the question it asks or the one input that says what the call does
-  // (waitNeed).
-  readonly tool?: string;
-  readonly need?: string;
-  // The message its last turn ended on, while idle.
-  readonly message?: string;
 };
 
 // What a harness hands its hooks on stdin: the fields Claude Code and

@@ -18,6 +18,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/agents";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { afterEach, describe, it } from "vitest";
@@ -166,7 +167,7 @@ const statusOf = async (id: string) =>
   (
     (await engine(
       Effect.flatMap(agents, (service) => service.statuses),
-    )) as ReadonlyArray<Agents.HarnessStatus>
+    )) as ReadonlyArray<AgentHarnessStatus>
   ).find((status) => status.id === id);
 
 // Claude Code set up in a config dir of its own, its shell running

@@ -84,7 +84,6 @@ const services = (options: EngineOptions) =>
         ShellIntegration.layer,
         Registry.layer,
         Scripts.layer,
-        WorktreeData.layer,
         GitHub.layer,
         Lifecycle.layer,
         CarryOver.layer,
@@ -100,6 +99,7 @@ const services = (options: EngineOptions) =>
     Layer.provideMerge(
       Layer.mergeAll(
         Config.layer,
+        WorktreeData.layer,
         Usage.layer,
         Identity.layer,
         Icons.layer,
@@ -140,7 +140,6 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
       Layer.mergeAll(
         Layout.layer,
         Registry.layer,
-        WorktreeData.layer,
         GitHub.layer,
         Lifecycle.layer,
         CarryOver.layer,
@@ -151,6 +150,7 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
     Layer.provideMerge(
       Layer.mergeAll(
         Config.layer,
+        WorktreeData.layer,
         Usage.layer,
         Identity.layer,
         Icons.layer,
