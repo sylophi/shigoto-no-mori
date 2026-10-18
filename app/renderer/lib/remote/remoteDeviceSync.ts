@@ -585,9 +585,9 @@ export const hubStatusOf = (
 
 // Boot wiring: follow the hub (hubStatusAtom, mounted here), the
 // account and the shared device-list cache for the life of the window.
-// The account and cache subscriptions are never unsubscribed, on
-// purpose, exactly like the other boot-scope subscriptions in boot.tsx;
-// the hub's ends with the page's registry. The boot's query client
+// The account subscription is never unsubscribed, on purpose; the
+// cache's ends with the page (`signal`), and the hub's with the page's
+// registry. The boot's query client
 // comes in rather than being reached for, because both boots
 // (renderer/boot.tsx, one for both shells) build their own, and so
 // does the push wiring each peer's api gets.

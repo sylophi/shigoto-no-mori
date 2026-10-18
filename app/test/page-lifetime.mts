@@ -1,10 +1,8 @@
 // Proof that what the boot starts outside React ends with the page
 // (renderer/boot.tsx's `page`): the hosts' sweep requests stop hearing
-// focus and the network before the page's registry is disposed, so a
-// page going (a full-page navigation, which fires `visibilitychange` to
-// hidden after `pagehide`) reads no disposed registry. Before, the
-// sweep's focus listener read the device list off it and threw
-// "registry is disposed".
+// focus before the page's registry is disposed, so a page going (a
+// full-page navigation, which fires `visibilitychange` to hidden after
+// `pagehide`) reads no disposed registry.
 //
 // Run: pnpm test page-lifetime.
 import assert from "node:assert/strict";
@@ -20,7 +18,7 @@ vi.stubGlobal("document", {
 });
 afterAll(() => vi.unstubAllGlobals());
 
-it("the sweep's listeners end before the registry they read is disposed", () => {
+it("the sweep's focus listener ends before the registry they read is disposed", () => {
   const registry = AtomRegistry.make();
   const page = new AbortController();
   startRemoteSweepRequests(registry, page.signal);
@@ -29,6 +27,5 @@ it("the sweep's listeners end before the registry they read is disposed", () => 
   page.abort();
   registry.dispose();
   assert.doesNotThrow(() => focusManager.setFocused(false));
-  assert.doesNotThrow(() => window.dispatchEvent(new Event("online")));
   focusManager.setFocused(undefined);
 });

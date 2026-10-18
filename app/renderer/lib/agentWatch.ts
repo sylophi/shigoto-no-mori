@@ -49,6 +49,7 @@ export function useWaitingAgents(): readonly WaitingAgent[] {
 export function startAgentWatch(
   api: RendererApi,
   registry: AtomRegistry.AtomRegistry,
+  signal: AbortSignal,
 ): void {
   // Each list as last seen, by its key: the list itself (the view sends
   // only what differs), its sessions by worktree and session, and its
@@ -68,7 +69,7 @@ export function startAgentWatch(
         .flatMap((seen) => seen.waiting)
         .toSorted((a, b) => a.session.at - b.session.at),
     );
-  onWorktreeLists(({ key: listKey, deviceId, list }) => {
+  const stop = onWorktreeLists(({ key: listKey, deviceId, list }) => {
     if (list === null) {
       if (lastSeen.delete(listKey)) publishWaiting();
       return;
@@ -104,6 +105,8 @@ export function startAgentWatch(
     publishWaiting();
     for (const notice of notices) notify(api, notice);
   });
+  // The lists end as the registry is disposed; nothing is published then.
+  signal.addEventListener("abort", stop, { once: true });
 }
 
 type Notice = {

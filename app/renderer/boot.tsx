@@ -106,9 +106,10 @@ export function startApp({
       [queryClientAtom, queryClient],
     ],
   });
-  // What the page starts outside React lives as long as the page: each
-  // start below ends its listeners and subscriptions with `page`, which
-  // ends before the registry they read is disposed.
+  // What the page starts outside React and could read or write the
+  // registry as the page goes (a focus or network listener, a list's
+  // end as the registry's own disposal stops its views) ends with
+  // `page`, which ends before the registry is disposed.
   const page = new AbortController();
   window.addEventListener("pagehide", (event) => {
     if (event.persisted) return;
@@ -178,11 +179,11 @@ export function startApp({
 
   // Villagers moving in and out of any device's worktrees, told in
   // their voice whoever moved them (Village life).
-  startVillagerMoves(api, queryClient, registry);
+  startVillagerMoves(api, queryClient, registry, page.signal);
 
   // Agent sessions on any device: the waiting ones for the Live page,
   // and on the desktop the notifications.
-  startAgentWatch(api, registry);
+  startAgentWatch(api, registry, page.signal);
 
   const paletteTurned = startThemeRotation(api, registry);
 
