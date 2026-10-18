@@ -55,7 +55,8 @@ export function ForwardAllButton({
   const bulk = useMutation({
     mutationFn: async (action: Mode) => {
       const failures: string[] = [];
-      let refused = false;
+      let started = 0;
+      let refusal: string | undefined;
       if (action === "start") {
         for (const entry of toStart) {
           const target = {
@@ -75,20 +76,24 @@ export function ForwardAllButton({
                 ...target,
               }),
             );
+            started += 1;
           } catch (error) {
-            failures.push(describeForwardError(error, target, deviceLabel));
-            // The peer refuses every port alike.
+            const reason = describeForwardError(error, target, deviceLabel);
+            // The peer refuses every port alike: the rest go unasked.
             if (isCommandRefusedError(error)) {
-              refused = true;
+              refusal = reason;
               break;
             }
+            failures.push(reason);
           }
         }
+        // A refusal is why the rest went unforwarded, whatever failed
+        // before it.
         reportFailures(
           "Couldn't forward",
           toStart.length,
-          refused ? toStart.length : failures.length,
-          failures[0],
+          refusal === undefined ? failures.length : toStart.length - started,
+          refusal ?? failures[0],
         );
       } else {
         for (const forward of toStop) {
@@ -144,9 +149,8 @@ export function ForwardAllButton({
   );
 }
 
-// One toast for the whole action, with the first reason under it: the
-// port, every one of them (a peer's refusal stops them all), or how many
-// of them.
+// One toast for the whole action, with its reason under it: the port,
+// every one of them, or how many of them did not go.
 function reportFailures(
   title: string,
   total: number,

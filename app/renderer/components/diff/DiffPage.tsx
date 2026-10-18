@@ -114,7 +114,7 @@ export function DiffPage({
 }: {
   // The patch's read, whichever of the three pages asked for it.
   diff: Pick<UseQueryResult<string>, "data" | "isLoading" | "error">;
-  // Asks for the patch again, for a media side it names only in short
+  // Asks for the patch again, for a media file it names only in short
   // (a pull request's, its commits not fetched here), and whether that
   // ask is out.
   retryMedia?: { readonly retry: () => void; readonly retrying: boolean };

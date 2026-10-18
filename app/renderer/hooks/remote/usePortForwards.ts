@@ -11,6 +11,7 @@
 // forward outlives the peer going to sleep, and stopping one is a purely
 // local act. Taking it from a scope would have tied the stop control to
 // an api the caller does not need.
+import { capitalized } from "@shigomori/contracts/words";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { refreshQueries } from "@/lib/askAgain";
 import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
@@ -98,7 +99,7 @@ export function describeForwardError(
     return `localhost:${ports.localPort ?? ports.remotePort} needs elevated privileges here. Pick a port above 1024.`;
   }
   if (isChannelRefusedError(error) && error.reason === "too-many-conns") {
-    return `${deviceLabel} already has as many forwarded connections open as it allows.`;
+    return `${capitalized(deviceLabel)} already has as many forwarded connections open as it allows.`;
   }
   return message;
 }

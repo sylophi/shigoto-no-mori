@@ -262,6 +262,7 @@ function portRows(remote: boolean) {
       entry={entry}
       taken={PORTS}
       remote={remote}
+      deviceLabel="Thinkpad"
       onUpdate={entry.source === "custom" ? resolved : undefined}
       onRemove={entry.source === "custom" ? noop : undefined}
       plain={!remote}

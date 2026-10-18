@@ -9,9 +9,9 @@ import {
 
 // An image, video or audio file's sides in a diff (MediaDiffView), each
 // read by the blob id its patch names. An added or deleted file has the
-// one side. A patch that names a side only in short says so, with
-// `retry` (a pull request's diff asked for again, which fetches its
-// commits again).
+// one side. A patch that names a side only in short says so for the
+// file, with `retry` (a pull request's diff asked for again, which
+// fetches its commits again).
 export function MediaDiff({
   projectId,
   worktreeId,

@@ -27,6 +27,7 @@ export function PortRowView({
   entry,
   taken,
   remote,
+  deviceLabel,
   onUpdate,
   onRemove,
   plain = false,
@@ -36,6 +37,8 @@ export function PortRowView({
   // Every listed port, for the edit form's duplicate check.
   taken: readonly WorktreePort[];
   remote: boolean;
+  // The scope's device by name, for the copy under a remote scope.
+  deviceLabel: string;
   // Present only when this row may be changed (a custom entry, and the
   // viewer holds command access on the host).
   onUpdate?: (next: CustomPort) => Promise<unknown>;
@@ -51,7 +54,7 @@ export function PortRowView({
   // scope Open means the local end and lives in the forward band. A
   // client that cannot forward (the browser) has no local end to open.
   // Locally the port is right here.
-  const where = remote ? "on that device" : "here";
+  const where = remote ? `on ${deviceLabel}` : "here";
 
   return (
     <li

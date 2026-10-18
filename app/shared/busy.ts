@@ -2,7 +2,12 @@
 // interrupt, in words: the host counts it (host/lib/Scripts.ts, busy)
 // and the shell asks before going ahead (main/electron/busyPrompt.ts).
 // Both sides word it from the counts.
-import { listed, plural, pluralize } from "@shigomori/contracts/words";
+import {
+  capitalized,
+  listed,
+  plural,
+  pluralize,
+} from "@shigomori/contracts/words";
 import type { ChangeKind } from "@shigomori/contracts/modules/session";
 
 export type BusyOperations = {
@@ -202,9 +207,6 @@ const CHANGE_WORDS: ReadonlyArray<{
     git: false,
   },
 ];
-
-const capitalized = (words: string) =>
-  words.charAt(0).toUpperCase() + words.slice(1);
 
 // Everything under way as one clause each, the ones doing the same
 // thing as one ("2 pulls and a push are still being made", "3

@@ -241,6 +241,7 @@ export function SettingsGeneralScene() {
           />
           <DataLocationSectionView
             remote={false}
+            deviceLabel="Thinkpad"
             root={`${HOME}/.sm`}
             home={HOME}
             moving={false}
