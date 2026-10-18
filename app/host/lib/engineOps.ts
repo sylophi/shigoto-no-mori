@@ -64,7 +64,7 @@ import {
 import { DoctorReportSchema } from "@shigomori/contracts/modules/cli";
 import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
 import { ConvertRefusedError } from "@shigomori/contracts/errors";
-import { shellQuote } from "@host/lib/util/shellQuote";
+import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import {
   asCall,
   asChange,

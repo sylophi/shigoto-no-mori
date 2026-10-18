@@ -1,5 +1,6 @@
 // Worktrees' removing: the guards a removal passes, the teardown, and
 // the checkout and branch going.
+import { lifecycleCommand } from "@shigomori/contracts/lifecycleScripts";
 import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -25,7 +26,6 @@ import {
   UNKNOWN_BRANCH,
   type WorktreeIdentity,
   WorktreeRefused,
-  lifecycleCommand,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
 import type { CreatingArea } from "./creating.ts";

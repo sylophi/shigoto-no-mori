@@ -92,10 +92,6 @@ export class Lifecycle extends Context.Service<
   }
 >()("sm/engine/Lifecycle") {}
 
-// A single-quoted shell word.
-export const shellQuote = (text: string) =>
-  `'${text.replaceAll("'", `'\\''`)}'`;
-
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const crypto = yield* Crypto.Crypto;

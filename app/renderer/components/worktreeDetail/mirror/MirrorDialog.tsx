@@ -290,7 +290,7 @@ function MirrorLive({
   dirtyApplied: boolean;
   onDone: () => void;
 }) {
-  const { sessions } = useMirrors();
+  const { sessions, daemon, daemonFailure } = useMirrors();
   const live: MirrorSession | undefined = sessions.find(
     (entry) => entry.session === session,
   );
@@ -298,7 +298,14 @@ function MirrorLive({
     <MirrorLiveView
       {...props}
       path={<LandedPath path={landed.path} />}
-      status={live === undefined ? null : describeMirror(live)}
+      status={
+        live === undefined
+          ? null
+          : describeMirror(live, {
+              engine: daemon,
+              engineFailure: daemonFailure,
+            })
+      }
       summary={live === undefined ? null : sessionSummary(live)}
     />
   );

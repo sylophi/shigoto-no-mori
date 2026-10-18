@@ -1,9 +1,4 @@
-import {
-  skipToken,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { skipToken, useMutation, useQuery } from "@tanstack/react-query";
 import type {
   GitOperationState,
   MergeBranchResult,
@@ -15,7 +10,6 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
-  refreshTree,
   useRefreshTree,
   useTreeView,
   useWorkingTreeWriteBack,
@@ -203,9 +197,9 @@ export function useMergePreview(
 // the branch moved too (a squash whose commit a hook refused), so the
 // worktree is read again either way.
 export function useMergeBranch() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
+  const refreshTree = useRefreshTree();
   return useMutation<
     MergeBranchResult,
     Error,
@@ -213,7 +207,7 @@ export function useMergeBranch() {
   >({
     mutationFn: (input) => api.run(api.worktrees.mergeBranch(input)),
     onSuccess: (data, vars) => writeBack(vars, data.worktree),
-    onError: (_err, vars) => refreshTree(queryClient, { api, keys }, vars),
+    onError: (_err, vars) => refreshTree(vars),
     meta: { silentError: true },
   });
 }

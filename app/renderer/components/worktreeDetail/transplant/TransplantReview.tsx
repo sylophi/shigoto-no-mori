@@ -8,7 +8,7 @@
 // the pull at step 2, so the review says so here and keeps Start off.
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { changeEntries } from "@shigomori/ui/lib/patchFiles.ts";
-import { useWorktreeChangesOnce } from "@/hooks/worktrees/useWorktreeChanges";
+import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useCarryOverRows } from "../flow/createPlan";
 import { type PullReviewProps, PullReviewStep } from "../flow/PullReview";
@@ -60,14 +60,13 @@ function ChangedFiles({
   worktree: Worktree;
   project: Project;
 }) {
-  // A one-shot preview: the list crosses the device link, so it is not
-  // re-pulled on every focus the way the changes page's is. It is git
-  // status rather than a patch, so untracked files are listed too.
+  // Git status rather than a patch, so untracked files are listed too:
+  // the page under the dialog's own view of the changes.
   const {
     data: changed,
     isPending,
     isError,
-  } = useWorktreeChangesOnce(project.id, worktree.id);
+  } = useWorktreeChanges(project.id, worktree.id);
   return (
     <ChangedFilesView
       files={changeEntries(changed ?? [])}

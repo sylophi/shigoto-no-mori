@@ -1,10 +1,4 @@
-import {
-  focusManager,
-  queryOptions,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { focusManager, queryOptions, useMutation } from "@tanstack/react-query";
 import type {
   ChangedFile,
   CommitChangesResult,
@@ -36,7 +30,6 @@ import {
 } from "@/lib/runtime/viewHooks";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { writeBackWorktree } from "@/hooks/worktrees/useWorktrees";
-import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
 // The changes page's views of a worktree.
 type TreeView =
@@ -121,22 +114,6 @@ export function useWorktreeChanges(projectId: string, worktreeId: string) {
   );
 }
 
-// The list read once, for a preview (the transplant review's file
-// list) that crosses the device link and need not follow the tree.
-export function useWorktreeChangesOnce(projectId: string, worktreeId: string) {
-  const { api, keys } = useHostScope();
-  return useQuery<readonly ChangedFile[]>({
-    queryKey: keys.worktreeChanges(projectId, worktreeId),
-    queryFn: ({ signal }) =>
-      api.run(api.worktrees.changeStatus({ projectId, worktreeId }), {
-        signal,
-      }),
-    refetchOnWindowFocus: false,
-    staleTime: 0,
-    meta: { errorTitle: "Couldn't read change status" },
-  });
-}
-
 // The changes page's views read now, after a change this window made,
 // so the page shows it without waiting for the worktree's watch.
 function refreshChanges(
@@ -184,31 +161,17 @@ export function useRefreshTree() {
     refreshChanges(api, scope);
 }
 
-// The working tree moved by a call this window made: the changes
-// page's views read now, and the transplant preview's list asked again.
-export function refreshTree(
-  queryClient: ReturnType<typeof useQueryClient>,
-  { api, keys }: { api: HostApi; keys: QueryKeyRegistry },
-  scope: { projectId: string; worktreeId: string },
-): void {
-  void queryClient.invalidateQueries({
-    queryKey: keys.worktreeChanges(scope.projectId, scope.worktreeId),
-  });
-  refreshChanges(api, scope);
-}
-
 // That, and the worktree the call answered with written back into its
 // list, for the sidebar's count and recent commits.
 export function useWorkingTreeWriteBack() {
-  const queryClient = useQueryClient();
   const registry = useRegistry();
-  const { api, deviceId, keys } = useHostScope();
+  const { api, deviceId } = useHostScope();
   return (
     scope: { projectId: string; worktreeId: string },
     worktree: Worktree,
   ): void => {
     writeBackWorktree(registry, deviceId, worktree);
-    refreshTree(queryClient, { api, keys }, scope);
+    refreshChanges(api, scope);
   };
 }
 

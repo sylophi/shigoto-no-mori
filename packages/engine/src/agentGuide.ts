@@ -2,7 +2,7 @@
 // told, and the command line that opens it on a guide session with
 // `sm guide mcp` as its tools.
 import type { GuideHarness } from "@shigomori/contracts/modules/guide";
-import { shellQuote } from "./Lifecycle.ts";
+import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import { APP_REPO } from "./flavor.ts";
 
 // Each harness's tool in the launcher catalog, which says whether its
