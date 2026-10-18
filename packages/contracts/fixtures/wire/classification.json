@@ -148,6 +148,10 @@
     "kind": "invoke",
     "scope": "client"
   },
+  "clientConfig:rotate": {
+    "kind": "invoke",
+    "scope": "client"
+  },
   "clientConfig:watch": {
     "kind": "view",
     "scope": "client"

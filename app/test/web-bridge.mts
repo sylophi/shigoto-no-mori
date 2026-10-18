@@ -7,8 +7,9 @@
 // Asserts: the page api's surface is every contract module by name, the
 // runtime's own peerApi, run, listen, pushes and view, and the preload's
 // scalar facts (so renderer components mount unmodified), the
-// localStorage-backed clientConfig store round-trips and heals corrupt
-// JSON, the per-browser deviceId is stable and matches DeviceIdSchema,
+// localStorage-backed clientConfig store round-trips, heals corrupt
+// JSON and turns an Each launch rotation once per tab, the
+// per-browser deviceId is stable and matches DeviceIdSchema,
 // enroll exchanges the Clerk session token for a credential with
 // platform "web" and persists the enc:false envelope, sign-out
 // revokes this device then clears the envelope, a concurrent enroll or
@@ -198,6 +199,28 @@ it("clientConfig: a patch keeps what another tab wrote, and the watch follows th
   );
   await waitFor(() => seen.length === 4, "a cleared key");
   assert.deepEqual(seen[3], { villageLife: true });
+});
+
+it("clientConfig: the tab turns an Each launch rotation once, however often it is asked", async () => {
+  const localStorage = memoryStorage();
+  localStorage.setItem(
+    "sm.web.clientConfig",
+    JSON.stringify({ themeRotation: "launch" }),
+  );
+  const bridge = createWebBridge(makeDeps({ localStorage }));
+  const rotate = (launching: boolean) =>
+    bridge.api.run(bridge.api.clientConfig.rotate({ launching }));
+  const stamp = await rotate(true);
+  assert.equal(typeof stamp, "number");
+  const turned = await bridge.api.run(bridge.api.clientConfig.read());
+  assert.equal(turned.themeRotatedAt, stamp);
+  assert.equal(turned.lightTheme, "latte");
+  assert.equal(await rotate(true), null, "a second window's launch");
+  assert.equal(await rotate(false), null, "a minute's check");
+  assert.deepEqual(
+    await bridge.api.run(bridge.api.clientConfig.read()),
+    turned,
+  );
 });
 
 it("stubs: read-classified channels answer structural defaults, the previewTheme allowlist entry resolves, and stub subscriptions unsubscribe cleanly", async () => {

@@ -186,7 +186,7 @@ export function startApp({
   // and on the desktop the notifications.
   startAgentWatch(api, registry, page.signal);
 
-  const paletteTurned = startThemeRotation(api, registry);
+  const paletteTurned = startThemeRotation(api, registry, page.signal);
 
   return { api, registry, queryClient, paletteTurned };
 }

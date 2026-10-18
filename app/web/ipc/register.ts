@@ -29,6 +29,7 @@ import {
 } from "@shigomori/contracts/modules/account";
 import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
 import { withoutPeerState } from "@shigomori/contracts/schemas/config";
+import { rotationOwner } from "@shigomori/ui/lib/themes.ts";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { releasesContract } from "@shigomori/contracts/modules/releases";
@@ -424,6 +425,13 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     const stored = readClientConfig();
     for (const watcher of clientConfigWatchers) watcher(stored);
   };
+  const writeClientConfig = (next: Record<string, unknown>) => {
+    writeKey(deps.localStorage, CLIENT_CONFIG_KEY, JSON.stringify(next));
+    clientConfigChanged();
+  };
+  // A tab is a launch of its own: its load turns an "Each launch"
+  // rotation, once, as the desktop's main process does per run.
+  const rotationTurnOf = rotationOwner();
   const clientConfigHandlers: Handlers<typeof clientConfigContract> = {
     read: readClientConfig,
     // Over the stored config as it is now, which another tab may have
@@ -434,8 +442,15 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         if (value !== undefined) next[key] = value;
       }
       for (const key of clear) delete next[key];
-      writeKey(deps.localStorage, CLIENT_CONFIG_KEY, JSON.stringify(next));
-      clientConfigChanged();
+      writeClientConfig(next);
+    },
+    rotate: ({ launching }) => {
+      const stored = readClientConfig();
+      const now = Date.now();
+      const turn = rotationTurnOf(stored, now, launching);
+      if (turn === null) return null;
+      writeClientConfig({ ...stored, ...turn });
+      return now;
     },
   };
 
