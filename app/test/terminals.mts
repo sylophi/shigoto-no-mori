@@ -15,6 +15,8 @@
 //     left where they are,
 //   - a host killed while a terminal floods comes back with what it
 //     saved when the output last paused: whole, in that folder,
+//   - a terminal that keeps changing is saved within a minute of awake
+//     time, the wall clock stepped back meanwhile,
 //   - a worktree terminal whose worktree is gone closes,
 //   - a shell running a foreground job counts as busy, and the quit's
 //     words name it,
@@ -36,6 +38,7 @@ import type {
   TerminalOwner,
 } from "@shigomori/contracts/schemas";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
@@ -52,7 +55,9 @@ import {
   appRoot,
   makeTracker,
   processAlive,
+  sleepingClock,
   tempDir,
+  testClock,
   waitFor,
 } from "./lib/checkKit.mts";
 import { launchTerminals, openSavedTerminals } from "./lib/terminalsApp.mts";
@@ -534,6 +539,57 @@ describe("the service", () => {
         "the lines came back out of order",
       );
     } finally {
+      await app.dispose();
+    }
+  });
+
+  it("a terminal that keeps changing is saved within a minute awake, the wall clock stepped back", async () => {
+    const clock = testClock();
+    const clocks = sleepingClock(clock);
+    clocks.sleep(10_000_000);
+    const data = join(root, "cadence-data");
+    const app = launch(data);
+    const store = openSavedTerminals({ home: root, dataDir: data });
+    const saved = async () =>
+      (
+        await store.runPromise(
+          Effect.flatMap(SavedTerminals.SavedTerminals, (rows) => rows.list),
+        )
+      ).find((row) => row.history.includes("flood-2"));
+    // Output comes in between any two steps, far from two seconds quiet.
+    const STEP = 100;
+    const step = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      await clock.advance(STEP);
+    };
+    try {
+      const { terminalId } = await app.runPromise(
+        Effect.provideService(
+          Effect.flatMap(Terminals.Terminals, (terminals) =>
+            terminals.open({ owner: { kind: "device" } }),
+          ),
+          Clock.Clock,
+          clocks.wall,
+        ),
+      );
+      const attached = attach(app, terminalId);
+      await withTerminals(app, (terminals) =>
+        terminals.write(
+          terminalId,
+          "while :; do echo flood-$((1+1)); sleep 0.01; done\r",
+        ),
+      );
+      while (!attached.output().includes("flood-2")) await step();
+      clocks.sleep(-10 * 60_000);
+      let awake = 0;
+      for (; awake < 55_000; awake += STEP) await step();
+      assert.equal(await saved(), undefined, "saved while still changing");
+      for (; awake < 62_000 && (await saved()) === undefined; awake += STEP) {
+        await step();
+      }
+      assert.ok(await saved(), "not saved within a minute of awake time");
+    } finally {
+      await store.dispose();
       await app.dispose();
     }
   });

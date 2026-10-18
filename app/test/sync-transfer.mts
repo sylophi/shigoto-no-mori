@@ -74,6 +74,7 @@ import { standInDeviceId, standInPeers } from "./lib/hostStandIns.mts";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree as sendWorktreeOn } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { hostContext, runHost, type Services } from "./lib/hostRuntime.mts";
@@ -99,6 +100,8 @@ import {
   handlerCtx,
   makeTracker,
   processAlive,
+  sleepingClock,
+  testClock,
   waitFor,
 } from "./lib/checkKit.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
@@ -879,6 +882,41 @@ it("mirror: the title and description follow whichever side was described last, 
     title: "Tie here",
     describedAt: 21,
   });
+});
+
+it("mirror: a describe on a device whose clock is behind its peer's still outranks the peer's", async () => {
+  const copy = {
+    projectId: cleanPull.worktree.projectId,
+    worktreeId: cleanPull.worktree.id,
+  };
+  const original = {
+    projectId: sourceProjectId,
+    worktreeId: worktreeIdFromPath(worktree2Path),
+  };
+  const clocks = sleepingClock(testClock());
+  clocks.sleep(1_000_000);
+  // Described on the peer, whose clock runs five minutes ahead.
+  await writeWorktreeDescription(original.projectId, original.worktreeId, {
+    title: "Ahead there",
+    describedAt: 1_000_000 + 300_000,
+  });
+  assert.equal(await followDescription(LISTENER, copy, original), "here");
+  // Described here a minute later, by a clock that also stepped back.
+  clocks.sleep(-60_000);
+  await runHost(
+    Effect.provideService(
+      worktreesHandlers.describe({ ...copy, title: "Behind here" }),
+      Clock.Clock,
+      clocks.wall,
+    ),
+  );
+  assert.equal(await followDescription(LISTENER, copy, original), "there");
+  for (const side of [copy, original]) {
+    assert.equal(
+      (await readWorktreeData(side.projectId, side.worktreeId))?.title,
+      "Behind here",
+    );
+  }
 });
 
 it("pull round trip (dirty): no branch bundle for a locally-known tip, and the capture is re-keyed, applied unstaged, and consumed", async () => {

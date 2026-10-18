@@ -25,6 +25,7 @@ import type {
   TerminalOwner,
 } from "@shigomori/contracts/schemas";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
+import { elapsedMillis } from "@shigomori/engine/elapsed";
 import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -89,7 +90,8 @@ const RESUME_AT = 256 * 1024;
 // A terminal's changed history is saved once its output has been quiet
 // this long, and at least this often while it keeps changing (a flood,
 // an agent CLI's spinner): what a crash may lose, against one write of
-// the whole ring each time.
+// the whole ring each time. Both count awake time, so a clock step moves
+// no save and a sleep spends none of the minute.
 const SAVE_QUIET = Duration.seconds(2);
 const SAVE_AT_MOST = Duration.minutes(1);
 // A shell is stopped with SIGHUP, as when its window closes, and
@@ -177,7 +179,7 @@ interface Session {
   readonly events: PubSub.PubSub<TerminalEvent>;
   readonly scope: Scope.Closeable;
   // Opened by output the store doesn't have yet, the last at
-  // `changedAt`.
+  // `changedAt` (elapsedMillis).
   readonly changed: Latch.Latch;
   changedAt: number;
   seq: number;
@@ -381,7 +383,7 @@ const make = <R, E>(options: {
           for (const piece of pieces(data)) {
             session.seq += 1;
             session.history.append(session.seq, piece);
-            session.changedAt = yield* Clock.currentTimeMillis;
+            session.changedAt = yield* elapsedMillis;
             session.changed.openUnsafe();
             yield* PubSub.publish(session.events, {
               kind: "output",
@@ -458,7 +460,7 @@ const make = <R, E>(options: {
               session.changedAt + Duration.toMillis(SAVE_QUIET),
               deadline,
             );
-            const now = yield* Clock.currentTimeMillis;
+            const now = yield* elapsedMillis;
             if (now >= due) break;
             yield* Effect.sleep(due - now);
           }

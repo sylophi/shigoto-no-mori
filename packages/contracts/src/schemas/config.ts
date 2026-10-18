@@ -238,7 +238,8 @@ export const CarryOverStatSchema = Schema.Struct({
 });
 export type CarryOverStat = typeof CarryOverStatSchema.Type;
 
-// describedAt (epoch ms) lets a mirror's two sides keep the newer pair.
+// describedAt orders a mirror's describes (on the epoch's scale, not a
+// date), so its two sides keep the later pair.
 const WorktreeDescriptionSchema = Schema.Struct({
   title: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
