@@ -5,6 +5,7 @@ import { cn } from "../../lib/utils.ts";
 import type { MoveNews, Speaker } from "../../lib/villagerVoice.ts";
 import { NextArrowView } from "./NextArrowView.tsx";
 import { MoveCaptionView } from "./VillagerDialogueView.tsx";
+import { useToday } from "../../hooks/useToday.ts";
 import { TypedWordsView } from "./TypedWordsView.tsx";
 
 // A legendary character's news: a letter on their own stationery that
@@ -199,11 +200,9 @@ function Stamp({
   tint: string;
   ink: string;
 }) {
-  const [today] = useState(() =>
-    new Date()
-      .toLocaleDateString(undefined, { month: "short", day: "numeric" })
-      .toUpperCase(),
-  );
+  const today = useToday()
+    .toLocaleDateString(undefined, { month: "short", day: "numeric" })
+    .toUpperCase();
   return (
     <>
       <span

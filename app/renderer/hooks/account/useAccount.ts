@@ -96,7 +96,7 @@ export const accountDevicesQueryOptions = (api: RendererApi) =>
     queryKey: queryKeys.accountDevices(),
     queryFn: async ({ signal, client }) => {
       const refused = listRefusals.get(client);
-      if (refused !== undefined && Date.now() < refused.until) {
+      if (refused !== undefined && performance.now() < refused.until) {
         throw refused.error;
       }
       try {
@@ -104,7 +104,7 @@ export const accountDevicesQueryOptions = (api: RendererApi) =>
       } catch (error) {
         if (isHubRateLimitedError(error)) {
           listRefusals.set(client, {
-            until: Date.now() + (error.retryAfterSeconds ?? 0) * 1000,
+            until: performance.now() + (error.retryAfterSeconds ?? 0) * 1000,
             error,
           });
         }

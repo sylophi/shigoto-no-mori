@@ -118,14 +118,14 @@ export function holdVillagerMoves(): () => void {
 // Leaves the moves of these worktrees (by id or by name, on any device)
 // untold for a while: the flow moving them tells of it itself.
 export function quietVillagerMoves(keys: readonly string[]): void {
-  const until = Date.now() + QUIET_MS;
+  const until = performance.now() + QUIET_MS;
   for (const key of keys) quiet.set(key, until);
 }
 
 // Whether a worktree's moves are someone else's news right now
 // (quietVillagerMoves). The visit log (visitLog.ts) reads it too.
 export function isQuiet(worktree: Worktree): boolean {
-  const now = Date.now();
+  const now = performance.now();
   return [worktree.id, worktree.name].some(
     (key) => (quiet.get(key) ?? 0) > now,
   );

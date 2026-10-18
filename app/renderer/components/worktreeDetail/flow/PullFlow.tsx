@@ -6,7 +6,7 @@
 // reports. The mutation's own status is the stage, with one reading
 // on top: a mutation that failed because the user cancelled it is the
 // cancelled stage, not a failure.
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { isMoveCancelledError } from "@shigomori/contracts/modules/sync";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
@@ -26,7 +26,6 @@ import type { DestinationPick } from "@shigomori/ui/views/worktreeDetail/flow/Pu
 import {
   type FlowStage,
   type Landing,
-  useClock,
 } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 
@@ -82,8 +81,9 @@ export function usePullFlow<Data extends Landed>({
   const destinationDeviceId = toPeer?.pickedId ?? localDeviceId;
   const nav = useWorktreeNav();
   const stage = stageOf(mutation);
-  // The attempt's clock: the mutation's own submit time, frozen at the
-  // moment it settles.
+  // The attempt's clock, on the monotonic one so a clock step never
+  // shows: from the start, frozen at the moment it settles.
+  const [startedAt, setStartedAt] = useState(0);
   const [endedAt, setEndedAt] = useState(0);
   // The cancel asked for and not yet answered by the mutation settling:
   // the running view says so and takes no second cancel.
@@ -94,9 +94,10 @@ export function usePullFlow<Data extends Landed>({
   const start = () => {
     progress.reset();
     setCancelling(false);
+    setStartedAt(performance.now());
     mutation.mutate(choice, {
       onSettled: () => {
-        setEndedAt(Date.now());
+        setEndedAt(performance.now());
         setCancelling(false);
       },
     });
@@ -129,7 +130,7 @@ export function usePullFlow<Data extends Landed>({
 
   return {
     stage,
-    elapsed: (stage === "running" ? now : endedAt) - mutation.submittedAt,
+    elapsed: (stage === "running" ? now : endedAt) - startedAt,
     progress,
     start,
     cancel,
@@ -234,4 +235,17 @@ export function PullFlowFrame({
       </PullFlowFrameView>
     </ModalShell>
   );
+}
+
+// A once-a-second tick while a pull runs, for the elapsed figure.
+// Frozen (and free) otherwise.
+function useClock(running: boolean): number {
+  const [now, setNow] = useState(() => performance.now());
+  useEffect(() => {
+    if (!running) return;
+    setNow(performance.now());
+    const timer = setInterval(() => setNow(performance.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running]);
+  return now;
 }

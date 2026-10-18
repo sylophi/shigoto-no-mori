@@ -4,7 +4,8 @@
 //
 // Asserts:
 //   - a device's script runs bind a started run, take its output, read
-//     a failed exit as news until its page is left, stop a run over the
+//     a failed exit as news until its page is left (a failure after the
+//     look is news however the wall clock reads), stop a run over the
 //     device's link, and drop a removed worktree's runs,
 //   - a peer's runs come out of the hub hop, decoded, and start over
 //     with the account,
@@ -32,7 +33,7 @@ import * as Effect from "effect/Effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Stream from "effect/Stream";
-import { it } from "vitest";
+import { it, vi } from "vitest";
 import type { Link } from "@shared/ipc/transport";
 import { pushFanOut } from "@shared/remote/rpcTransport";
 import { gitFetchingAtom } from "@/hooks/git/useProjectGitFetching";
@@ -202,6 +203,23 @@ it("script runs: a run's state, output and activity, from its pushes", async () 
   await waitFor(() => stateOf()?.runId === "r2", "the second run");
   await push(scriptsContract, "event", { runId: "r2", kind: "exit", code: 1 });
   await waitFor(() => activity() === "failed", "the failure as news");
+  runs.markSeen("w1");
+  assert.equal(activity(), null);
+
+  // The wall clock stepped back an hour: a failure after the look is
+  // still newer than it.
+  const back = vi.spyOn(Date, "now").mockReturnValue(Date.now() - 3_600_000);
+  await push(scriptsContract, "event", {
+    runId: "r3",
+    kind: "started",
+    projectId: "p1",
+    worktreeId: "w1",
+    slot: setup,
+  });
+  await waitFor(() => stateOf()?.runId === "r3", "the third run");
+  await push(scriptsContract, "event", { runId: "r3", kind: "exit", code: 1 });
+  await waitFor(() => activity() === "failed", "the failure after the look");
+  back.mockRestore();
   runs.markSeen("w1");
   assert.equal(activity(), null);
 

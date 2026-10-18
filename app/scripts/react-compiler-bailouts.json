@@ -114,12 +114,6 @@
     "reason": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
   },
   {
-    "file": "app/renderer/hooks/worktrees/useWorktreePullRequest.ts",
-    "function": "useWorktreePullRequest",
-    "category": "Todo",
-    "reason": "(BuildHIR::lowerExpression) Handle ??= operators in AssignmentExpression"
-  },
-  {
     "file": "app/renderer/lib/runtime/viewHooks.ts",
     "function": "useViewErrorToast",
     "category": "Refs",

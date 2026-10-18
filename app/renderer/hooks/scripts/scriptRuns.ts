@@ -88,6 +88,9 @@ interface OutputLog {
 interface RunMeta {
   worktreeId: string;
   slotKind: SlotKind;
+  // Which end this was, in this window's order of ends (scriptRuns'
+  // `ends`), so a failure is newer than a look by order, not by clock.
+  endOrder?: number;
 }
 
 export const EMPTY_STATE: ScriptRunState = Object.freeze({
@@ -109,18 +112,18 @@ interface StartInput {
 }
 
 // What a reader draws: each slot's record, which worktree and kind of
-// slot it is, and when each worktree's page was last left (a failure
-// since then is news, activityOf).
+// slot it is, and how many runs had ended when each worktree's page was
+// last left (a failure since then is news, activityOf).
 type RunsState = {
   readonly states: ReadonlyMap<ScriptKey, ScriptRunState>;
   readonly meta: ReadonlyMap<ScriptKey, RunMeta>;
-  readonly seenAt: ReadonlyMap<string, number>;
+  readonly seenThrough: ReadonlyMap<string, number>;
 };
 
 const NO_RUNS: RunsState = {
   states: new Map(),
   meta: new Map(),
-  seenAt: new Map(),
+  seenThrough: new Map(),
 };
 
 const withEntry = <K, V>(map: ReadonlyMap<K, V>, key: K, value: V) =>
@@ -178,6 +181,7 @@ export class ScriptRuns {
   // peer's, where the notice reaches every viewer and only the ones
   // that ran something there have anything to hear.
   private warnOnUnseenRemoval: boolean;
+  private ends = 0;
 
   constructor(
     registry: AtomRegistry.AtomRegistry,
@@ -216,6 +220,7 @@ export class ScriptRuns {
         status: "errored",
         endedAt: Date.now(),
       }));
+      this.ended(input.key);
       throw err;
     }
 
@@ -366,11 +371,11 @@ export class ScriptRuns {
   // worktrees that no longer exist on disk. Returns whether these runs
   // held any run there.
   clearForWorktree(worktreeId: string): boolean {
-    const { seenAt } = this.current;
-    if (seenAt.has(worktreeId)) {
+    const { seenThrough } = this.current;
+    if (seenThrough.has(worktreeId)) {
       this.publish({
         ...this.current,
-        seenAt: withoutEntry(seenAt, worktreeId),
+        seenThrough: withoutEntry(seenThrough, worktreeId),
       });
     }
     let touched = false;
@@ -417,9 +422,19 @@ export class ScriptRuns {
   markSeen(worktreeId: string): void {
     this.publish({
       ...this.current,
-      seenAt: withEntry(this.current.seenAt, worktreeId, Date.now()),
+      seenThrough: withEntry(this.current.seenThrough, worktreeId, this.ends),
     });
   }
+  private ended(key: ScriptKey): void {
+    const m = this.current.meta.get(key);
+    if (!m) return;
+    this.ends += 1;
+    this.publish({
+      ...this.current,
+      meta: withEntry(this.current.meta, key, { ...m, endOrder: this.ends }),
+    });
+  }
+
   private setStateWithActivity(
     key: ScriptKey,
     update: (prev: ScriptRunState) => ScriptRunState,
@@ -478,6 +493,7 @@ export class ScriptRuns {
           endedAt: Date.now(),
           cancelling: false,
         }));
+        this.ended(key);
         if (event.code !== 0 && m && !stopped) {
           this.toastLifecycleFailure(m.slotKind, event.code);
         }
@@ -592,19 +608,19 @@ function exitSentinel(code: number | null): string {
 // consequential state to surface in the sidebar. With nothing running,
 // an unseen failure (a nonzero exit since markSeen, so not a stop).
 export function activityOf(
-  { states, meta, seenAt }: RunsState,
+  { states, meta, seenThrough }: RunsState,
   worktreeId: string,
 ): ScriptActivityKind | null {
   let hasSetup = false;
   let hasPackage = false;
   let hasUnseenFailure = false;
-  const seen = seenAt.get(worktreeId) ?? 0;
+  const seen = seenThrough.get(worktreeId) ?? 0;
   for (const [key, m] of meta) {
     if (m.worktreeId !== worktreeId) continue;
     const s = states.get(key);
     if (!s) continue;
     if (s.status !== "starting" && s.status !== "running") {
-      if (s.exitCode && (s.endedAt ?? 0) > seen) hasUnseenFailure = true;
+      if (s.exitCode && (m.endOrder ?? 0) > seen) hasUnseenFailure = true;
       continue;
     }
     // Release is conceptually like teardown, the highest priority tier.

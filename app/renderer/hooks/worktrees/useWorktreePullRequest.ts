@@ -85,8 +85,10 @@ export function useWorktreePullRequest(
       }
       if (queryClient.isMutating({ mutationKey: pullRequestMutationKey(keys) }))
         return false;
-      settlingSince.current ??= Date.now();
-      return Date.now() - settlingSince.current < SETTLE_WINDOW_MS
+      if (settlingSince.current === null) {
+        settlingSince.current = performance.now();
+      }
+      return performance.now() - settlingSince.current < SETTLE_WINDOW_MS
         ? SETTLE_POLL_MS
         : false;
     },
@@ -103,10 +105,10 @@ export function useWorktreePullRequest(
   // map can't match yet: the mutation refreshes the page as it settles.
   // Only the map moving asks again: the page's own answer lands in it.
   const entry = useProjectPullRequests(projectId).data?.[branch];
-  const detail = useRef(page.data);
-  detail.current = page.data;
   useEffect(() => {
-    const shown = detail.current;
+    const shown = queryClient.getQueryData<PullRequestDetail | null>(
+      keys.worktreePullRequest(projectId, branch),
+    );
     if (shown === undefined || (shown !== null && entry === undefined)) return;
     if (queryClient.isMutating({ mutationKey: pullRequestMutationKey(keys) }))
       return;
