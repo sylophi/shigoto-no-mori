@@ -20,11 +20,10 @@ no `PORT` of its own, so the port goes in all three places.
 `pnpm device <profile> [--fresh] [--clone-login]`
 (`scripts/dev-device.mts`) runs a dev window as a dev profile
 (`dev-app.md`) with its debugging port on `SHIGOMORI_DEBUG_PORT`.
-The first window of a worktree is the
-primary, a full `pnpm dev`: the build, the renderer's vite server,
-deep links. A window started while that server answers is a peer on
-the primary's build, so open the primary first, and end the peers
-before it, or everything at once.
+The first window of a worktree is the primary, a full `pnpm dev`: the
+build, the renderer's vite server, deep links. A window started while
+that server answers is a peer on the primary's build, so open the
+primary first, and end the peers before it, or everything at once.
 
 Each window's account page should list the other device as online,
 then connected. The device names end in `[<tag>-a]` and `[<tag>-b]`.
@@ -134,9 +133,8 @@ in `dev-app.md`, "When a device is removed".
   still reads signed in: its device credential outlives the Clerk
   session, and a clone copies the empty session. Open the plain dev
   app in a weblab session on a free port named in all three places:
-  `"start":
-  "SHIGOMORI_DEBUG_PORT=9341 pnpm dev"`, with `attach` and `address`
-  `127.0.0.1:9341`. Check
+  `"start": "SHIGOMORI_DEBUG_PORT=9341 pnpm dev"`, with `attach` and
+  `address` `127.0.0.1:9341`. Check
   `{ "js": "Boolean(window.Clerk.session)" }`, and if it is false run
   `{ "js": "window.Clerk.openSignIn()" }` and press Continue with
   GitHub in its window. It signs in again without leaving the account.
