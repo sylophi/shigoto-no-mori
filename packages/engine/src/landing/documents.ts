@@ -6,7 +6,8 @@ import * as Schema from "effect/Schema";
 import { errorDocument } from "../errorDocument.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
-import type { MergeMethod, PullRequestSummary } from "../GitHub.ts";
+import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
+import type { PullRequestSummary } from "../GitHub.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 
@@ -315,12 +316,6 @@ export const SETTLE_TIMEOUT_MS = 20 * 1000;
 // Bounds the walk down a chain: the rows are a snapshot, so a loop in
 // stale ones must end.
 export const MAX_STACK_DEPTH = 64;
-
-// The verdicts auto-merge is for: the base branch's rules aren't met yet,
-// or the head must catch up with a base that requires it. Anything else
-// merges now, or keeps the plain merge's refusal.
-export const autoMergeArms = (status: string | undefined) =>
-  status === "BLOCKED" || status === "BEHIND";
 
 // The merge's fields in merge's document and land's "merged". No method
 // means the PR was merged before the command ran.

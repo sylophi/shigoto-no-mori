@@ -17,12 +17,15 @@ import {
   ATTACHMENT_VIDEO_EXTENSIONS,
   type CreatePullRequestResult,
   isFromThisRepository,
-  MAX_ATTACHMENT_IMAGE_BYTES,
-  MAX_ATTACHMENT_VIDEO_BYTES,
   type PullRequestCompare,
   type PullRequestDraft,
   type StagedAttachment,
 } from "@shigomori/contracts/schemas";
+import {
+  attachmentReference,
+  attachmentRefusal,
+  attachmentTypeOfName,
+} from "@shigomori/contracts/attachments";
 import { orderRemotesByPrecedence } from "@shigomori/engine/gitParse";
 import { parseNumstat } from "@shigomori/engine/gitParse";
 import * as Git from "@shigomori/engine/Git";
@@ -372,11 +375,13 @@ export const stageAttachment = Effect.fn("NewPullRequest.stageAttachment")(
     const fs = yield* FileSystem.FileSystem;
     const path = stagedAttachmentPath(chunk.id, chunk.name);
     const bytes = Buffer.from(chunk.base64, "base64");
-    if (chunk.offset + bytes.length > MAX_ATTACHMENT_VIDEO_BYTES) {
-      return yield* new GhActionError({
-        reason: `An attachment can be at most ${MAX_ATTACHMENT_VIDEO_BYTES / 1024 / 1024} MB.`,
-      });
-    }
+    // By the file's whole size so far, as the dialog checked the file.
+    const refusal = attachmentRefusal({
+      name: chunk.name,
+      type: attachmentTypeOfName(chunk.name),
+      size: chunk.offset + bytes.length,
+    });
+    if (refusal !== null) return yield* new GhActionError({ reason: refusal });
     if (chunk.offset === 0) {
       yield* sweepStaleAttachments;
       yield* fs.makeDirectory(join(ATTACHMENTS_DIR, chunk.id), {
@@ -423,22 +428,19 @@ export const stageAttachmentFromUrl = Effect.fn(
         .split(";")[0]
         ?.trim()
         .toLowerCase() ?? "";
-    const image = ATTACHMENT_IMAGE_EXTENSIONS[type];
-    const ext = image ?? ATTACHMENT_VIDEO_EXTENSIONS[type];
-    if (!ext) {
+    // The link's bytes so far, refused by the dialog's rule for a file.
+    const refused = (size?: number) => {
+      const reason = attachmentRefusal({ name: source.url, type, size });
+      return reason === null ? null : new GhActionError({ reason });
+    };
+    const length = response.headers.get("content-length");
+    const early = refused(length === null ? undefined : Number(length));
+    if (early !== null) {
       yield* cancel;
-      return yield* new GhActionError({
-        reason: `Only images and videos can be attached, and ${source.url} is neither`,
-      });
+      return yield* early;
     }
-    const max = image ? MAX_ATTACHMENT_IMAGE_BYTES : MAX_ATTACHMENT_VIDEO_BYTES;
-    const tooBig = new GhActionError({
-      reason: `${source.url} is over the ${max / 1024 / 1024} MB GitHub takes`,
-    });
-    if (Number(response.headers.get("content-length") ?? 0) > max) {
-      yield* cancel;
-      return yield* tooBig;
-    }
+    const ext =
+      ATTACHMENT_IMAGE_EXTENSIONS[type] ?? ATTACHMENT_VIDEO_EXTENSIONS[type];
     const name = `${source.stem}.${ext}`;
     yield* sweepStaleAttachments;
     yield* fs.makeDirectory(join(ATTACHMENTS_DIR, source.id), {
@@ -452,10 +454,13 @@ export const stageAttachmentFromUrl = Effect.fn(
     }).pipe(
       Stream.mapEffect((bytes: Uint8Array) => {
         size += bytes.length;
-        return size > max ? Effect.fail(tooBig) : Effect.succeed(bytes);
+        const late = refused(size);
+        return late === null ? Effect.succeed(bytes) : Effect.fail(late);
       }),
       Stream.run(fs.sink(stagedAttachmentPath(source.id, name))),
     );
+    const empty = refused(size);
+    if (empty !== null) return yield* empty;
     return { name, type } satisfies StagedAttachment;
   }).pipe(
     Effect.timeoutOrElse({
@@ -718,8 +723,8 @@ function pointAtStaged(
           let pointed = part;
           for (const { name, path } of staged) {
             pointed = pointed
-              .replaceAll(`](./${name})`, `](${path})`)
-              .replaceAll(`](<./${name}>)`, `](<${path}>)`);
+              .replaceAll(`](${attachmentReference(name)})`, `](${path})`)
+              .replaceAll(`](<${attachmentReference(name)}>)`, `](<${path}>)`);
           }
           return pointed;
         })
@@ -783,7 +788,7 @@ const restoreStagedReferences = Effect.fnUntraced(function* (
   );
   let restored = body;
   for (const { name, path } of staged) {
-    restored = restored.replaceAll(path, `./${name}`);
+    restored = restored.replaceAll(path, attachmentReference(name));
   }
   if (restored === body) return;
   yield* runGh(["pr", "edit", url, `--body=${restored}`], {
