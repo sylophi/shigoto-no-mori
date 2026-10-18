@@ -8,7 +8,8 @@
 // runtime's own peerApi, run, listen, pushes and view, and the preload's
 // scalar facts (so renderer components mount unmodified), the
 // localStorage-backed clientConfig store round-trips, heals corrupt
-// JSON and turns an Each launch rotation once per tab, the per-browser deviceId is stable and matches DeviceIdSchema,
+// JSON and turns an Each launch rotation once per tab, the
+// per-browser deviceId is stable and matches DeviceIdSchema,
 // enroll exchanges the Clerk session token for a credential with
 // platform "web" and persists the enc:false envelope, sign-out
 // revokes this device then clears the envelope, a concurrent enroll or
