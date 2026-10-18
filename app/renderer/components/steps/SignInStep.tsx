@@ -1,12 +1,12 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import type { SignInStep } from "@shigomori/ui/views/steps/migrationEnded.ts";
+import type { SignInStep as SignInStepShown } from "@shigomori/ui/views/steps/migrationEnded.ts";
 import {
   type EnrollmentStep,
   useEnrollment,
 } from "@/hooks/account/useEnrollment";
 import { useHasAccountService } from "@/lib/accountService";
 
-const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
+const SIGN_IN: Record<EnrollmentStep, SignInStepShown> = {
   done: { state: "done", asks: false },
   enrolling: { state: "running", asks: false },
   enroll: { state: "running", asks: false },
@@ -15,7 +15,7 @@ const SIGN_IN: Record<EnrollmentStep, SignInStep> = {
 
 export interface SignInStepState {
   // None when the build has no account service: sign-in stays off.
-  readonly signIn: SignInStep | null;
+  readonly signIn: SignInStepShown | null;
   readonly needsDeviceKey: boolean;
   readonly run: () => void;
 }

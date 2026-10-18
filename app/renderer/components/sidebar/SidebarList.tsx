@@ -103,9 +103,8 @@ export function SidebarList({
   // comes back with the project just left in view, so the place the
   // list was read from is found again. Before the selection's reveal
   // below, which then has the last word on a worktree opened from
-  // outside the sidebar.
-  // Keyed on the level alone: the rows and the virtualizer are new
-  // every render.
+  // outside the sidebar. Keyed on the level alone: the rows and the
+  // virtualizer are new every render.
   const startOver = useEffectEvent(() => {
     if (!moved) return;
     if (level !== null) {
@@ -117,7 +116,9 @@ export function SidebarList({
     );
     if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
   });
-  useEffect(() => startOver(), [level]);
+  useEffect(() => {
+    startOver();
+  }, [level]);
 
   const items = virtualizer.getVirtualItems();
   const listRef = useRef<HTMLDivElement>(null);
