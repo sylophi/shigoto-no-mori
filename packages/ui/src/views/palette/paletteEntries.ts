@@ -7,6 +7,7 @@ import type {
   Worktree,
 } from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
+import type { InboxShelf } from "../sidebar/sidebarRow.ts";
 
 // One worktree the palette can land on, wherever it lives.
 export interface PaletteEntry {
@@ -22,9 +23,10 @@ export interface PaletteEntry {
   pr: PullRequest | undefined;
   // Matches a hidden-worktree prefix: listed only for a query.
   hidden: boolean;
-  // Merged, shelved or agent working: still found, but below the work in
-  // progress.
-  sunk: boolean;
+  // The inbox shelf it sits on, the prefixes aside (`hidden` says
+  // that): merged, shelved or agent working is still found, but below
+  // the work in progress. Null for live work.
+  shelf: InboxShelf | null;
 }
 
 // A project the query names, standing for its checkouts on every

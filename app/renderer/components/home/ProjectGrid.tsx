@@ -20,8 +20,7 @@ import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
 import { useForestSources } from "@/components/sidebar/forestSources";
 import {
   ProjectGroupActions,
-  useGroupMembers,
-  useIconMember,
+  useProjectGroup,
 } from "@/components/sidebar/ProjectGroupActions";
 import { useLocateProject } from "@/components/sidebar/LocateProjectPicker";
 import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
@@ -80,17 +79,14 @@ function Grid({
   const { openCreateForm } = useQuickCreateWorktree();
   // The worktree the tile names, or with none anywhere yet, the place
   // to make one: the palette's ↩ on a project.
-  const open = (row: ProjectListRow, lead: GroupWork["lead"]) => {
+  const open = ({ lead, project, device }: GroupWork) => {
     if (lead) {
       toPageOn(lead.device?.deviceId, "detail", {
         projectId: lead.worktree.projectId,
         worktreeId: lead.worktree.id,
       });
     } else {
-      openCreateForm(
-        row.project.id,
-        row.local ? undefined : row.members[0]?.deviceId,
-      );
+      openCreateForm(project.id, device?.deviceId);
     }
   };
   return (
@@ -109,7 +105,7 @@ function Grid({
                   key={row.key}
                   row={row}
                   work={tileWork}
-                  onOpen={() => open(row, tileWork?.lead)}
+                  onOpen={() => tileWork && open(tileWork)}
                 />,
               ] as const;
             }),
@@ -157,16 +153,17 @@ function ProjectTile({
   onOpen: () => void;
 }) {
   const showBadges = useShowDeviceBadges();
-  const { project, local, members, branches, pinned } = row;
+  const { project, branches, pinned } = row;
   const [hovered, setHovered] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const group = useGroupMembers(members, local ? project : undefined);
-  // The member the icon and the About are read from.
-  const iconMember = useIconMember(group, local);
-  const sourceId = iconMember?.project.id ?? project.id;
-  const sourceDevice = iconMember?.deviceId;
+  // The icon and the About are read from the same checkout.
+  const { group, icon } = useProjectGroup(row);
   const missing = project.pathExists === false;
-  const description = useRepoDescription(sourceId, sourceDevice, !missing);
+  const description = useRepoDescription(
+    icon.projectId,
+    icon.deviceId,
+    !missing,
+  );
   // A missing project's tile locates it, as its sidebar row does.
   const { relocating, onLocate, picker } = useLocateProject(
     group,
@@ -189,14 +186,7 @@ function ProjectTile({
       onOpen={onOpen}
       onHover={setHovered}
       triggerRef={triggerRef}
-      icon={
-        <ProjectIcon
-          projectId={sourceId}
-          name={project.name}
-          deviceId={sourceDevice}
-          className="size-8"
-        />
-      }
+      icon={<ProjectIcon {...icon} name={project.name} className="size-8" />}
       // A missing project keeps them too, as its sidebar row does:
       // Remove is how it goes.
       actions={

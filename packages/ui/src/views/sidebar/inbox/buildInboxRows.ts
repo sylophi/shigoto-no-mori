@@ -16,18 +16,19 @@ import {
 } from "@shigomori/contracts/schemas";
 import {
   deviceBadgeOf,
-  groupShelfOf,
   mirrorBadgeLookup,
   mirrorPairsOf,
   remoteWorktreeKey,
   worktreeRowKey,
+  worktreeShelfOf,
 } from "../buildSidebarRows.ts";
 import type { SidebarDeviceBadge } from "../DeviceBadgeView.tsx";
 import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
-import type {
-  InboxShelf,
-  SidebarRow,
-  SidebarViewModel,
+import {
+  INBOX_SHELVES,
+  type InboxShelf,
+  type SidebarRow,
+  type SidebarViewModel,
 } from "../sidebarRow.ts";
 import { byInboxRank, inboxRank, type InboxRank } from "./inboxRank.ts";
 
@@ -74,26 +75,6 @@ interface Entry extends InboxRank {
   mirror: SidebarDeviceBadge | undefined;
   mirrorWorktreeId: string | undefined;
   shelf: InboxShelf | null;
-}
-
-// A worktree lands in exactly one box. An agent's working mark and
-// shelving are explicit decisions (groupShelfOf), so they outrank
-// mergedness: a shelved branch that also merged stays where the user
-// filed it. The hidden prefixes are one too, just
-// made ahead of time. A primary is always live: it can't be
-// shelved, and a merged PR on whatever branch it happens to have checked
-// out doesn't make the project's root "done".
-function bucketFor(
-  worktree: Worktree,
-  pr: PullRequest | undefined,
-  prefixes: readonly string[],
-  allowAgentWorking: boolean,
-): InboxShelf | "live" {
-  if (worktree.isPrimary) return "live";
-  const shelf = groupShelfOf(worktree, prefixes, allowAgentWorking);
-  if (shelf !== null) return shelf;
-  if (worktree.mergedIntoPrimary || pr?.state === "MERGED") return "merged";
-  return "live";
 }
 
 function worktreeRow(entry: Entry): SidebarRow {
@@ -161,7 +142,7 @@ export function buildInboxRows({
   const leftOut = new Set<string>();
   // Where each of this machine's entries filed, for the peers' rows to
   // fold into.
-  const localBucket = new Map<string, InboxShelf | "live">();
+  const localShelf = new Map<string, InboxShelf | null>();
   const file = (
     project: Project,
     trees: readonly Worktree[],
@@ -179,7 +160,12 @@ export function buildInboxRows({
         continue;
       }
       const pr = prs?.[worktree.branch];
-      const bucket = bucketFor(worktree, pr, hiddenPrefixes, allowAgentWorking);
+      const shelf = worktreeShelfOf(
+        worktree,
+        pr,
+        hiddenPrefixes,
+        allowAgentWorking,
+      );
       const entry: Entry = {
         ...inboxRank(worktree, pinWaiting),
         project,
@@ -191,14 +177,14 @@ export function buildInboxRows({
           device === undefined
             ? peerOfLocal.get(worktree.id)?.peerWorktreeId
             : undefined,
-        shelf: bucket === "live" ? null : bucket,
+        shelf,
       };
-      if (device === undefined) localBucket.set(worktree.id, bucket);
-      if (bucket === "live") {
+      if (device === undefined) localShelf.set(worktree.id, shelf);
+      if (shelf === null) {
         live.push(entry);
       } else {
-        shelves[bucket].push(entry);
-        shelfOf.set(worktreeRowKey(device?.deviceId, worktree.id), bucket);
+        shelves[shelf].push(entry);
+        shelfOf.set(worktreeRowKey(device?.deviceId, worktree.id), shelf);
       }
     }
   };
@@ -226,8 +212,8 @@ export function buildInboxRows({
         if (local === undefined) return true;
         const pr = item.pullRequests[worktree.branch];
         if (
-          localBucket.get(local) !==
-          bucketFor(worktree, pr, hiddenPrefixes, allowAgentWorking)
+          localShelf.get(local) !==
+          worktreeShelfOf(worktree, pr, hiddenPrefixes, allowAgentWorking)
         ) {
           return true;
         }
@@ -280,12 +266,7 @@ export function buildInboxRows({
     if (!expanded) continue;
     rows.push(...entries.toSorted(byInboxRank).map(worktreeRow));
   }
-  for (const shelf of [
-    "agentWorking",
-    "shelved",
-    "merged",
-    "hidden",
-  ] as const) {
+  for (const shelf of INBOX_SHELVES) {
     const entries = shelves[shelf];
     if (entries.length === 0) continue;
     const expanded = openShelves.has(shelf);

@@ -67,7 +67,7 @@ export type LiveMember = GroupMember & { api: HostApi };
 // where that peer lets this device command it (the same reading the
 // new-worktree picker uses, and until its session reports the peer is
 // assumed granted rather than flashing actions in and out).
-export function useGroupMembers(
+function useGroupMembers(
   peers: readonly RemoteProjectMember[],
   localProject: Project | undefined,
 ): GroupMember[] {
@@ -103,7 +103,7 @@ export function useGroupMembers(
 // keeps reading the member that last served it, because that is the
 // key the cached icon lives under. A group that never had a live member
 // reads its first. Undefined for a local project, which reads its own.
-export function useIconMember(
+function useIconMember(
   group: readonly GroupMember[],
   local: boolean,
 ): GroupMember | undefined {
@@ -119,6 +119,37 @@ export function useIconMember(
   return (
     live ?? group.find((member) => member.deviceId === lastLiveId) ?? group[0]
   );
+}
+
+export interface ProjectGroupIcon {
+  projectId: string;
+  deviceId: string | undefined;
+}
+
+// A project row's group (useGroupMembers) and the checkout its icon is
+// read from (useIconMember), as the tree's header, the home page's
+// tile and the inbox's create menu all draw it.
+export function useProjectGroup({
+  project,
+  local,
+  members,
+}: {
+  project: Project;
+  local: boolean;
+  members: readonly RemoteProjectMember[];
+}): {
+  group: GroupMember[];
+  icon: ProjectGroupIcon;
+} {
+  const group = useGroupMembers(members, local ? project : undefined);
+  const iconMember = useIconMember(group, local);
+  return {
+    group,
+    icon: {
+      projectId: iconMember?.project.id ?? project.id,
+      deviceId: iconMember?.deviceId,
+    },
+  };
 }
 
 // Where the group's quick create lands: the pick (useQuickCreateDeviceId)

@@ -23,7 +23,6 @@ import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
 import { isHiddenByPrefix } from "@shigomori/contracts/sharedSettings";
 
 import {
-  isAgentWorking,
   worktreeLastActivityAt,
   type Project,
   type Worktree,
@@ -35,6 +34,7 @@ import {
   mirrorPairsOf,
   projectGroupKey,
   worktreeRowKey,
+  worktreeShelfOf,
 } from "../sidebar/buildSidebarRows.ts";
 import { ownerOf } from "../sidebar/sidebarRow.ts";
 
@@ -94,15 +94,16 @@ export function buildPaletteEntries({
     const pullRequests = pullRequestQueries[i]?.data;
     for (const worktree of trees) {
       localIds.add(worktree.id);
+      const pr = pullRequests?.[worktree.branch];
       entries.push({
         key: worktreeRowKey(undefined, worktree.id),
         worktree,
         project,
         device: undefined,
         mirror: mirrorBadgeFor(worktree),
-        pr: pullRequests?.[worktree.branch],
+        pr,
         hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
-        sunk: isSunk(worktree, allowAgentWorking),
+        shelf: worktreeShelfOf(worktree, pr, [], allowAgentWorking),
       });
     }
   });
@@ -116,15 +117,16 @@ export function buildPaletteEntries({
         folds.set(key, worktreeRowKey(undefined, folded));
         continue;
       }
+      const pr = item.pullRequests[worktree.branch];
       entries.push({
         key,
         worktree,
         project: item.project,
         device,
         mirror: undefined,
-        pr: item.pullRequests[worktree.branch],
+        pr,
         hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
-        sunk: isSunk(worktree, allowAgentWorking),
+        shelf: worktreeShelfOf(worktree, pr, [], allowAgentWorking),
       });
     }
   }
@@ -139,7 +141,7 @@ export function buildPaletteEntries({
   const visitOrder = (entry: PaletteEntry) => lastVisit.get(entry.key) ?? 0;
   const sorted = entries.toSorted(
     (a, b) =>
-      Number(a.sunk) - Number(b.sunk) ||
+      Number(isSunk(a)) - Number(isSunk(b)) ||
       visitOrder(b) - visitOrder(a) ||
       worktreeLastActivityAt(b.worktree) - worktreeLastActivityAt(a.worktree) ||
       a.worktree.name.localeCompare(b.worktree.name),
@@ -147,10 +149,7 @@ export function buildPaletteEntries({
   return { entries: sorted, entryKeyOf };
 }
 
-const isSunk = (worktree: Worktree, allowAgentWorking: boolean) =>
-  isAgentWorking(worktree, allowAgentWorking) ||
-  worktree.shelved ||
-  worktree.mergedIntoPrimary;
+const isSunk = (entry: PaletteEntry) => entry.shelf !== null;
 
 // The row ↩ lands on when the palette opens. The worktree on screen
 // leads the recency order (it was visited last), so opening on it
@@ -192,7 +191,7 @@ const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
   pr?.title ?? "",
 ];
 
-const entryWeight = (entry: PaletteEntry) => (entry.sunk ? 0.5 : 1);
+const entryWeight = (entry: PaletteEntry) => (isSunk(entry) ? 0.5 : 1);
 
 // Where a project opens, here and on its home page tile
 // (home/gridModel.ts): of its worktrees in the list's order, the first
@@ -202,7 +201,7 @@ const entryWeight = (entry: PaletteEntry) => (entry.sunk ? 0.5 : 1);
 export function projectLead(
   trees: readonly PaletteEntry[],
 ): PaletteEntry | undefined {
-  const open = trees.filter((t) => !t.sunk && !t.hidden);
+  const open = trees.filter((t) => !isSunk(t) && !t.hidden);
   return open.find((t) => t.device?.reachable !== false) ?? open[0] ?? trees[0];
 }
 
@@ -218,31 +217,26 @@ function ownerNames(project: Project): string[] {
   return owner ? [owner.name, `${owner.name}/${owner.repo}`] : [];
 }
 
-// The few projects the query names, best first, and all of an owner's
-// when it is the owner's name. Every project
-// on every device, the ones with no worktrees too, since the sidebar's
-// list of projects is the other way to them. Not one whose folder is
-// gone, which the sidebar won't open either. Only for a query:
-// unasked, the worktree list already leads with their work.
-export function rankPaletteProjects(
-  query: string,
+// Every project on every device as its sidebar group, the ones with no
+// worktrees too, and not one whose folder is gone, which the sidebar
+// won't open either: by group key, the checkout the group goes by, and
+// its worktrees in the list's order. This device's projects first, so
+// a group names its local checkout. A repo only peers hold is named by
+// a reachable one, where its pages open. The palette's projects and
+// the home page's tiles (home/gridModel.ts) are these.
+export interface ProjectGroup {
+  project: Project;
+  device: SidebarDeviceBadge | undefined;
+  trees: PaletteEntry[];
+  devices: Set<string | undefined>;
+}
+
+export function projectGroups(
   entries: readonly PaletteEntry[],
   projects: readonly Project[],
   remote: readonly RemoteForestItem[],
-): PaletteProject[] {
-  if (!query) return [];
-  const groups = new Map<
-    string,
-    {
-      project: Project;
-      device: SidebarDeviceBadge | undefined;
-      trees: PaletteEntry[];
-      devices: Set<string | undefined>;
-    }
-  >();
-  // This device's projects first, so a group names its local checkout.
-  // A repo only peers hold is named by a reachable one, where its
-  // pages open.
+): Map<string, ProjectGroup> {
+  const groups = new Map<string, ProjectGroup>();
   const join = (project: Project, device: SidebarDeviceBadge | undefined) => {
     const key = projectGroupKey(project, device?.deviceId);
     const group = groups.get(key);
@@ -269,7 +263,20 @@ export function rankPaletteProjects(
     const key = projectGroupKey(entry.project, entry.device?.deviceId);
     groups.get(key)?.trees.push(entry);
   }
-  const items = [...groups].map(
+  return groups;
+}
+
+// The few projects the query names, best first, and all of an owner's
+// when it is the owner's name (projectGroups). Only for a query:
+// unasked, the worktree list already leads with their work.
+export function rankPaletteProjects(
+  query: string,
+  entries: readonly PaletteEntry[],
+  projects: readonly Project[],
+  remote: readonly RemoteForestItem[],
+): PaletteProject[] {
+  if (!query) return [];
+  const items = [...projectGroups(entries, projects, remote)].map(
     ([key, { project, device, trees, devices }]): PaletteProject => ({
       key: `project:${key}`,
       project,
