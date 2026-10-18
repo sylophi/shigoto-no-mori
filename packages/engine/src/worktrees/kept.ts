@@ -100,7 +100,7 @@ export const makeKept = Effect.gen(function* () {
           repo: project.path,
           ref: dirtyRef(to),
           commit: capture.value,
-          expected: "",
+          expected: Git.ABSENT_REF,
         });
       }
       yield* git.deleteRef(project.path, dirtyRef(from), capture.value);

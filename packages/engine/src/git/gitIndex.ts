@@ -1,6 +1,5 @@
 // Git's index: undoing commits, hard resets, and discarding changes into snapshots that put them back.
 import { pluralize } from "@shigomori/contracts/words";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -8,6 +7,7 @@ import * as Path from "effect/Path";
 import { splitLines, splitZ } from "../gitParse.ts";
 import { isUntracked } from "@shigomori/contracts/schemas";
 import {
+  ABSENT_REF,
   DISCARD_REF_PREFIX,
   DISCARD_SNAPSHOTS_KEPT,
   GitCommandError,
@@ -112,7 +112,7 @@ export const makeGitIndex = ({
     // A commit of `paths` as they are on disk now, under
     // DISCARD_REF_PREFIX, built in a scratch index so the real one is
     // untouched. The ref keeps its objects through gc, and the newest
-    // DISCARD_SNAPSHOTS_KEPT are kept.
+    // DISCARD_SNAPSHOTS_KEPT, by number, are kept.
     const snapshotPaths = (worktree: string, paths: readonly string[]) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -153,23 +153,55 @@ export const makeGitIndex = ({
             ],
             { env },
           )).trim();
-          yield* run(worktree, [
-            "update-ref",
-            `${DISCARD_REF_PREFIX}${yield* Clock.currentTimeMillis}`,
-            snapshot,
-          ]);
-          // Ref names are equal-width millisecond stamps, so a reverse name
-          // sort is newest first. Best effort: a failed prune leaves a ref.
-          yield* run(worktree, [
+          // Named by a number one past the repository's highest and made
+          // only where no ref is yet, so a snapshot from another worktree
+          // taking the number first sends this one to the next, and no
+          // clock orders them.
+          const numbered = run(worktree, [
             "for-each-ref",
             "--format=%(refname)",
-            "--sort=-refname",
             DISCARD_REF_PREFIX,
           ]).pipe(
-            Effect.flatMap((stdout) =>
+            Effect.map((stdout) =>
+              splitLines(stdout).flatMap((ref) => {
+                const name = ref.slice(DISCARD_REF_PREFIX.length);
+                return /^[1-9]\d*$/.test(name) ? [Number(name)] : [];
+              }),
+            ),
+          );
+          yield* Effect.gen(function* () {
+            const highest = (yield* numbered).reduce(
+              (a, b) => Math.max(a, b),
+              0,
+            );
+            yield* run(worktree, [
+              "update-ref",
+              `${DISCARD_REF_PREFIX}${highest + 1}`,
+              snapshot,
+              ABSENT_REF,
+            ]);
+          }).pipe(
+            Effect.retry({
+              times: 8,
+              // Taken by another snapshot since it was read, or held by
+              // its write: either way the next number is free.
+              while: (error) =>
+                /reference already exists|cannot lock ref/.test(
+                  stderrOf(error),
+                ),
+            }),
+          );
+          // Best effort: a failed prune leaves a ref.
+          yield* numbered.pipe(
+            Effect.flatMap((numbers) =>
               Effect.forEach(
-                splitLines(stdout).slice(DISCARD_SNAPSHOTS_KEPT),
-                (ref) => run(worktree, ["update-ref", "-d", ref]),
+                numbers.toSorted((a, b) => b - a).slice(DISCARD_SNAPSHOTS_KEPT),
+                (n) =>
+                  run(worktree, [
+                    "update-ref",
+                    "-d",
+                    `${DISCARD_REF_PREFIX}${n}`,
+                  ]),
               ),
             ),
             Effect.ignore,

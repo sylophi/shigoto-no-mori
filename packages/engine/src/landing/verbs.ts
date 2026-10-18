@@ -406,23 +406,21 @@ export const makeVerbs = ({
           reporter,
         );
         yield* awaitMerge(project.path, pr, outcome, "land", reporter);
-        // The wait can take as long as the checks do, time enough for new
-        // work in the worktree, so the guards run again, on the head the
-        // PR merged with.
-        if (outcome.outcome !== "merged") {
-          if (!worktree.isPrimary) {
-            yield* worktrees.checkRemovable(located, options.force);
-          }
-          if (guarded) {
-            yield* guardCommits(
-              project.path,
-              branch,
-              pr.number,
-              yield* github.headOf(project.path, pr.number),
-              remote,
-              "land",
-            );
-          }
+        // The merge and its wait leave time for new work in the worktree,
+        // even a merge GitHub answers at once, so the guards run again, on
+        // the head the PR merged with.
+        if (!worktree.isPrimary) {
+          yield* worktrees.checkRemovable(located, options.force);
+        }
+        if (guarded) {
+          yield* guardCommits(
+            project.path,
+            branch,
+            pr.number,
+            yield* github.headOf(project.path, pr.number),
+            remote,
+            "land",
+          );
         }
         method = outcome.method;
       }

@@ -279,8 +279,9 @@ function removedIdsOf(doc: Landing.Document): string[] {
   return ids;
 }
 
-// Forced: the app's cleanup box appears in merged-PR context, so the UI
-// has already gated mergedness.
+// Not forced: the cleanup box shows for a merged PR, but the branch can
+// hold commits made since, which only `done`'s own proof refuses to
+// delete.
 export const finishWorktree = Effect.fnUntraced(function* (
   project: Project,
   worktreeId: string,
@@ -288,7 +289,7 @@ export const finishWorktree = Effect.fnUntraced(function* (
   const doc = yield* asChange(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
-      return yield* (yield* Landing.Landing).done(located, { force: true });
+      return yield* (yield* Landing.Landing).done(located, { force: false });
     }),
     { projectId: project.id, worktreeId },
     "finish",

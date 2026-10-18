@@ -51,7 +51,10 @@ import * as Worktrees from "../../src/Worktrees.ts";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as WtFolder from "../../src/WtFolder.ts";
-import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
+import {
+  isOutsideGitVariable,
+  repositoryRoot,
+} from "../../../../gitIsolation.ts";
 import { macfs } from "./macfs.ts";
 
 // The darwin helper, for the tests that take it with the sandbox's
@@ -140,6 +143,10 @@ export type Sandbox = {
   // A git repository at `name` beside the data dirs, which every side
   // shares, with `files` committed.
   readonly repo: (name: string, files?: Record<string, string>) => string;
+  // This repository at `name`, at the commit checked out, on main: a
+  // real project's tree to clone and land from. Its own commit, not a
+  // pinned one, since CI's checkout is shallow and holds no other.
+  readonly realRepo: (name: string) => string;
   // git in `cwd` with the sandbox's identity, answering its stdout.
   readonly git: (cwd: string, ...args: string[]) => string;
   readonly engine: <A, E>(run: Effect.Effect<A, E, Engine>) => Promise<unknown>;
@@ -333,6 +340,22 @@ export function sandbox(
       }
       git("add", "-A");
       git("commit", "-q", "--allow-empty", "-m", "init");
+      return dir;
+    },
+    realRepo: (name) => {
+      const dir = join(root, name);
+      const git = (cwd: string, ...args: string[]) =>
+        execFileSync("git", args, { cwd, env: gitEnv(), stdio: "ignore" });
+      git(
+        root,
+        "clone",
+        "-q",
+        "--shared",
+        "--no-checkout",
+        repositoryRoot,
+        dir,
+      );
+      git(dir, "checkout", "-q", "-B", "main", "HEAD");
       return dir;
     },
     // The service call's answer, or its error as the terminal reports
