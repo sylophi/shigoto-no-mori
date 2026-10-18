@@ -3,7 +3,6 @@
 // out as its lifecycle phases), what state each listed step is in, the
 // headline for the step underway, and a single overall figure for the
 // bar between the two devices.
-import { useEffect, useState } from "react";
 import {
   type SyncCloneInto,
   type SyncPullProgress,
@@ -112,19 +111,6 @@ export function overallProgress(frame: SyncPullProgress | null): number {
 function byteRatio(frame: SyncPullProgress): number {
   const total = frame.totalBytes ?? 0;
   return total > 0 ? Math.min(1, (frame.bytes ?? 0) / total) : 0;
-}
-
-// A once-a-second tick while a pull runs, for the elapsed figure.
-// Frozen (and free) otherwise.
-export function useClock(running: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!running) return;
-    setNow(Date.now());
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [running]);
-  return now;
 }
 
 export function formatElapsed(ms: number): string {
