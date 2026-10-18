@@ -11,13 +11,15 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { expect } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
@@ -122,12 +124,24 @@ function appPids(app: number | undefined): { pid: number; command: string }[] {
 
 // A failed walk's root (its repos, data folder and home with the
 // shell's logs), with the host's trace beside it, kept under
-// SM_WALK_FAILURES. A copy that fails says so and keeps what it got.
+// SM_WALK_FAILURES when it is set, and the newest KEPT_FAILURES there
+// alone. Never inside the repository: each root holds a copy of the
+// repo, which the typecheck, vitest, knip and oxlint would all read,
+// gitignored or not. A copy that fails says so and keeps what it got.
+const KEPT_FAILURES = 5;
+const KEPT_NAME = /-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/;
+
 function keepFailed(root: string): void {
+  const failures = process.env["SM_WALK_FAILURES"];
+  if (failures === undefined || failures === "") return;
   const walk = basename(expect.getState().testPath ?? root);
-  const failures =
-    process.env["SM_WALK_FAILURES"] ??
-    join(APP_DIR, "lab", "walks", "failures");
+  const repository = join(APP_DIR, "..");
+  if (isInside(resolve(failures), repository)) {
+    console.error(
+      `[walks] ${walk} failed; SM_WALK_FAILURES names a folder inside the repository, so its root isn't kept`,
+    );
+    return;
+  }
   const kept = join(
     failures,
     `${walk.replace(/\.walk\.mts$/, "")}-${new Date().toISOString().replace(/[:.]/g, "-")}`,
@@ -145,7 +159,19 @@ function keepFailed(root: string): void {
       error,
     );
   }
+  // Only the roots this keeps, by their name: the folder may hold others.
+  const older = readdirSync(failures, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && KEPT_NAME.test(entry.name))
+    .map((entry) => join(failures, entry.name))
+    .toSorted((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
+    .slice(KEPT_FAILURES);
+  for (const dir of older) rmSync(dir, { recursive: true, force: true });
 }
+
+const isInside = (path: string, folder: string): boolean => {
+  const from = relative(folder, path);
+  return from === "" || (!from.startsWith("..") && !isAbsolute(from));
+};
 
 export async function bootLab(options: LabOptions): Promise<Lab> {
   const bundle = labBundle();

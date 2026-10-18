@@ -38,5 +38,12 @@
     "vitest.config.ts",
     "vite.reactCompiler.ts",
     "vite.dedupe.ts"
+  ],
+  // Outputs a run writes inside the tree, gitignored but not hidden
+  // from the compiler, which a copy of the repo in one would swamp.
+  "exclude": [
+    "lab/walks/failures",
+    "lab/reliability/report",
+    "lab/fake-host/villager-data"
   ]
 }
