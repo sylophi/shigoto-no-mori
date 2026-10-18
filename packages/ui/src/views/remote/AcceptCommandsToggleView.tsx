@@ -13,8 +13,7 @@
 // spells out what the grant covers and tints while it is on.
 //
 // Written immediately through the host store, never staged in a form:
-// flipping it is the whole action. The registry mounts the watcher
-// that follows a flip made in another window.
+// flipping it is the whole action.
 import {
   Cable,
   Eye,
@@ -101,8 +100,8 @@ export function AcceptCommandsToggleView({
         // Inert until the first read lands, so the switch never shows a
         // false "off" that a click would then turn into a real write. A
         // read that FAILED is a different case: the switch stays live,
-        // reading off, so a click is the retry (a successful write fans
-        // out and the read runs again).
+        // reading off, so a click is the retry (the write asks the read
+        // again).
         disabled={(enabled === undefined && !isError) || pending}
         switchClassName="data-[checked]:bg-amber-500"
         alone="access"

@@ -1,12 +1,8 @@
-import {
-  type QueryClient,
-  queryOptions,
-  useMutation,
-  useQueries,
-  useQuery,
-} from "@tanstack/react-query";
+import { callOf } from "@shigomori/contracts/contract";
+import { updaterContract } from "@shigomori/contracts/modules/updater";
+import { useMutation } from "@tanstack/react-query";
+import * as Atom from "effect/reactivity/Atom";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import type { UpdaterState } from "@shigomori/contracts/schemas";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
@@ -19,75 +15,49 @@ import {
 } from "@/lib/updates";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { toast } from "@/lib/toast";
-import { queryKeysFor } from "@/lib/queryKeys";
+import { hostStateAtom } from "@/lib/runtime/atoms";
 import { useApi } from "@/lib/runtime/pageApi";
+import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
 
-// One device's updater state, under that device's own key. Errors stay
-// silent: a peer out of reach answers nothing, and the Version section
-// shows that as unavailable rather than toasting on every visit.
-function updaterStateQueryOptions(deviceId: string, api: HostApi) {
-  return queryOptions<UpdaterState>({
-    queryKey: queryKeysFor(deviceId).updaterState(),
-    queryFn: ({ signal }) => api.run(api.updater.get(), { signal }),
-    // Never stale: every device's updater:state broadcast is mirrored
-    // into its key by its push watch (lib/hostWatch.ts), and a peer's
-    // is re-read whenever its session lands, which covers a restart
-    // into the new build.
-    staleTime: Number.POSITIVE_INFINITY,
-    // A focus has nothing to add to that, and an unreachable peer
-    // (whose read never succeeds, so it is always stale) would
-    // otherwise be re-asked, with retries, on every one.
-    refetchOnWindowFocus: false,
-    meta: { silentError: true },
-  });
-}
+// One device's updater state, as its host pushes it on every change,
+// seeded by its read (pushedState). A peer's starts again on each new
+// session to it, which covers its restart into the new build.
+const updaterStateAtom = Atom.family((deviceId: string) =>
+  hostStateAtom(deviceId, {
+    read: callOf(updaterContract, "get"),
+    push: callOf(updaterContract, "state"),
+  }).pipe(Atom.setIdleTTL("1 minute")),
+);
 
-// The one writer both boot-scope mirrors go through. A push landing
-// while the seeding read is still in flight would be overwritten by
-// that read's older answer, for good under the staleTime above, so the
-// read is dropped first: the push is the newer word.
-export function writeUpdaterState(
-  queryClient: QueryClient,
-  deviceId: string,
-  state: UpdaterState,
-): void {
-  const queryKey = queryKeysFor(deviceId).updaterState();
-  void queryClient.cancelQueries({ queryKey, exact: true });
-  queryClient.setQueryData(queryKey, state);
-}
+const updaterStatesAtom = viewsOf(updaterStateAtom);
 
-// Seeded from `updater:get` and then driven entirely by the
-// `updater:state` broadcast, with no polling. The serving process is
-// the single source of truth. The renderer just mirrors it, at boot
-// scope rather than here (see the staleTime note above). Reads its
-// device from the host scope: this window's own updater with no
+const useUpdaterStates = (deviceIds: readonly string[]) =>
+  useViews(updaterStatesAtom, deviceIds).map((state) => state.data);
+
+// The updater of the device the host scope names: this window's own updater with no
 // provider mounted, or a peer's over its direct session inside one,
 // so the same Settings card answers for whichever device is selected.
 export function useUpdater() {
   const { deviceId, api } = useHostScope();
-  const query = useQuery(updaterStateQueryOptions(deviceId, api));
+  const view = useView(updaterStateAtom(deviceId));
 
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
   const check = useMutation({
     mutationFn: () => api.run(api.updater.check()),
     meta: { errorTitle: "Couldn't check for updates" },
   });
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
   const install = useMutation({
     mutationFn: () => restartIntoUpdate(api),
     meta: { errorTitle: "Couldn't install the update" },
   });
 
-  // The explicit annotation strips react-query's NoInfer wrapper from
-  // `data`; tsgo (TypeScript 7) can't narrow the discriminated union
-  // through the intrinsic NoInfer that query-core 5.101 switched to.
-  const state: UpdaterState | null = query.data ?? null;
   return {
-    state,
+    state: view.data ?? null,
     check,
     install,
-    isError: query.isError,
-    refetch: query.refetch,
+    isError: view.error !== null,
+    refetch: view.refetch,
   };
 }
 
@@ -96,10 +66,9 @@ export function useUpdater() {
 // until its first check.
 export function useInstallFailure(): string | null {
   const page = useApi();
-  const { data } = useQuery({
-    ...updaterStateQueryOptions(page.deviceId, page),
-    enabled: useHasLocalHost(),
-  });
+  const { data } = useView(
+    useHasLocalHost() ? updaterStateAtom(page.deviceId) : null,
+  );
   return data?.kind === "error" && data.install === true ? data.message : null;
 }
 
@@ -155,24 +124,16 @@ function useUpdateTargets(): UpdateTarget[] {
 
 // The updates this window could install right now, as deviceId to the
 // staged version, the local machine's first. What the sidebar's
-// Settings dot, Settings' General row and its device tabs flag. A plain object so
-// react-query can hand back the same reference while the answer is
-// unchanged.
+// Settings dot, Settings' General row and its device tabs flag.
 export function useStagedUpdates(): Readonly<Record<string, string>> {
   const targets = useUpdateTargets();
-  return useQueries({
-    queries: targets.map((target) =>
-      updaterStateQueryOptions(target.deviceId, target.api),
-    ),
-    combine: (results) => {
-      const staged: Record<string, string> = {};
-      targets.forEach((target, index) => {
-        const state: UpdaterState | undefined = results[index]?.data;
-        if (state?.kind === "ready") staged[target.deviceId] = state.version;
-      });
-      return staged;
-    },
+  const states = useUpdaterStates(targets.map((target) => target.deviceId));
+  const staged: Record<string, string> = {};
+  targets.forEach((target, index) => {
+    const state = states[index];
+    if (state?.kind === "ready") staged[target.deviceId] = state.version;
   });
+  return staged;
 }
 
 // Every device this window could update that is behind the newest
@@ -180,19 +141,14 @@ export function useStagedUpdates(): Readonly<Record<string, string>> {
 // offers and Settings' Update all acts on (useUpdateAll).
 export function useOutdatedDevices(): KnownUpdates {
   const targets = useUpdateTargets();
-  return useQueries({
-    queries: targets.map((target) =>
-      updaterStateQueryOptions(target.deviceId, target.api),
-    ),
-    combine: (results) =>
-      findOutdated(
-        targets.map((target, index) => ({
-          deviceId: target.deviceId,
-          running: target.running,
-          state: results[index]?.data,
-        })),
-      ),
-  });
+  const states = useUpdaterStates(targets.map((target) => target.deviceId));
+  return findOutdated(
+    targets.map((target, index) => ({
+      deviceId: target.deviceId,
+      running: target.running,
+      state: states[index],
+    })),
+  );
 }
 
 // Update every device in `outdated` (useOutdatedDevices), from one
@@ -213,7 +169,7 @@ export function useUpdateAll(
   const localDeviceId = useApi().deviceId;
   const targets = useUpdateTargets();
 
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
   return useMutation({
     mutationFn: async () => {
       const chosen = targets.flatMap((target) => {
