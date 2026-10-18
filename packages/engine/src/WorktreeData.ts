@@ -16,8 +16,9 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
 // A worktree's title and description, empty when unset. `describedAt`
-// (epoch ms, 0 for never) is when either was last set: a mirror's two
-// sides each take describes, and the newer pair is the one both keep.
+// (0 for never) orders describes rather than dating them: on the
+// epoch's scale, but past any stamp this copy holds, so a mirror's two
+// sides keep the later pair even when one's clock is behind.
 export type Description = {
   readonly title: string;
   readonly description: string;
@@ -32,7 +33,7 @@ export class WorktreeData extends Context.Service<
       worktreeId: string,
     ) => Effect.Effect<Description>;
     // Sets what `change` names from the pair as stored when the write
-    // lands, so a describe in between isn't undone, and stamps the time.
+    // lands, so a describe in between isn't undone, and stamps it.
     // An empty value clears its field. Answers what it wrote.
     readonly describe: (
       projectId: string,
@@ -138,7 +139,7 @@ const make = Effect.gen(function* () {
         const next = {
           title: change.title ?? stored.title,
           description: change.description ?? stored.description,
-          describedAt: now,
+          describedAt: Math.max(now, stored.describedAt + 1),
         };
         yield* sql`INSERT INTO worktree_data ${sql.insert({
           project_id: projectId,

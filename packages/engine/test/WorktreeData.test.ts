@@ -64,10 +64,11 @@ it("replaces a worktree's ports and keeps its description", async () => {
     }),
   );
   assert.deepEqual(ports, [{ port: 4000, label: "api" }]);
+  // Described twice in one millisecond, the second stamped after.
   assert.deepEqual(description, {
     title: "T",
     description: "D",
-    describedAt: 5,
+    describedAt: 6,
   });
   assert.deepEqual(cleared, []);
 });
