@@ -21,7 +21,6 @@ import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync"
 import * as Git from "@shigomori/engine/Git";
 import * as Arr from "effect/Array";
 import { errorWordsOf } from "@host/lib/errorWords";
-import * as Cache from "effect/Cache";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -29,7 +28,7 @@ import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "../Engine";
 import * as Ops from "../engineOps";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
-import { answersFor } from "../util/cacheTtl";
+import { keptAnswers } from "../util/kept";
 
 export type CarryOverCheckout = Pick<
   WorktreeIdentity,
@@ -319,12 +318,8 @@ export const makeCarryOver = Effect.gen(function* () {
   // The same walk serves the sync handler's ignored-paths read, so a
   // dialog listing a worktree and its picker browsing it share one.
   const git = yield* Git.Git;
-  const ignored = yield* Cache.makeWith(git.listIgnoredPaths, {
-    capacity: Infinity,
-    timeToLive: answersFor(IGNORED_PATHS_TTL),
-  });
-  const ignoredPaths: IgnoredPaths = (checkoutPath) =>
-    Cache.get(ignored, checkoutPath);
+  const ignored = yield* keptAnswers(git.listIgnoredPaths, IGNORED_PATHS_TTL);
+  const ignoredPaths: IgnoredPaths = ignored.get;
 
   return {
     // Falls back to the primary alone when the worktree list can't be

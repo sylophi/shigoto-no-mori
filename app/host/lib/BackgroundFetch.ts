@@ -30,6 +30,7 @@ import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import type { broadcastAll } from "@host/process/wires";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
+import { ageOf as ageBetween, type Stamp, stampOf } from "@host/lib/util/kept";
 
 // Skip if a fetch finished within this window. Short enough that rapid
 // focus events don't feel stale, long enough that the focus, sweep and
@@ -91,13 +92,8 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
   Effect.gen(function* () {
     const clock = yield* Clock.Clock;
     const now = () => elapsedMillisUnsafe(clock);
-    type Stamp = { readonly elapsed: number; readonly wall: number };
-    const stamp = (): Stamp => ({
-      elapsed: now(),
-      wall: clock.currentTimeMillisUnsafe(),
-    });
-    const ageOf = (at: Stamp) =>
-      Math.max(now() - at.elapsed, clock.currentTimeMillisUnsafe() - at.wall);
+    const stamp = () => stampOf(clock);
+    const ageOf = (at: Stamp) => ageBetween(at, stamp());
     const scripts = yield* Scripts.Scripts;
     const pullRequests = yield* PullRequestMaps.PullRequestMaps;
     // What a pass reaches, as the layer finds it.

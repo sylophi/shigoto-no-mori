@@ -27,6 +27,8 @@
 // Run: pnpm test hub-link.
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
   CLOSE_DEVICE_REVOKED,
@@ -54,7 +56,13 @@ import {
   NO_LISTENER_CODE,
 } from "@shared/hub/link";
 import { it } from "vitest";
-import { type Track, waitFor } from "./lib/checkKit.mts";
+import { make as makeHubConnection } from "@host/hub/connection";
+import {
+  sleepingClock,
+  testClock,
+  type Track,
+  waitFor,
+} from "./lib/checkKit.mts";
 import { bootDevice, type BootDeviceOpts } from "./lib/hubBoot.mts";
 import { delay } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
@@ -298,6 +306,76 @@ it("replay: an ask is judged by when it arrives, not by any clock: one sent from
   });
   await delay(150);
   assert.equal(served, 1, "a replayed ask was served");
+});
+
+it("replay: an ask is remembered its window of time awake: a replay after a sleep or a forward step of the wall clock is still turned away, and a backward step pins nothing", async () => {
+  const stub = await startStubHub(trackTest);
+  let served = 0;
+  const clock = testClock();
+  const { wall, sleep } = sleepingClock(clock);
+  // The machine's wall clock, wherever it is read, moves with B's.
+  const realNow = Date.now;
+  let stepped = 0;
+  Date.now = () => realNow() + stepped;
+  trackTest(() => {
+    Date.now = realNow;
+  });
+  const step = (ms: number) => {
+    sleep(ms);
+    stepped += ms;
+  };
+  const b = await bootDevice(
+    stub,
+    "B",
+    {
+      serveConnectInfo: (caller, input) => {
+        served += 1;
+        return testServer(caller, input);
+      },
+      createConnection: (opts) =>
+        makeHubConnection(opts).pipe(Effect.provideService(Clock.Clock, wall)),
+    },
+    trackTest,
+  );
+  const a = await bootDevice(stub, "A", {}, trackTest);
+  await waitFor(
+    () => a.connection.status().onlineDeviceIds.includes("B"),
+    "A to see B",
+  );
+  const before = stub.receivedCount();
+  assert.equal(await a.connection.askConnectInfo("B", "once", ASK_MS), "once");
+  const sent = stub.received.slice(before).find((entry) => entry.from === "A");
+  assert.ok(sent !== undefined);
+  const ask = frameOf(sent.frame);
+  let id = ask.id;
+  const replayServed = async () => {
+    const was = served;
+    id += 1;
+    stub.injectTo("B", {
+      t: "relay",
+      from: "A",
+      frame: encodeRelayFrame({ ...ask, id }),
+    });
+    await delay(150);
+    return served > was;
+  };
+  // Asleep past the window: the wall clock ran on, monotonic time stood.
+  step(SEEN_ASK_RETENTION_MS + 60_000);
+  assert.equal(await replayServed(), false, "a sleep reopened the window");
+  step(-2 * 60 * 60_000);
+  assert.equal(await replayServed(), false);
+  // The window passes awake, the wall clock still behind.
+  await clock.advance(SEEN_ASK_RETENTION_MS);
+  stepped += SEEN_ASK_RETENTION_MS;
+  await waitFor(
+    () => b.connection.status().socket.phase === "connected",
+    "B to be connected",
+  );
+  assert.equal(
+    await replayServed(),
+    true,
+    "a backward step kept the ask past its window",
+  );
 });
 
 it("replay record: an ask is remembered for the window from its receipt, and a full record refuses a new one rather than forget one", () => {

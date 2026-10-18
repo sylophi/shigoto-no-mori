@@ -241,6 +241,11 @@ export const layer = Layer.effect(Registry, make);
   `Effect.cached` or a `Cache`; shared mutable state is a `Ref` or
   `SubscriptionRef`; one fiber waiting for another's result is a
   `Deferred`.
+- An answer kept for a time in the host's memory is
+  `app/host/lib/util/kept.ts`'s, not a `Cache` TTL or `cachedWithTTL`:
+  in this version those read the wall clock, which a sleep or a clock
+  step moves, and keep a failure unless told not to (V3.md's Time
+  design).
 
 ## 7. Platform access
 

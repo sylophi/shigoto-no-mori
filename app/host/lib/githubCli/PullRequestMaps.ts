@@ -10,23 +10,20 @@ import {
   type PullRequestDetail,
   toSlimPullRequest,
 } from "@shigomori/contracts/schemas";
-import { elapsedMillis } from "@shigomori/engine/elapsed";
 import type * as Git from "@shigomori/engine/Git";
 import type * as GitHub from "@shigomori/engine/GitHub";
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as HostPushes from "../HostPushes";
+import { ageOf, type Stamp, stamp as now } from "../util/kept";
 import * as GithubCli from "./GithubCli";
 import {
-  ageOf,
   pullRequestMapsEqual,
   readBranchPullRequest,
   readProjectPullRequests,
   type SignedUrls,
-  type Stamp,
   withSignedImages,
 } from "./pullRequests";
 
@@ -89,12 +86,6 @@ const make = Effect.gen(function* () {
   const signedUrls: SignedUrls = new Map();
   const none: PullRequestMap = new Map();
 
-  const now = Effect.gen(function* () {
-    return {
-      elapsed: yield* elapsedMillis,
-      wall: yield* Clock.currentTimeMillis,
-    } satisfies Stamp;
-  });
   const generation = (project: ProjectRef) => generations.get(project.id) ?? 0;
   const bump = (project: ProjectRef) =>
     generations.set(project.id, generation(project) + 1);

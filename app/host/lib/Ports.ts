@@ -14,7 +14,7 @@ import {
   DEVICE_SETTINGS_DEFAULTS,
   type WorktreePort,
 } from "@shigomori/contracts/schemas";
-import * as Cache from "effect/Cache";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -24,7 +24,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Paths from "@shigomori/engine/Paths";
-import { envSetting } from "@shared/config";
 import {
   mergeWorktreePorts,
   type PoolPort,
@@ -34,7 +33,7 @@ import type * as Engine from "./Engine";
 import * as Ops from "./engineOps";
 import { isLoopbackPortListening } from "./net";
 import { findProject, findWorktreePath } from "./projects";
-import { answersFor } from "./util/cacheTtl";
+import { keptAnswer, keptAnswers } from "./util/kept";
 
 interface Worktree {
   readonly projectId: string;
@@ -113,76 +112,82 @@ const make = Effect.gen(function* () {
   const read = <A, E>(effect: Effect.Effect<A, E, Engine.Services>) =>
     effect.pipe(Effect.provide(engine), Effect.orDie);
 
-  const installed = yield* findExecutable("port-pool").pipe(
-    Effect.map(Option.isSome),
-    Effect.provideService(FileSystem.FileSystem, fs),
-    Effect.provideService(Path.Path, path),
-    Effect.cachedWithTTL(INSTALLED_TTL),
+  const installed = yield* keptAnswer(
+    findExecutable("port-pool").pipe(
+      Effect.map(Option.isSome),
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+    ),
+    INSTALLED_TTL,
   );
 
-  const configured = yield* Cache.make({
-    lookup: (cwd: string) =>
+  // A config that could not be read or parsed is asked about again: only
+  // what the file says is kept.
+  const configured = yield* keptAnswers(
+    (cwd: string) =>
       fs.readFileString(path.join(cwd, "port-pool.config.json")).pipe(
         Effect.flatMap((raw) =>
           Effect.try(() => "schemaVersion" in (JSON.parse(raw) as object)),
         ),
-        Effect.orElseSucceed(() => false),
+        Effect.catchReason("PlatformError", "NotFound", () =>
+          Effect.succeed(false),
+        ),
       ),
-    capacity: Infinity,
-    timeToLive: STATE_TTL,
-  });
+    STATE_TTL,
+  );
+  const configuredAt = (cwd: string) =>
+    configured.get(cwd).pipe(Effect.orElseSucceed(() => false));
 
-  // Keyed by the state file's path, so a change of XDG_DATA_HOME (the
-  // proof's isolation, port-pool's own dev-run advice) is a different
-  // entry rather than a stale hit. Read as plain JSON: the file and its
-  // schemaVersion are port-pool's. Absent means port-pool has never run,
-  // and corrupt is port-pool's to report: both read as no allocations.
-  const allocations = yield* Cache.make({
-    lookup: (statePath: string) =>
-      fs.readFileString(statePath).pipe(
-        Effect.flatMap(decodePortPoolState),
-        Effect.map((state) => {
-          const byDir = new Map<string, PoolPort[]>();
-          for (const entry of state.allocations ?? []) {
-            const parsed = decodeAllocation(entry);
-            if (Option.isNone(parsed)) continue;
-            const { dir, ports, portOrder } = parsed.value;
-            const names = [
-              ...(portOrder ?? []).filter((name) => name in ports),
-              ...Object.keys(ports).filter(
-                (name) => !portOrder?.includes(name),
-              ),
-            ];
-            byDir.set(
-              normalizeDir(dir),
-              names.map((name) => ({ name, port: ports[name] as number })),
-            );
-          }
-          return byDir;
-        }),
-        Effect.orElseSucceed(() => new Map<string, PoolPort[]>()),
-      ),
-    capacity: Infinity,
-    timeToLive: STATE_TTL,
-  });
-
-  const paths = yield* Cache.makeWith(
+  const paths = yield* keptAnswers(
     (key: string) => read(findWorktreePath(parseWorktreeKey(key))),
-    {
-      capacity: Infinity,
-      timeToLive: answersFor(PATH_TTL),
-    },
+    PATH_TTL,
   );
   const pathOf = (worktree: Worktree) =>
-    Cache.get(paths, worktreeKey(worktree.projectId, worktree.worktreeId));
+    paths.get(worktreeKey(worktree.projectId, worktree.worktreeId));
 
   const { home } = yield* read(Effect.service(Paths.Paths));
-  const statePath = () =>
-    path.join(
-      envSetting("XDG_DATA_HOME")?.trim() || path.join(home, ".local", "share"),
-      "port-pool",
-      "state.json",
-    );
+  const dataHome = Option.getOrElse(
+    Option.filter(
+      Option.map(
+        yield* Config.String("XDG_DATA_HOME").pipe(Config.option),
+        (value) => value.trim(),
+      ),
+      (value) => value !== "",
+    ),
+    () => path.join(home, ".local", "share"),
+  );
+  const statePath = path.join(dataHome, "port-pool", "state.json");
+
+  // Read as plain JSON: the file and its schemaVersion are port-pool's.
+  // Absent means port-pool has never run, and an entry it can't read is
+  // skipped. A file that could not be read or parsed (port-pool's to
+  // report) reads as no allocations, and is read again next time.
+  const allocations = (yield* keptAnswer(
+    fs.readFileString(statePath).pipe(
+      Effect.catchReason("PlatformError", "NotFound", () =>
+        Effect.succeed("{}"),
+      ),
+      Effect.flatMap(decodePortPoolState),
+      Effect.map((state) => {
+        const byDir = new Map<string, PoolPort[]>();
+        for (const entry of state.allocations ?? []) {
+          const parsed = decodeAllocation(entry);
+          if (Option.isNone(parsed)) continue;
+          const { dir, ports, portOrder } = parsed.value;
+          const names = [
+            ...(portOrder ?? []).filter((name) => name in ports),
+            ...Object.keys(ports).filter((name) => !portOrder?.includes(name)),
+          ];
+          byDir.set(
+            normalizeDir(dir),
+            names.map((name) => ({ name, port: ports[name] as number })),
+          );
+        }
+        return byDir;
+      }),
+    ),
+    STATE_TTL,
+  )).pipe(Effect.orElseSucceed(() => new Map<string, PoolPort[]>()));
 
   const portPoolEnabled = read(Ops.readGlobalConfig()).pipe(
     Effect.map(
@@ -195,14 +200,14 @@ const make = Effect.gen(function* () {
     if (!(yield* portPoolEnabled)) return null;
     const dir = yield* pathOf(worktree);
     const [isInstalled, isConfigured] = yield* Effect.all(
-      [installed, Cache.get(configured, dir)],
+      [installed, configuredAt(dir)],
       { concurrency: 2 },
     );
     return isInstalled && isConfigured ? dir : null;
   });
 
   const poolPorts = Effect.fn("Ports.poolPorts")(function* (dir: string) {
-    const byDir = yield* Cache.get(allocations, statePath());
+    const byDir = yield* allocations;
     return byDir.get(normalizeDir(dir)) ?? [];
   });
 
