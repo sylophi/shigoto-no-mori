@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -49,6 +50,11 @@ export const engineDataDir = join(
 // is built (host/lib/Engine.ts). Set here, so a proof never writes to
 // the dev app's, or to one the shell exported.
 process.env.SHIGOMORI_DATA_DIR = engineDataDir;
+// gh's config, which the host reads its known hosts from, as it is when
+// the graph is built (host/lib/githubCli/GithubCli.ts): never the
+// developer's own. A proof that installs a fake gh before then points it
+// at its own.
+process.env.GH_CONFIG_DIR = join(engineDataDir, "..", "gh-config");
 const engine = Engine.layer({
   flavor: "dev",
   macfs: macfs(),
@@ -121,6 +127,16 @@ export const hostContext = async () => {
 };
 export const runHost = async <A, E>(effect: Effect.Effect<A, E, Services>) =>
   Effect.runPromiseWith(await hostContext())(effect);
+
+// A service of the host built again for a proof, not the graph's: over
+// the environment as it is now, read through Config as the graph reads
+// it.
+export const builtNow = <A, E, R>(layer: Layer.Layer<A, E, R>) =>
+  Layer.fresh(layer).pipe(
+    Layer.provide(
+      ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv())),
+    ),
+  );
 
 export const startHost = () => runtime.context();
 export const disposeHost = async () => {

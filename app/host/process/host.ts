@@ -8,11 +8,9 @@ import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import type * as Tracer from "effect/Tracer";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
@@ -113,12 +111,10 @@ const parentPort = (process as { parentPort: ParentPort }).parentPort;
 // stuck before the host is up stops it, and the spans open at the last
 // beat name what a stuck host was doing.
 const BEAT_EVERY_MS = 5_000;
-const openSpans = new Set<Tracer.Span>();
-// The spans' start times are the Clock's, so their ages are read on it.
+const openSpans: Observability.OpenSpans = new Map();
 const beat = () => {
-  const now = Number(Effect.runSync(Clock.currentTimeNanos) / 1_000_000n);
   // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a utility process's parent port, which has no origin
-  parentPort.postMessage(beatOf(openSpans, now));
+  parentPort.postMessage(beatOf(openSpans, performance.now()));
 };
 beat();
 setInterval(beat, BEAT_EVERY_MS).unref();

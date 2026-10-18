@@ -242,7 +242,8 @@ const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 const REJECT_TERMINATE_DELAY_MS = 250;
 // How long a socket asked to close has before it is cut.
 const TERMINATE_GRACE_MS = 1_500;
-// Failed hellos from one client identity before a lockout window.
+// Failed hellos from one client identity before a lockout window, of
+// time awake: neither a sleep nor a clock step spends it.
 const AUTH_FAILURE_LIMIT = 5;
 const AUTH_LOCKOUT_MS = 30_000;
 // How often at most a refused web Origin is logged.
@@ -500,7 +501,7 @@ export const make = (options: {
     const isLockedOut = (ip: string): boolean => {
       const entry = failedAuth.get(ip);
       if (entry === undefined) return false;
-      if (entry.until <= clock.currentTimeMillisUnsafe()) {
+      if (entry.until <= elapsedMillisUnsafe(clock)) {
         failedAuth.delete(ip);
         return false;
       }
@@ -508,7 +509,7 @@ export const make = (options: {
     };
 
     const recordAuthFailure = (ip: string): void => {
-      const now = clock.currentTimeMillisUnsafe();
+      const now = elapsedMillisUnsafe(clock);
       for (const [key, entry] of failedAuth) {
         if (entry.until <= now) failedAuth.delete(key);
       }
@@ -527,7 +528,7 @@ export const make = (options: {
         const connections = new Map<number, Connection>();
         let nextClientId = 0;
         let preAuth = 0;
-        let originRejectLoggedAt = 0;
+        let originRejectLoggedAt = -Infinity;
         // Effect's binary layout (shared/remote/link.ts), so a channel's
         // bytes cross as bytes.
         const serialization = yield* RpcSerialization.RpcSerialization.pipe(
@@ -1068,7 +1069,7 @@ export const make = (options: {
           verifyClient: (info: { req: IncomingMessage }) => {
             const origin = info.req.headers.origin;
             const allowed = isAllowedOrigin(origin, opts.allowedOrigin);
-            const at = clock.currentTimeMillisUnsafe();
+            const at = elapsedMillisUnsafe(clock);
             if (
               !allowed &&
               at - originRejectLoggedAt >= ORIGIN_REJECT_LOG_THROTTLE_MS

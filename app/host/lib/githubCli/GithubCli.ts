@@ -13,7 +13,7 @@ import type {
   RepoMergeConfig,
 } from "@shigomori/contracts/schemas";
 import { DEVICE_SETTINGS_DEFAULTS } from "@shigomori/contracts/schemas";
-import * as Cache from "effect/Cache";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -25,11 +25,12 @@ import * as EngineConfig from "@shigomori/engine/Config";
 import { ghKnownHosts } from "@shigomori/engine/ghHost";
 import * as Git from "@shigomori/engine/Git";
 import * as GitHub from "@shigomori/engine/GitHub";
+import * as Paths from "@shigomori/engine/Paths";
 import * as Ops from "../engineOps";
-import { answersFor } from "../util/cacheTtl";
+import { keptAnswer, keptAnswers } from "../util/kept";
 import * as Processes from "@shigomori/engine/processes";
 import { gh, GH_TIMEOUT_MS } from "./exec";
-import { ghHostsPath, type GithubRepoInfo, parseRemoteUrl } from "./remote";
+import { type GithubRepoInfo, parseRemoteUrl } from "./remote";
 
 // gh installed but not usable, for a read that would rather fail than
 // answer blank.
@@ -163,15 +164,28 @@ const make = Effect.gen(function* () {
       Effect.provideService(GitHub.GitHub, github),
     );
 
-  // The hosts gh is logged in to. github.com always counts, with the
-  // file missing (most users, a fresh install) or unreadable.
-  const knownHosts = yield* Effect.suspend(() =>
-    fs.readFileString(ghHostsPath()),
-  ).pipe(
-    Effect.map(ghKnownHosts),
-    Effect.orElseSucceed(() => new Set(["github.com"])),
-    Effect.cachedWithTTL(KNOWN_HOSTS_TTL),
+  // gh's own precedence for its hosts.yml: GH_CONFIG_DIR, then the XDG
+  // config directory. Diverging from gh here would leave Enterprise
+  // hosts unrecognized for users who set either variable.
+  const { configHome } = yield* Paths.Paths;
+  const hostsFile = path.join(
+    Option.getOrElse(
+      yield* Config.String("GH_CONFIG_DIR").pipe(Config.option),
+      () => path.join(configHome, "gh"),
+    ),
+    "hosts.yml",
   );
+
+  // The hosts gh is logged in to. github.com always counts, with the
+  // file missing (most users, a fresh install) or, for this ask alone,
+  // unreadable.
+  const knownHosts = (yield* keptAnswer(
+    fs.readFileString(hostsFile).pipe(
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("")),
+      Effect.map(ghKnownHosts),
+    ),
+    KNOWN_HOSTS_TTL,
+  )).pipe(Effect.orElseSucceed(() => new Set(["github.com"])));
 
   // `gh auth token` exits non-zero when not signed in, and is not asked
   // when gh is missing. It reads gh's own store, where `gh auth status`
@@ -179,31 +193,43 @@ const make = Effect.gen(function* () {
   // as signed out. Asked bare first (gh's own default host, GH_HOST and
   // the token variables among it), then per host gh's file knows, since
   // bare it answers for one host alone and an Enterprise login would
-  // read as none. The token itself is dropped unread.
-  const probe = yield* Effect.gen(function* () {
-    const installed = Option.isSome(
-      yield* findExecutable("gh").pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-        Effect.provideService(Path.Path, path),
-      ),
-    );
-    if (!installed) return { installed, authed: false };
-    const asks = [
-      [] as string[],
-      ...[...(yield* knownHosts)].map((host) => ["--hostname", host]),
-    ];
-    let authed = false;
-    for (const ask of asks) {
-      authed = yield* gh(["auth", "token", ...ask]).pipe(
-        Effect.as(true),
-        Effect.orElseSucceed(() => false),
+  // read as none. The token itself is dropped unread. A gh that did not
+  // answer (killed, timed out) reads as signed out for this ask alone.
+  const probe = (yield* keptAnswer(
+    Effect.gen(function* () {
+      const installed = Option.isSome(
+        yield* findExecutable("gh").pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
+        ),
       );
-      if (authed) break;
-    }
-    return { installed, authed };
-  }).pipe(withGh, Effect.cachedWithTTL(READINESS_TTL));
+      if (!installed) return { installed, authed: false };
+      const asks = [
+        [] as string[],
+        ...[...(yield* knownHosts)].map((host) => ["--hostname", host]),
+      ];
+      let unanswered: Processes.CommandError | undefined;
+      for (const ask of asks) {
+        const answer = yield* gh(["auth", "token", ...ask]).pipe(
+          Effect.as(true),
+          Effect.catch((error) =>
+            Effect.sync(() => {
+              if (error.reason !== "failed" || error.exitCode === null) {
+                unanswered = error;
+              }
+              return false;
+            }),
+          ),
+        );
+        if (answer) return { installed, authed: true };
+      }
+      if (unanswered !== undefined) return yield* unanswered;
+      return { installed, authed: false };
+    }).pipe(withGh),
+    READINESS_TTL,
+  )).pipe(Effect.orElseSucceed(() => ({ installed: true, authed: false })));
 
-  const repos = yield* Cache.makeWith(
+  const repos = yield* keptAnswers(
     (cwd: string) =>
       Effect.gen(function* () {
         const [remotes, hosts] = yield* Effect.all(
@@ -216,16 +242,16 @@ const make = Effect.gen(function* () {
         }
         return null;
       }),
-    { capacity: Infinity, timeToLive: answersFor(REPO_TTL) },
+    REPO_TTL,
   );
 
   // The engine's read at the host's gh deadline, kept only when it read.
-  const mergeConfigs = yield* Cache.makeWith(
+  const mergeConfigs = yield* keptAnswers(
     (cwd: string) => github.repoMergeConfig(cwd, { timeout: GH_TIMEOUT_MS }),
-    { capacity: Infinity, timeToLive: answersFor(MERGE_CONFIG_TTL) },
+    MERGE_CONFIG_TTL,
   );
 
-  const pullRequestOptions = yield* Cache.makeWith(
+  const pullRequestOptions = yield* keptAnswers(
     (cwd: string) =>
       gh(
         [
@@ -252,11 +278,11 @@ const make = Effect.gen(function* () {
         ),
         withGh,
       ),
-    { capacity: Infinity, timeToLive: answersFor(PULL_REQUEST_OPTIONS_TTL) },
+    PULL_REQUEST_OPTIONS_TTL,
   );
 
   // Keyed by the repo (host/owner/repo), so clones of one repo share it.
-  const descriptions = yield* Cache.makeWith(
+  const descriptions = yield* keptAnswers(
     (slug: string) =>
       gh(
         [
@@ -270,7 +296,7 @@ const make = Effect.gen(function* () {
         Effect.map(({ stdout }) => stdout.trim() || null),
         withGh,
       ),
-    { capacity: Infinity, timeToLive: answersFor(DESCRIPTION_TTL) },
+    DESCRIPTION_TTL,
   );
 
   const unavailableReason = Effect.gen(function* () {
@@ -287,9 +313,7 @@ const make = Effect.gen(function* () {
     return null;
   }).pipe(Effect.withSpan("GithubCli.unavailableReason"));
 
-  const repo = Effect.fn("GithubCli.repo")((cwd: string) =>
-    Cache.get(repos, cwd),
-  );
+  const repo = Effect.fn("GithubCli.repo")((cwd: string) => repos.get(cwd));
 
   const unavailableFor = Effect.fn("GithubCli.unavailableFor")(function* (
     cwd: string,
@@ -314,12 +338,12 @@ const make = Effect.gen(function* () {
       return (yield* knownHosts).has(parsed.host) ? parsed.host : null;
     }),
     evictRepo: Effect.fn("GithubCli.evictRepo")((cwd: string) =>
-      Cache.invalidate(repos, cwd),
+      repos.invalidate(cwd),
     ),
     unavailableFor,
     mergeConfig: Effect.fn("GithubCli.mergeConfig")(function* (cwd) {
       if ((yield* unavailableFor(cwd)) !== null) return null;
-      return yield* Cache.get(mergeConfigs, cwd);
+      return yield* mergeConfigs.get(cwd);
     }),
     // The repo the app takes the project for (its GitHub links open
     // it), not gh's base repo, which for a fork is the parent.
@@ -329,13 +353,10 @@ const make = Effect.gen(function* () {
       if (reason !== null) return yield* new GhUnavailableError({ reason });
       const info = yield* repo(cwd);
       if (info === null) return null;
-      return yield* Cache.get(
-        descriptions,
-        `${info.host}/${info.owner}/${info.repo}`,
-      );
+      return yield* descriptions.get(`${info.host}/${info.owner}/${info.repo}`);
     }),
     pullRequestOptions: Effect.fn("GithubCli.pullRequestOptions")((cwd) =>
-      Cache.get(pullRequestOptions, cwd),
+      pullRequestOptions.get(cwd),
     ),
   });
 });

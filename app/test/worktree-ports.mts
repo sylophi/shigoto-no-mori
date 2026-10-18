@@ -1,11 +1,14 @@
-// Durable proof for the worktree port list's three pure-ish parts,
-// under plain Node with no Electron and no git:
+// Durable proof for the worktree port list's parts, under plain Node
+// with no Electron:
 //   - the port-pool state reader (host/lib/Ports.ts) honours
 //     XDG_DATA_HOME, keeps the project's declared port order, tolerates
 //     a trailing slash on the recorded directory, skips malformed
 //     allocations and unknown fields, and reads a missing or corrupt
-//     state file as "no allocations" (cached per state path, so the
-//     data-home switch is a real re-read).
+//     state file as "no allocations". What it read is kept 10 s on
+//     both clocks: read again after a sleep or a forward step of the
+//     wall clock, and never pinned by a backward one.
+//   - a worktree's port-pool config that could not be read is read
+//     again at the next ask, not taken for "not configured" for 10 s.
 //   - the merge (shared/ports/mergeWorktreePorts.ts) lists pool rows first and
 //     shadows a custom row on a pool-allocated number.
 //   - the loopback probe and dial (host/lib/net.ts) see a listener on
@@ -13,25 +16,56 @@
 //     closed port as not listening within the deadline.
 // Run: pnpm test worktree-ports.
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Ops from "@host/lib/engineOps";
 import * as Ports from "@host/lib/Ports";
-import { runHost } from "./lib/hostRuntime.mts";
+import { addProject } from "@host/lib/projects";
+import { initDataDirAt } from "@shared/paths";
+import { builtNow, engineDataDir, runHost } from "./lib/hostRuntime.mts";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { dialLoopback, isLoopbackPortListening } from "@host/lib/net";
 import { errorCodeOf } from "@shigomori/contracts/errors";
 import {
   freeLoopbackPort,
+  sandboxGit,
+  sleepingClock,
   startLoopbackServer,
+  tempDir,
+  testClock,
   type Track,
 } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import { beforeAll, it } from "vitest";
 
-const poolPortsFor = (dir: string) =>
-  runHost(Effect.flatMap(Ports.Ports, (ports) => ports.poolPorts(dir)));
+// The service as the host builds it with `dataHome` for XDG_DATA_HOME,
+// its calls run on `clock`.
+async function portsIn(dataHome: string, clock?: Clock.Clock) {
+  process.env.XDG_DATA_HOME = dataHome;
+  const ports = await runHost(
+    Effect.provide(Effect.service(Ports.Ports), builtNow(Ports.layer)),
+  );
+  const on = <A,>(effect: Effect.Effect<A>) =>
+    Effect.runPromise(
+      clock === undefined
+        ? effect
+        : Effect.provideService(effect, Clock.Clock, clock),
+    );
+  return {
+    poolPorts: (dir: string) => on(ports.poolPorts(dir)),
+    active: (worktree: { projectId: string; worktreeId: string }) =>
+      on(ports.portPoolActive(worktree)),
+  };
+}
 
 async function listenOn(host: string, track: Track): Promise<number> {
   const server = await startLoopbackServer((socket) => socket.end(), { host });
@@ -41,11 +75,12 @@ async function listenOn(host: string, track: Track): Promise<number> {
 
 let dataHome: string;
 let statePath: string;
-beforeAll(() => {
+let ports: Awaited<ReturnType<typeof portsIn>>;
+beforeAll(async () => {
   dataHome = mkdtempSync(join(tmpdir(), "sm-ports-"));
-  process.env.XDG_DATA_HOME = dataHome;
   mkdirSync(join(dataHome, "port-pool"));
   statePath = join(dataHome, "port-pool", "state.json");
+  ports = await portsIn(dataHome);
 });
 
 it("state reader: XDG_DATA_HOME, declared order, trailing slash, malformed entries skipped", async () => {
@@ -67,28 +102,101 @@ it("state reader: XDG_DATA_HOME, declared order, trailing slash, malformed entri
       ],
     }),
   );
-  assert.deepEqual(await poolPortsFor("/tmp/sm-ports/alpha"), [
+  assert.deepEqual(await ports.poolPorts("/tmp/sm-ports/alpha"), [
     { name: "web", port: 4000 },
     { name: "api", port: 4100 },
     { name: "db", port: 4200 },
   ]);
-  assert.deepEqual(await poolPortsFor("/tmp/sm-ports/beta/"), [
+  assert.deepEqual(await ports.poolPorts("/tmp/sm-ports/beta/"), [
     { name: "web", port: 4300 },
   ]);
-  assert.deepEqual(await poolPortsFor("/tmp/sm-ports/gamma"), []);
+  assert.deepEqual(await ports.poolPorts("/tmp/sm-ports/gamma"), []);
 });
 
 it("state reader: a corrupt state file reads as no allocations", async () => {
-  // A fresh data home sidesteps the reader's TTL cache.
   const corruptHome = mkdtempSync(join(tmpdir(), "sm-ports-corrupt-"));
   mkdirSync(join(corruptHome, "port-pool"));
   writeFileSync(join(corruptHome, "port-pool", "state.json"), "{nope");
-  process.env.XDG_DATA_HOME = corruptHome;
-  // The reader caches per state path, so the switch of data home is
-  // a fresh read, not a cached hit on the good file above.
-  assert.deepEqual(await poolPortsFor("/tmp/sm-ports/alpha"), []);
-  process.env.XDG_DATA_HOME = dataHome;
-  assert.equal((await poolPortsFor("/tmp/sm-ports/alpha")).length, 3);
+  const corrupt = await portsIn(corruptHome);
+  assert.deepEqual(await corrupt.poolPorts("/tmp/sm-ports/alpha"), []);
+  assert.equal((await ports.poolPorts("/tmp/sm-ports/alpha")).length, 3);
+});
+
+it("state reader: what it read is kept 10 s on both clocks, read again after a sleep, and a backward step pins nothing", async () => {
+  const home = tempDir("sm-ports-clocks-", trackTest);
+  mkdirSync(join(home, "port-pool"));
+  const allocate = (port: number) =>
+    writeFileSync(
+      join(home, "port-pool", "state.json"),
+      JSON.stringify({
+        allocations: [{ dir: "/tmp/sm-ports/a", ports: { web: port } }],
+      }),
+    );
+  const webPort = async () =>
+    (await clocked.poolPorts("/tmp/sm-ports/a"))[0]?.port;
+  const clock = testClock();
+  const { wall, sleep, stop } = sleepingClock(clock);
+  const clocked = await portsIn(home, wall);
+  allocate(4000);
+  assert.equal(await webPort(), 4000);
+  allocate(4001);
+  assert.equal(await webPort(), 4000, "kept within its 10 s");
+  // A sleep: the wall clock ran on, monotonic time stood.
+  sleep(10_000);
+  assert.equal(await webPort(), 4001, "read again after a sleep");
+  // The wall clock stepped back an hour, then 10 s passed awake.
+  allocate(4002);
+  sleep(-3_600_000);
+  await clock.advance(10_000);
+  assert.equal(
+    await webPort(),
+    4002,
+    "a backward step kept the allocations past their 10 s",
+  );
+  // Stopped: both clocks ran on.
+  allocate(4003);
+  stop(10_000);
+  assert.equal(await webPort(), 4003);
+});
+
+it("config: a port-pool config that could not be read is read again at the next ask", async () => {
+  initDataDirAt(engineDataDir);
+  const root = tempDir("sm-ports-config-", trackTest);
+  const repo = join(root, "repo");
+  mkdirSync(repo);
+  const git = sandboxGit();
+  git(repo, "init", "-q", "-b", "main");
+  git(repo, "commit", "-q", "--allow-empty", "-m", "a");
+  const project = await runHost(addProject(repo));
+  const [primary] = await runHost(
+    Ops.listWorktreeIdentities({ projectId: project.id }),
+  );
+  assert.ok(primary !== undefined);
+  await runHost(Ops.patchGlobalConfig({ portPool: true }));
+  trackTest(() => runHost(Ops.patchGlobalConfig({ portPool: false })));
+  // port-pool on PATH, as the service finds it when it is built.
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "port-pool"), "#!/bin/sh\n");
+  chmodSync(join(bin, "port-pool"), 0o755);
+  const path = process.env["PATH"];
+  process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;
+  trackTest(() => {
+    process.env["PATH"] = path;
+  });
+  const config = join(repo, "port-pool.config.json");
+  // A directory where the file goes: the read fails.
+  mkdirSync(config);
+  const configured = await portsIn(dataHome);
+  const worktree = { projectId: project.id, worktreeId: primary.id };
+  assert.equal(await configured.active(worktree), false);
+  rmSync(config, { recursive: true });
+  writeFileSync(config, JSON.stringify({ schemaVersion: 1 }));
+  assert.equal(
+    await configured.active(worktree),
+    true,
+    "the failed read was kept as not configured",
+  );
 });
 
 it("merge: pool rows first in declared order, a custom row on a pool number is shadowed", async () => {

@@ -354,6 +354,7 @@ export const make = (
           localDeviceId: opts.deviceId,
           localKey: deviceKeyPair(opts.deviceKey),
           seenAsks,
+          now: () => elapsedMillisUnsafe(clock),
           send: (text) => socket.send(text),
           serveConnectInfo: deps.serveConnectInfo,
           onPresence: (online) => {
