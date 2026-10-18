@@ -4,22 +4,23 @@ The real app, as many devices as a test needs, each a dev window
 weblab starts and attaches to:
 
 ```json
-{ "name": "a", "attach": "127.0.0.1:9241", "address": "127.0.0.1:9241", "start": "pnpm device <tag>-a --fresh --clone-login", "startTimeout": 240000, "tab": "shigomori-dev://" }
+{ "name": "a", "attach": "127.0.0.1:9241", "address": "127.0.0.1:9241", "start": "SHIGOMORI_DEBUG_PORT=9241 pnpm device <tag>-a --fresh --clone-login", "startTimeout": 240000, "tab": "shigomori-dev://" }
 ```
 
 ```json
-{ "name": "b", "attach": "127.0.0.1:9242", "address": "127.0.0.1:9242", "start": "pnpm device <tag>-b --fresh --clone-login", "startTimeout": 240000, "tab": "shigomori-dev://" }
+{ "name": "b", "attach": "127.0.0.1:9242", "address": "127.0.0.1:9242", "start": "SHIGOMORI_DEBUG_PORT=9242 pnpm device <tag>-b --fresh --clone-login", "startTimeout": 240000, "tab": "shigomori-dev://" }
 ```
 
 `attach` drives the window over Chromium's debugging port. `address`
 and `start` are what make weblab launch it: nothing answers at the
-port yet, so it runs `pnpm device` with the port in `PORT`, waits for
-the port, attaches, and stops the window when the session ends.
+port yet, so it runs `start`, waits for the port, attaches, and stops
+the window when the session ends. weblab runs `start` as written, with
+no `PORT` of its own, so the port goes in all three places.
 
 `pnpm device <profile> [--fresh] [--clone-login]`
 (`scripts/dev-device.mts`) runs a dev window as a dev profile
-(`dev-app.md`) with its debugging port on `PORT` (or
-`SHIGOMORI_DEBUG_PORT`). The first window of a worktree is the
+(`dev-app.md`) with its debugging port on `SHIGOMORI_DEBUG_PORT`.
+The first window of a worktree is the
 primary, a full `pnpm dev`: the build, the renderer's vite server,
 deep links. A window started while that server answers is a peer on
 the primary's build, so open the primary first, and end the peers
@@ -132,8 +133,8 @@ in `dev-app.md`, "When a device is removed".
   the plain dev app's Clerk session may have expired, even while it
   still reads signed in: its device credential outlives the Clerk
   session, and a clone copies the empty session. Open the plain dev
-  app in a weblab session on a free port named in all three places
-  (weblab passes the command no `PORT`): `"start":
+  app in a weblab session on a free port named in all three places:
+  `"start":
   "SHIGOMORI_DEBUG_PORT=9341 pnpm dev"`, with `attach` and `address`
   `127.0.0.1:9341`. Check
   `{ "js": "Boolean(window.Clerk.session)" }`, and if it is false run
