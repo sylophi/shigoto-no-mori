@@ -2,19 +2,15 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   invalidateDeviceSettingsQueries,
-  toDeviceSettingsPatch,
+  peerSettingsWrite,
 } from "./useSettingsSave";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 
 // Save for the device-managed keys of whichever device the surrounding
-// HostScope names: one idempotent patch of every key it edits through
-// the scoped api, then the shared post-save fan-out (config, launcher
-// catalogs, gh readiness/PRs) against that device's registry.
-// No per-key diff and no second store: the patch write is cheap enough
-// that an unchanged key riding along costs nothing. A refused save (the
-// host revoked command access mid-edit) surfaces through the central
-// CommandRefusedError toast. isPending resets either way, so Save
-// re-enables for a retry.
+// HostScope names: a patch of the keys the form changed from what it
+// last saved, so a key the device's own user changed meanwhile is never
+// written back. A refused save (the host revoked command access
+// mid-edit) surfaces through the central CommandRefusedError toast.
 //
 // The local device's save does NOT come through here -- it writes two
 // stores (device config plus this window's appearance) as one mutation
@@ -24,12 +20,17 @@ export function useDeviceSettingsSave() {
   const { api, keys } = useHostScope();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (state: SettingsFormState) =>
-      api.run(
-        api.globalConfig.writeDeviceSettings({
-          patch: toDeviceSettingsPatch(state),
-        }),
-      ),
+    mutationFn: async ({
+      state,
+      saved,
+    }: {
+      state: SettingsFormState;
+      saved: SettingsFormState;
+    }) => {
+      const patch = peerSettingsWrite(saved, state);
+      if (Object.keys(patch).length === 0) return;
+      await api.run(api.globalConfig.writeDeviceSettings({ patch }));
+    },
     onSuccess: () => invalidateDeviceSettingsQueries(queryClient, keys),
     meta: { errorTitle: "Couldn't save settings" },
   });

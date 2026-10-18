@@ -5,6 +5,7 @@
 // "Theming").
 import {
   type ClientConfig,
+  clientSetting,
   type DarkTheme,
   DARK_THEME_IDS,
   type LightTheme,
@@ -98,7 +99,7 @@ export function resolveDoubutsuPicks(
   config: Pick<ClientConfig, "doubutsu" | "lightTheme" | "darkTheme">,
 ): DoubutsuPicks {
   return {
-    doubutsu: config.doubutsu ?? true,
+    doubutsu: clientSetting(config, "doubutsu"),
     light: config.lightTheme ?? DEFAULT_LIGHT_THEME,
     dark: config.darkTheme ?? DEFAULT_DARK_THEME,
   };

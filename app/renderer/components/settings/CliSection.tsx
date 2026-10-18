@@ -1,8 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  errorMessageOf,
-  isCommandRefusedError,
-} from "@shigomori/contracts/errors";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
@@ -12,9 +8,9 @@ import type {
 } from "@shigomori/contracts/modules/cli";
 import {
   CliSectionView,
-  PeerReadErrorView,
   ShellIntegrationView,
 } from "@shigomori/ui/views/settings/CliSectionView.tsx";
+import { PeerReadError, peerStaleTime } from "./peerReads";
 
 // The CLI's install (CliSectionView) on whichever device the section
 // is mounted for, so a peer's section installs on the peer. A peer
@@ -51,7 +47,13 @@ export function CliSection() {
   });
 
   if (!status) {
-    return <PeerReadError error={error} what="the CLI install" heading />;
+    return (
+      <PeerReadError
+        error={error}
+        what="the CLI install"
+        heading="Command line tool"
+      />
+    );
   }
 
   return (
@@ -62,39 +64,6 @@ export function CliSection() {
       onInstall={(force) => install.mutate({ force })}
       onUninstall={() => uninstall.mutate()}
       shell={<ShellIntegrationBlock name={status.name} />}
-    />
-  );
-}
-
-// Each read on a peer is a round trip, and the shell one spawns the
-// CLI there, for state that only these buttons and that machine's own
-// terminal change. The mutations seed the cache from their replies and
-// a landed session re-asks, so a peer's answer needs no focus refetch.
-// This machine keeps the default: a terminal install shows on return.
-function peerStaleTime(remote: boolean): number {
-  return remote ? Number.POSITIVE_INFINITY : 0;
-}
-
-// A peer's failed read is silent in the toast layer (gatedHostReadMeta),
-// so it is said here instead of the section just not being there. A
-// refusal is the exception: that is the read-only state the page
-// already explains. Locally the toast carries the error.
-function PeerReadError({
-  error,
-  what,
-  heading = false,
-}: {
-  error: unknown;
-  what: string;
-  heading?: boolean;
-}) {
-  const { remote } = useHostScope();
-  if (!remote || !error || isCommandRefusedError(error)) return null;
-  return (
-    <PeerReadErrorView
-      what={what}
-      message={errorMessageOf(error)}
-      heading={heading}
     />
   );
 }

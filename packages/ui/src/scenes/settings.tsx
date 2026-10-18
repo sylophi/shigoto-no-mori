@@ -12,9 +12,9 @@ import { AppearanceSectionView } from "../views/settings/AppearanceSectionView.t
 import { ChangelogDialogView } from "../views/settings/ChangelogDialogView.tsx";
 import {
   CliSectionView,
-  PeerReadErrorView,
   ShellIntegrationView,
 } from "../views/settings/CliSectionView.tsx";
+import { PeerReadErrorView } from "../views/settings/PeerReadErrorView.tsx";
 import { DangerZoneView } from "../views/settings/DangerZoneView.tsx";
 import { DataLocationSectionView } from "../views/settings/DataLocationSectionView.tsx";
 import {
@@ -432,7 +432,12 @@ export function SettingsPartsScene() {
           <PeerReadErrorView
             what="the CLI install"
             message="the device closed the connection"
-            heading
+            heading="Command line tool"
+          />
+          <PeerReadErrorView
+            what="the agent hooks"
+            message="the device closed the connection"
+            heading="Coding agents"
           />
           <NoDevicesView />
           <ClientVersionSectionView

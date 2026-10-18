@@ -1,10 +1,7 @@
 import type { ReactNode } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
-import {
-  SectionHeading,
-  SectionIntro,
-} from "../../primitives/section-heading.tsx";
+import { SectionIntro } from "../../primitives/section-heading.tsx";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import type {
   CliStatus,
@@ -145,31 +142,6 @@ export function CliSectionView({
           while the bin dir is off PATH, so offering Enable would
           install something inert and report it green. */}
       {state === "installed" && onPath && shell}
-    </section>
-  );
-}
-
-// A peer's read that failed, said here since the toast layer stays
-// silent for a peer (gatedHostReadMeta).
-export function PeerReadErrorView({
-  what,
-  message,
-  heading = false,
-}: {
-  what: string;
-  message: string;
-  heading?: boolean;
-}) {
-  const note = (
-    <p className="text-xs text-muted-foreground select-text">
-      Couldn&apos;t check {what} on that device: {message}
-    </p>
-  );
-  if (!heading) return note;
-  return (
-    <section className="space-y-3">
-      <SectionHeading className="mb-1">Command line tool</SectionHeading>
-      {note}
     </section>
   );
 }

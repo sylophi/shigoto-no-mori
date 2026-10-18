@@ -1,3 +1,4 @@
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import {
   createContext,
   use,
@@ -76,7 +77,9 @@ export function ThemeProvider({
   // captured at mount: a later cache clear (nuke) must fall back to the
   // current mirror, not flash the launch-time value. Config wins as
   // soon as it arrives.
-  const saved: Theme = isLoading ? readBootHint() : (config?.theme ?? "system");
+  const saved: Theme = isLoading
+    ? readBootHint()
+    : clientSetting(config ?? {}, "theme");
   const [override, setOverride] = useState<Theme | null>(null);
   const applied = override ?? saved;
 

@@ -1,3 +1,4 @@
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import type { SidebarMarks } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { useHasLocalHost } from "@/lib/localHost";
@@ -15,15 +16,15 @@ function useClientFlag(select: (config: ClientConfig) => boolean): boolean {
 }
 
 const markTerrierProjects = (config: ClientConfig) =>
-  config.markTerrierProjects === true;
+  clientSetting(config, "markTerrierProjects");
 const showDeviceBadges = (config: ClientConfig) =>
-  config.showDeviceBadges !== false;
+  clientSetting(config, "showDeviceBadges");
 const allowAgentWorking = (config: ClientConfig) =>
-  config.allowAgentWorking === true;
+  clientSetting(config, "allowAgentWorking");
 const markAgentsWaiting = (config: ClientConfig) =>
-  config.markAgentsWaiting !== false;
+  clientSetting(config, "markAgentsWaiting");
 const inlineWorktrees = (config: ClientConfig) =>
-  config.inlineWorktrees === true;
+  clientSetting(config, "inlineWorktrees");
 
 // Terrier's paw on the projects it lists. Off unless switched on, and
 // then shown only where terrierMarksHere holds too.

@@ -4,7 +4,11 @@ import {
   SettingsSaveError,
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
-import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
+import {
+  fromConfig,
+  keepTouched,
+  withClientFields,
+} from "@shigomori/ui/lib/settingsForm.ts";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import {
   pickHostDevice,
@@ -104,22 +108,6 @@ import { useApi } from "@/lib/runtime/pageApi";
 // form only ever carries appearance, and every device in the tab bar
 // is a peer, edited over that peer's direct session exactly as from
 // another desktop.
-// A draft over a seed that moved: what the form changed stays, the rest
-// takes the new seed.
-function keepTouched(
-  form: SettingsFormState,
-  saved: SettingsFormState,
-  next: SettingsFormState,
-): SettingsFormState {
-  const merged = { ...next };
-  for (const key of Object.keys(form) as (keyof SettingsFormState)[]) {
-    if (JSON.stringify(form[key]) !== JSON.stringify(saved[key])) {
-      Object.assign(merged, { [key]: form[key] });
-    }
-  }
-  return merged;
-}
-
 export function SettingsForm({
   initialConfig,
   initialClientConfig,
@@ -179,26 +167,7 @@ export function SettingsForm({
       // advance the snapshot for it: only the appearance fields stay
       // unsaved and Save retries just those.
       if (error instanceof SettingsSaveError && error.devicePersisted) {
-        setSavedSnapshot((prev) => ({
-          ...form,
-          theme: prev.theme,
-          doubutsu: prev.doubutsu,
-          lightTheme: prev.lightTheme,
-          darkTheme: prev.darkTheme,
-          themeRotation: prev.themeRotation,
-          themeRotationEvery: prev.themeRotationEvery,
-          pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
-          villageLife: prev.villageLife,
-          villageNews: prev.villageNews,
-          markTerrierProjects: prev.markTerrierProjects,
-          showDeviceBadges: prev.showDeviceBadges,
-          allowAgentWorking: prev.allowAgentWorking,
-          markAgentsWaiting: prev.markAgentsWaiting,
-          notifyAgentWaiting: prev.notifyAgentWaiting,
-          notifyAgentDone: prev.notifyAgentDone,
-          inlineWorktrees: prev.inlineWorktrees,
-          keybindings: prev.keybindings,
-        }));
+        setSavedSnapshot((prev) => withClientFields(form, prev));
       }
     }
     // No explicit setOverride(null). The providers clear the override

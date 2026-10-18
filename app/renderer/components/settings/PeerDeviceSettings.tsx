@@ -5,7 +5,7 @@ import { EmptyPanel } from "@shigomori/ui/primitives/empty-panel.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
-import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
+import { fromConfig, keepTouched } from "@shigomori/ui/lib/settingsForm.ts";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
@@ -170,18 +170,16 @@ function PeerSettingsForm({
   // dirty), and the patch encoder carries only the device-managed keys.
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
     useDirtyForm<SettingsFormState>(fromConfig(initialConfig, {}));
-  // The section stays mounted across visits, so a background refetch of
-  // the device's config (its own user changed a toggle) rebases the
-  // form. Clean, it adopts the change. Dirty, the snapshot moves so
-  // Save diffs against what the device has now.
+  // The device's config moved (its own user changed a toggle): the form
+  // follows it, keeping the fields changed here unsaved over it.
   useEffect(() => {
-    reseed(fromConfig(initialConfig, {}));
+    reseed(fromConfig(initialConfig, {}), keepTouched);
   }, [initialConfig, reseed]);
 
   const handleSave = async () => {
     if (!isDirty) return;
     try {
-      await save.mutateAsync(form);
+      await save.mutateAsync({ state: form, saved: savedSnapshot });
       setSavedSnapshot(form);
     } catch {
       // Surfaced by the mutation cache toast and the banner below.

@@ -11,9 +11,10 @@
 // villageLife is a client setting (ClientConfig): the purely visual
 // villager extras on every worktree named after a character, whichever
 // device it lives on, with the villager data this device holds
-// (host/lib/VillagerData.ts). Off when unset.
+// (host/lib/VillagerData.ts).
 import {
   type ClientConfig,
+  clientSetting,
   DEVICE_SETTINGS_DEFAULTS,
   type GlobalConfig,
 } from "@shigomori/contracts/schemas/config";
@@ -30,7 +31,7 @@ type VillageConfig = Pick<ClientConfig, "villageLife">;
 // The one switch for villager extras. The renderer reads it through
 // useVillageLife (renderer/hooks/config/useVillageLife.ts).
 export function villageLifeEnabled(config: VillageConfig): boolean {
-  return config.villageLife ?? false;
+  return clientSetting(config, "villageLife");
 }
 
 // Whether the extras show: the switch on and the villager data all
@@ -44,9 +45,9 @@ export function villageLifeShows(
 }
 
 // Whether villagers moving in or out say so (Village news, under
-// Village life). On when unset.
+// Village life).
 export function villageNewsEnabled(
   config: Pick<ClientConfig, "villageNews">,
 ): boolean {
-  return config.villageNews ?? true;
+  return clientSetting(config, "villageNews");
 }
