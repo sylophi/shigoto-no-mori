@@ -64,9 +64,9 @@ remote-tracking default branch).
   walk has. The walk adds them as it needs them: a device without the
   project is a fresh one.
 - **The hub** (`lib/labHub.mts`): this checkout's worker under
-  `wrangler dev` with local bindings (`hub/wrangler.lab.jsonc`), where
-  a login is `lab:<account>` in place of a Clerk session token
-  (`hub/src/lab.ts`). Each device enrolls through the page api with
+  `wrangler dev` with local bindings, its config, build and state in a
+  temp folder of its own, where a login is `lab:<account>` in place of
+  a Clerk session token (`hub/src/lab.ts`). Each device enrolls through the page api with
   it. No network and no Clerk: the window logs that Clerk's UI didn't
   load, and nothing else of the account needs it. The devices reach
   each other directly on loopback, as two Macs on one network do.

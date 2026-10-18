@@ -30,8 +30,8 @@
       ],
     },
     "hub": {
-      // The lab's worker (wrangler.lab.jsonc), which the cross-device
-      // walks run.
+      // The lab's worker, which the cross-device walks run
+      // (app/lab/walks/lib/labHub.mts).
       "entry": ["src/lab.ts"],
       "ignoreDependencies": [
         // cloudflare:test and cloudflare:workers are workerd's built-in

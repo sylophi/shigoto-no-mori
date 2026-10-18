@@ -1,8 +1,9 @@
-// The lab's entry (wrangler.lab.jsonc), for the cross-device walks
-// (app/lab/walks): the worker as deployed, but a login is "lab:<account>"
-// in place of a Clerk session token, so two lab builds on one machine
-// enroll as devices of one account with no Clerk and no network. Never
-// deployed: the deploy scripts take wrangler.jsonc.
+// The lab's entry, for the cross-device walks (app/lab/walks): the
+// worker as deployed, but a login is "lab:<account>" in place of a Clerk
+// session token, so lab builds on one machine enroll as devices of one
+// account with no Clerk and no network. Never deployed: the deploy
+// scripts take wrangler.jsonc, and the walks write a config of their own
+// for this (app/lab/walks/lib/labHub.mts).
 import { createWorker } from "./worker.ts";
 
 export { DeviceHub } from "./hubObject.ts";

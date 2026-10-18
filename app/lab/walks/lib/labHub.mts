@@ -1,17 +1,50 @@
 // The device hub a cross-device walk runs itself: this checkout's
-// worker under `wrangler dev` with local bindings only
-// (hub/wrangler.lab.jsonc), where a login is "lab:<account>" in place
-// of a Clerk session token (hub/src/lab.ts). No network and no Clerk,
-// so it runs the same on a laptop and in CI.
+// worker under `wrangler dev` with local bindings only, where a login is
+// "lab:<account>" in place of a Clerk session token (hub/src/lab.ts). No
+// network and no Clerk, so it runs the same on a laptop and in CI.
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
 
 const HUB_DIR = join(import.meta.dirname, "..", "..", "..", "..", "hub");
 const WRANGLER = join(HUB_DIR, "node_modules", ".bin", "wrangler");
-const CONFIG = "wrangler.lab.jsonc";
+
+// hub/wrangler.jsonc's worker with the lab's entry and no routes. It is
+// written into the hub's own temp folder, since wrangler keeps its build
+// beside its config and its state where it is told: nothing of a walk's
+// lands in the repository.
+const labConfig = () => ({
+  name: "shigomori-hub-lab",
+  main: join(HUB_DIR, "src", "lab.ts"),
+  compatibility_date: "2026-08-01",
+  durable_objects: {
+    bindings: [{ name: "DEVICE_HUB", class_name: "DeviceHub" }],
+  },
+  migrations: [{ tag: "v1", new_sqlite_classes: ["DeviceHub"] }],
+  d1_databases: [
+    {
+      binding: "DB",
+      database_name: "shigomori-hub-lab",
+      database_id: "00000000-0000-4000-8000-000000000000",
+      migrations_dir: join(HUB_DIR, "migrations"),
+    },
+  ],
+  ratelimits: [
+    {
+      name: "RATE_LIMIT",
+      namespace_id: "3001",
+      simple: { limit: 300, period: 60 },
+    },
+    {
+      name: "RATE_LIMIT_OPEN",
+      namespace_id: "3002",
+      simple: { limit: 60, period: 60 },
+    },
+  ],
+  workers_dev: false,
+});
 
 export interface LabHub {
   readonly url: string;
@@ -21,7 +54,10 @@ export interface LabHub {
 }
 
 export async function startLabHub(): Promise<LabHub> {
-  const state = mkdtempSync(join(tmpdir(), "sm-walk-hub-"));
+  const root = mkdtempSync(join(tmpdir(), "sm-walk-hub-"));
+  const config = join(root, "wrangler.json");
+  writeFileSync(config, JSON.stringify(labConfig()));
+  const state = join(root, "state");
   const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
   execFileSync(
     WRANGLER,
@@ -32,11 +68,11 @@ export async function startLabHub(): Promise<LabHub> {
       "shigomori-hub-lab",
       "--local",
       "-c",
-      CONFIG,
+      config,
       "--persist-to",
       state,
     ],
-    { cwd: HUB_DIR, env, stdio: ["ignore", "ignore", "pipe"] },
+    { cwd: root, env, stdio: ["ignore", "ignore", "pipe"] },
   );
   const port = await freeLoopbackPort();
   // Its own process group, so the stop takes workerd with it.
@@ -45,7 +81,7 @@ export async function startLabHub(): Promise<LabHub> {
     [
       "dev",
       "-c",
-      CONFIG,
+      config,
       "--ip",
       "127.0.0.1",
       "--port",
@@ -55,7 +91,7 @@ export async function startLabHub(): Promise<LabHub> {
       "--var",
       "TICKET_SIGNING_KEY:lab-only-not-a-secret",
     ],
-    { cwd: HUB_DIR, env, detached: true, stdio: ["ignore", "ignore", "pipe"] },
+    { cwd: root, env, detached: true, stdio: ["ignore", "ignore", "pipe"] },
   );
   let exited = false;
   let stderr = "";
@@ -72,7 +108,7 @@ export async function startLabHub(): Promise<LabHub> {
         if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
       });
     }
-    rmSync(state, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   };
   const url = `http://127.0.0.1:${port}`;
   try {
