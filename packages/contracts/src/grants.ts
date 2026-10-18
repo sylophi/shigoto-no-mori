@@ -34,6 +34,7 @@ export const GRANTS = {
       "branches:create",
       "branches:delete",
       "branches:rename",
+      "git:fetchProject",
       "git:refreshProject",
       "githubCli:createPullRequest",
       "githubCli:disablePullRequestAutoMerge",

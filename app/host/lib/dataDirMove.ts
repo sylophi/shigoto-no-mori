@@ -41,6 +41,7 @@ import { dirtyRef } from "@shigomori/engine/Dirty";
 import { DataDirLock } from "@shigomori/engine/DataDirLock";
 import * as Git from "@shigomori/engine/Git";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
+import { busyRefusal } from "@shared/busy";
 import * as Scripts from "./Scripts";
 import {
   asMoveOwner,
@@ -227,13 +228,13 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
   // delegated engine runs) is mid-write inside the data dir and can't be
   // safely killed or moved under. Refuse instead.
   const scripts = yield* Scripts.Scripts;
-  const busy = yield* scripts.busy;
-  if (busy.inflightDeletes + busy.engineChanges > 0) {
-    return yield* new DataDirMoveError({
-      reason:
-        "Another operation is still running (worktree delete or CLI " +
-        "command). Try again when it finishes.",
-    });
+  const refused = busyRefusal({
+    ...(yield* scripts.busy),
+    runningScripts: 0,
+    busyTerminals: 0,
+  });
+  if (refused !== null) {
+    return yield* new DataDirMoveError({ reason: refused });
   }
 
   // Where git will name the moved worktrees: by the destination's real
@@ -405,7 +406,10 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         });
       }
     }
-    yield* scripts.deleting(entries.map(({ oldId }) => oldId));
+    yield* scripts.deleting(
+      entries.map(({ oldId }) => oldId),
+      "move",
+    );
     // Each moved worktree with its dirty capture as it is now, read
     // strictly: the forward re-key carries that capture or fails, and an
     // undo carries back that one.

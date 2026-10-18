@@ -24,7 +24,10 @@
 //     host never runs more than LINK_CALLS_IN_FLIGHT (48) at once, and
 //     starts them in the order they were made.
 //   - with the cap full, the link's ping still answers, while one more
-//     call is refused.
+//     call is refused;
+//   - a page's refresh as it opens (git:refreshProject) makes no quit
+//     ask, and the refresh its button asks for (git:fetchProject) reads
+//     as a fetch being made.
 //
 // No timer is involved: every wait is on a condition (waitFor).
 //
@@ -67,6 +70,8 @@ import {
   LINK_CALLS_IN_FLIGHT,
   rpcLink,
 } from "@shared/remote/rpcTransport";
+import { EngineChanges } from "@host/lib/Engine";
+import { busyDetail } from "@shared/busy";
 import { processAlive, waitFor } from "./lib/checkKit.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import { hostContext } from "./lib/hostRuntime.mts";
@@ -167,6 +172,7 @@ exit 1
     worktreesHandlers.changeStatus,
   );
   registrar.serveOne(gitContract, "refreshProject", hold);
+  registrar.serveOne(gitContract, "fetchProject", hold);
   const host = await hostContext();
   const scope = Scope.makeUnsafe();
   const context = await Effect.runPromise(
@@ -426,4 +432,45 @@ it("full cap: with every place on a connection held, its ping still answers", as
   await fillCap(connection);
   await connection.run(connection.raw("link:ping"));
   assert.equal(held.running, MAX_IN_FLIGHT_PER_PEER);
+});
+
+// The changes the sandbox's engine counts, which the loopback serves
+// on, as the quit would word them.
+const busyWords = async () =>
+  busyDetail(
+    {
+      runningScripts: 0,
+      inflightDeletes: 0,
+      inflightMoves: 0,
+      busyTerminals: 0,
+      engineChanges: (
+        await Effect.runPromiseWith(await hostContext())(
+          Effect.map(EngineChanges, (changes) => changes.underWay()),
+        )
+      ).map(({ kind }) => kind),
+    },
+    "quit",
+  );
+
+it("quit: a page's refresh as it opens makes no quit ask, and the refresh its button asks for does", async () => {
+  const link = await openLink();
+  resetHeld();
+  const opening = link.run(
+    link.raw("git:refreshProject", { projectId: "page" }),
+  );
+  await waitFor(() => held.running === 1, "the page's refresh to run");
+  assert.equal(await busyWords(), null);
+  releaseHeld();
+  await opening;
+  const pressed = link.run(
+    link.raw("git:fetchProject", { projectId: "button" }),
+  );
+  await waitFor(() => held.running === 1, "the button's refresh to run");
+  assert.equal(
+    await busyWords(),
+    "A fetch is still being made. Quitting now will interrupt it.",
+  );
+  releaseHeld();
+  await pressed;
+  assert.equal(await busyWords(), null);
 });

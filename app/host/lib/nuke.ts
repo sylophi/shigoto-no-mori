@@ -28,11 +28,8 @@ import * as Ops from "./engineOps";
 import * as Git from "@shigomori/engine/Git";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import * as Scripts from "./Scripts";
+import * as Worktrees from "./Worktrees";
 import { dataDir } from "@shared/paths";
-
-// How long one worktree's teardown may run during a nuke, as a move's
-// rollback cleanup allows (sync/landing.ts).
-const TEARDOWN_TIMEOUT_MS = 60_000;
 
 class NukeRefusedError extends Schema.TaggedError<NukeRefusedError>()(
   "NukeRefusedError",
@@ -92,7 +89,8 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   // what it couldn't (leftIf).
   readonly uninstall: Effect.Effect<ReadonlyArray<Left>, never, U>;
   readonly home?: string;
-  // How long one worktree's teardown may run (TEARDOWN_TIMEOUT_MS).
+  // How long one worktree's teardown may run (Worktrees.forceRemove's
+  // minute by default).
   readonly teardownTimeoutMs?: number;
 }) {
   const { onProgress } = options;
@@ -134,8 +132,9 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   );
   const marked = perProject.flatMap(({ targets }) => targets.map((t) => t.id));
   const scripts = yield* Scripts.Scripts;
+  const worktrees = yield* Worktrees.Worktrees;
   yield* Effect.gen(function* () {
-    yield* scripts.deleting(marked);
+    yield* scripts.deleting(marked, "remove");
     let removed = 0;
     yield* onProgress({ phase: "worktrees", done: 0, total: marked.length });
     // One removal at a time within a project: each one rewrites the
@@ -147,12 +146,16 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
           for (const target of targets) {
             // A teardown script that never ends is a cleanup failure,
             // not a nuke that never finishes.
-            const failed = yield* Ops.forceRemoveWorktree(project, target.id, {
-              timeoutMs: options.teardownTimeoutMs ?? TEARDOWN_TIMEOUT_MS,
-            }).pipe(
-              Effect.as(null),
-              Effect.catch((error) => Effect.succeed(errorWordsOf(error))),
-            );
+            const failed = yield* worktrees
+              .forceRemove({
+                projectId: project.id,
+                worktreeId: target.id,
+                cleanupWithin: options.teardownTimeoutMs,
+              })
+              .pipe(
+                Effect.as(null),
+                Effect.catch((error) => Effect.succeed(errorWordsOf(error))),
+              );
             // One inside the data dir goes with it at the next start.
             if (failed !== null && !isSameOrInside(target.path, dataDir())) {
               left.push({ what: target.path, why: failed });

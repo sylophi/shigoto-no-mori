@@ -1,7 +1,8 @@
-// The Worktrees service's removals (../Worktrees.ts): one worktree, or
-// a landed stack's, which the engine commits under the tombstone, each
-// announced to every viewer while it goes and with its outcome after,
-// and the mirrors of what went stopped.
+// The Worktrees service's removals (../Worktrees.ts): one worktree, a
+// landed stack's, or one that must go (forced), which the engine commits
+// under the tombstone, each announced to every viewer while it goes and
+// with its outcome after, and the mirrors of what went stopped.
+import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -14,7 +15,10 @@ import {
 } from "../projects";
 import * as Scripts from "../Scripts";
 import { stopMirrorsForWorktree } from "@host/mirror/registry";
-import { ScriptsRunningError } from "./documents";
+import { bookingScripts, ScriptsRunningError } from "./documents";
+
+// How long a forced removal's cleanup may run before it reads as failed.
+const FORCED_CLEANUP_MS = 60_000;
 
 export type RemoveInput = {
   readonly projectId: string;
@@ -72,15 +76,17 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       return yield* scripts
         .withDeleteInflight(
           worktreeId,
-          busy,
-          Ops.deleteWorktree(
-            project,
-            {
-              worktreeId,
-              force: input.force,
-              skipCleanup: input.skipCleanup,
-            },
-            { notifyScript },
+          { kind: "remove", busy },
+          bookingScripts(scripts, notifyScript, (reporter) =>
+            Ops.deleteWorktree(
+              project,
+              {
+                worktreeId,
+                force: input.force,
+                skipCleanup: input.skipCleanup,
+              },
+              reporter,
+            ),
           ).pipe(
             Effect.tap((outcome) =>
               Effect.sync(() => {
@@ -124,11 +130,15 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       return yield* scripts
         .withDeletesInflight(
           ids,
-          busy,
-          Ops.deleteStack(project, removal, {
-            notifyScript,
-            removedOther: (id) => void removed.add(id),
-          }).pipe(
+          { kind: "remove", busy },
+          bookingScripts(scripts, notifyScript, (reporter) =>
+            Ops.deleteStack(
+              project,
+              removal,
+              reporter,
+              (id) => void removed.add(id),
+            ),
+          ).pipe(
             Effect.tap((outcome) =>
               Effect.sync(() => {
                 for (const id of outcome.removed) removed.add(id);
@@ -155,5 +165,73 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         );
     }, Effect.provide(host));
 
-    return { remove, removeStack };
+    // A removal that must happen (a nuke, the undo of a create a landing
+    // didn't keep): forced, so the port-pool lease is released and the
+    // teardown runs like any removal, and when that cleanup fails, again
+    // without it, since leaving the worktree behind is not an option. The
+    // cleanup runs on a clock: the nuke, or the cancel of something that
+    // hung, must not wait on a teardown that hangs the same way. It
+    // overlaps a removal already under way rather than wait for it, and
+    // reads a worktree that removal took first as removed.
+    const forceRemove = Effect.fn("Worktrees.forceRemove")(function* (input: {
+      readonly projectId: string;
+      readonly worktreeId: string;
+      readonly cleanupWithin?: number | undefined;
+    }) {
+      const project = yield* findProject(input.projectId);
+      const worktreeId = yield* currentWorktreeId(project.id, input.worktreeId);
+      yield* announce(project.id, worktreeId, "removing");
+      let removed = false;
+      const once = (options: { readonly skipCleanup: boolean }) =>
+        bookingScripts(
+          scripts,
+          () => {},
+          (reporter) =>
+            Ops.deleteWorktree(
+              project,
+              {
+                worktreeId,
+                force: true,
+                ...(options.skipCleanup
+                  ? { skipCleanup: true }
+                  : {
+                      cleanupWithin: input.cleanupWithin ?? FORCED_CLEANUP_MS,
+                    }),
+              },
+              reporter,
+            ),
+        );
+      return yield* scripts
+        .withDeleteInflight(
+          worktreeId,
+          { kind: "remove", busy: undefined },
+          Effect.gen(function* () {
+            // A cleanup the clock stopped reads as a cleanup failure. A
+            // worktree already gone (another removal beat this one) is
+            // what this one was for.
+            const first = yield* once({ skipCleanup: false }).pipe(
+              Effect.catch((error) =>
+                Effect.succeed({ ok: isEntityGoneError(error) }),
+              ),
+            );
+            removed =
+              first.ok ||
+              (yield* once({ skipCleanup: true }).pipe(
+                Effect.catchIf(isEntityGoneError, () =>
+                  Effect.succeed({ ok: true }),
+                ),
+              )).ok;
+          }),
+          () => (removed ? stopMirrors([worktreeId]) : Effect.void),
+        )
+        .pipe(
+          Effect.ensuring(
+            Effect.suspend(() =>
+              announce(project.id, worktreeId, removed ? "removed" : "kept"),
+            ),
+          ),
+        );
+    }, Effect.provide(host));
+
+    return { remove, removeStack, forceRemove };
   });

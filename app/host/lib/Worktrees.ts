@@ -1,9 +1,10 @@
 // What the host does across a project's checkouts: the reads cached
 // where they are slow to repeat (carry-over's and the folder pickers'
-// listings, worktrees/carryOver.ts), and the moves and removals that
-// hold host state around the engine's commit: the running work they
-// refuse, the tombstone, the removal announcements and the mirrors
-// (V3.md, decision 20; worktrees/moving.ts, worktrees/removing.ts).
+// listings, worktrees/carryOver.ts), and the creates, moves and removals
+// that hold host state around the engine's commit: the create mark and
+// the lifecycle scripts booked, the running work they refuse, the
+// tombstone, the removal announcements and the mirrors (V3.md, decision
+// 20; worktrees/creating.ts, moving.ts, removing.ts).
 import type {
   UnknownProjectError,
   UnknownWorktreeError,
@@ -12,6 +13,7 @@ import type {
 import type {
   CarryOverCandidate,
   CarryOverStat,
+  CreateWorktreeResult,
   DeleteStackResult,
   DeleteWorktreeResult,
   Worktree,
@@ -20,6 +22,7 @@ import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync"
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Scope from "effect/Scope";
 import type * as Git from "@shigomori/engine/Git";
 import { PeerReach } from "@host/ipc/PeerReach";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
@@ -36,8 +39,16 @@ import type {
   RunningWorkError,
   ScriptsRunningError,
 } from "./worktrees/documents";
+import {
+  type CreateFailure,
+  type CreateInput,
+  type CreateNotifiers,
+  makeCreating,
+} from "./worktrees/creating";
 import { makeMoving } from "./worktrees/moving";
 import { makeRemoving, type RemoveInput } from "./worktrees/removing";
+
+export type { CreateNotifiers } from "./worktrees/creating";
 
 // What a move or a removal can fail with before or at the engine's
 // commit.
@@ -79,9 +90,37 @@ export class Worktrees extends Context.Service<
     readonly ignoredPaths: (
       worktreePath: string,
     ) => Effect.Effect<string[], Git.GitError>;
+    // The creates, moves and removals run on the caller's engine, which
+    // a proof's sandbox stands in for.
+    //
+    // A new worktree, answered once the engine made it (or once its run
+    // ended, `resolveOn` "exit") while its carry-over and setup go on.
+    readonly create: (
+      input: CreateInput,
+      notify: CreateNotifiers,
+      options?: { readonly resolveOn?: "created" | "exit" },
+    ) => Effect.Effect<CreateWorktreeResult, CreateFailure, Engine.Services>;
+    // An external checkout replaced by a managed one on its branch.
+    readonly adopt: (
+      input: {
+        readonly projectId: string;
+        readonly worktreeId: string;
+        readonly force: boolean;
+      },
+      notify: CreateNotifiers,
+    ) => Effect.Effect<CreateWorktreeResult, CreateFailure, Engine.Services>;
+    // A landing's create, undone with the scope it is made in unless
+    // `keep` committed it (worktrees/creating.ts says when).
+    readonly createHeld: (
+      input: CreateInput & { readonly branchName: string },
+      notify: CreateNotifiers,
+    ) => Effect.Effect<
+      { readonly worktree: Worktree; readonly keep: Effect.Effect<void> },
+      CreateFailure,
+      Engine.Services | Scope.Scope
+    >;
     // The moves and removals name the worktree by its id or one it had
-    // before a move. They run on the caller's engine, which a proof's
-    // sandbox stands in for.
+    // before a move.
     //
     // `sm worktrees move`: the checkout to `destinationPath`, under the
     // id that path gives it.
@@ -121,6 +160,14 @@ export class Worktrees extends Context.Service<
       input: RemoveInput,
       notifyScript: Scripts.NotifyScriptEvent,
     ) => Effect.Effect<DeleteStackResult, ChangeError, Engine.Services>;
+    // A removal that must happen (a nuke's, a landing's undone create),
+    // its cleanup on a clock of `cleanupWithin` ms (a minute by default),
+    // and without it when it fails.
+    readonly forceRemove: (input: {
+      readonly projectId: string;
+      readonly worktreeId: string;
+      readonly cleanupWithin?: number | undefined;
+    }) => Effect.Effect<void, ChangeError, Engine.Services>;
   }
 >()("sm/host/Worktrees") {}
 
@@ -135,10 +182,12 @@ const make = Effect.gen(function* () {
       HostPushes.HostPushes | MirrorEngine | PeerReach | Scripts.Scripts
     >(),
   );
+  const removing = yield* makeRemoving(host);
   return Worktrees.of({
     ...(yield* makeCarryOver),
+    ...(yield* makeCreating(removing)),
     ...(yield* makeMoving(host)),
-    ...(yield* makeRemoving(host)),
+    ...removing,
   });
 });
 

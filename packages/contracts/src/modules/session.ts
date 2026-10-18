@@ -26,11 +26,36 @@ const AccountFactsSchema = strict(
 );
 export type AccountFacts = typeof AccountFactsSchema.Type;
 
+// What a change a person started is (or an auto-pull's fast-forward),
+// for the words a quit asks with (app/shared/busy.ts).
+const ChangeKindSchema = Schema.Literals([
+  "commit",
+  "push",
+  "pull",
+  "pullAndPush",
+  "fetch",
+  "merge",
+  "checkout",
+  "stash",
+  "unstash",
+  "finish",
+  "pullRequest",
+  "autoPull",
+  "create",
+  "land",
+  "send",
+  "bring",
+  "remove",
+  "move",
+]);
+export type ChangeKind = typeof ChangeKindSchema.Type;
+
 const BusyOperationsSchema = strict(
   Schema.Struct({
     runningScripts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     inflightDeletes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-    engineChanges: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    inflightMoves: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    engineChanges: Schema.Array(ChangeKindSchema),
     busyTerminals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }),
 );

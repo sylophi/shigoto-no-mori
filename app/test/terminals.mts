@@ -673,7 +673,8 @@ describe("the service", () => {
           {
             runningScripts: 1,
             inflightDeletes: 0,
-            engineChanges: 0,
+            inflightMoves: 0,
+            engineChanges: [],
             busyTerminals: 1,
           },
           "quit",

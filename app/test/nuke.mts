@@ -1,8 +1,9 @@
 // Durable proof for "Nuke everything" against REAL git repositories:
 // the host's half refuses for a trap and touches nothing, removes every
 // worktree the app made (and only those) with a second run finishing
-// what an interrupted first left, with no teardown script holding it
-// up, and reports what it couldn't; the
+// what an interrupted first left, each removal announced as any delete
+// is, with no teardown script holding it up, and reports what it
+// couldn't; the
 // next start's half deletes what the marker names and all of userData
 // but the lock and the dev profiles, and finishes after a start that
 // died halfway through.
@@ -22,6 +23,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { afterAll, beforeAll, it } from "vitest";
 import { runHost } from "./lib/hostRuntime.mts";
+import { onHostPush } from "./lib/hostStandIns.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import {
   finishPendingNuke,
@@ -60,6 +62,17 @@ const nuke = (
       ...(teardownTimeoutMs === undefined ? {} : { teardownTimeoutMs }),
     }),
   );
+
+// Every removal announcement from here on, as `<worktree id> <state>`.
+const announced: string[] = [];
+onHostPush((push) => {
+  if (push.channel !== "worktrees:removal") return;
+  const { worktreeId, state } = push.payload as {
+    worktreeId: string;
+    state: string;
+  };
+  announced.push(`${worktreeId} ${state}`);
+});
 
 class ReadOnly extends Schema.TaggedError<ReadOnly>()("ReadOnly", {}) {
   override get message(): string {
@@ -152,8 +165,22 @@ it("removes every worktree the app made, and a second run finishes an interrupte
   assert.deepEqual(first, [], "it never reached the uninstall");
 
   const second: string[] = [];
+  announced.length = 0;
   const report = await nuke(second);
   assert.deepEqual(report.left, []);
+  // Each removal is announced as going, then gone, as any delete is.
+  const going = between.length - 2;
+  assert.equal(
+    announced.filter((entry) => entry.endsWith(" removing")).length,
+    going,
+  );
+  assert.deepEqual(
+    announced
+      .filter((entry) => entry.endsWith(" removed"))
+      .map((entry) => entry.replace(" removed", " removing"))
+      .toSorted(),
+    announced.filter((entry) => entry.endsWith(" removing")).toSorted(),
+  );
   assert.deepEqual(second, ["hooks"]);
   // The outside project's worktree from the refusal went too.
   assert.deepEqual((await worktrees(project)).toSorted(), [external, project]);

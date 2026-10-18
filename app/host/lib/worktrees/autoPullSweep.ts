@@ -16,11 +16,11 @@
 // app started in it is left alone too: the tree moving under a running
 // dev server is the one way a pull the user never clicked could bite.
 // So is a data-folder move, which the pull waits out by skipping.
-import { DataDirLock } from "@shigomori/engine/DataDirLock";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
+import { changing } from "../Engine";
 
 type AutoPullSkipReason =
   | "detached"
@@ -45,7 +45,7 @@ const skipped = (reason: AutoPullSkipReason): AutoPullOutcome => ({
 // processes the app started in this worktree. Git cannot see those,
 // and it is required so no caller forgets to ask.
 export const autoPullWorktree = Effect.fnUntraced(function* (
-  worktree: Pick<WorktreeIdentity, "path" | "detached">,
+  worktree: Pick<WorktreeIdentity, "projectId" | "id" | "path" | "detached">,
   options: { busy: boolean },
 ) {
   if (worktree.detached) return skipped("detached");
@@ -55,16 +55,18 @@ export const autoPullWorktree = Effect.fnUntraced(function* (
   if (counts.behind === 0) return skipped("synced");
   if (counts.ahead > 0) return skipped("ahead");
   if (options.busy) return skipped("busy");
-  const lock = yield* DataDirLock;
-  return yield* Effect.gen(function* () {
-    const git = yield* Git.Git;
-    if (yield* git.hasUncommittedOrUntracked(worktree.path)) {
-      return skipped("dirty");
-    }
-    yield* git.fastForwardToUpstream(worktree.path);
-    return { kind: "pulled", commits: counts.behind } as AutoPullOutcome;
-  }).pipe(
-    lock.guard,
+  return yield* changing(
+    Effect.gen(function* () {
+      const git = yield* Git.Git;
+      if (yield* git.hasUncommittedOrUntracked(worktree.path)) {
+        return skipped("dirty");
+      }
+      yield* git.fastForwardToUpstream(worktree.path);
+      return { kind: "pulled", commits: counts.behind } as AutoPullOutcome;
+    }),
+    { projectId: worktree.projectId, worktreeId: worktree.id },
+    "autoPull",
+  ).pipe(
     Effect.catchTag(
       ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
       () => Effect.succeed(skipped("busy")),

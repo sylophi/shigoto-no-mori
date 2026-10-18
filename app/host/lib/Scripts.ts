@@ -11,19 +11,21 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import type {
+  Mark,
   NotifyScriptEvent,
   RunArgs,
   RunningScriptWorktree,
   ScriptRefusedError,
   WorktreeBusyError,
 } from "./scripts/documents";
-import { makeMarks } from "./scripts/marks";
+import { type MarkKind, makeMarks } from "./scripts/marks";
 import { makeRemoving } from "./scripts/removing";
 import { type LifecycleRuns, makeRuns } from "./scripts/runs";
 import type { PtySpawnError } from "./scripts/ScriptRuns";
 import { makeUnderWay } from "./scripts/underWay";
 
 export type {
+  Mark,
   NotifyScriptEvent,
   RunningScriptWorktree,
   ScriptEnvValues,
@@ -79,7 +81,7 @@ export class Scripts extends Context.Service<
     // that removes or moves worktrees.
     readonly withDeleteInflight: <A, E, R, E2, R2>(
       worktreeId: string,
-      busyMessage: string,
+      mark: Mark,
       run: Effect.Effect<A, E, R>,
       mirrorsAfter: (result: A) => Effect.Effect<unknown, E2, R2>,
     ) => Effect.Effect<
@@ -89,7 +91,7 @@ export class Scripts extends Context.Service<
     >;
     readonly withDeletesInflight: <A, E, R, E2, R2>(
       worktreeIds: readonly string[],
-      busyMessage: string,
+      mark: Mark,
       run: Effect.Effect<A, E, R>,
       mirrorsAfter: (result: A) => Effect.Effect<unknown, E2, R2>,
     ) => Effect.Effect<
@@ -97,10 +99,11 @@ export class Scripts extends Context.Service<
       E | E2 | WorktreeBusyError | WorktreeSettingUpError,
       R | R2
     >;
-    // The worktrees a removal that stops their scripts itself (a nuke,
-    // a data-folder move) works on, marked until the scope closes.
+    // The worktrees a removal or move that stops their scripts itself (a
+    // nuke, a data-folder move) works on, marked until the scope closes.
     readonly deleting: (
       worktreeIds: readonly string[],
+      kind: MarkKind,
     ) => Effect.Effect<void, never, Scope.Scope>;
     readonly removingProject: <A, E, R>(
       projectId: string,
@@ -109,6 +112,9 @@ export class Scripts extends Context.Service<
     readonly busy: Effect.Effect<BusyOperations>;
     readonly refuseNew: Effect.Effect<void>;
     readonly reapRemoved: Effect.Effect<ReadonlyArray<RunningScriptWorktree>>;
+    // The scripts and terminals of every project no longer registered
+    // stopped and closed (./scripts/removing.ts).
+    readonly reapRemovedProjects: Effect.Effect<void>;
   }
 >()("sm/host/Scripts") {}
 

@@ -202,7 +202,8 @@ async function startLoopback(options: {
     Effect.succeed({
       runningScripts: 0,
       inflightDeletes: 0,
-      engineChanges: 0,
+      inflightMoves: 0,
+      engineChanges: [],
       busyTerminals: 0,
     }),
   );
@@ -741,7 +742,8 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
     Exit.succeed({
       runningScripts: 0,
       inflightDeletes: 0,
-      engineChanges: 0,
+      inflightMoves: 0,
+      engineChanges: [],
       busyTerminals: 0,
     }),
   );
