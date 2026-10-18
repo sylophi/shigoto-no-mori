@@ -487,7 +487,10 @@ describe("commits the pull request never had", () => {
     });
     const doc = await land(located);
     assert.equal(doc["code"], "unpushed-commits", JSON.stringify(doc));
-    assert.match(String(doc["error"]), /[0-9a-f]+ late\. /);
+    assert.match(
+      String(doc["error"]),
+      /^Branch fox has a commit PR #5 doesn't have, which landing would delete: [0-9a-f]+ late\. /,
+    );
     assert.deepEqual(gh.merges(), ["pr merge 5 --auto --squash"]);
     assert.equal(await foxSurvives(located), true);
     assert.match(

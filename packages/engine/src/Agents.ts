@@ -11,9 +11,9 @@
 // worktree binds it to that one. `bind` does it explicitly. The
 // bindings are the Registry's, kept by worktree id like the marks.
 import * as Clock from "effect/Clock";
-import * as Crypto from "effect/Crypto";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";

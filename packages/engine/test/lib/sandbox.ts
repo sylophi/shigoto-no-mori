@@ -51,7 +51,10 @@ import * as Worktrees from "../../src/Worktrees.ts";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as WtFolder from "../../src/WtFolder.ts";
-import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
+import {
+  isOutsideGitVariable,
+  repositoryRoot,
+} from "../../../../gitIsolation.ts";
 import { macfs } from "./macfs.ts";
 
 // The darwin helper, for the tests that take it with the sandbox's
@@ -341,12 +344,17 @@ export function sandbox(
     },
     realRepo: (name) => {
       const dir = join(root, name);
-      // The root, the one place the tests' isolation lets git find this
-      // repository (gitIsolation.ts).
-      const source = join(import.meta.dirname, "..", "..", "..", "..");
       const git = (cwd: string, ...args: string[]) =>
         execFileSync("git", args, { cwd, env: gitEnv(), stdio: "ignore" });
-      git(root, "clone", "-q", "--shared", "--no-checkout", source, dir);
+      git(
+        root,
+        "clone",
+        "-q",
+        "--shared",
+        "--no-checkout",
+        repositoryRoot,
+        dir,
+      );
       git(dir, "checkout", "-q", "-B", "main", "HEAD");
       return dir;
     },

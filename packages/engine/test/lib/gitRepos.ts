@@ -10,7 +10,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { afterAll } from "vitest";
 import * as Git from "../../src/Git.ts";
-import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
+import {
+  isOutsideGitVariable,
+  repositoryRoot,
+} from "../../../../gitIsolation.ts";
 
 // The service runs git under this process's environment. A pre-commit
 // hook's GIT_* variables would point it at the commit in progress, and
@@ -57,13 +60,11 @@ export const rev = (repo: string, ref: string): string =>
 // A clone of this repository at the commit checked out, shaped like a
 // user's project: main tracking origin/main, origin the checkout it
 // came from. Its own commit, not a pinned one: CI's checkout is
-// shallow and holds no other. Read from the root, the one place the
-// tests' isolation lets git find this repository (gitIsolation.ts).
+// shallow and holds no other.
 export function realClone(dir = tempDir("real-")): string {
-  const source = join(import.meta.dirname, "..", "..", "..", "..");
-  const head = rev(source, "HEAD");
+  const head = rev(repositoryRoot, "HEAD");
   const repo = join(dir, "shigoto-no-mori");
-  git(dir, "clone", "-q", "--shared", "--no-checkout", source, repo);
+  git(dir, "clone", "-q", "--shared", "--no-checkout", repositoryRoot, repo);
   git(repo, "update-ref", "refs/remotes/origin/main", head);
   git(
     repo,

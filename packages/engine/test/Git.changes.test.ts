@@ -419,6 +419,21 @@ it("two worktrees discarding at the same moment keep both snapshots", async () =
   for (const snapshot of snapshots) assert.ok(held.has(snapshot));
 });
 
+it("a discard in a sha256 repository keeps its snapshot", async () => {
+  const repo = tempDir("sha256-");
+  git(repo, "init", "-q", "--object-format=sha256", "-b", "main");
+  write(repo, "a.txt", "one\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "init");
+  write(repo, "a.txt", "edited\n");
+  const snapshot = await withGit((g) =>
+    g.discard({ worktree: repo, paths: ["a.txt"] }),
+  );
+  assert.equal(snapshot.length, 64);
+  assert.ok(new Set(discardTips(repo).values()).has(snapshot));
+  assert.equal(read(repo, "a.txt"), "one\n");
+});
+
 it("undoing a discard fails when a file it would delete can't go", async () => {
   const repo = seedRepo();
   rmSync(join(repo, "b.txt"));

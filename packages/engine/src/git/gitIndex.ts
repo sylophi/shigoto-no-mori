@@ -7,6 +7,7 @@ import * as Path from "effect/Path";
 import { splitLines, splitZ } from "../gitParse.ts";
 import { isUntracked } from "@shigomori/contracts/schemas";
 import {
+  ABSENT_REF,
   DISCARD_REF_PREFIX,
   DISCARD_SNAPSHOTS_KEPT,
   GitCommandError,
@@ -16,7 +17,6 @@ import {
   SHOWN,
   stderrOf,
   UndoRefusedError,
-  ZERO_SHA,
 } from "./documents.ts";
 import type { OperationArea } from "./operation.ts";
 import type { RunningArea } from "./running.ts";
@@ -164,20 +164,33 @@ export const makeGitIndex = ({
           ]).pipe(
             Effect.map((stdout) =>
               splitLines(stdout).flatMap((ref) => {
-                const n = Number(ref.slice(DISCARD_REF_PREFIX.length));
-                return Number.isSafeInteger(n) && n > 0 ? [n] : [];
+                const name = ref.slice(DISCARD_REF_PREFIX.length);
+                return /^[1-9]\d*$/.test(name) ? [Number(name)] : [];
               }),
             ),
           );
           yield* Effect.gen(function* () {
-            const next = Math.max(0, ...(yield* numbered)) + 1;
+            const highest = (yield* numbered).reduce(
+              (a, b) => Math.max(a, b),
+              0,
+            );
             yield* run(worktree, [
               "update-ref",
-              `${DISCARD_REF_PREFIX}${next}`,
+              `${DISCARD_REF_PREFIX}${highest + 1}`,
               snapshot,
-              ZERO_SHA,
+              ABSENT_REF,
             ]);
-          }).pipe(Effect.retry({ times: 8 }));
+          }).pipe(
+            Effect.retry({
+              times: 8,
+              // Taken by another snapshot since it was read, or held by
+              // its write: either way the next number is free.
+              while: (error) =>
+                /reference already exists|cannot lock ref/.test(
+                  stderrOf(error),
+                ),
+            }),
+          );
           // Best effort: a failed prune leaves a ref.
           yield* numbered.pipe(
             Effect.flatMap((numbers) =>

@@ -82,7 +82,7 @@ export {
   UndoRefusedError,
   PATHSPEC_CHUNK,
   UnknownRevisionError,
-  ZERO_SHA,
+  ABSENT_REF,
   stderrOf,
 } from "./git/documents.ts";
 export type {
@@ -316,7 +316,7 @@ export class Git extends Context.Service<
       GitError
     >;
     // With `expected`, a compare-and-set: the ref moves only while it
-    // still points there (forty zeros: only while it does not exist).
+    // still points there (ABSENT_REF: only while it does not exist).
     readonly updateRef: (input: {
       readonly repo: string;
       readonly ref: string;
