@@ -356,7 +356,6 @@ export function ProjectPagesPartsScene() {
               projectPath={SM.path}
               device={DEVICE}
               customPath="/Volumes/Work/worktrees"
-              customPathError={null}
               onOpenPicker={noop}
               toMove={WORKTREES.filter((w) => !w.isPrimary && !w.isExternal)
                 .slice(0, 2)

@@ -12,12 +12,6 @@
     "reason": "Hooks must be called at the top level in the body of a function component or custom hook, and may not be called within function expressions. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)"
   },
   {
-    "file": "app/renderer/components/ForestPage.tsx",
-    "function": "ForestPage",
-    "category": "Suppression",
-    "reason": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
-  },
-  {
     "file": "app/renderer/components/guide/GuideMenu.tsx",
     "function": "GuideMenu",
     "category": "Suppression",

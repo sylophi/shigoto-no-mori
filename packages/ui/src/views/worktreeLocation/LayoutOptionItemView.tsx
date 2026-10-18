@@ -18,7 +18,6 @@ interface LayoutOptionItemProps {
   projectPath: string;
   device: DeviceLayout;
   customPath: string;
-  customPathError: string | null;
   onSelect: (layout: WorktreeLayout) => void;
   onOpenPicker: () => void;
 }
@@ -29,7 +28,6 @@ export function LayoutOptionItemView({
   projectPath,
   device,
   customPath,
-  customPathError,
   onSelect,
   onOpenPicker,
 }: LayoutOptionItemProps) {
@@ -109,9 +107,6 @@ export function LayoutOptionItemView({
               <FolderOpen />
               {hasCustomPath ? "Change folder" : "Choose folder…"}
             </Button>
-            {customPathError && (
-              <p className="text-xs text-destructive">{customPathError}</p>
-            )}
           </div>
         )}
       </div>

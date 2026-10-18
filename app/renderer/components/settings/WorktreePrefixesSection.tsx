@@ -33,7 +33,8 @@ export function WorktreePrefixesSection({
       settled={settled}
       commit={(next) => {
         if (sameList(normalizeWorktreePrefixes(next), prefixes)) return true;
-        const saved = save(next);
+        // A write that fails takes the edit back.
+        const saved = save(next, () => setDraft(null));
         if (saved === null) return false;
         setDraft(saved);
         return true;

@@ -123,6 +123,7 @@ function AddProjectDialog() {
               setQuery={setPathOrUrl}
               addToTerrier={addToTerrier}
               setAddToTerrier={setAddToTerrier}
+              setWorking={setWorking}
               onClose={onClose}
               escapeRef={escapeRef}
             />
