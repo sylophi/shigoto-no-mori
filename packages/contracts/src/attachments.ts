@@ -14,10 +14,24 @@ import {
 // at the staged copy.
 export const attachmentReference = (name: string) => `./${name}`;
 
+// The extension a type is named by, which is what gh goes by, or "" for
+// one gh won't upload.
+export function attachmentExtension(type: string): string {
+  if (Object.hasOwn(ATTACHMENT_IMAGE_EXTENSIONS, type)) {
+    return ATTACHMENT_IMAGE_EXTENSIONS[type] ?? "";
+  }
+  if (Object.hasOwn(ATTACHMENT_VIDEO_EXTENSIONS, type)) {
+    return ATTACHMENT_VIDEO_EXTENSIONS[type] ?? "";
+  }
+  return "";
+}
+
 // The type a staged name stands for, by its extension (the dialog and
 // the host name a file by its type's), or "" for one gh won't upload.
 export function attachmentTypeOfName(name: string): string {
-  const ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+  const dot = name.lastIndexOf(".");
+  if (dot === -1) return "";
+  const ext = name.slice(dot + 1).toLowerCase();
   const byExtension = (types: Readonly<Record<string, string>>) =>
     Object.keys(types).find((type) => types[type] === ext);
   return (

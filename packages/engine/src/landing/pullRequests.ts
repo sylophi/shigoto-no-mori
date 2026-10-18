@@ -54,7 +54,8 @@ export const makePullRequests = Effect.gen(function* () {
     verb: LandingRefused["verb"],
   ) =>
     Effect.gen(function* () {
-      if (allowed.length === 0) return yield* refuse(verb, "no-methods");
+      const [first] = allowed;
+      if (first === undefined) return yield* refuse(verb, "no-methods");
       if (flag !== undefined) {
         if (!allowed.includes(flag)) {
           return yield* refuse(
@@ -69,10 +70,7 @@ export const makePullRequests = Effect.gen(function* () {
       const { settings } = Config.projectSettingsOf(
         yield* config.read(projectScope(project)),
       );
-      return (
-        pickMergeMethod(allowed, settings?.["lastMergeMethod"]) ??
-        (yield* refuse(verb, "no-methods"))
-      );
+      return pickMergeMethod(allowed, settings?.["lastMergeMethod"]) ?? first;
     });
 
   // Best effort, as the app does it.

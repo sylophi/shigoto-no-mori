@@ -2,7 +2,10 @@ import {
   ATTACHMENT_IMAGE_EXTENSIONS,
   ATTACHMENT_VIDEO_EXTENSIONS,
 } from "@shigomori/contracts/schemas";
-import { attachmentReference } from "@shigomori/contracts/attachments";
+import {
+  attachmentExtension,
+  attachmentReference,
+} from "@shigomori/contracts/attachments";
 
 // Files pasted, dropped or picked into a new pull request's description,
 // and images and videos that come as links (one dragged off a web page,
@@ -51,10 +54,7 @@ export function attachmentName(
   file: { name: string; type: string },
   stems: ReadonlySet<string>,
 ): string {
-  const ext =
-    ATTACHMENT_IMAGE_EXTENSIONS[file.type] ??
-    ATTACHMENT_VIDEO_EXTENSIONS[file.type] ??
-    "";
+  const ext = attachmentExtension(file.type);
   const stem = clean(stemOf(file.name)).slice(0, 80) || "file";
   return `${unique(stem, stems)}${ext ? `.${ext}` : ""}`;
 }

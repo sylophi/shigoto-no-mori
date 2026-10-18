@@ -13,8 +13,6 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import {
-  ATTACHMENT_IMAGE_EXTENSIONS,
-  ATTACHMENT_VIDEO_EXTENSIONS,
   type CreatePullRequestResult,
   isFromThisRepository,
   type PullRequestCompare,
@@ -22,6 +20,7 @@ import {
   type StagedAttachment,
 } from "@shigomori/contracts/schemas";
 import {
+  attachmentExtension,
   attachmentReference,
   attachmentRefusal,
   attachmentTypeOfName,
@@ -433,15 +432,14 @@ export const stageAttachmentFromUrl = Effect.fn(
       const reason = attachmentRefusal({ name: source.url, type, size });
       return reason === null ? null : new GhActionError({ reason });
     };
-    const length = response.headers.get("content-length");
+    // A missing or empty header says nothing of the size.
+    const length = response.headers.get("content-length") || null;
     const early = refused(length === null ? undefined : Number(length));
     if (early !== null) {
       yield* cancel;
       return yield* early;
     }
-    const ext =
-      ATTACHMENT_IMAGE_EXTENSIONS[type] ?? ATTACHMENT_VIDEO_EXTENSIONS[type];
-    const name = `${source.stem}.${ext}`;
+    const name = `${source.stem}.${attachmentExtension(type)}`;
     yield* sweepStaleAttachments;
     yield* fs.makeDirectory(join(ATTACHMENTS_DIR, source.id), {
       recursive: true,
