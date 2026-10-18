@@ -4,6 +4,7 @@
 // (real git on a sandbox).
 import assert from "node:assert/strict";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -151,6 +152,15 @@ it(
       `${pkg.scripts["postinstall"]} && ((for i in $(seq 3000); do echo watching; sleep 0.05; done) & echo $! >> '${watchers}')`;
     writeFileSync(manifest, `${JSON.stringify(pkg, null, 2)}\n`);
     sandboxed.git(repo, "commit", "-q", "-am", "A watcher after postinstall");
+    // From the store this checkout installed from, and without the
+    // dependencies' build scripts (Electron's download): the install a
+    // setup makes, never the network's.
+    const saved = {
+      offline: process.env["npm_config_offline"],
+      ignoreScripts: process.env["npm_config_ignore_scripts"],
+    };
+    process.env["npm_config_offline"] = "true";
+    process.env["npm_config_ignore_scripts"] = "true";
     const said: string[] = [];
     const created = (await sandboxed.engine(
       Effect.gen(function* () {
@@ -178,7 +188,16 @@ it(
         );
       }).pipe(Effect.timeout("90 seconds")),
     )) as { worktree?: Worktrees.WorktreeRow; error?: string };
-    const pids = readFileSync(watchers, "utf8").trim().split("\n").map(Number);
+    for (const [key, value] of [
+      ["npm_config_offline", saved.offline],
+      ["npm_config_ignore_scripts", saved.ignoreScripts],
+    ] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    const pids = existsSync(watchers)
+      ? readFileSync(watchers, "utf8").trim().split("\n").map(Number)
+      : [];
     try {
       assert.equal(created.error, undefined, said.join("").slice(-2000));
       assert.equal(created.worktree?.branch, "fox");

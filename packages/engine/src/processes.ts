@@ -14,6 +14,7 @@ import * as Predicate from "effect/Predicate";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
@@ -220,10 +221,14 @@ export const outputUntilExit = <A, E, R>(
 ): Effect.Effect<A, E, R> =>
   Effect.gen(function* () {
     const reading = yield* Ref.make(true);
+    // A chunk is handed on whole or not at all once the read ends.
+    const turn = yield* Semaphore.make(1);
     const reader = yield* output.pipe(
       Stream.runForEach((chunk) =>
-        Effect.flatMap(Ref.get(reading), (on) =>
-          on ? onChunk(chunk) : Effect.void,
+        turn.withPermits(1)(
+          Effect.flatMap(Ref.get(reading), (on) =>
+            on ? onChunk(chunk) : Effect.void,
+          ),
         ),
       ),
       Effect.ignore,
@@ -231,9 +236,11 @@ export const outputUntilExit = <A, E, R>(
     );
     return yield* Effect.gen(function* () {
       const exited = yield* Effect.exit(exit);
+      // On a real clock: a TestClock never ends this wait while a child
+      // holds the pipes.
       yield* Fiber.await(reader).pipe(Effect.timeoutOption(EXIT_DRAIN));
       return yield* exited;
-    }).pipe(Effect.ensuring(Ref.set(reading, false)));
+    }).pipe(Effect.ensuring(turn.withPermits(1)(Ref.set(reading, false))));
   });
 
 // A command in a process group of its own (the spawner's default),

@@ -307,6 +307,9 @@ const make = Effect.gen(function* () {
                   },
                 ),
               );
+              // Unreferenced, so the scope's close leaves the group the
+              // launched command shares with its sh alone.
+              yield* Effect.asVoid(handle.unref);
               yield* handle.exitCode;
             }),
           ).pipe(
