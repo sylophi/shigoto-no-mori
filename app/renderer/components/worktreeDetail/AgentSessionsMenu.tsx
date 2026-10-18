@@ -6,7 +6,7 @@ import {
   useResumeAgent,
   useUnbindAgent,
 } from "@/hooks/worktrees/useWorktreeMutations";
-import { canResume } from "@shigomori/ui/lib/agentSessions.ts";
+import { isKnownHarness } from "@shigomori/contracts/harnesses";
 import type { AgentSession, Worktree } from "@shigomori/contracts/schemas";
 import {
   AgentSessionsMenuView,
@@ -71,7 +71,7 @@ function SessionRow({
       // Only between turns: resuming a session mid-turn would start a
       // second copy while the first is still working.
       resumable={
-        session.state === "idle" && canResume(session.harness) && !remote
+        session.state === "idle" && isKnownHarness(session.harness) && !remote
       }
       resumeDisabled={resume.isPending || busy}
       unbindDisabled={unbind.isPending || busy}

@@ -7,7 +7,7 @@ import {
 } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { fillEmptyCommitDraft } from "@/lib/commitDraft";
-import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { CommitRewrite } from "@shigomori/ui/lib/commitRewrite.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";

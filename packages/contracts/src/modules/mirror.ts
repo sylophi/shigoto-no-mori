@@ -1,3 +1,4 @@
+import { pluralize } from "../words.ts";
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import { broughtPaths } from "../mirrorIgnores.ts";
@@ -57,7 +58,7 @@ export function isHaltedStatus(status: string): boolean {
 }
 
 export function describeIgnores(mode: MirrorIgnoreMode, count: number): string {
-  const paths = `${count} ${count === 1 ? "path" : "paths"}`;
+  const paths = pluralize(count, "path");
   switch (mode) {
     case "everything":
       return "Nothing left out";

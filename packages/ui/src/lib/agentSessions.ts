@@ -1,23 +1,7 @@
 import type { StatusTone } from "../primitives/status-dot.tsx";
 import type { AgentSession } from "@shigomori/contracts/schemas";
 
-// How the app names a harness and a session's state (engine Agents.ts).
-// A harness without built-in support shows by the name it gave itself.
-const HARNESS_LABELS: Record<string, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-};
-
-export function harnessLabel(harness: string): string {
-  return HARNESS_LABELS[harness] ?? harness;
-}
-
-// The harnesses with built-in support are the ones `sm agents resume`
-// knows how to resume.
-export function canResume(harness: string): boolean {
-  return Object.hasOwn(HARNESS_LABELS, harness);
-}
-
+// How the app shows a session's state.
 export const AGENT_STATE_VIEW: Record<
   AgentSession["state"],
   { label: string; tone: StatusTone }

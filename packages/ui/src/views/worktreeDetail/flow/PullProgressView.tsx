@@ -22,7 +22,7 @@ import { ErrorBanner } from "../../../primitives/error-banner.tsx";
 import { DeviceGlyphView } from "../../shared/DeviceGlyphView.tsx";
 import { peerReadOnlyNote } from "../../../lib/commandAccessCopy.ts";
 import { formatBytes } from "../../../lib/formatBytes.ts";
-import { pluralize } from "../../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import {
   pullLandingBranch,
   pullWorktreeName,

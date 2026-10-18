@@ -21,7 +21,7 @@ import { Chip } from "../../../primitives/chip-button.tsx";
 import { SectionHeading } from "../../../primitives/section-heading.tsx";
 import { InlineError } from "../../../primitives/inline-error.tsx";
 import { peerReadOnlyNote } from "../../../lib/commandAccessCopy.ts";
-import { pluralize } from "../../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
 import { FlowBodyView, FlowFooterView } from "../flow/FlowChromeView.tsx";
 import type { Landing } from "../flow/pullSteps.ts";

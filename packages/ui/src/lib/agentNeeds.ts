@@ -9,8 +9,9 @@ import {
   SquareTerminal,
 } from "lucide-react";
 import type { AgentSession } from "@shigomori/contracts/schemas";
-import { pluralize } from "./pluralize.ts";
-import { AGENT_STATE_VIEW, harnessLabel } from "./agentSessions.ts";
+import { pluralize } from "@shigomori/contracts/words";
+import { harnessLabel } from "@shigomori/contracts/harnesses";
+import { AGENT_STATE_VIEW } from "./agentSessions.ts";
 
 // What kind of prompt a waiting session is on, read off its tool
 // (engine agentSessions.ts waitNeed): an icon for it, what the agent wants in a

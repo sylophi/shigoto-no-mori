@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "../../primitives/dropdown-menu.tsx";
 import { type StatusTone, TONE_TEXT } from "../../primitives/status-dot.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { useOutside } from "../../outside.tsx";
 import { cn } from "../../lib/utils.ts";
 

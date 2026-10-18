@@ -10,8 +10,9 @@ export function FirstRunView({
   addKeys,
   onAdd,
 }: {
-  // Where this device's worktrees live, tildified.
-  worktreesDir: string;
+  // Where this device's worktrees live, tildified, null until the
+  // app's data folder is known.
+  worktreesDir: string | null;
   // Add a project's keys (lib/keymap.ts), none in a window without them.
   addKeys: string | null;
   onAdd: () => void;
@@ -37,7 +38,12 @@ export function FirstRunView({
           </StepView>
           <StepView n={2} title="Spawn worktrees.">
             One per branch you want in parallel. They live under{" "}
-            <MonoView>{worktreesDir}</MonoView>.
+            {worktreesDir === null ? (
+              "the app's data folder"
+            ) : (
+              <MonoView>{worktreesDir}</MonoView>
+            )}
+            .
           </StepView>
           <StepView n={3} title="Launch your tools.">
             Open each worktree in Cursor, VS Code, Zed, or any custom tool you

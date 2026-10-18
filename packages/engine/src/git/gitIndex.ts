@@ -1,4 +1,5 @@
 // Git's index: undoing commits, hard resets, and discarding changes into snapshots that put them back.
+import { pluralize } from "@shigomori/contracts/words";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -140,7 +141,7 @@ export const makeGitIndex = ({
           );
           yield* runChunked(worktree, ["add", "-A"], paths, { env });
           const tree = (yield* run(worktree, ["write-tree"], { env })).trim();
-          const message = `Discarded from ${path.basename(worktree)}: ${paths.length} file${paths.length === 1 ? "" : "s"}`;
+          const message = `Discarded from ${path.basename(worktree)}: ${pluralize(paths.length, "file")}`;
           const snapshot = (yield* run(
             worktree,
             [

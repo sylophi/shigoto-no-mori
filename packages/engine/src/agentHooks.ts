@@ -7,6 +7,7 @@
 //
 // Codex runs a hook only once the user has trusted it (its /hooks
 // review), keyed by a hash of the entry, which codexHookHash computes.
+import { knownHarness } from "@shigomori/contracts/harnesses";
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import { canonicalJson } from "./agentSessions.ts";
@@ -48,8 +49,7 @@ export type Harness = {
 
 export const HARNESSES: ReadonlyArray<Harness> = [
   {
-    id: "claude",
-    label: "Claude Code",
+    ...knownHarness("claude"),
     sessionEnv: "CLAUDE_CODE_SESSION_ID",
     subagentIds: false,
     resume: "claude --resume",
@@ -70,8 +70,7 @@ export const HARNESSES: ReadonlyArray<Harness> = [
     ],
   },
   {
-    id: "codex",
-    label: "Codex",
+    ...knownHarness("codex"),
     sessionEnv: "CODEX_THREAD_ID",
     subagentIds: true,
     resume: "codex resume",

@@ -27,9 +27,6 @@ export function DangerZone() {
     [api],
   );
 
-  const home = runtime?.homedir ?? null;
-  const root = runtime?.dataDir ? tildify(runtime.dataDir, home) : "~/.sm";
-
   const handleNuke = () => {
     trigger(async () => {
       setNuking(true);
@@ -64,7 +61,7 @@ export function DangerZone() {
 
   return (
     <DangerZoneView
-      root={root}
+      root={runtime ? tildify(runtime.dataDir, runtime.homedir) : null}
       nuking={nuking}
       progress={progress}
       left={left}

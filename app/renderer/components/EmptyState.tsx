@@ -1,3 +1,4 @@
+import { WORKTREES_DIR } from "@shigomori/contracts/git/worktreeLayout";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import { FirstRunView } from "@shigomori/ui/views/FirstRunView.tsx";
 import { useOverlays } from "@/hooks/ui/useOverlays";
@@ -18,9 +19,15 @@ export function EmptyState() {
 
   if (projectsLoading) return null;
   if (projects.length === 0) {
+    // Named once this build's data dir is known (a v2 install, v3, the
+    // dev app's each have their own).
     return (
       <FirstRunView
-        worktreesDir={`${tildify(runtime?.dataDir ?? "~/.sm", runtime?.homedir ?? null)}/wt/`}
+        worktreesDir={
+          runtime
+            ? `${tildify(runtime.dataDir, runtime.homedir)}/${WORKTREES_DIR}/`
+            : null
+        }
         addKeys={keys?.label ?? null}
         onAdd={() => openAddProject()}
       />

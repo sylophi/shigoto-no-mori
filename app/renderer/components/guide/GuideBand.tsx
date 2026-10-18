@@ -1,4 +1,4 @@
-import { GUIDE_HARNESS_LABELS } from "@shigomori/contracts/modules/guide";
+import { harnessLabel } from "@shigomori/contracts/harnesses";
 import { GuideBandView } from "@shigomori/ui/views/guide/GuideView.tsx";
 import { useGuide } from "@/hooks/useGuide";
 import { notifyError } from "@/lib/toast";
@@ -11,7 +11,7 @@ export function GuideBand() {
   if (guide === null) return null;
   return (
     <GuideBandView
-      harnessLabel={GUIDE_HARNESS_LABELS[guide.harness]}
+      harnessLabel={harnessLabel(guide.harness)}
       onStop={() =>
         void api
           .run(api.guide.stop())

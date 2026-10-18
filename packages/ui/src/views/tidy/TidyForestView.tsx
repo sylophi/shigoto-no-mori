@@ -10,7 +10,7 @@ import type { DiskUsageTotals } from "./tidyModel.ts";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { TIDY_SORT_OPTIONS, type TidySort } from "./tidyModel.ts";
 import { TidyStatView } from "./TidyStatView.tsx";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 
 export function TidyPageView({

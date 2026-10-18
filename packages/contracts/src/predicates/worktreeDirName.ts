@@ -24,3 +24,15 @@ export function sanitizeBranchForPath(branch: string): string {
 export function isValidWorktreeDirName(name: string): boolean {
   return name.length > 0 && sanitizeBranchForPath(name) === name;
 }
+
+// The folder a worktree converted into a managed one is given: its
+// branch's, or a detached one's short hash as it is. Empty for a branch
+// that sanitizes to nothing, which gets a generated name.
+export function adoptedDirName(worktree: {
+  readonly branch: string;
+  readonly detached: boolean;
+}): string {
+  return worktree.detached
+    ? worktree.branch
+    : sanitizeBranchForPath(worktree.branch);
+}

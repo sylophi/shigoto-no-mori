@@ -1,3 +1,4 @@
+import { plural } from "@shigomori/contracts/words";
 import { type Dispatch, type SetStateAction, useState } from "react";
 import { digitsOnly } from "@shigomori/contracts/schemas";
 import type { SettingsFormState } from "../../lib/settingsForm.ts";
@@ -180,7 +181,7 @@ function AutoShelveDaysField({
             }}
             className="tabular h-7 w-12 px-1.5 text-center"
           />
-          {days === 1 ? "day" : "days"}
+          {plural(days, "day")}
         </>
       )}
     </div>

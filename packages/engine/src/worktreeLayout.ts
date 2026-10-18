@@ -1,6 +1,7 @@
 // Where a project's worktrees live, as path math: the managed root
 // under the data dir, the in-project folder, a custom base, and the
 // project's own external drive.
+import { WORKTREES_DIR } from "@shigomori/contracts/git/worktreeLayout";
 import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
 import { createHash } from "node:crypto";
 import { basename, join, normalize } from "node:path";
@@ -18,10 +19,6 @@ export type LayoutSettings = {
   readonly customWorktreePath?: string | undefined;
   readonly managedOnProjectDrive: boolean;
 };
-
-// The folder worktrees live in under each root: short, since agents and
-// people read and type these paths all day.
-const WT = "wt";
 
 // Where the data dir is, and the flavor's name for it, which a managed
 // root on another drive is named after.
@@ -42,7 +39,7 @@ function driveBaseOf(
   const volume = externalVolumeRoot(projectPath);
   return volume === undefined
     ? undefined
-    : join(volume, place.dataDirName, WT, basename(projectPath));
+    : join(volume, place.dataDirName, WORKTREES_DIR, basename(projectPath));
 }
 
 // driveBaseOf as a destination for new worktrees: none as well when the
@@ -68,8 +65,8 @@ export function projectDriveBase(
 const ownBases = (projectPath: string, place: DataDirPlace) => {
   const drive = driveBaseOf(projectPath, place);
   return [
-    join(place.dataDir, WT, basename(projectPath)),
-    join(projectPath, ".shigomori", WT),
+    join(place.dataDir, WORKTREES_DIR, basename(projectPath)),
+    join(projectPath, ".shigomori", WORKTREES_DIR),
     ...(drive === undefined ? [] : [drive]),
   ];
 };
@@ -143,10 +140,10 @@ export function worktreeBase(
   settings: LayoutSettings,
   place: DataDirPlace,
 ): string {
-  const managedRoot = join(place.dataDir, WT, basename(projectPath));
+  const managedRoot = join(place.dataDir, WORKTREES_DIR, basename(projectPath));
   switch (settings.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout) {
     case "in-project":
-      return join(projectPath, ".shigomori", WT);
+      return join(projectPath, ".shigomori", WORKTREES_DIR);
     case "custom": {
       // Cleaned, so a custom path of `/` stays the root rather than an
       // empty, relative base, and one through `..` is the folder it names.

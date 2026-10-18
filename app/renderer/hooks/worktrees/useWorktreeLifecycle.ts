@@ -16,7 +16,7 @@ import type {
   WorktreeCarryOverComplete,
   WorktreeRemoval,
 } from "@shigomori/contracts/schemas";
-import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import type { QueryClient } from "@tanstack/react-query";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
