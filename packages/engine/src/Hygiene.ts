@@ -23,7 +23,8 @@ import type { RegisteredProject } from "./Registry.ts";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Worktrees from "./Worktrees.ts";
 
-// A folder's measure, the contract's for a worktree without its id.
+// A folder's measure, the contract's for a worktree without its id,
+// `lastActivityAt` read outside ACTIVITY_EXCLUDED.
 // `bytes` is its footprint, what `du` reports (allocated blocks, each
 // inode once). `reclaimableBytes` is what removing it would free,
 // usually far less: pnpm imports packages as clones of its store (or

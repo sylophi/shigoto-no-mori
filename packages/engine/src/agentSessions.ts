@@ -14,7 +14,9 @@ export type AgentState = WireSession["state"];
 
 // One session bound to a worktree: the contract's, and the permission
 // prompts it waits on, oldest first, each its call (toolWait), its tool
-// and what it asks (waitEntry), which are kept and never sent.
+// and what it asks (waitEntry), which `sm --json`'s rows carry and the
+// contract leaves out. Harness is "claude", "codex", or whatever a
+// harness without built-in support names itself.
 export type AgentSession = WireSession & {
   readonly waits?: ReadonlyArray<string>;
 };

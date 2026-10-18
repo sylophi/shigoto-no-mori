@@ -94,6 +94,13 @@ it("hands a project terrier came to list after it was added its settings and wor
         "trunk",
       );
       yield* data.describe(added.id, primary, { title: "Kept" });
+      // What the terrier id held before goes for what the project brings.
+      yield* config.set(
+        { kind: "project", projectId: id, path: repo },
+        "defaultBranch",
+        "stale",
+      );
+      yield* data.describe(id, primary, { title: "Stale" });
       yield* config.set({ kind: "device" }, "terrier", "true");
       yield* registry.unregister(added.id);
       const kept = yield* config.get(
