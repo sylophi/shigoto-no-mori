@@ -181,8 +181,8 @@ function PeerSettingsForm({
     const saved = savedSnapshot;
     try {
       await save.mutateAsync({ state: form, saved });
-      // Only what this Save wrote advances: a change the device made
-      // while it was out stays the device's.
+      // Only the fields this Save carried advance: a change the device
+      // made to another field while it was out stays the device's.
       setSavedSnapshot((prev) => keepTouched(form, saved, prev));
     } catch {
       // Surfaced by the mutation cache toast and the banner below.

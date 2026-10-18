@@ -161,8 +161,8 @@ export function SettingsForm({
     const saved = savedSnapshot;
     try {
       await save.mutateAsync({ state: form, saved });
-      // Only what this Save wrote advances: a change another window or
-      // the device made while it was out stays theirs.
+      // Only the fields this Save carried advance: a change another window
+      // or the device made to another field while it was out stays theirs.
       setSavedSnapshot((prev) => keepTouched(form, saved, prev));
     } catch (error) {
       // The mutation's toast and the banner below already surface the

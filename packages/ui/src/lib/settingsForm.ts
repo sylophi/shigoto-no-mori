@@ -13,7 +13,6 @@ import {
   type LightTheme,
   resolveDoubutsuPicks,
 } from "./themes.ts";
-import { villageNewsEnabled } from "./villageLife.ts";
 
 // The settings form's staged state, one flat shape across both stores:
 // what this window shows (client config) and what the device stores.
@@ -88,7 +87,7 @@ function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
       "pauseAnimationsOnBattery",
     ),
     villageLife: clientSetting(clientConfig, "villageLife"),
-    villageNews: villageNewsEnabled(clientConfig),
+    villageNews: clientSetting(clientConfig, "villageNews"),
     markTerrierProjects: clientSetting(clientConfig, "markTerrierProjects"),
     showDeviceBadges: clientSetting(clientConfig, "showDeviceBadges"),
     allowAgentWorking: clientSetting(clientConfig, "allowAgentWorking"),

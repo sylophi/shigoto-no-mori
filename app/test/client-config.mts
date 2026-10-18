@@ -126,6 +126,18 @@ it("a peer's form keeps its edits over the device's own change, and its Save wri
   assert.deepEqual(peerSettingsWrite(moved, moved), {});
 });
 
+it("a Save advances only the fields it carried, so a change made meanwhile stays", () => {
+  const saved = fromConfig({}, {});
+  const form = { ...saved, autoPullNew: true };
+  // The device turned terrier on while the Save was out.
+  const prev = fromConfig({ terrier: true }, {});
+  const snapshot = keepTouched(form, saved, prev);
+  assert.equal(snapshot.autoPullNew, true);
+  assert.equal(snapshot.terrier, true);
+  const merged = keepTouched(form, saved, prev);
+  assert.deepEqual(peerSettingsWrite(snapshot, merged), {});
+});
+
 it("a Save whose client half failed leaves only the client fields unsaved", () => {
   const saved = fromConfig({}, {});
   const form = { ...saved, theme: "dark" as const, autoPullNew: true };

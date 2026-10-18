@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import {
   ClientConfigSchema,
+  clientSetting,
   DeviceSettingsPatchSchema,
 } from "@shigomori/contracts/schemas";
 import type { VillagerDataStatus } from "@shigomori/contracts/schemas/villagers";
@@ -25,7 +26,6 @@ import {
   doubutsuNamesEnabled,
   villageLifeEnabled,
   villageLifeShows,
-  villageNewsEnabled,
 } from "@shigomori/ui/lib/villageLife.ts";
 import { it } from "vitest";
 import {
@@ -45,9 +45,9 @@ it("unset, each setting reads off", () => {
 });
 
 it("unset, Village news reads on", () => {
-  assert.equal(villageNewsEnabled({}), true);
-  assert.equal(villageNewsEnabled({ villageNews: true }), true);
-  assert.equal(villageNewsEnabled({ villageNews: false }), false);
+  assert.equal(clientSetting({}, "villageNews"), true);
+  assert.equal(clientSetting({ villageNews: true }, "villageNews"), true);
+  assert.equal(clientSetting({ villageNews: false }, "villageNews"), false);
 });
 
 it("Village life shows only with the villager data", () => {
