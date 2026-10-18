@@ -5,6 +5,7 @@
 // unattended-run settings, and every step is reported as the document
 // `sm --json` prints for it, so the terminal and the host relay the same
 // events.
+import { loginShellOf } from "@shigomori/contracts/loginShell";
 import { scriptEnvOf, UNATTENDED_ENV } from "@shigomori/contracts/scriptEnv";
 import {
   lifecycleScriptName,
@@ -99,10 +100,10 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const crypto = yield* Crypto.Crypto;
 
-  // The user's login shell, run as one (no -i) so .zprofile sets PATH up
-  // without zsh's interactive init. $SHELL first, then the account
-  // database, which is the GUI case: a process launchd started may carry
-  // no $SHELL at all. /bin/sh only when neither names one.
+  // The user's login shell (contracts' loginShellOf), run as one (no -i)
+  // so .zprofile sets PATH up without zsh's interactive init. The
+  // account's reading is the GUI case: a process launchd started may
+  // carry no $SHELL at all. /bin/sh only when neither names one.
   const accountShell = spawner
     .string(
       ChildProcess.make("/bin/sh", [
@@ -119,10 +120,13 @@ const make = Effect.gen(function* () {
     );
   const loginShell = yield* Effect.cached(
     Effect.gen(function* () {
-      const shell = yield* Config.String("SHELL").pipe(
-        Effect.orElseSucceed(() => ""),
-      );
-      const found = shell !== "" ? shell : yield* accountShell;
+      const found = yield* loginShellOf({
+        environment: "own",
+        shellVar: yield* Config.String("SHELL").pipe(
+          Effect.orElseSucceed(() => ""),
+        ),
+        account: accountShell,
+      });
       return found === ""
         ? { shell: "/bin/sh", args: [] }
         : { shell: found, args: ["-l"] };

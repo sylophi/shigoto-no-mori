@@ -74,8 +74,8 @@ export class HookFileError extends Schema.TaggedError<HookFileError>()(
 export type HookShell = {
   readonly zdotdir?: string | undefined;
   readonly configHome?: string | undefined;
-  // The login shell's path.
-  readonly loginShell?: string | undefined;
+  // The login shell's path, as `Lifecycle.loginShell` reads it.
+  readonly loginShell: string;
 };
 
 // The document `shell status --json` prints.
@@ -94,24 +94,24 @@ export class ShellIntegration extends Context.Service<
   ShellIntegration,
   {
     // The login shell, when it is one sm supports, else "".
-    readonly loginShell: (shell?: HookShell) => Effect.Effect<ShellKind | "">;
+    readonly loginShell: (shell: HookShell) => Effect.Effect<ShellKind | "">;
     // The status document, and each shell's config home-collapsed, in
     // the same order.
-    readonly status: (shell?: HookShell) => Effect.Effect<{
+    readonly status: (shell: HookShell) => Effect.Effect<{
       readonly document: StatusDocument;
       readonly shown: ReadonlyArray<string>;
     }>;
     // Installs the shell's hook, and answers where, home-collapsed.
     readonly install: (
       kind: ShellKind,
-      shell?: HookShell,
+      shell: HookShell,
     ) => Effect.Effect<string, HookFileError>;
     // Removes the hook from every shell's config, as it only removes
     // what is recognizably ours: covers having switched shells since.
     // Each shell answers where the hook was (none when there was none),
     // or why it stayed.
     readonly uninstall: (
-      shell?: HookShell,
+      shell: HookShell,
     ) => Effect.Effect<
       ReadonlyArray<Result.Result<Option.Option<string>, HookFileError>>
     >;
@@ -125,7 +125,7 @@ const make = Effect.gen(function* () {
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
   // Where the hooks live, and how a path under home is shown.
-  const place = (shell: HookShell = {}) =>
+  const place = (shell: HookShell) =>
     Effect.gen(function* () {
       const at = hookPlace(paths, shell.zdotdir ?? (yield* envVar("ZDOTDIR")));
       return {
@@ -151,18 +151,13 @@ const make = Effect.gen(function* () {
       cause,
     });
 
-  const loginShell = (shell: HookShell = {}) =>
-    Effect.map(
-      shell.loginShell === undefined
-        ? envVar("SHELL")
-        : Effect.succeed(shell.loginShell),
-      (path): ShellKind | "" => {
-        const kind = basename(path);
-        return isShellKind(kind) ? kind : "";
-      },
-    );
+  const loginShell = (shell: HookShell) =>
+    Effect.sync((): ShellKind | "" => {
+      const kind = basename(shell.loginShell);
+      return isShellKind(kind) ? kind : "";
+    });
 
-  const status = (shell?: HookShell) =>
+  const status = (shell: HookShell) =>
     Effect.gen(function* () {
       const at = yield* place(shell);
       const hooks: Hook[] = [];
@@ -209,7 +204,7 @@ const make = Effect.gen(function* () {
 
   const install = Effect.fn("ShellIntegration.install")(function* (
     kind: ShellKind,
-    shell?: HookShell,
+    shell: HookShell,
   ) {
     const at = yield* place(shell);
     const hook = yield* inspectHook(at, kind);
@@ -261,12 +256,12 @@ const make = Effect.gen(function* () {
 
   return ShellIntegration.of({
     loginShell: Effect.fn("ShellIntegration.loginShell")(loginShell),
-    status: Effect.fn("ShellIntegration.status")((shell?: HookShell) =>
+    status: Effect.fn("ShellIntegration.status")((shell: HookShell) =>
       status(shell).pipe(Effect.provideContext(platform)),
     ),
     install,
     uninstall: Effect.fn("ShellIntegration.uninstall")(function* (
-      shell?: HookShell,
+      shell: HookShell,
     ) {
       const at = yield* place(shell);
       const results: Array<

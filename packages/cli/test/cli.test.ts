@@ -1022,6 +1022,21 @@ describe("shell", () => {
       "export A=1\n",
     );
   });
+
+  it("names the login shell the engine runs: $SHELL's over the account's, the account's with no $SHELL", async () => {
+    box.fakeBin("dscl", 'echo "UserShell: /bin/bash"');
+    const loginShell = async (SHELL: string) =>
+      (
+        JSON.parse(
+          (
+            await start(box.home, ["--json", "shell", "status"], { SHELL })
+              .ended
+          ).stdout,
+        ) as { loginShell: string }
+      ).loginShell;
+    assert.equal(await loginShell("/bin/zsh"), "zsh");
+    assert.equal(await loginShell(""), "bash");
+  });
 });
 
 // A project "repo" with a linked worktree "w", and a package.json whose

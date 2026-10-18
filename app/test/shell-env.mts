@@ -8,11 +8,13 @@
 // exported, run a script, and the marker must not be in its env.
 import assert from "node:assert/strict";
 import { existsSync, writeFileSync } from "node:fs";
+import { userInfo } from "node:os";
 import { join } from "node:path";
 import {
   captureShellEnv,
   LAUNCHD_PATH,
   launchBaseEnv,
+  loginShell,
   mergeShellEnv,
   parseShellEnv,
   replaceProcessEnv,
@@ -69,6 +71,15 @@ const BASE = {
 // environment rebuild.
 it("the base is launchd's variables, PATH and the shell, nothing else", () => {
   assert.deepEqual(launchBaseEnv(LAUNCH, "/bin/zsh"), BASE);
+});
+
+it("the shell captured is the account's, whatever $SHELL the launcher had", () => {
+  const account = userInfo().shell ?? "";
+  assert.notEqual(account, "", "no account shell to read here");
+  assert.equal(
+    Effect.runSync(loginShell({ SHELL: "/opt/launcher/bin/sh" })),
+    account,
+  );
 });
 
 const wrapped = (entries: string[]): string =>

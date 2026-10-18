@@ -5,6 +5,8 @@ import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Paths from "@shigomori/engine/Paths";
+import * as Lifecycle from "@shigomori/engine/Lifecycle";
+import { childDefaults } from "@shigomori/engine/processes";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
@@ -121,7 +123,10 @@ const sm = Command.make("sm").pipe(
     loaded(launchersCommand),
     shellCommand.pipe(
       Command.provide(
-        ShellIntegration.layer.pipe(Layer.provideMerge(Paths.layer(flavor))),
+        Layer.mergeAll(ShellIntegration.layer, Lifecycle.layer).pipe(
+          Layer.provide(childDefaults),
+          Layer.provideMerge(Paths.layer(flavor)),
+        ),
       ),
     ),
     loaded(cdCommand),
