@@ -1,10 +1,11 @@
 // Proof for the shell-hook probe (host/lib/cli/shell.ts): a login shell
 // that answered keeps its answer, and one that failed is asked again,
-// whatever it printed before failing.
+// whatever it printed before failing; a startup file that leaves a job
+// holding stdout doesn't hold the answer.
 //
 // Run: pnpm test hook-shell.
 import assert from "node:assert/strict";
-import { chmodSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
@@ -18,8 +19,8 @@ import { makeTracker, tempDir } from "./lib/checkKit.mts";
 const { track, teardown } = makeTracker();
 afterAll(teardown);
 
-// A login shell that prints the probe's answer, notes each run, and
-// exits with `code`.
+// A login shell that runs the probe's command with ZDOTDIR /zdot and
+// XDG_CONFIG_HOME /xdg, notes each run, and exits with `code`.
 const shellExiting = (code: number) => {
   const dir = tempDir("sm-hook-shell-", track);
   const runs = join(dir, "runs");
@@ -27,7 +28,7 @@ const shellExiting = (code: number) => {
   const shell = join(dir, "zsh");
   writeFileSync(
     shell,
-    `#!/bin/sh\necho run >> '${runs}'\nprintf '__SHIGOMORI_HOOK_ENV__/zdot\\037/xdg'\nexit ${code}\n`,
+    `#!/bin/sh\necho run >> '${runs}'\nZDOTDIR=/zdot XDG_CONFIG_HOME=/xdg /bin/sh -c "$2"\nexit ${code}\n`,
   );
   chmodSync(shell, 0o755);
   return {
@@ -74,3 +75,31 @@ it("keeps a login shell's answer, and asks again after one that failed", async (
   assert.deepEqual(unread, { zdotdir: "", loginShell: failing.shell });
   assert.equal(failing.runs(), 2);
 });
+
+const ZSH = "/bin/zsh";
+it.skipIf(!existsSync(ZSH))(
+  "answers $ZDOTDIR at once when the startup files leave a job holding stdout",
+  async () => {
+    const dir = tempDir("sm-hook-shell-job-", track);
+    const pidFile = join(dir, "job.pid");
+    writeFileSync(join(dir, ".zshrc"), `(sleep 30 & echo $! > '${pidFile}')\n`);
+    const shell = join(dir, "zsh");
+    writeFileSync(shell, `#!/bin/sh\nexec env ZDOTDIR='${dir}' ${ZSH} "$@"\n`);
+    chmodSync(shell, 0o755);
+    try {
+      const started = performance.now();
+      const [first] = await readTwice(shell);
+      assert.equal(first?.zdotdir, dir);
+      assert.ok(
+        performance.now() - started < 2000,
+        "the probe waited for the job's stdout instead of its marker",
+      );
+    } finally {
+      // Ended with the probe's process group, unless the probe never was.
+      try {
+        process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+      } catch {}
+    }
+  },
+  15_000,
+);
