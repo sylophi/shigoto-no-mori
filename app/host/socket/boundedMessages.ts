@@ -9,10 +9,10 @@
 // upper bound on their encoded size; a single value past it goes alone.
 import * as Stream from "effect/Stream";
 
-// The size of the largest frame the listener admits the other way
-// (MAX_INBOUND_FRAME_BYTES in DeviceLink.ts), so no message of a stream
-// is larger than one a peer may send.
-export const MAX_MESSAGE_BYTES = 1024 * 1024;
+// The largest frame the link's listener admits (DeviceLink.ts), a call
+// well past any a peer makes (a channel write is at most 32 KiB of
+// bytes), and so the largest message of a stream the other way.
+export const MAX_MESSAGE_BYTES = 1 << 20;
 
 // At least the bytes `value` takes in the binary layout: a string's
 // UTF-16 code units at three UTF-8 bytes each, bytes as they are, and

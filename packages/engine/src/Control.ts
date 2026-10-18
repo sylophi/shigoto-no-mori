@@ -15,7 +15,11 @@ import {
   LinkRefusedError,
   RemoteCallError,
 } from "@shigomori/contracts/errors";
-import { LINK_MAX_FRAME_BYTES, LoopbackGroup } from "@shigomori/contracts/link";
+import {
+  CLOSE_TRY_AGAIN,
+  LINK_MAX_FRAME_BYTES,
+  LoopbackGroup,
+} from "@shigomori/contracts/link";
 import { isInvoke } from "@shigomori/contracts/contract";
 import {
   CONTROL_ERROR_CODES,
@@ -125,6 +129,21 @@ export class Control extends Context.Service<
 
 export const LOOPBACK_FILE = "loopback.json";
 
+// What loopback.json holds: the host's pid, the loopback's port and
+// token, and the app's version. Written aside first, at
+// loopbackPartialOf, and renamed in.
+export const LoopbackFile = Schema.fromJsonString(
+  Schema.Struct({
+    pid: Schema.Int,
+    port: Schema.Int,
+    token: Schema.String,
+    appVersion: Schema.String,
+  }),
+);
+
+export const loopbackPartialOf = (file: string, pid: number) =>
+  `${file}.${pid}`;
+
 // The app answers a hello at once, so a dial or a welcome that takes
 // this long is not the app.
 const HANDSHAKE_TIMEOUT = "5 seconds";
@@ -140,21 +159,8 @@ const PING = {
   pingTimeout: Duration.infinity,
 } as const;
 
-// The close code the link's listener turns a connection away with when
-// it holds as many as it takes.
-const CLOSE_OVER_CAPACITY = 1013;
-
 // What a transfer's progress is, to the verbs that show it.
 const PROGRESS = "sync:pullProgress";
-
-const LoopbackFileSchema = Schema.fromJsonString(
-  Schema.Struct({
-    pid: Schema.optional(Schema.Int),
-    port: Schema.optional(Schema.Int),
-    token: Schema.optional(Schema.String),
-    appVersion: Schema.optional(Schema.String),
-  }),
-);
 
 // The group's calls, each known only as some call: a tag and a payload,
 // and an Effect or a Stream back.
@@ -176,13 +182,11 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
   const published = fs
     .readFileString(path.join(paths.dataDir, LOOPBACK_FILE))
     .pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(LoopbackFileSchema)),
+      Effect.flatMap(Schema.decodeUnknownEffect(LoopbackFile)),
       Effect.option,
       Effect.map(
-        Option.flatMap(({ pid = 0, port = 0, token = "", appVersion = "" }) =>
-          pid > 0 && port > 0 && token !== ""
-            ? Option.some({ pid, port, token, appVersion })
-            : Option.none(),
+        Option.filter(
+          ({ pid, port, token }) => pid > 0 && port > 0 && token !== "",
         ),
       ),
     );
@@ -230,7 +234,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     // A refusal before the welcome: a listener at its cap says so, and
     // anything else is a loopback.json this listener didn't write.
     const turnedAway = () =>
-      closeCode === CLOSE_OVER_CAPACITY
+      closeCode === CLOSE_TRY_AGAIN
         ? new AppBusy({ binary: paths.binaryName })
         : notRunning;
 

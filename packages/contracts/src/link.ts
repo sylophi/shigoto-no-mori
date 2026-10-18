@@ -31,6 +31,11 @@ import type { PushKeys, PushProducerPayload } from "./types.ts";
 // base64 in one frame, about 21.4 MiB with its envelope.
 export const LINK_MAX_FRAME_BYTES = 32 * 1024 * 1024;
 
+// The standard "try again later" a link's listener closes with: at its
+// cap, or unable to check a ticket now (the account's roster
+// unavailable). Nothing against the dialer, which reads it as busy.
+export const CLOSE_TRY_AGAIN = 1013;
+
 export type ChannelEndpoint = {
   // Call `consumed` once the sink has taken them: calling it early
   // defeats backpressure.

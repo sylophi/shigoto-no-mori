@@ -6,6 +6,7 @@
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
 import { LinkRefusedError, RemoteCallError } from "@shigomori/contracts/errors";
 import {
+  CLOSE_TRY_AGAIN,
   CommandGate,
   LinkPeer,
   LoopbackGroup,
@@ -173,7 +174,7 @@ export const fakeApp = async (
                   // The writer waits for a reader to hold the socket.
                   Effect.andThen(socket.reader, socket.writer).pipe(
                     Effect.flatMap(({ write }) =>
-                      write(new Socket.CloseEvent(1013, "busy")),
+                      write(new Socket.CloseEvent(CLOSE_TRY_AGAIN, "busy")),
                     ),
                   ),
                 ).pipe(Effect.ignore)
