@@ -214,6 +214,7 @@ import {
   DIRECT_TICKET_PREFIX,
 } from "@host/direct/tickets";
 import { makeConnectInfo, TUNNEL_HOLD_MS } from "@host/direct/connectInfo";
+import { mintHexId } from "@host/lib/hexId";
 import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
 import {
   CLOSE_HANDSHAKE_FAILED,
@@ -1259,7 +1260,7 @@ function ticketOf(info: DirectConnectInfo, kind: "lan" | "tunnel"): string {
   return candidate.ticket;
 }
 
-it("tunnel recheck: a connection asking a third time with its last two tunnel tickets unspent, and nothing of either set, rechecks an up tunnel, and no other ask does: not a re-ask mid-race", async () => {
+it("tunnel recheck: a device whose last two asks, each under a fresh connection id as the dialer makes them, were handed a tunnel ticket that reached nothing rechecks an up tunnel once per run of failures, and a link from any of its connections starts the count over", async () => {
   const store = createConnectTicketStore();
   let tunnel: string | null = "wss://sm-0123456789ab.sm.example.test";
   let rechecks = 0;
@@ -1268,44 +1269,50 @@ it("tunnel recheck: a connection asking a third time with its last two tunnel ti
     mintTickets: (peer, kinds) => store.mint(peer, kinds),
     candidateAddresses: () => ["127.0.0.1"],
     tunnelUrl: () => tunnel,
-    tunnelUndialedSets: (peer) => store.undialedSets(peer, "tunnel"),
+    tunnelUndialed: (deviceId, runs) =>
+      store.claimUndialed(deviceId, "tunnel", runs),
     recheckTunnel: () => {
       rechecks += 1;
     },
     acceptsCommands: () => false,
     sharesData: () => true,
   });
-  const web = { dialableKinds: ["tunnel"], connectionId: ONE_CONNECTION };
-  const desktop = {
-    dialableKinds: ["lan", "tunnel"],
-    connectionId: "d".repeat(32),
-  };
-  // A first ask, then a re-ask while its dial may still race.
-  await connectInfo(DIALER, web);
-  await connectInfo(DIALER, web);
-  assert.equal(rechecks, 0, "a re-ask mid-race rechecked");
-  // Two dials in a row that reached nothing, then a third ask.
-  const third = await connectInfo(DIALER, web);
+  // One dial's ask, as directDial.ts makes it: a connection of its own.
+  const ask = (deviceId: string, dialableKinds: string[]) =>
+    connectInfo(deviceId, { dialableKinds, connectionId: mintHexId() });
+  const web = ["tunnel"];
+  const desktop = ["lan", "tunnel"];
+  // A first ask, then one after its dial reached nothing.
+  await ask(DIALER, web);
+  await ask(DIALER, web);
+  assert.equal(rechecks, 0, "one failed dial rechecked");
+  // After two: once, and not again for the same run.
+  const third = await ask(DIALER, web);
   assert.equal(rechecks, 1);
-  // One after a dial that linked starts the count again.
+  await ask(DIALER, web);
+  await ask(DIALER, web);
+  assert.equal(rechecks, 1, "a run of failures rechecked twice");
+  // A link, here from an earlier connection (another tab), ends the run.
   assert.equal(store.consume(ticketOf(third, "tunnel"), "tunnel"), DIALER);
-  await connectInfo(DIALER, web);
-  await connectInfo(DIALER, web);
+  await ask(DIALER, web);
+  await ask(DIALER, web);
   assert.equal(rechecks, 1);
-  // A desktop whose lan candidate won leaves its tunnel ticket be.
-  const raced = await connectInfo(DIALER, desktop);
-  assert.equal(store.consume(ticketOf(raced, "lan"), "lan"), DIALER);
-  await connectInfo(DIALER, desktop);
-  await connectInfo(DIALER, desktop);
-  assert.equal(rechecks, 1);
-  // Two whose every candidate failed.
-  await connectInfo(DIALER, desktop);
+  await ask(DIALER, web);
   assert.equal(rechecks, 2);
+  // Another device keeps its own count, and a desktop whose lan
+  // candidate won leaves its tunnel ticket be.
+  const raced = await ask("E", desktop);
+  assert.equal(store.consume(ticketOf(raced, "lan"), "lan"), "E");
+  await ask("E", desktop);
+  await ask("E", desktop);
+  assert.equal(rechecks, 2);
+  // Two whose every candidate failed.
+  await ask("E", desktop);
+  assert.equal(rechecks, 3);
   // A tunnel already down is not asked.
   tunnel = null;
-  await connectInfo(DIALER, web);
-  await connectInfo(DIALER, web);
-  assert.equal(rechecks, 2);
+  for (let turn = 0; turn < 3; turn++) await ask("F", web);
+  assert.equal(rechecks, 3);
 });
 
 it("identity binding: a ticket minted for one device refuses another, and a wrong expected welcome identity fails the handshake", async () => {

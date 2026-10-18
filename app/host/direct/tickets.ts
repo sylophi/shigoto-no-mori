@@ -82,10 +82,18 @@ export type ConnectTicketStore = {
   // expired, or dropped). Single use: a ticket links one socket, the
   // one whose hello spends it first.
   consume(ticket: string, arrivedAs: DirectCandidateKind): string | null;
-  // How many of the connection's sets in a row, its pending one last,
-  // were minted with a ticket of `kind` and had nothing spent: dials
-  // that reached nothing, or a re-ask while one was still racing.
-  undialedSets(peer: TicketPeer, kind: DirectCandidateKind): number;
+  // Whether the device's last `runs` sets in a row, whichever of its
+  // connections asked, were minted with a ticket of `kind` and none of
+  // its tickets reached this host since: dials that reached nothing
+  // (a dialer asks again, under a fresh connection id, after one
+  // fails). True once per run of such failures: a ticket of any of its
+  // sets reaching a hello ends the run, so several tabs of one web
+  // device share the count, and any tab linking resets it.
+  claimUndialed(
+    deviceId: string,
+    kind: DirectCandidateKind,
+    runs: number,
+  ): boolean;
   // Drops the pending tickets of every device not in `deviceIds`, the
   // account's live roster: a device removed from the account spends
   // nothing it was handed before.
@@ -103,24 +111,6 @@ export type ConnectTicketStoreOpts = {
   ttlMs?: number;
   now?: () => number;
 };
-
-// One connection's pending set.
-type TicketSet = {
-  deviceId: string;
-  tickets: Set<string>;
-  kinds: ReadonlySet<DirectCandidateKind>;
-  spent: boolean;
-  // The undialed sets of each kind just before this one.
-  undialedBefore: ReadonlyMap<DirectCandidateKind, number>;
-};
-
-const undialedOf = (
-  entry: TicketSet | undefined,
-  kind: DirectCandidateKind,
-): number =>
-  entry === undefined || entry.spent || !entry.kinds.has(kind)
-    ? 0
-    : (entry.undialedBefore.get(kind) ?? 0) + 1;
 
 // The key of one connection's pending set.
 const setKey = (peer: TicketPeer) => `${peer.deviceId}\n${peer.connectionId}`;
@@ -143,7 +133,18 @@ export function createConnectTicketStore(
   >();
   // Each connection's pending set, in minting order, which mint's
   // replacement and the per-device cap run on.
-  const sets = new Map<string, TicketSet>();
+  const sets = new Map<string, { deviceId: string; tickets: Set<string> }>();
+  // Each device's asks since a ticket of its last reached a hello: the
+  // kinds its latest set was minted with, how many sets before it held
+  // each kind, and the kinds this run already answered true for.
+  const asks = new Map<
+    string,
+    {
+      latest: ReadonlySet<DirectCandidateKind>;
+      before: Map<DirectCandidateKind, number>;
+      claimed: Set<DirectCandidateKind>;
+    }
+  >();
   // The tickets let go, oldest first.
   const retired = new Set<string>();
 
@@ -187,12 +188,9 @@ export function createConnectTicketStore(
     clear() {
       for (const ticket of pending.keys()) retire(ticket);
       sets.clear();
+      asks.clear();
     },
     mint(peer, kinds) {
-      // Read before the sweep, which may take the set's last ticket.
-      const undialedBefore = new Map(
-        kinds.map((kind) => [kind, undialedOf(sets.get(setKey(peer)), kind)]),
-      );
       sweepExpired();
       // Replacement first: a fresh connectInfo invalidates the same
       // connection's previous candidate-set (only its freshest dial
@@ -229,13 +227,17 @@ export function createConnectTicketStore(
         tickets.push(ticket);
       }
       if (set.size > 0)
-        sets.set(key, {
-          deviceId: peer.deviceId,
-          tickets: set,
-          kinds: new Set(kinds),
-          spent: false,
-          undialedBefore,
-        });
+        sets.set(key, { deviceId: peer.deviceId, tickets: set });
+      const asked = asks.get(peer.deviceId);
+      const before = new Map<DirectCandidateKind, number>();
+      for (const kind of asked?.latest ?? []) {
+        before.set(kind, (asked?.before.get(kind) ?? 0) + 1);
+      }
+      asks.set(peer.deviceId, {
+        latest: new Set(kinds),
+        before,
+        claimed: asked?.claimed ?? new Set(),
+      });
       return tickets;
     },
 
@@ -249,8 +251,14 @@ export function createConnectTicketStore(
         : entry.peerDeviceId;
     },
 
-    undialedSets(peer, kind) {
-      return undialedOf(sets.get(setKey(peer)), kind);
+    claimUndialed(deviceId, kind, runs) {
+      const asked = asks.get(deviceId);
+      if (asked === undefined || asked.claimed.has(kind)) return false;
+      const undialed =
+        (asked.before.get(kind) ?? 0) + (asked.latest.has(kind) ? 1 : 0);
+      if (undialed < runs) return false;
+      asked.claimed.add(kind);
+      return true;
     },
 
     keepDevices(deviceIds) {
@@ -258,13 +266,15 @@ export function createConnectTicketStore(
       for (const [key, entry] of sets) {
         if (!keep.has(entry.deviceId)) dropSet(key);
       }
+      for (const deviceId of asks.keys()) {
+        if (!keep.has(deviceId)) asks.delete(deviceId);
+      }
     },
 
     consume(ticket, arrivedAs) {
       const entry = pending.get(ticket);
       if (entry === undefined || entry.kind !== arrivedAs) return null;
-      const set = sets.get(entry.set);
-      if (set !== undefined) set.spent = true;
+      asks.delete(entry.peerDeviceId);
       forget(ticket, entry.set);
       return entry.expiresAt > now() ? entry.peerDeviceId : null;
     },

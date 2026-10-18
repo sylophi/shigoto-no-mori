@@ -45,14 +45,17 @@ type ConnectInfoDeps = {
   // Whether a tunnel that is starting comes up within `withinMs`
   // (Tunnel's startingThenUp). Without it, nothing is held.
   tunnelStartingThenUp?(withinMs: number): Promise<boolean>;
-  // How many of the connection's sets in a row held a tunnel ticket and
-  // had nothing spent (the ticket store's `undialedSets`), and Tunnel's
-  // `recheck`, asked once that reaches UNDIALED_BEFORE_RECHECK: asks
-  // again after dials that reached nothing are the evidence a connector
-  // wedged with no wake leaves. One alone may be a keeper re-asking
-  // while its race still runs, and a recheck whose probe fails
-  // transiently stops advertising the tunnel while it probes on.
-  tunnelUndialedSets?(peer: TicketPeer): number;
+  // Whether the asking device's last `runs` asks in a row, whichever of
+  // its connections made them, were handed a tunnel ticket and none of
+  // its tickets reached a hello since (the ticket store's
+  // `claimUndialed`, true once per such run), and Tunnel's `recheck`,
+  // asked when they were: a device asking again after
+  // UNDIALED_BEFORE_RECHECK dials that reached nothing is the evidence a
+  // connector wedged with no wake leaves. Not at every ask: one failure
+  // alone may be the peer's own network or another of its tabs still
+  // racing, and a recheck whose probe fails transiently stops
+  // advertising the tunnel while it probes on.
+  tunnelUndialed?(deviceId: string, runs: number): boolean;
   recheckTunnel?(): void;
   // The command-access switch the link's CommandGate reads, reported to
   // the asker so its UI and CLI know up front. The gate stays the only
@@ -107,10 +110,7 @@ export function makeConnectInfo(
     const input = decodeConnectInfoInput(rawInput);
     if (
       deps.tunnelUrl() !== null &&
-      (deps.tunnelUndialedSets?.({
-        deviceId: callerDeviceId,
-        connectionId: input.connectionId,
-      }) ?? 0) >= UNDIALED_BEFORE_RECHECK
+      deps.tunnelUndialed?.(callerDeviceId, UNDIALED_BEFORE_RECHECK) === true
     ) {
       deps.recheckTunnel?.();
     }
