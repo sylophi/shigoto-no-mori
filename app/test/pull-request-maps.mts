@@ -3,8 +3,9 @@
 // that moves the map moves its view, the create dialog's stack lookup
 // past the map's age among them, where only the sweep's read told the
 // view before. A failed read isn't kept as an answer: the last good map
-// stays, and the next ask reads again. The map's age is monotonic time,
-// so a step of the wall clock either way neither keeps it nor drops it.
+// stays, and the next ask reads again. The map ages by whichever clock
+// reads older: a sleep or a forward step of the wall clock reads it
+// again, and a backward step keeps it no longer than its monotonic age.
 //
 // Drives the real host code against a fake gh on PATH, which answers
 // the project-wide list from a file, or fails while another file is
