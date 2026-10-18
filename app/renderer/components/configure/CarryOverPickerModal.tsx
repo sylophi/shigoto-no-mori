@@ -1,7 +1,13 @@
 import { useCarryOverListing } from "@/hooks/projects/useCarryOverListing";
-import type { CarryOverEntry } from "@shigomori/contracts/schemas";
+import type {
+  CarryOverCandidate,
+  CarryOverEntry,
+} from "@shigomori/contracts/schemas";
 import { OnlyInWorktreesView } from "@shigomori/ui/views/configure/OnlyInWorktreesView.tsx";
-import { PathPickerModal } from "@/components/shared/PathPickerModal";
+import {
+  PathPickerModal,
+  usePathSteps,
+} from "@/components/shared/PathPickerModal";
 import { CarryOverTrailingView } from "@shigomori/ui/views/configure/CarryOverTrailingView.tsx";
 
 interface CarryOverPickerModalProps {
@@ -26,12 +32,13 @@ export function CarryOverPickerModal({
   onPick,
   onClose,
 }: CarryOverPickerModalProps) {
-  const useListing = (relative: string) =>
-    useCarryOverListing(projectId, relative);
+  const steps = usePathSteps<CarryOverCandidate>();
+  const listing = useCarryOverListing(projectId, steps.relative);
   return (
     <PathPickerModal
       rootPath={projectPath}
-      useListing={useListing}
+      steps={steps}
+      listing={listing}
       renderProvenance={(entry) => (
         <OnlyInWorktreesView
           inPrimary={entry.inPrimary}

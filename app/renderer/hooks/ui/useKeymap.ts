@@ -4,7 +4,7 @@
 // says what an action does with useKeymapAction while it is on screen,
 // and shows its keys with useBinding. The menu's actions are the
 // shell's: their keys go to its menu (useMenuChords), which runs them.
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 import {
   createExternalStore,
   useExternalStore,
@@ -74,12 +74,11 @@ export function useKeymapAction(
   { enabled = true, overOverlays = false } = {},
 ): void {
   // The latest closure, so a render does not re-register.
-  const latest = useRef(run);
-  latest.current = run;
+  const latest = useEffectEvent(run);
   useEffect(() => {
     if (!enabled) return;
     const handler: Handler = {
-      run: (e) => latest.current(e),
+      run: (e) => latest(e),
       overOverlays,
     };
     handlers.set(id, [...(handlers.get(id) ?? []), handler]);

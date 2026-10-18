@@ -10,7 +10,7 @@
 // whose session is not in hand. A runner with no session up leaves the
 // button disabled, saying so: nothing to drive the mirror through, but
 // the worktree is still mirrored.
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState, useEffectEvent } from "react";
 import { RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -81,11 +81,12 @@ function MirrorLinkAction({
   // re-opens the session under a new one, and the dialog stays. A stop
   // ends with the link leaving the page and the dialog with it.
   const [open, setOpen] = useState(false);
+  // Once per ask.
+  const opened = useEffectEvent(onOpened);
   useEffect(() => {
     if (!asked) return;
     setOpen(true);
-    onOpened();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per ask: `onOpened` is a fresh closure per render.
+    opened();
   }, [asked]);
   // A runner that went away takes the dialog with it, and it stays
   // closed when the runner is back.

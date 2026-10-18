@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type RefObject,
+  useEffectEvent,
 } from "react";
 import {
   rowSizeHint,
@@ -103,7 +104,9 @@ export function SidebarList({
   // list was read from is found again. Before the selection's reveal
   // below, which then has the last word on a worktree opened from
   // outside the sidebar.
-  useEffect(() => {
+  // Keyed on the level alone: the rows and the virtualizer are new
+  // every render.
+  const startOver = useEffectEvent(() => {
     if (!moved) return;
     if (level !== null) {
       scrollerRef.current?.scrollTo({ top: 0 });
@@ -113,8 +116,8 @@ export function SidebarList({
       (row) => row.kind === "project" && row.groupKey === shown.left,
     );
     if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the level alone: the rows and the virtualizer are new every render.
-  }, [level]);
+  });
+  useEffect(() => startOver(), [level]);
 
   const items = virtualizer.getVirtualItems();
   const listRef = useRef<HTMLDivElement>(null);

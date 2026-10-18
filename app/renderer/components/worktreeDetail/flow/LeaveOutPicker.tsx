@@ -3,9 +3,11 @@
 import { type ReactNode, useState } from "react";
 import {
   PathPickerModal,
-  type PathPickerModalProps,
+  usePathSteps,
 } from "@/components/shared/PathPickerModal";
+import type { PathPickerProps } from "@shigomori/ui/views/shared/PathPickerView.tsx";
 import type { PickerEntry } from "@shigomori/ui/views/shared/PickerRowView.tsx";
+import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import type { IgnoreSelection } from "./ignoreChoice";
 import {
@@ -15,32 +17,73 @@ import {
   LeaveOutTrailingView,
 } from "@shigomori/ui/views/worktreeDetail/flow/LeaveOutPickerView.tsx";
 
-// What the picker browses: the folder browser's own props, less the
-// row control and the close, which are the picker's.
-export type LeaveOutBrowse<E extends PickerEntry = PickerEntry> = Omit<
-  PathPickerModalProps<E>,
+// The row control and the close the picker hands the folder browser.
+export type LeaveOutBrowsing = Pick<
+  PathPickerProps<PickerEntry>,
   "renderTrailing" | "onClose"
 >;
 
+// What the picker browses: a folder browser over the caller's files.
+export type LeaveOutBrowse = (browsing: LeaveOutBrowsing) => ReactNode;
+
+type BrowsedWorktree = { projectId: string; id: string; path: string };
+
 // One worktree, read under the surrounding scope.
-export function browseWorktree(worktree: {
-  projectId: string;
-  id: string;
-  path: string;
-}): LeaveOutBrowse {
-  return {
-    rootPath: worktree.path,
-    useListing: (relative) =>
-      useWorktreeFolder(worktree.projectId, worktree.id, relative, true),
-    emptyRootLabel: "The worktree is empty.",
-  };
+export function browseWorktree(worktree: BrowsedWorktree): LeaveOutBrowse {
+  return (browsing) => (
+    <WorktreeFolderPicker worktree={worktree} {...browsing} />
+  );
 }
 
-export function LeaveOutPicker<E extends PickerEntry>({
+function WorktreeFolderPicker({
+  worktree,
+  ...browsing
+}: LeaveOutBrowsing & { worktree: BrowsedWorktree }) {
+  const steps = usePathSteps<SyncWorktreeFolderEntry>();
+  const listing = useWorktreeFolder(
+    worktree.projectId,
+    worktree.id,
+    steps.relative,
+    true,
+  );
+  return (
+    <PathPickerModal
+      rootPath={worktree.path}
+      emptyRootLabel="The worktree is empty."
+      steps={steps}
+      listing={listing}
+      {...browsing}
+    />
+  );
+}
+
+// Each row's pick, by the rule being edited.
+function trailingOf({
+  bringing,
+  excepted,
+  copy,
+  full,
+  toggle,
+}: ReturnType<typeof leaveOutEdit>): LeaveOutBrowsing["renderTrailing"] {
+  return (entry, path, insideIgnored) => (
+    <LeaveOutTrailingView
+      picked={excepted.has(path)}
+      ignored={entry.ignored}
+      // The engine never walks into a folder it leaves out, so a path
+      // under one cannot be brought on its own.
+      unreachable={bringing && insideIgnored}
+      full={full}
+      copy={copy}
+      onPick={() => toggle(path)}
+    />
+  );
+}
+
+export function LeaveOutPicker({
   value,
   onChange,
   ignored,
-  browse,
+  renderBrowser,
   disabled = false,
   note,
   children,
@@ -49,7 +92,7 @@ export function LeaveOutPicker<E extends PickerEntry>({
   onChange: (next: IgnoreSelection) => void;
   ignored: IgnoredPaths;
   // What the custom picker browses.
-  browse: LeaveOutBrowse<E>;
+  renderBrowser: LeaveOutBrowse;
   disabled?: boolean;
   note?: ReactNode;
   children?: ReactNode;
@@ -58,10 +101,6 @@ export function LeaveOutPicker<E extends PickerEntry>({
   // it is up (PathPickerModal's capture listener), so the dialog under
   // it needs no say.
   const [picking, setPicking] = useState(false);
-  const { bringing, excepted, copy, full, toggle } = leaveOutEdit(
-    value,
-    onChange,
-  );
   return (
     <LeaveOutPickerView
       value={value}
@@ -71,24 +110,11 @@ export function LeaveOutPicker<E extends PickerEntry>({
       note={note}
       onBrowse={() => setPicking(true)}
       browser={
-        picking && (
-          <PathPickerModal
-            {...browse}
-            renderTrailing={(entry, path, insideIgnored) => (
-              <LeaveOutTrailingView
-                picked={excepted.has(path)}
-                ignored={entry.ignored}
-                // The engine never walks into a folder it leaves out, so a
-                // path under one cannot be brought on its own.
-                unreachable={bringing && insideIgnored}
-                full={full}
-                copy={copy}
-                onPick={() => toggle(path)}
-              />
-            )}
-            onClose={() => setPicking(false)}
-          />
-        )
+        picking &&
+        renderBrowser({
+          renderTrailing: trailingOf(leaveOutEdit(value, onChange)),
+          onClose: () => setPicking(false),
+        })
       }
     >
       {children}

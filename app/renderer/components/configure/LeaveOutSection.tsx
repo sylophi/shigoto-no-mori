@@ -25,7 +25,14 @@ import {
   sameSelection,
   selectionOfPreset,
 } from "../worktreeDetail/flow/ignoreChoice";
-import { LeaveOutPicker } from "../worktreeDetail/flow/LeaveOutPicker";
+import {
+  LeaveOutPicker,
+  type LeaveOutBrowsing,
+} from "../worktreeDetail/flow/LeaveOutPicker";
+import {
+  PathPickerModal,
+  usePathSteps,
+} from "@/components/shared/PathPickerModal";
 import { FoundOnDevicesView } from "@shigomori/ui/views/configure/OnlyInWorktreesView.tsx";
 
 const NOTE =
@@ -36,6 +43,25 @@ const NOTE =
 function foundOn(entry: RepoListingEntry) {
   return entry.everywhere ? null : (
     <FoundOnDevicesView holders={entry.holders} className="max-w-56" />
+  );
+}
+
+// The repo by name: a folder here may sit on a peer alone, under no
+// path this device has.
+function RepoFolderPicker({
+  project,
+  ...browsing
+}: LeaveOutBrowsing & { project: Project }) {
+  const steps = usePathSteps<RepoListingEntry>();
+  const listing = useRepoListing(project, steps.relative);
+  return (
+    <PathPickerModal
+      rootPath={project.name}
+      renderProvenance={foundOn}
+      steps={steps}
+      listing={listing}
+      {...browsing}
+    />
   );
 }
 
@@ -78,13 +104,9 @@ export function LeaveOutSection({ project }: { project: Project }) {
               isError: !worktrees.isPending,
             }
       }
-      browse={{
-        // The repo by name: a folder here may sit on a peer alone, under
-        // no path this device has.
-        rootPath: project.name,
-        useListing: (relative) => useRepoListing(project, relative),
-        renderProvenance: foundOn,
-      }}
+      renderBrowser={(browsing) => (
+        <RepoFolderPicker project={project} {...browsing} />
+      )}
       note={NOTE}
     />
   );

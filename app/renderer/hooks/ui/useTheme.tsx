@@ -112,7 +112,7 @@ export function ThemeProvider({
   useEffect(() => {
     if (fromRoot) return;
     root.classList.toggle("dark", resolved === "dark");
-    root.style.colorScheme = resolved;
+    root.style.setProperty("color-scheme", resolved);
   }, [fromRoot, root, resolved]);
 
   // Keep the main process in sync so the BrowserWindow background tracks
