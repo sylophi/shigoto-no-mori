@@ -109,6 +109,9 @@ export function TransplantFinish({
   // Each fate ends on the landed worktree's page, except a teardown
   // the source refused.
   const finish = async () => {
+    const keptTitle = landing.onPeer
+      ? `Sent ${branch} ${landing.to}`
+      : `Brought ${branch} here`;
     try {
       if (choice === "shelve") {
         await setShelved.mutateAsync({
@@ -126,15 +129,9 @@ export function TransplantFinish({
           description: `The copy on ${sourceDeviceLabel} was torn down.`,
         });
       } else {
-        say(
-          result.worktree,
-          landing.onPeer
-            ? `Sent ${branch} ${landing.to}`
-            : `Brought ${branch} here`,
-          {
-            description: `The copy on ${sourceDeviceLabel} is kept.`,
-          },
-        );
+        say(result.worktree, keptTitle, {
+          description: `The copy on ${sourceDeviceLabel} is kept.`,
+        });
       }
       onOpen();
     } catch {

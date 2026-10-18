@@ -365,10 +365,10 @@ function PaletteDialog({
   // Back on the list with its query, the row the verbs were for (or
   // the one clicked) highlighted again. The Command remounts per stage,
   // see below.
-  const back = (key = picked?.row.key ?? "") => {
+  const back = (key?: string) => {
     setQuery(picked?.query ?? "");
     setPicked(null);
-    setHighlighted(key);
+    setHighlighted(key ?? picked?.row.key ?? "");
   };
 
   const onQueryChange = (next: string) => {

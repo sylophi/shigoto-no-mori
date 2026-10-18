@@ -38,6 +38,8 @@ export function FolderPickerModal({
   const browse = useBrowseListing({ query, setQuery, setHighlighted });
 
   const openFinder = async () => {
+    // Open Finder where the picker is, not at ~.
+    const defaultPath = browse.listing?.path;
     let picked: string | null;
     try {
       picked = await api.run(
@@ -45,8 +47,7 @@ export function FolderPickerModal({
           title,
           buttonLabel: confirmLabel,
           message: hint,
-          // Open Finder where the picker is, not at ~.
-          defaultPath: browse.listing?.path,
+          defaultPath,
         }),
       );
     } catch (err) {

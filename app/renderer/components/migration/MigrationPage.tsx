@@ -5,7 +5,10 @@ import { useMigration } from "@/hooks/useMigration";
 import { migrationOwed } from "@shigomori/contracts/schemas/migration";
 import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
 import { migrationEnded } from "@shigomori/ui/views/steps/migrationEnded.ts";
-import { useSignInStep } from "@/components/steps/useSignInStep";
+import {
+  SignInStep,
+  type SignInStepState,
+} from "@/components/steps/SignInStep";
 import { useApi } from "@/lib/runtime/pageApi";
 import { notifyError } from "@/lib/toast";
 
@@ -15,13 +18,22 @@ import { notifyError } from "@/lib/toast";
 // button once it has lapsed. With every step done it opens the app, and
 // with nothing to migrate at once.
 export function MigrationPage() {
+  return (
+    <SignInStep
+      render={(step, keyDue) => <MigrationSteps step={step} keyDue={keyDue} />}
+    />
+  );
+}
+
+function MigrationSteps({
+  step,
+  keyDue,
+}: {
+  step: SignInStepState;
+  keyDue: boolean;
+}) {
   const api = useApi();
   const migration = useMigration();
-  // Shown from the moment the device key is due, and done once it no
-  // longer is.
-  const [keyDue, setKeyDue] = useState(false);
-  const step = useSignInStep(keyDue);
-  if (step.needsDeviceKey && !keyDue) setKeyDue(true);
   const signIn = keyDue ? step.signIn : null;
   const navigate = useNavigate();
   // The stuck moves tried again: pending while the host tries them, and
