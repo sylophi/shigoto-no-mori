@@ -13,7 +13,10 @@ export function NewBranchForm({
   onDone: () => void;
 }) {
   const [name, setName] = useState("");
-  const [base, setBase] = useState(defaultBase ?? "");
+  // The default base until one is picked, so one that arrives after
+  // the form opened still seeds it.
+  const [picked, setBase] = useState<string | null>(null);
+  const base = picked ?? defaultBase ?? "";
   const create = useCreateBranch();
   const trimmed = name.trim();
   const canSubmit = trimmed.length > 0 && base.length > 0;

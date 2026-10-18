@@ -32,7 +32,10 @@ export function useSaveWorktreePrefixes(list: WorktreePrefixList) {
     KEYS[list],
     `Couldn't save the ${list} prefixes`,
   );
-  return (prefixes: readonly string[]): string[] | null => {
+  return (
+    prefixes: readonly string[],
+    onFailed?: () => void,
+  ): string[] | null => {
     const value = worktreePrefixesValue(prefixes);
     if (value === null) {
       notifyError(
@@ -42,7 +45,7 @@ export function useSaveWorktreePrefixes(list: WorktreePrefixList) {
       return null;
     }
     // An empty list clears the setting.
-    set(value === "" ? null : value);
+    set(value === "" ? null : value, onFailed);
     return parseWorktreePrefixes(value);
   };
 }

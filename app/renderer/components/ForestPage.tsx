@@ -9,7 +9,7 @@
 // rather than redirecting: a phone turned to landscape crosses the
 // breakpoint, and turning back should find the forest where it was.
 import * as Schema from "effect/Schema";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { SidebarViewSchema } from "@shigomori/contracts/schemas";
 import { Sidebar } from "@/components/sidebar/Sidebar";
@@ -17,6 +17,7 @@ import { ForestPageView } from "@shigomori/ui/views/ForestPageView.tsx";
 import {
   useSetSidebarView,
   useSidebarView,
+  useSidebarViewSettled,
 } from "@/hooks/projects/useSidebarView";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 
@@ -33,10 +34,16 @@ export function ForestPage() {
   // route rather than with the last tap.
   const preferred = useSidebarView();
   const { mutate: setView } = useSetSidebarView();
+  // Written as the route or the layout changes, or as the stored view is
+  // first read, not as it moves: a write that failed puts the stored
+  // view back, which must not ask for the write again.
+  const settled = useSidebarViewSettled();
+  const follow = useEffectEvent(() => {
+    if (preferred !== view) setView(view);
+  });
   useEffect(() => {
-    if (phone && preferred !== view) setView(view);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setView is a fresh closure per render; the write keys off the three values that matter.
-  }, [phone, preferred, view]);
+    if (phone && settled) follow();
+  }, [phone, view, settled]);
   return (
     <ForestPageView
       phone={phone}

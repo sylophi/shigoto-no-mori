@@ -63,7 +63,10 @@ export function LeaveOutSection({ project }: { project: Project }) {
       onChange={(next) => {
         // A click on the base already in force is not a pick.
         if (sameSelection(next, selection)) return;
-        if (save(presetOfSelection(next))) setDraft(next);
+        // A write that fails takes the pick back.
+        if (save(presetOfSelection(next), () => setDraft(null))) {
+          setDraft(next);
+        }
       }}
       // With no checkout to walk there is no list, and never will be.
       ignored={

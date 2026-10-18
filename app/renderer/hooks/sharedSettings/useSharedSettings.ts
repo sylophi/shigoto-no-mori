@@ -99,7 +99,13 @@ export function useSetSharedSetting(
       writeSharedSetting(api, registry, write.key, write.value),
     meta: { errorTitle },
   });
-  return (value: SharedSettingValue) => {
-    if (key !== undefined) mutation.mutate({ key, value });
+  // `onFailed` lets a caller take back what it showed ahead of the
+  // write. Passed to `mutate`, not `useMutation`, so only the latest
+  // write's failure runs it and an older one can't take back a newer
+  // draft.
+  return (value: SharedSettingValue, onFailed?: () => void) => {
+    if (key !== undefined) {
+      mutation.mutate({ key, value }, { onError: () => onFailed?.() });
+    }
   };
 }
