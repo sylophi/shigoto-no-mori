@@ -59,6 +59,8 @@ macfs/macfs
 
 # The scene comparison's report (app/lab/scene-compare)
 app/lab/scene-compare/report/
+# A failed walk's root and logs, kept by a local run (app/lab/walks)
+app/lab/walks/failures/
 # The reliability harness's report (app/lab/reliability)
 app/lab/reliability/report/
 # The guide's how-tos' report (app/lab/guide-eval)
