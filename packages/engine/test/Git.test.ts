@@ -269,10 +269,11 @@ it("an interrupted run takes its git down with it, hooks and all", async () => {
 });
 
 it("a commit and a push end at git's exit while a hook's child holds its stderr", async () => {
-  // A project as a user has one, pushing to a scratch remote.
+  // A project as a user has one, pushing to a scratch remote that holds
+  // its history (a shallow checkout's clone can't push to an empty one).
   const repo = realClone();
-  const remote = tempDir("remote-");
-  git(remote, "init", "-q", "--bare");
+  const remote = join(tempDir("remote-"), "remote.git");
+  git(repo, "clone", "-q", "--bare", repo, remote);
   git(repo, "remote", "set-url", "origin", remote);
   const pids = join(tempDir("hook-"), "pids");
   // git hands a hook its stderr for stdout too; the child keeps both.
