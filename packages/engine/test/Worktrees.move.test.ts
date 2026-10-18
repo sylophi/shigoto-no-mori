@@ -137,6 +137,73 @@ it("renames a worktree in its folder, its id, lease and mirrors' record carried"
   ]);
 });
 
+// A relocate re-keys the worktrees that moved along with the repo; the
+// managed ones' leases follow them, and the primary's is left alone.
+it("carries port-pool's lease of a managed worktree a relocated project took along", async () => {
+  const { repo, log } = pooled();
+  const fox = join(repo, ".shigomori", "wt", "fox");
+  const moved = join(box.home, "proj-moved");
+  await box.engine(
+    Effect.gen(function* () {
+      const project = yield* (yield* Registry.Registry).register({
+        name: "proj",
+        path: repo,
+      });
+      yield* (yield* Config.Config).set(
+        { kind: "project", projectId: project.id, path: repo },
+        "worktreeLayout",
+        "in-project",
+      );
+    }),
+  );
+  box.git(repo, "worktree", "add", "-q", "-b", "fox", fox);
+  renameSync(repo, moved);
+  await box.engine(
+    Effect.gen(function* () {
+      const project = (yield* (yield* Registry.Registry).listed).find(
+        ({ path }) => path === repo,
+      );
+      assert.ok(project !== undefined);
+      yield* (yield* Worktrees.Worktrees).relocateProject(project, moved);
+    }),
+  );
+  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), [
+    `release ${fox}`,
+    `ensure ${join(moved, ".shigomori", "wt", "fox")}`,
+  ]);
+});
+
+// The doctor's relink of a worktree moved by hand carries its lease.
+it("carries port-pool's lease of a managed worktree moved by hand when it is re-linked", async () => {
+  const { repo, dataDir, log } = pooled();
+  const fox = join(dataDir, "wt", "proj", "fox");
+  const otter = join(dataDir, "wt", "proj", "otter");
+  const project = (await box.engine(
+    Effect.gen(function* () {
+      const registered = yield* (yield* Registry.Registry).register({
+        name: "proj",
+        path: repo,
+      });
+      yield* (yield* Worktrees.Worktrees).create(
+        registered,
+        { name: "fox", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      );
+      return registered;
+    }),
+  )) as Registry.RegisteredProject;
+  renameSync(fox, otter);
+  await box.engine(
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.relink(project, new Map([[fox, otter]])),
+    ),
+  );
+  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n").slice(-2), [
+    `release ${fox}`,
+    `ensure ${otter}`,
+  ]);
+});
+
 it("refuses a rename of the primary, to a taken, reserved or unfit name", async () => {
   const { repo, dataDir } = pooled();
   for (const name of ["fox", "owl"]) {
