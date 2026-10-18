@@ -99,7 +99,11 @@ export function useSetSharedSetting(
       writeSharedSetting(api, registry, write.key, write.value),
     meta: { errorTitle },
   });
-  return (value: SharedSettingValue) => {
-    if (key !== undefined) mutation.mutate({ key, value });
+  // `onFailed` lets a caller take back what it showed ahead of the
+  // write.
+  return (value: SharedSettingValue, onFailed?: () => void) => {
+    if (key !== undefined) {
+      mutation.mutate({ key, value }, { onError: () => onFailed?.() });
+    }
   };
 }

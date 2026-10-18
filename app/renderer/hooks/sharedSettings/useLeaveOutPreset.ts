@@ -36,7 +36,7 @@ export function useSaveLeaveOutPreset(identity: string | null | undefined) {
     keyFor(identity),
     "Couldn't save the leave-out default",
   );
-  return (next: LeaveOutPreset): boolean => {
+  return (next: LeaveOutPreset, onFailed?: () => void): boolean => {
     const value = leaveOutPresetValue(next);
     if (value === null) {
       notifyError(
@@ -45,7 +45,7 @@ export function useSaveLeaveOutPreset(identity: string | null | undefined) {
       );
       return false;
     }
-    set(value);
+    set(value, onFailed);
     return true;
   };
 }

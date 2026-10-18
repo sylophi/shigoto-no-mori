@@ -1,5 +1,5 @@
 import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { VillagerMovingIn } from "./VillagerMovingIn";
@@ -153,12 +153,13 @@ function NewWorktreeForm({
   const [cloneFiles, setCloneFiles] = useState(true);
   const candidates = usePullRequestCandidates(project.id, prMode);
   const verdict = candidates.data;
-  useEffect(() => {
-    if (defaultMode !== null || !verdict) return;
+  // Latched as the verdict lands, during that render, so no frame shows
+  // the pull request mode the verdict rules out.
+  if (defaultMode === null && verdict) {
     setDefaultMode(
       verdict.status === "unavailable" ? "branch-from" : DEFAULT_MODE,
     );
-  }, [defaultMode, verdict]);
+  }
   const create = useCreateWorktree();
   const createFromPr = useCreateWorktreeFromPullRequest();
 

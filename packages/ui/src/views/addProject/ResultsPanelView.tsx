@@ -49,7 +49,11 @@ export function ResultsPanelView(props: ResultsPanelProps) {
         className={MODAL_COMMAND_CLASS}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <IconButton onClick={props.onBack} aria-label="Back">
+          <IconButton
+            onClick={props.onBack}
+            disabled={props.bulkAdding}
+            aria-label="Back"
+          >
             <ArrowLeft className="size-4" />
           </IconButton>
           <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />

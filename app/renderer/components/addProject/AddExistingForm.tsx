@@ -36,6 +36,8 @@ interface AddExistingFormProps {
   setQuery: (value: string) => void;
   addToTerrier: boolean;
   setAddToTerrier: (value: boolean) => void;
+  // Holds the dialog open while it adds.
+  setWorking: (working: boolean) => void;
   onClose: () => void;
   // What the dialog's Escape runs instead of closing. Set while there
   // is a scan to back out of, null otherwise.
@@ -51,6 +53,7 @@ export function AddExistingForm({
   setQuery,
   addToTerrier,
   setAddToTerrier,
+  setWorking,
   onClose,
   escapeRef,
 }: AddExistingFormProps) {
@@ -186,6 +189,15 @@ export function AddExistingForm({
       escapeRef.current = null;
     };
   });
+
+  // Held open while it adds, as a clone and a create are, so neither
+  // Escape nor Back leaves a run that then closes the dialog under a new
+  // path. Undone on unmount too.
+  useEffect(() => {
+    if (!bulkAdding) return;
+    setWorking(true);
+    return () => setWorking(false);
+  }, [bulkAdding, setWorking]);
 
   const toggleSelected = (path: string) => {
     setSelected(withToggled(path));

@@ -18,7 +18,6 @@ export function LocationFormView({
   projectPath,
   device,
   customPath,
-  customPathError,
   onOpenPicker,
   toMove,
   status,
@@ -35,7 +34,6 @@ export function LocationFormView({
   projectPath: string;
   device: DeviceLayout;
   customPath: string;
-  customPathError: string | null;
   onOpenPicker: () => void;
   // The worktrees the layout moves, and where each goes.
   toMove: readonly { worktree: Worktree; destination: string }[];
@@ -63,7 +61,6 @@ export function LocationFormView({
             projectPath={projectPath}
             device={device}
             customPath={customPath}
-            customPathError={customPathError}
             onSelect={onLayout}
             onOpenPicker={onOpenPicker}
           />

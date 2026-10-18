@@ -9,7 +9,7 @@
 // rather than redirecting: a phone turned to landscape crosses the
 // breakpoint, and turning back should find the forest where it was.
 import * as Schema from "effect/Schema";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { SidebarViewSchema } from "@shigomori/contracts/schemas";
 import { Sidebar } from "@/components/sidebar/Sidebar";
@@ -33,10 +33,15 @@ export function ForestPage() {
   // route rather than with the last tap.
   const preferred = useSidebarView();
   const { mutate: setView } = useSetSidebarView();
+  // Written as the route or the layout changes, not as the stored view
+  // does: a write that failed puts the stored view back, which must not
+  // ask for the write again.
+  const follow = useEffectEvent(() => {
+    if (preferred !== view) setView(view);
+  });
   useEffect(() => {
-    if (phone && preferred !== view) setView(view);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- setView is a fresh closure per render; the write keys off the three values that matter.
-  }, [phone, preferred, view]);
+    if (phone) follow();
+  }, [phone, view]);
   return (
     <ForestPageView
       phone={phone}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
@@ -33,41 +33,23 @@ export function LocationForm({
   worktrees,
   config,
   resolvedDefaultBranch,
-  // react-doctor-disable-next-line react-doctor/prefer-useReducer -- per-field setters are simple; saved* mirrors track persisted state without coupling between fields
 }: LocationFormProps) {
   const { toProjectPage } = useProjectNav();
   const write = useShigomoriWrite();
   const relocate = useRelocateWorktree();
 
-  // Mirror the persisted config in local state so we can flip it
-  // immediately after a successful save. Reading the config prop
-  // directly would lag while the shigomori query refetches, which
-  // briefly re-enables the Move button after a batch completes.
-  const configLayout =
+  const savedLayout =
     config?.worktreeLayout ?? PROJECT_CONFIG_DEFAULTS.worktreeLayout;
-  const configCustomPath = config?.customWorktreePath ?? "";
-  // react-doctor-disable-next-line react-doctor/no-derived-useState -- savedLayout tracks the last-persisted value, not the prop; updated in handleApply and synced from the prop only when no batch is in flight
-  const [savedLayout, setSavedLayout] = useState<WorktreeLayout>(configLayout);
-  // react-doctor-disable-next-line react-doctor/no-derived-useState -- savedCustomPath tracks the last-persisted value, not the prop; updated in handleApply and synced from the prop only when no batch is in flight
-  const [savedCustomPath, setSavedCustomPath] =
-    useState<string>(configCustomPath);
-
-  const [layout, setLayout] = useState<WorktreeLayout>(savedLayout);
-  const [customPath, setCustomPath] = useState<string>(savedCustomPath);
-  const [customPathError, setCustomPathError] = useState<string | null>(null);
+  const savedCustomPath = config?.customWorktreePath ?? "";
+  // A draft follows the stored config until it is edited here, so a
+  // change another window or the terminal made shows rather than being
+  // offered back as this form's.
+  const [layoutDraft, setLayout] = useState<WorktreeLayout | null>(null);
+  const [customPathDraft, setCustomPath] = useState<string | null>(null);
+  const layout = layoutDraft ?? savedLayout;
+  const customPath = customPathDraft ?? savedCustomPath;
   const { status, batchRunning, runBatch } = useSequentialBatch();
   const [pickerOpen, setPickerOpen] = useState(false);
-
-  // Pick up external config changes (e.g. another window edited the project).
-  // Keying the parent on the config would remount us mid-batch and orphan
-  // the in-flight relocate loop, so we sync the mirrors instead and skip
-  // while a batch is running.
-  // react-doctor-disable-next-line react-doctor/no-derived-state-effect -- key-prop reset would remount mid-batch and orphan the in-flight relocate loop
-  useEffect(() => {
-    if (batchRunning) return;
-    setSavedLayout(configLayout);
-    setSavedCustomPath(configCustomPath);
-  }, [configLayout, configCustomPath, batchRunning]);
 
   // Custom layout with no folder picked yet has no resolvable
   // destination, and nothing to plan.
@@ -99,14 +81,6 @@ export function LocationForm({
   const layoutChanged =
     layout !== savedLayout || customPath.trim() !== savedCustomPath.trim();
 
-  const validateCustomPath = (): string | null => {
-    if (layout !== "custom") return null;
-    const trimmed = customPath.trim();
-    if (!trimmed) return "Path is required for a custom layout.";
-    if (!trimmed.startsWith("/")) return "Path must be absolute.";
-    return null;
-  };
-
   // Only on a plan read: without one, an apply would save the layout
   // and move nothing.
   const canSubmit =
@@ -117,12 +91,6 @@ export function LocationForm({
     !plan.isFetching;
 
   const handleApply = async () => {
-    const validationError = validateCustomPath();
-    if (validationError) {
-      setCustomPathError(validationError);
-      return;
-    }
-    setCustomPathError(null);
     // The plan asked again under the batch's flag, so the form holds
     // still from the click; and moved by the plan alone, so a worktree
     // made since the list was last pushed moves too.
@@ -151,9 +119,11 @@ export function LocationForm({
         customWorktreePath: nextCustomPath || undefined,
       };
       try {
+        // Answers once the config is read again, so the drafts let go
+        // onto what was stored.
         await write.mutateAsync({ projectId, config: nextConfig });
-        setSavedLayout(layout);
-        setSavedCustomPath(nextCustomPath);
+        setLayout(null);
+        setCustomPath(null);
         return true;
       } catch {
         // useShigomoriWrite already surfaces an error toast via its meta.
@@ -190,7 +160,6 @@ export function LocationForm({
       projectPath={projectPath}
       device={device}
       customPath={customPath}
-      customPathError={customPathError}
       onOpenPicker={() => setPickerOpen(true)}
       toMove={toMove}
       status={status}
@@ -208,7 +177,6 @@ export function LocationForm({
             confirmLabel="Use this folder"
             onPick={(path) => {
               setCustomPath(path);
-              if (customPathError) setCustomPathError(null);
               setPickerOpen(false);
             }}
             onClose={() => setPickerOpen(false)}
