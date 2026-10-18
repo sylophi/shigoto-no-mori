@@ -1,6 +1,8 @@
+import * as Schema from "effect/Schema";
 import { defineContract, invoke, view } from "../contract.ts";
 import {
   PatchClientConfigPayloadSchema,
+  RotatePalettePayloadSchema,
   StoredClientConfigSchema,
   VoidSchema,
 } from "../schemas/index.ts";
@@ -21,4 +23,10 @@ export const clientConfigContract = defineContract(
   // the window module's previewTheme, which the renderer has always
   // fired by the time a save lands.
   invoke("patch", PatchClientConfigPayloadSchema, VoidSchema),
+  // The palette rotation's turn, if one is due (Settings > Appearance),
+  // made by the store's owner over the config as it stands, so windows
+  // checking at once turn it once, and the launch's turn once however
+  // many windows the launch opens. Answers the turn's stamp
+  // (themeRotatedAt), null with none made.
+  invoke("rotate", RotatePalettePayloadSchema, Schema.NullOr(Schema.Number)),
 );

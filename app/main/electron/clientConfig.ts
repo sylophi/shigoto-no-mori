@@ -14,6 +14,8 @@
 import { join } from "node:path";
 import { app, nativeTheme } from "electron";
 import { clientSetting } from "@shigomori/contracts/schemas/config";
+import { rotationOwner } from "@shigomori/ui/lib/themes.ts";
+import * as Clock from "effect/Clock";
 import type * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -113,7 +115,7 @@ export function updateClientConfig(
       await clientConfigRead();
       const before = SubscriptionRef.getUnsafe(memo);
       const after = update(before);
-      await writeClientConfig(after);
+      if (after !== before) await writeClientConfig(after);
       return { before, after };
     }).pipe(changes.withPermits(1)),
   );
@@ -133,6 +135,25 @@ export function patchClientConfig(
     for (const key of clear) delete after[key];
     return after as ClientConfig;
   });
+}
+
+// The palette rotation (clientConfig:rotate), owned here so the
+// windows' checks turn it once, and the launch's turn once per run of
+// the app.
+const rotationTurnOf = rotationOwner();
+export function rotatePalette(launching: boolean): Promise<number | null> {
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const { before, after } = yield* Effect.promise(() =>
+        updateClientConfig((config) => {
+          const turn = rotationTurnOf(config, now, launching);
+          return turn ? { ...config, ...turn } : config;
+        }),
+      );
+      return after === before ? null : now;
+    }),
+  );
 }
 
 // Merge-on-write, matching the downgrade-safety rule the device store

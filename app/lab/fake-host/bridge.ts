@@ -2043,6 +2043,8 @@ export function installFakeHostBridge(
       for (const key of clear) delete next[key];
       localStorage.setItem("sm.fakeHost.clientConfig", JSON.stringify(next));
     },
+    // A pose holds still, so its palette never turns.
+    "clientConfig:rotate": () => null,
     "hub:status": hubSnapshot,
     "hub:invokePeer": ({ deviceId, channel, input }, signal?: AbortSignal) => {
       const wire = peerWires.get(deviceId);

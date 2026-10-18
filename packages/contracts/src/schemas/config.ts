@@ -516,6 +516,12 @@ export const PatchClientConfigPayloadSchema = Schema.Struct({
   ),
 });
 
+// A window's palette rotation check, and whether it is the one its
+// launch makes.
+export const RotatePalettePayloadSchema = Schema.Struct({
+  launching: Schema.Boolean,
+});
+
 export const WriteShigomoriPayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,
   config: ShigomoriConfigSchema,

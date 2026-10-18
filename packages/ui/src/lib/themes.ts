@@ -159,7 +159,8 @@ const ROTATION_MS: Record<Exclude<ThemeRotation, "launch">, number> = {
 // The rotation's next turn, if one is due: the pair after the light
 // pick's, round to the first after the last, stamped `now`. Null with
 // rotation or the switch off. A launch is a moment like any other to
-// the timed rotations.
+// the timed rotations. A stamp ahead of `now` is a clock set back since
+// the last turn, which turns again rather than waiting the clock out.
 export function rotationTurn(
   config: ClientConfig,
   now: number,
@@ -168,12 +169,30 @@ export function rotationTurn(
   const picks = resolveDoubutsuPicks(config);
   const every = config.themeRotation;
   if (!picks.doubutsu || !every) return null;
+  const stamp = config.themeRotatedAt ?? 0;
   const due =
     every === "launch"
       ? launching
-      : now - (config.themeRotatedAt ?? 0) >= ROTATION_MS[every];
+      : now < stamp || now - stamp >= ROTATION_MS[every];
   if (!due) return null;
   const next = (pairOf(LIGHT_THEMES, picks.light) + 1) % LIGHT_THEMES.length;
   const light = LIGHT_THEMES[next]?.id ?? DEFAULT_LIGHT_THEME;
   return { ...storedPicks(light, darkTwin(light)), themeRotatedAt: now };
+}
+
+// The rotation as the client config's owner turns it (the desktop's
+// main process, a web tab's shell): the launch's turn once in the
+// owner's life, however many windows open or reload in it, and a timed
+// one whenever a check finds it due.
+export function rotationOwner(): (
+  config: ClientConfig,
+  now: number,
+  launching: boolean,
+) => ReturnType<typeof rotationTurn> {
+  let launched = false;
+  return (config, now, launching) => {
+    const turn = rotationTurn(config, now, launching && !launched);
+    if (launching) launched = true;
+    return turn;
+  };
 }
