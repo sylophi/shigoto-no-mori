@@ -28,17 +28,24 @@ export const makeKept = Effect.gen(function* () {
   const data = yield* WorktreeData.WorktreeData;
   const cloneCheckout = yield* CloneCheckout.CloneCheckout;
 
+  // A recorded move from a path is the folder that last left it: a
+  // folder made at a path, or moved there, ends the record of whatever
+  // left it before (`claimed`).
+  const claimed = (paths: ReadonlyArray<string>) =>
+    sql`DELETE FROM wt_moves WHERE moved = 1 AND from_path IN ${sql.in(paths)}`;
+
   // Written anew, so the rowid orders the moves (WtFolder's placed).
   const recordMove = (project: RegisteredProject, moved: Moved) =>
-    Effect.andThen(
+    Effect.all([
       sql`DELETE FROM wt_moves WHERE from_path = ${moved.fromPath}`,
+      claimed([moved.toPath]),
       sql`INSERT INTO wt_moves ${sql.insert({
         from_path: moved.fromPath,
         to_path: moved.toPath,
         project_id: project.id,
         moved: 1,
       })}`,
-    );
+    ]);
 
   const rekeyRows = (
     project: RegisteredProject,
@@ -100,13 +107,18 @@ export const makeKept = Effect.gen(function* () {
       ),
     );
 
-  const forgetRows = (project: RegisteredProject, worktreeId: string) =>
+  const forgetRows = (
+    project: RegisteredProject,
+    worktreeId: string,
+    madeAt: ReadonlyArray<string> = [],
+  ) =>
     sql
       .withTransaction(
         Effect.all([
           registry.forgetWorktree(worktreeId),
           data.forget(project.id, worktreeId),
           cloneCheckout.forget(worktreeId),
+          madeAt.length === 0 ? Effect.void : claimed(madeAt),
         ]),
       )
       .pipe(Effect.orDie);
@@ -159,9 +171,15 @@ export const makeKept = Effect.gen(function* () {
                 ),
         ),
       ),
-    forget: (project: RegisteredProject, worktreeId: string) =>
+    // `madeAt`, for a checkout just made there (its path, as asked and as
+    // git spells it), ends the record of the folder that left it.
+    forget: (
+      project: RegisteredProject,
+      worktreeId: string,
+      madeAt: ReadonlyArray<string> = [],
+    ) =>
       Effect.andThen(
-        forgetRows(project, worktreeId),
+        forgetRows(project, worktreeId, madeAt),
         git.deleteRef(project.path, dirtyRef(worktreeId)).pipe(Effect.ignore),
       ),
   };

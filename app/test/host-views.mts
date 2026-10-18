@@ -438,6 +438,7 @@ it("mirrors: the daemon coming up, on mirror:changed", async () => {
     status: Effect.sync(() => status),
     failure: Effect.succeed(undefined),
     sessions: Effect.succeed([]),
+    fresh: Effect.succeed(true),
     create: refused,
     recreate: refused,
     terminate: refused,

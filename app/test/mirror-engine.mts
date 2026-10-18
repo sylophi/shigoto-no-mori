@@ -25,6 +25,9 @@
 //   - an engine whose stores cannot be read answers as unavailable and
 //     refuses every change, saying why,
 //   - an orphaned transfer whose end fails is asked again,
+//   - the bookkeeping waits for a restarted daemon's own snapshot,
+//   - a worktree made where a moved one was, gone outside the app, ends
+//     its mirror rather than re-opening it on the moved one's folder,
 //   - a transfer whose daemon stops and doesn't come back fails at the
 //     missing ceiling, not the settle ceiling,
 //   - a daemon restarting keeps the list and the git follower's verdict
@@ -44,7 +47,13 @@
 //
 // Run: pnpm test mirror-engine.
 import assert from "node:assert/strict";
-import { mkdtempSync, renameSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Cause from "effect/Cause";
@@ -838,4 +847,90 @@ it("a transfer whose daemon stops and doesn't come back fails at the missing cei
     conflicts: 0,
     error: "the transfer session was lost with the engine",
   });
+});
+
+it("the bookkeeping waits for a restarted daemon's own snapshot", async () => {
+  const { state, crash, adjust, write, requests } = await harness(() => ({
+    ok: true,
+  }));
+  const gone = join(root, "gone");
+  mkdirSync(gone, { recursive: true });
+  const mirror = rawMirrorSession({
+    session: "s1",
+    localRoot: gone,
+    labels: {
+      [MIRROR_LABEL_MODE]: "mirror",
+      [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
+    },
+  });
+  await state([mirror]);
+  await crash();
+  rmSync(gone, { recursive: true, force: true });
+  await adjust(1_000);
+  await write({ event: "ready" });
+  await settleTurns();
+  assert.deepEqual(
+    requests().filter((asked) => asked.startsWith("terminate")),
+    [],
+    "the last run's snapshot ended a session",
+  );
+});
+
+it("a worktree made where a moved one was ends its mirror when it goes, never re-opening it on the moved one's folder", async () => {
+  scrubProcessGitEnv();
+  const git = sandboxGit();
+  const { run, state, requests } = await harness(() => ({ ok: true }));
+  const base = tempDir("sm-mirror-reused-", trackTest);
+  const repo = join(base, "repo");
+  git(base, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "a\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "a");
+  const reused = await run(
+    Effect.gen(function* () {
+      const project = yield* (yield* Registry.Registry).register({
+        name: "repo",
+        path: repo,
+      });
+      const worktrees = yield* Worktrees.Worktrees;
+      const made = (branch: string) =>
+        Effect.flatMap(
+          worktrees.create(
+            project,
+            { name: "fox", branch, skipSetup: true },
+            { report: () => Effect.void, color: false },
+          ),
+          (created) =>
+            Effect.map(worktrees.identities(project), (found) => {
+              const row = found.find(({ id }) => id === created.worktree.id);
+              assert.ok(row !== undefined);
+              return row;
+            }),
+        );
+      const moved = yield* made("one");
+      yield* worktrees.move(
+        { project, worktree: moved },
+        join(base, "elsewhere", "otter"),
+      );
+      const taken = yield* made("two");
+      assert.equal(taken.path, moved.path);
+      return taken;
+    }),
+  );
+  rmSync(reused.path, { recursive: true, force: true });
+  await state([
+    rawMirrorSession({
+      session: "s1",
+      localRoot: reused.path,
+      labels: {
+        [MIRROR_LABEL_MODE]: "mirror",
+        [MIRROR_LABEL_LOCAL_WORKTREE]: reused.id,
+      },
+    }),
+  ]);
+  await waitFor(
+    () => requests().includes("terminate s1"),
+    "the mirror of the worktree gone to end",
+  );
+  assert.deepEqual(requests(), ["terminate s1"]);
 });

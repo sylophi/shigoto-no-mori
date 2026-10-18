@@ -59,6 +59,7 @@ export const inertMirrorImpl = (
   status: Effect.succeed("running"),
   failure: Effect.succeed(undefined),
   sessions: Effect.succeed([]),
+  fresh: Effect.succeed(true),
   create: notHere,
   recreate: notHere,
   terminate: notHere,

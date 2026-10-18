@@ -597,3 +597,52 @@ it("reads a move undone and made again where it was made last, its paths away", 
     a: b,
   });
 });
+
+// A worktree id is its path's hash, so a worktree made where another
+// left reads as that one's old id: its record is the old folder's no
+// longer.
+it("forgets the move of a folder whose path a new worktree took, and records that one's own", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const elsewhere = join(box.home, "elsewhere", "otter");
+  const later = join(box.home, "later", "owl");
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const folder = yield* WtFolder.WtFolder;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const made = (branch: string) =>
+        worktrees.create(
+          project,
+          { name: "fox", branch, skipSetup: true },
+          { report: () => Effect.void, color: false },
+        );
+      const identity = (id: string) =>
+        Effect.map(worktrees.identities(project), (found) => {
+          const row = found.find((listed) => listed.id === id);
+          assert.ok(row !== undefined);
+          return row;
+        });
+      const first = yield* identity((yield* made("one")).worktree.id);
+      yield* worktrees.move({ project, worktree: first }, elsewhere);
+      const taken = yield* identity((yield* made("two")).worktree.id);
+      const afterCreate = {
+        to: Option.getOrNull(yield* folder.movedTo(first.path)),
+        ids: [...(yield* folder.movedIds)],
+      };
+      yield* worktrees.move({ project, worktree: taken }, later);
+      return {
+        reused: taken.path === first.path,
+        afterCreate,
+        afterMove: Option.getOrNull(yield* folder.movedTo(first.path)),
+      };
+    }),
+  )) as {
+    reused: boolean;
+    afterCreate: { to: string | null; ids: Array<[string, string]> };
+    afterMove: string | null;
+  };
+  assert.ok(result.reused, "the second worktree took another path");
+  assert.deepEqual(result.afterCreate, { to: null, ids: [] });
+  assert.equal(result.afterMove, later);
+});

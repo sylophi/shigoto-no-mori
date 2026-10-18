@@ -341,7 +341,14 @@ export const rootExists = (path: string): Promise<boolean> =>
 
 export const settleMirrorBookkeeping = Effect.gen(function* () {
   const daemon = yield* engineOrNull;
-  if (daemon === null || (yield* daemon.status) !== "running") return;
+  // Off the running daemon's own snapshot: its ready comes before it.
+  if (
+    daemon === null ||
+    (yield* daemon.status) !== "running" ||
+    !(yield* daemon.fresh)
+  ) {
+    return;
+  }
   const ids = [...pendingStops];
   pendingStops.clear();
   yield* Effect.forEach(ids, (id) => endSessionsOnWorktree(daemon, id), {
