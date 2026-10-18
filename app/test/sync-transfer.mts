@@ -2069,3 +2069,98 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
     await otherEngine.close();
   }
 });
+
+it("mirror start into a device with no checkout, the project's default branch a remote-tracking ref: the clone checks out the remote's branch at the remote ref's tip, origin/HEAD on it, and the copy lands in the clone", async () => {
+  // ---- The settings a laptop project has (the owner's, read off a
+  // real device): the default branch is origin/main, a remote-tracking
+  // ref, which local main lags behind; gitignored files carried over;
+  // a setup script. A clone made for the copy checks out main, made of
+  // the source's origin/main, not a branch named "origin/main".
+  const otherDataDir = join(sandbox, "data-tracking");
+  mkdirSync(otherDataDir);
+  const otherCli = createCliRunner(fixture.smBinary, {
+    ...fixture.smEnv,
+    SHIGOMORI_DATA_DIR: otherDataDir,
+  });
+  const otherEngine = await secondEngine(otherDataDir);
+  const otherContext = await otherEngine.context();
+  const asOtherDevice = <A, E>(effect: Effect.Effect<A, E, Services>) =>
+    runHost(Effect.provide(effect, otherContext));
+  try {
+    const repo = await fixture.initRepo("tracking-source");
+    await commitFile(repo, "root.txt", "root\n", "root");
+    await commitFile(repo, "ahead.txt", "on origin\n", "ahead on origin");
+    const originTip = await gitOut(repo, "rev-parse", "HEAD");
+    await git(repo, [
+      "remote",
+      "add",
+      "origin",
+      "https://github.com/example/tracking.git",
+    ]);
+    await git(repo, ["update-ref", "refs/remotes/origin/main", originTip]);
+    await git(repo, ["reset", "--quiet", "--hard", "HEAD~1"]);
+    const wtPath = await addWorktree(
+      repo,
+      "rudy",
+      "rudy",
+      "rudy.txt",
+      "rudy\n",
+      "rudy",
+    );
+    const { id: projectId } = await addProject(otherCli.sm, repo);
+    await asOtherDevice(
+      Ops.writeProjectConfig(projectId, {
+        carryOver: [
+          { path: "CLAUDE.local.md", mode: "copy" },
+          { path: "app/.env.local", mode: "copy" },
+        ],
+        defaultBranch: "origin/main",
+        lastMergeMethod: "squash",
+        scripts: { setup: "printf set > .setup-ran" },
+      }),
+    );
+    const sentInto = join(sandbox, "clones", "tracking");
+    const { result: sent } = await asOtherDevice(
+      sendWorktreeOn(
+        {
+          targetDeviceId: LISTENER,
+          projectId,
+          worktreeId: worktreeIdFromPath(wtPath),
+          cloneInto: { parentDir: sentInto, name: "tracking" },
+        },
+        handlerCtx(),
+        { mirror: true },
+      ),
+    );
+    assert.ok(sent.cloned, "the mirror made no clone on the peer");
+    const clone = sent.cloned.path;
+    assert.equal(
+      await gitOut(clone, "symbolic-ref", "HEAD"),
+      "refs/heads/main",
+    );
+    assert.equal(await gitOut(clone, "rev-parse", "HEAD"), originTip);
+    assert.equal(
+      await gitOut(clone, "symbolic-ref", "refs/remotes/origin/HEAD"),
+      "refs/remotes/origin/main",
+    );
+    assert.equal(await gitOut(clone, "rev-parse", "origin/main"), originTip);
+    assert.equal(
+      await gitOut(clone, "rev-parse", "--abbrev-ref", "main@{upstream}"),
+      "origin/main",
+    );
+    assert.equal(await gitOut(clone, "for-each-ref", "refs/shigomori/"), "");
+    assert.equal(
+      await repoIdentityOf(clone),
+      await repoIdentityOf(repo),
+      "the clone must read as the same repo",
+    );
+    assert.equal(sent.worktree.projectId, sent.cloned.id);
+    assert.equal(sent.worktree.branch, "rudy");
+    assert.equal(
+      readFileSync(join(sent.worktree.path, "rudy.txt"), "utf8"),
+      "rudy\n",
+    );
+  } finally {
+    await otherEngine.close();
+  }
+});

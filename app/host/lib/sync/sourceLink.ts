@@ -69,7 +69,7 @@ import { incomingRef } from "@shigomori/engine/Bundle";
 import * as Git from "@shigomori/engine/Git";
 import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
-import { primaryRef } from "@host/lib/projects";
+import { defaultBranchOf } from "@host/lib/projects";
 import { requireChannels } from "@host/socket/channelStreams";
 
 // What the source's answers reach: the engine (its captures and
@@ -352,6 +352,7 @@ const TipAnswerSchema = strict(
 const CloneFactsSchema = strict(
   Schema.Struct({
     branch: GitRefNameSchema,
+    ref: SyncBundleRefSchema,
     remoteUrl: Schema.NullOr(Schema.String),
   }),
 );
@@ -363,14 +364,17 @@ const decodeCapture = Schema.decodeUnknownSync(SyncCaptureSchema);
 const decodeCloneFacts = Schema.decodeUnknownSync(CloneFactsSchema);
 
 // Where a fetched ref lands: capture and index refs keep their name,
-// branch refs land under refs/shigomori/incoming/<branch>. Never a
-// local branch: `sm bundle unpack` enforces the refs/shigomori/
+// branch refs land under refs/shigomori/incoming/<branch>, and a
+// remote-tracking ref under refs/shigomori/incoming/remotes/<remote>/<branch>.
+// Never a local branch: `sm bundle unpack` enforces the refs/shigomori/
 // destination fail-closed, this mapping just picks the names.
-function landingRefspec(ref: string): string {
-  const dst = ref.startsWith("refs/shigomori/")
-    ? ref
-    : incomingRef(ref.slice("refs/heads/".length));
-  return `${ref}:${dst}`;
+export function landingRefOf(ref: string): string {
+  if (ref.startsWith("refs/shigomori/")) return ref;
+  return incomingRef(
+    ref.startsWith("refs/heads/")
+      ? ref.slice("refs/heads/".length)
+      : ref.slice("refs/".length),
+  );
 }
 
 // Byte progress for a caller that reports it, coalesced to about half
@@ -625,21 +629,24 @@ export const serveSource = (
   }).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
 };
 
-// The clone's two questions: the branch the source's checkout is
-// measured against (what a clone is made of) and where it was cloned
-// from (the remote the clone gets, by the clone payload's own rule,
-// shared/cloneUrl.ts).
+// The clone's questions: the default branch, as the local branch the
+// clone checks out and as the source's ref it is made of (what the
+// source's checkout is measured against: "refs/remotes/origin/main"
+// for a remote-tracking setting, whose local "main" may lag or be
+// missing), and where it was cloned from (the remote the clone gets, by
+// the clone payload's own rule, shared/cloneUrl.ts).
 const cloneFactsOf = (project: Project) =>
   Effect.map(
     Effect.all(
       [
-        primaryRef(project),
+        defaultBranchOf(project),
         Effect.flatMap(Git.Git, (git) => git.listRemoteEntries(project.path)),
       ],
       { concurrency: 2 },
     ),
-    ([branch, remotes]): CloneFacts => ({
+    ([{ ref, branch }, remotes]): CloneFacts => ({
       branch,
+      ref: ref === branch ? `refs/heads/${branch}` : `refs/remotes/${ref}`,
       remoteUrl: pickCloneUrl(remotes),
     }),
   );
@@ -714,7 +721,7 @@ export type WorktreeSource = SourceFacts & {
   cloneFacts: Effect.Effect<CloneFacts, unknown, SourceServices>;
   // Asks for a bundle of `refs` thinned by `haves`, writes it to a temp
   // file as it arrives and unpacks it into `into`, every ref under
-  // refs/shigomori/ (landingRefspec). Byte progress once with 0 when
+  // refs/shigomori/ (landingRefOf). Byte progress once with 0 when
   // the size is known, then coalesced.
   fetch(input: {
     refs: readonly string[];
@@ -808,7 +815,7 @@ function askSource(
             return yield* Ops.bundleUnpack(
               into,
               path,
-              refs.map(landingRefspec),
+              refs.map((ref) => `${ref}:${landingRefOf(ref)}`),
             );
           }),
         );

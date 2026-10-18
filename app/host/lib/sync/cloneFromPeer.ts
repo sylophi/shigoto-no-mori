@@ -35,8 +35,7 @@ import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { pidAlive } from "@shigomori/engine/processes";
 import { expandHome } from "@shared/paths";
-import { incomingRef as incomingRefFor } from "@shigomori/engine/Bundle";
-import type { WorktreeSource } from "./sourceLink";
+import { landingRefOf, type WorktreeSource } from "./sourceLink";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
@@ -104,7 +103,8 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   register: (dest: string) => Effect.Effect<A, E, R>,
   onProgress?: (bytes: number, totalBytes: number) => void,
 ) {
-  // The source's default branch is what the checkout is made of, so the
+  // The source's default branch is what the checkout is made of: its
+  // ref there, checked out here as the local branch it names. So the
   // clone reads as the repo (its identity is the root of that branch,
   // packages/engine/src/Identity.ts) and not as one worktree of it. The
   // remote it was cloned from comes along when it has one, so the
@@ -125,7 +125,7 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   if (pending?.dest === left && pending.identity === identity) {
     return yield* finishRegister(left, register);
   }
-  const [dest, { branch, remoteUrl }] = yield* Effect.all(
+  const [dest, { branch, ref, remoteUrl }] = yield* Effect.all(
     [
       Effect.flatMap(Git.Git, (git) => git.checkDestination(parent, name)),
       source.cloneFacts,
@@ -142,7 +142,7 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
     });
   }
   const branchRef = decodeBundleRef(`refs/heads/${branch}`);
-  const incomingRef = incomingRefFor(branch);
+  const incomingRef = landingRefOf(ref);
   yield* sweepPartials(parent, name);
   const partial = join(parent, `.${name}.partial-${process.pid}`);
   const removePartial = Effect.promise(() =>
@@ -171,7 +171,7 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
         // git's own default lands on the right one.
         yield* git.run(partial, ["symbolic-ref", "HEAD", branchRef]);
         const { fetched } = yield* source.fetch({
-          refs: [branchRef],
+          refs: [ref],
           haves: [],
           into: { path: partial },
           onProgress,
