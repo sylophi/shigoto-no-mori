@@ -52,7 +52,7 @@ const createPullRequest = (cwd: string) =>
   runHost(
     NewPullRequest.createPullRequest({
       cwd,
-      projectPath: cwd,
+      project: { id: cwd, path: cwd },
       base: "main",
       title: "Images",
       body: "",

@@ -59,9 +59,11 @@ export class GithubCli extends Context.Service<
     // For a path that just gained its GitHub remote (a publish), so the
     // next read sees it rather than a cached "not on GitHub".
     readonly evictRepo: (cwd: string) => Effect.Effect<void>;
-    // The gate for read paths: gh ready, and the repo on a GitHub
-    // remote. Mutations check the reason so their errors stay specific.
-    readonly readyForRepo: (cwd: string) => Effect.Effect<boolean>;
+    // unavailableReason, else whether the repo is on a GitHub remote:
+    // null when gh may be asked about it.
+    readonly unavailableFor: (
+      cwd: string,
+    ) => Effect.Effect<GhUnavailableReason | "no-github-remote" | null>;
     // Null when gh is not ready or the repo is not on GitHub. A gh call
     // that fails (the network, an expired token) fails rather than reads
     // as null, so the renderer asks again instead of keeping "every
@@ -289,11 +291,12 @@ const make = Effect.gen(function* () {
     Cache.get(repos, cwd),
   );
 
-  const readyForRepo = Effect.fn("GithubCli.readyForRepo")(function* (
+  const unavailableFor = Effect.fn("GithubCli.unavailableFor")(function* (
     cwd: string,
   ) {
-    if ((yield* unavailableReason) !== null) return false;
-    return (yield* repo(cwd)) !== null;
+    const reason = yield* unavailableReason;
+    if (reason !== null) return reason;
+    return (yield* repo(cwd)) === null ? ("no-github-remote" as const) : null;
   });
 
   return GithubCli.of({
@@ -313,9 +316,9 @@ const make = Effect.gen(function* () {
     evictRepo: Effect.fn("GithubCli.evictRepo")((cwd: string) =>
       Cache.invalidate(repos, cwd),
     ),
-    readyForRepo,
+    unavailableFor,
     mergeConfig: Effect.fn("GithubCli.mergeConfig")(function* (cwd) {
-      if (!(yield* readyForRepo(cwd))) return null;
+      if ((yield* unavailableFor(cwd)) !== null) return null;
       return yield* Cache.get(mergeConfigs, cwd);
     }),
     // The repo the app takes the project for (its GitHub links open

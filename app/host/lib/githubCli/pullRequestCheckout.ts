@@ -79,13 +79,9 @@ const CANDIDATE_JSON_FIELDS = Object.keys(GhPrCandidateSchema.fields).join(",");
 // merged or closed head is the "check out source" mode's job.
 export const listPullRequestCandidates = Effect.fn("PullRequests.candidates")(
   function* (cwd: string) {
-    const cli = yield* GithubCli;
-    const unavailable = yield* cli.unavailableReason;
+    const unavailable = yield* (yield* GithubCli).unavailableFor(cwd);
     if (unavailable) {
       return { status: "unavailable", reason: unavailable } as const;
-    }
-    if (!(yield* cli.repo(cwd))) {
-      return { status: "unavailable", reason: "no-github-remote" } as const;
     }
     return yield* gh(
       [
@@ -192,12 +188,12 @@ const readPullRequestHead = (cwd: string, number: number) =>
 export const resolvePullRequestCheckout = Effect.fn(
   "PullRequests.resolveCheckout",
 )(function* (cwd: string, number: number) {
-  const cli = yield* GithubCli;
-  if (yield* cli.unavailableReason) {
-    return yield* refused("The GitHub CLI isn't available for this project.");
-  }
-  if (!(yield* cli.repo(cwd))) {
+  const unavailable = yield* (yield* GithubCli).unavailableFor(cwd);
+  if (unavailable === "no-github-remote") {
     return yield* refused("This project has no GitHub remote to fetch from.");
+  }
+  if (unavailable) {
+    return yield* refused("The GitHub CLI isn't available for this project.");
   }
   const head = yield* readPullRequestHead(cwd, number);
   // Resolved from the PR's URL rather than from "the first GitHub

@@ -2,11 +2,13 @@
 // repo, on github.com and on a GitHub Enterprise Server in private mode.
 // An attachment (<host>/user-attachments/assets/<id>) loads only for a
 // browser signed in to its host, so the host's single-branch read
-// (getWorktreePullRequest) points each image in the markdown at the URL
-// of the body GitHub renders, on the attachment's host, a subdomain of
-// it or githubusercontent.com, and leaves a link to one as written. A
-// refetch within the signed URL's life keeps the body as it was, so the
-// page doesn't load its images again.
+// (PullRequestMaps' branchPullRequest) points each image in the markdown
+// at the URL of the body GitHub renders, on the attachment's host, a
+// subdomain of it or githubusercontent.com, and leaves a link to one as
+// written. A refetch within a few minutes keeps the body as it was, so
+// the page doesn't load its images again, but never hands back a URL
+// within a minute of the expiry its token names. The reads run on a
+// test clock the proof moves.
 //
 // Drives the real host code against a fake gh on PATH, which answers
 // each repo only when GH_HOST names its host, and whose GraphQL answer
@@ -20,7 +22,10 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { type AddressInfo } from "node:net";
 import https from "node:https";
 import { join } from "node:path";
-import * as PullRequests from "@host/lib/githubCli/pullRequests";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import { PullRequestMaps } from "@host/lib/githubCli/PullRequestMaps";
+import { withSignedImages } from "@host/lib/githubCli/pullRequests";
 import { runHost } from "./lib/hostRuntime.mts";
 import { afterAll, it } from "vitest";
 import {
@@ -28,11 +33,19 @@ import {
   makeTracker,
   sandboxGit,
   scrubProcessGitEnv,
+  sleepingClock,
   tempDir,
+  testClock,
 } from "./lib/checkKit.mts";
 
+const clock = testClock();
+const clocks = sleepingClock(clock);
 const getWorktreePullRequest = (cwd: string, branch: string) =>
-  runHost(PullRequests.getWorktreePullRequest(cwd, branch));
+  runHost(
+    Effect.flatMap(PullRequestMaps, (maps) =>
+      maps.branchPullRequest({ id: cwd, path: cwd }, branch),
+    ).pipe(Effect.provideService(Clock.Clock, clocks.wall)),
+  );
 
 const tracker = makeTracker();
 afterAll(() => tracker.teardown());
@@ -43,6 +56,7 @@ const answers = (host: string) => ({
   graphql: join(root, `${host}-graphql.json`),
 });
 const GHE = "ghe.example.com";
+const HOUR = 3_600_000;
 installFakeGh(
   root,
   `#!/bin/sh
@@ -182,20 +196,106 @@ it("an attached image on github.com takes its signed URL, and keeps it", async (
     "a refetch keeps the signed URLs",
   );
 
-  // Four minutes on, a URL has a minute left, and the next read
-  // takes the newly signed one.
-  const now = Date.now;
-  Date.now = () => now() + 4 * 60_000;
-  try {
-    writeFileSync(answer, rendered("third"));
-    assert.equal(
-      (await getWorktreePullRequest(repo, "pics"))?.body,
-      signedBody("third"),
-      "a URL near its expiry is signed anew",
-    );
-  } finally {
-    Date.now = now;
+  // The wall clock stepped back an hour holds no URL longer: four
+  // minutes on the monotonic clock, the next read takes the newly
+  // signed one.
+  clocks.sleep(-HOUR);
+  await clock.advance(2 * 60_000);
+  assert.equal(
+    (await getWorktreePullRequest(repo, "pics"))?.body,
+    signedBody("first"),
+    "two minutes on, the wall clock back an hour: kept",
+  );
+  await clock.advance(2 * 60_000);
+  writeFileSync(answer, rendered("third"));
+  assert.equal(
+    (await getWorktreePullRequest(repo, "pics"))?.body,
+    signedBody("third"),
+    "a URL four minutes old is signed anew",
+  );
+  // The wall clock back where the tests after this one start it.
+  clocks.sleep(HOUR);
+});
+
+it("a URL with an opaque token is signed anew after a sleep, a stopped process or the wall clock stepped forward", async () => {
+  const id = "77777777-7777-4777-8777-777777777777";
+  const opaque = (n: number) =>
+    `https://private-user-images.githubusercontent.com/1/2-${id}.png?token=t${n}`;
+  const { list, graphql: answer } = answers("github.com");
+  writeFileSync(
+    list,
+    JSON.stringify([
+      pullRequest(
+        "https://github.com/o/r/pull/3",
+        "pics",
+        `![shot](${attachment(id)})`,
+      ),
+    ]),
+  );
+  const repo = repoOn("opaque", "https://github.com/o/r.git");
+  let n = 0;
+  const read = async () => {
+    n += 1;
+    writeFileSync(answer, graphql(`<img src="${opaque(n)}">`));
+    return (await getWorktreePullRequest(repo, "pics"))?.body;
+  };
+  assert.equal(await read(), `![shot](${opaque(1)})`);
+  let shown = opaque(1);
+  for (const [what, move] of [
+    ["a sleep", () => clocks.sleep(4 * 60_000)],
+    ["a stopped process", () => clocks.stop(4 * 60_000)],
+    ["the wall clock two hours on", () => clocks.sleep(2 * HOUR)],
+  ] as const) {
+    assert.equal(await read(), `![shot](${shown})`, `${what}: kept before`);
+    move();
+    assert.equal(await read(), `![shot](${opaque(n)})`, `${what}: signed anew`);
+    shown = opaque(n);
   }
+});
+
+const tokenPart = (value: object) =>
+  Buffer.from(JSON.stringify(value)).toString("base64url");
+// A token GitHub signed, expiring `inMs` from the clock's now.
+const token = (inMs: number) => {
+  const exp = Math.floor((clocks.wall.currentTimeMillisUnsafe() + inMs) / 1000);
+  return `${tokenPart({ alg: "HS256" })}.${tokenPart({ exp })}.sig`;
+};
+
+it("a signed URL isn't handed back within a minute of its token's expiry", async () => {
+  const id = "66666666-6666-4666-8666-666666666666";
+  const { list, graphql: answer } = answers("github.com");
+  writeFileSync(
+    list,
+    JSON.stringify([
+      pullRequest(
+        "https://github.com/o/r/pull/3",
+        "pics",
+        `![shot](${attachment(id)})`,
+      ),
+    ]),
+  );
+  const repo = repoOn("tokens", "https://github.com/o/r.git");
+  const short = token(90_000);
+  writeFileSync(answer, graphql(`<img src="${signed(id, "png", short)}">`));
+  assert.equal(
+    (await getWorktreePullRequest(repo, "pics"))?.body,
+    `![shot](${signed(id, "png", short)})`,
+  );
+
+  const next = token(10 * 60_000);
+  writeFileSync(answer, graphql(`<img src="${signed(id, "png", next)}">`));
+  await clock.advance(20_000);
+  assert.equal(
+    (await getWorktreePullRequest(repo, "pics"))?.body,
+    `![shot](${signed(id, "png", short)})`,
+    "70 seconds left: reused",
+  );
+  await clock.advance(15_000);
+  assert.equal(
+    (await getWorktreePullRequest(repo, "pics"))?.body,
+    `![shot](${signed(id, "png", next)})`,
+    "55 seconds left: signed anew",
+  );
 });
 
 // The stand-in Enterprise Server, with subdomain isolation: the
@@ -355,9 +455,11 @@ it("an attachment on an Enterprise Server that names its port takes its signed U
   const media = `https://media.ghe.example.com/user/7/files/${PNG}?token=signed`;
   const own = `https://${server}/storage/user/7/files/${LEGACY}?token=signed`;
   assert.equal(
-    PullRequests.withSignedImages(
+    withSignedImages(
       `![shot](${shot})\n\n![older](${older})`,
       `<p><img src="${media}"></p><p><img src="${own}"></p>`,
+      new Map(),
+      { elapsed: 0, wall: 0 },
     ),
     `![shot](${media})\n\n![older](${own})`,
   );

@@ -3,8 +3,8 @@
 // across every fork, so a stranger's fork PR of the same name sits
 // beside the branch's own, and the worktree page merges and drafts by
 // whatever number these reads hand it. The host's single-branch read
-// (getWorktreePullRequest) and the sidebar's map
-// (refreshProjectPullRequests) skip fork PRs, and a branch with only a
+// and the sidebar's map (PullRequestMaps' branchPullRequest and
+// refresh) skip fork PRs, and a branch with only a
 // fork's reads as having none. The fork's PR a branch was checked out
 // from (branch.<b>.merge at refs/pull/<n>/head) is the branch's own,
 // and marked so. The renderer drops what a peer's host on an older
@@ -23,7 +23,8 @@ import {
   ownBranchPullRequest,
   ownBranchPullRequests,
 } from "@shigomori/ui/lib/pullRequest.ts";
-import * as PullRequests from "@host/lib/githubCli/pullRequests";
+import * as Effect from "effect/Effect";
+import { PullRequestMaps } from "@host/lib/githubCli/PullRequestMaps";
 import { it } from "vitest";
 import { hostEngine } from "./lib/smBinary.mts";
 import { runHost } from "./lib/hostRuntime.mts";
@@ -36,9 +37,17 @@ import {
 import { trackTest } from "./lib/vitestKit.mts";
 
 const getWorktreePullRequest = (cwd: string, branch: string) =>
-  runHost(PullRequests.getWorktreePullRequest(cwd, branch));
+  runHost(
+    Effect.flatMap(PullRequestMaps, (maps) =>
+      maps.branchPullRequest({ id: cwd, path: cwd }, branch),
+    ),
+  );
 const refreshProjectPullRequests = (cwd: string) =>
-  runHost(PullRequests.refreshProjectPullRequests(cwd));
+  runHost(
+    Effect.flatMap(PullRequestMaps, (maps) =>
+      maps.refresh({ id: cwd, path: cwd }),
+    ),
+  );
 
 scrubProcessGitEnv();
 
