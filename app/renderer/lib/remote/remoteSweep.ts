@@ -6,10 +6,8 @@
 // looked), then renewed within the lease the host hands back, for as
 // long as this window stays focused. Boot-scoped like the device sync.
 import { focusManager } from "@tanstack/react-query";
-import {
-  isCommandRefusedError,
-  isNotSharingError,
-} from "@shigomori/contracts/errors";
+import { isPeerRefusal } from "@shigomori/contracts/errors";
+import { backoffDelayMs } from "@shared/remote/supervisor";
 import { documentFocused } from "@/lib/focus";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { remoteDevicesAtom } from "./devices";
@@ -70,18 +68,13 @@ export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
       },
       (error: unknown) => {
         if (latest.get(deviceId) !== id) return;
-        if (
-          !attended ||
-          !deps.connected(deviceId) ||
-          isCommandRefusedError(error) ||
-          isNotSharingError(error)
-        ) {
+        if (!attended || !deps.connected(deviceId) || isPeerRefusal(error)) {
           failures.delete(deviceId);
           return;
         }
         const count = (failures.get(deviceId)?.count ?? 0) + 1;
         failures.set(deviceId, { count, renewal });
-        later(RETRY_MS[Math.min(count - 1, RETRY_MS.length - 1)] ?? 0, renewal);
+        later(backoffDelayMs(RETRY_MS, count - 1), renewal);
       },
     );
   };
@@ -115,6 +108,7 @@ export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
 
 export function startRemoteSweepRequests(
   registry: AtomRegistry.AtomRegistry,
+  signal: AbortSignal,
 ): void {
   const connectedDevices = () =>
     registry
@@ -131,10 +125,18 @@ export function startRemoteSweepRequests(
     },
     documentFocused(),
   );
-  focusManager.subscribe((focused) =>
+  const unfocus = focusManager.subscribe((focused) =>
     renewals.attend(focused, connectedDevices()),
   );
-  window.addEventListener("online", renewals.retryNow);
+  window.addEventListener("online", renewals.retryNow, { signal });
+  signal.addEventListener(
+    "abort",
+    () => {
+      unfocus();
+      renewals.stop();
+    },
+    { once: true },
+  );
   // Signing out drops every peer api. A renewal firing after that
   // would rebuild one just to be refused.
   onAccountLeft(renewals.stop);

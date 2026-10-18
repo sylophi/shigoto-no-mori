@@ -16,10 +16,9 @@ import {
   payloadOf,
 } from "@shigomori/contracts/contract";
 import {
-  isCommandRefusedError,
   isContractError,
   isNoDirectConnectionError,
-  isNotSharingError,
+  isPeerRefusal,
   isRemoteCallError,
 } from "@shigomori/contracts/errors";
 import { hubContract } from "@shigomori/contracts/modules/hub";
@@ -82,12 +81,6 @@ export const peerSessionAtom = Atom.family((_deviceId: string) =>
 // with the same id (this machine on two accounts) starts over.
 export const accountsLeftAtom = Atom.keepAlive(Atom.make(0));
 
-// A device's refusal is a switch that may flip back (its command access
-// off, its sharing off), so the view is asked again. The device's other
-// failures (an unknown project) end the view.
-const isRefusal = (error: unknown) =>
-  isCommandRefusedError(error) || isNotSharingError(error);
-
 // What ends a view for good: the device's own failure (an unknown
 // project), or its read failing in its own words (a RemoteCallError),
 // which asking again every few seconds would only repeat unseen. A
@@ -96,7 +89,7 @@ const isRefusal = (error: unknown) =>
 const endsView = (error: unknown) =>
   isRemoteCallError(error) ||
   (isContractError(error) &&
-    !isRefusal(error) &&
+    !isPeerRefusal(error) &&
     !isNoDirectConnectionError(error));
 
 // When a view is asked again, while anyone still reads it (its readers
@@ -109,7 +102,7 @@ const endsView = (error: unknown) =>
 const REDIAL = Schedule.exponential("250 millis", 2).pipe(
   Schedule.modifyDelay(({ input, attempt, duration }) =>
     Effect.succeed(
-      isRefusal(input)
+      isPeerRefusal(input)
         ? Duration.min(
             Duration.times(Duration.seconds(2), 2 ** Math.max(attempt - 1, 0)),
             Duration.seconds(30),
@@ -265,9 +258,9 @@ export function valueNow<A>(
 }
 
 // A host view's values, decoded where they may come from another build
-// (a peer's), as an atom. The device's own failure (an unknown project,
-// a refused call) is what the view ends with; a dropped link is asked
-// again, and a peer's view starts again on a new session to it. Kept a
+// (a peer's), as an atom. The device's own failure (an unknown project)
+// is what the view ends with; a refusal and a dropped link are asked
+// again (REDIAL), and a peer's view starts again on a new session to it. Kept a
 // while after its last reader goes, so a page that comes back finds it
 // streaming.
 export function hostViewAtom<R extends ContractCall>(options: {
@@ -320,7 +313,7 @@ export function hostViewAtom<R extends ContractCall>(options: {
       // asks that found no way to it count.
       Stream.tapError((error) =>
         Effect.sync(() => {
-          if (!isRefusal(error)) failures += 1;
+          if (!isPeerRefusal(error)) failures += 1;
         }),
       ),
       Stream.catchIf(

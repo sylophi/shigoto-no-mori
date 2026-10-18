@@ -94,8 +94,11 @@ export function useTreeView<A>(
     () =>
       ended && atom !== null
         ? focusManager.subscribe((focused) => {
+            // Read only on focus: a page going hides it after its
+            // registry is disposed.
+            if (!focused) return;
             const result = registry.get(atom);
-            if (focused && AsyncResult.isFailure(result) && !result.waiting) {
+            if (AsyncResult.isFailure(result) && !result.waiting) {
               registry.refresh(atom);
             }
           })

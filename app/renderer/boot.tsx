@@ -106,8 +106,15 @@ export function startApp({
       [queryClientAtom, queryClient],
     ],
   });
+  // What the page starts outside React and could read or write the
+  // registry as the page goes (a focus or network listener, a list's
+  // end as the registry's own disposal stops its views) ends with
+  // `page`, which ends before the registry is disposed.
+  const page = new AbortController();
   window.addEventListener("pagehide", (event) => {
-    if (!event.persisted) registry.dispose();
+    if (event.persisted) return;
+    page.abort();
+    registry.dispose();
   });
 
   // A peer's views start again on each new session to it, and its
@@ -135,7 +142,7 @@ export function startApp({
   });
 
   followFocus(api);
-  if (api.isElectron) startLocalHost(api, queryClient, registry);
+  if (api.isElectron) startLocalHost(api, queryClient, registry, page.signal);
 
   // The shared settings exchange: this device's copy follows its peers'
   // and theirs follow it.
@@ -147,26 +154,36 @@ export function startApp({
   // through the same watchHost this machine's do (startLocalHost),
   // from the moment the peer is first seen. On a hostless client that
   // is the ONLY thing keeping the forest live between focus refetches.
-  startRemoteDeviceSync(api, queryClient, registry, (deviceId, peer) => {
-    const stopPushes = watchHost(queryClient, deviceId, peer);
-    const stopSettings = followDeviceSettings(registry, queryClient, deviceId);
-    return () => {
-      stopPushes();
-      stopSettings();
-    };
-  });
+  startRemoteDeviceSync(
+    api,
+    queryClient,
+    registry,
+    (deviceId, peer) => {
+      const stopPushes = watchHost(queryClient, deviceId, peer);
+      const stopSettings = followDeviceSettings(
+        registry,
+        queryClient,
+        deviceId,
+      );
+      return () => {
+        stopPushes();
+        stopSettings();
+      };
+    },
+    page.signal,
+  );
 
   // The other direction: a host sweeps while someone is looking, and
   // this window says so to the hosts it is looking at.
-  startRemoteSweepRequests(registry);
+  startRemoteSweepRequests(registry, page.signal);
 
   // Villagers moving in and out of any device's worktrees, told in
   // their voice whoever moved them (Village life).
-  startVillagerMoves(api, queryClient, registry);
+  startVillagerMoves(api, queryClient, registry, page.signal);
 
   // Agent sessions on any device: the waiting ones for the Live page,
   // and on the desktop the notifications.
-  startAgentWatch(api, registry);
+  startAgentWatch(api, registry, page.signal);
 
   const paletteTurned = startThemeRotation(api, registry);
 
@@ -277,6 +294,7 @@ function startLocalHost(
   api: RendererApi,
   queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
+  signal: AbortSignal,
 ): void {
   // This machine's broadcasts, into its cache, exactly as a peer's
   // land in theirs.
@@ -306,8 +324,8 @@ function startLocalHost(
     .catch(() => undefined);
 
   // The network gone or back, as this window's Chromium sees it.
-  window.addEventListener("online", () => networkChanged(api));
-  window.addEventListener("offline", () => networkChanged(api));
+  window.addEventListener("online", () => networkChanged(api), { signal });
+  window.addEventListener("offline", () => networkChanged(api), { signal });
 }
 
 // Whether someone is looking at the page, for React Query's focus

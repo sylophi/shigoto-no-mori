@@ -5,6 +5,10 @@
 // supervised desired state owned by the direct keeper
 // (shared/hub/directKeeper.ts), so a call that lands on no session
 // rejects, and a push needs only the session the keeper already holds.
+// A refusal it answers names the peer (refusalNamed), which the peer
+// itself never sends, so a toast can say which device said no.
+import { refusalNamed } from "@shigomori/contracts/errors";
+import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Link } from "@shared/ipc/transport";
 
@@ -22,9 +26,13 @@ const hop = (deviceId: string, channel: string, input: unknown) =>
 export function peerLink(hub: Link, deviceId: string): Link {
   return {
     call: (channel, input, span) =>
-      hub.call("hub:invokePeer", hop(deviceId, channel, input), span),
+      hub
+        .call("hub:invokePeer", hop(deviceId, channel, input), span)
+        .pipe(Effect.mapError((error) => refusalNamed(error, deviceId))),
     view: (channel, input) =>
-      hub.view("hub:watchPeer", hop(deviceId, channel, input)),
+      hub
+        .view("hub:watchPeer", hop(deviceId, channel, input))
+        .pipe(Stream.mapError((error) => refusalNamed(error, deviceId))),
     pushes: (channel) =>
       hub.pushes("hub:peerPush").pipe(
         Stream.filter((push) => {

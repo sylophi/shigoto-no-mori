@@ -585,9 +585,9 @@ export const hubStatusOf = (
 
 // Boot wiring: follow the hub (hubStatusAtom, mounted here), the
 // account and the shared device-list cache for the life of the window.
-// The account and cache subscriptions are never unsubscribed, on
-// purpose, exactly like the other boot-scope subscriptions in boot.tsx;
-// the hub's ends with the page's registry. The boot's query client
+// The account subscription is never unsubscribed, on purpose; the
+// cache's ends with the page (`signal`), and the hub's with the page's
+// registry. The boot's query client
 // comes in rather than being reached for, because both boots
 // (renderer/boot.tsx, one for both shells) build their own, and so
 // does the push wiring each peer's api gets.
@@ -596,6 +596,7 @@ export function startRemoteDeviceSync(
   queryClient: QueryClient,
   atoms: AtomRegistry.AtomRegistry,
   watch: WatchPeer,
+  signal: AbortSignal,
 ): void {
   boundPageApi = api;
   boundQueryClient = queryClient;
@@ -633,10 +634,11 @@ export function startRemoteDeviceSync(
   // anywhere). Rebuilding off the cache is the only way a peer's rename
   // or its removal from the account reaches this store at all: the hub
   // pushes neither, so nothing on the wire will ever say so.
-  queryClient.getQueryCache().subscribe((event) => {
+  const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || event.action.type !== "success") return;
     if (event.query.queryHash !== deviceListHash) return;
     reconcile({ hubDriven: false });
   });
+  signal.addEventListener("abort", unsubscribe, { once: true });
   atoms.mount(hubStatusAtom);
 }
