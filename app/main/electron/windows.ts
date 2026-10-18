@@ -280,14 +280,21 @@ function create(
     for (const listener of closedListeners) listener(entry.id);
   });
 
-  // Recover the page from a renderer crash: a new window where it was,
+  // Recover the page from its renderer going: a new window where it was,
   // then the crashed one goes, leaving no ghost behind. The recreate
   // budget lives in the liveness module and is the app's, so a crash
   // loop across windows still gives up.
   attachRenderProcessRecovery(window, {
     isShuttingDown,
     recreateWindow: () => {
-      create(entry.route, { bounds: entry.bounds });
+      // As it was: an app kept hidden, or a window minimized, stays so.
+      const minimized = !window.isDestroyed() && window.isMinimized();
+      create(entry.route, {
+        bounds: entry.bounds,
+        ...(app.isHidden() || minimized
+          ? { restart: { visibility: { hidden: app.isHidden() }, minimized } }
+          : {}),
+      });
       if (!window.isDestroyed()) window.destroy();
     },
     onGiveUp: () => {
