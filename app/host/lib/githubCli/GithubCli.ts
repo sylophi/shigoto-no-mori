@@ -97,6 +97,9 @@ export class GithubCli extends Context.Service<
 >()("sm/host/GithubCli") {}
 
 const READINESS_TTL = Duration.seconds(30);
+// Short, so a gh that comes back is seen soon, but long enough that a
+// stuck one isn't spawned again by every ask.
+const UNANSWERED_PROBE_TTL = Duration.seconds(10);
 const KNOWN_HOSTS_TTL = Duration.hours(1);
 // Short because users do occasionally `git remote add` mid-session, but
 // long enough that one worktree open's queries share one probe. Without
@@ -166,7 +169,8 @@ const make = Effect.gen(function* () {
 
   // gh's own precedence for its hosts.yml: GH_CONFIG_DIR, then the XDG
   // config directory. Diverging from gh here would leave Enterprise
-  // hosts unrecognized for users who set either variable.
+  // hosts unrecognized for users who set either variable. Set but empty
+  // reads as unset, as Config's environment provider reads it.
   const { configHome } = yield* Paths.Paths;
   const hostsFile = path.join(
     Option.getOrElse(
@@ -194,7 +198,8 @@ const make = Effect.gen(function* () {
   // the token variables among it), then per host gh's file knows, since
   // bare it answers for one host alone and an Enterprise login would
   // read as none. The token itself is dropped unread. A gh that did not
-  // answer (killed, timed out) reads as signed out for this ask alone.
+  // answer (killed, timed out) reads as signed out, asked again after
+  // UNANSWERED_PROBE_TTL.
   const probe = (yield* keptAnswer(
     Effect.gen(function* () {
       const installed = Option.isSome(
@@ -227,6 +232,7 @@ const make = Effect.gen(function* () {
       return { installed, authed: false };
     }).pipe(withGh),
     READINESS_TTL,
+    { failures: UNANSWERED_PROBE_TTL },
   )).pipe(Effect.orElseSucceed(() => ({ installed: true, authed: false })));
 
   const repos = yield* keptAnswers(

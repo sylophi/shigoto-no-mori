@@ -7,13 +7,13 @@
 //
 // Run: pnpm test github-cli-clocks.
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import { it } from "vitest";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
-import { builtNow, runHost } from "./lib/hostRuntime.mts";
+import { serviceBuiltNow } from "./lib/hostRuntime.mts";
 import {
   installFakeGh,
   sleepingClock,
@@ -51,11 +51,10 @@ const loggedInTo = (hostsFile: string, host: string | null) =>
 
 // The service built over this test's gh, its calls run on `clock`.
 async function cliOn(clock?: Clock.Clock) {
-  const cli = await runHost(
-    Effect.provide(
-      Effect.service(GithubCli.GithubCli),
-      builtNow(GithubCli.layer),
-    ),
+  const cli = await serviceBuiltNow(
+    GithubCli.GithubCli,
+    GithubCli.layer,
+    trackTest,
   );
   const on = <A, E>(effect: Effect.Effect<A, E>) =>
     Effect.runPromise(
@@ -133,12 +132,14 @@ it("a hosts.yml that could not be read is read again at the next ask, not taken 
   assert.equal(await cli.hostOf(GHE_REPO), GHE);
 });
 
-it("a gh that answered nothing reads as signed out for that ask alone", async () => {
+it("a gh that answered nothing reads as signed out, is not spawned again by every ask, and is asked again 10 s on", async () => {
   const root = tempDir("sm-gh-clocks-", trackTest);
   const answers = join(root, "answers");
+  const spawned = join(root, "spawned");
   installFakeGh(
     root,
     `#!/bin/sh
+echo >> '${spawned}'
 [ -f '${answers}' ] || kill -9 $$
 case "$*" in
 "auth token"*) echo token ;;
@@ -147,8 +148,27 @@ esac
 `,
     trackTest,
   );
-  const cli = await cliOn();
+  const spawns = () => readFileSync(spawned, "utf8").split("\n").length - 1;
+  const clock = testClock();
+  const { wall, sleep } = sleepingClock(clock);
+  const cli = await cliOn(wall);
   assert.equal(await cli.authed(), false);
+  const once = spawns();
   writeFileSync(answers, "");
+  assert.equal(await cli.authed(), false);
+  assert.equal(spawns(), once, "an ask spawned the unanswered gh again");
+  sleep(10_000);
   assert.equal(await cli.authed(), true, "the failed probe was kept");
+});
+
+it("an empty GH_CONFIG_DIR reads as unset, not as the working folder", async () => {
+  const root = tempDir("sm-gh-clocks-", trackTest);
+  installFakeGh(root, "#!/bin/sh\nexit 1\n", trackTest);
+  loggedInTo(join(root, "hosts.yml"), GHE);
+  process.env["GH_CONFIG_DIR"] = "";
+  const cwd = process.cwd();
+  process.chdir(root);
+  trackTest(() => process.chdir(cwd));
+  const cli = await cliOn();
+  assert.equal(await cli.hostOf(GHE_REPO), null);
 });

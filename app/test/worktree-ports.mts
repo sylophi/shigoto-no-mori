@@ -31,12 +31,13 @@ import * as Ops from "@host/lib/engineOps";
 import * as Ports from "@host/lib/Ports";
 import { addProject } from "@host/lib/projects";
 import { initDataDirAt } from "@shared/paths";
-import { builtNow, engineDataDir, runHost } from "./lib/hostRuntime.mts";
+import { engineDataDir, runHost, serviceBuiltNow } from "./lib/hostRuntime.mts";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { dialLoopback, isLoopbackPortListening } from "@host/lib/net";
 import { errorCodeOf } from "@shigomori/contracts/errors";
 import {
   freeLoopbackPort,
+  makeTracker,
   sandboxGit,
   sleepingClock,
   startLoopbackServer,
@@ -45,15 +46,16 @@ import {
   type Track,
 } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
-import { beforeAll, it } from "vitest";
+import { afterAll, beforeAll, it } from "vitest";
+
+const tracker = makeTracker();
+afterAll(tracker.teardown);
 
 // The service as the host builds it with `dataHome` for XDG_DATA_HOME,
 // its calls run on `clock`.
 async function portsIn(dataHome: string, clock?: Clock.Clock) {
   process.env.XDG_DATA_HOME = dataHome;
-  const ports = await runHost(
-    Effect.provide(Effect.service(Ports.Ports), builtNow(Ports.layer)),
-  );
+  const ports = await serviceBuiltNow(Ports.Ports, Ports.layer, tracker.track);
   const on = <A,>(effect: Effect.Effect<A>) =>
     Effect.runPromise(
       clock === undefined

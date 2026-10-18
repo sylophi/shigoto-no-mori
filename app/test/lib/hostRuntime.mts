@@ -11,6 +11,8 @@ import { childDefaults } from "@shigomori/engine/processes";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import * as Layer from "effect/Layer";
 import * as Migration from "@shigomori/engine/Migration";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -137,6 +139,19 @@ export const builtNow = <A, E, R>(layer: Layer.Layer<A, E, R>) =>
       ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv())),
     ),
   );
+
+// The service a layer builds, built as builtNow builds it and up until
+// `track`'s test ends, its lookups and fibers with it.
+export const serviceBuiltNow = async <I, S, E>(
+  tag: Context.Key<I, S>,
+  layer: Layer.Layer<I, E, Services>,
+  track: (teardown: () => Promise<void>) => unknown,
+): Promise<S> => {
+  const scope = Scope.makeUnsafe();
+  track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const context = await runHost(Layer.buildWithScope(builtNow(layer), scope));
+  return Context.get(context, tag);
+};
 
 export const startHost = () => runtime.context();
 export const disposeHost = async () => {
