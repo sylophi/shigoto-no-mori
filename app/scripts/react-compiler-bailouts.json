@@ -10,47 +10,5 @@
     "function": "SidebarList",
     "category": "IncompatibleLibrary",
     "reason": "Use of incompatible library"
-  },
-  {
-    "file": "packages/ui/src/primitives/modal-shell.tsx",
-    "function": "ModalShell",
-    "category": "Refs",
-    "reason": "Cannot access refs during render"
-  },
-  {
-    "file": "packages/ui/src/primitives/tooltip.tsx",
-    "function": "SimpleTooltip",
-    "category": "Refs",
-    "reason": "Cannot access refs during render"
-  },
-  {
-    "file": "packages/ui/src/views/sidebar/ProjectRowView.tsx",
-    "function": "ProjectRowView",
-    "category": "Refs",
-    "reason": "Cannot access refs during render"
-  },
-  {
-    "file": "packages/ui/src/views/terminal/TerminalView.tsx",
-    "function": "TerminalView",
-    "category": "Refs",
-    "reason": "Cannot access refs during render"
-  },
-  {
-    "file": "packages/ui/src/views/worktreeDetail/flow/PullProgressView.tsx",
-    "function": "PullProgressView",
-    "category": "Todo",
-    "reason": "(BuildHIR::node.lowerReorderableExpression) Expression type `TemplateLiteral` cannot be safely reordered"
-  },
-  {
-    "file": "packages/ui/src/views/worktreeDetail/ports/PortFormView.tsx",
-    "function": "PortFormView",
-    "category": "Todo",
-    "reason": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
-  },
-  {
-    "file": "packages/ui/src/views/worktreeDetail/ScriptLaunchRowView.tsx",
-    "function": "ScriptLaunchRowView",
-    "category": "Refs",
-    "reason": "Cannot access refs during render"
   }
 ]

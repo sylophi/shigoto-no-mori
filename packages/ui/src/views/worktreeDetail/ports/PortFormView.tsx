@@ -66,12 +66,13 @@ export function PortFormView({
       return;
     }
     setSaving(true);
+    const trimmed = label.trim();
+    const entry = {
+      port: parsed,
+      label: trimmed.length > 0 ? trimmed : undefined,
+    };
     try {
-      const trimmed = label.trim();
-      await onSubmit({
-        port: parsed,
-        label: trimmed.length > 0 ? trimmed : undefined,
-      });
+      await onSubmit(entry);
       onDone();
     } catch (err) {
       setError(errorMessageOf(err));

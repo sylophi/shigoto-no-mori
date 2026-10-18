@@ -6,7 +6,9 @@ import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
 
 export function ProjectRowView({
-  sortable,
+  // Taken apart here: a ref read off the object would make the compiler
+  // take every read of it for a ref's.
+  sortable: { setNodeRef, style, attributes, isDragging },
   arrangeMode,
   pickable,
   current,
@@ -43,14 +45,14 @@ export function ProjectRowView({
 }) {
   return (
     <div
-      ref={sortable.setNodeRef}
-      style={sortable.style}
-      className={cn("relative rounded-md", sortable.isDragging && "opacity-0")}
+      ref={setNodeRef}
+      style={style}
+      className={cn("relative rounded-md", isDragging && "opacity-0")}
       // The sortable's marks belong to arranging alone. Outside it the
       // sortable is off, and its aria-disabled would put the
       // not-allowed cursor (index.css) on a row that is only a title,
       // and a tab stop on a wrapper with nothing to do.
-      {...(arrangeMode ? sortable.attributes : undefined)}
+      {...(arrangeMode ? attributes : undefined)}
     >
       <div
         // A row of the list is picked as one pill, though the click

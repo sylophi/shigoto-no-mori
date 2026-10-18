@@ -9,25 +9,25 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 export function ScriptLaunchRowView({
   pinned,
   buttons,
-  measure,
+  rowRef,
+  measurerRef,
+  names,
 }: {
   // The scripts pinned to the row, every one shown.
   pinned: boolean;
   // The pills shown (ScriptLaunchButton).
   buttons: ReactNode;
-  // Unpinned: the row and the hidden copy of every candidate's pill it
-  // measures them on, so the row shows the ones that fit.
-  measure?: {
-    rowRef?: Ref<HTMLDivElement>;
-    measurerRef?: Ref<HTMLDivElement>;
-    names: readonly string[];
-  };
+  // Unpinned: the row and the hidden copy of every candidate's pill
+  // (`names`) it measures them on, so the row shows the ones that fit.
+  rowRef?: Ref<HTMLDivElement>;
+  measurerRef?: Ref<HTMLDivElement>;
+  names?: readonly string[];
 }) {
-  if (pinned || measure === undefined) {
+  if (pinned || names === undefined) {
     return <div className="flex flex-wrap items-center gap-2">{buttons}</div>;
   }
   return (
-    <div ref={measure.rowRef} className="relative flex items-center gap-2">
+    <div ref={rowRef} className="relative flex items-center gap-2">
       {buttons}
 
       {/* inert keeps the natural-width copy out of the tab order and the
@@ -45,10 +45,10 @@ export function ScriptLaunchRowView({
         className="pointer-events-none invisible absolute inset-x-0 top-0 overflow-hidden"
       >
         <div
-          ref={measure.measurerRef}
+          ref={measurerRef}
           className="flex w-max items-center gap-2 whitespace-nowrap"
         >
-          {measure.names.map((name) => (
+          {names.map((name) => (
             <ScriptPillView key={name} name={name} busy={false} />
           ))}
         </div>
