@@ -1,11 +1,11 @@
-// Proof that the requests a device's settings feed follow the settings
-// whoever wrote them (renderer/hooks/config/useGlobalConfig.ts,
-// followDeviceSettings): the device's config view moving its `githubCli`
-// switch reads gh's answers again, moving its launch tools reads the
-// launcher lists again, and a move of anything else reads neither, with
-// no Settings save in the window. Before, only the window's own save
-// asked them again, so `sm config` or another device's form left them
-// stale.
+// Proof that gh's answers follow a device's `githubCli` switch whoever
+// moved it (renderer/hooks/config/useGlobalConfig.ts,
+// followDeviceSettings): the device's config view turning the switch
+// reads them again, and nothing else does, an explicit default over an
+// absent key included. Before, only the window's own Settings save asked
+// them again, so `sm config` or another device's form left them stale.
+// The rest of a device's settings reach its requests through the push
+// watch's externalChange (push-reads).
 //
 // Run: pnpm test device-settings-reads.
 import assert from "node:assert/strict";
@@ -14,11 +14,11 @@ import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig"
 import type { GlobalConfig } from "@shigomori/contracts/schemas";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";
+import * as Queue from "effect/Queue";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Stream from "effect/Stream";
 import { it } from "vitest";
 import type { Link } from "@shared/ipc/transport";
-import { pushFanOut } from "@shared/remote/rpcTransport";
 import { followDeviceSettings } from "@/hooks/config/useGlobalConfig";
 import { queryKeysFor } from "@/lib/queryKeys";
 import {
@@ -46,20 +46,28 @@ function shown(client: QueryClient, queryKey: readonly unknown[]) {
   return { counts, unsubscribe };
 }
 
-it("gh's answers and the launch tools follow the device's settings, and nothing else does", async () => {
-  const host = pushFanOut();
-  let following = 0;
+it("gh's answers follow the device's githubCli switch, and nothing else moves them", async () => {
+  // The device's config view, its values sent by hand once it listens.
+  const listeners = new Set<(value: GlobalConfig) => void>();
   const link: Link = {
     local: true,
     call: (channel) => Effect.die(new Error(`no stand-in for ${channel}`)),
     view: (channel) =>
-      Stream.unwrap(
-        Effect.sync(() => {
-          following += 1;
-          return host.pushes(channel);
-        }),
-      ),
-    pushes: (channel) => host.pushes(channel),
+      channel === WATCH
+        ? Stream.callback<unknown>((queue) =>
+            Effect.acquireRelease(
+              Effect.sync(() => {
+                const listen = (value: GlobalConfig) => {
+                  Queue.offerUnsafe(queue, value);
+                };
+                listeners.add(listen);
+                return listen;
+              }),
+              (listen) => Effect.sync(() => listeners.delete(listen)),
+            ),
+          )
+        : Stream.die(new Error(`no view ${channel}`)),
+    pushes: () => Stream.never,
   };
   const queryClient = new QueryClient();
   const registry = AtomRegistry.make({
@@ -71,29 +79,25 @@ it("gh's answers and the launch tools follow the device's settings, and nothing 
   });
   const keys = queryKeysFor(DEVICE);
   const gh = shown(queryClient, keys.githubCliReadiness());
-  const launchers = shown(queryClient, keys.projectLaunchers("p1"));
-  await waitFor(
-    () => gh.counts.reads === 1 && launchers.counts.reads === 1,
-    "the first reads",
-  );
+  await waitFor(() => gh.counts.reads === 1, "the first read");
 
   const stop = followDeviceSettings(registry, queryClient, DEVICE);
-  const config = (value: GlobalConfig) => host.emit(WATCH, value);
-  await waitFor(() => following > 0, "the view followed");
-  // The view's first value is no move, and the next move of anything
-  // else reads neither: each later read is the one move it follows.
-  config({ githubCli: true });
-  config({ githubCli: true, autoPullNew: true });
-  config({ githubCli: false, autoPullNew: true });
-  await waitFor(() => gh.counts.reads === 2, "gh read again");
-  assert.equal(launchers.counts.reads, 1);
-
+  await waitFor(() => listeners.size > 0, "the view followed");
+  const config = (value: GlobalConfig) => {
+    for (const listen of listeners) listen(value);
+  };
+  // An absent switch, then the same switch spelled out beside other
+  // moves, reads nothing: the next read is the switch's own move.
+  config({});
+  config({ githubCli: true, autoPullNew: true, terminal: "ghostty" });
   config({ githubCli: false, autoPullNew: true, terminal: "ghostty" });
-  await waitFor(() => launchers.counts.reads === 2, "launchers read again");
-  assert.equal(gh.counts.reads, 2);
+  await waitFor(() => gh.counts.reads === 2, "gh read again");
+  config({ githubCli: false, launchers: [], hiddenLaunchers: ["app:zed"] });
+  config({});
+  await waitFor(() => gh.counts.reads === 3, "gh read again on the way back");
+  assert.equal(gh.counts.reads, 3);
 
   stop();
   gh.unsubscribe();
-  launchers.unsubscribe();
   registry.dispose();
 });

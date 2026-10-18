@@ -171,11 +171,6 @@ export class SettingsSaveError extends Error {
   }
 }
 
-interface SettingsSaveResult {
-  devicePersisted: boolean;
-  clientPersisted: boolean;
-}
-
 // One Save over two stores, as ONE mutation so isPending, isSuccess and
 // error reset atomically per save (two mutations left a failed half's
 // error sticky across later successful saves). Each store is sent only
@@ -196,7 +191,7 @@ export function useSettingsSave() {
     }: {
       state: SettingsFormState;
       saved: SettingsFormState;
-    }): Promise<SettingsSaveResult> => {
+    }): Promise<void> => {
       const { devicePatch, clientPatch } = settingsWrites(saved, state);
       const devicePersisted = Object.keys(devicePatch).length > 0;
       const clientPersisted = Object.keys(clientPatch).length > 0;
@@ -228,7 +223,6 @@ export function useSettingsSave() {
           throw new SettingsSaveError(devicePersisted, error);
         }
       }
-      return { devicePersisted, clientPersisted };
     },
     meta: { errorTitle: "Couldn't save settings" },
   });

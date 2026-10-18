@@ -1,5 +1,6 @@
 import { callOf } from "@shigomori/contracts/contract";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
+import { DEVICE_SETTINGS_DEFAULTS } from "@shigomori/contracts/schemas";
 import type { QueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -46,41 +47,30 @@ export function useLocalGlobalConfig() {
   return useView(api.isElectron ? globalConfigAtom(api.deviceId) : null);
 }
 
-// The requests a device's settings feed (gh's answers, which its
-// `githubCli` switch gates, and the launch tools) read again whenever
-// those settings move, whoever wrote them: Settings, a peer's form or
-// `sm config` in a terminal. The host follows the same settings from
-// its store; this follows its view. Held
-// for as long as the device's api lives, as its push watch is.
+// gh's answers read again when the device's `githubCli` switch moves,
+// whoever moved it (Settings, a peer's form, `sm config`). The rest of a
+// device's settings writes reach its requests through the push watch's
+// externalChange, which leaves gh's keys out for their cost; the host
+// gates them on this switch (GithubCli.unavailableReason). Held beside
+// each device's push watch, so a peer's config view stays up for the
+// account's life, asked again on the view's ladders while it is away or
+// not sharing.
 export function followDeviceSettings(
   registry: AtomRegistry.AtomRegistry,
   queryClient: QueryClient,
   deviceId: string,
 ): () => void {
   const keys = queryKeysFor(deviceId);
-  let last: { readonly gh: string; readonly launch: string } | undefined;
+  let last: boolean | undefined;
   return registry.subscribe(
     globalConfigAtom(deviceId),
     (result) => {
       if (!AsyncResult.isSuccess(result)) return;
-      const config = result.value;
-      const next = {
-        gh: JSON.stringify(config.githubCli ?? null),
-        launch: JSON.stringify([
-          config.launchers,
-          config.hiddenLaunchers,
-          config.launchScripts,
-          config.terminal,
-          config.editor,
-        ]),
-      };
-      if (last !== undefined && next.gh !== last.gh) {
+      const on = result.value.githubCli ?? DEVICE_SETTINGS_DEFAULTS.githubCli;
+      if (last !== undefined && on !== last) {
         refreshQueries(queryClient, { queryKey: keys.githubCliAll() });
       }
-      if (last !== undefined && next.launch !== last.launch) {
-        refreshQueries(queryClient, { queryKey: keys.launchersAll() });
-      }
-      last = next;
+      last = on;
     },
     { immediate: true },
   );
