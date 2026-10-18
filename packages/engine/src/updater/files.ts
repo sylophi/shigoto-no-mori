@@ -73,8 +73,8 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
               ),
         ),
       );
-    // A removal of what nothing needs gone: a leftover the next run's
-    // prune sweeps again, its failure no step's.
+    // A removal of what nothing needs gone: a leftover a later run
+    // sweeps or clears, its failure no step's.
     const prune = (target: string) => removeAll(target).pipe(Effect.ignore);
 
     // A file the terminal, the app and a v2 Go sm share, read leniently: one

@@ -1072,7 +1072,8 @@ describe("staging", () => {
 
   it("fails a confirmed clear it couldn't make, rather than answer up to date", async () => {
     const box = newBox("2.0.0-beta.2");
-    seedStaged(box, "2.0.0-beta.2");
+    // Newer than the build, so it is offered until it goes.
+    seedStaged(box, "2.0.0-beta.3");
     const { client } = network((url) =>
       url.toString() === LIST ? json(null) : undefined,
     );

@@ -280,7 +280,12 @@ export const makeStaging = ({
         // forever. Only a confirmed answer clears it: the kept release list
         // can lag a release an earlier run staged, and that stays ready.
         if (confirmed) {
-          yield* clearStaged;
+          // Required only while the update would still be offered: one
+          // of this build's version or older is offered never again.
+          const offered = yield* installable(running.version);
+          yield* Option.isSome(offered)
+            ? clearStaged
+            : clearStaged.pipe(Effect.ignore);
           return Option.none<StagedManifest>();
         }
         return yield* installable(running.version);
