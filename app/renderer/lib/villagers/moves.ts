@@ -41,6 +41,7 @@ import {
 } from "@shigomori/ui/lib/villagerVoice.ts";
 import { speakersFor } from "./speakers";
 import { recordVisits } from "./visitLog";
+import { type Deadline, deadlineIn, deadlinePassed } from "@/lib/deadline";
 
 // Short enough not to read as late.
 const SETTLE_MS = 150;
@@ -61,7 +62,7 @@ const showing = new Map<
 >();
 // Worktrees whose moves are someone else's news, by id or name, until
 // when.
-const quiet = new Map<string, number>();
+const quiet = new Map<string, Deadline>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 // The page's api and query client, from the boot.
 let started:
@@ -118,17 +119,17 @@ export function holdVillagerMoves(): () => void {
 // Leaves the moves of these worktrees (by id or by name, on any device)
 // untold for a while: the flow moving them tells of it itself.
 export function quietVillagerMoves(keys: readonly string[]): void {
-  const until = performance.now() + QUIET_MS;
+  const until = deadlineIn(QUIET_MS);
   for (const key of keys) quiet.set(key, until);
 }
 
 // Whether a worktree's moves are someone else's news right now
 // (quietVillagerMoves). The visit log (visitLog.ts) reads it too.
 export function isQuiet(worktree: Worktree): boolean {
-  const now = performance.now();
-  return [worktree.id, worktree.name].some(
-    (key) => (quiet.get(key) ?? 0) > now,
-  );
+  return [worktree.id, worktree.name].some((key) => {
+    const until = quiet.get(key);
+    return until !== undefined && !deadlinePassed(until);
+  });
 }
 
 function settle(): void {

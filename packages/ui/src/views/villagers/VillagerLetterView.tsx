@@ -1,11 +1,11 @@
 import { type CSSProperties, useState } from "react";
+import { useToday } from "../../hooks/useToday.ts";
 import { stationeryFor } from "../../lib/villagers/stationery.ts";
 import { StationeryPrintView } from "./StationeryPrintView.tsx";
 import { cn } from "../../lib/utils.ts";
 import type { MoveNews, Speaker } from "../../lib/villagerVoice.ts";
 import { NextArrowView } from "./NextArrowView.tsx";
 import { MoveCaptionView } from "./VillagerDialogueView.tsx";
-import { useToday } from "../../hooks/useToday.ts";
 import { TypedWordsView } from "./TypedWordsView.tsx";
 
 // A legendary character's news: a letter on their own stationery that

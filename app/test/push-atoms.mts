@@ -209,17 +209,24 @@ it("script runs: a run's state, output and activity, from its pushes", async () 
   // The wall clock stepped back an hour: a failure after the look is
   // still newer than it.
   const back = vi.spyOn(Date, "now").mockReturnValue(Date.now() - 3_600_000);
-  await push(scriptsContract, "event", {
-    runId: "r3",
-    kind: "started",
-    projectId: "p1",
-    worktreeId: "w1",
-    slot: setup,
-  });
-  await waitFor(() => stateOf()?.runId === "r3", "the third run");
-  await push(scriptsContract, "event", { runId: "r3", kind: "exit", code: 1 });
-  await waitFor(() => activity() === "failed", "the failure after the look");
-  back.mockRestore();
+  try {
+    await push(scriptsContract, "event", {
+      runId: "r3",
+      kind: "started",
+      projectId: "p1",
+      worktreeId: "w1",
+      slot: setup,
+    });
+    await waitFor(() => stateOf()?.runId === "r3", "the third run");
+    await push(scriptsContract, "event", {
+      runId: "r3",
+      kind: "exit",
+      code: 1,
+    });
+    await waitFor(() => activity() === "failed", "the failure after the look");
+  } finally {
+    back.mockRestore();
+  }
   runs.markSeen("w1");
   assert.equal(activity(), null);
 

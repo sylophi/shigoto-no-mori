@@ -1,5 +1,5 @@
 import { readStoredJson, writeStored } from "@/lib/localStorage";
-// The order in which worktrees were last opened in this window (a
+// The order in which worktrees were last opened in this app's windows (a
 // revision, higher is later, so a clock step can't reorder it), across
 // every project and device, for the worktree palette's order: where you were
 // last floats to the top. Keyed by the sidebar's row key (worktreeRowKey,

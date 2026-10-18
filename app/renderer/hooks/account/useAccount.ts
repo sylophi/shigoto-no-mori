@@ -25,6 +25,7 @@ import {
   MACHINE_FALLBACK_ICON,
   type DeviceIcon,
 } from "@shigomori/contracts/deviceIcon";
+import { type Deadline, deadlineIn, deadlinePassed } from "@/lib/deadline";
 import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
@@ -88,7 +89,7 @@ export function useLocalDeviceIcon(): DeviceIcon {
 // error as it starts.
 const listRefusals = new WeakMap<
   QueryClient,
-  { readonly until: number; readonly error: HubRateLimitedError }
+  { readonly until: Deadline; readonly error: HubRateLimitedError }
 >();
 
 export const accountDevicesQueryOptions = (api: RendererApi) =>
@@ -96,7 +97,7 @@ export const accountDevicesQueryOptions = (api: RendererApi) =>
     queryKey: queryKeys.accountDevices(),
     queryFn: async ({ signal, client }) => {
       const refused = listRefusals.get(client);
-      if (refused !== undefined && performance.now() < refused.until) {
+      if (refused !== undefined && !deadlinePassed(refused.until)) {
         throw refused.error;
       }
       try {
@@ -104,7 +105,7 @@ export const accountDevicesQueryOptions = (api: RendererApi) =>
       } catch (error) {
         if (isHubRateLimitedError(error)) {
           listRefusals.set(client, {
-            until: performance.now() + (error.retryAfterSeconds ?? 0) * 1000,
+            until: deadlineIn((error.retryAfterSeconds ?? 0) * 1000),
             error,
           });
         }
