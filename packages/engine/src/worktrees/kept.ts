@@ -30,15 +30,25 @@ export const makeKept = Effect.gen(function* () {
 
   // A recorded move from a path is the folder that last left it: a
   // folder made at a path, or moved there, ends the record of whatever
-  // left it before (`claimed`).
+  // left it before (`claimed`). An earlier move into the path, of the
+  // folder that left it, is pointed past it first, so its chain still
+  // ends where that folder is.
   const claimed = (paths: ReadonlyArray<string>) =>
-    sql`DELETE FROM wt_moves WHERE moved = 1 AND from_path IN ${sql.in(paths)}`;
+    Effect.andThen(
+      sql`UPDATE wt_moves AS r SET to_path = (
+          SELECT c.to_path FROM wt_moves AS c
+          WHERE c.from_path = r.to_path AND c.moved = 1 AND c.rowid > r.rowid)
+        WHERE r.moved = 1 AND r.to_path IN ${sql.in(paths)} AND EXISTS (
+          SELECT 1 FROM wt_moves AS c
+          WHERE c.from_path = r.to_path AND c.moved = 1 AND c.rowid > r.rowid)`,
+      sql`DELETE FROM wt_moves WHERE moved = 1 AND from_path IN ${sql.in(paths)}`,
+    );
 
   // Written anew, so the rowid orders the moves (WtFolder's placed).
   const recordMove = (project: RegisteredProject, moved: Moved) =>
     Effect.all([
+      claimed([moved.fromPath, moved.toPath]),
       sql`DELETE FROM wt_moves WHERE from_path = ${moved.fromPath}`,
-      claimed([moved.toPath]),
       sql`INSERT INTO wt_moves ${sql.insert({
         from_path: moved.fromPath,
         to_path: moved.toPath,

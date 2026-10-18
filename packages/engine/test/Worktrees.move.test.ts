@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
+import * as Layout from "../src/Layout.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import * as WtFolder from "../src/WtFolder.ts";
@@ -645,4 +646,55 @@ it("forgets the move of a folder whose path a new worktree took, and records tha
   assert.ok(result.reused, "the second worktree took another path");
   assert.deepEqual(result.afterCreate, { to: null, ids: [] });
   assert.equal(result.afterMove, later);
+});
+
+// A folder moved on twice, then a worktree made at the path between.
+it("keeps a chain of moves whole when a worktree takes a path in its middle", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const a = join(box.home, "away", "a", "fox");
+  const c = join(box.home, "away", "c", "fox");
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const project = yield* (yield* Registry.Registry).register({
+        name: "proj",
+        path: repo,
+      });
+      const worktrees = yield* Worktrees.Worktrees;
+      const folder = yield* WtFolder.WtFolder;
+      const b = join(
+        yield* (yield* Layout.Layout).worktreeBase(project),
+        "fox",
+      );
+      yield* worktrees.rekey(project, worktreeIdFromPath(a), b, {
+        fromPath: a,
+      });
+      yield* worktrees.rekey(project, worktreeIdFromPath(b), c, {
+        fromPath: b,
+      });
+      const made = yield* worktrees.create(
+        project,
+        { name: "fox", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      );
+      return {
+        b,
+        made: made.worktree.path,
+        a: Option.getOrNull(yield* folder.movedTo(a)),
+        fromB: Option.getOrNull(yield* folder.movedTo(b)),
+        ids: [...(yield* folder.movedIds)],
+      };
+    }),
+  )) as {
+    b: string;
+    made: string;
+    a: string | null;
+    fromB: string | null;
+    ids: Array<[string, string]>;
+  };
+  assert.equal(result.made, result.b, "the worktree was made elsewhere");
+  assert.equal(result.a, c);
+  assert.equal(result.fromB, null);
+  assert.deepEqual(result.ids, [
+    [worktreeIdFromPath(a), worktreeIdFromPath(c)],
+  ]);
 });
