@@ -9,7 +9,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
@@ -18,6 +17,7 @@ import * as Lifecycle from "./Lifecycle.ts";
 import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
+import { capture } from "./processes.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
@@ -209,26 +209,10 @@ const make = Effect.gen(function* () {
   const usage = yield* Usage.Usage;
   const config = yield* Config.Config;
 
-  // Runs a program to its end: its exit code, and what it printed.
+  // Runs a program to its exit: its exit code, and what it printed.
   const ran = (program: string, args: ReadonlyArray<string>) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const handle = yield* spawner.spawn(
-          ChildProcess.make(program, [...args], {
-            stdin: "ignore",
-          }),
-        );
-        const [stdout, stderr, code] = yield* Effect.all(
-          [
-            handle.stdout.pipe(Stream.decodeText(), Stream.mkString),
-            handle.stderr.pipe(Stream.decodeText(), Stream.mkString),
-            handle.exitCode,
-          ],
-          { concurrency: 3 },
-        );
-        return { code, output: `${stdout}${stderr}`.trim() };
-      }),
-    ).pipe(
+    capture(spawner, program, args, { from: "all" }).pipe(
+      Effect.map(({ code, output }) => ({ code, output: output.trim() })),
       Effect.catch((error) =>
         Effect.succeed({ code: -1, output: error.message }),
       ),
@@ -323,6 +307,9 @@ const make = Effect.gen(function* () {
                   },
                 ),
               );
+              // Unreferenced, so the scope's close leaves the group the
+              // launched command shares with its sh alone.
+              yield* Effect.asVoid(handle.unref);
               yield* handle.exitCode;
             }),
           ).pipe(

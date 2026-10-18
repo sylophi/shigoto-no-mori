@@ -39,6 +39,7 @@ import {
   failureAs,
   failureOf,
   git,
+  realClone,
   rev,
   seedRepo,
   tempDir,
@@ -265,6 +266,39 @@ it("an interrupted run takes its git down with it, hooks and all", async () => {
     timeout: 5000,
     interval: 20,
   });
+});
+
+it("a commit and a push end at git's exit while a hook's child holds its stderr", async () => {
+  // A project as a user has one, pushing to a scratch remote that holds
+  // its history (a shallow checkout's clone can't push to an empty one).
+  const repo = realClone();
+  const remote = join(tempDir("remote-"), "remote.git");
+  git(repo, "clone", "-q", "--bare", repo, remote);
+  git(repo, "remote", "set-url", "origin", remote);
+  const pids = join(tempDir("hook-"), "pids");
+  // git hands a hook its stderr for stdout too; the child keeps both.
+  for (const hook of ["pre-commit", "pre-push"]) {
+    write(
+      repo,
+      `.git/hooks/${hook}`,
+      `#!/bin/sh\n(echo started; sleep 30) &\necho $! >> '${pids}'\n`,
+    );
+    chmodSync(join(repo, `.git/hooks/${hook}`), 0o755);
+  }
+  await withGit((g) =>
+    Effect.gen(function* () {
+      yield* g.run(repo, ["commit", "-q", "--allow-empty", "-m", "hooked"]);
+      yield* g.run(repo, ["push", "-q", "origin", "HEAD:refs/heads/hooked"]);
+    }).pipe(Effect.timeout("10 seconds")),
+  );
+  assert.equal(rev(remote, "hooked"), rev(repo, "HEAD"));
+  // What the hooks left goes with git's process group as the run ends.
+  for (const pid of readFileSync(pids, "utf8").trim().split("\n")) {
+    await vi.waitFor(
+      () => assert.throws(() => process.kill(Number(pid), 0), /ESRCH/),
+      { timeout: 5000, interval: 20 },
+    );
+  }
 });
 
 // --- worktrees ------------------------------------------------------

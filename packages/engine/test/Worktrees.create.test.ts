@@ -6,14 +6,16 @@ import assert from "node:assert/strict";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   renameSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Effect from "effect/Effect";
-import { afterEach, it } from "vitest";
+import { afterEach, it, vi } from "vitest";
 import * as Config from "../src/Config.ts";
 import * as Doctor from "../src/Doctor.ts";
 import * as Registry from "../src/Registry.ts";
@@ -22,10 +24,11 @@ import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox | undefined;
 let links: string | undefined;
+// A real install's node_modules takes a while to remove.
 afterEach(async () => {
   await box?.remove();
   if (links !== undefined) rmSync(links, { recursive: true, force: true });
-});
+}, 60_000);
 
 // A project, and the worktree `fox` made in it.
 const symlinkedFox = async () => {
@@ -128,3 +131,106 @@ it("names the default branch's local branch from the ref it resolved: the remote
     primaryBranch: "origin/feat",
   });
 });
+
+it(
+  "the owner's setup, then a watcher pnpm runs on its output, finishes with the watcher still running",
+  { timeout: 180_000 },
+  async () => {
+    const sandboxed = sandbox();
+    box = sandboxed;
+    const repo = sandboxed.realRepo("shigoto-no-mori");
+    const watchers = join(sandboxed.home, "watchers");
+    // A watcher the setup starts after the owner's install, through pnpm,
+    // that keeps writing to the script's output, as a dev server or a
+    // file watcher does: past the create's own limit, and ending by
+    // itself after. Not in the postinstall, which an install runs too and
+    // pnpm waits out.
+    const manifest = join(repo, "package.json");
+    const pkg = JSON.parse(readFileSync(manifest, "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    pkg.scripts["watch"] =
+      `echo $$ $PPID >> '${watchers}'; for i in $(seq 3000); do echo watching; sleep 0.05; done`;
+    writeFileSync(manifest, `${JSON.stringify(pkg, null, 2)}\n`);
+    sandboxed.git(repo, "commit", "-q", "-am", "A watcher");
+    // From the store this checkout installed from, and without the
+    // dependencies' build scripts (Electron's download): the install a
+    // setup makes, never the network's. Both prefixes, as pnpm reads
+    // either.
+    const settings = [
+      "npm_config_offline",
+      "npm_config_ignore_scripts",
+      "pnpm_config_offline",
+      "pnpm_config_ignore_scripts",
+    ] as const;
+    const saved = settings.map((key) => [key, process.env[key]] as const);
+    for (const key of settings) process.env[key] = "true";
+    const said: string[] = [];
+    const restore = () => {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    };
+    const created = (await sandboxed
+      .engine(
+        Effect.gen(function* () {
+          const project = yield* (yield* Registry.Registry).register({
+            name: "shigoto-no-mori",
+            path: repo,
+          });
+          yield* (yield* Config.Config).set(
+            { kind: "project", projectId: project.id, path: project.path },
+            "scripts.setup",
+            "pnpm install && pnpm run postinstall && (pnpm run watch &)",
+          );
+          return yield* (yield* Worktrees.Worktrees).create(
+            project,
+            { name: "fox" },
+            {
+              report: (event) =>
+                Effect.sync(() => {
+                  if (event.event === "script" && event.kind === "data") {
+                    said.push(event.data);
+                  }
+                }),
+              color: false,
+            },
+          );
+        }).pipe(Effect.timeout("90 seconds")),
+      )
+      .finally(restore)) as {
+      worktree?: Worktrees.WorktreeRow;
+      error?: string;
+    };
+    // The watcher and its pnpm, once pnpm has started it.
+    const pids = await vi
+      .waitFor(
+        () => {
+          const [pid = 0, parent = 0] = readFileSync(watchers, "utf8")
+            .trim()
+            .split(" ")
+            .map(Number);
+          assert.ok(pid > 0 && parent > 0);
+          return [pid, parent];
+        },
+        { timeout: 20_000, interval: 100 },
+      )
+      .catch(() => []);
+    try {
+      assert.equal(created.error, undefined, said.join("").slice(-2000));
+      assert.equal(created.worktree?.branch, "fox");
+      assert.match(said.join(""), /\[icons\] synced/);
+      assert.equal(pids.length, 2, "the watcher never started");
+      for (const pid of pids) assert.doesNotThrow(() => process.kill(pid, 0));
+    } finally {
+      for (const pid of pids) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // Gone already: a watcher ends by itself.
+        }
+      }
+    }
+  },
+);
