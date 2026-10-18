@@ -7,7 +7,7 @@ import { Input } from "../../../primitives/input.tsx";
 import { SegmentedControl } from "../../../primitives/segmented-control.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { Warning } from "../../../primitives/warning.tsx";
-import { pluralize } from "../../../lib/pluralize.ts";
+import { listed, pluralize } from "@shigomori/contracts/words";
 import type {
   IntegrateMethod,
   MergePreview,
@@ -238,6 +238,5 @@ function nameConflicts(paths: readonly string[]): string {
   const named = paths.slice(0, NAMED_CONFLICTS);
   const rest = paths.length - named.length;
   if (rest > 0) return `${named.join(", ")} and ${rest} more`;
-  if (named.length === 1) return named[0] ?? "";
-  return `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`;
+  return listed(named);
 }

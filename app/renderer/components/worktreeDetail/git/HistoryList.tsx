@@ -12,7 +12,7 @@ import type {
   CommitActions,
   CommitRewrite,
 } from "@shigomori/ui/lib/commitRewrite.ts";
-import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import {
   deriveRemoteSyncState,
   type BranchHistory,

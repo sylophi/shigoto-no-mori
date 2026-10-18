@@ -2,6 +2,7 @@
 // interrupt, in words: the host counts it (host/lib/Scripts.ts, busy)
 // and the shell asks before going ahead (main/electron/busyPrompt.ts).
 // Both sides word it from the counts.
+import { listed, plural, pluralize } from "@shigomori/contracts/words";
 import type { ChangeKind } from "@shigomori/contracts/modules/session";
 
 export type BusyOperations = {
@@ -36,10 +37,6 @@ export const BUSY_COPY: Record<
   },
 };
 
-function pluralize(n: number, singular: string, plural: string): string {
-  return n === 1 ? singular : plural;
-}
-
 function isBusy(busy: BusyOperations): boolean {
   return (
     busy.runningScripts > 0 ||
@@ -56,17 +53,17 @@ function runningWords(
   busy: BusyOperations,
 ): { subject: string; obj: string } | null {
   const parts = [
-    [busy.runningScripts, "script", "scripts"],
-    [busy.busyTerminals, "terminal", "terminals"],
+    [busy.runningScripts, "script"],
+    [busy.busyTerminals, "terminal"],
   ] as const;
   const named = parts
     .filter(([n]) => n > 0)
-    .map(([n, one, many]) => `${n} ${pluralize(n, one, many)}`);
+    .map(([n, noun]) => pluralize(n, noun));
   if (named.length === 0) return null;
   const total = busy.runningScripts + busy.busyTerminals;
   return {
-    subject: `${named.join(" and ")} ${pluralize(total, "is", "are")}`,
-    obj: pluralize(total, "it", "them"),
+    subject: `${listed(named)} ${plural(total, "is", "are")}`,
+    obj: plural(total, "it", "them"),
   };
 }
 
@@ -209,12 +206,6 @@ const CHANGE_WORDS: ReadonlyArray<{
 const capitalized = (words: string) =>
   words.charAt(0).toUpperCase() + words.slice(1);
 
-// "a, b and c".
-const listed = (parts: readonly string[]) =>
-  parts.length < 2
-    ? (parts[0] ?? "")
-    : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1) ?? ""}`;
-
 // Everything under way as one clause each, the ones doing the same
 // thing as one ("2 pulls and a push are still being made", "3
 // operations (…) are still being made" past two), worded for this
@@ -252,7 +243,7 @@ function underWay(busy: BusyOperations, there = false) {
     clauses.push(
       parts.length > 2
         ? `${n} ${git ? "git operations" : "operations"} (${listed(parts)}) are still ${doing}`
-        : `${listed(parts)} ${pluralize(n, "is", "are")} still ${doing}`,
+        : `${listed(parts)} ${plural(n, "is", "are")} still ${doing}`,
     );
   }
   const total =
@@ -262,7 +253,7 @@ function underWay(busy: BusyOperations, there = false) {
   const removing = groups.has("being removed");
   return {
     clauses,
-    obj: pluralize(total, "it", "them"),
+    obj: plural(total, "it", "them"),
     runningOnly: running !== null && groups.size === 0,
     removingOnly: removing && running === null && groups.size === 1,
     removing,

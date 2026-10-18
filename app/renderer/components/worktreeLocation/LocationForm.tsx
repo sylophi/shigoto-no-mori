@@ -14,7 +14,7 @@ import {
   type Worktree,
   type WorktreeLayout,
 } from "@shigomori/contracts/schemas";
-import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { LocationFormView } from "@shigomori/ui/views/worktreeLocation/LocationFormView.tsx";
 
 interface LocationFormProps {

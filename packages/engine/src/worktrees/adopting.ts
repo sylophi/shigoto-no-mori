@@ -1,6 +1,6 @@
 // Worktrees' adopting: an external checkout taken under management,
 // and setup run again in a worktree.
-import { sanitizeBranchForPath } from "@shigomori/contracts/predicates/worktreeDirName";
+import { adoptedDirName } from "@shigomori/contracts/predicates/worktreeDirName";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Git from "../Git.ts";
@@ -56,9 +56,7 @@ export const makeAdopting = ({
       }
       // Adopting re-checks-out the branch tip, so what is uncommitted goes.
       yield* requireClean(worktree, options.force, "adopt", "adopting");
-      const name = worktree.detached
-        ? worktree.branch
-        : sanitizeBranchForPath(worktree.branch);
+      const name = adoptedDirName(worktree);
       // The replacement first, then the checkout it replaces. A removal
       // that fails takes the replacement back only while the original
       // still holds the commits; otherwise the replacement stays, holding

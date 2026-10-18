@@ -18,7 +18,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { clientConfigNow } from "@/hooks/config/useClientConfig";
 import { needView } from "@shigomori/ui/lib/agentNeeds.ts";
-import { harnessLabel } from "@shigomori/ui/lib/agentSessions.ts";
+import { harnessLabel } from "@shigomori/contracts/harnesses";
 import { documentFocused } from "@/lib/focus";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { onWorktreeLists } from "@/lib/viewFeed";

@@ -6,7 +6,7 @@ import { KeyedButtonView } from "./DialogPartsView.tsx";
 import { ResultRowView } from "./ResultRowView.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { MODAL_COMMAND_CLASS } from "../../primitives/cmdk-classes.ts";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { FooterRow } from "../../primitives/footer-row.tsx";
 
 interface ResultsPanelProps {

@@ -8,6 +8,7 @@
 // with it. Bounded per worktree and persisted in the store (the engine's
 // MirrorHistory), so a restart keeps the recent past. Electron-free like the
 // daemon: the store is injected.
+import { pluralize } from "@shigomori/contracts/words";
 import {
   isHaltedStatus,
   MIRROR_HISTORY_LIMIT,
@@ -215,7 +216,7 @@ export function createMirrorHistory(deps: {
           localWorktreeId,
           "conflict",
           first === undefined
-            ? `${next.conflicts} conflicts`
+            ? pluralize(next.conflicts, "conflict")
             : `${first.root}: changed on both sides`,
         );
       }

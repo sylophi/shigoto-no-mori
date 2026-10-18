@@ -68,7 +68,7 @@ import { gitFetchingAtom } from "./hooks/git/useProjectGitFetching";
 import { scriptRunsAtom, scriptRunsOf } from "./hooks/scripts/scriptRuns";
 import { worktreeLifecycleAtom } from "./hooks/worktrees/useWorktreeLifecycle";
 import "./app.css";
-import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 
 // Not render blocking, unlike app.css (see fonts.css). A failed fetch
 // leaves the fallback face, which is what text paints in meanwhile.

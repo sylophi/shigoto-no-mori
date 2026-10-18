@@ -23,7 +23,7 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { useNow } from "../../hooks/useNow.ts";
 import { needView } from "../../lib/agentNeeds.ts";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
 
 // The live things a card lists, each a block with its status and its

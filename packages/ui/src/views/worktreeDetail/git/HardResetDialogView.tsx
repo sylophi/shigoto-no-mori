@@ -5,7 +5,7 @@ import { Button } from "../../../primitives/button.tsx";
 import { InlineError } from "../../../primitives/inline-error.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { Warning } from "../../../primitives/warning.tsx";
-import { pluralize } from "../../../lib/pluralize.ts";
+import { plural, pluralize } from "@shigomori/contracts/words";
 import type { MergePreview } from "@shigomori/contracts/schemas";
 
 // `git reset --hard` to any branch or commit, saying first what the
@@ -146,7 +146,7 @@ function notOnARemote({ own, pushed }: MergePreview): string | null {
   if (unpushed === 0) return null;
   if (own === 1) return "It isn't on a remote";
   if (unpushed === own) return "None of them are on a remote";
-  return `${unpushed} of them ${unpushed === 1 ? "isn't" : "aren't"} on a remote`;
+  return `${unpushed} of them ${plural(unpushed, "isn't", "aren't")} on a remote`;
 }
 
 function describe(

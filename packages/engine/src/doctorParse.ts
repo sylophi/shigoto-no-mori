@@ -1,16 +1,9 @@
 // The pure pieces of the doctor's checks: the parsers for what git, ps
-// and port-pool print, the words a finding counts with, and just enough
-// semver to tell an update file this build already is.
+// and port-pool print, and just enough semver to tell an update file
+// this build already is.
 import * as Option from "effect/Option";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import { parseLstart } from "./processes.ts";
-
-export const plural = (n: number) => (n === 1 ? "" : "s");
-
-// English has more irregulars than a trailing "s" covers ("entry is",
-// "entries are"), so this one takes both forms.
-export const pluralize = (n: number, one: string, many: string) =>
-  n === 1 ? one : many;
 
 // Go's strings.Fields: the words between runs of white space.
 export const fields = (text: string) =>

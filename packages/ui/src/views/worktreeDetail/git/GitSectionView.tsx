@@ -4,7 +4,7 @@ import { DiffStats } from "../../../primitives/diff-stats.tsx";
 import { RelativeDate } from "../../../primitives/relative-date.tsx";
 import { SectionHeading } from "../../../primitives/section-heading.tsx";
 import { TONE_MARK } from "../../../primitives/status-dot.tsx";
-import { pluralize } from "../../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import type {

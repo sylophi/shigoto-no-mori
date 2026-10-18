@@ -13,8 +13,8 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import type { SidebarView } from "@shigomori/contracts/schemas";
+import { harnessLabel } from "@shigomori/contracts/harnesses";
 import {
-  GUIDE_HARNESS_LABELS,
   GUIDE_QUESTION,
   type GuideHarness,
 } from "@shigomori/contracts/modules/guide";
@@ -209,7 +209,7 @@ export function SidebarGuideMenuItemsView({
       <DropdownMenuLabel>{GUIDE_QUESTION}</DropdownMenuLabel>
       {harnesses.map((harness) => (
         <DropdownMenuItem key={harness} onClick={() => onPick(harness)}>
-          {GUIDE_HARNESS_LABELS[harness]}
+          {harnessLabel(harness)}
         </DropdownMenuItem>
       ))}
     </DropdownMenuGroup>

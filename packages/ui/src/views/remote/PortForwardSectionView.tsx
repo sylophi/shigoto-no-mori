@@ -37,7 +37,7 @@ import { ExternalLink } from "../../primitives/external-link.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 
 export function PortForwardSectionView({
   canStart,

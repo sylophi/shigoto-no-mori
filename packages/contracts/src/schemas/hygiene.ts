@@ -1,3 +1,4 @@
+import { pluralize } from "../words.ts";
 import * as Schema from "effect/Schema";
 import { isRealBranch } from "./project.ts";
 import type { Worktree } from "./worktree.ts";
@@ -86,9 +87,7 @@ export function deriveHygieneVerdict(
   if (worktree.changedCount > 0) {
     return verdict(
       "dirty",
-      `${worktree.changedCount} uncommitted ${
-        worktree.changedCount === 1 ? "change" : "changes"
-      } would be lost.`,
+      `${pluralize(worktree.changedCount, "uncommitted change")} would be lost.`,
     );
   }
   if (hygiene?.untracked) {
@@ -141,9 +140,7 @@ export function deriveHygieneVerdict(
     );
   }
   const unpushed = worktree.hasUpstream ? worktree.ahead > 0 : true;
-  const commitCount = `${hygiene.uniqueCommits} ${
-    hygiene.uniqueCommits === 1 ? "commit" : "commits"
-  }`;
+  const commitCount = pluralize(hygiene.uniqueCommits, "commit");
   if (unpushed) {
     return verdict(
       "unpushed",

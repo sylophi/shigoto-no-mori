@@ -73,7 +73,8 @@ Rules that keep both themes cheap to maintain:
   `primitives/empty-panel.tsx`, and a bare icon button
   `primitives/icon-button.tsx` (`reveal` for one that shows on its
   row's hover, `size="xs"` in a diff's headers). Don't re-inline their
-  class strings, and count a noun through `lib/pluralize.ts`.
+  class strings, and count a noun or join a list through contracts'
+  `words.ts` (`pluralize`, `plural` for the word alone, `listed`).
 - **Hover hints are the app's tooltip**, `SimpleTooltip` from
   `primitives/tooltip.tsx`, never a `title` attribute: the browser's tooltip
   wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches

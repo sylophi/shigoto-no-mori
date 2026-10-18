@@ -11,7 +11,7 @@ import {
   mergeSettingsOf,
   pickMergeMethod,
 } from "@shigomori/contracts/mergeMethods";
-import { pluralize } from "./pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import {
   isBranchsPullRequest,
   type MergeMethod,

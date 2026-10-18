@@ -23,7 +23,7 @@ import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { useRegistry } from "@/lib/runtime/viewHooks";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
-import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { listed, plural, pluralize } from "@shigomori/contracts/words";
 import { notifyError, toast } from "@/lib/toast";
 import { DeviceHeading, LiveCard } from "./LiveCard";
 import {
@@ -42,10 +42,7 @@ function summarize(devices: readonly LiveDevice[]): string {
     forwards > 0 && pluralize(forwards, "port forward"),
     mirrors > 0 && pluralize(mirrors, "mirror"),
   ].filter((part) => part !== false);
-  const running =
-    parts.length < 2
-      ? parts[0]
-      : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  const running = listed(parts);
   const needYou = agents > 0 && agentsNeedYou(agents);
   if (needYou && running) return `${needYou}, with ${running} running`;
   if (needYou) return needYou;
@@ -151,7 +148,7 @@ function StopAllScripts({ hosts }: { hosts: readonly HostScripts[] }) {
       icon={<Square aria-hidden className="size-3 fill-current" />}
       tip={
         readOnly > 0
-          ? `${pluralize(readOnly, "script")} on a read-only device ${readOnly === 1 ? "stays" : "stay"} running`
+          ? `${pluralize(readOnly, "script")} on a read-only device ${plural(readOnly, "stays", "stay")} running`
           : undefined
       }
       onClick={() => trigger(() => stopAll.mutate())}

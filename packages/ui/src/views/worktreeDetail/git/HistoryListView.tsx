@@ -6,7 +6,7 @@ import { ChevronRight, Layers, Search } from "lucide-react";
 import { Input } from "../../../primitives/input.tsx";
 import { SegmentedControl } from "../../../primitives/segmented-control.tsx";
 import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
-import { pluralize } from "../../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
 import { HistorySelection, useRowSelection } from "./CommitRowView.tsx";
 

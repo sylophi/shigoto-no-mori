@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke, Remote } from "../contract.ts";
+import { harnessLabel, KNOWN_HARNESS_IDS } from "../harnesses.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
@@ -7,20 +8,15 @@ import { strict } from "../schemas/strict.ts";
 // opened from: `sm guide mcp` calls the host, which passes the call to its
 // shell, which drives the window.
 
-export const GuideHarnessSchema = Schema.Literals(["claude", "codex"]);
+export const GuideHarnessSchema = Schema.Literals(KNOWN_HARNESS_IDS);
 export type GuideHarness = typeof GuideHarnessSchema.Type;
 export const isGuideHarness = Schema.is(GuideHarnessSchema);
-
-export const GUIDE_HARNESS_LABELS: Record<GuideHarness, string> = {
-  claude: "Claude Code",
-  codex: "Codex",
-};
 
 // What the guide is for, as the sidebar's question mark and its menu
 // say it, and the Help menu's item for a harness.
 export const GUIDE_QUESTION = "Ask a question about the app";
 export const askAboutTheApp = (harness: GuideHarness): string =>
-  `Ask ${GUIDE_HARNESS_LABELS[harness]} about the app`;
+  `Ask ${harnessLabel(harness)} about the app`;
 
 const GuideRefSchema = Schema.Int.check(Schema.isGreaterThan(0));
 

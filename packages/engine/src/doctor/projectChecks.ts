@@ -1,4 +1,5 @@
 // The doctor's project checks: each project's repo, worktrees, scripts, launchers and ports.
+import { plural, pluralize } from "@shigomori/contracts/words";
 import { PROJECT_CONFIG_DEFAULTS } from "@shigomori/contracts/schemas/projectConfigDefaults";
 import * as Predicate from "effect/Predicate";
 import { tildify } from "@shigomori/contracts/projectPaths";
@@ -12,13 +13,7 @@ import { WORKTREE_INCLUDE } from "../CarryOver.ts";
 import * as Config from "../Config.ts";
 import { projectSettingsOf } from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
-import {
-  fields,
-  plural,
-  pluralize,
-  scriptFileTokens,
-  shellWord,
-} from "../doctorParse.ts";
+import { fields, scriptFileTokens, shellWord } from "../doctorParse.ts";
 import * as Git from "../Git.ts";
 import * as Layout from "../Layout.ts";
 import * as Paths from "../Paths.ts";
@@ -298,12 +293,12 @@ export const makeProjectChecks = ({
           entries.push(
             repairable(
               check("Projects", "project-moved", project.name).warn(
-                `${n} worktree${plural(n)} moved without telling git (${shown.join(", ")}), so git lists the old path as missing`,
+                `${pluralize(n, "worktree")} moved without telling git (${shown.join(", ")}), so git lists the old path as missing`,
                 "Re-link it (`git worktree repair <new path>`). Never prune it.",
               ),
               {
                 prompt: "",
-                label: `re-linked ${n} moved worktree${plural(n)} for ${project.name}`,
+                label: `re-linked ${pluralize(n, "moved worktree")} for ${project.name}`,
                 destructive: false,
                 writesStore: true,
                 apply: Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
@@ -318,7 +313,7 @@ export const makeProjectChecks = ({
           entries.push(
             repairable(
               check("Projects", "project-worktrees", project.name).warn(
-                `git still lists ${shown.length} worktree${plural(shown.length)} whose directory is gone (${shown.join(", ")})`,
+                `git still lists ${pluralize(shown.length, "worktree")} whose directory is gone (${shown.join(", ")})`,
                 "Prune the metadata (`git worktree prune`). If one was moved, run `git worktree repair <new path>` instead.",
               ),
               {
@@ -337,7 +332,7 @@ export const makeProjectChecks = ({
           const shown = drift.strays.map((stray) => tildify(stray, home));
           entries.push(
             check("Projects", "project-strays", project.name).warn(
-              `${shown.length} ${pluralize(shown.length, "directory", "directories")} in the managed layout that git doesn't know about (${shown.join(", ")})`,
+              `${pluralize(shown.length, "directory", "directories")} in the managed layout that git doesn't know about (${shown.join(", ")})`,
               `Adopt it (\`${binaryName} adopt <path>\`) or delete it by hand. ${binaryName} won't guess.`,
             ),
           );
@@ -394,11 +389,11 @@ export const makeProjectChecks = ({
         }
         if (missing.length === 0) return [];
         const names = missing.map((worktree) => path.basename(worktree.path));
-        const label = `${missing.length} worktree${plural(missing.length)}`;
+        const label = pluralize(missing.length, "worktree");
         return [
           repairable(
             check("Projects", "project-leases", project.name).warn(
-              `${label} port-pool covers ${missing.length === 1 ? "holds" : "hold"} no ports (${names.join(", ")}), so ${missing.length === 1 ? "its" : "their"} servers bind elsewhere`,
+              `${label} port-pool covers ${plural(missing.length, "holds", "hold")} no ports (${names.join(", ")}), so ${plural(missing.length, "its", "their")} servers bind elsewhere`,
               "Run the fix, which asks port-pool to lease them.",
             ),
             {
@@ -444,12 +439,12 @@ export const makeProjectChecks = ({
         return [
           repairable<StoreServices>(
             check("Projects", "project-wt-moves", project.name).warn(
-              `${n} worktree${plural(n)} still in a v2 folder, not moved into wt/: ${shown.join(", ")}`,
+              `${pluralize(n, "worktree")} still in a v2 folder, not moved into wt/: ${shown.join(", ")}`,
               "Clear what stopped the move (unlock it, finish the operation, move the existing folder aside), then run the fix to try again.",
             ),
             {
               prompt: "",
-              label: `moved ${n} worktree${plural(n)} into wt/ for ${project.name}`,
+              label: `moved ${pluralize(n, "worktree")} into wt/ for ${project.name}`,
               destructive: false,
               writesStore: true,
               apply: Effect.gen(function* () {
@@ -488,12 +483,12 @@ export const makeProjectChecks = ({
         return [
           repairable<StoreServices>(
             check("Projects", "project-interrupted-moves", project.name).warn(
-              `${n} worktree move${plural(n)} cut short: ${shown.join(", ")}`,
+              `${pluralize(n, "worktree move")} cut short: ${shown.join(", ")}`,
               "Run the fix to finish each one git already made and undo the rest.",
             ),
             {
               prompt: "",
-              label: `finished the cut-short move${plural(n)} for ${project.name}`,
+              label: `finished the cut-short ${plural(n, "move")} for ${project.name}`,
               destructive: false,
               writesStore: true,
               apply: Effect.gen(function* () {
@@ -627,7 +622,7 @@ export const makeProjectChecks = ({
         const n = missing.length;
         return [
           check("Projects", "project-carryover", project.name).warn(
-            `carry-over ${pluralize(n, "entry", "entries")} ${missing.join(", ")}${pluralize(n, " is", " are")} in no checkout, so new worktrees start without ${pluralize(n, "it", "them")}`,
+            `carry-over ${plural(n, "entry", "entries")} ${missing.join(", ")}${plural(n, " is", " are")} in no checkout, so new worktrees start without ${plural(n, "it", "them")}`,
             `Restore it in the primary checkout, or drop the entry (\`${binaryName} projects config carryover rm ${shellWord(first)} -p ${project.name}\`).`,
           ),
         ];
@@ -673,12 +668,12 @@ export const makeProjectChecks = ({
         return [
           repairable(
             check("Projects", "project-incoming", project.name).warn(
-              `${n} transfer landing ref${plural(n)} left by an interrupted transfer (${shown.join(", ")}), which can block the next one`,
-              `Delete ${pluralize(n, "it", "them")}. The commits stay on the device they came from.`,
+              `${pluralize(n, "transfer landing ref")} left by an interrupted transfer (${shown.join(", ")}), which can block the next one`,
+              `Delete ${plural(n, "it", "them")}. The commits stay on the device they came from.`,
             ),
             {
               prompt: `Delete ${stale.join(", ")} in ${project.name}?`,
-              label: `deleted ${n} leftover landing ref${plural(n)} in ${project.name}`,
+              label: `deleted ${pluralize(n, "leftover landing ref")} in ${project.name}`,
               destructive: true,
               apply: Effect.forEach(
                 stale,

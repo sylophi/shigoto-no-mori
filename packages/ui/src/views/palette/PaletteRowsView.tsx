@@ -12,7 +12,7 @@ import { StatusIndicatorView } from "../sidebar/StatusIndicatorView.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { matchPositions } from "../../lib/fuzzyMatch.ts";
 import { formatRelativeTime } from "../../lib/relativeTime.ts";
-import { pluralize } from "../../lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../lib/utils.ts";
 import { worktreeTitle } from "../../lib/worktreeTitle.ts";
 import { worktreeLastActivityAt } from "@shigomori/contracts/schemas";

@@ -16,7 +16,8 @@ export function DangerZoneView({
   onRelaunch,
 }: {
   // The data folder it deletes, tildified.
-  root: string;
+  // Tildified, null until it is known.
+  root: string | null;
   nuking: boolean;
   progress: NukeProgress | null;
   // What a finished nuke could not do, which waits on a relaunch.
@@ -62,8 +63,13 @@ export function DangerZoneView({
           <p className="text-xs text-muted-foreground">
             Force-removes every worktree shigomori created, removes its command
             line tool and hooks, takes this device off your account, and deletes
-            everything under <span className="font-mono">{root}</span> along
-            with the app's settings and logs. The app restarts as a fresh
+            everything under{" "}
+            {root === null ? (
+              "the app's data folder"
+            ) : (
+              <span className="font-mono">{root}</span>
+            )}{" "}
+            along with the app's settings and logs. The app restarts as a fresh
             install. The original project repos on disk are not touched.
           </p>
         </div>

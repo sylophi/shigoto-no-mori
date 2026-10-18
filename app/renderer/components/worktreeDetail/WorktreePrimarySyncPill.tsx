@@ -5,7 +5,7 @@ import {
   useSyncWithPrimaryWorktree,
 } from "@/hooks/worktrees/useWorktreeSync";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { pluralize } from "@shigomori/ui/lib/pluralize.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { isSyncConflictsError } from "@shigomori/contracts/errors";
 import type { Worktree } from "@shigomori/contracts/schemas";

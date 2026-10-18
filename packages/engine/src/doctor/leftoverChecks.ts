@@ -2,7 +2,8 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import { atoi, parseProcessTable, plural, pluralize } from "../doctorParse.ts";
+import { plural, pluralize } from "@shigomori/contracts/words";
+import { atoi, parseProcessTable } from "../doctorParse.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
 import { pidAlive, PS_BIRTH_ENV } from "../processes.ts";
@@ -90,7 +91,7 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       const n = orphans.length;
       return [
         check("Processes", "scripts", "scripts").warn(
-          `${n} script${plural(n)} the app started ${pluralize(n, "is", "are")} still running after it quit (${orphans.map(({ command }) => command).join(", ")}), holding ${pluralize(n, "its", "their")} ports`,
+          `${pluralize(n, "script")} the app started ${plural(n, "is", "are")} still running after it quit (${orphans.map(({ command }) => command).join(", ")}), holding ${plural(n, "its", "their")} ports`,
           `Open the app, which stops them at launch, or run \`kill ${orphans.map(({ pid }) => String(pid)).join(" ")}\`.`,
         ),
       ];
