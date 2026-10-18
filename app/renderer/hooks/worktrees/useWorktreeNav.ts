@@ -2,7 +2,7 @@
 // page lives under /devices/$deviceId, so its internal links target the
 // device the current host scope names. The paths themselves come from
 // lib/routePaths so the route tree and these links cannot drift apart.
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import {
   useMatchRoute,
   useNavigate,
@@ -253,10 +253,12 @@ export function useTakeWorktreeDialog(
   };
   const { projectId, worktreeId } = useScopedWorktreeParams();
   const nav = useWorktreeNav();
-  useEffect(() => {
-    if (dialog === undefined) return;
-    open(dialog);
+  // Once per ask.
+  const take = useEffectEvent((asked: WorktreeDialog) => {
+    open(asked);
     nav.toWorktree(projectId, worktreeId, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per ask: `open` and `nav` are fresh closures per render.
+  });
+  useEffect(() => {
+    if (dialog !== undefined) take(dialog);
   }, [dialog]);
 }

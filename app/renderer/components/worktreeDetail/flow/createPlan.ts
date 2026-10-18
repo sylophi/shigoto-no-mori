@@ -10,6 +10,7 @@ import type { CreatePlan } from "@shigomori/ui/views/worktreeDetail/flow/PullPro
 import {
   PROJECT_CONFIG_DEFAULTS,
   type Project,
+  type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
@@ -29,6 +30,10 @@ function useSetupScript(localProject: Project | undefined): string {
 // uses. The include status is read unconditionally (like Configure
 // does) so the two requests run side by side instead of the second
 // waiting on the config.
+// Read outside the hook: the compiler takes a `use…` member for a hook.
+const includesOn = (config: ShigomoriConfig | null | undefined) =>
+  config?.useWorktreeInclude ?? PROJECT_CONFIG_DEFAULTS.useWorktreeInclude;
+
 export function useCarryOverRows(localProject: Project | undefined): {
   rows: { path: string; tag: string }[];
   isPending: boolean;
@@ -38,11 +43,7 @@ export function useCarryOverRows(localProject: Project | undefined): {
   );
   const { data: include } = useWorktreeIncludeStatus(localProject?.id ?? null);
   const manual = config?.carryOver ?? PROJECT_CONFIG_DEFAULTS.carryOver;
-  const included = worktreeIncludeExtras(
-    manual,
-    config?.useWorktreeInclude ?? PROJECT_CONFIG_DEFAULTS.useWorktreeInclude,
-    include,
-  );
+  const included = worktreeIncludeExtras(manual, includesOn(config), include);
   return {
     rows: [
       ...manual.map((e) => ({ path: e.path, tag: e.mode as string })),

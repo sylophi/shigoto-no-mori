@@ -55,7 +55,8 @@ export function useDeleteAndNavigate(
   // `gone` widens the removal past this worktree: a stack removal
   // takes its neighbours too, and the page must not land on one of
   // those.
-  const navigateToSibling = (gone: readonly string[] = [worktree.id]) => {
+  const navigateToSibling = (widened?: readonly string[]) => {
+    const gone = widened ?? [worktree.id];
     // The inbox has an order of its own (newest work first) and leaves
     // the primary out, so its landing is the fallback's.
     if (inboxShowing()) {

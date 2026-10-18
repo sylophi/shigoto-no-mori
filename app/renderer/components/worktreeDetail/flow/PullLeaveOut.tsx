@@ -21,7 +21,7 @@ export function PullLeaveOut({
       value={pull.selection}
       onChange={pull.setSelection}
       ignored={pull.ignored}
-      browse={browseWorktree(worktree)}
+      renderBrowser={browseWorktree(worktree)}
     >
       {pull.presetDiffers && (
         <Button variant="ghost" size="sm" onClick={pull.saveAsPreset}>

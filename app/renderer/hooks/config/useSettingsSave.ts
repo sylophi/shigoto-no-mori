@@ -204,21 +204,18 @@ export function useSettingsSave() {
         );
       }
       if (clientPersisted) {
+        // A pick or a rotation saved here starts a timed rotation's
+        // period over.
+        const restartsRotation = [
+          "lightTheme",
+          "darkTheme",
+          "themeRotation",
+        ].some((key) => key in clientPatch);
+        const patch = restartsRotation
+          ? { ...clientPatch, themeRotatedAt: Date.now() }
+          : clientPatch;
         try {
-          // A pick or a rotation saved here starts a timed rotation's
-          // period over.
-          const restartsRotation = [
-            "lightTheme",
-            "darkTheme",
-            "themeRotation",
-          ].some((key) => key in clientPatch);
-          await patchClientConfig(
-            page,
-            registry,
-            restartsRotation
-              ? { ...clientPatch, themeRotatedAt: Date.now() }
-              : clientPatch,
-          );
+          await patchClientConfig(page, registry, patch);
         } catch (error) {
           throw new SettingsSaveError(devicePersisted, error);
         }

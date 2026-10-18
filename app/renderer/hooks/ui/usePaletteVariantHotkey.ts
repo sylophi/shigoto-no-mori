@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 import {
   DEFAULT_LIGHT_THEME,
   type LightTheme,
@@ -37,6 +37,9 @@ export function usePaletteVariantHotkey(enabled: boolean): void {
     applied.light === saved.light &&
     nextVariant(LIGHT_THEMES, saved.light) !== null;
 
+  // The handler reads the pick from the registry at press time, so it
+  // subscribes once while listening.
+  const pick = useEffectEvent(mutate);
   useEffect(() => {
     if (!listening) return;
     const onKey = (e: KeyboardEvent) => {
@@ -58,10 +61,9 @@ export function usePaletteVariantHotkey(enabled: boolean): void {
       const next = nextVariant(LIGHT_THEMES, current);
       if (next === null) return;
       e.preventDefault();
-      mutate(next);
+      pick(next);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mutate is a fresh closure per render, and the handler reads the pick from the registry at press time, so re-subscribing each render would be churn.
   }, [listening, registry]);
 }

@@ -96,6 +96,7 @@ build's single-instance lock is machine-wide.
 | `new-worktree` | A branch off a source; a source branch checked out as it is |
 | `rename` | Renaming a worktree from its page: the folder moves and the window stays on the worktree's page |
 | `location` | The Worktree location page with the data folder reached through a link: a worktree already in place is not offered a move |
+| `appearance` | Settings > Appearance: a palette and a theme picked stay on the window until Discard, which puts back what is saved |
 | `terminals` | A terminal from the worktree's footer runs what is typed; after the app quits as a person quits it and starts again, it is back in its folder with its lines above |
 | `pull-request` | A pull request on its branch's page and its diff page with images, against the fake gh |
 | `pull-request-partial` | A pull request whose commits can't be fetched: its diff from `gh pr diff`, each image side saying it isn't here, with Try again, which draws them once the commits are reachable |

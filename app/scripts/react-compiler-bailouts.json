@@ -1,117 +1,15 @@
 [
   {
-    "file": "app/renderer/components/configure/CarryOverPickerModal.tsx",
-    "function": "CarryOverPickerModal",
-    "category": "Hooks",
-    "reason": "Hooks must be called at the top level in the body of a function component or custom hook, and may not be called within function expressions. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)"
-  },
-  {
-    "file": "app/renderer/components/configure/LeaveOutSection.tsx",
-    "function": "LeaveOutSection",
-    "category": "Hooks",
-    "reason": "Hooks must be called at the top level in the body of a function component or custom hook, and may not be called within function expressions. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)"
-  },
-  {
     "file": "app/renderer/components/guide/GuideMenu.tsx",
     "function": "GuideMenu",
     "category": "Suppression",
     "reason": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
   },
   {
-    "file": "app/renderer/components/palette/WorktreePalette.tsx",
-    "function": "PaletteDialog",
-    "category": "Todo",
-    "reason": "(BuildHIR::node.lowerReorderableExpression) Expression type `LogicalExpression` cannot be safely reordered"
-  },
-  {
-    "file": "app/renderer/components/shared/FolderPickerModal.tsx",
-    "function": "FolderPickerModal",
-    "category": "Todo",
-    "reason": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
-  },
-  {
-    "file": "app/renderer/components/shared/PathPickerModal.tsx",
-    "function": "PathPickerModal",
-    "category": "Hooks",
-    "reason": "Hooks must be the same function on every render, but this value may change over time to a different function. See https://react.dev/reference/rules/react-calls-components-and-hooks#dont-dynamically-use-hooks"
-  },
-  {
     "file": "app/renderer/components/sidebar/SidebarList.tsx",
     "function": "SidebarList",
-    "category": "Suppression",
-    "reason": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
-  },
-  {
-    "file": "app/renderer/components/steps/useSignInStep.ts",
-    "function": "useSignInStep",
-    "category": "Hooks",
-    "reason": "Hooks must always be called in a consistent order, and may not be called conditionally. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)"
-  },
-  {
-    "file": "app/renderer/components/worktreeDetail/flow/createPlan.ts",
-    "function": "useCarryOverRows",
-    "category": "Hooks",
-    "reason": "Hooks may not be referenced as normal values, they must be called. See https://react.dev/reference/rules/react-calls-components-and-hooks#never-pass-around-hooks-as-regular-values"
-  },
-  {
-    "file": "app/renderer/components/worktreeDetail/mirror/MirrorAction.tsx",
-    "function": "MirrorLinkAction",
-    "category": "Suppression",
-    "reason": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
-  },
-  {
-    "file": "app/renderer/components/worktreeDetail/transplant/TransplantFinish.tsx",
-    "function": "TransplantFinish",
-    "category": "Todo",
-    "reason": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
-  },
-  {
-    "file": "app/renderer/hooks/config/useSettingsSave.ts",
-    "function": "useSettingsSave",
-    "category": "Todo",
-    "reason": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
-  },
-  {
-    "file": "app/renderer/hooks/ui/useKeymap.ts",
-    "function": "useKeymapAction",
-    "category": "Refs",
-    "reason": "Cannot access refs during render"
-  },
-  {
-    "file": "app/renderer/hooks/ui/usePalette.tsx",
-    "function": "PaletteProvider",
-    "category": "Immutability",
-    "reason": "This value cannot be modified"
-  },
-  {
-    "file": "app/renderer/hooks/ui/usePaletteVariantHotkey.ts",
-    "function": "usePaletteVariantHotkey",
-    "category": "Suppression",
-    "reason": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
-  },
-  {
-    "file": "app/renderer/hooks/ui/useTheme.tsx",
-    "function": "ThemeProvider",
-    "category": "Immutability",
-    "reason": "This value cannot be modified"
-  },
-  {
-    "file": "app/renderer/hooks/worktrees/useDeleteAndNavigate.ts",
-    "function": "useDeleteAndNavigate",
-    "category": "Todo",
-    "reason": "(BuildHIR::node.lowerReorderableExpression) Expression type `ArrayExpression` cannot be safely reordered"
-  },
-  {
-    "file": "app/renderer/hooks/worktrees/useWorktreeNav.ts",
-    "function": "useTakeWorktreeDialog",
-    "category": "Suppression",
-    "reason": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
-  },
-  {
-    "file": "app/renderer/lib/runtime/viewHooks.ts",
-    "function": "useViewErrorToast",
-    "category": "Refs",
-    "reason": "Cannot access refs during render"
+    "category": "IncompatibleLibrary",
+    "reason": "Use of incompatible library"
   },
   {
     "file": "packages/ui/src/primitives/modal-shell.tsx",

@@ -235,7 +235,7 @@ function Ignores({
       value={selection}
       onChange={setDraft}
       ignored={ignored}
-      browse={browseWorktree(worktree)}
+      renderBrowser={browseWorktree(worktree)}
       disabled={!canControl || setIgnores.isPending}
     >
       {dirty && (

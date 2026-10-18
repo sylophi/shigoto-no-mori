@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
 import {
   SettingsSaveError,
@@ -146,14 +146,13 @@ export function SettingsForm({
   useEffect(() => holdThemeRotation(), []);
 
   // Drop any staged previews when leaving the settings page so the rest
-  // of the app falls back to the saved values.
-  useEffect(
-    () => () => {
-      setOverride(null);
-      setPaletteOverride(null);
-    },
-    [setOverride, setPaletteOverride],
-  );
+  // of the app falls back to the saved values. On leaving alone,
+  // whatever the providers hand out for the setters.
+  const dropPreviews = useEffectEvent(() => {
+    setOverride(null);
+    setPaletteOverride(null);
+  });
+  useEffect(() => () => dropPreviews(), []);
 
   const handleSave = async () => {
     // Two stores behind one Save. useSettingsSave routes each field to

@@ -111,8 +111,8 @@ export function PaletteProvider({
   useLayoutEffect(() => {
     if (fromRoot) return;
     root.classList.toggle("doubutsu", applied.doubutsu);
-    if (active) root.dataset.palette = active;
-    else delete root.dataset.palette;
+    if (active) root.setAttribute("data-palette", active);
+    else root.removeAttribute("data-palette");
   }, [fromRoot, root, applied.doubutsu, active]);
 
   // Mirror the saved values into localStorage so the next launch can
