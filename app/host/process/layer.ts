@@ -96,12 +96,15 @@ function onExternalStateChange() {
       .filter((projectId) => projectId !== undefined),
   );
   for (const projectId of mirrored) announceProjectChanged(projectId);
-  // The terminal may have added or removed a project: re-read the list,
-  // then follow it with the git-directory watches.
+  // The terminal may have added or removed a project: re-read the list
+  // (a project gone takes its scripts, and a worktree or project gone its
+  // terminals), then follow it with the git-directory watches.
   // A watcher that failed to start has nothing to follow.
   void Graph.run(
-    refresh.pipe(
-      Effect.ignore,
+    Effect.flatMap(
+      Scripts.Scripts,
+      (scripts) => scripts.reapRemovedProjects,
+    ).pipe(
       Effect.andThen(Effect.serviceOption(GitWatcher.GitWatcher)),
       Effect.flatMap(
         Option.match({
@@ -111,10 +114,6 @@ function onExternalStateChange() {
       ),
     ),
   ).catch(() => {});
-  // A worktree or project gone takes its terminals with it.
-  void Graph.runIfUp(
-    Effect.flatMap(Terminals.Terminals, (terminals) => terminals.closeMissing),
-  );
   // The app's only chance to notice an `sm rm` run in a terminal, which
   // leaves a script the app started there running in a deleted cwd and
   // holding its port.

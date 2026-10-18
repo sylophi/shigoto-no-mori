@@ -8,6 +8,7 @@ import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import { EngineChanges } from "../../host/lib/Engine.ts";
 
 // No data-folder move runs beside these proofs: the lock lets every
 // change through.
@@ -17,8 +18,16 @@ const noMove = Layer.succeed(DataDirLock.DataDirLock, {
   alone: (effect) => effect,
 });
 
+// Nor a quit that would ask what is under way.
+const uncounted = Layer.succeed(EngineChanges, {
+  underWay: () => [],
+  counted: (effect) => effect,
+});
+
 const runtime = ManagedRuntime.make(
-  Layer.merge(Git.layer, noMove).pipe(Layer.provideMerge(NodeServices.layer)),
+  Layer.mergeAll(Git.layer, noMove, uncounted).pipe(
+    Layer.provideMerge(NodeServices.layer),
+  ),
 );
 
 type Services = ManagedRuntime.ManagedRuntime.Services<typeof runtime>;

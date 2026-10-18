@@ -106,6 +106,8 @@ export function startHost(options: {
         Graph.run(
           asChange(
             Effect.flatMap(WtFolder.WtFolder, (folder) => folder.retryStuck),
+            {},
+            "move",
           ),
         ),
       ),

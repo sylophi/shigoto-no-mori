@@ -70,7 +70,12 @@ import {
   type PeerReach,
   peerSyncFor,
 } from "@host/ipc/PeerReach";
-import { standInDeviceId, standInPeers } from "./lib/hostStandIns.mts";
+import {
+  standInDeviceId,
+  standInMirror,
+  standInPeers,
+} from "./lib/hostStandIns.mts";
+import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree as sendWorktreeOn } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
@@ -79,6 +84,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { hostContext, runHost, type Services } from "./lib/hostRuntime.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
+import { EngineChanges } from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import * as Scripts from "@host/lib/Scripts";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
@@ -154,6 +160,11 @@ const offerSource = <T, E>(
   openOnPeer: (channelId: string) => Effect.Effect<T, E, PeerReach>,
 ) => runHost(offer(LISTENER, project, worktreeId, openOnPeer));
 const repoIdentityOf = (path: string) => runHost(Ops.repoIdentity(path));
+// The kinds of change counted now (Scripts.busy words them).
+const changesUnderWay = async () =>
+  (
+    await runHost(Effect.map(EngineChanges, (changes) => changes.underWay()))
+  ).map(({ kind }) => kind);
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
 // wrappers, and the engine on the sandbox's data dir
@@ -995,6 +1006,11 @@ it("pull refusals: an already-existing branch and an unmatched repo identity bot
       ),
     /No local project matches/,
   );
+  assert.deepEqual(
+    await changesUnderWay(),
+    [],
+    "a refused pull leaves nothing counted",
+  );
 });
 
 it("a pull whose source can't make its temporary files is answered with why, not left waiting", async () => {
@@ -1352,6 +1368,11 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
     async () => sendWorktreeHere(wt7, pullCtx),
     /The other device answered: feature7 is already checked out/,
   );
+  assert.deepEqual(
+    await changesUnderWay(),
+    [],
+    "a refused send leaves nothing counted",
+  );
   writeFileSync(join(wt7Path, "draft.txt"), "sent draft, then edited\n");
   const keptSent = await runHost(syncHandlers.teardownSource(wt7Sent, pullCtx));
   assert.equal(keptSent.sourceRemoved, false);
@@ -1642,8 +1663,10 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
 // removed, the branch (kept by `sm rm` under the setting) and
 // incoming ref gone and the source untouched. Once over, there is nothing left to cancel. The same
 // for a send, where the landing runs on the peer and meets the
-// cancel as the link torn down under it, and for a caller that
-// goes away (its call interrupted), which cancels like a click.
+// cancel as the link torn down under it, for a caller that goes
+// away (its call interrupted), which cancels like a click, and for a
+// cancel after the landing committed (the files step), which still
+// takes the copy.
 describe("cancelMove", () => {
   let targetConfigBefore: ShigomoriConfig | null;
   const setupPidPath = join(sandbox, "setup.pid");
@@ -1726,6 +1749,11 @@ describe("cancelMove", () => {
     cancelledPull.catch(() => {});
     const pullSetupPid = await setupStarted();
     assert.equal(processAlive(pullSetupPid), true);
+    assert.deepEqual(
+      await changesUnderWay(),
+      ["bring"],
+      "the pull counts as one move for its whole run, its landing in it",
+    );
     const cancelledAt = Date.now();
     assert.deepEqual(
       await runHost(
@@ -1740,6 +1768,11 @@ describe("cancelMove", () => {
     );
     await waitFor(() => !processAlive(pullSetupPid), "the setup script to die");
     await landedNothing("cancel1", wtCancelPath);
+    assert.deepEqual(
+      await changesUnderWay(),
+      [],
+      "a cancelled pull leaves nothing counted",
+    );
     assert.deepEqual(
       await runHost(
         syncHandlers.cancelMove({ sourceWorktreeId: wtCancelId }, pullCtx),
@@ -1783,6 +1816,12 @@ describe("cancelMove", () => {
     );
     cancelledSend.catch(() => {});
     const sendSetupPid = await setupStarted();
+    // Both devices share this process, so the peer's landing is counted
+    // here too: what this side adds is the send.
+    assert.ok(
+      (await changesUnderWay()).includes("send"),
+      "the send counts for its whole run",
+    );
     assert.deepEqual(
       await runHost(
         syncHandlers.cancelMove({ sourceWorktreeId: wtCancel2Id }, pullCtx),
@@ -1804,6 +1843,10 @@ describe("cancelMove", () => {
       20_000,
     );
     await landedNothing("cancel2", wtCancel2Path);
+    await waitFor(
+      async () => (await changesUnderWay()).length === 0,
+      "a cancelled send to leave nothing counted",
+    );
     await assert.rejects(
       async () =>
         runHost(
@@ -1851,6 +1894,66 @@ describe("cancelMove", () => {
       "the setup script to die",
     );
     await landedNothing("cancel3", wtCancel3Path);
+  });
+
+  it("cancelMove (pull, after its landing committed): a cancel at the files step still takes the copy, its branch and its incoming ref", async () => {
+    // (d) Past the landing's commit point (Worktrees.createHeld's keep):
+    // the files step, held by a transfer session that never settles.
+    const wtCancel4Path = await addWorktree(
+      sourceRepo,
+      "wt-cancel4",
+      "cancel4",
+    );
+    const wtCancel4Id = worktreeIdFromPath(wtCancel4Path);
+    let atFiles!: () => void;
+    const reachedFiles = new Promise<void>((resolve) => {
+      atFiles = resolve;
+    });
+    standInMirror(
+      inertMirrorImpl({
+        create: () =>
+          Effect.sync(() => {
+            atFiles();
+            return "cancel4-files";
+          }),
+        sessions: Effect.succeed([
+          rawMirrorSession({ session: "cancel4-files" }),
+        ]),
+        terminate: () => Effect.void,
+      }),
+    );
+    try {
+      const cancelledPull = Promise.resolve(
+        pullWorktree(
+          {
+            sourceDeviceId: LISTENER,
+            sourceProjectId,
+            sourceWorktreeId: wtCancel4Id,
+            sourceIdentity: identity,
+            branch: "cancel4",
+            runSetup: false,
+            ignoreMode: "everything",
+          },
+          pullCtx,
+        ),
+      );
+      cancelledPull.catch(() => {});
+      await reachedFiles;
+      assert.ok(
+        await refExists(targetRepo, "refs/heads/cancel4"),
+        "the landing answered before the files step",
+      );
+      assert.deepEqual(
+        await runHost(
+          syncHandlers.cancelMove({ sourceWorktreeId: wtCancel4Id }, pullCtx),
+        ),
+        { cancelled: true },
+      );
+      await assert.rejects(cancelledPull, /The move was cancelled/);
+      await landedNothing("cancel4", wtCancel4Path);
+    } finally {
+      standInMirror(inertMirrorImpl());
+    }
   });
 });
 

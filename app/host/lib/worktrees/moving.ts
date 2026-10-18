@@ -59,7 +59,10 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
         if (!worktree.isPrimary) yield* refuseRunningWork(worktree, verb);
         return yield* scripts.withDeleteInflight(
           worktree.id,
-          "This worktree is already being removed or moved.",
+          {
+            kind: "move",
+            busy: "This worktree is already being removed or moved.",
+          },
           commit(project, worktree.id),
           // A move to where the worktree already is, spelled the same,
           // keeps its id and has no mirrors to carry.

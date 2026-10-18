@@ -184,10 +184,9 @@ export const worktreesHandlers = {
     { projectId, worktreeName, branchName, base, checkout, cloneFiles },
     ctx,
   ) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.createWorktree(
-        project,
-        { worktreeName, branchName, base, checkout, cloneFiles },
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.create(
+        { projectId, worktreeName, branchName, base, checkout, cloneFiles },
         worktreeNotifiers(ctx),
       ),
     ),
@@ -195,11 +194,9 @@ export const worktreesHandlers = {
   // A renderer from before the field sends none and expects the force
   // it always got, so only an explicit false runs unforced.
   convertExternal: ({ projectId, worktreeId, force }, ctx) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.adoptWorktree(
-        project,
-        worktreeId,
-        force !== false,
+    Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+      worktrees.adopt(
+        { projectId, worktreeId, force: force !== false },
         worktreeNotifiers(ctx),
       ),
     ),

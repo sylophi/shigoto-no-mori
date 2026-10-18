@@ -4,11 +4,8 @@
 // it (sync:receiveWorktree, landForSender below) against a link the
 // sender answers on. The source's side is sourceLink.ts.
 import { callFailureOf } from "@shigomori/contracts/errors";
-import { DataDirLock } from "@shigomori/engine/DataDirLock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import {
@@ -23,14 +20,15 @@ import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
-import { type Project, type Worktree } from "@shigomori/contracts/schemas";
+import { type Project } from "@shigomori/contracts/schemas";
+import { changing } from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
+import * as Worktrees from "@host/lib/Worktrees";
 import { incomingRef as incomingRefFor } from "@shigomori/engine/Bundle";
 import { dirtyRef } from "@shigomori/engine/Dirty";
 import * as Git from "@shigomori/engine/Git";
 import {
   addProject,
-  findProject,
   findProjectByIdentity,
   findProjectByIdentityOrFail,
 } from "@host/lib/projects";
@@ -169,13 +167,15 @@ export type Landing = {
 // rather than failing: the worktree and branch are real and useful,
 // and the dirty state is still safe on the source device.
 //
-// An interrupt (the move's cancel) stops whichever step is waiting
-// (the link's question, the engine's create), and the worktree the
-// create made is removed by its finalizer, registered in `move` so a
-// cancel at any later step of the move removes it too.
-// The destination is then as it was, bar a clone that got registered
-// (which stays, a checkout at the place the user named) and a capture
-// ref a retry overwrites.
+// The landing commits when it answers: the create is held in `move`
+// (Worktrees.createHeld) until the caller runs the `keep` it answers
+// with, once nothing of its own is left to fail, so a failure of any
+// step after the create (the capture's ref) removes the copy, and so does
+// an interrupt (the move's cancel) at any step of the move, which
+// stops whichever step is waiting (the link's question, the engine's
+// create). The destination is then as it was, bar a clone that got
+// registered (which stays, a checkout at the place the user named) and
+// a capture ref a retry overwrites.
 export const landWorktree = (
   source: WorktreeSource,
   landing: Landing,
@@ -299,9 +299,16 @@ export const landWorktree = (
         });
       }
 
+      // Read before the create, so nothing after it but the capture's
+      // ref steps can fail the landing.
+      const captureTree =
+        captured && capture.commit !== undefined
+          ? yield* git.treeOf(project.path, capture.commit as string)
+          : undefined;
+
       // 5 and 6. The create on the incoming ref, then the capture
       // re-applied in it.
-      const { worktree, dirtyApplied } = yield* landIncoming(
+      const { worktree, dirtyApplied, keep } = yield* landIncoming(
         project,
         {
           branch: landBranch,
@@ -317,11 +324,8 @@ export const landWorktree = (
         progress,
         move,
       );
-      const captureTree =
-        captured && capture.commit !== undefined
-          ? yield* git.treeOf(project.path, capture.commit as string)
-          : undefined;
       return {
+        keep,
         worktree,
         captured,
         dirtyApplied,
@@ -359,7 +363,7 @@ export const landForSender: EffectHandlers<
   return Effect.gen(function* () {
     const move = yield* Effect.scope;
     const source = yield* linkSource(link);
-    const { receipt, ...landed } = yield* landWorktree(
+    const { receipt, keep, ...landed } = yield* landWorktree(
       source,
       { ...landing, landBranch: landBranch ?? landing.branch },
       ctx,
@@ -373,6 +377,7 @@ export const landForSender: EffectHandlers<
       projectId: landed.worktree.projectId,
       worktreeId: landed.worktree.id,
     });
+    yield* keep;
     return { ...landed, receipt };
   }).pipe(
     Effect.scoped,
@@ -411,20 +416,19 @@ const landIncoming = (
   progress: (frame: Pick<SyncPullProgress, "step" | "createPhase">) => void,
   move: Scope.Scope,
 ) =>
-  Effect.gen(function* () {
-    // The create, the capture's ref and its apply, held as one change
-    // while no data-folder move can start: a move between them would
-    // carry the worktree to its new id and leave the ref under the old.
-    const lock = yield* DataDirLock;
-    return yield* lock
-      .guard(landWhole(project, input, ctx, progress, move))
-      .pipe(
-        Effect.catchTag(
-          ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
-          (error) => Effect.fail(callFailureOf(error)),
-        ),
-      );
-  });
+  // The create, the capture's ref and its apply, held as one change
+  // while no data-folder move can start: a move between them would
+  // carry the worktree to its new id and leave the ref under the old.
+  changing(
+    landWhole(project, input, ctx, progress, move),
+    { projectId: project.id },
+    "land",
+  ).pipe(
+    Effect.catchTag(
+      ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
+      (error) => Effect.fail(callFailureOf(error)),
+    ),
+  );
 
 const landWhole = (
   project: Project,
@@ -436,26 +440,17 @@ const landWhole = (
   Effect.gen(function* () {
     // The ordinary create, on a new branch at the incoming ref.
     // checkout stays UNSET: checkout:true would leave the worktree ON
-    // the incoming ref instead of the new branch. resolveOn "exit"
-    // holds the mutation until carry-over and setup finished, so the
-    // dirty apply below never races the setup scripts. The new
-    // worktree's own lifecycle phases still reach its detail page as
-    // usual. They are mirrored into the move's progress because the
-    // caller cannot subscribe by an id that does not exist yet.
+    // the incoming ref instead of the new branch. Its run is waited out
+    // whole, so the dirty apply below never races the setup scripts.
+    // The new worktree's own lifecycle phases still reach its detail
+    // page as usual. They are mirrored into the move's progress because
+    // the caller cannot subscribe by an id that does not exist yet.
     progress({ step: "create" });
     const notify = worktreeNotifiers(ctx);
-    // The create runs whole even under a cancel: an interrupt tells it
-    // through `cancelled`, its setup script dies with it, and a create
-    // cut short still answers with its worktree (engineOps.ts,
-    // runStreamingCreate), which the release then removes. So it runs
-    // on a fiber of the move's, waited on interruptibly, and the release
-    // waits for its answer. Released with the move, and only when it was
-    // interrupted.
-    const cancelled = yield* Deferred.make<void>();
-    const create = yield* Effect.acquireRelease(
-      Ops.createWorktree(
-        project,
+    const { worktree, keep } = yield* (yield* Worktrees.Worktrees)
+      .createHeld(
         {
+          projectId: project.id,
           branchName: input.branch,
           base: input.incomingRef,
           worktreeName: input.worktreeName,
@@ -470,21 +465,8 @@ const landWhole = (
             }
           },
         },
-        { resolveOn: "exit", cancelled: Deferred.await(cancelled) },
-      ).pipe(Effect.withSpan("Landing.create"), Effect.forkIn(move)),
-      (fiber, exit) =>
-        Exit.hasInterrupts(exit)
-          ? Deferred.succeed(cancelled, undefined).pipe(
-              Effect.andThen(Fiber.await(fiber)),
-              Effect.flatMap((created) =>
-                Exit.isSuccess(created)
-                  ? rollBackLanded(created.value.worktree)
-                  : Effect.void,
-              ),
-            )
-          : Effect.void,
-    ).pipe(Scope.provide(move));
-    const { worktree } = yield* Fiber.join(create);
+      )
+      .pipe(Effect.withSpan("Landing.create"), Scope.provide(move));
 
     // Capture refs are keyed by worktree id, and ids are derived
     // from paths (sha256(path)[:12]), so the source's id names the
@@ -527,37 +509,5 @@ const landWhole = (
         ),
       );
     }
-    return { worktree, dirtyApplied };
+    return { worktree, dirtyApplied, keep };
   });
-
-// The rollback of a landed worktree whose move was cancelled: the
-// forced removal, its cleanup on a clock since the cancel is of
-// something that hung, then the branch, which the move made and `sm rm`
-// keeps when the project is set to keep branches (a retry would meet
-// it). Best effort past that: what could not be removed is logged, and
-// the cancel is still the answer.
-const ROLLBACK_CLEANUP_MS = 60_000;
-
-const rollBackLanded = (
-  worktree: Pick<Worktree, "projectId" | "id" | "branch">,
-) =>
-  Effect.gen(function* () {
-    const project = yield* findProject(worktree.projectId);
-    yield* Ops.forceRemoveWorktree(project, worktree.id, {
-      timeoutMs: ROLLBACK_CLEANUP_MS,
-    });
-    yield* Effect.ignore(
-      (yield* Git.Git).deleteBranch({
-        repo: project.path,
-        name: worktree.branch,
-        force: true,
-      }),
-    );
-  }).pipe(
-    Effect.catch((error) =>
-      Effect.logWarning(
-        "[sync] could not remove the worktree of a cancelled move:",
-        error,
-      ),
-    ),
-  );

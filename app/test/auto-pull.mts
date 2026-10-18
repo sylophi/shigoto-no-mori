@@ -57,6 +57,8 @@ const sweepProject = async (projectId: string, busy: ReadonlySet<string>) =>
   sweepAutoPull(await listWorktreeIdentities({ projectId }), busy);
 
 const git = sandboxGit(gitEnv);
+// What the pull's change is counted under (Scripts.busy).
+const counted = { projectId: "project", id: "project" };
 
 const decodeMarks = Schema.decodeUnknownSync(
   Schema.Array(Schema.Struct({ id: Schema.String, autoPull: Schema.Boolean })),
@@ -108,7 +110,7 @@ it("a clean worktree strictly behind its upstream fast-forwards", async () => {
   pushCommit(seed, "two.txt");
   git(project, "fetch", "-q");
   const outcome = await autoPullWorktree(
-    { path: project, detached: false },
+    { ...counted, path: project, detached: false },
     { busy: false },
   );
   assert.deepEqual(outcome, { kind: "pulled", commits: 2 });
@@ -119,7 +121,7 @@ it("a clean worktree strictly behind its upstream fast-forwards", async () => {
 it("a worktree already at its upstream is left alone", async () => {
   const { project } = makeSandbox(trackTest);
   const outcome = await autoPullWorktree(
-    { path: project, detached: false },
+    { ...counted, path: project, detached: false },
     { busy: false },
   );
   assert.deepEqual(outcome, { kind: "skipped", reason: "synced" });
@@ -134,7 +136,7 @@ it("a local commit stops the pull, even with the upstream ahead", async () => {
   git(project, "fetch", "-q");
   const before = head(project);
   const outcome = await autoPullWorktree(
-    { path: project, detached: false },
+    { ...counted, path: project, detached: false },
     { busy: false },
   );
   assert.deepEqual(outcome, { kind: "skipped", reason: "ahead" });
@@ -148,7 +150,7 @@ it("a modified tracked file stops the pull", async () => {
   writeFileSync(join(project, "README.md"), "edited\n");
   const before = head(project);
   const outcome = await autoPullWorktree(
-    { path: project, detached: false },
+    { ...counted, path: project, detached: false },
     { busy: false },
   );
   assert.deepEqual(outcome, { kind: "skipped", reason: "dirty" });
@@ -163,7 +165,7 @@ it("an untracked file stops the pull, whatever the untracked-files setting", asy
   writeFileSync(join(project, "scratch.txt"), "scratch\n");
   const before = head(project);
   const outcome = await autoPullWorktree(
-    { path: project, detached: false },
+    { ...counted, path: project, detached: false },
     { busy: false },
   );
   assert.deepEqual(outcome, { kind: "skipped", reason: "dirty" });
@@ -175,12 +177,18 @@ it("a detached HEAD and a missing upstream are skipped", async () => {
   pushCommit(seed, "remote.txt");
   git(project, "fetch", "-q");
   assert.deepEqual(
-    await autoPullWorktree({ path: project, detached: true }, { busy: false }),
+    await autoPullWorktree(
+      { ...counted, path: project, detached: true },
+      { busy: false },
+    ),
     { kind: "skipped", reason: "detached" },
   );
   git(project, "checkout", "-q", "-b", "unpublished");
   assert.deepEqual(
-    await autoPullWorktree({ path: project, detached: false }, { busy: false }),
+    await autoPullWorktree(
+      { ...counted, path: project, detached: false },
+      { busy: false },
+    ),
     { kind: "skipped", reason: "no-upstream" },
   );
 });
@@ -191,7 +199,7 @@ it("a worktree with an app-started script is skipped", async () => {
   git(project, "fetch", "-q");
   const before = head(project);
   const outcome = await autoPullWorktree(
-    { path: project, detached: false },
+    { ...counted, path: project, detached: false },
     { busy: true },
   );
   assert.deepEqual(outcome, { kind: "skipped", reason: "busy" });
