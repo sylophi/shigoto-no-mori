@@ -3,7 +3,7 @@
 // view only says what grid it has room for (onFit), on every change of
 // its box and whenever it takes focus, and draws at whatever size the
 // feed sets. A grid bigger than the box is cut off at its edges.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -56,8 +56,9 @@ export function TerminalView({
   const proposeRef = useRef<((claim: boolean) => void) | null>(null);
   // The latest callbacks, so a new closure from the container does not
   // build a new terminal.
-  const handlers = useRef({ onInput, onFit, onLink });
-  handlers.current = { onInput, onFit, onLink };
+  const input = useEffectEvent(onInput);
+  const fitTo = useEffectEvent(onFit);
+  const link = useEffectEvent(onLink);
 
   // xterm keeps every glyph it has drawn, so it opens once both faces
   // are in: one drawn in the fallback face would stay that way. A Nerd
@@ -99,9 +100,7 @@ export function TerminalView({
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.loadAddon(
-      new WebLinksAddon((_event, uri) => handlers.current.onLink(uri)),
-    );
+    term.loadAddon(new WebLinksAddon((_event, uri) => link(uri)));
     term.open(host);
     // The GPU renderer, for a full-screen program's redraws. A lost
     // context (the GPU reset, too many contexts) falls back to the DOM
@@ -120,7 +119,7 @@ export function TerminalView({
     let replayed = true;
     const dataSub = term.onData((data) => {
       if (replayed && host.contains(host.ownerDocument.activeElement)) {
-        handlers.current.onInput(data);
+        input(data);
       }
     });
 
@@ -135,7 +134,7 @@ export function TerminalView({
       const key = `${cols}x${rows}`;
       if (!claim && key === proposed) return;
       proposed = key;
-      handlers.current.onFit(cols, rows);
+      fitTo(cols, rows);
     };
     proposeRef.current = propose;
     // Observing delivers the current size straight away.
@@ -197,7 +196,7 @@ export function TerminalView({
   // that comes alive (a script's run past its start) claims its size,
   // which its process could not take before it ran, and takes focus
   // unless something else on the page holds it (a field typed in
-  // meanwhile).
+  // meanwhile). Applied again to a terminal built anew for a new feed.
   const wasLive = useRef(live);
   useEffect(() => {
     const term = termRef.current;
@@ -222,7 +221,7 @@ export function TerminalView({
       }
     }
     wasLive.current = live;
-  }, [live, fontsIn]);
+  }, [live, fontsIn, feed]);
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the
   // host's box, so padding on the host itself would count as columns.

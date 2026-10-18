@@ -2,8 +2,8 @@ import {
   type ComponentProps,
   type ReactNode,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
-  useRef,
   useState,
 } from "react";
 import { Dialog } from "@base-ui/react/dialog";
@@ -72,11 +72,14 @@ export function ModalShell({
   // Escape lives on the shell's document, not the shell: after a click
   // on the backdrop or a gap, focus (and the keydown target) is the
   // body, whose events never reach React's delegated handlers.
-  // Captured, so it lands before any handler inside the shell.
-  const onEscapeRef = useRef(onEscape ?? onClose);
-  onEscapeRef.current = onEscape ?? onClose;
-  const closeOnEscapeRef = useRef(closeOnEscape && dismissable);
-  closeOnEscapeRef.current = closeOnEscape && dismissable;
+  // Captured, so it lands before any handler inside the shell. Read
+  // as the key lands, so a render does not re-register.
+  const escape = useEffectEvent((e: KeyboardEvent) => {
+    if (!(closeOnEscape && dismissable)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (onEscape ?? onClose)();
+  });
   const root = useThemeRoot();
   // Base UI's portal mounts a render after the shell, so its backdrop
   // arrives as state.
@@ -88,7 +91,6 @@ export function ModalShell({
     openShells.push(id);
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || openShells.at(-1) !== id) return;
-      if (!closeOnEscapeRef.current) return;
       // A menu, list or popup open over the shell (a dropdown inside
       // it, or a combobox's popup with its search field) takes its own
       // Escape first: captured here, the key would close the dialog
@@ -102,9 +104,7 @@ export function ModalShell({
       ) {
         return;
       }
-      e.preventDefault();
-      e.stopPropagation();
-      onEscapeRef.current();
+      escape(e);
     };
     doc.addEventListener("keydown", onKey, true);
     return () => {
@@ -151,9 +151,9 @@ export function ModalShell({
         if (scrolls.size > 0) {
           const originals = [...backdrop.querySelectorAll("*")];
           const copies = ghost.querySelectorAll("*");
-          for (const [el, [left, top]] of scrolls) {
+          scrolls.forEach(([left, top], el) => {
             copies[originals.indexOf(el)]?.scrollTo(left, top);
-          }
+          });
         }
         fadeOut(ghost);
       });
