@@ -2,7 +2,8 @@
 // (Engine.changing): the git work a person starts. The others end in
 // moments, or nobody pressed them: a page's refresh as it opens
 // (git:refreshProject) is not the refresh its button asks for
-// (git:fetchProject).
+// (git:fetchProject), and a mirror's push into this repo
+// (sync:receiveBundle) is its follower's.
 import type { ChangeKind } from "@shigomori/contracts/modules/session";
 
 const kinds: Readonly<Record<string, ChangeKind>> = {
@@ -11,7 +12,6 @@ const kinds: Readonly<Record<string, ChangeKind>> = {
   "githubCli:mergePullRequest": "merge",
   "githubCli:publish": "push",
   "githubCli:resolvePullRequestCheckout": "fetch",
-  "sync:receiveBundle": "receive",
   "sync:receiveWorktree": "land",
   "worktrees:applyStash": "unstash",
   "worktrees:checkoutBranch": "checkout",

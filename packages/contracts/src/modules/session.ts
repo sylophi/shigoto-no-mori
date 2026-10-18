@@ -39,7 +39,6 @@ const ChangeKindSchema = Schema.Literals([
   "stash",
   "unstash",
   "finish",
-  "receive",
   "pullRequest",
   "autoPull",
   "create",

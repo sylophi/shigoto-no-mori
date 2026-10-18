@@ -250,7 +250,7 @@ it("the calls a person starts that run git past a moment are named, and a page's
       "worktrees:applyStash": "unstash",
       "worktrees:restoreStash": "unstash",
       "worktrees:pullAndPush": "pullAndPush",
-      "sync:receiveBundle": "receive",
+      "sync:receiveBundle": null,
       "git:fetchProject": "fetch",
       "git:refreshProject": null,
       "worktrees:setShelved": null,
@@ -273,19 +273,42 @@ it("the words name the git work under way", () => {
   );
   assert.equal(
     busyRemoteRefusal(busyWith("push", "pull", "pull"), "move"),
-    "2 pulls and a push are still being made there. Wait for them to finish before moving the data folder.",
+    "On that device, 2 pulls and a push are still being made. Wait for them to finish before moving the data folder.",
   );
   assert.equal(
     busyDetail(busyWith("pull", "fetch", "create"), "quit"),
-    "3 operations are still being made: a pull, a fetch and a new worktree. Quitting now will interrupt them.",
+    "3 operations (a pull, a fetch and a new worktree) are still being made. Quitting now will interrupt them.",
   );
   assert.equal(
     busyDetail(busyWith("pull", "push", "commit"), "quit"),
-    "3 git operations are still being made: a pull, a push and a commit. Quitting now will interrupt them.",
+    "3 git operations (a pull, a push and a commit) are still being made. Quitting now will interrupt them.",
   );
   assert.equal(
     busyDetail(busyWith("land", "send", "finish", "pullRequest"), "quit"),
     "A branch is still being finished, a pull request is still being opened, a worktree is still being sent and a worktree is still arriving. Quitting now will interrupt them.",
+  );
+});
+
+it("the words read cleanly however the kinds mix, on this screen and another's", () => {
+  // A list in parentheses runs into no clause after it.
+  assert.equal(
+    busyDetail(busyWith("pull", "push", "autoPull", "send"), "quit"),
+    "3 git operations (a pull, a push and an auto-pull) are still being made and a worktree is still being sent. Quitting now will interrupt them.",
+  );
+  // A pull and push is a pull and a push.
+  assert.equal(
+    busyDetail(busyWith("pull", "pullAndPush"), "quit"),
+    "2 pulls and a push are still being made. Quitting now will interrupt them.",
+  );
+  // Another device's screen: "there" once, and a move between devices
+  // in that device's terms.
+  assert.equal(
+    busyRemoteRefusal(busyWith("bring", "bring", "send"), "restart"),
+    "On that device, a worktree is still being sent off and 2 worktrees are still being brought in. Wait for them to finish before restarting to update.",
+  );
+  assert.equal(
+    busyRemoteRefusal(busyWith("pull", "push", "commit"), "quit"),
+    "On that device, 3 git operations (a pull, a push and a commit) are still being made. Wait for them to finish before quitting.",
   );
 });
 
@@ -305,7 +328,7 @@ it("every kind of work under way is named in one sentence", () => {
   );
   assert.equal(
     busyRemoteRefusal(mixed, "quit"),
-    "1 terminal is still running there, a worktree is still being removed and a pull is still being made. Stop or wait for them before quitting.",
+    "On that device, 1 terminal is still running, a worktree is still being removed and a pull is still being made. Stop or wait for them before quitting.",
   );
   assert.equal(
     busyRefusal(busyWith("move")),
@@ -417,7 +440,7 @@ it("a peer's data-folder move is refused over a busy terminal", async () => {
       ),
       {
         message:
-          "1 terminal is still running there. Stop it before moving the data folder.",
+          "On that device, 1 terminal is still running. Stop it before moving the data folder.",
       },
     );
   } finally {
@@ -508,7 +531,7 @@ it("a move under its mark reads as a worktree being moved, and a run there is re
       );
       assert.equal(
         busyRemoteRefusal(counted, "move"),
-        "A worktree is still being moved there. Wait for it to finish before moving the data folder.",
+        "On that device, a worktree is still being moved. Wait for it to finish before moving the data folder.",
       );
       const refused = yield* Effect.flip(
         scripts.start({

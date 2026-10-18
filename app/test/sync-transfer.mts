@@ -1006,6 +1006,11 @@ it("pull refusals: an already-existing branch and an unmatched repo identity bot
       ),
     /No local project matches/,
   );
+  assert.deepEqual(
+    await changesUnderWay(),
+    [],
+    "a refused pull leaves nothing counted",
+  );
 });
 
 it("a pull whose source can't make its temporary files is answered with why, not left waiting", async () => {
@@ -1362,6 +1367,11 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
   await assert.rejects(
     async () => sendWorktreeHere(wt7, pullCtx),
     /The other device answered: feature7 is already checked out/,
+  );
+  assert.deepEqual(
+    await changesUnderWay(),
+    [],
+    "a refused send leaves nothing counted",
   );
   writeFileSync(join(wt7Path, "draft.txt"), "sent draft, then edited\n");
   const keptSent = await runHost(syncHandlers.teardownSource(wt7Sent, pullCtx));
@@ -1759,6 +1769,11 @@ describe("cancelMove", () => {
     await waitFor(() => !processAlive(pullSetupPid), "the setup script to die");
     await landedNothing("cancel1", wtCancelPath);
     assert.deepEqual(
+      await changesUnderWay(),
+      [],
+      "a cancelled pull leaves nothing counted",
+    );
+    assert.deepEqual(
       await runHost(
         syncHandlers.cancelMove({ sourceWorktreeId: wtCancelId }, pullCtx),
       ),
@@ -1828,6 +1843,10 @@ describe("cancelMove", () => {
       20_000,
     );
     await landedNothing("cancel2", wtCancel2Path);
+    await waitFor(
+      async () => (await changesUnderWay()).length === 0,
+      "a cancelled send to leave nothing counted",
+    );
     await assert.rejects(
       async () =>
         runHost(

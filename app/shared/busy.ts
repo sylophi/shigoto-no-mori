@@ -78,6 +78,9 @@ const CHANGE_WORDS: ReadonlyArray<{
   readonly one: string;
   readonly many: string;
   readonly doing: string;
+  // What it is doing in words for another device's screen, where it
+  // differs.
+  readonly doingThere?: string;
   readonly git: boolean;
 }> = [
   {
@@ -105,13 +108,6 @@ const CHANGE_WORDS: ReadonlyArray<{
     kind: "push",
     one: "a push",
     many: "pushes",
-    doing: "being made",
-    git: true,
-  },
-  {
-    kind: "pullAndPush",
-    one: "a pull and push",
-    many: "pulls and pushes",
     doing: "being made",
     git: true,
   },
@@ -190,6 +186,7 @@ const CHANGE_WORDS: ReadonlyArray<{
     one: "a worktree",
     many: "worktrees",
     doing: "being sent",
+    doingThere: "being sent off",
     git: false,
   },
   {
@@ -197,6 +194,7 @@ const CHANGE_WORDS: ReadonlyArray<{
     one: "a worktree",
     many: "worktrees",
     doing: "being brought here",
+    doingThere: "being brought in",
     git: false,
   },
   {
@@ -205,13 +203,6 @@ const CHANGE_WORDS: ReadonlyArray<{
     many: "worktrees",
     doing: "arriving",
     git: false,
-  },
-  {
-    kind: "receive",
-    one: "a bundle of commits",
-    many: "bundles of commits",
-    doing: "arriving",
-    git: true,
   },
 ];
 
@@ -226,10 +217,14 @@ const listed = (parts: readonly string[]) =>
 
 // Everything under way as one clause each, the ones doing the same
 // thing as one ("2 pulls and a push are still being made", "3
-// operations are still being made: …" past two), how many there are,
-// and whether any is a running script or terminal, a removal, or
-// something else.
-function underWay(busy: BusyOperations) {
+// operations (…) are still being made" past two), worded for this
+// device's screen or another's (`there`), how many there are, and
+// whether any is a running script or terminal, a removal, or something
+// else. A pull and push is a pull and a push.
+function underWay(busy: BusyOperations, there = false) {
+  const changes = busy.engineChanges.flatMap((kind): ChangeKind[] =>
+    kind === "pullAndPush" ? ["pull", "push"] : [kind],
+  );
   const clauses: string[] = [];
   const running = runningWords(busy);
   if (running !== null) clauses.push(`${running.subject} still running`);
@@ -244,18 +239,19 @@ function underWay(busy: BusyOperations) {
   for (const words of CHANGE_WORDS) {
     const n =
       (marked[words.kind] ?? 0) +
-      busy.engineChanges.filter((kind) => kind === words.kind).length;
+      changes.filter((kind) => kind === words.kind).length;
     if (n === 0) continue;
-    const group = groups.get(words.doing) ?? { parts: [], n: 0, git: true };
+    const doing = (there ? words.doingThere : undefined) ?? words.doing;
+    const group = groups.get(doing) ?? { parts: [], n: 0, git: true };
     group.parts.push(n === 1 ? words.one : `${n} ${words.many}`);
     group.n += n;
     group.git &&= words.git;
-    groups.set(words.doing, group);
+    groups.set(doing, group);
   }
   for (const [doing, { parts, n, git }] of groups) {
     clauses.push(
       parts.length > 2
-        ? `${n} ${git ? "git operations" : "operations"} are still ${doing}: ${listed(parts)}`
+        ? `${n} ${git ? "git operations" : "operations"} (${listed(parts)}) are still ${doing}`
         : `${listed(parts)} ${pluralize(n, "is", "are")} still ${doing}`,
     );
   }
@@ -307,15 +303,13 @@ export function busyRemoteRefusal(
     quit: "quitting",
     move: "moving the data folder",
   }[action];
-  const what = underWay(busy);
-  const [first = "", ...rest] = what.clauses;
-  const there = capitalized(listed([`${first} there`, ...rest]));
+  const what = underWay(busy, true);
   const then = what.runningOnly
     ? `Stop ${what.obj}`
     : what.running
       ? "Stop or wait for them"
       : `Wait for ${what.obj} to finish`;
-  return `${there}. ${then} before ${verb}.`;
+  return `On that device, ${listed(what.clauses)}. ${then} before ${verb}.`;
 }
 
 // Why a change of this device's own can't start while the work under
