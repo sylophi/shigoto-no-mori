@@ -45,6 +45,13 @@ config runs every proof that imports the kit. That includes
 creates and deletes itself, and CI runners are thrown away after each
 run.
 
+A view is proved by its markup (`renderToString`, no DOM). A proof of
+the window's wiring, that a container draws a control and its click or
+a push reaches the right call, mounts the real components in a DOM
+instead: `// @vitest-environment happy-dom` at the top of the file
+(`guide-wiring.mts`). Only that kind: a proof doesn't move off the
+markup without a reason a markup can't answer.
+
 To add one, add `<name>.mts` here, named for what it proves (the
 module or the behaviour: `clone.mts`, `git-watcher.mts`), with a
 covers line for anything it depends on without importing it. A rule
