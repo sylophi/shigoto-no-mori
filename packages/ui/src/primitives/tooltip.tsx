@@ -119,6 +119,9 @@ function SimpleTooltip({
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const [armed, setArmed] = useState(false);
   const childDisabled = Boolean(children.props.disabled);
+  // Taken off the props, not read through them: a `.ref` member read in
+  // render is a ref read to the compiler.
+  const { ref: childRef } = children.props;
   if (lazy && whenTruncated && !armed && !childDisabled) {
     return cloneElement(children, {
       onPointerEnter: (event: PointerEvent<HTMLElement>) => {
@@ -147,7 +150,7 @@ function SimpleTooltip({
         />
       ) : (
         <TooltipTrigger
-          ref={children.props.ref}
+          ref={childRef}
           render={withoutOpenState(children)}
           delay={delay}
         />

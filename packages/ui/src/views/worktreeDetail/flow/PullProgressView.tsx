@@ -127,8 +127,8 @@ export function PullProgressView({
   extraRows = NO_EXTRA_ROWS,
   filesDetail,
   sourcePart = "source, untouched",
-  runningNote = `Nothing on ${sourceDeviceLabel} changes until you decide at the finish step.`,
-  failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
+  runningNote,
+  failedNote,
   cancelledNote,
   progressLabel = "Transplant progress",
   landing = LANDS_HERE,
@@ -138,6 +138,12 @@ export function PullProgressView({
   // What the destination's create runs (createPlan.ts).
   plan: CreatePlan;
 }) {
+  const runningWords =
+    runningNote ??
+    `Nothing on ${sourceDeviceLabel} changes until you decide at the finish step.`;
+  const failedWords =
+    failedNote ??
+    `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`;
   const cancelledWords =
     cancelledNote ??
     `Nothing landed ${landing.on}, and the copy on ${sourceDeviceLabel} is untouched.`;
@@ -333,7 +339,7 @@ export function PullProgressView({
       </FlowBodyView>
 
       {ended !== null ? (
-        <FlowFooterView note={cancelled ? cancelledWords : failedNote}>
+        <FlowFooterView note={cancelled ? cancelledWords : failedWords}>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
           </Button>
@@ -346,7 +352,7 @@ export function PullProgressView({
           note={
             cancelling
               ? `Cancelling. Whatever landed ${landing.on} is being removed.`
-              : runningNote
+              : runningWords
           }
         >
           <Button

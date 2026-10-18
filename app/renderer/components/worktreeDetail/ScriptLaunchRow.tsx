@@ -157,11 +157,9 @@ function FittedScriptRow({
           command={entry.command}
         />
       ))}
-      measure={{
-        rowRef: containerRef,
-        measurerRef,
-        names: candidates.map((entry) => entry.name),
-      }}
+      rowRef={containerRef}
+      measurerRef={measurerRef}
+      names={candidates.map((entry) => entry.name)}
     />
   );
 }

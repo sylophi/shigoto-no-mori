@@ -251,7 +251,7 @@ export function WorktreePageScene() {
                     onClick={noop}
                   />
                 ))}
-                measure={{ names: ["dev", "test", "theme:check"] }}
+                names={["dev", "test", "theme:check"]}
               />
             }
           />
