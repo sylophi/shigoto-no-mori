@@ -1,8 +1,5 @@
-import {
-  lifecycleSlot,
-  type ScriptName,
-  type ShigomoriConfig,
-} from "@shigomori/contracts/schemas";
+import { lifecycleSlot } from "@shigomori/contracts/schemas";
+import { lifecycleCommand } from "@shigomori/engine/Worktrees";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
@@ -10,7 +7,6 @@ import * as Views from "@host/lib/Views";
 import { findProject } from "@host/lib/projects";
 import * as Scripts from "@host/lib/Scripts";
 import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
-import { shellQuote } from "@host/lib/util/shellQuote";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HostServices } from "@host/process/services";
@@ -23,24 +19,6 @@ class UnconfiguredScriptError extends Schema.TaggedError<UnconfiguredScriptError
 ) {
   override get message(): string {
     return `No "${this.script}" script configured for ${this.project}`;
-  }
-}
-
-// The shell command behind each ScriptName.
-function resolveScriptCommand(
-  script: ScriptName,
-  config: ShigomoriConfig | null,
-  worktreePath: string,
-): string {
-  switch (script) {
-    case "setup":
-      return config?.scripts?.setup?.trim() ?? "";
-    case "teardown":
-      return config?.scripts?.teardown?.trim() ?? "";
-    case "port-pool-provision":
-      return `port-pool provision ${shellQuote(worktreePath)}`;
-    case "port-pool-release":
-      return `port-pool release ${shellQuote(worktreePath)}`;
   }
 }
 
@@ -65,11 +43,8 @@ export const scriptsHandlers = {
     Effect.gen(function* () {
       const project = yield* findProject(projectId);
       const ctx = yield* prepareScriptRun(project, worktreeId);
-      const command = resolveScriptCommand(
-        script,
-        ctx.config,
-        ctx.worktree.path,
-      );
+      const slot = lifecycleSlot(script);
+      const command = lifecycleCommand(slot, ctx.config, ctx.worktree.path);
       if (!command) {
         return yield* new UnconfiguredScriptError({
           script,
@@ -78,7 +53,7 @@ export const scriptsHandlers = {
       }
       const runId = yield* (yield* Scripts.Scripts).start({
         command,
-        slot: lifecycleSlot(script),
+        slot,
         worktree: ctx.worktree,
         project,
         scriptEnv: ctx.scriptEnv,

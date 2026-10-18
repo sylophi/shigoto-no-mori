@@ -11,7 +11,7 @@ const config: PortPoolConfig = {
   },
 };
 
-it("reads each port out of the files port-pool wrote, the first file to carry a name winning", () => {
+it("reads each port out of the files port-pool wrote, the first file and variable to carry a name winning", () => {
   const files = new Map([
     [
       ".env",
@@ -20,8 +20,8 @@ it("reads each port out of the files port-pool wrote, the first file to carry a 
     ["server/.env", 'PORT="4200"\nDB_PORT=x\nWEB=4999\n'],
   ]);
   assert.deepEqual(matchPorts(config, files), [
+    { name: "api", port: 4200, file: ".env", key: "API_URL" },
     { name: "web", port: 4100, file: ".env", key: "PORT" },
-    { name: "api", port: 4200, file: "server/.env", key: "PORT" },
   ]);
 });
 
@@ -30,4 +30,23 @@ it("skips a file that isn't there", () => {
     matchPorts(config, new Map([["server/.env", "DB_PORT=5432"]])),
     [{ name: "db", port: 5432, file: "server/.env", key: "DB_PORT" }],
   );
+});
+
+it("reads a name only a URL carries back through the URL's literal text, and leaves a template naming two", () => {
+  const urls: PortPoolConfig = {
+    configured: true,
+    portNames: ["api", "web", "db"],
+    envFiles: {
+      ".env": {
+        API_URL: "http://localhost:${api}/v1",
+        BOTH: "${web}:${db}",
+        WRONG: "https://localhost:${db}",
+      },
+    },
+  };
+  const env =
+    "API_URL=http://localhost:4200/v1\nBOTH=4100:5432\nWRONG=http://localhost:5432\n";
+  assert.deepEqual(matchPorts(urls, new Map([[".env", env]])), [
+    { name: "api", port: 4200, file: ".env", key: "API_URL" },
+  ]);
 });

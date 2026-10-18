@@ -442,6 +442,53 @@ it("finishes a move past a registered project whose folder is gone", async () =>
   );
 });
 
+// port-pool keys a lease by folder, and only at the new place does the
+// layout count a moved worktree managed: the first start there carries
+// each one's lease.
+it("carries each moved worktree's port-pool lease when the move settles at the new place, one the journal doesn't name too", async () => {
+  box.write("config.json", { portPool: true });
+  const dataDir = box.side("engine");
+  const log = join(box.home, "port-pool.log");
+  box.fakeBin("port-pool", `echo "$@" >> ${log}`);
+  const repo = box.repo("proj", {
+    "README.md": "hi\n",
+    "port-pool.config.json": '{"schemaVersion":1}\n',
+  });
+  const oldPath = join(box.home, "old-data", "wt", "proj", "fox");
+  const newPath = join(dataDir, "wt", "proj", "fox");
+  box.git(repo, "worktree", "add", "-q", "-b", "fox", newPath);
+  // One the journal doesn't name, which git still lists where it was.
+  const oldOwl = join(box.home, "old-data", "wt", "proj", "owl");
+  const newOwl = join(dataDir, "wt", "proj", "owl");
+  box.git(repo, "worktree", "add", "-q", "-b", "owl", oldOwl);
+  renameSync(oldOwl, newOwl);
+  const projectId = (await box.engine(
+    Effect.map(
+      Effect.flatMap(Registry.Registry, (registry) =>
+        registry.register({ name: "proj", path: repo }),
+      ),
+      ({ id }) => id,
+    ),
+  )) as string;
+  writeFileSync(
+    join(dataDir, JOURNAL),
+    JSON.stringify({
+      from: join(box.home, "old-data"),
+      to: dataDir,
+      partial: null,
+      moved: [{ projectId, oldPath, newPath, capture: null, state: "rekeyed" }],
+    }),
+  );
+  await settleAt(dataDir);
+  assert.equal(existsSync(join(dataDir, JOURNAL)), false);
+  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), [
+    `release ${oldPath}`,
+    `ensure ${newPath}`,
+    `release ${oldOwl}`,
+    `ensure ${newOwl}`,
+  ]);
+});
+
 // A copy's old tree outlives the move that made it: the first process
 // to open the store at the new place removes it, so a power loss before
 // the copy reached the disk still has it.

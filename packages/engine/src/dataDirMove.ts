@@ -164,8 +164,9 @@ const settled = <A, E, R>(
 // own copy only, its journal last), which waited till then so a power
 // loss before the copy reached the disk still had it; re-points every
 // link again, the journal's entries and any worktree git lists under the
-// old folder; removes the journal; and lets the store write, last. Each
-// step is idempotent, so a process that finds the journal runs it again.
+// old folder; carries each entry's port-pool lease; removes the journal;
+// and lets the store write, last. Each step is idempotent, so a process
+// that finds the journal runs it again.
 export const finishMove = (
   journal: Journal,
   at: string,
@@ -230,6 +231,44 @@ export const finishMove = (
         }),
       { discard: true },
     ).pipe((repair) => settled(repair, "a moved worktree's link", "finishing"));
+    // Only at the new place does the layout count a moved worktree as
+    // managed, which is what port-pool's lease there hangs on. What moved
+    // is the journal's entries and whatever git lists inside the folder
+    // now, its old place where the folder was; the moving process may have
+    // repaired the latter's links already.
+    if (options.settle && repaired) {
+      yield* Effect.forEach(
+        listed,
+        (project) =>
+          Effect.gen(function* () {
+            const found = yield* worktrees.identities(project);
+            const from = new Map(
+              found.flatMap((one) =>
+                !one.isPrimary && isSameOrInside(one.path, at)
+                  ? [
+                      [
+                        one.path,
+                        path.join(journal.from, path.relative(at, one.path)),
+                      ] as const,
+                    ]
+                  : [],
+              ),
+            );
+            for (const entry of journal.moved) {
+              if (entry.projectId === project.id) {
+                from.set(entry.newPath, entry.oldPath);
+              }
+            }
+            for (const one of found) {
+              const oldPath = from.get(one.path);
+              if (oldPath !== undefined) {
+                yield* worktrees.carryLease(oldPath, one);
+              }
+            }
+          }).pipe(Effect.ignore),
+        { discard: true },
+      );
+    }
     if (!(options.settle && cleaned && repaired)) return;
     yield* letGo(options.file, "finishing");
   });

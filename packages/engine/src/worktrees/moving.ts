@@ -408,10 +408,11 @@ export const makeMoving = ({
 
     // port-pool keys a lease by its folder: the old folder's goes, and a
     // managed checkout gets its own on the new one, where the ports may
-    // differ. A failure is only logged.
-    const carryLease = (fromPath: string, moved: WorktreeIdentity) =>
-      Effect.gen(function* () {
-        if (!(yield* deviceFlag("portPool"))) return;
+    // differ. A primary checkout's lease was never sm's to move. A
+    // failure is only logged.
+    const carryLease = Effect.fn("Worktrees.carryLease")(
+      function* (fromPath: string, moved: WorktreeIdentity) {
+        if (moved.isPrimary || !(yield* deviceFlag("portPool"))) return;
         const installed = yield* findExecutable("port-pool").pipe(
           Effect.provideContext(platform),
         );
@@ -428,7 +429,9 @@ export const makeMoving = ({
             );
           }
         }
-      }).pipe(Effect.ignore);
+      },
+      (effect) => Effect.ignore(effect),
+    );
 
     // What a move carries once git lists the checkout at `toPath`: what
     // is kept under the old id re-keyed and the move recorded as made, in
@@ -664,7 +667,15 @@ export const makeMoving = ({
       }
       return to;
     });
-    return { move, carryMoved, rename, rekey, resume, interrupted };
+    return {
+      move,
+      carryMoved,
+      carryLease,
+      rename,
+      rekey,
+      resume,
+      interrupted,
+    };
   });
 
 export type MovingArea = Effect.Success<ReturnType<typeof makeMoving>>;

@@ -13,7 +13,6 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Config from "../Config.ts";
 import * as Git from "../Git.ts";
-import { shellQuote } from "../Lifecycle.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
 import { ownedLevels } from "../worktreeLayout.ts";
@@ -26,7 +25,7 @@ import {
   UNKNOWN_BRANCH,
   type WorktreeIdentity,
   WorktreeRefused,
-  scriptOf,
+  lifecycleCommand,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
 import type { CreatingArea } from "./creating.ts";
@@ -237,7 +236,11 @@ export const makeRemoving = ({
       let cleanupRan = false;
       if (!worktree.isExternal && !options.skipCleanup) {
         const { settings } = yield* projectSettings(project);
-        const teardown = scriptOf(settings, "teardown");
+        const teardown = lifecycleCommand(
+          { kind: "teardown" },
+          settings,
+          worktree.path,
+        );
         const pool = yield* portPoolActive(worktree);
         if (pool || teardown !== "") {
           const context = yield* scriptContext(project, worktree);
@@ -285,10 +288,11 @@ export const makeRemoving = ({
           };
           cleanupRan = true;
           if (pool) {
+            const slot = { kind: "portPool", phase: "release" } as const;
             yield* cleanup(
               "portPoolRelease",
-              `port-pool release ${shellQuote(worktree.path)}`,
-              { kind: "portPool", phase: "release" },
+              lifecycleCommand(slot, settings, worktree.path),
+              slot,
             );
           }
           if (teardown !== "") {
