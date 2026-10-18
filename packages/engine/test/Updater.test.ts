@@ -13,6 +13,7 @@ import {
   spawnSync,
 } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -1067,6 +1068,31 @@ describe("staging", () => {
     );
     assert.equal(doc.status, "up-to-date");
     assert.equal(existsSync(staged(box)), false);
+  });
+
+  it("fails a confirmed clear it couldn't make, rather than answer up to date", async () => {
+    const box = newBox("2.0.0-beta.2");
+    // Newer than the build, so it is offered until it goes.
+    seedStaged(box, "2.0.0-beta.3");
+    const { client } = network((url) =>
+      url.toString() === LIST ? json(null) : undefined,
+    );
+    // The folder's own entries can't go while it is read only.
+    chmodSync(staged(box), 0o555);
+    try {
+      const error = await failure({ box, http: client }, (u) =>
+        u.stage({ running: running(box, "2.0.0-beta.2") }),
+      );
+      assert.ok(error instanceof Updater.RemoveFailed, String(error));
+      assert.equal(error.path, staged(box));
+      assert.match(
+        words(error),
+        /^Couldn't remove .*staged: .*Permission denied/,
+      );
+    } finally {
+      chmodSync(staged(box), 0o755);
+    }
+    assert.ok(existsSync(join(staged(box), "manifest.json")));
   });
 
   it("keeps the staged bundle when a newer download fails", async () => {
