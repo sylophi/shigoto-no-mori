@@ -265,6 +265,11 @@ const endAllMirrors = () =>
 // covers a sign-out with the daemon up, and resets this one.
 const noAccountSweep = createNoAccountSweep({
   sessions: mirrorSessionsNow,
+  fresh: () =>
+    Graph.readNow(
+      MirrorDaemon.onDaemon((daemon) => daemon.fresh),
+      () => false,
+    ),
   signedIn: accountSignedIn,
   end: () => void endAllMirrors().catch(() => {}),
 });

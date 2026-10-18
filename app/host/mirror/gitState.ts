@@ -562,6 +562,9 @@ export const watchIndexFile = (
       const fs = yield* FileSystem.FileSystem;
       const gitDir = yield* (yield* Git.Git).gitDir(worktreePath);
       const index = join(gitDir, "index");
+      // A git dir whose open hangs would hang the host with it: watched
+      // once it opens promptly (watchPath).
+      yield* untilWatchable(gitDir);
       // Null for a read that failed, which says nothing about a change.
       const stampOf = fs.stat(index).pipe(
         Effect.map(
@@ -574,9 +577,6 @@ export const watchIndexFile = (
         ),
         Effect.orElseSucceed(() => null),
       );
-      // A git dir whose open hangs would hang the host with it: watched
-      // once it opens promptly (watchPath).
-      yield* untilWatchable(gitDir);
       // The index's stamp as of the last signal, read as each one fires.
       const seen = yield* Ref.make(yield* stampOf);
       // From a signal until its stamp is read, so a beat in between

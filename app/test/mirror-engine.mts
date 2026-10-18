@@ -24,6 +24,9 @@
 //     the engine's bookkeeping: an orphaned transfer in it is ended,
 //   - an engine whose stores cannot be read answers as unavailable and
 //     refuses every change, saying why,
+//   - an orphaned transfer whose end fails is asked again,
+//   - a transfer whose daemon stops and doesn't come back fails at the
+//     missing ceiling, not the settle ceiling,
 //   - a daemon restarting keeps the list and the git follower's verdict
 //     its sessions had, and the threads note nothing of it,
 //   - a copy's release outstanding when the engine closes ends with it,
@@ -86,6 +89,7 @@ import {
   MIRROR_LABEL_LOCAL_WORKTREE,
   stopMirrorsForWorktree,
 } from "../host/mirror/registry.ts";
+import { transferFilesOnce } from "../host/mirror/oneShot.ts";
 import { mirrorList } from "../host/mirror/sessions.ts";
 import { MIRROR_LABEL_MODE } from "@shigomori/contracts/modules/mirror";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
@@ -100,7 +104,11 @@ import {
 } from "./lib/checkKit.mts";
 import { standInPeers } from "./lib/hostStandIns.mts";
 import { hostContext } from "./lib/hostRuntime.mts";
-import { mirrorEndpoint, rawMirrorSession } from "./lib/mirrorFakes.mts";
+import {
+  inertMirrorImpl,
+  mirrorEndpoint,
+  rawMirrorSession,
+} from "./lib/mirrorFakes.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 type Request = { id: string; op: string; session?: string };
@@ -761,4 +769,73 @@ it("a stepped wall clock neither holds a copy-gone report back nor lets one thro
   await clock.advance(1_000);
   await Effect.runPromise(follower.reconcileNow("s1"));
   assert.equal(reports, 2, "a wall clock stepped forward let one through");
+});
+
+it("an orphaned transfer whose end failed is asked again on the next snapshot", async () => {
+  let terminates = 0;
+  const { state, requests } = await harness((request) => {
+    if (request.op !== "terminate") return { ok: true };
+    terminates += 1;
+    return terminates === 1
+      ? { ok: false, error: "the engine is busy" }
+      : { ok: true };
+  });
+  const orphan = rawMirrorSession({
+    session: "orphan",
+    localRoot: root,
+    labels: { [MIRROR_LABEL_MODE]: "transfer-a-token-nobody-holds" },
+  });
+  await state([orphan]);
+  await waitFor(() => terminates === 1, "the orphan's first end");
+  await state([orphan]);
+  await waitFor(
+    () =>
+      requests().filter((asked) => asked === "terminate orphan").length === 2,
+    "the orphan's end to be asked again",
+  );
+});
+
+it("a transfer whose daemon stops and doesn't come back fails at the missing ceiling", async () => {
+  const clock = testClock();
+  let status: "running" | "failing" = "running";
+  const engine = inertMirrorImpl({
+    status: Effect.sync(() => status),
+    create: () => Effect.succeed("t1"),
+    terminate: () => Effect.void,
+    // The snapshot that stands through the stop: connected, mid-copy.
+    sessions: Effect.succeed([
+      rawMirrorSession({ session: "t1", status: "reconciling" }),
+    ]),
+  });
+  let outcome: unknown;
+  Effect.runForkWith(clock.context)(
+    transferFilesOnce(
+      {
+        localRoot: root,
+        localWorktreeId: "w",
+        sourceDeviceId: "B",
+        sourceProjectId: "p",
+        sourceWorktreeId: "w",
+        remoteRoot: "/b",
+        name: "w",
+        ignores: [],
+      },
+      () => {},
+    ).pipe(
+      Effect.provideService(MirrorEngine, engine),
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          outcome = result;
+        }),
+      ),
+    ),
+  );
+  await clock.advance(1_000);
+  status = "failing";
+  for (let second = 0; second < 12; second++) await clock.advance(1_000);
+  assert.deepEqual(outcome, {
+    crossed: false,
+    conflicts: 0,
+    error: "the transfer session was lost with the engine",
+  });
 });

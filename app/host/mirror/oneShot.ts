@@ -45,7 +45,9 @@ export type TransferFilesResult = {
 const POLL_MS = 250;
 // The daemon's snapshots trail its answers (file-sync/engine.go
 // throttles them), so a session its create just made can be missing
-// from the last one. Missing for longer, it is gone.
+// from the last one, and a daemon that isn't running lists the sessions
+// it had, which nothing carries. Missing, or with no daemon running, for
+// longer than this, the transfer is lost.
 const MISSING_CEILING_MS = 10_000;
 // An error with no cycle behind it for this long is a session that
 // cannot connect (the peer's engine, the grant), not a slow one.
@@ -162,7 +164,10 @@ const waitSettled = (
     let disconnectedSince: number | null = null;
     let everConnected = false;
     while (now() - startedAt < SETTLE_CEILING_MS) {
-      const raw = yield* findSession(daemon, session);
+      const raw =
+        (yield* daemon.status) === "running"
+          ? yield* findSession(daemon, session)
+          : undefined;
       if (raw === undefined) {
         missingSince ??= now();
         if (now() - missingSince > MISSING_CEILING_MS) {

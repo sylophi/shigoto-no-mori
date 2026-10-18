@@ -602,7 +602,9 @@ const make = (options: Options) =>
         }
       });
 
-    // The daemon's own snapshot, once it has one: a restart's comes after
+    // The daemon's own snapshot: the current one while it runs (it sends
+    // one on every change, so a session made before the failure is in
+    // it, and one made after is ended as it shows up), a restart's after
     // its ready.
     const awaitFresh = Stream.fromPubSub(changes).pipe(
       Stream.filterEffect(() => Ref.get(fresh)),

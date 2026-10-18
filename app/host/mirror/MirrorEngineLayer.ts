@@ -253,12 +253,14 @@ const make = (options: {
 
     // A transfer session no pull here is waiting on (registry.ts
     // isOrphanedTransfer) is ended on sight, since no mirror surface
-    // would ever show it. Each is asked once, and the engine drops it
-    // from the next snapshot.
+    // would ever show it, off the running daemon's own snapshot. Each is
+    // asked once while its end is under way or done, and the engine drops
+    // it from the next snapshot; one whose end failed is asked again.
     const reaped = new Set<string>();
-    const reapOrphanedTransfers = Effect.flatMap(daemon.sessions, (sessions) =>
-      Effect.forEach(
-        sessions.filter(
+    const reapOrphanedTransfers = Effect.gen(function* () {
+      if (!(yield* daemon.fresh)) return;
+      yield* Effect.forEach(
+        (yield* daemon.sessions).filter(
           (session) =>
             isOrphanedTransfer(session) && !reaped.has(session.session),
         ),
@@ -266,15 +268,19 @@ const make = (options: {
           reaped.add(session.session);
           return terminate(session.session).pipe(
             Effect.catch((error) =>
-              Effect.logWarning(
-                `[mirror] could not end an orphaned transfer session: ${error.message}`,
+              Effect.sync(() => reaped.delete(session.session)).pipe(
+                Effect.andThen(
+                  Effect.logWarning(
+                    `[mirror] could not end an orphaned transfer session: ${error.message}`,
+                  ),
+                ),
               ),
             ),
           );
         },
         { discard: true },
-      ),
-    );
+      );
+    });
 
     const engine = MirrorEngine.of({
       status: daemon.status,

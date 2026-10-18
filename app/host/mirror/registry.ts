@@ -496,20 +496,25 @@ export const moveMirrorsOfWorktree = (
 // this device is not on. Each session is asked about once, signed in
 // or not, so one failed credential read (it reads as signed out) ends
 // nothing already running. A sign-out ends what was running itself and
-// resets the sweep, so a session reported after it is asked again.
+// resets the sweep, so a session reported after it is asked again. Only
+// the running daemon's own snapshot is asked about: the one that stands
+// through a restart can end nothing.
 export function createNoAccountSweep(deps: {
   sessions: () => readonly MirrorSessionRaw[];
+  // Whether `sessions` is the running daemon's own (MirrorDaemon's fresh).
+  fresh: () => boolean;
   signedIn: () => boolean;
   end: () => void;
 }): { run: () => void; reset: () => void } {
   const asked = new Set<string>();
   return {
     run: () => {
-      const fresh = deps.sessions().filter((raw) => !asked.has(raw.session));
-      if (fresh.length === 0) return;
+      if (!deps.fresh()) return;
+      const unasked = deps.sessions().filter((raw) => !asked.has(raw.session));
+      if (unasked.length === 0) return;
       // Asked before marking: a check that throws leaves them to ask again.
       const signedIn = deps.signedIn();
-      for (const raw of fresh) asked.add(raw.session);
+      for (const raw of unasked) asked.add(raw.session);
       if (!signedIn) deps.end();
     },
     reset: () => asked.clear(),

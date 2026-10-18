@@ -28,14 +28,17 @@ export const makeKept = Effect.gen(function* () {
   const data = yield* WorktreeData.WorktreeData;
   const cloneCheckout = yield* CloneCheckout.CloneCheckout;
 
+  // Written anew, so the rowid orders the moves (WtFolder's placed).
   const recordMove = (project: RegisteredProject, moved: Moved) =>
-    sql`INSERT INTO wt_moves ${sql.insert({
-      from_path: moved.fromPath,
-      to_path: moved.toPath,
-      project_id: project.id,
-      moved: 1,
-    })} ON CONFLICT (from_path) DO UPDATE SET
-      to_path = excluded.to_path, moved = 1, error = NULL`;
+    Effect.andThen(
+      sql`DELETE FROM wt_moves WHERE from_path = ${moved.fromPath}`,
+      sql`INSERT INTO wt_moves ${sql.insert({
+        from_path: moved.fromPath,
+        to_path: moved.toPath,
+        project_id: project.id,
+        moved: 1,
+      })}`,
+    );
 
   const rekeyRows = (
     project: RegisteredProject,

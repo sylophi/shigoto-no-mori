@@ -559,3 +559,41 @@ it("records an adopt's, a project relocate's and the data-folder move's re-keys 
   );
   assert.deepEqual(recorded, Option.some(ahead));
 });
+
+// The data-folder move re-keys forward, then back on an undo, then
+// forward again on a retry, each recorded; with the drive the folders
+// are on away, neither path can be looked at.
+it("reads a move undone and made again where it was made last, its paths away", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const a = join(box.home, "away", "a", "fox");
+  const b = join(box.home, "away", "b", "fox");
+  const rekey = (from: string, to: string, back = false) =>
+    box.engine(
+      Effect.gen(function* () {
+        const registry = yield* Registry.Registry;
+        const project =
+          (yield* registry.listed).find(({ path }) => path === repo) ??
+          (yield* registry.register({ name: "proj", path: repo }));
+        yield* (yield* Worktrees.Worktrees).rekey(
+          project,
+          worktreeIdFromPath(from),
+          to,
+          { fromPath: from, back },
+        );
+        const folder = yield* WtFolder.WtFolder;
+        return {
+          ids: [...(yield* folder.movedIds)],
+          a: Option.getOrNull(yield* folder.movedTo(a)),
+        };
+      }),
+    ) as Promise<{ ids: Array<[string, string]>; a: string | null }>;
+  await rekey(a, b);
+  assert.deepEqual(await rekey(b, a, true), {
+    ids: [[worktreeIdFromPath(b), worktreeIdFromPath(a)]],
+    a: null,
+  });
+  assert.deepEqual(await rekey(a, b), {
+    ids: [[worktreeIdFromPath(a), worktreeIdFromPath(b)]],
+    a: b,
+  });
+});
