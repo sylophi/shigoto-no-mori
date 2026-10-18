@@ -95,14 +95,28 @@ export const makeBranches = ({
       (effect) => Effect.ignore(effect),
     );
 
+    const resolvePrimaryRef = Effect.fn("Git.resolvePrimaryRef")(function* (
+      repo: string,
+      override?: string,
+      remotes?: readonly string[],
+    ) {
+      return Option.flatMap(
+        yield* pickDefault(repo, override, remotes),
+        ({ refs, picked }) =>
+          picked === undefined
+            ? Option.map(
+                Option.fromUndefinedOr(refs.locals[0]),
+                (branch) => `refs/heads/${branch}`,
+              )
+            : Option.some(picked),
+      );
+    });
+
     const resolveDefaultBranch = Effect.fn("Git.resolveDefaultBranch")(
       function* (repo: string, override?: string, remotes?: readonly string[]) {
-        return Option.flatMap(
-          yield* pickDefault(repo, override, remotes),
-          ({ refs, picked }) =>
-            picked === undefined
-              ? Option.fromUndefinedOr(refs.locals[0])
-              : Option.some(shortRefName(picked)),
+        return Option.map(
+          yield* resolvePrimaryRef(repo, override, remotes),
+          shortRefName,
         );
       },
     );
@@ -239,6 +253,7 @@ export const makeBranches = ({
       branchRefs,
       appendExcludes,
       resolveDefaultBranch,
+      resolvePrimaryRef,
       resolveDefaultRef,
       checkoutBranch,
       createBranch,

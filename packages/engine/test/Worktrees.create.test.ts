@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, it } from "vitest";
+import * as Config from "../src/Config.ts";
 import * as Doctor from "../src/Doctor.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
@@ -71,4 +72,59 @@ it("reads a worktree renamed by hand there as moved, not a stray", async () => {
   const ids = doc.checks.map((finding) => finding.id);
   assert.ok(!ids.includes("project-strays"), JSON.stringify(doc.checks));
   assert.equal(ids.filter((id) => id === "project-moved").length, 1);
+});
+
+it("names the default branch's local branch from the ref it resolved: the remote's branch for a remote-tracking ref, a stale remote's too, and a local branch named like a remote ref as itself", async () => {
+  box = sandbox();
+  const sandboxed = box;
+  const repo = sandboxed.repo("proj", { "README.md": "hi\n" });
+  const tip = sandboxed.git(repo, "rev-parse", "HEAD").trim();
+  sandboxed.git(
+    repo,
+    "remote",
+    "add",
+    "origin",
+    "https://example.com/proj.git",
+  );
+  sandboxed.git(repo, "update-ref", "refs/remotes/origin/main", tip);
+  sandboxed.git(repo, "update-ref", "refs/remotes/gone/trunk", tip);
+  sandboxed.git(repo, "branch", "origin/feat");
+  const targetWith = (defaultBranch: string | undefined) =>
+    sandboxed.engine(
+      Effect.gen(function* () {
+        const registry = yield* Registry.Registry;
+        const worktrees = yield* Worktrees.Worktrees;
+        const [project] = yield* registry.projects;
+        const registered =
+          project ?? (yield* registry.register({ name: "proj", path: repo }));
+        if (defaultBranch !== undefined) {
+          yield* Effect.flatMap(Config.Config, (config) =>
+            config.set(
+              {
+                kind: "project",
+                projectId: registered.id,
+                path: registered.path,
+              },
+              "defaultBranch",
+              defaultBranch,
+            ),
+          );
+        }
+        const { primaryRef, primaryBranch } =
+          yield* worktrees.primaryTarget(registered);
+        return { primaryRef, primaryBranch };
+      }),
+    );
+  assert.deepEqual(await targetWith(undefined), {
+    primaryRef: "origin/main",
+    primaryBranch: "main",
+  });
+  assert.deepEqual(await targetWith("gone/trunk"), {
+    primaryRef: "gone/trunk",
+    primaryBranch: "trunk",
+  });
+  assert.deepEqual(await targetWith("origin/feat"), {
+    primaryRef: "origin/feat",
+    primaryBranch: "origin/feat",
+  });
 });
