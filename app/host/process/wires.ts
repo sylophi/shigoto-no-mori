@@ -268,7 +268,7 @@ const serveConnectInfo = makeConnectInfo({
     Graph.run(
       onTunnel((tunnel) => tunnel.startingThenUp(Duration.millis(withinMs))),
     ).catch(() => false),
-  tunnelUndialed: (peer) => directTickets.undialed(peer, "tunnel"),
+  tunnelUndialedSets: (peer) => directTickets.undialedSets(peer, "tunnel"),
   recheckTunnel: () => {
     void Graph.run(onTunnel((tunnel) => tunnel.recheck)).catch(() => {});
   },

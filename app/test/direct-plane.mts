@@ -1259,7 +1259,7 @@ function ticketOf(info: DirectConnectInfo, kind: "lan" | "tunnel"): string {
   return candidate.ticket;
 }
 
-it("tunnel recheck: a connection asking again while its last tunnel ticket lies unspent, and nothing of its set was, rechecks an up tunnel, and no other ask does", async () => {
+it("tunnel recheck: a connection asking a third time with its last two tunnel tickets unspent, and nothing of either set, rechecks an up tunnel, and no other ask does: not a re-ask mid-race", async () => {
   const store = createConnectTicketStore();
   let tunnel: string | null = "wss://sm-0123456789ab.sm.example.test";
   let rechecks = 0;
@@ -1268,7 +1268,7 @@ it("tunnel recheck: a connection asking again while its last tunnel ticket lies 
     mintTickets: (peer, kinds) => store.mint(peer, kinds),
     candidateAddresses: () => ["127.0.0.1"],
     tunnelUrl: () => tunnel,
-    tunnelUndialed: (peer) => store.undialed(peer, "tunnel"),
+    tunnelUndialedSets: (peer) => store.undialedSets(peer, "tunnel"),
     recheckTunnel: () => {
       rechecks += 1;
     },
@@ -1280,25 +1280,30 @@ it("tunnel recheck: a connection asking again while its last tunnel ticket lies 
     dialableKinds: ["lan", "tunnel"],
     connectionId: "d".repeat(32),
   };
-  // A first ask, then one after its dial reached nothing.
+  // A first ask, then a re-ask while its dial may still race.
   await connectInfo(DIALER, web);
-  assert.equal(rechecks, 0);
-  const second = await connectInfo(DIALER, web);
+  await connectInfo(DIALER, web);
+  assert.equal(rechecks, 0, "a re-ask mid-race rechecked");
+  // Two dials in a row that reached nothing, then a third ask.
+  const third = await connectInfo(DIALER, web);
   assert.equal(rechecks, 1);
-  // One after a dial that linked.
-  assert.equal(store.consume(ticketOf(second, "tunnel"), "tunnel"), DIALER);
+  // One after a dial that linked starts the count again.
+  assert.equal(store.consume(ticketOf(third, "tunnel"), "tunnel"), DIALER);
+  await connectInfo(DIALER, web);
   await connectInfo(DIALER, web);
   assert.equal(rechecks, 1);
   // A desktop whose lan candidate won leaves its tunnel ticket be.
   const raced = await connectInfo(DIALER, desktop);
   assert.equal(store.consume(ticketOf(raced, "lan"), "lan"), DIALER);
   await connectInfo(DIALER, desktop);
+  await connectInfo(DIALER, desktop);
   assert.equal(rechecks, 1);
-  // One whose every candidate failed.
+  // Two whose every candidate failed.
   await connectInfo(DIALER, desktop);
   assert.equal(rechecks, 2);
   // A tunnel already down is not asked.
   tunnel = null;
+  await connectInfo(DIALER, web);
   await connectInfo(DIALER, web);
   assert.equal(rechecks, 2);
 });

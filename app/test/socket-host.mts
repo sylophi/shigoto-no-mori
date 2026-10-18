@@ -527,6 +527,20 @@ it("refusal: a ticket the host never minted is a blocked verdict, and five of th
   assert.equal(locked.code, 4003);
 });
 
+it("refusal: a pending ticket presented with a key other than the roster's counts as a guess, and five lock the address out", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const ticket = mintTicket(listener.tickets, DIALER);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const refused = await dialFails(listener, {
+      ticket,
+      localKey: generateKeyPair(),
+    });
+    assert.ok(refused.refusal instanceof LinkRefusedError);
+  }
+  assert.equal((await dialFails(listener)).code, 4003);
+});
+
 it("lockout: an address is benched for 30 s of time awake, which neither a sleep nor a step of the wall clock either way spends", async () => {
   const track = trackTest;
   const clock = testClock();
