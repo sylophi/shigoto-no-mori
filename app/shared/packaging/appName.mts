@@ -52,13 +52,23 @@ export function assertDevProfileName(name: string): void {
 }
 
 // The profile named in an environment, or null when unset or empty.
-export function devProfileFromEnv(
+function devProfileFromEnv(
   env: Record<string, string | undefined>,
 ): string | null {
   const raw = env[DEV_PROFILE_ENV]?.trim() ?? "";
   if (raw === "") return null;
   assertDevProfileName(raw);
   return raw;
+}
+
+// The profile a build runs as, or null: a dev run's, or a test flavor's
+// (the lab's walks run one build as two devices). A release build never
+// runs as one, whatever its environment says.
+export function profileFromEnv(
+  build: { readonly packaged: boolean; readonly debuggable: boolean },
+  env: Record<string, string | undefined>,
+): string | null {
+  return build.packaged && !build.debuggable ? null : devProfileFromEnv(env);
 }
 
 // The folder in the plain dev userData that holds the profiles'.

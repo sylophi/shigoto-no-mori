@@ -1,0 +1,33 @@
+// The lab's hub (src/lab.ts), run on loopback by the cross-device walks
+// (app/lab/walks/lib/labHub.mts) with local bindings only. Never deployed.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shigomori-hub-lab",
+  "main": "src/lab.ts",
+  "compatibility_date": "2026-08-01",
+  "durable_objects": {
+    "bindings": [{ "name": "DEVICE_HUB", "class_name": "DeviceHub" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DeviceHub"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shigomori-hub-lab",
+      "database_id": "00000000-0000-4000-8000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "ratelimits": [
+    {
+      "name": "RATE_LIMIT",
+      "namespace_id": "3001",
+      "simple": { "limit": 300, "period": 60 },
+    },
+    {
+      "name": "RATE_LIMIT_OPEN",
+      "namespace_id": "3002",
+      "simple": { "limit": 60, "period": 60 },
+    },
+  ],
+  "workers_dev": false,
+}

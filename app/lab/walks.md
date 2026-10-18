@@ -9,7 +9,7 @@ proved here as well.
 
 ```sh
 SM_FLAVOR=lab pnpm -C app package   # once per change to the app
-pnpm walks                          # every walk, about 30 s
+pnpm walks                          # every walk, about 7 minutes
 pnpm walks changes                  # the walks whose file names match
 ```
 
@@ -38,13 +38,54 @@ else.
 
 - **After every landing on release/v3**, in the `Walks` workflow
   (`.github/workflows/walks.yml`), which packages the lab build on a
-  macOS runner and runs every walk: about 2 minutes of walks and 3 of
-  packaging, too long for every pull request. It can also be started
+  macOS runner and runs every walk: about 8 minutes of walks (the
+  cross-device ones about a minute and a half of that) and 1 of
+  packaging, too long for every pull request. It checks out the whole
+  history, since the cross-device walks' project is this repository
+  at a pinned commit. It can also be started
   by hand (`workflow_dispatch`). A regression shows within the hour
   after a merge and before any cut.
 - **Before every prerelease cut**, as the packaged check
   (`V3.md`, Process), on the build about to be cut.
 - **By hand**, with `pnpm walks`, for a change that touches a page.
+
+## Two devices, a real project
+
+The cross-device walks (`cross-device.walk.mts`) run the lab build as
+several devices of one account, on a real project with the owner's
+settings, because the flows between devices broke on what a
+generated repo and default settings never have (V3.md, the clone of a
+remote-tracking default branch).
+
+- **The devices** (`lib/devices.mts`): each is the lab build launched
+  as a profile (`SHIGOMORI_PROFILE`, which a test flavor takes and a
+  release build ignores), so each has its own userData,
+  single-instance lock and hub credential, and its own root as every
+  walk has. The walk adds them as it needs them: a device without the
+  project is a fresh one.
+- **The hub** (`lib/labHub.mts`): this checkout's worker under
+  `wrangler dev` with local bindings (`hub/wrangler.lab.jsonc`), where
+  a login is `lab:<account>` in place of a Clerk session token
+  (`hub/src/lab.ts`). Each device enrolls through the page api with
+  it. No network and no Clerk: the window logs that Clerk's UI didn't
+  load, and nothing else of the account needs it. The devices reach
+  each other directly on loopback, as two Macs on one network do.
+- **The project** (`lib/realRepo.mts`): this repository at a pinned
+  commit, 2,562 files and 1,076 commits, served by `git daemon` on
+  loopback as the remote, so a clone from a peer carries it (a local
+  path it would not). A device clones it as a laptop has it: the
+  default branch `origin/main`, the owner's settings
+  (`applyOwnerSettings`: carry-over copies of `CLAUDE.local.md`, ignored
+  only by the user's own excludes, and `app/.env.local`; a setup
+  script; squash), and worktrees made from `origin/main`.
+- **The setup script** is a cheap one of the same shape as the owner's
+  `pnpm install && pnpm run postinstall`: a real command that reads the
+  tree and writes into the worktree's ignored `node_modules` in a few
+  seconds. The owner's own takes minutes and gigabytes per worktree,
+  which a run of a dozen worktrees can't spend; the hand sweep runs it.
+- **What a walk fails with** is what the window says: a dialog that
+  ends in its failure fails the walk with its words, so a broken flow
+  reads as the error the person met.
 
 ## Adding one
 
@@ -68,7 +109,8 @@ it("does what the person did", async () => {
   page, `git` for the walk's repos and `sm` for the bundle's
   terminal command. `gh` takes a script, or a function of the root
   that makes one. `linkedDataDir` puts the data folder behind a
-  symlink.
+  symlink. `debugPort` is the window's debugging port, for a weblab
+  session attached to a walk held at a breakpoint.
 - `lib/labApp.mts` starts the build (`bootLab`, with `--sm-lab`, so
   the page's api is there for a walk that needs it). It hands back
   the page, `git` for the walk's repos, `sm` for the bundle's
@@ -111,4 +153,5 @@ build's single-instance lock is machine-wide.
 | `pull-request` | A pull request on its branch's page and its diff page with images, against the fake gh |
 | `pull-request-partial` | A pull request whose commits can't be fetched: its diff from `gh pr diff`, each image saying once that it isn't here, with Try again, which draws them once the commits are reachable |
 | `renderer-recovery` | A window whose renderer is SIGTERMed, then SIGKILLed, then every process under the app SIGTERMed at once: each time the window is back on its page and reads the repo, the host restarted too; a window the person closes stays closed |
+| `cross-device` | Two devices and a real project: the other device's worktree read-only while its control is off, its actions once it is on; mirror to it and from it, send and bring, each into the project there at another path and into a device without it, cloned first; the clone on `main` at the remote's tip with `origin/HEAD` and the upstream on `origin/main`, the copy clean with its carried files, the source torn down after a transplant |
 | `host-restart` | The host killed, then stopped until the watchdog restarts it: the band says it is reconnecting and why it restarted, no error toast, and the page reads the new host's state. The window's timers stopped past every link limit, and the whole app stopped as a sleep stops it with a commit sent as it stopped: no band, no toast, no restart, and the commit lands once. About 4 minutes |

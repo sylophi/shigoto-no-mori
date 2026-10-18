@@ -30,6 +30,9 @@
       ],
     },
     "hub": {
+      // The lab's worker (wrangler.lab.jsonc), which the cross-device
+      // walks run.
+      "entry": ["src/lab.ts"],
       "ignoreDependencies": [
         // cloudflare:test and cloudflare:workers are workerd's built-in
         // modules, provided by @cloudflare/vitest-pool-workers.
