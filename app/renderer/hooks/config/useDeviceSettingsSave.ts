@@ -27,9 +27,11 @@ export function useDeviceSettingsSave() {
       state: SettingsFormState;
       saved: SettingsFormState;
     }) => {
-      const patch = peerSettingsWrite(saved, state);
-      if (Object.keys(patch).length === 0) return;
-      await api.run(api.globalConfig.writeDeviceSettings({ patch }));
+      await api.run(
+        api.globalConfig.writeDeviceSettings({
+          patch: peerSettingsWrite(saved, state),
+        }),
+      );
     },
     onSuccess: () => invalidateDeviceSettingsQueries(queryClient, keys),
     meta: { errorTitle: "Couldn't save settings" },

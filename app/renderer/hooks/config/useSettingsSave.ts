@@ -7,8 +7,8 @@ import {
   type ClientConfig,
   type DeviceSettingsPatch,
   type LauncherCommand,
-  storedClientSetting,
 } from "@shigomori/contracts/schemas";
+import { storedClientSetting } from "@shigomori/contracts/schemas/config";
 import { storedPicks } from "@shigomori/ui/lib/themes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";

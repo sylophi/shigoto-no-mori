@@ -178,9 +178,12 @@ function PeerSettingsForm({
 
   const handleSave = async () => {
     if (!isDirty) return;
+    const saved = savedSnapshot;
     try {
-      await save.mutateAsync({ state: form, saved: savedSnapshot });
-      setSavedSnapshot(form);
+      await save.mutateAsync({ state: form, saved });
+      // Only what this Save wrote advances: a change the device made
+      // while it was out stays the device's.
+      setSavedSnapshot((prev) => keepTouched(form, saved, prev));
     } catch {
       // Surfaced by the mutation cache toast and the banner below.
       // The form stays dirty so the user can retry or discard.

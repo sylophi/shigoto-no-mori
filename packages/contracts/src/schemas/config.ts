@@ -469,24 +469,7 @@ export function withoutPeerState(config: ClientConfig): ClientConfig {
 
 // The value of an absent client key that has a default. A key saved
 // equal to its default is stored as absent (`storedClientSetting`).
-type ClientSettingKey =
-  | "theme"
-  | "doubutsu"
-  | "villageLife"
-  | "villageNews"
-  | "markTerrierProjects"
-  | "showDeviceBadges"
-  | "allowAgentWorking"
-  | "markAgentsWaiting"
-  | "notifyAgentWaiting"
-  | "notifyAgentDone"
-  | "inlineWorktrees"
-  | "pauseAnimationsOnBattery"
-  | "keepReachable"
-  | "groupProjectsByOwner";
-const CLIENT_CONFIG_DEFAULTS: {
-  readonly [K in ClientSettingKey]-?: NonNullable<ClientConfig[K]>;
-} = {
+const CLIENT_CONFIG_DEFAULTS = {
   theme: "system",
   doubutsu: true,
   villageLife: false,
@@ -501,7 +484,10 @@ const CLIENT_CONFIG_DEFAULTS: {
   pauseAnimationsOnBattery: true,
   keepReachable: true,
   groupProjectsByOwner: true,
+} satisfies {
+  readonly [K in keyof ClientConfig]?: NonNullable<ClientConfig[K]>;
 };
+type ClientSettingKey = keyof typeof CLIENT_CONFIG_DEFAULTS;
 
 export const clientSetting = <K extends ClientSettingKey>(
   config: Pick<ClientConfig, K>,
@@ -513,12 +499,6 @@ export const storedClientSetting = <K extends ClientSettingKey>(
   value: NonNullable<ClientConfig[K]>,
 ): ClientConfig[K] =>
   value === CLIENT_CONFIG_DEFAULTS[key] ? undefined : value;
-
-export function keepReachableOn(
-  config: Pick<ClientConfig, "keepReachable">,
-): boolean {
-  return clientSetting(config, "keepReachable");
-}
 
 export const StoredClientConfigSchema = loose(ClientConfigSchema);
 

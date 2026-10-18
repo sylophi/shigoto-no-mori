@@ -158,16 +158,21 @@ export function SettingsForm({
   const handleSave = async () => {
     // Two stores behind one Save. useSettingsSave routes each field to
     // its engine and skips whichever store is unchanged.
+    const saved = savedSnapshot;
     try {
-      await save.mutateAsync({ state: form, saved: savedSnapshot });
-      setSavedSnapshot(form);
+      await save.mutateAsync({ state: form, saved });
+      // Only what this Save wrote advances: a change another window or
+      // the device made while it was out stays theirs.
+      setSavedSnapshot((prev) => keepTouched(form, saved, prev));
     } catch (error) {
       // The mutation's toast and the banner below already surface the
       // failure. A partial failure still landed the device half, so
       // advance the snapshot for it: only the appearance fields stay
       // unsaved and Save retries just those.
       if (error instanceof SettingsSaveError && error.devicePersisted) {
-        setSavedSnapshot((prev) => withClientFields(form, prev));
+        setSavedSnapshot((prev) =>
+          withClientFields(keepTouched(form, saved, prev), prev),
+        );
       }
     }
     // No explicit setOverride(null). The providers clear the override

@@ -12,7 +12,7 @@
 // both crash guards is the pure module
 // main/core/liveness/rateLimit.ts, which test/liveness.mts drives
 // headlessly.
-import { keepReachableOn } from "@shigomori/contracts/schemas/config";
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import { app, type BrowserWindow } from "electron";
 import { platform } from "node:os";
 import { join } from "node:path";
@@ -40,7 +40,7 @@ function keepReachableEnabled(): boolean {
   // login item left behind by a previously configured build.
   if (!accountServiceConfigured()) return false;
   try {
-    return keepReachableOn(readClientConfigSync());
+    return clientSetting(readClientConfigSync(), "keepReachable");
   } catch (error) {
     // The store's own read swallows corruption (an unparseable file
     // reads as empty, so as the default), and a liveness decision must

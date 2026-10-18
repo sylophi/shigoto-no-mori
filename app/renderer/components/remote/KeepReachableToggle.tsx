@@ -1,4 +1,4 @@
-import { keepReachableOn } from "@shigomori/contracts/schemas/config";
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useKeepReachableUpdate } from "@/hooks/config/useKeepReachableUpdate";
 import { KeepReachableToggleView } from "@shigomori/ui/views/remote/KeepReachableToggleView.tsx";
@@ -17,7 +17,7 @@ export function KeepReachableToggle() {
   const keepReachableUpdate = useKeepReachableUpdate();
   return (
     <KeepReachableToggleView
-      on={keepReachableOn(clientConfig ?? {})}
+      on={clientSetting(clientConfig ?? {}, "keepReachable")}
       pending={keepReachableUpdate.isPending}
       onChange={(next) => keepReachableUpdate.mutate(next)}
       launchAtLogin={launchAtLoginSupported}
