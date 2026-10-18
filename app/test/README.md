@@ -74,6 +74,9 @@ Every run's temp files go in a folder of the run's own,
 `$TMPDIR/sm-test/<family>/<id>/`: the runner and each vitest config
 point TMPDIR there before a test starts (`../../testTemp.mts`), so a
 proof needs no cleanup of its own for what a killed process leaves.
+XDG_CONFIG_HOME points into it too, so the data dir's pointer and the
+data-folder lock are the run's, not the machine's; pnpm's and Bun's own
+settings are linked in from the user's.
 The folder goes as the run exits, and a run killed before that leaves
 a folder the next run of any suite sweeps (`test-temp`). Nothing
 outlives a run, so a build the proofs share (`lib/smBinary.mts`) is
