@@ -14,10 +14,10 @@ pnpm walks changes                  # the walks whose file names match
 ```
 
 Each walk starts a fresh app on a temp root of its own, removed
-afterwards. A failed walk's (its boot, a hook or a case) is kept
-under `SM_WALK_FAILURES` when it is set, the newest five there alone,
-and never inside the repository, where the typecheck and the other
-tools would read its copy of the repo. It holds the
+afterwards. A failed walk's root (its boot, a hook or a case failed)
+is kept under `SM_WALK_FAILURES` when it is set, every one of this run
+and the newest five of the runs before, and never inside a checkout,
+whose typecheck would read its copy of the repo. It holds the
 shell's `main.log` and trace under `home/Library/Logs`, and the host's
 trace beside it in `host-logs`, which every walk of the run appends to.
 CI keeps every walk's logs (`SM_WALK_LOGS`) and a failed walk's root,

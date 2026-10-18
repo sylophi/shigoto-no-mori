@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { expect } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
@@ -124,27 +124,27 @@ function appPids(app: number | undefined): { pid: number; command: string }[] {
 
 // A failed walk's root (its repos, data folder and home with the
 // shell's logs), with the host's trace beside it, kept under
-// SM_WALK_FAILURES when it is set, and the newest KEPT_FAILURES there
-// alone. Never inside the repository: each root holds a copy of the
-// repo, which the typecheck, vitest, knip and oxlint would all read,
-// gitignored or not. A copy that fails says so and keeps what it got.
+// SM_WALK_FAILURES when it is set, with the newest KEPT_FAILURES of the
+// runs before this one. Never inside a checkout: each root holds a copy
+// of the repo, which the checkout's typecheck would read, gitignored or
+// not. A keep or a prune that fails says so and never throws.
 const KEPT_FAILURES = 5;
-const KEPT_NAME = /-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z$/;
+const KEPT_STAMP = /-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)$/;
+const stampOf = (date: Date) => date.toISOString().replace(/[:.]/g, "-");
 
 function keepFailed(root: string): void {
   const failures = process.env["SM_WALK_FAILURES"];
   if (failures === undefined || failures === "") return;
   const walk = basename(expect.getState().testPath ?? root);
-  const repository = join(APP_DIR, "..");
-  if (isInside(resolve(failures), repository)) {
+  if (inCheckout(resolve(failures))) {
     console.error(
-      `[walks] ${walk} failed; SM_WALK_FAILURES names a folder inside the repository, so its root isn't kept`,
+      `[walks] ${walk} failed; SM_WALK_FAILURES names a folder inside a checkout, so its root isn't kept`,
     );
     return;
   }
   const kept = join(
     failures,
-    `${walk.replace(/\.walk\.mts$/, "")}-${new Date().toISOString().replace(/[:.]/g, "-")}`,
+    `${walk.replace(/\.walk\.mts$/, "")}-${stampOf(new Date())}`,
   );
   try {
     mkdirSync(failures, { recursive: true });
@@ -159,19 +159,55 @@ function keepFailed(root: string): void {
       error,
     );
   }
-  // Only the roots this keeps, by their name: the folder may hold others.
-  const older = readdirSync(failures, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && KEPT_NAME.test(entry.name))
-    .map((entry) => join(failures, entry.name))
-    .toSorted((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)
-    .slice(KEPT_FAILURES);
-  for (const dir of older) rmSync(dir, { recursive: true, force: true });
+  try {
+    pruneFailures(failures);
+  } catch (error) {
+    console.error(
+      `[walks] pruning the kept roots in ${failures} failed:`,
+      error,
+    );
+  }
 }
 
-const isInside = (path: string, folder: string): boolean => {
-  const from = relative(folder, path);
-  return from === "" || (!from.startsWith("..") && !isAbsolute(from));
+// The roots kept by earlier runs past the newest few, by the stamp in
+// their names: the folder may hold other folders, and this run's own
+// roots all stay, its first failure the one that tells most.
+function pruneFailures(failures: string): void {
+  const runStart = stampOf(runStartedAt());
+  const earlier = readdirSync(failures)
+    .map((name) => ({ name, stamp: KEPT_STAMP.exec(name)?.[1] }))
+    .filter(
+      (entry): entry is { name: string; stamp: string } =>
+        entry.stamp !== undefined && entry.stamp < runStart,
+    )
+    .toSorted((a, b) => b.stamp.localeCompare(a.stamp));
+  for (const { name } of earlier.slice(KEPT_FAILURES)) {
+    rmSync(join(failures, name), { recursive: true, force: true });
+  }
+}
+
+// When this `pnpm walks` began: its test run folder's birth
+// (testTemp.mts), which every walk file of the run shares.
+const runStartedAt = (): Date => {
+  const run = process.env["SM_TEST_RUN"];
+  return run === undefined ? new Date() : statSync(run).birthtime;
 };
+
+// Whether `path`, or the nearest folder of it that exists, is inside a
+// git checkout, this one or another (a `.git` folder or a worktree's
+// `.git` file in it or above it).
+function inCheckout(path: string): boolean {
+  let at = path;
+  while (!existsSync(at)) {
+    const parent = dirname(at);
+    if (parent === at) return false;
+    at = parent;
+  }
+  for (let dir = realpathSync(at); ; dir = dirname(dir)) {
+    if (existsSync(join(dir, ".git"))) return true;
+    if (dirname(dir) === dir) return false;
+  }
+}
 
 export async function bootLab(options: LabOptions): Promise<Lab> {
   const bundle = labBundle();
