@@ -6,9 +6,11 @@ import assert from "node:assert/strict";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   renameSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -22,10 +24,11 @@ import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox | undefined;
 let links: string | undefined;
+// A real install's node_modules takes a while to remove.
 afterEach(async () => {
   await box?.remove();
   if (links !== undefined) rmSync(links, { recursive: true, force: true });
-});
+}, 60_000);
 
 // A project, and the worktree `fox` made in it.
 const symlinkedFox = async () => {
@@ -128,3 +131,67 @@ it("names the default branch's local branch from the ref it resolved: the remote
     primaryBranch: "origin/feat",
   });
 });
+
+it(
+  "the owner's setup, its postinstall leaving a watcher on its output, finishes with the watcher still running",
+  { timeout: 180_000 },
+  async () => {
+    const sandboxed = sandbox();
+    box = sandboxed;
+    const repo = sandboxed.realRepo("shigoto-no-mori");
+    const watchers = join(sandboxed.home, "watchers");
+    // This repository's own postinstall, then a watcher that keeps writing
+    // to the script's output, as a dev server or a file watcher does: past
+    // the create's own limit, and ending by itself after.
+    const manifest = join(repo, "package.json");
+    const pkg = JSON.parse(readFileSync(manifest, "utf8")) as {
+      scripts: Record<string, string>;
+    };
+    pkg.scripts["postinstall"] =
+      `${pkg.scripts["postinstall"]} && ((for i in $(seq 3000); do echo watching; sleep 0.05; done) & echo $! >> '${watchers}')`;
+    writeFileSync(manifest, `${JSON.stringify(pkg, null, 2)}\n`);
+    sandboxed.git(repo, "commit", "-q", "-am", "A watcher after postinstall");
+    const said: string[] = [];
+    const created = (await sandboxed.engine(
+      Effect.gen(function* () {
+        const project = yield* (yield* Registry.Registry).register({
+          name: "shigoto-no-mori",
+          path: repo,
+        });
+        yield* (yield* Config.Config).set(
+          { kind: "project", projectId: project.id, path: project.path },
+          "scripts.setup",
+          "pnpm install && pnpm run postinstall",
+        );
+        return yield* (yield* Worktrees.Worktrees).create(
+          project,
+          { name: "fox" },
+          {
+            report: (event) =>
+              Effect.sync(() => {
+                if (event.event === "script" && event.kind === "data") {
+                  said.push(event.data);
+                }
+              }),
+            color: false,
+          },
+        );
+      }).pipe(Effect.timeout("90 seconds")),
+    )) as { worktree?: Worktrees.WorktreeRow; error?: string };
+    const pids = readFileSync(watchers, "utf8").trim().split("\n").map(Number);
+    try {
+      assert.equal(created.error, undefined, said.join("").slice(-2000));
+      assert.equal(created.worktree?.branch, "fox");
+      assert.match(said.join(""), /\[icons\] synced[\s\S]*watching/);
+      assert.doesNotThrow(() => process.kill(pids.at(-1) ?? 0, 0));
+    } finally {
+      for (const pid of pids) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          // Gone already: a watcher ends by itself.
+        }
+      }
+    }
+  },
+);

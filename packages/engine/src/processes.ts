@@ -7,10 +7,13 @@
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
@@ -181,17 +184,79 @@ export const capture = (
         }),
       );
       const all = options.from === "all";
-      const [output, , code] = yield* Effect.all(
-        [
-          text(all ? handle.all : handle.stdout),
-          all ? Effect.void : Stream.runDrain(handle.stderr),
-          handle.exitCode,
-        ],
-        { concurrency: "unbounded" },
+      const {
+        read: [output],
+        code,
+      } = yield* readToExit(
+        handle,
+        Effect.all(
+          [
+            text(all ? handle.all : handle.stdout),
+            all ? Effect.void : Stream.runDrain(handle.stderr),
+          ],
+          { concurrency: 2 },
+        ),
       );
-      return { output, code: Number(code) };
+      return { output, code };
     }),
   );
+
+// How long output may still arrive after its process's exit and count:
+// Node can report the exit before the last of what was written.
+const EXIT_DRAIN = "200 millis";
+
+// A process's output until it exits, each chunk to `onChunk`, then its
+// `exit`, for a script whose background children outlive it (a
+// lifecycle script, in this process's group): one inherits its pipes and
+// can hold them open for good, so the exit ends the read, not the pipes'
+// end. The reader runs in `scope` and drops what comes after, so a child
+// that outlives the read keeps a reader until it closes the pipe or
+// `scope` ends.
+export const outputUntilExit = <A, E, R>(
+  output: Stream.Stream<Uint8Array, unknown>,
+  exit: Effect.Effect<A, E, R>,
+  onChunk: (chunk: Uint8Array) => Effect.Effect<void>,
+  scope: Scope.Scope,
+): Effect.Effect<A, E, R> =>
+  Effect.gen(function* () {
+    const reading = yield* Ref.make(true);
+    const reader = yield* output.pipe(
+      Stream.runForEach((chunk) =>
+        Effect.flatMap(Ref.get(reading), (on) =>
+          on ? onChunk(chunk) : Effect.void,
+        ),
+      ),
+      Effect.ignore,
+      Effect.forkIn(scope),
+    );
+    return yield* Effect.gen(function* () {
+      const exited = yield* Effect.exit(exit);
+      yield* Fiber.await(reader).pipe(Effect.timeoutOption(EXIT_DRAIN));
+      return yield* exited;
+    }).pipe(Effect.ensuring(Ref.set(reading, false)));
+  });
+
+// A command in a process group of its own (the spawner's default),
+// `read` (its pipes, read to their end) and its exit code. Its exit ends
+// the group: a child it left running (a hook's, under git; an app an
+// editor's command started) would otherwise hold the pipes open for
+// good. What the command wrote before it exited is all still read.
+export const readToExit = <A, E, R>(
+  handle: ChildProcessSpawner.ChildProcessHandle,
+  read: Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const reading = yield* Effect.forkScoped(read);
+    // A read that fails (past its cap) fails it at once: the command may
+    // be blocked writing to a pipe no one reads.
+    const code = yield* Effect.raceFirst(
+      handle.exitCode,
+      Effect.andThen(Fiber.join(reading), Effect.never),
+    );
+    // Nothing left to end is no failure.
+    yield* handle.kill({ forceKillAfter: KILL_GRACE }).pipe(Effect.ignore);
+    return { read: yield* Fiber.join(reading), code: Number(code) };
+  });
 
 // `capture`, ended past `timeout` (its scope closes, so the command goes
 // with it) and failed.
@@ -370,16 +435,21 @@ export const exec = Effect.fn("exec")(function* (
         stdin: "ignore",
       }),
     );
-    const [stdout, stderr] = yield* Effect.all(
-      [
-        readAll(handle.stdout, limit, {
-          tooLarge: () => fail("too-large", undefined),
-        }),
-        readAll(handle.stderr, limit),
-      ],
-      { concurrency: 2 },
+    const {
+      read: [stdout, stderr],
+      code,
+    } = yield* readToExit(
+      handle,
+      Effect.all(
+        [
+          readAll(handle.stdout, limit, {
+            tooLarge: () => fail("too-large", undefined),
+          }),
+          readAll(handle.stderr, limit),
+        ],
+        { concurrency: 2 },
+      ),
     );
-    const code = yield* handle.exitCode;
     if (code !== 0) {
       return yield* fail(
         "failed",

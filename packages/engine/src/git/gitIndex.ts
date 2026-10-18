@@ -186,6 +186,7 @@ export const makeGitIndex = ({
               // Taken by another snapshot since it was read, or held by
               // its write: either way the next number is free.
               while: (error) =>
+                error instanceof GitCommandError &&
                 /reference already exists|cannot lock ref/.test(
                   stderrOf(error),
                 ),

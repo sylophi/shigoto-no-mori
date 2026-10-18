@@ -18,9 +18,9 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { outputUntilExit } from "./processes.ts";
 
 // Where a lifecycle step stands, as `sm --json` reports it.
 export type Phase = "carryOver" | "setup" | "portPoolProvision" | "idle";
@@ -95,6 +95,7 @@ export class Lifecycle extends Context.Service<
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const crypto = yield* Crypto.Crypto;
+  const background = yield* Effect.scope;
 
   // The user's login shell (contracts' loginShellOf), run as one (no -i)
   // so .zprofile sets PATH up without zsh's interactive init. The
@@ -181,23 +182,25 @@ const make = Effect.gen(function* () {
         // One decoder for the run, so a character split across two reads
         // comes out whole.
         const decoder = new TextDecoder();
-        yield* handle.success.all.pipe(
-          Stream.runForEach((chunk) =>
+        // The shell's exit ends the run. What it left in the background
+        // keeps the pipes, which the service's scope reads on.
+        const code = yield* outputUntilExit(
+          handle.success.all,
+          // A signal death is no exit code, like a run that never started.
+          handle.success.exitCode.pipe(
+            Effect.map(Number),
+            Effect.orElseSucceed(() => null),
+          ),
+          (chunk) =>
             script({
               runId,
               kind: "data",
               data: decoder.decode(chunk, { stream: true }),
             }),
-          ),
-          Effect.ignore,
+          background,
         );
         const rest = decoder.decode();
         if (rest !== "") yield* script({ runId, kind: "data", data: rest });
-        // A signal death is no exit code, like a run that never started.
-        const code = yield* handle.success.exitCode.pipe(
-          Effect.map(Number),
-          Effect.orElseSucceed(() => null),
-        );
         return yield* exit(code);
       }),
     );
