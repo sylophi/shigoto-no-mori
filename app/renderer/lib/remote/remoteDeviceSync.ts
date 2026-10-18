@@ -302,7 +302,7 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
 // what supervision replaced. Scoped to the device that just landed,
 // through invalidateDeviceSession and NOT the externalChange sweep: a
 // session coming up is not a "that host's state moved" ping, and the
-// sweep's exemptions (runtime, githubCli, fs, portForwards, updater,
+// sweep's exemptions (runtime, githubCli, fs, portForwards,
 // the two worktree cost domains) name exactly the queries that
 // hard-failed during the dial window, so sweeping through them would
 // refetch everything except what is broken.

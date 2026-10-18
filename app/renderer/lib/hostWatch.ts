@@ -24,11 +24,9 @@
 // lib/remote/sharedSettingsSync.ts), and the pushes that are atoms of
 // their own (the script runs, the worktree lifecycle, the git fetches).
 import { gitContract } from "@shigomori/contracts/modules/git";
-import { updaterContract } from "@shigomori/contracts/modules/updater";
 import type { QueryClient } from "@tanstack/react-query";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-import { writeUpdaterState } from "@/hooks/system/useUpdater";
 import { invalidateWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
 import {
   invalidateHostDevice,
@@ -70,13 +68,6 @@ export function watchHost(
     listen(pushes(gitContract, "refsRefreshed"), ({ projectId }) => {
       invalidateBranchState(queryClient, keys, projectId);
       invalidateWorktreePullRequests(queryClient, keys, projectId);
-    }),
-    // Its updater moved. The state rides the push whole, so it is
-    // written rather than re-asked, and always on, so the update flags
-    // (the sidebar's Settings dot, Settings' device tabs) follow a
-    // check that finishes with no Version section mounted.
-    listen(pushes(updaterContract, "state"), (state) => {
-      writeUpdaterState(queryClient, deviceId, state);
     }),
   ];
   return () => {

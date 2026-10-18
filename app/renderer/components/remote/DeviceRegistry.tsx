@@ -19,7 +19,6 @@ import {
   useAccountDevices,
   useLocalDevice,
   useRevokeDevice,
-  useWatchCommandAccessChanges,
 } from "@/hooks/account/useAccount";
 import {
   CLERK_SIGN_OUT_KEY,
@@ -48,7 +47,6 @@ import { useApi } from "@/lib/runtime/pageApi";
 export function DeviceRegistry({ accountId }: { accountId: string }) {
   const api = useApi();
   const localDeviceId = api.deviceId;
-  useWatchCommandAccessChanges();
   const local = useLocalDevice();
   const devicesQuery = useAccountDevices();
   const revokeDevice = useRevokeDevice();

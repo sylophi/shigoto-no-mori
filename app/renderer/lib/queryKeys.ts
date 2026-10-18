@@ -52,12 +52,6 @@ export function hostKeyDeviceId(queryKey: readonly unknown[]): unknown {
 // The client-scoped builders: they carry no device id and build the
 // same tuple whichever device a caller is looking at.
 export const queryKeys = {
-  // Client-scoped: the v3 migration as the shell serves it.
-  migration: () => ["migration"] as const,
-
-  // Client-scoped: this window's guide as its shell serves it.
-  guide: () => ["guide"] as const,
-
   // Client-scoped: the code highlighter holding a language, loaded in
   // this window whichever device the code came from.
   codeHighlighter: (lang: string) => ["codeHighlighter", lang] as const,
@@ -69,11 +63,6 @@ export const queryKeys = {
   account: () => ["account"] as const,
   accountStatus: () => ["account", "status"] as const,
   accountDevices: () => ["account", "devices"] as const,
-  // Whether this host accepts commands from the account's other
-  // devices. Kept OUTSIDE the "account" prefix so the toggle (which
-  // fans out on commandAccessChanged) writes only this query and
-  // never thrashes status or the device list.
-  accountCommandAccess: () => ["accountCommandAccess"] as const,
 
   // Client-scoped: the port-forward engine (its listeners and conns)
   // lives in this machine's host process, whichever device a
@@ -275,12 +264,6 @@ function buildQueryKeys(deviceId: string) {
     // a set of per-host facts served by the host-scoped runtime contract.
     runtimeInfo: () => host("runtime", "info"),
 
-    // Host-scoped: the update is a fact about the machine the app runs
-    // on, and a peer's Settings tab shows that device's state under its
-    // own id. Seeded by updater:get and then driven by the updater:state
-    // broadcast, which a remote scope receives over its direct session.
-    updaterState: () => host("updater"),
-
     // Host-scoped: a mirror's thread of events, keyed by the local
     // worktree like the host keeps it. (The mirror list itself is the
     // host's view, hooks/remote/useMirrors.ts.)
@@ -317,12 +300,10 @@ export function queryKeysFor(deviceId: string): QueryKeyRegistry {
 //   sweep is several git calls or a directory walk per worktree) and
 //   invalidation ignores staleTime. Focus, mount and the removal flow
 //   still cover them.
-// - runtime and updater: static per-host facts and that device's
-//   updater state, which its own broadcast drives. No git-state change
-//   touches either.
-// - portForwards for the same reason as updater: the forward set is
-//   this install's engine state, driven by its own changed broadcast,
-//   and no host git-state ping moves it.
+// - runtime: static per-host facts. No git-state change touches them.
+// - portForwards: the forward set is this install's engine state,
+//   driven by its own changed broadcast, and no host git-state ping
+//   moves it.
 // - clientConfig for scope: the store lives in this app instance's
 //   userData, so no host's state change can touch it. Including it
 //   would defeat the query's staleTime Infinity on every ping.
@@ -351,10 +332,9 @@ const externalChangeExempt = new Set([
   "githubCli",
   // Re-read on its own beat while on screen.
   "mirrorHistory",
-  // Driven by its own changed broadcast, like updater.
+  // Driven by its own changed broadcast.
   "portForwards",
   "runtime",
-  "updater",
   "worktreeHygiene",
   "worktreeDiskUsage",
 ]);
@@ -380,8 +360,8 @@ function hostKeyProjectId(queryKey: readonly unknown[]): unknown {
 // local change (and vice versa). Client-scoped keys carry no id and
 // keep the domain-exempt behavior whichever device pinged. The
 // exemptions above are the whole point of this entry: "state on that
-// device moved" says nothing about GitHub, hygiene, forwards or the
-// updater, so those sit the ping out. See invalidateDeviceSession for
+// device moved" says nothing about GitHub, hygiene or forwards, so
+// those sit the ping out. See invalidateDeviceSession for
 // the sibling that must NOT sit them out.
 export function invalidateHostDevice(
   queryClient: QueryClient,
@@ -436,7 +416,7 @@ export function invalidateHostProject(
 // moment ago. Same device-id scoping as invalidateHostDevice and
 // deliberately NO domain exemption, because the exempt list is tuned
 // for "that host's git state moved" and is exactly wrong here: runtime,
-// githubCli, fs, portForwards, updater, worktreeHygiene and
+// githubCli, fs, portForwards, worktreeHygiene and
 // worktreeDiskUsage are the queries that hard-failed with "no direct
 // connection" while the keeper was still dialing, so exempting them
 // would skip precisely what needs refetching. Client-scoped keys are
