@@ -34,11 +34,13 @@ export class FileSyncUnavailableError extends Schema.TaggedError<FileSyncUnavail
 export const isFileSyncUnavailable = Schema.is(FileSyncUnavailableError);
 
 // A `serve` child: its stdin and stdout as one duplex stream, stderr
-// apart for diagnostics.
+// apart for diagnostics, and its scope, which closes as it ends, for
+// what serves alongside it.
 export interface ServeChild {
   readonly pid: number;
   readonly stream: Duplex;
   readonly stderr: Readable;
+  readonly scope: Scope.Scope;
 }
 
 // `env` is added to the app's environment.
@@ -127,6 +129,7 @@ const make = (binaryPath: () => string | null) =>
         pid: handle.pid,
         stream: Duplex.from({ readable: output, writable: input }),
         stderr,
+        scope: child,
       };
     });
 

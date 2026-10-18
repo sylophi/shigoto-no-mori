@@ -1340,13 +1340,17 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
       refreshGit: () => Effect.sync(() => verdict),
       noteEvent: (worktreeId, kind, detail) =>
         noted.push([worktreeId, kind, detail]),
+      releaseCopy: (raw) =>
+        Effect.sync(() => {
+          released.push(raw.worktreeId);
+        }),
     });
     // The peer's list never answers, which the copy-gone probe reads
     // as no answer (the copy may well be there), so no refusal is
     // waved through as a copy already gone.
     standInPeers({
       // The peer's own serving side, as far as this check asks it: the
-      // copy's delete and its release. Everything else refuses.
+      // copy's delete. Everything else refuses.
       transportFor: () => ({
         local: true,
         invoke: async (channel, input) => {
@@ -1354,10 +1358,6 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
           if (channel === "worktrees:delete") {
             deleted.push(worktreeId);
             return { ok: true };
-          }
-          if (channel === "mirror:release") {
-            released.push(worktreeId);
-            return undefined;
           }
           throw new Error("not in this check");
         },

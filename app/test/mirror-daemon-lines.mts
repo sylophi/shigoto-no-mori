@@ -25,7 +25,13 @@
 //   - a child that exits reads as failing, with its code and its last
 //     word on stderr, through its restarts until one is ready; one
 //     that can't be spawned is failing too, saying why, and only a
-//     missing engine reads as unavailable.
+//     missing engine reads as unavailable,
+//   - the last snapshot stands through a restart, read as stale until
+//     the next run sends its own,
+//   - a create the daemon made but never answered in time, or answered
+//     only after a kill and a restart, is read back as the session it
+//     made, and one it made after the read back found none is ended as
+//     it shows up.
 //
 // Run: pnpm test mirror-daemon-lines.
 import assert from "node:assert/strict";
@@ -164,6 +170,23 @@ async function harness() {
     status: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.status)),
     failure: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.failure)),
     sessions: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.sessions)),
+    fresh: () => runtime.runSync(MirrorDaemon.onDaemon((d) => d.fresh)),
+    create: () =>
+      runtime.runPromise(
+        MirrorDaemon.onDaemon((d) =>
+          d.create({
+            localRoot: "/a",
+            deviceId: "B",
+            projectId: "p",
+            worktreeId: "w",
+            remoteRoot: "/b",
+            name: "mirror-w",
+            localWorktreeId: "w",
+            labels: { localWorktreeId: "w" },
+            ignores: [],
+          }),
+        ),
+      ),
     pause: (id: string) =>
       runtime.runPromise(MirrorDaemon.onDaemon((d) => d.pause(id))),
     resume: (id: string) =>
@@ -414,4 +437,106 @@ it("a daemon that stops answering (a SIGSTOP) is found by its ping, killed and s
   await send({ event: "ready" });
   assert.equal(daemon.status(), "running");
   assert.equal(kills.count, 1);
+});
+
+it("the last snapshot stands through a restart, stale until the next run sends its own", async () => {
+  const { daemon, send, exit, adjust } = await harness();
+  await send({ event: "ready" });
+  await send({ event: "state", sessions: [session("s1")] });
+  await exit(0);
+  assert.equal(daemon.status(), "failing");
+  assert.deepEqual(
+    daemon.sessions().map((raw) => raw.session),
+    ["s1"],
+    "a restart emptied the snapshot",
+  );
+  assert.equal(daemon.fresh(), false);
+  await adjust(1_000);
+  await send({ event: "ready" });
+  assert.equal(daemon.fresh(), false, "a ready read as the run's snapshot");
+  await send({ event: "state", sessions: [session("s1"), session("s2")] });
+  assert.equal(daemon.fresh(), true);
+  assert.deepEqual(
+    daemon.sessions().map((raw) => raw.session),
+    ["s1", "s2"],
+  );
+});
+
+// The labels of the create the supervisor last wrote, as the session it
+// makes carries them.
+const lastCreate = (requests: Record<string, unknown>[]) => {
+  const create = requests.findLast((request) => request["op"] === "create");
+  assert.ok(create !== undefined, "no create was sent");
+  return { labels: create["labels"] as Record<string, string> };
+};
+
+const answerPing = async (
+  requests: Record<string, unknown>[],
+  send: (line: unknown) => Promise<void>,
+) => {
+  const ping = requests.findLast((request) => request["op"] === "ping");
+  assert.ok(ping !== undefined, "no ping was sent");
+  await send({ id: ping["id"], ok: false, error: 'unknown op "ping"' });
+};
+
+it("a create the daemon made but answered too late is read back as its session", async () => {
+  const { daemon, send, requests, adjust } = await harness();
+  await send({ event: "ready" });
+  const creating = daemon.create();
+  await settleTurns();
+  const { labels } = lastCreate(requests);
+  await send({
+    event: "state",
+    sessions: [{ ...session("made"), labels }],
+  });
+  await adjust(30_000);
+  await answerPing(requests, send);
+  await adjust(90_000);
+  assert.equal(await creating, "made");
+});
+
+it("a create the daemon made before it was killed is read back off its next run", async () => {
+  const { daemon, send, requests, adjust, kills } = await harness();
+  await send({ event: "ready" });
+  const creating = daemon.create();
+  await settleTurns();
+  const { labels } = lastCreate(requests);
+  // Stopped: the ping goes unanswered, and the daemon is replaced.
+  await adjust(30_000 + 10_000);
+  assert.equal(kills.count, 1);
+  await adjust(1_000);
+  await send({ event: "ready" });
+  await send({
+    event: "state",
+    sessions: [{ ...session("made"), labels }],
+  });
+  assert.equal(await creating, "made");
+});
+
+it("a create read back with no session fails, and the session it makes later is ended as it shows up", async () => {
+  const { daemon, send, requests, adjust } = await harness();
+  await send({ event: "ready" });
+  await send({ event: "state", sessions: [session("s1")] });
+  const creating = daemon.create().then(
+    () => assert.fail("the create resolved"),
+    (error: unknown) => error,
+  );
+  await settleTurns();
+  const { labels } = lastCreate(requests);
+  await adjust(30_000);
+  await answerPing(requests, send);
+  await adjust(90_000);
+  const failed = await creating;
+  assert.ok(failed instanceof MirrorDaemon.MirrorDaemonError);
+  assert.equal(failed.reason, "timed-out");
+  await send({
+    event: "state",
+    sessions: [session("s1"), { ...session("late"), labels }],
+  });
+  assert.deepEqual(
+    requests
+      .filter((request) => request["op"] === "terminate")
+      .map((request) => request["session"]),
+    ["late"],
+  );
 });

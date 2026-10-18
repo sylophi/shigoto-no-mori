@@ -24,6 +24,16 @@
 //     the engine's bookkeeping: an orphaned transfer in it is ended,
 //   - an engine whose stores cannot be read answers as unavailable and
 //     refuses every change, saying why,
+//   - a daemon restarting keeps the list and the git follower's verdict
+//     its sessions had, and the threads note nothing of it,
+//   - a copy's release outstanding when the engine closes ends with it,
+//   - the follower's copy-gone report, once a minute, counts elapsed
+//     time: a wall clock stepped back neither holds the next one off
+//     nor a step forward lets it through early,
+//   - a worktree re-keyed with no host hook (an adopt, a project
+//     relocate, as the terminal makes them) carries its thread and the
+//     invitation of a copy it is to its new id, and the daemon's next
+//     snapshot re-opens a session on it at its new path,
 //   - a device leaving its account ends its sessions within the
 //     sweep's bound: a terminate the daemon never answers is given up
 //     at 5 s, and an answer that comes later notes nothing on the
@@ -31,10 +41,11 @@
 //
 // Run: pnpm test mirror-engine.
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -43,6 +54,7 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -52,6 +64,9 @@ import * as FileSync from "../host/fileSync/FileSync.ts";
 import * as HostAccount from "../host/lib/HostAccount.ts";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
+import * as Registry from "@shigomori/engine/Registry";
+import * as Worktrees from "@shigomori/engine/Worktrees";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as MirrorDaemon from "../host/mirror/MirrorDaemon.ts";
 import {
   type MirrorCreateInput,
@@ -60,11 +75,32 @@ import {
 } from "../host/mirror/MirrorEngine.ts";
 import * as MirrorEngineLayer from "../host/mirror/MirrorEngineLayer.ts";
 import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
-import { MIRROR_LABEL_LOCAL_WORKTREE } from "../host/mirror/registry.ts";
+import {
+  inviteMirror,
+  landInvitedMirror,
+  listMirrorInvites,
+} from "../host/mirror/invites.ts";
+import { makeGitFollower } from "../host/mirror/gitFollow.ts";
+import {
+  MIRROR_LABEL_LOCAL_PROJECT,
+  MIRROR_LABEL_LOCAL_WORKTREE,
+  stopMirrorsForWorktree,
+} from "../host/mirror/registry.ts";
+import { mirrorList } from "../host/mirror/sessions.ts";
 import { MIRROR_LABEL_MODE } from "@shigomori/contracts/modules/mirror";
-import { settleTurns, waitFor } from "./lib/checkKit.mts";
+import { UnknownWorktreeError } from "@shigomori/contracts/errors";
+import {
+  sandboxGit,
+  scrubProcessGitEnv,
+  settleTurns,
+  sleepingClock,
+  tempDir,
+  testClock,
+  waitFor,
+} from "./lib/checkKit.mts";
+import { standInPeers } from "./lib/hostStandIns.mts";
 import { hostContext } from "./lib/hostRuntime.mts";
-import { rawMirrorSession } from "./lib/mirrorFakes.mts";
+import { mirrorEndpoint, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 type Request = { id: string; op: string; session?: string };
@@ -106,6 +142,8 @@ async function harness(
 ) {
   const requests: Request[] = [];
   const held: Request[] = [];
+  // One per spawn: the child's exit.
+  const exits: Deferred.Deferred<number>[] = [];
   const out = Effect.runSync(Queue.unbounded<Uint8Array>());
   const write = (line: unknown) =>
     Queue.offerUnsafe(
@@ -133,6 +171,7 @@ async function harness(
             Effect.forkScoped,
           );
           const exit = yield* Deferred.make<number>();
+          exits.push(exit);
           return ChildProcessSpawner.makeHandle({
             pid: ChildProcessSpawner.ProcessId(2),
             exitCode: Deferred.await(exit).pipe(
@@ -211,6 +250,20 @@ async function harness(
   ) => runtime.runPromiseExit(Effect.flatMap(MirrorEngine, f));
   return {
     engine,
+    run: runtime.runPromise,
+    close: () => runtime.dispose(),
+    // The daemon's child exits, as a crash ends it.
+    crash: async () => {
+      const exit = exits.at(-1);
+      assert.ok(exit !== undefined, "no child was spawned");
+      Effect.runSync(Deferred.succeed(exit, 1));
+      await settleTurns();
+    },
+    // A line from the daemon, as it writes one.
+    write: async (line: unknown) => {
+      write(line);
+      await settleTurns();
+    },
     // The engine's call, as a fiber a check can interrupt.
     fork: <A, E>(f: (engine: MirrorEngine["Service"]) => Effect.Effect<A, E>) =>
       runtime.runFork(Effect.flatMap(MirrorEngine, f)),
@@ -456,4 +509,256 @@ it("an engine whose stores cannot be read answers as unavailable and refuses eve
     "The mirror engine failed to start: the store is unreadable.",
   );
   assert.deepEqual(requests(), []);
+});
+
+it("an adopt and a project relocate carry a mirror's thread, its copy's invitation and its running session to the new id", async () => {
+  // The engine's adopt and relocate run git in this process.
+  scrubProcessGitEnv();
+  const git = sandboxGit();
+  const { engine, run, requests, state, history } = await harness((request) =>
+    request.op === "create" ? { ok: true, session: "reopened" } : { ok: true },
+  );
+  const base = tempDir("sm-mirror-rekeys-", trackTest);
+  const repo = join(base, "repo");
+  git(base, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "a\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "a");
+  // An original mirrored from here, outside the repo, and a copy a peer
+  // mirrors into, inside it.
+  const outside = join(base, "outside");
+  git(repo, "worktree", "add", "-q", "-b", "otter", outside);
+  const copy = join(repo, "nested", "owl");
+  git(repo, "worktree", "add", "-q", "-b", "owl", copy);
+  const project = await run(
+    Effect.flatMap(Registry.Registry, (registry) =>
+      registry.register({ name: "repo", path: repo }),
+    ),
+  );
+  const invite = inviteMirror({
+    peerDeviceId: "B",
+    sourceWorktreeId: "0123456789ab",
+    identity: "repo",
+  });
+  trackTest(() => run(invite.withdraw));
+  await run(
+    landInvitedMirror("B", "0123456789ab", {
+      projectId: project.id,
+      worktreeId: worktreeIdFromPath(copy),
+    }),
+  );
+  const original = worktreeIdFromPath(outside);
+  succeeded(
+    await engine((mirrors) =>
+      Effect.sync(() => {
+        mirrors.noteEvent(original, "started", "");
+        mirrors.noteEvent(worktreeIdFromPath(repo), "started", "");
+      }),
+    ),
+  );
+  const live = rawMirrorSession({
+    session: "live",
+    localRoot: outside,
+    labels: {
+      [MIRROR_LABEL_MODE]: "mirror",
+      [MIRROR_LABEL_LOCAL_WORKTREE]: original,
+    },
+  });
+  await state([live]);
+
+  const adopted = await run(
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external !== undefined);
+      return (yield* worktrees.adopt(
+        { project, worktree: external },
+        { force: false },
+        { report: () => Effect.void, color: false },
+      )).worktree;
+    }),
+  );
+  await waitFor(
+    () => history(adopted.id).some((event) => event.kind === "started"),
+    "the thread to follow the adopt",
+  );
+  assert.deepEqual(history(original), []);
+  // The daemon's next snapshot, the session's root gone.
+  await state([live]);
+  await waitFor(
+    () => requests().includes("terminate live"),
+    "the session to re-open on the adopted checkout",
+  );
+  assert.deepEqual(requests(), ["pause live", "create", "terminate live"]);
+
+  const moved = join(base, "repo-moved");
+  renameSync(repo, moved);
+  await run(
+    Effect.gen(function* () {
+      const listed = (yield* (yield* Registry.Registry).listed).find(
+        ({ id }) => id === project.id,
+      );
+      assert.ok(listed !== undefined);
+      yield* (yield* Worktrees.Worktrees).relocateProject(listed, moved);
+    }),
+  );
+  const movedCopy = worktreeIdFromPath(join(moved, "nested", "owl"));
+  await waitFor(
+    () =>
+      listMirrorInvites().some(
+        (landed) => landed.copy?.worktreeId === movedCopy,
+      ),
+    "the copy's invitation to follow the relocate",
+  );
+  assert.ok(
+    history(worktreeIdFromPath(moved)).some(
+      (event) => event.kind === "started",
+    ),
+    "the primary's thread stayed under its old id",
+  );
+});
+
+it("a daemon restarting keeps the list and the follower's verdict, and the threads note nothing of it", async () => {
+  const { run, state, crash, adjust, write, history } = await harness(() => ({
+    ok: true,
+  }));
+  const mirror = rawMirrorSession({
+    session: "s1",
+    localRoot: root,
+    labels: {
+      [MIRROR_LABEL_MODE]: "mirror",
+      [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
+    },
+    local: mirrorEndpoint({ connected: true }),
+    remote: mirrorEndpoint({ connected: true }),
+  });
+  await state([mirror]);
+  const before = await run(mirrorList());
+  assert.deepEqual(
+    before.sessions.map((listed) => listed.session),
+    ["s1"],
+  );
+  await crash();
+  const during = await run(mirrorList());
+  assert.equal(during.daemon, "failing");
+  assert.deepEqual(during.sessions, before.sessions);
+  // The next run brings the session back still connecting.
+  await adjust(1_000);
+  await write({ event: "ready" });
+  await state([
+    {
+      ...mirror,
+      local: mirrorEndpoint({ connected: false }),
+      remote: mirrorEndpoint({ connected: false }),
+    },
+  ]);
+  await state([mirror]);
+  assert.deepEqual(
+    history("w1").filter(
+      (event) => event.kind === "disconnected" || event.kind === "connected",
+    ),
+    [],
+  );
+});
+
+it("a copy's release still out when the engine closes ends with it", async () => {
+  let asked = false;
+  let ended = false;
+  standInPeers({
+    transportFor: () => ({
+      invoke: (channel, _input, options) =>
+        new Promise((_resolve, reject) => {
+          if (channel !== "mirror:release") {
+            reject(new Error("not in this check"));
+            return;
+          }
+          asked = true;
+          options?.signal?.addEventListener("abort", () => {
+            ended = true;
+            reject(new Error("aborted"));
+          });
+        }),
+      subscribe: () => () => {},
+    }),
+    channelsFor: () => () => Promise.reject(new Error("not in this check")),
+  });
+  const { run, state, close } = await harness(() => ({ ok: true }));
+  await state([
+    rawMirrorSession({
+      session: "s1",
+      localRoot: root,
+      deviceId: "B",
+      labels: {
+        [MIRROR_LABEL_MODE]: "mirror",
+        [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
+      },
+    }),
+  ]);
+  await run(stopMirrorsForWorktree("w1"));
+  await waitFor(() => asked, "the copy's release to be asked");
+  await close();
+  await waitFor(() => ended, "the release to end with the engine");
+});
+
+it("a stepped wall clock neither holds a copy-gone report back nor lets one through early", async () => {
+  standInPeers({
+    transportFor: () => ({
+      invoke: (channel) =>
+        Promise.reject(
+          channel === "mirror:gitState"
+            ? new UnknownWorktreeError({ worktreeId: "copy" })
+            : new Error("not in this check"),
+        ),
+      subscribe: () => () => {},
+    }),
+    channelsFor: () => () => Promise.reject(new Error("not in this check")),
+  });
+  const project = await Effect.runPromiseWith(await hostContext())(
+    Effect.flatMap(Registry.Registry, (registry) =>
+      registry.register({ name: "gone", path: root }),
+    ),
+  );
+  const copy = rawMirrorSession({
+    session: "s1",
+    localRoot: root,
+    deviceId: "B",
+    projectId: "p",
+    worktreeId: "copy",
+    labels: {
+      [MIRROR_LABEL_MODE]: "mirror",
+      [MIRROR_LABEL_LOCAL_PROJECT]: project.id,
+      [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
+    },
+  });
+  const clock = testClock();
+  const clocks = sleepingClock(clock);
+  let reports = 0;
+  const scope = Effect.runSync(Scope.make());
+  trackTest(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const follower = await Effect.runPromiseWith(await hostContext())(
+    makeGitFollower({
+      sessions: Effect.succeed([copy]),
+      sweepMs: 3_600_000,
+      onCopyGone: () => {
+        reports += 1;
+      },
+      log: () => {},
+    }).pipe(
+      Scope.provide(scope),
+      Effect.provideService(Clock.Clock, clocks.wall),
+    ),
+  );
+  await waitFor(() => reports === 1, "the first report");
+  // Back an hour, a minute on.
+  clocks.sleep(-3_600_000);
+  await clock.advance(60_000);
+  await Effect.runPromise(follower.reconcileNow("s1"));
+  assert.equal(reports, 2, "a wall clock stepped back held the report off");
+  // Forward two hours, a second on.
+  clocks.sleep(7_200_000);
+  await clock.advance(1_000);
+  await Effect.runPromise(follower.reconcileNow("s1"));
+  assert.equal(reports, 2, "a wall clock stepped forward let one through");
 });

@@ -447,6 +447,7 @@ it("mirrors: the daemon coming up, on mirror:changed", async () => {
     refreshGit: refused,
     history: () => [],
     noteEvent: () => {},
+    releaseCopy: () => Effect.void,
     forgetHistory: () => {},
     moveHistory: () => {},
     localProjectChanged: () => {},

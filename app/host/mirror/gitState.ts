@@ -37,17 +37,21 @@
 // an index refresh is what makes the staged view match without
 // rewriting a single file.
 import { copyFile, mkdtemp, stat } from "node:fs/promises";
-import { watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Project } from "@shigomori/contracts/schemas";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Deferred from "effect/Deferred";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Git from "@shigomori/engine/Git";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import { untilWatchable } from "@host/lib/watchPath";
 
@@ -535,108 +539,77 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
   return { applied: true } as ApplyGitStateResult;
 });
 
-// Fires when the worktree's index file is rewritten (a stage, an
+// Emits when the worktree's index file is rewritten (a stage, an
 // unstage, a checkout, also git's own refreshes: the consumer compares
-// trees to tell them apart). Returns the stop function. Resolves the
-// git dir once. A worktree whose git dir moves is a removed worktree.
-// The watch's event is a hint: every `backstopMs` the index's stamp is
-// read too, and one that moved with no event (a dropped one, a watch
-// that errored and ended) fires as well.
+// trees to tell them apart), for as long as it is read. Resolves the git
+// dir once. A worktree whose git dir moves is a removed worktree. The
+// watch's event is a hint: every `backstop` the index's stamp is read
+// too, and one that moved with no event (a dropped one, a watch that
+// failed and ended) emits as well.
 export const watchIndexFile = (
   worktreePath: string,
-  onChange: () => void,
   // Test seams. Real callers take the defaults.
-  {
-    debounceMs = 300,
-    backstopMs = 10_000,
-    watchDir = watch,
-  }: {
-    readonly debounceMs?: number;
-    readonly backstopMs?: number;
-    readonly watchDir?: typeof watch;
+  options: {
+    readonly debounce?: Duration.Input;
+    readonly backstop?: Duration.Input;
+    readonly watch?: (
+      path: string,
+    ) => Stream.Stream<FileSystem.WatchEvent, PlatformError>;
   } = {},
-) =>
-  Effect.gen(function* () {
-    const gitDir = yield* (yield* Git.Git).gitDir(worktreePath);
-    const index = join(gitDir, "index");
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let watcher: ReturnType<typeof watch> | null = null;
-    let backstop: ReturnType<typeof setInterval> | null = null;
-    // The index's stamp as of the last signal, read as each one fires.
-    let seen: string | null = null;
-    // Null for a read that failed, which says nothing about a change.
-    const stampOf = () =>
-      stat(index).then(
-        (info) => `${info.ino}:${info.mtimeMs}:${info.size}`,
-        (error: unknown) =>
-          error instanceof Error && "code" in error && error.code === "ENOENT"
-            ? "-"
-            : null,
+): Stream.Stream<void, Git.GitError, Git.Git | FileSystem.FileSystem> =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const gitDir = yield* (yield* Git.Git).gitDir(worktreePath);
+      const index = join(gitDir, "index");
+      // Null for a read that failed, which says nothing about a change.
+      const stampOf = fs.stat(index).pipe(
+        Effect.map(
+          (info) =>
+            `${Option.getOrUndefined(info.ino)}:${Option.getOrUndefined(Option.map(info.mtime, (at) => at.getTime()))}:${info.size}`,
+        ),
+        Effect.catchIf(
+          (error) => Predicate.isTagged(error.reason, "NotFound"),
+          () => Effect.succeed("-"),
+        ),
+        Effect.orElseSucceed(() => null),
       );
-    // From a signal's debounce until its stamp is read, so a beat in
-    // between doesn't take the old stamp for a change of its own.
-    let firing = false;
-    const signal = () => {
-      if (timer !== null) clearTimeout(timer);
-      firing = true;
-      timer = setTimeout(() => {
-        timer = null;
-        void stampOf().then((stamp) => {
-          if (stamp !== null) seen = stamp;
-          firing = false;
-          if (!stopped) onChange();
-        });
-      }, debounceMs);
-    };
-    const start = () => {
-      void stampOf().then((stamp) => {
-        seen ??= stamp;
-      });
+      // A git dir whose open hangs would hang the host with it: watched
+      // once it opens promptly (watchPath).
+      yield* untilWatchable(gitDir);
+      // The index's stamp as of the last signal, read as each one fires.
+      const seen = yield* Ref.make(yield* stampOf);
+      // From a signal until its stamp is read, so a beat in between
+      // doesn't take the old stamp for a change of its own.
+      const firing = yield* Ref.make(false);
+      const heard = (options.watch?.(gitDir) ?? fs.watch(gitDir)).pipe(
+        Stream.filter((event) => event.path === "index"),
+        Stream.ignore,
+      );
       // A beat waits for the last one's read: one held by a volume that
       // stalls must not be joined by another each beat, on a thread pool
       // of four.
-      let reading = false;
-      backstop = setInterval(() => {
-        if (reading) return;
-        reading = true;
-        void stampOf()
-          .then((stamp) => {
-            if (stamp !== null && seen !== null && stamp !== seen && !firing) {
-              signal();
-            }
-          })
-          .finally(() => {
-            reading = false;
-          });
-      }, backstopMs);
-      backstop.unref();
-      try {
-        watcher = watchDir(gitDir, { persistent: false });
-      } catch {
-        return;
-      }
-      watcher.on("change", (_event, file) => {
-        if (file === "index") signal();
-      });
-      watcher.on("error", () => {});
-    };
-    // A git dir whose open hangs would hang the host with it: watched
-    // once it opens promptly (watchPath).
-    const waiting = Effect.runFork(
-      untilWatchable(gitDir).pipe(
-        Effect.andThen(
-          Effect.sync(() => {
-            if (!stopped) start();
+      const beats = Stream.tick(options.backstop ?? "10 seconds").pipe(
+        Stream.drop(1),
+        Stream.filterEffect(() =>
+          Effect.gen(function* () {
+            if (yield* Ref.get(firing)) return false;
+            const stamp = yield* stampOf;
+            const last = yield* Ref.get(seen);
+            return stamp !== null && last !== null && stamp !== last;
           }),
         ),
-      ),
-    );
-    return () => {
-      stopped = true;
-      Effect.runFork(Fiber.interrupt(waiting));
-      if (timer !== null) clearTimeout(timer);
-      if (backstop !== null) clearInterval(backstop);
-      watcher?.close();
-    };
-  });
+      );
+      return Stream.merge(heard, beats).pipe(
+        Stream.tap(() => Ref.set(firing, true)),
+        Stream.debounce(options.debounce ?? "300 millis"),
+        Stream.mapEffect(() =>
+          Effect.gen(function* () {
+            const stamp = yield* stampOf;
+            if (stamp !== null) yield* Ref.set(seen, stamp);
+            yield* Ref.set(firing, false);
+          }),
+        ),
+      );
+    }),
+  );

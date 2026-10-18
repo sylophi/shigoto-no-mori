@@ -34,11 +34,15 @@ import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as Result from "effect/Result";
 import * as Fiber from "effect/Fiber";
+import * as FiberMap from "effect/FiberMap";
 import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 import type * as Context from "effect/Context";
+import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Scope from "effect/Scope";
 import type * as Engine from "@host/lib/Engine";
+import { elapsedMillis } from "@shigomori/engine/elapsed";
 import {
   isHaltedStatus,
   MIRROR_LABEL_REPLACES,
@@ -93,7 +97,6 @@ type FollowRecord = {
   // A follow that moves the tip or the branch was held back for the
   // files to settle. The next idle snapshot re-triggers it.
   waitingForFiles: boolean;
-  stopIndexWatch: (() => void) | null;
 };
 
 // The backstop only: every real change arrives as a signal, so the
@@ -117,6 +120,9 @@ export type GitFollower = ReturnType<typeof makeFollower>;
 // it from anywhere, and every reconcile runs in the scope.
 export const makeGitFollower = (deps: {
   sessions: Effect.Effect<readonly FollowableSession[]>;
+  // Whether `sessions` is the running daemon's own snapshot
+  // (MirrorDaemon's fresh). Absent, always.
+  fresh?: Effect.Effect<boolean>;
   // Persists the agreed state per session. Absent means memory only
   // (the checks).
   agreedStore?: AgreedStore;
@@ -159,12 +165,15 @@ export const makeGitFollower = (deps: {
               }),
             ),
           );
+    // Each followed session's index watch, by session.
+    const watches = yield* FiberMap.make<string>();
     const follower = makeFollower(
       deps,
       (work) => {
         Queue.offerUnsafe(inbox, work);
       },
       stored,
+      watches,
     );
     // The inbox's worker: each signal's work in turn, a reconcile it
     // starts running on its own in the scope.
@@ -191,6 +200,7 @@ const failureOf = (exit: Exit.Exit<unknown, unknown>) =>
 type FollowServices =
   | Engine.Services
   | ChildProcessSpawner.ChildProcessSpawner
+  | FileSystem.FileSystem
   | PeerReach;
 
 const reconcileOf = (
@@ -199,9 +209,13 @@ const reconcileOf = (
     setStatus: (record: FollowRecord, status: MirrorGitStatus) => void;
     setAgreed: (record: FollowRecord, agreed: GitStateCore) => void;
     filesSettled: (record: FollowRecord) => Effect.Effect<boolean>;
-    copyGone: (session: FollowableSession) => void;
+    copyGone: (session: FollowableSession) => Effect.Effect<void>;
     warn: (message: string) => void;
     descriptionFailed: Set<string>;
+    // Runs an effect in the follower's scope, ended with it.
+    fork: <R>(
+      effect: Effect.Effect<void, never, R>,
+    ) => Effect.Effect<void, never, R>;
   },
 ) =>
   Effect.fnUntraced(function* (record: FollowRecord) {
@@ -210,6 +224,13 @@ const reconcileOf = (
     if (session.paused) {
       record.waitingForFiles = false;
       setStatus(record, { status: "off", detail: "paused" });
+      return;
+    }
+    // A daemon restarting carries no files, and its last snapshot says
+    // nothing of where they stand: git waits with them, until the next
+    // run's snapshot has them idle (syncSessions).
+    if (!(yield* deps.fresh ?? Effect.succeed(true))) {
+      record.waitingForFiles = true;
       return;
     }
     // Still waiting on the files: the reads would only end at the same
@@ -252,7 +273,7 @@ const reconcileOf = (
       // Only once the peer has answered, so an unreachable one is not
       // a failure logged on every sweep.
       if (Exit.isSuccess(peerRead) && deps.followDescription === true) {
-        yield* Effect.forkDetach(
+        yield* helpers.fork(
           followDescription(
             session.deviceId,
             { projectId: localProjectId, worktreeId: localWorktreeId },
@@ -282,7 +303,7 @@ const reconcileOf = (
           ? null
           : operationInRefusal(errorWordsOf(peerFailure));
       if (peerFailure !== undefined && isEntityGoneError(peerFailure)) {
-        copyGone(session);
+        yield* copyGone(session);
       }
       if (Exit.isFailure(localRead)) {
         const failure = Cause.squash(localRead.cause);
@@ -384,6 +405,7 @@ function makeFollower(
   // The agreed states by session id, as the store had them at start,
   // written back only when an entry actually changes.
   stored: Record<string, GitStateCore>,
+  watches: FiberMap.FiberMap<string>,
 ) {
   const records = new Map<string, FollowRecord>();
   const copyGoneAt = new Map<string, number>();
@@ -434,20 +456,30 @@ function makeFollower(
     persist();
   }
 
-  function copyGone(session: FollowableSession): void {
-    if (deps.onCopyGone === undefined) return;
-    const now = Date.now();
-    const last = copyGoneAt.get(session.session);
-    if (last !== undefined && now - last < COPY_GONE_EVERY_MS) return;
-    copyGoneAt.set(session.session, now);
-    try {
-      deps.onCopyGone(session);
-    } catch (error) {
-      warn(
-        `[mirror] git follow ${session.session}: ending a gone copy failed: ${errorWordsOf(error)}`,
-      );
-    }
-  }
+  // Elapsed time: a step of the wall clock neither holds a report back
+  // nor lets one through early.
+  const copyGone = (session: FollowableSession) =>
+    Effect.gen(function* () {
+      if (deps.onCopyGone === undefined) return;
+      const now = yield* elapsedMillis;
+      const last = copyGoneAt.get(session.session);
+      if (last !== undefined && now - last < COPY_GONE_EVERY_MS) return;
+      copyGoneAt.set(session.session, now);
+      try {
+        deps.onCopyGone(session);
+      } catch (error) {
+        warn(
+          `[mirror] git follow ${session.session}: ending a gone copy failed: ${errorWordsOf(error)}`,
+        );
+      }
+    });
+
+  const fork = <R>(effect: Effect.Effect<void, never, R>) =>
+    Effect.suspend(() =>
+      runIn === null
+        ? Effect.void
+        : Effect.asVoid(Effect.forkIn(effect, runIn.scope)),
+    );
 
   // Whether the files are idle enough for a follow that moves the tip
   // or the branch. If not, the record waits for the snapshot that says
@@ -481,6 +513,7 @@ function makeFollower(
     copyGone,
     warn,
     descriptionFailed,
+    fork,
   });
 
   // Starts a reconcile, or queues one behind the reconcile in flight.
@@ -522,19 +555,19 @@ function makeFollower(
   // Bring the followed set in line with the daemon's sessions: a new
   // session gets a record (seeded from the stored agreement) and an
   // index watcher, a gone one is dropped. Its stored agreement stays:
-  // the daemon reports no sessions while it restarts, and the same
-  // sessions come back a moment later. Only forget() below, on an
-  // explicit terminate, drops the agreement. True when a session
-  // came, went or flipped its pause. A session that replaced another (a
+  // a re-open's old session leaves the list before its rename() lands
+  // the agreement on the new one. Only forget() below, on an explicit
+  // terminate, drops it. True when a session came, went or flipped its
+  // pause. A session that replaced another (a
   // re-open, MIRROR_LABEL_REPLACES) and has no agreement of its own
   // starts from the replaced one's. A record waiting for its files is
   // triggered here the moment the engine reports them idle.
   const syncSessions = Effect.gen(function* () {
     const current = new Map((yield* deps.sessions).map((s) => [s.session, s]));
     let changed = false;
-    for (const [id, record] of records) {
+    for (const id of records.keys()) {
       if (!current.has(id)) {
-        record.stopIndexWatch?.();
+        yield* FiberMap.remove(watches, id);
         records.delete(id);
         copyGoneAt.delete(id);
         changed = true;
@@ -559,22 +592,17 @@ function makeFollower(
         running: null,
         pending: false,
         waitingForFiles: false,
-        stopIndexWatch: null,
       };
       records.set(id, record);
       if (runIn !== null) {
-        yield* Effect.forkIn(
-          watchIndexFile(session.localRoot, () => post(trigger(record))).pipe(
-            Effect.tap((stop) =>
-              Effect.sync(() => {
-                if (records.get(id) === record) record.stopIndexWatch = stop;
-                else stop();
-              }),
-            ),
+        yield* FiberMap.run(
+          watches,
+          id,
+          watchIndexFile(session.localRoot).pipe(
+            Stream.runForEach(() => Effect.sync(() => post(trigger(record)))),
             Effect.ignore,
             Effect.provide(runIn.context),
           ),
-          runIn.scope,
         );
       }
     }
@@ -607,7 +635,6 @@ function makeFollower(
     },
     detach(): void {
       runIn = null;
-      for (const record of records.values()) record.stopIndexWatch?.();
       records.clear();
     },
     reconcileAll,

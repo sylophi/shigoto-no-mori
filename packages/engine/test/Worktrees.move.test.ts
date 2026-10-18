@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
@@ -482,4 +483,79 @@ it("fails a re-key back over a packed-refs git can't parse, and carries it once 
     }),
   )) as { reason: string; back: boolean };
   assert.deepEqual(result, { reason: "failed", back: true });
+});
+
+// What follows a worktree's id outside the store (the host's mirrors)
+// learns of every re-key from the record, whichever made it.
+it("records an adopt's, a project relocate's and the data-folder move's re-keys as moves, old id to new", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const outside = join(box.home, "outside", "otter");
+  box.git(repo, "worktree", "add", "-q", "-b", "otter", outside);
+  const inside = join(repo, "nested", "owl");
+  box.git(repo, "worktree", "add", "-q", "-b", "owl", inside);
+  const adopted = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const external = (yield* worktrees.identities(project)).find(
+        (row) => row.path === outside,
+      );
+      assert.ok(external !== undefined);
+      const made = yield* worktrees.adopt(
+        { project, worktree: external },
+        { force: false },
+        { report: () => Effect.void, color: false },
+      );
+      return {
+        id: made.worktree.id,
+        movedIds: yield* (yield* WtFolder.WtFolder).movedIds,
+      };
+    }),
+  )) as { id: string; movedIds: ReadonlyMap<string, string> };
+  assert.equal(adopted.movedIds.get(worktreeIdFromPath(outside)), adopted.id);
+
+  const moved = join(box.home, "proj-moved");
+  renameSync(repo, moved);
+  const relocated = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = (yield* registry.listed).find(
+        ({ path }) => path === repo,
+      );
+      assert.ok(project !== undefined);
+      yield* worktrees.relocateProject(project, moved);
+      return yield* (yield* WtFolder.WtFolder).movedIds;
+    }),
+  )) as ReadonlyMap<string, string>;
+  assert.equal(
+    relocated.get(worktreeIdFromPath(repo)),
+    worktreeIdFromPath(moved),
+  );
+  assert.equal(
+    relocated.get(worktreeIdFromPath(inside)),
+    worktreeIdFromPath(join(moved, "nested", "owl")),
+  );
+
+  // The data-folder move re-keys ahead of the rename that moves the
+  // checkout, naming where it was.
+  const owl = join(moved, "nested", "owl");
+  const ahead = join(box.home, "data-moved", "owl");
+  const recorded = await box.engine(
+    Effect.gen(function* () {
+      const project = (yield* (yield* Registry.Registry).listed).find(
+        ({ path }) => path === moved,
+      );
+      assert.ok(project !== undefined);
+      yield* (yield* Worktrees.Worktrees).rekey(
+        project,
+        worktreeIdFromPath(owl),
+        ahead,
+        { fromPath: owl },
+      );
+      return yield* (yield* WtFolder.WtFolder).movedTo(owl);
+    }),
+  );
+  assert.deepEqual(recorded, Option.some(ahead));
 });

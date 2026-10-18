@@ -59,7 +59,9 @@ export class WtFolder extends Context.Service<
       projectId: string,
     ) => Effect.Effect<ReadonlyArray<Unmoved>>;
     // Where a worktree's folder went, moved by the migration, `worktrees
-    // move` or a rename, for state kept by its path.
+    // move`, a rename, an adopt, a project relocate or the data-folder
+    // move (every re-key whose checkout moved, worktrees/kept.ts), for
+    // state kept by its path.
     readonly movedTo: (
       fromPath: string,
     ) => Effect.Effect<Option.Option<string>>;

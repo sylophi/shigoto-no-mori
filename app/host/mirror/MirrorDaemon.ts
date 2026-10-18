@@ -5,14 +5,17 @@
 // and the daemon streams a full state snapshot every time any session
 // moves. A crash is met with a restart on a short ladder (persisted
 // sessions come back on their own when it does), and closing the layer
-// ends the child. The engine never outlives this process: besides the
-// layer's close, it exits when its stdin closes and on seeing its
-// parent pid change (file-sync/main.go, watchParent), so a host that
-// dies uncleanly takes its daemon and every serve child down with it.
+// ends the child. The last snapshot stands through a restart, read as
+// stale until the next run sends its own. The engine never outlives
+// this process: besides the layer's close, it exits when its stdin
+// closes and on seeing its parent pid change (file-sync/main.go,
+// watchParent), so a host that dies uncleanly takes its daemon and
+// every serve child down with it.
 //
 // Electron-free on purpose: the binary comes through the FileSync
 // service, so the mirror check drives this exact supervisor against a
 // freshly built engine.
+import { randomUUID } from "node:crypto";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -146,6 +149,13 @@ const REQUEST_TIMEOUT_MS = 120_000;
 // silence means a stopped or hung process, not a slow create.
 const STALL_CHECK_MS = 30_000;
 const PING_ANSWER_MS = 10_000;
+// A create whose answer never came (it timed out, or the daemon went
+// with it) may have made its session all the same, persisted to come
+// back with the next run: its snapshot is waited for this long before
+// the create is read back.
+const READ_BACK_MS = 30_000;
+// The label that tells a create's session by the request that made it.
+const CREATE_LABEL = "createToken";
 
 export class MirrorDaemon extends Context.Service<
   MirrorDaemon,
@@ -154,10 +164,17 @@ export class MirrorDaemon extends Context.Service<
     // Why the daemon last stopped or couldn't start, while it is
     // "failing".
     readonly failure: Effect.Effect<string | undefined>;
+    // The last snapshot, which stands through a restart.
     readonly sessions: Effect.Effect<readonly MirrorSessionRaw[]>;
+    // Whether `sessions` is the running daemon's own: from an exit until
+    // the next run's first snapshot it is the last run's, as it stood.
+    readonly fresh: Effect.Effect<boolean>;
     // Every state snapshot and every status transition, the latest one
     // first when the stream starts after it.
     readonly changes: Stream.Stream<void>;
+    // A create that got no answer is read back off the daemon's snapshot
+    // (its next run's, after an exit), and answers with the session it
+    // made. One it made later is ended as it shows up.
     readonly create: (
       input: MirrorCreateInput,
     ) => Effect.Effect<string, MirrorDaemonError>;
@@ -195,6 +212,10 @@ const make = (options: Options) =>
     // The daemon's last word on stderr, which says why it stopped.
     const lastSaid = yield* Ref.make<string | undefined>(undefined);
     const sessions = yield* Ref.make<readonly MirrorSessionRaw[]>([]);
+    const fresh = yield* Ref.make(false);
+    // The creates read back without a session: one that shows up after is
+    // ended on sight, since its caller already reported it failed.
+    const abandoned = new Set<string>();
     // The running child's stdin, for the requests.
     const stdin = yield* Ref.make(Option.none<Queue.Queue<Uint8Array>>());
     // The requests waiting on a response, by id.
@@ -281,7 +302,9 @@ const make = (options: Options) =>
           );
         case "state":
           return Ref.set(sessions, event.sessions).pipe(
+            Effect.andThen(Ref.set(fresh, true)),
             Effect.andThen(changed),
+            Effect.andThen(endAbandoned(event.sessions)),
           );
         case "error":
           return Effect.logWarning(`[mirror] daemon error: ${event.error}`);
@@ -424,7 +447,7 @@ const make = (options: Options) =>
       );
       killChild = null;
       yield* Ref.set(stdin, Option.none());
-      yield* Ref.set(sessions, []);
+      yield* Ref.set(fresh, false);
       if (unresponsive) {
         yield* failAllPending("unresponsive");
         yield* Effect.logWarning(
@@ -459,7 +482,7 @@ const make = (options: Options) =>
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {
         yield* Ref.set(stdin, Option.none());
-        yield* Ref.set(sessions, []);
+        yield* Ref.set(fresh, false);
         yield* failAllPending("stopped");
         yield* setStatus("stopped");
       }),
@@ -558,6 +581,64 @@ const make = (options: Options) =>
         return response.session ?? "";
       });
 
+    const endAbandoned = (listed: readonly MirrorSessionRaw[]) =>
+      Effect.sync(() => {
+        for (const raw of listed) {
+          const token = raw.labels[CREATE_LABEL];
+          if (token === undefined || !abandoned.delete(token)) continue;
+          runInScope(
+            request("terminate", { session: raw.session }).pipe(
+              Effect.catch((error) =>
+                Effect.sync(() => abandoned.add(token)).pipe(
+                  Effect.andThen(
+                    Effect.logWarning(
+                      `[mirror] could not end a session a failed create made: ${error.message}`,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+      });
+
+    // The daemon's own snapshot, once it has one: a restart's comes after
+    // its ready.
+    const awaitFresh = Stream.fromPubSub(changes).pipe(
+      Stream.filterEffect(() => Ref.get(fresh)),
+      Stream.runHead,
+      Effect.timeoutOption(READ_BACK_MS),
+    );
+
+    const create = Effect.fn("MirrorDaemon.create")(function* (
+      input: MirrorCreateInput,
+    ) {
+      const token = randomUUID();
+      return yield* request("create", {
+        ...input,
+        labels: { ...input.labels, [CREATE_LABEL]: token },
+      }).pipe(
+        // Every failure but a refusal, a daemon that never took it and
+        // the layer closing leaves the outcome unknown.
+        Effect.catchIf(
+          (error) =>
+            error.reason !== "refused" &&
+            error.reason !== "not-running" &&
+            error.reason !== "stopped",
+          (error) =>
+            Effect.gen(function* () {
+              yield* awaitFresh;
+              const made = (yield* Ref.get(sessions)).find(
+                (raw) => raw.labels[CREATE_LABEL] === token,
+              );
+              if (made !== undefined) return made.session;
+              abandoned.add(token);
+              return yield* error;
+            }),
+        ),
+      );
+    });
+
     return MirrorDaemon.of({
       status: Ref.get(status),
       failure: Ref.get(status).pipe(
@@ -566,10 +647,9 @@ const make = (options: Options) =>
         ),
       ),
       sessions: Ref.get(sessions),
+      fresh: Ref.get(fresh),
       changes: Stream.fromPubSub(changes),
-      create: Effect.fn("MirrorDaemon.create")((input: MirrorCreateInput) =>
-        request("create", { ...input }),
-      ),
+      create,
       terminate: Effect.fn("MirrorDaemon.terminate")((session: string) =>
         request("terminate", { session }),
       ),

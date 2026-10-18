@@ -361,12 +361,18 @@ export class Worktrees extends Context.Service<
     // `expect` names the dirty capture to carry by its commit (null:
     // none), as its caller saw it: a different one under `from` fails the
     // re-key (`changed`). `back` is an undo's, which leaves a changed one,
-    // or one kept at `toPath`'s id, where it is.
+    // or one kept at `toPath`'s id, where it is. `fromPath`, where the
+    // checkout is now, records the move for what follows the id outside
+    // the store (WtFolder.movedIds).
     readonly rekey: (
       project: RegisteredProject,
       from: string,
       toPath: string,
-      options?: { readonly expect?: string | null; readonly back?: boolean },
+      options?: {
+        readonly expect?: string | null;
+        readonly back?: boolean;
+        readonly fromPath?: string;
+      },
     ) => Effect.Effect<string, CaptureNotCarried>;
     // Points a project whose repo was moved or renamed by hand at where
     // it is now (an absolute path, any folder inside it will do), keeping

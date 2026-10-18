@@ -24,7 +24,7 @@ import {
   type WorktreeIdentity,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
-import type { KeptArea } from "./kept.ts";
+import type { KeptArea, Moved } from "./kept.ts";
 import type { MovingArea } from "./moving.ts";
 
 export const makeRelocating = ({
@@ -118,7 +118,11 @@ export const makeRelocating = ({
         const found = yield* identities(project).pipe(
           Effect.orElseSucceed((): ReadonlyArray<WorktreeIdentity> => []),
         );
-        const rekeys: Array<readonly [from: string, to: string]> = [];
+        const rekeys: Array<{
+          readonly from: string;
+          readonly to: string;
+          readonly where: Moved;
+        }> = [];
         for (const [oldPath, newPath] of moved) {
           const resolved = yield* fs
             .realPath(newPath)
@@ -129,7 +133,13 @@ export const makeRelocating = ({
           );
           if (now === undefined) continue;
           const from = worktreeIdFromPath(oldPath);
-          if (from !== now.id) rekeys.push([from, now.id]);
+          if (from !== now.id) {
+            rekeys.push({
+              from,
+              to: now.id,
+              where: { fromPath: oldPath, toPath: now.path },
+            });
+          }
         }
         return { rekeys, repaired };
       });
@@ -141,7 +151,9 @@ export const makeRelocating = ({
       moved: ReadonlyMap<string, string>,
     ) {
       const { rekeys, repaired } = yield* rekeysOf(project, moved);
-      for (const [from, to] of rekeys) yield* kept.rekey(project, from, to);
+      for (const { from, to, where } of rekeys) {
+        yield* kept.rekey(project, from, to, { moved: where });
+      }
       if (Result.isFailure(repaired)) return yield* repaired.failure;
     });
 
@@ -223,8 +235,8 @@ export const makeRelocating = ({
                 to,
                 path.basename(to),
               );
-              for (const [from, now] of rekeys) {
-                yield* kept.rekeyRows(entry, from, now);
+              for (const { from, to: now, where } of rekeys) {
+                yield* kept.rekeyRows(entry, from, now, where);
               }
               return entry;
             }),
@@ -232,7 +244,7 @@ export const makeRelocating = ({
           .pipe(Effect.catchTags({ SqlError: Effect.die }));
         // Best effort from here: the entry already points at the new path.
         // A capture that didn't follow is said, and stays under the old id.
-        for (const [from, now] of rekeys) {
+        for (const { from, to: now } of rekeys) {
           const carried = yield* kept.rekeyCapture(relocated, from, now);
           if (carried !== "followed") {
             yield* Effect.logWarning(

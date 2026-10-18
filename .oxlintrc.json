@@ -69,7 +69,6 @@
       "files": [
         "app/main/hostProcess.ts",
         "packages/engine/src/worktrees/moving.ts",
-        "app/host/mirror/gitFollow.ts",
         "app/main/electron/liveness.ts",
         "app/main/electron/notifications.ts"
       ],

@@ -3,7 +3,10 @@
 // id, or forgotten. What clones proved about the old id goes either way.
 // The rows go in one transaction, which a caller may widen to commit
 // them with its own; the capture's ref follows, since git isn't in the
-// transaction, and a later call finishes it.
+// transaction, and a later call finishes it. A re-key whose checkout
+// moved records the move in `wt_moves` in the same transaction, which
+// is where anything kept outside the store under the old id (the host's
+// mirrors) learns of it, whoever re-keyed it (WtFolder.movedIds).
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -15,6 +18,9 @@ import type { RegisteredProject } from "../Registry.ts";
 import * as WorktreeData from "../WorktreeData.ts";
 import { CaptureNotCarried } from "./documents.ts";
 
+// Where a re-keyed checkout was and is now.
+export type Moved = { readonly fromPath: string; readonly toPath: string };
+
 export const makeKept = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const git = yield* Git.Git;
@@ -22,13 +28,28 @@ export const makeKept = Effect.gen(function* () {
   const data = yield* WorktreeData.WorktreeData;
   const cloneCheckout = yield* CloneCheckout.CloneCheckout;
 
-  const rekeyRows = (project: RegisteredProject, from: string, to: string) =>
+  const recordMove = (project: RegisteredProject, moved: Moved) =>
+    sql`INSERT INTO wt_moves ${sql.insert({
+      from_path: moved.fromPath,
+      to_path: moved.toPath,
+      project_id: project.id,
+      moved: 1,
+    })} ON CONFLICT (from_path) DO UPDATE SET
+      to_path = excluded.to_path, moved = 1, error = NULL`;
+
+  const rekeyRows = (
+    project: RegisteredProject,
+    from: string,
+    to: string,
+    moved?: Moved,
+  ) =>
     sql
       .withTransaction(
         Effect.all([
           registry.moveWorktree(from, to),
           data.move(project.id, from, to),
           cloneCheckout.forget(from),
+          moved === undefined ? Effect.void : recordMove(project, moved),
         ]),
       )
       .pipe(Effect.orDie);
@@ -119,10 +140,11 @@ export const makeKept = Effect.gen(function* () {
       options: {
         readonly expect?: string | null;
         readonly back?: boolean;
+        readonly moved?: Moved;
       } = {},
     ) =>
       Effect.andThen(
-        rekeyRows(project, from, to),
+        rekeyRows(project, from, to, options.moved),
         Effect.flatMap(
           rekeyCapture(project, from, to, options.expect),
           (carried) =>

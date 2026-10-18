@@ -452,14 +452,10 @@ export const makeMoving = ({
             yield* sql
               .withTransaction(
                 Effect.all([
-                  kept.rekeyRows(project, from, moved.id),
-                  sql`INSERT INTO wt_moves ${sql.insert({
-                    from_path: fromPath,
-                    to_path: moved.path,
-                    project_id: project.id,
-                    moved: 1,
-                  })} ON CONFLICT (from_path) DO UPDATE SET
-                    to_path = excluded.to_path, moved = 1, error = NULL`,
+                  kept.rekeyRows(project, from, moved.id, {
+                    fromPath,
+                    toPath: moved.path,
+                  }),
                   sql`UPDATE moving SET carried = 1
                     WHERE from_path = ${fromPath}`,
                 ]),
@@ -652,10 +648,20 @@ export const makeMoving = ({
       options: {
         readonly expect?: string | null;
         readonly back?: boolean;
+        readonly fromPath?: string;
       } = {},
     ) {
-      const to = worktreeIdFromPath(cleanPath(toPath));
-      if (to !== from) yield* kept.rekey(project, from, to, options);
+      const clean = cleanPath(toPath);
+      const to = worktreeIdFromPath(clean);
+      const { fromPath, ...rest } = options;
+      if (to !== from) {
+        yield* kept.rekey(project, from, to, {
+          ...rest,
+          ...(fromPath === undefined
+            ? {}
+            : { moved: { fromPath, toPath: clean } }),
+        });
+      }
       return to;
     });
     return { move, carryMoved, rename, rekey, resume, interrupted };

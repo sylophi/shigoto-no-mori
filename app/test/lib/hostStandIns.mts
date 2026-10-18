@@ -80,6 +80,7 @@ const standIns = Layer.mergeAll(
       refreshGit: (session) => mirror.refreshGit(session),
       history: (id) => mirror.history(id),
       noteEvent: (id, kind, detail) => mirror.noteEvent(id, kind, detail),
+      releaseCopy: (raw) => mirror.releaseCopy(raw),
       forgetHistory: (id) => mirror.forgetHistory(id),
       moveHistory: (from, to) => mirror.moveHistory(from, to),
       localProjectChanged: (id) => mirror.localProjectChanged(id),

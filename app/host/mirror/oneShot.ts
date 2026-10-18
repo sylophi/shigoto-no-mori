@@ -43,8 +43,9 @@ export type TransferFilesResult = {
 };
 
 const POLL_MS = 250;
-// The daemon reports no sessions while it restarts and the same ones
-// come back moments later. A session gone for longer was lost with it.
+// The daemon's snapshots trail its answers (file-sync/engine.go
+// throttles them), so a session its create just made can be missing
+// from the last one. Missing for longer, it is gone.
 const MISSING_CEILING_MS = 10_000;
 // An error with no cycle behind it for this long is a session that
 // cannot connect (the peer's engine, the grant), not a slow one.

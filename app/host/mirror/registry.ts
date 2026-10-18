@@ -21,7 +21,6 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
-import { peerMirrorFor } from "@host/ipc/PeerReach";
 import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
 import {
   dropMirrorInvitesWithPeers,
@@ -197,8 +196,8 @@ export const findSession = (daemon: MirrorEngine["Service"], session: string) =>
 // (invites.ts), daemon or no daemon.
 //
 // A daemon that is not running (restarting, or still starting at
-// boot) lists no sessions, so the id waits in `pendingStops` and the
-// first snapshot of a running daemon ends what it names
+// boot) ends nothing, so the id waits in `pendingStops` and the first
+// snapshot of a running daemon ends what it names
 // (settleMirrorBookkeeping). The copy a peer holds stays a worktree of
 // its own, and its device is told it is no longer mirrored
 // (mirror:release).
@@ -211,10 +210,11 @@ export const stopMirrorsForWorktree = (localWorktreeId: string) =>
     // mirroring anything.
     const daemon = yield* engineOrNull;
     if (daemon === null) return;
-    if ((yield* daemon.status) !== "running") {
+    if ((yield* daemon.status) === "running") {
+      yield* endSessionsOnWorktree(daemon, localWorktreeId);
+    } else {
       pendingStops.add(localWorktreeId);
     }
-    yield* endSessionsOnWorktree(daemon, localWorktreeId);
     // The worktree is gone, so its thread has no page left to show on.
     daemon.forgetHistory(localWorktreeId);
   });
@@ -231,7 +231,7 @@ const endSessionsOnWorktree = (
       (raw) =>
         daemon.terminate(raw.session).pipe(
           Effect.andThen(
-            isTransferSession(raw) ? Effect.void : releaseCopy(raw),
+            isTransferSession(raw) ? Effect.void : daemon.releaseCopy(raw),
           ),
           Effect.catch((error) =>
             Effect.sync(() =>
@@ -242,23 +242,6 @@ const endSessionsOnWorktree = (
           ),
         ),
       { concurrency: "unbounded", discard: true },
-    ),
-  );
-
-// Tells the copy's device its copy is no longer mirrored, so the
-// invitation it left for this device (host/mirror/invites.ts) goes and
-// the copy is an ordinary worktree there. Best effort: a peer away, or
-// on a build without the verb, keeps the invitation until the copy is
-// deleted, which only ever admits this device's calls on that copy.
-const releaseCopy = (raw: MirrorSessionRaw) =>
-  Effect.asVoid(
-    Effect.forkDetach(
-      Effect.ignore(
-        peerMirrorFor(raw.deviceId).release({
-          projectId: raw.projectId,
-          worktreeId: raw.worktreeId,
-        }),
-      ),
     ),
   );
 
@@ -273,7 +256,7 @@ export const endMirrorKeepingCopy = (
 ) =>
   Effect.gen(function* () {
     yield* daemon.terminate(raw.session);
-    yield* releaseCopy(raw);
+    yield* daemon.releaseCopy(raw);
     daemon.noteEvent(localWorktreeIdOf(raw), "stopped", detail);
   });
 
@@ -439,15 +422,17 @@ const endOnce = <E, R>(session: string, end: Effect.Effect<unknown, E, R>) =>
     () => Effect.sync(() => endingSessions.delete(session)),
   );
 
-// A move (worktrees:relocate) put the original somewhere else. The id
-// is path derived, so to the engine it is a new worktree: each session
-// on the old one re-opens on the new path (MirrorEngine's recreate, the
-// git follower's agreement carried across by the replaces label), and
-// the thread moves with it. The engine halted the old session the
-// moment its root went, so nothing crossed meanwhile. A re-open the
-// peer cannot answer (it is away: the engine opens a session only
-// against both sides) ends the mirror instead, the copy kept, and the
-// thread says so.
+// A worktree here was re-keyed: its id is path derived, so a move put it
+// under a new one. What is kept under the old id follows: the invitation
+// of a copy it was, its thread, and each session on it, re-opened on the
+// new path (MirrorEngine's recreate, the git follower's agreement
+// carried across by the replaces label). The engine halted the old
+// session the moment its root went, so nothing crossed meanwhile. A
+// daemon that isn't running re-opens nothing: its first snapshot finds
+// the session's root gone and the move recorded, and this runs again
+// (settleMirrorBookkeeping). A re-open the peer cannot answer (it is
+// away: the engine opens a session only against both sides) ends the
+// mirror instead, the copy kept, and the thread says so.
 export const moveMirrorsOfWorktree = (
   oldId: string,
   moved: { id: string; path: string },
@@ -456,17 +441,11 @@ export const moveMirrorsOfWorktree = (
     yield* moveMirrorInvitesOf(oldId, moved.id);
     const daemon = yield* engineOrNull;
     if (daemon === null) return;
-    if ((yield* daemon.status) !== "running") {
-      // Nothing to re-open against: the stop waits for the daemon like a
-      // delete's, and the copy stays.
-      pendingStops.add(oldId);
-      return;
-    }
+    daemon.moveHistory(oldId, moved.id);
+    if ((yield* daemon.status) !== "running") return;
     const sessions = (yield* mirrorSessions(daemon)).filter(
       (raw) => localWorktreeIdOf(raw) === oldId,
     );
-    if (sessions.length === 0) return;
-    daemon.moveHistory(oldId, moved.id);
     yield* Effect.forEach(
       sessions,
       (raw) =>
@@ -496,7 +475,7 @@ export const moveMirrorsOfWorktree = (
                   raw.session,
                   Effect.andThen(
                     daemon.terminate(raw.session),
-                    releaseCopy(raw),
+                    daemon.releaseCopy(raw),
                   ),
                 );
                 daemon.noteEvent(
@@ -556,7 +535,9 @@ export const endMirrorsWithPeers = (
   Effect.gen(function* () {
     yield* dropMirrorInvitesWithPeers(stillOnAccount);
     const daemon = yield* engineOrNull;
-    if (daemon === null) return;
+    // A daemon that isn't running ends nothing: the sessions it brings
+    // back are swept as they come (createNoAccountSweep).
+    if (daemon === null || (yield* daemon.status) !== "running") return;
     const candidates = opts.transfers
       ? yield* daemon.sessions
       : yield* mirrorSessions(daemon);
