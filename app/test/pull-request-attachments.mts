@@ -5,9 +5,12 @@
 // line with it. Run: pnpm test pull-request-attachments.
 import assert from "node:assert/strict";
 import {
+  attachmentRefusal,
+  attachmentTypeOfName,
+} from "@shigomori/contracts/attachments";
+import {
   attachmentMarkdown,
   attachmentName,
-  attachmentRefusal,
   attachmentStems,
   dataUrlFile,
   insertBlock,
@@ -84,6 +87,10 @@ it("only what GitHub shows, within its limits", () => {
     /Only images and videos/,
   );
   assert.match(attachmentRefusal(file("image/png", 0)) ?? "", /empty/);
+  // The host checks a staged chunk by its name, which says its type.
+  assert.equal(attachmentTypeOfName("shot-2.png"), "image/png");
+  assert.equal(attachmentTypeOfName("clip.MOV"), "video/quicktime");
+  assert.equal(attachmentTypeOfName("notes.pdf"), "");
 });
 
 it("a reference lands at the caret on a line of its own", () => {

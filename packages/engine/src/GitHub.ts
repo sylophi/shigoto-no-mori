@@ -3,7 +3,12 @@
 // check, the deadline and the reasons a lookup couldn't be made are the
 // same for each.
 import {
+  mergeSettingsOf,
+  type MergeSettings,
+} from "@shigomori/contracts/mergeMethods";
+import {
   isBranchsOwn,
+  type MergeMethod,
   type RepoMergeConfig,
 } from "@shigomori/contracts/schemas/pullRequest";
 import * as Context from "effect/Context";
@@ -104,17 +109,6 @@ export class GitHubOutputError extends Schema.TaggedError<GitHubOutputError>()(
     return `unexpected gh ${this.command} output`;
   }
 }
-
-// The merge methods GitHub knows, in the order a pick falls back on.
-const MERGE_METHODS = ["merge", "squash", "rebase"] as const;
-export type MergeMethod = (typeof MERGE_METHODS)[number];
-
-// The repo's merge settings: the methods its merge button offers, in
-// MERGE_METHODS order, and whether auto-merge may be armed on its PRs.
-export type MergeSettings = {
-  readonly allowed: ReadonlyArray<MergeMethod>;
-  readonly autoMerge: boolean;
-};
 
 // A stack GitHub knows, bottom first. A merged PR is "closed".
 export type GitHubStack = ReadonlyArray<{
@@ -831,12 +825,7 @@ const make = Effect.gen(function* () {
     repo: string,
   ) {
     const config = yield* Effect.option(repoMergeConfig(repo));
-    if (Option.isNone(config))
-      return { allowed: MERGE_METHODS, autoMerge: false };
-    return {
-      allowed: MERGE_METHODS.filter((method) => config.value[method]),
-      autoMerge: config.value.autoMerge,
-    };
+    return mergeSettingsOf(Option.getOrNull(config));
   });
 
   const mergeProgress = Effect.fn("GitHub.mergeProgress")(function* (

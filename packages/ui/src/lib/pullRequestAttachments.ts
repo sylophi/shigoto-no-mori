@@ -1,9 +1,11 @@
 import {
   ATTACHMENT_IMAGE_EXTENSIONS,
   ATTACHMENT_VIDEO_EXTENSIONS,
-  MAX_ATTACHMENT_IMAGE_BYTES,
-  MAX_ATTACHMENT_VIDEO_BYTES,
 } from "@shigomori/contracts/schemas";
+import {
+  attachmentExtension,
+  attachmentReference,
+} from "@shigomori/contracts/attachments";
 
 // Files pasted, dropped or picked into a new pull request's description,
 // and images and videos that come as links (one dragged off a web page,
@@ -26,24 +28,6 @@ export interface Attachment {
   previewUrl: string | null;
   status: "staging" | "staged" | "failed";
   error?: string;
-}
-
-// Why a file can't be attached, or null when it can.
-export function attachmentRefusal(file: {
-  name: string;
-  type: string;
-  size: number;
-}): string | null {
-  const video = isVideo(file.type);
-  if (!video && !Object.hasOwn(ATTACHMENT_IMAGE_EXTENSIONS, file.type)) {
-    return `Only images and videos can be attached, and ${file.name} is neither`;
-  }
-  if (file.size === 0) return `${file.name} is empty`;
-  const max = video ? MAX_ATTACHMENT_VIDEO_BYTES : MAX_ATTACHMENT_IMAGE_BYTES;
-  if (file.size > max) {
-    return `${file.name} is over the ${max / 1024 / 1024} MB GitHub takes`;
-  }
-  return null;
 }
 
 // The types a file picker offers.
@@ -70,10 +54,7 @@ export function attachmentName(
   file: { name: string; type: string },
   stems: ReadonlySet<string>,
 ): string {
-  const ext =
-    ATTACHMENT_IMAGE_EXTENSIONS[file.type] ??
-    ATTACHMENT_VIDEO_EXTENSIONS[file.type] ??
-    "";
+  const ext = attachmentExtension(file.type);
   const stem = clean(stemOf(file.name)).slice(0, 80) || "file";
   return `${unique(stem, stems)}${ext ? `.${ext}` : ""}`;
 }
@@ -112,7 +93,7 @@ function clean(part: string): string {
 // The markdown that shows an attachment, on a line of its own: alone in
 // its paragraph, a video becomes a player on GitHub.
 export function attachmentMarkdown(name: string, alt: string): string {
-  return `![${altMarkdown(alt)}](./${name})`;
+  return `![${altMarkdown(alt)}](${attachmentReference(name)})`;
 }
 
 // Alt text as it can stand between the brackets: no brackets of its
@@ -131,11 +112,14 @@ export function withFetchedName(
   name: string,
   alt: string,
 ): string {
-  const placeholderAlt = `Uploading ${stem}…`;
+  const placeholderAlt = uploadingAlt(stem);
   return body.replace(
-    new RegExp(`!\\[([^\\]]*)\\]\\(\\./${escapeRegExp(id)}\\)`, "g"),
+    new RegExp(
+      `!\\[([^\\]]*)\\]\\(${escapeRegExp(attachmentReference(id))}\\)`,
+      "g",
+    ),
     (_, written: string) =>
-      `![${written === placeholderAlt ? altMarkdown(alt) : written}](./${name})`,
+      `![${written === placeholderAlt ? altMarkdown(alt) : written}](${attachmentReference(name)})`,
   );
 }
 
@@ -160,7 +144,7 @@ export function insertBlock(
 }
 
 export function refersTo(body: string, name: string): boolean {
-  return body.includes(`](./${name})`);
+  return body.includes(`](${attachmentReference(name)})`);
 }
 
 // The description as the preview renders it: a video's reference
@@ -176,7 +160,10 @@ export function previewSource(
   for (const { name, previewUrl } of attachments) {
     if (previewUrl !== null) continue;
     source = source.replaceAll(
-      new RegExp(`!\\[[^\\]]*\\]\\(\\./${escapeRegExp(name)}\\)`, "g"),
+      new RegExp(
+        `!\\[[^\\]]*\\]\\(${escapeRegExp(attachmentReference(name))}\\)`,
+        "g",
+      ),
       `*${name}*`,
     );
   }
@@ -190,7 +177,7 @@ export function previewImages(
 ): Record<string, string> {
   return Object.fromEntries(
     attachments.flatMap(({ name, previewUrl }) =>
-      previewUrl === null ? [] : [[`./${name}`, previewUrl]],
+      previewUrl === null ? [] : [[attachmentReference(name), previewUrl]],
     ),
   );
 }
@@ -199,7 +186,7 @@ export function previewImages(
 // its line with the line, one inside a sentence on its own. The rest of
 // the text stays as it was.
 export function withoutReference(body: string, name: string): string {
-  const ref = `!\\[[^\\]]*\\]\\(\\./${escapeRegExp(name)}\\)`;
+  const ref = `!\\[[^\\]]*\\]\\(${escapeRegExp(attachmentReference(name))}\\)`;
   return body
     .replace(new RegExp(`(^|\\n)${ref}(?=\\n|$)`, "g"), "$1")
     .replace(new RegExp(` ?${ref}`, "g"), "")
@@ -304,8 +291,10 @@ export function linkStem(url: string, stems: ReadonlySet<string>): string {
 // Holds a linked file's place while the host fetches it, as GitHub's
 // own form does while it uploads.
 export function uploadingMarkdown(id: string, stem: string): string {
-  return `![Uploading ${stem}…](./${id})`;
+  return `![${uploadingAlt(stem)}](${attachmentReference(id)})`;
 }
+
+const uploadingAlt = (stem: string) => `Uploading ${stem}…`;
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

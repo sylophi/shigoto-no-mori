@@ -6,10 +6,14 @@ import {
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { forkBranchCandidates } from "@shigomori/contracts/git/branches";
+import {
+  autoMergeArms,
+  mergeSettingsOf,
+  pickMergeMethod,
+} from "@shigomori/contracts/mergeMethods";
 import { pluralize } from "./pluralize.ts";
 import {
   isBranchsPullRequest,
-  MergeMethodSchema,
   type MergeMethod,
   type PullRequest,
   type PullRequestCandidate,
@@ -124,25 +128,18 @@ export interface MergeStateDescriptor {
   canMerge: boolean;
 }
 
-// The verdicts auto-merge is for: the same two as the engine's
-// autoMergeArms (Landing.ts), which says why.
-function autoMergeArms(state: PullRequestMergeState): boolean {
-  return state === "BLOCKED" || state === "BEHIND";
-}
-
 // Whether the merge button arms auto-merge instead of merging: the
 // repo allows it, the PR is neither a draft nor in a stack (a stack
 // lands one PR at a time or through GitHub's stack merge, and neither
-// arms it), and the verdict is one waiting fixes. The engine decides
-// the same way from the same inputs (Landing.merge). This only shapes
-// the button.
+// arms it), and the verdict is one waiting fixes (autoMergeArms, which
+// the engine's merge arms by). This only shapes the button.
 export function armsAutoMerge(
   config: RepoMergeConfig | null,
   pr: PullRequestDetail,
   stacked: boolean,
 ): boolean {
   return (
-    (config?.autoMerge ?? false) &&
+    mergeSettingsOf(config).autoMerge &&
     !stacked &&
     !pr.isDraft &&
     autoMergeArms(pr.mergeState)
@@ -455,28 +452,12 @@ export function describeArmedAutoMerge(method: MergeMethod): {
   };
 }
 
-// Picks the user's saved method when it's still allowed by the repo;
-// otherwise falls back to the first allowed method in the canonical
-// order. Returns null when nothing is allowed at all (degenerate repo
-// config or gh failed to report).
+// The repo's methods (mergeSettingsOf) and the one the button leads
+// with (pickMergeMethod), null with none allowed.
 export function resolveMergeMethod(
   config: RepoMergeConfig | null,
   lastPicked: MergeMethod | undefined,
-): { primary: MergeMethod | null; allowed: MergeMethod[] } {
-  // A null config means we couldn't read it. Assume every method is
-  // allowed so the user isn't blocked by our missing data, and no
-  // auto-merge, since GitHub refuses to arm it where the repo doesn't
-  // allow it (the engine's Landing assumes the same).
-  const allowedMap: RepoMergeConfig = config ?? {
-    merge: true,
-    squash: true,
-    rebase: true,
-    autoMerge: false,
-  };
-  const allowed = MergeMethodSchema.literals.filter((m) => allowedMap[m]);
-  const [fallback] = allowed;
-  if (fallback === undefined) return { primary: null, allowed: [] };
-  const primary =
-    lastPicked && allowed.includes(lastPicked) ? lastPicked : fallback;
-  return { primary, allowed };
+): { primary: MergeMethod | null; allowed: readonly MergeMethod[] } {
+  const { allowed } = mergeSettingsOf(config);
+  return { primary: pickMergeMethod(allowed, lastPicked), allowed };
 }

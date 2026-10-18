@@ -394,7 +394,19 @@ it("an attachment is staged a chunk at a time, in order", async () => {
   await assert.rejects(chunk(3, "!"), /Attachment chunk out of order/);
   await assert.rejects(chunk(20, "!"), /Attachment chunk out of order/);
   assert.equal(readFileSync(staged, "utf8"), "hello world");
-  await assert.rejects(chunk(100 * 1024 * 1024 - 1, "!!"), /at most 100 MB/);
+  // Each kind within GitHub's size for it, the image's checked here as
+  // well as in the dialog.
+  await assert.rejects(
+    chunk(10 * 1024 * 1024 - 1, "!!"),
+    /shot\.png is over the 10 MB GitHub takes/,
+  );
+  const other = (name: string, offset: number) =>
+    stageAttachment({ id, name, offset, base64: "ISE=" });
+  await assert.rejects(
+    other("clip.mp4", 100 * 1024 * 1024 - 1),
+    /clip\.mp4 is over the 100 MB GitHub takes/,
+  );
+  await assert.rejects(other("notes.pdf", 0), /Only images and videos/);
   await chunk(0, "again");
   assert.equal(readFileSync(staged, "utf8"), "again", "offset 0 starts over");
 
@@ -406,7 +418,7 @@ it("an attachment is staged a chunk at a time, in order", async () => {
     id: old,
     name: "old.png",
     offset: 0,
-    base64: "",
+    base64: Buffer.from("old").toString("base64"),
   });
   const dayAgo = new Date(Date.now() - 25 * 60 * 60_000);
   utimesSync(stagedDir(old), dayAgo, dayAgo);
@@ -431,7 +443,11 @@ it("a linked image is fetched by its type, within GitHub's limits", async () => 
     } else if (req.url === "/shot.jpg") send("image/png; q=1", "PNG");
     else if (req.url === "/page") send("text/html", "<p>hi</p>");
     else if (req.url === "/big") send("image/png", big);
-    else if (req.url === "/big-unsized") {
+    else if (req.url === "/empty") send("image/png", "");
+    else if (req.url === "/empty-unsized") {
+      res.writeHead(200, { "content-type": "image/png" });
+      res.end();
+    } else if (req.url === "/big-unsized") {
       res.writeHead(200, { "content-type": "image/png" });
       res.write(big.subarray(0, 6 * 1024 * 1024));
       res.end(big.subarray(6 * 1024 * 1024));
@@ -486,6 +502,9 @@ it("a linked image is fetched by its type, within GitHub's limits", async () => 
     /over the 10 MB/,
     "counted as it comes when it doesn't say its size",
   );
+  // An empty one, as the dialog refuses an empty file.
+  await assert.rejects(fetchAs("/empty"), /is empty/);
+  await assert.rejects(fetchAs("/empty-unsized"), /is empty/);
   assert.ok(!existsSync(stagedDir(id)), "a refused one leaves nothing");
 });
 

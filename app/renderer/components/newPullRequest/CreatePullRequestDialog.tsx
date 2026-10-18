@@ -1,9 +1,9 @@
+import { attachmentRefusal } from "@shigomori/contracts/attachments";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { CreatePullRequestDialogView } from "@shigomori/ui/views/newPullRequest/CreatePullRequestDialogView.tsx";
 import {
   attachmentMarkdown,
   attachmentName,
-  attachmentRefusal,
   attachmentStems,
   dataUrlFile,
   insertBlock,
