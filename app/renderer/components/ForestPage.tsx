@@ -17,6 +17,7 @@ import { ForestPageView } from "@shigomori/ui/views/ForestPageView.tsx";
 import {
   useSetSidebarView,
   useSidebarView,
+  useSidebarViewSettled,
 } from "@/hooks/projects/useSidebarView";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 
@@ -33,15 +34,16 @@ export function ForestPage() {
   // route rather than with the last tap.
   const preferred = useSidebarView();
   const { mutate: setView } = useSetSidebarView();
-  // Written as the route or the layout changes, not as the stored view
-  // does: a write that failed puts the stored view back, which must not
-  // ask for the write again.
+  // Written as the route or the layout changes, or as the stored view is
+  // first read, not as it moves: a write that failed puts the stored
+  // view back, which must not ask for the write again.
+  const settled = useSidebarViewSettled();
   const follow = useEffectEvent(() => {
     if (preferred !== view) setView(view);
   });
   useEffect(() => {
-    if (phone) follow();
-  }, [phone, view]);
+    if (phone && settled) follow();
+  }, [phone, view, settled]);
   return (
     <ForestPageView
       phone={phone}

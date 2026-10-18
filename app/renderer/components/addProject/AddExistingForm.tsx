@@ -193,11 +193,12 @@ export function AddExistingForm({
   // Held open while it adds, as a clone and a create are, so neither
   // Escape nor Back leaves a run that then closes the dialog under a new
   // path. Undone on unmount too.
+  const adding = bulkAdding || addProject.isPending;
   useEffect(() => {
-    if (!bulkAdding) return;
+    if (!adding) return;
     setWorking(true);
     return () => setWorking(false);
-  }, [bulkAdding, setWorking]);
+  }, [adding, setWorking]);
 
   const toggleSelected = (path: string) => {
     setSelected(withToggled(path));

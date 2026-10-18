@@ -153,8 +153,7 @@ function NewWorktreeForm({
   const [cloneFiles, setCloneFiles] = useState(true);
   const candidates = usePullRequestCandidates(project.id, prMode);
   const verdict = candidates.data;
-  // Latched as the verdict lands, during that render, so no frame shows
-  // the pull request mode the verdict rules out.
+  // Latched as the verdict lands, during that render.
   if (defaultMode === null && verdict) {
     setDefaultMode(
       verdict.status === "unavailable" ? "branch-from" : DEFAULT_MODE,

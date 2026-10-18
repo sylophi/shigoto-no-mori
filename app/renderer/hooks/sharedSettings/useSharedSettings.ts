@@ -100,7 +100,9 @@ export function useSetSharedSetting(
     meta: { errorTitle },
   });
   // `onFailed` lets a caller take back what it showed ahead of the
-  // write.
+  // write. Passed to `mutate`, not `useMutation`, so only the latest
+  // write's failure runs it and an older one can't take back a newer
+  // draft.
   return (value: SharedSettingValue, onFailed?: () => void) => {
     if (key !== undefined) {
       mutation.mutate({ key, value }, { onError: () => onFailed?.() });
