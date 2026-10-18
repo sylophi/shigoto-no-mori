@@ -206,6 +206,84 @@ export const clientPushes = <R extends ContractCall>(
     }),
   );
 
+// State a device or this window's shell keeps whole and pushes on
+// every change (the updater's, the guide's), as its stream: the pushes,
+// with a read as the seed until the first push, which is newer, and
+// read again on each of `reseeds` (a change of account). A read that
+// fails fails it, to be asked again on REDIAL.
+export function pushedState<R extends ContractCall, P extends ContractCall>(
+  link: Link,
+  options: {
+    readonly read: R;
+    readonly push: P;
+    readonly reseeds?: Stream.Stream<unknown, never, ClientLinks>;
+  },
+): Stream.Stream<Decoded<PayloadOf<P>>, unknown, ClientLinks> {
+  type A = Decoded<PayloadOf<P>>;
+  // Pushes as they reach the stream's reader: a read is kept only if
+  // none came between its start and its answer reaching the reader, so
+  // the order is the reader's, not the fibers'.
+  let pushes = 0;
+  const read = Effect.suspend(() => {
+    const after = pushes;
+    return link.call(channelOf(options.read), undefined).pipe(
+      Effect.flatMap((output) =>
+        link.local === true
+          ? Effect.succeed(output as A)
+          : Schema.decodeUnknownEffect(outputOf(options.read))(output),
+      ),
+      Effect.map((value) => ({ value: value as A, after })),
+    );
+  });
+  const seeds = Stream.concat(
+    Stream.make(undefined),
+    options.reseeds ?? Stream.empty,
+  ).pipe(Stream.mapEffect(() => read));
+  return Stream.merge(
+    (pushesOn(link, options.push) as Stream.Stream<A>).pipe(
+      Stream.map((value) => ({ value, after: undefined })),
+    ),
+    seeds,
+  ).pipe(
+    Stream.filter((next) => {
+      if (next.after === undefined) {
+        pushes += 1;
+        return true;
+      }
+      return next.after === pushes;
+    }),
+    Stream.map((next) => next.value),
+  );
+}
+
+// The same over this window's own link for a module of its shell.
+export const shellState = <R extends ContractCall, P extends ContractCall>(
+  module: ContractModule,
+  options: Parameters<typeof pushedState<R, P>>[1],
+) =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const { linkOf } = yield* ClientLinks;
+      return pushedState(linkOf(module), options);
+    }),
+  ).pipe(Stream.retry(REDIAL));
+
+// The same for one device's host module: a peer's starts again on each
+// new session to it, which covers a restart into a new build.
+export const hostStateAtom = <R extends ContractCall, P extends ContractCall>(
+  deviceId: string,
+  options: Parameters<typeof pushedState<R, P>>[1],
+) =>
+  clientAtoms.atom((get) => {
+    const localDeviceId = get(localDeviceIdAtom);
+    if (deviceId !== localDeviceId) get(peerSessionAtom(deviceId));
+    return Stream.unwrap(
+      Effect.map(hostLinkOf(deviceId, localDeviceId), (link) =>
+        pushedState(link, options),
+      ),
+    ).pipe(Stream.retry(REDIAL));
+  });
+
 // One device's host calls as Promises, for an atom whose methods a
 // caller outside an effect uses (the script runs): each runs on the
 // atom's scope, so one still in flight ends with it, and its answer is

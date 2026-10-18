@@ -29,6 +29,10 @@ import { type Deadline, deadlineIn, deadlinePassed } from "@/lib/deadline";
 import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
+import { callOf } from "@shigomori/contracts/contract";
+import * as Atom from "effect/reactivity/Atom";
+import { clientAtoms, clientPushes, shellState } from "@/lib/runtime/atoms";
+import { useView, useViewErrorToast } from "@/lib/runtime/viewHooks";
 
 // Account status: configured/signedIn plus this device's stored name.
 // staleTime Infinity: `configured` is launch env and cannot change
@@ -218,39 +222,30 @@ export function useSetDeviceIcon() {
 }
 
 // Whether this host accepts commands from the account's other devices,
-// for the current account. Mounted only under the same signed-in guard
-// as useAccountDevices, and the handler answers false signed out. Kept
-// off the "account" prefix so the toggle invalidates only this.
-export function useAcceptsCommands() {
-  const api = useApi();
-  return useQuery<boolean>({
-    queryKey: queryKeys.accountCommandAccess(),
-    queryFn: ({ signal }) => api.run(api.account.acceptsCommands(), { signal }),
-    meta: { errorTitle: "Couldn't read command access" },
-  });
-}
-
-// Write the switch into its query whenever main fans out a flip (the
-// broadcast carries it), so every window's toggle reflects the new
-// state without polling. Separate from the account.changed watch so
-// the toggle never re-reads status or the device list.
-export function useWatchCommandAccessChanges(): void {
-  const api = useApi();
-  const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      api.listen(
-        api.pushes(accountContract, "commandAccessChanged"),
-        (accepts) => {
-          queryClient.setQueryData(queryKeys.accountCommandAccess(), accepts);
-        },
+// for the current account, as the shell says it and pushes each flip,
+// read again as the account changes. The handler answers false signed
+// out.
+const acceptsCommandsAtom = Atom.keepAlive(
+  clientAtoms.atom(
+    shellState(accountContract, {
+      read: callOf(accountContract, "acceptsCommands"),
+      push: callOf(accountContract, "commandAccessChanged"),
+      reseeds: clientPushes(
+        accountContract,
+        callOf(accountContract, "changed"),
       ),
-    [queryClient, api],
-  );
+    }),
+  ),
+);
+
+export function useAcceptsCommands() {
+  const state = useView(acceptsCommandsAtom);
+  useViewErrorToast(state, "Couldn't read command access");
+  return { data: state.data, isError: state.error !== null };
 }
 
 // An imperative write. It does not update itself: main emits
-// commandAccessChanged and useWatchCommandAccessChanges writes it.
+// commandAccessChanged, which the switch's atom follows.
 export function useSetAcceptsCommands() {
   const api = useApi();
   return useMutation<void, Error, boolean>({
