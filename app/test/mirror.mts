@@ -1340,13 +1340,17 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
       refreshGit: () => Effect.sync(() => verdict),
       noteEvent: (worktreeId, kind, detail) =>
         noted.push([worktreeId, kind, detail]),
+      releaseCopy: (raw) =>
+        Effect.sync(() => {
+          released.push(raw.worktreeId);
+        }),
     });
     // The peer's list never answers, which the copy-gone probe reads
     // as no answer (the copy may well be there), so no refusal is
     // waved through as a copy already gone.
     standInPeers({
       // The peer's own serving side, as far as this check asks it: the
-      // copy's delete and its release. Everything else refuses.
+      // copy's delete. Everything else refuses.
       transportFor: () => ({
         local: true,
         invoke: async (channel, input) => {
@@ -1354,10 +1358,6 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
           if (channel === "worktrees:delete") {
             deleted.push(worktreeId);
             return { ok: true };
-          }
-          if (channel === "mirror:release") {
-            released.push(worktreeId);
-            return undefined;
           }
           throw new Error("not in this check");
         },
@@ -1558,7 +1558,7 @@ it("a session's mode says what it is, and a re-open carries it", () => {
   });
 });
 
-it("the no-account sweep asks about each session once, so a misread credential ends nothing already running", async () => {
+it("the no-account sweep asks about each session once, so a misread credential ends nothing already running, and a sign-out while the daemon is down ends what it brings back", async () => {
   // (6f) The sweep of sessions the engine brings back for a device on
   // no account asks about each session once, signed in or not. A
   // credential that reads as signed out later (one bad read) ends
@@ -1572,6 +1572,7 @@ it("the no-account sweep asks about each session once, so a misread credential e
     let ends = 0;
     const sweep = createNoAccountSweep({
       sessions: () => sessions,
+      fresh: () => true,
       signedIn: () => {
         checks += 1;
         return signedIn;
@@ -1609,6 +1610,7 @@ it("the no-account sweep asks about each session once, so a misread credential e
     const throwing = checks;
     const failing = createNoAccountSweep({
       sessions: () => sessions,
+      fresh: () => true,
       signedIn: () => {
         checks += 1;
         if (checks === throwing + 1) throw new Error("no credential yet");
@@ -1621,6 +1623,25 @@ it("the no-account sweep asks about each session once, so a misread credential e
     assert.throws(() => failing.run(), /no credential yet/);
     failing.run();
     assert.equal(checks, throwing + 2, "a check that threw was not retried");
+  }
+  // Signed out while the daemon is down: the snapshot that stands
+  // through the restart lists sessions it can't end, and the ones the
+  // next run brings back are ended.
+  {
+    let running = false;
+    let ended = 0;
+    const sweep = createNoAccountSweep({
+      sessions: () => [rawMirrorSession({ session: "s-1", labels: {} })],
+      fresh: () => running,
+      signedIn: () => false,
+      end: () => {
+        if (running) ended += 1;
+      },
+    });
+    sweep.run();
+    running = true;
+    sweep.run();
+    assert.equal(ended, 1, "the sessions the daemon brought back kept running");
   }
 });
 

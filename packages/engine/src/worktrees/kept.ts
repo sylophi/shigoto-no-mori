@@ -3,7 +3,10 @@
 // id, or forgotten. What clones proved about the old id goes either way.
 // The rows go in one transaction, which a caller may widen to commit
 // them with its own; the capture's ref follows, since git isn't in the
-// transaction, and a later call finishes it.
+// transaction, and a later call finishes it. A re-key whose checkout
+// moved records the move in `wt_moves` in the same transaction, which
+// is where anything kept outside the store under the old id (the host's
+// mirrors) learns of it, whoever re-keyed it (WtFolder.movedIds).
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -15,6 +18,9 @@ import type { RegisteredProject } from "../Registry.ts";
 import * as WorktreeData from "../WorktreeData.ts";
 import { CaptureNotCarried } from "./documents.ts";
 
+// Where a re-keyed checkout was and is now.
+export type Moved = { readonly fromPath: string; readonly toPath: string };
+
 export const makeKept = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const git = yield* Git.Git;
@@ -22,13 +28,48 @@ export const makeKept = Effect.gen(function* () {
   const data = yield* WorktreeData.WorktreeData;
   const cloneCheckout = yield* CloneCheckout.CloneCheckout;
 
-  const rekeyRows = (project: RegisteredProject, from: string, to: string) =>
+  // A recorded move from a path is the folder that last left it: a
+  // folder made at a path, or moved there, ends the record of whatever
+  // left it before (`claimed`). An earlier move into the path, of the
+  // folder that left it, is pointed past it first, so its chain still
+  // ends where that folder is.
+  const claimed = (paths: ReadonlyArray<string>) =>
+    Effect.andThen(
+      sql`UPDATE wt_moves AS r SET to_path = (
+          SELECT c.to_path FROM wt_moves AS c
+          WHERE c.from_path = r.to_path AND c.moved = 1 AND c.rowid > r.rowid)
+        WHERE r.moved = 1 AND r.to_path IN ${sql.in(paths)} AND EXISTS (
+          SELECT 1 FROM wt_moves AS c
+          WHERE c.from_path = r.to_path AND c.moved = 1 AND c.rowid > r.rowid)`,
+      sql`DELETE FROM wt_moves WHERE moved = 1 AND from_path IN ${sql.in(paths)}`,
+    );
+
+  // Written anew, so the rowid orders the moves (WtFolder's placed).
+  const recordMove = (project: RegisteredProject, moved: Moved) =>
+    Effect.all([
+      claimed([moved.fromPath, moved.toPath]),
+      sql`DELETE FROM wt_moves WHERE from_path = ${moved.fromPath}`,
+      sql`INSERT INTO wt_moves ${sql.insert({
+        from_path: moved.fromPath,
+        to_path: moved.toPath,
+        project_id: project.id,
+        moved: 1,
+      })}`,
+    ]);
+
+  const rekeyRows = (
+    project: RegisteredProject,
+    from: string,
+    to: string,
+    moved?: Moved,
+  ) =>
     sql
       .withTransaction(
         Effect.all([
           registry.moveWorktree(from, to),
           data.move(project.id, from, to),
           cloneCheckout.forget(from),
+          moved === undefined ? Effect.void : recordMove(project, moved),
         ]),
       )
       .pipe(Effect.orDie);
@@ -76,13 +117,18 @@ export const makeKept = Effect.gen(function* () {
       ),
     );
 
-  const forgetRows = (project: RegisteredProject, worktreeId: string) =>
+  const forgetRows = (
+    project: RegisteredProject,
+    worktreeId: string,
+    madeAt: ReadonlyArray<string> = [],
+  ) =>
     sql
       .withTransaction(
         Effect.all([
           registry.forgetWorktree(worktreeId),
           data.forget(project.id, worktreeId),
           cloneCheckout.forget(worktreeId),
+          madeAt.length === 0 ? Effect.void : claimed(madeAt),
         ]),
       )
       .pipe(Effect.orDie);
@@ -119,10 +165,11 @@ export const makeKept = Effect.gen(function* () {
       options: {
         readonly expect?: string | null;
         readonly back?: boolean;
+        readonly moved?: Moved;
       } = {},
     ) =>
       Effect.andThen(
-        rekeyRows(project, from, to),
+        rekeyRows(project, from, to, options.moved),
         Effect.flatMap(
           rekeyCapture(project, from, to, options.expect),
           (carried) =>
@@ -134,9 +181,15 @@ export const makeKept = Effect.gen(function* () {
                 ),
         ),
       ),
-    forget: (project: RegisteredProject, worktreeId: string) =>
+    // `madeAt`, for a checkout just made there (its path, as asked and as
+    // git spells it), ends the record of the folder that left it.
+    forget: (
+      project: RegisteredProject,
+      worktreeId: string,
+      madeAt: ReadonlyArray<string> = [],
+    ) =>
       Effect.andThen(
-        forgetRows(project, worktreeId),
+        forgetRows(project, worktreeId, madeAt),
         git.deleteRef(project.path, dirtyRef(worktreeId)).pipe(Effect.ignore),
       ),
   };

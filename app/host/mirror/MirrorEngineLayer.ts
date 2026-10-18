@@ -6,6 +6,8 @@
 import { errorMessageOf, isEntityGoneError } from "@shigomori/contracts/errors";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
+import * as StoreChanges from "@shigomori/engine/StoreChanges";
+import * as WtFolder from "@shigomori/engine/WtFolder";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -14,11 +16,16 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { errorWordsOf } from "@host/lib/errorWords";
+import { type PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import * as HostAccount from "@host/lib/HostAccount";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { makeGitFollower } from "./gitFollow";
 import { createMirrorHistory } from "./history";
-import { loadMirrorInvites, reconcileMirrorInvites } from "./invites";
+import {
+  loadMirrorInvites,
+  moveMirrorInvitesOf,
+  reconcileMirrorInvites,
+} from "./invites";
 import * as MirrorDaemon from "./MirrorDaemon";
 import {
   type MirrorCreateInput,
@@ -41,6 +48,7 @@ import { endMirrorIfCopyGone } from "./sessions";
 const LEAVE_ACCOUNT_LIMIT = "5 seconds";
 
 type Bookkeeping = Exclude<
+  | PeerReach
   | Effect.Services<typeof settleMirrorBookkeeping>
   | Effect.Services<ReturnType<typeof endMirrorsWithPeers>>
   | Effect.Services<ReturnType<typeof endMirrorIfCopyGone>>,
@@ -97,8 +105,40 @@ const make = (options: {
       onChange: options.onChange,
     });
 
+    // Every re-key the engine records (WtFolder.movedIds), this process's
+    // or another's (the terminal's adopt or relocate), carries the thread
+    // and the invitation kept under the old id: those made while the app
+    // was closed as it comes up, and each one after as the store records
+    // it. The sessions follow at the daemon's next snapshot, which finds
+    // their root gone and the move recorded (settleMirrorBookkeeping).
+    const folder = yield* WtFolder.WtFolder;
+    const carried = new Map<string, string>();
+    const carryRekeys = Effect.gen(function* () {
+      for (const [from, to] of yield* folder.movedIds) {
+        if (carried.get(from) === to) continue;
+        carried.set(from, to);
+        history.move(from, to);
+        yield* moveMirrorInvitesOf(from, to);
+      }
+    }).pipe(
+      Effect.catchCause((cause) =>
+        Effect.logWarning("[mirror] a worktree's re-key went unread", cause),
+      ),
+    );
+    const stored = yield* (yield* StoreChanges.StoreChanges).subscribe;
+    yield* carryRekeys.pipe(
+      Effect.andThen(
+        stored.pipe(
+          Stream.filter((tables) => tables.has("wt_moves")),
+          Stream.runForEach(() => carryRekeys),
+        ),
+      ),
+      Effect.forkScoped,
+    );
+
     const follower = yield* makeGitFollower({
       sessions: mirrorSessions(daemon),
+      fresh: daemon.fresh,
       followDescription: true,
       // The states both sides last agreed on, in the store so a restart
       // resumes the follow rule rather than falling back to ancestry.
@@ -121,10 +161,23 @@ const make = (options: {
       },
     });
 
-    // The daemon's sessions that are mirrors, into their threads.
-    const observeHistory = Effect.map(mirrorSessions(daemon), (sessions) =>
-      history.observe(sessions, (session) => follower.statusOf(session)),
-    );
+    // The daemon's sessions that are mirrors, into their threads, off its
+    // own snapshots: the one that stands through a restart moves nothing,
+    // and the sessions the next run brings back are seen afresh.
+    let restarted = false;
+    const observeHistory = Effect.gen(function* () {
+      if (!(yield* daemon.fresh)) {
+        restarted = true;
+        return;
+      }
+      if (restarted) {
+        restarted = false;
+        history.restarted();
+      }
+      history.observe(yield* mirrorSessions(daemon), (session) =>
+        follower.statusOf(session),
+      );
+    });
 
     const fromDaemon = Effect.mapError(
       (error: MirrorDaemon.MirrorDaemonError) =>
@@ -200,12 +253,14 @@ const make = (options: {
 
     // A transfer session no pull here is waiting on (registry.ts
     // isOrphanedTransfer) is ended on sight, since no mirror surface
-    // would ever show it. Each is asked once, and the engine drops it
-    // from the next snapshot.
+    // would ever show it, off the running daemon's own snapshot. Each is
+    // asked once while its end is under way or done, and the engine drops
+    // it from the next snapshot; one whose end failed is asked again.
     const reaped = new Set<string>();
-    const reapOrphanedTransfers = Effect.flatMap(daemon.sessions, (sessions) =>
-      Effect.forEach(
-        sessions.filter(
+    const reapOrphanedTransfers = Effect.gen(function* () {
+      if (!(yield* daemon.fresh)) return;
+      yield* Effect.forEach(
+        (yield* daemon.sessions).filter(
           (session) =>
             isOrphanedTransfer(session) && !reaped.has(session.session),
         ),
@@ -213,20 +268,25 @@ const make = (options: {
           reaped.add(session.session);
           return terminate(session.session).pipe(
             Effect.catch((error) =>
-              Effect.logWarning(
-                `[mirror] could not end an orphaned transfer session: ${error.message}`,
+              Effect.sync(() => reaped.delete(session.session)).pipe(
+                Effect.andThen(
+                  Effect.logWarning(
+                    `[mirror] could not end an orphaned transfer session: ${error.message}`,
+                  ),
+                ),
               ),
             ),
           );
         },
         { discard: true },
-      ),
-    );
+      );
+    });
 
     const engine = MirrorEngine.of({
       status: daemon.status,
       failure: daemon.failure,
       sessions: daemon.sessions,
+      fresh: daemon.fresh,
       create,
       recreate,
       terminate,
@@ -243,6 +303,19 @@ const make = (options: {
       history: (localWorktreeId) => history.eventsFor(localWorktreeId),
       noteEvent: (localWorktreeId, kind, detail) =>
         history.note(localWorktreeId, kind, detail),
+      releaseCopy: (raw) =>
+        Effect.sync(() => {
+          runFork(
+            withEngine(
+              Effect.ignore(
+                peerMirrorFor(raw.deviceId).release({
+                  projectId: raw.projectId,
+                  worktreeId: raw.worktreeId,
+                }),
+              ),
+            ),
+          );
+        }),
       forgetHistory: (localWorktreeId) => history.forget(localWorktreeId),
       moveHistory: (from, to) => history.move(from, to),
       localProjectChanged: (projectId) =>
@@ -307,6 +380,7 @@ const unavailable = (cause: Cause.Cause<unknown>) => {
     status: Effect.succeed("unavailable"),
     failure: Effect.succeed(undefined),
     sessions: Effect.succeed([]),
+    fresh: Effect.succeed(false),
     create: () => Effect.fail(refused),
     recreate: () => Effect.fail(refused),
     terminate: () => Effect.fail(refused),
@@ -316,6 +390,7 @@ const unavailable = (cause: Cause.Cause<unknown>) => {
     refreshGit: () => Effect.succeed(undefined),
     history: () => [],
     noteEvent: () => {},
+    releaseCopy: () => Effect.void,
     forgetHistory: () => {},
     moveHistory: () => {},
     localProjectChanged: () => {},
