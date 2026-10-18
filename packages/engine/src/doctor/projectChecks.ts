@@ -28,7 +28,8 @@ import * as Registry from "../Registry.ts";
 import type { ListedProject, RegisteredProject } from "../Registry.ts";
 import { isStagingName } from "../worktreeLayout.ts";
 import * as Worktrees from "../Worktrees.ts";
-import { scriptOf, type WorktreeIdentity } from "../Worktrees.ts";
+import { scriptOf } from "@shigomori/contracts/lifecycleScripts";
+import type { WorktreeIdentity } from "../Worktrees.ts";
 import * as WtFolder from "../WtFolder.ts";
 import { PORT_POOL_CONFIG, parsePortPoolConfig } from "../ports.ts";
 import {

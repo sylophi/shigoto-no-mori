@@ -13,7 +13,6 @@ import type { PortForwardSummary } from "@shigomori/contracts/modules/portForwar
 import type { RunningScript, Worktree } from "@shigomori/contracts/schemas";
 import { RunnerScope } from "@/components/worktreeDetail/mirror/MirrorAction";
 import { MirrorManageDialog } from "@/components/worktreeDetail/mirror/MirrorManageDialog";
-import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 import { useMirrorView } from "@/components/worktreeDetail/mirror/useMirrorView";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import type { LiveMirror } from "@/hooks/live/useLiveActivity";
@@ -121,11 +120,7 @@ function SessionItem({
     },
     session,
   );
-  const view = describeMirror(session, {
-    runnerAway: runnerApi === undefined ? managed.names.runner : undefined,
-    engine,
-    engineFailure,
-  });
+  const { view } = managed;
   return (
     <MirrorSessionItemView
       peer={<DeviceName deviceId={session.deviceId} />}

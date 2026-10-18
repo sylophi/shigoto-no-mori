@@ -26,3 +26,23 @@ export function pullBranchCollision(
     ? `${branch} already exists ${where}. Delete that branch first, or open it and pull normally.`
     : `${branch} is already checked out at ${holderPath} ${where}. Stop or delete that worktree first.`;
 }
+
+// The branch whose place in git's ref tree a new one would take: refs
+// are a directory tree, so mirror/main is refused by a branch named
+// mirror, and a branch named mirror by mirror/main.
+export function branchInTheWay(
+  branch: string,
+  local: readonly string[],
+): string | undefined {
+  return local.find(
+    (name) => name.startsWith(`${branch}/`) || branch.startsWith(`${name}/`),
+  );
+}
+
+export function pullBranchInTheWay(
+  branch: string,
+  inTheWay: string,
+  where = "here",
+): string {
+  return `${branch} cannot be created ${where}: a branch named ${inTheWay} is in the way (git allows one of the two). Rename that branch first.`;
+}

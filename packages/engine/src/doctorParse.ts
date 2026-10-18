@@ -2,7 +2,7 @@
 // and port-pool print, the words a finding counts with, and just enough
 // semver to tell an update file this build already is.
 import * as Option from "effect/Option";
-import { shellQuote } from "./Lifecycle.ts";
+import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import { parseLstart } from "./processes.ts";
 
 export const plural = (n: number) => (n === 1 ? "" : "s");

@@ -11,7 +11,7 @@
 //     with the account,
 //   - this machine's worktree lifecycle follows the create phases and a
 //     removal under way, and a peer's removal is dropped as a new
-//     session to it lands,
+//     session to it lands, its close still forgetting the worktree,
 //   - the git fetches read per device, and a peer's start over on a new
 //     session,
 //   - the hub's status reaches its atom, a push beating the seed, and
@@ -41,7 +41,7 @@ import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { readsRunsOf } from "@/hooks/live/useLiveActivity";
 import { activityOf, scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { worktreeLifecycleAtom } from "@/hooks/worktrees/useWorktreeLifecycle";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeys, queryKeysFor } from "@/lib/queryKeys";
 import { remoteDevicesAtom } from "@/lib/remote/devices";
 import {
   hubStatusAtom,
@@ -278,7 +278,7 @@ it("script runs: a peer's come out of the hub hop and go with the account", asyn
 });
 
 it("worktree lifecycle: create phases and removals, per device", async () => {
-  const { registry, push, peerPush } = page();
+  const { registry, queryClient, push, peerPush } = page();
   const unmountLocal = registry.mount(worktreeLifecycleAtom(LOCAL));
   const unmountPeer = registry.mount(worktreeLifecycleAtom(PEER));
   const local = () => valueOf(registry.get(worktreeLifecycleAtom(LOCAL)));
@@ -321,6 +321,20 @@ it("worktree lifecycle: create phases and removals, per device", async () => {
   assert.equal(local().removing.has("w9"), false, "kept per device");
   registry.update(peerSessionAtom(PEER), (count) => count + 1);
   assert.equal(peer().removing.has("w9"), false);
+
+  // Its close, landing on the new session that never heard the start,
+  // still forgets what the window kept of the worktree.
+  const kept = queryKeysFor(PEER).worktreeData("p1", "w9");
+  queryClient.setQueryData(kept, { title: "kept" });
+  await peerPush(worktreesContract, "removal", {
+    projectId: "p1",
+    worktreeId: "w9",
+    state: "removed",
+  });
+  await waitFor(
+    () => queryClient.getQueryData(kept) === undefined,
+    "the removed worktree's reads forgotten",
+  );
 
   unmountLocal();
   unmountPeer();

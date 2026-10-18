@@ -18,7 +18,7 @@ import * as Lifecycle from "./Lifecycle.ts";
 import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
-import { shellQuote } from "./Lifecycle.ts";
+import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
 

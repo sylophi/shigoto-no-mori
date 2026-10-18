@@ -17,7 +17,9 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import { errorWordsOf } from "@host/lib/errorWords";
 import {
+  branchInTheWay,
   pullBranchCollision,
+  pullBranchInTheWay,
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { type Project } from "@shigomori/contracts/schemas";
@@ -96,16 +98,11 @@ const refuseLandingCollision = Effect.fnUntraced(function* (
       reason: pullBranchCollision(branch, holder?.path),
     });
   }
-  // Git keeps refs in a directory tree, so a branch can sit neither
-  // under an existing one nor above it: mirror/main is refused by a
-  // branch named mirror, and a branch named mirror by mirror/main.
   // Refused here, before the transfer, rather than by the create.
-  const inTheWay = local.find(
-    (name) => name.startsWith(`${branch}/`) || branch.startsWith(`${name}/`),
-  );
+  const inTheWay = branchInTheWay(branch, local);
   if (inTheWay !== undefined) {
     return yield* new LandingCollisionError({
-      reason: `${branch} cannot be created here: a branch named ${inTheWay} is in the way (git allows one of the two). Rename that branch first.`,
+      reason: pullBranchInTheWay(branch, inTheWay),
     });
   }
   // The copy keeps the source's folder name, and the engine's create
