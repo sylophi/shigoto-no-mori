@@ -69,7 +69,8 @@ interface BuildPaletteEntriesArgs {
 // without its shelves: shelved, merged and primary checkouts all
 // included, since a palette is for finding things, not triage. Where
 // you were last leads (this window's visits), and the rest follow by
-// their own last activity, merged and shelved ones after all the rest.
+// their own last activity, the ones on an inbox shelf (merged, shelved,
+// agent working) after all the rest.
 // Worktrees under a hidden prefix wait for a query, the way the
 // sidebar keeps them behind a fold.
 export function buildPaletteEntries({
@@ -168,7 +169,7 @@ export function initialPaletteKey(
 // project (alone or ahead of the branch, "sm feat"), the device, so
 // "thinkpad" narrows to that machine's work, the project's owner, so
 // an org's name narrows to its work, or the pull request, by
-// "#148" or its title. Merged and shelved worktrees score at half, so
+// "#148" or its title. Worktrees on a shelf score at half, so
 // they come up for a query that names them and sink under one that
 // matches live work as well. Ties keep the recency order, since the
 // sort is stable. No query lists all but the hidden.
@@ -217,6 +218,13 @@ function ownerNames(project: Project): string[] {
   return owner ? [owner.name, `${owner.name}/${owner.repo}`] : [];
 }
 
+export interface ProjectGroupEntries {
+  project: Project;
+  device: SidebarDeviceBadge | undefined;
+  trees: PaletteEntry[];
+  devices: Set<string | undefined>;
+}
+
 // Every project on every device as its sidebar group, the ones with no
 // worktrees too, and not one whose folder is gone, which the sidebar
 // won't open either: by group key, the checkout the group goes by, and
@@ -224,19 +232,12 @@ function ownerNames(project: Project): string[] {
 // a group names its local checkout. A repo only peers hold is named by
 // a reachable one, where its pages open. The palette's projects and
 // the home page's tiles (home/gridModel.ts) are these.
-export interface ProjectGroup {
-  project: Project;
-  device: SidebarDeviceBadge | undefined;
-  trees: PaletteEntry[];
-  devices: Set<string | undefined>;
-}
-
 export function projectGroups(
   entries: readonly PaletteEntry[],
   projects: readonly Project[],
   remote: readonly RemoteForestItem[],
-): Map<string, ProjectGroup> {
-  const groups = new Map<string, ProjectGroup>();
+): Map<string, ProjectGroupEntries> {
+  const groups = new Map<string, ProjectGroupEntries>();
   const join = (project: Project, device: SidebarDeviceBadge | undefined) => {
     const key = projectGroupKey(project, device?.deviceId);
     const group = groups.get(key);

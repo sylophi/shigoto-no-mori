@@ -12,7 +12,7 @@ import {
   buildPaletteEntries,
   projectGroups,
   projectLead,
-  type ProjectGroup,
+  type ProjectGroupEntries,
 } from "../palette/buildPaletteEntries.ts";
 import type { ProjectGroupOrder } from "../sidebar/buildSidebarRows.ts";
 import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
@@ -53,7 +53,7 @@ export function buildGrid({ visits, ...forest }: GridInput): {
 
 // Each project group's work, by the group key its tile goes by.
 function workByGroup(
-  groups: ReadonlyMap<string, ProjectGroup>,
+  groups: ReadonlyMap<string, ProjectGroupEntries>,
 ): Map<string, GroupWork> {
   return new Map(
     [...groups].map(([key, { project, device, trees }]) => {
