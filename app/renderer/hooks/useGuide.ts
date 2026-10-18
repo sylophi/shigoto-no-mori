@@ -17,6 +17,9 @@ import { clientAtoms, shellState } from "@/lib/runtime/atoms";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 import { useView } from "@/lib/runtime/viewHooks";
 
+// One the shell refused in its own words is not asked again this window
+// (redialing ends it), as the shell answering at all is the window's
+// premise.
 const guideAtom = Atom.keepAlive(
   clientAtoms.atom(
     shellState(guideContract, {

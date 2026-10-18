@@ -113,7 +113,7 @@ const REDIAL = Schedule.exponential("250 millis", 2).pipe(
 );
 
 // How many asks a peer's view that never showed a value makes with no
-// session to the peer before it gives up (hostViewAtom): about eight
+// session to the peer before it gives up (redialing): about eight
 // seconds on REDIAL's ladder (250 ms doubling to 2 s), room for a session
 // still dialing at boot, as v2's three retries a second, two and four
 // apart gave.

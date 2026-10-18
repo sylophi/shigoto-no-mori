@@ -11,6 +11,9 @@ import { useHasLocalHost } from "@/lib/localHost";
 import { clientAtoms, shellState } from "@/lib/runtime/atoms";
 import { useView } from "@/lib/runtime/viewHooks";
 
+// One the shell refused in its own words is not asked again this window
+// (redialing ends it), as the shell answering at all is the window's
+// premise.
 const migrationAtom = Atom.keepAlive(
   clientAtoms.atom(
     shellState(migrationContract, {

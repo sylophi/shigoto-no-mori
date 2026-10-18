@@ -32,7 +32,11 @@ import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 import { callOf } from "@shigomori/contracts/contract";
 import * as Atom from "effect/reactivity/Atom";
 import { clientAtoms, shellState } from "@/lib/runtime/atoms";
-import { useView, useViewErrorToast } from "@/lib/runtime/viewHooks";
+import {
+  useRegistry,
+  useView,
+  useViewErrorToast,
+} from "@/lib/runtime/viewHooks";
 
 // Account status: configured/signedIn plus this device's stored name.
 // staleTime Infinity: `configured` is launch env and cannot change
@@ -240,12 +244,16 @@ export function useAcceptsCommands() {
   return { data: state.data, isError: state.error !== null };
 }
 
-// An imperative write. It does not update itself: main emits
-// commandAccessChanged, which the switch's atom follows.
+// An imperative write: main emits commandAccessChanged, which the
+// switch's atom follows.
 export function useSetAcceptsCommands() {
   const api = useApi();
+  const registry = useRegistry();
   return useMutation<void, Error, boolean>({
     mutationFn: (enabled) => api.run(api.account.setAcceptsCommands(enabled)),
+    // The switch's read asked again, which a failed one needs (its
+    // stream ended, so the flip's push is not heard).
+    onSettled: () => registry.refresh(acceptsCommandsAtom),
     meta: { errorTitle: "Couldn't change command access" },
   });
 }
