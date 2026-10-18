@@ -406,8 +406,8 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
 // through.
 export const ClientConfigSchema = Schema.Struct({
   theme: Schema.optional(ThemeSchema),
-  // Absent = on. Mirrored to localStorage so startup paints without a
-  // flash, as are the palettes.
+  // Mirrored to localStorage so startup paints without a flash, as are
+  // the palettes.
   doubutsu: Schema.optional(Schema.Boolean),
   lightTheme: Schema.optional(LightThemeSchema),
   darkTheme: Schema.optional(DarkThemeSchema),
@@ -417,22 +417,16 @@ export const ClientConfigSchema = Schema.Struct({
   themeRotatedAt: Schema.optional(Schema.Finite),
   // Desktop only: it needs villager data in this device's data dir.
   villageLife: Schema.optional(Schema.Boolean),
-  // Absent = on.
   villageNews: Schema.optional(Schema.Boolean),
   markTerrierProjects: Schema.optional(Schema.Boolean),
-  // Absent = on.
   showDeviceBadges: Schema.optional(Schema.Boolean),
   allowAgentWorking: Schema.optional(Schema.Boolean),
-  // Absent = on.
   markAgentsWaiting: Schema.optional(Schema.Boolean),
-  // Waiting: absent = on. Done: absent = off.
   notifyAgentWaiting: Schema.optional(Schema.Boolean),
   notifyAgentDone: Schema.optional(Schema.Boolean),
   inlineWorktrees: Schema.optional(Schema.Boolean),
-  // Absent = on.
   pauseAnimationsOnBattery: Schema.optional(Schema.Boolean),
-  // The login item and the relaunch after a crash. Read through
-  // keepReachableOn (absent = on).
+  // The login item and the relaunch after a crash.
   keepReachable: Schema.optional(Schema.Boolean),
   // Local port by `${deviceId}:${remotePort}`, a forward's identity. Only
   // ports that differ from the remote one are stored.
@@ -446,7 +440,6 @@ export const ClientConfigSchema = Schema.Struct({
   ),
   sidebarView: Schema.optional(SidebarViewSchema),
   projectsSort: Schema.optional(ProjectSortModeSchema),
-  // Absent = on.
   groupProjectsByOwner: Schema.optional(Schema.Boolean),
   // By group key (projectGroupKey).
   collapsedProjects: Schema.optional(Schema.Array(Schema.String)),
@@ -474,11 +467,38 @@ export function withoutPeerState(config: ClientConfig): ClientConfig {
   return rest;
 }
 
-export function keepReachableOn(
-  config: Pick<ClientConfig, "keepReachable">,
-): boolean {
-  return config.keepReachable !== false;
-}
+// The value of an absent client key that has a default. A key saved
+// equal to its default is stored as absent (`storedClientSetting`).
+const CLIENT_CONFIG_DEFAULTS = {
+  theme: "system",
+  doubutsu: true,
+  villageLife: false,
+  villageNews: true,
+  markTerrierProjects: false,
+  showDeviceBadges: true,
+  allowAgentWorking: false,
+  markAgentsWaiting: true,
+  notifyAgentWaiting: true,
+  notifyAgentDone: false,
+  inlineWorktrees: false,
+  pauseAnimationsOnBattery: true,
+  keepReachable: true,
+  groupProjectsByOwner: true,
+} satisfies {
+  readonly [K in keyof ClientConfig]?: NonNullable<ClientConfig[K]>;
+};
+type ClientSettingKey = keyof typeof CLIENT_CONFIG_DEFAULTS;
+
+export const clientSetting = <K extends ClientSettingKey>(
+  config: Pick<ClientConfig, K>,
+  key: K,
+): NonNullable<ClientConfig[K]> => config[key] ?? CLIENT_CONFIG_DEFAULTS[key];
+
+export const storedClientSetting = <K extends ClientSettingKey>(
+  key: K,
+  value: NonNullable<ClientConfig[K]>,
+): ClientConfig[K] =>
+  value === CLIENT_CONFIG_DEFAULTS[key] ? undefined : value;
 
 export const StoredClientConfigSchema = loose(ClientConfigSchema);
 

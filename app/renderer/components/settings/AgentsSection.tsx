@@ -4,15 +4,17 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
 import { AgentsSectionView } from "@shigomori/ui/views/settings/AgentsSectionView.tsx";
+import { PeerReadError, peerStaleTime } from "./peerReads";
 
 // The agent hooks section (AgentsSectionView), installed and removed
 // through the scoped device right away.
 export function AgentsSection() {
   const { api, keys, remote } = useHostScope();
   const queryClient = useQueryClient();
-  const { data: harnesses } = useQuery<readonly AgentHarnessStatus[]>({
+  const { data: harnesses, error } = useQuery<readonly AgentHarnessStatus[]>({
     queryKey: keys.agents(),
     queryFn: ({ signal }) => api.run(api.agents.status(), { signal }),
+    staleTime: peerStaleTime(remote),
     meta: gatedHostReadMeta(remote, "Couldn't check the agent hooks"),
   });
   const applyStatus = (next: readonly AgentHarnessStatus[]) => {
@@ -26,7 +28,15 @@ export function AgentsSection() {
   });
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
-  if (!harnesses) return null;
+  if (!harnesses) {
+    return (
+      <PeerReadError
+        error={error}
+        what="the agent hooks"
+        heading="Coding agents"
+      />
+    );
+  }
 
   return (
     <AgentsSectionView

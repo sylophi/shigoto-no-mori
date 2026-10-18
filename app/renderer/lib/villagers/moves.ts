@@ -20,10 +20,10 @@
 // that tells of a worktree coming or going itself (a transplant, a
 // mirror) quiets its moves (quietVillagerMoves), so one action is one
 // piece of news.
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import type { QueryClient } from "@tanstack/react-query";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { Worktree } from "@shigomori/contracts/schemas";
-import { villageNewsEnabled } from "@shigomori/ui/lib/villageLife.ts";
 import { toastVillagerMove } from "@/components/villagers/toasts";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
 import { clientConfigOnce } from "@/hooks/config/useClientConfig";
@@ -168,7 +168,7 @@ async function tell({
   // Village news off, the moves go untold. The album still counts
   // them (visitLog.ts).
   const config = await clientConfigOnce(registry);
-  if (!config || !villageNewsEnabled(config)) return;
+  if (!config || !clientSetting(config, "villageNews")) return;
   await Promise.all(
     batch.map(async ([deviceId, moves]) => {
       const { movedIn, movedOut } = settled(moves);

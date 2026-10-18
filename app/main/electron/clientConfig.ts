@@ -13,6 +13,7 @@
 // through FileSystem.
 import { join } from "node:path";
 import { app, nativeTheme } from "electron";
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import type * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -162,12 +163,11 @@ function writeClientConfig(config: ClientConfig): Promise<void> {
   );
 }
 
-// The one place nativeTheme.themeSource is set, and the single home of
-// the absent-means-"system" default. Boot and the window module's
+// The one place nativeTheme.themeSource is set. Boot and the window module's
 // previewTheme both land here. A clientConfig patch deliberately does
 // not: the renderer's preview effect has always applied the staged
 // theme by the time a save lands, so an apply-on-write could only ever
 // override the screen with a stale value.
 export function applyThemeSource(theme: Theme | undefined): void {
-  nativeTheme.themeSource = theme ?? "system";
+  nativeTheme.themeSource = clientSetting({ theme }, "theme");
 }

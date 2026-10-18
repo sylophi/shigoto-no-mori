@@ -1,4 +1,4 @@
-import { keepReachableOn } from "@shigomori/contracts/schemas/config";
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
 import type { Handlers, ViewHandlers } from "@shigomori/contracts/types";
 import {
@@ -18,7 +18,10 @@ export const clientConfigHandlers: Handlers<typeof clientConfigContract> = {
     // keepReachable rides this store but drives the OS login item, so
     // only a patch that changed it reconciles: unrelated ones (theme,
     // palettes) skip a redundant setLoginItemSettings syscall.
-    if (keepReachableOn(after) !== keepReachableOn(before)) {
+    if (
+      clientSetting(after, "keepReachable") !==
+      clientSetting(before, "keepReachable")
+    ) {
       reconcileLaunchAtLogin();
     }
   },
