@@ -10,7 +10,7 @@
 // sentinel followed by a device id, so a second device's data can
 // enter the cache without colliding and scope stays decidable from the
 // tuple alone. Client-scoped keys belong to this app instance alone
-// (clientConfig, account, portForwards) and never get either.
+// (the account, the port forwards, the releases) and never get either.
 import { refreshQueries } from "@/lib/askAgain";
 import type { QueryClient } from "@tanstack/react-query";
 
@@ -301,22 +301,12 @@ export function queryKeysFor(deviceId: string): QueryKeyRegistry {
 //   invalidation ignores staleTime. Focus, mount and the removal flow
 //   still cover them.
 // - runtime: static per-host facts. No git-state change touches them.
-// - portForwards: the forward set is this install's engine state,
-//   driven by its own changed broadcast, and no host git-state ping
-//   moves it.
-// - clientConfig for scope: the store lives in this app instance's
-//   userData, so no host's state change can touch it. Including it
-//   would defeat the query's staleTime Infinity on every ping.
-// - account for the same two reasons: credential state lives outside
-//   any forest and moves only on account:changed, and the status
-//   query's staleTime Infinity would be defeated on every ping.
 // - fs for loop-safety as well as relevance: a git-state ping says
 //   nothing about a directory listing, and because fs reads are tagged
 //   mutating (gated on the command-access switch), a ping-driven fs refetch on
 //   a remote scope would itself trigger the host's resolved-mutation
 //   ping, refetching forever.
 const externalChangeExempt = new Set([
-  "account",
   // CLI links and rc hooks are not forest state, so a git-state ping
   // never re-asks.
   "cli",
@@ -324,7 +314,6 @@ const externalChangeExempt = new Set([
   // The agents' hooks files, likewise: and an agent's turn changes
   // forest state on every prompt.
   "agents",
-  "clientConfig",
   // A full doctor run spawns git and gh on the host: it re-runs on
   // demand, never on a ping.
   "doctor",
@@ -332,8 +321,6 @@ const externalChangeExempt = new Set([
   "githubCli",
   // Re-read on its own beat while on screen.
   "mirrorHistory",
-  // Driven by its own changed broadcast.
-  "portForwards",
   "runtime",
   "worktreeHygiene",
   "worktreeDiskUsage",
@@ -357,8 +344,8 @@ function hostKeyProjectId(queryKey: readonly unknown[]): unknown {
 // invalidate only when bound to THIS device id: a remote device's
 // queries cache under its own id in the same host families, so a
 // device-blind sweep would invalidate a peer's worktrees on a purely
-// local change (and vice versa). Client-scoped keys carry no id and
-// keep the domain-exempt behavior whichever device pinged. The
+// local change (and vice versa). Client-scoped keys are this app
+// instance's, which no device's state moving touches. The
 // exemptions above are the whole point of this entry: "state on that
 // device moved" says nothing about GitHub, hygiene or forwards, so
 // those sit the ping out. See invalidateDeviceSession for
@@ -369,8 +356,7 @@ export function invalidateHostDevice(
 ): void {
   refreshQueries(queryClient, {
     predicate: (query) => {
-      const keyDeviceId = hostKeyDeviceId(query.queryKey);
-      if (keyDeviceId !== undefined && keyDeviceId !== deviceId) return false;
+      if (hostKeyDeviceId(query.queryKey) !== deviceId) return false;
       return externalChangeAllows(query.queryKey);
     },
   });

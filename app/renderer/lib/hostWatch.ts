@@ -1,13 +1,13 @@
-// Push-driven cache upkeep of the requests (React Query) for ONE device,
-// the same for this machine and every peer: the host's broadcasts,
-// received over whatever wire
-// the device's api rides (this machine's loopback link, a peer's
-// device link through the hub bridge's peerPush fan-out), land in
-// that device's cache the same way. The boot calls it for this machine
+// Push-driven upkeep of the requests (React Query) for ONE device, the
+// same for this machine and every peer: the host's broadcasts, received
+// over whatever wire the device's api rides, read again what they move
+// in that device's cache. The boot calls it for this machine
 // (renderer/boot.tsx) and remoteDeviceSync for each peer the moment it
-// builds the peer's api, so the always-mounted sidebar rows for any
-// device refresh the moment its state moves, whether or not one of its
-// pages is open. Nothing else refetches an always-mounted query.
+// builds the peer's api. A bridge kept while these families are
+// requests (decision 20): a branch list, a project's settings, a
+// worktree's data, the launch tools, a commit's diff, an open page's
+// pull request, none of which the host serves as a view. A family the
+// host comes to serve as a view leaves it.
 //
 // No reachability gate on purpose: a push from a device IS that
 // device's session speaking, and invalidating a device nothing caches
@@ -54,14 +54,15 @@ export function watchHost(
       invalidateHostDevice(queryClient, deviceId);
     }),
     // One project's git state moved (a commit or checkout by an agent or
-    // a terminal, seen by the host's git-directory watcher): refetch
-    // that project's rows only.
+    // a terminal, seen by the host's git-directory watcher): read that
+    // project's requests again only.
     listen(pushes(gitContract, "projectChanged"), ({ projectId }) => {
       invalidateHostProject(queryClient, deviceId, projectId);
     }),
     // A background fetch landed one project's refs: everything derived
     // from them, and the open worktree pages' PRs (a merge or a push is
-    // what most often moves one). Scoped to that project: the sweep
+    // what most often moves one, and the project's PR map, a view,
+    // carries no mergeability). Scoped to that project: the sweep
     // broadcasts per project, so an unscoped invalidation would cost one
     // `gh pr view` per other project every sweep, each cancelling the
     // last.

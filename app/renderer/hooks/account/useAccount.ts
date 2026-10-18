@@ -187,10 +187,9 @@ export function useAccountSignOut() {
   });
 }
 
-// Removes another device from the account on the device hub. Like the
-// command-access write it does not invalidate itself: main broadcasts
-// account:changed after the revoke, and the watcher above turns it
-// into the invalidation. Self-revoke is not
+// Removes another device from the account on the device hub. It does
+// not invalidate itself: main broadcasts account:changed after the
+// revoke, and the watcher above turns it into the invalidation. Self-revoke is not
 // offered by the account page -- this device signs out instead, so the
 // Clerk session ends first and ClerkAccountSync cannot re-enroll it
 // back onto the account.
