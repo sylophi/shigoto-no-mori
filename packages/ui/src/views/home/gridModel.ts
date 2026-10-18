@@ -10,13 +10,11 @@ import {
 } from "@shigomori/contracts/schemas";
 import {
   buildPaletteEntries,
+  projectGroups,
   projectLead,
+  type ProjectGroupEntries,
 } from "../palette/buildPaletteEntries.ts";
-import type { PaletteEntry } from "../palette/paletteEntries.ts";
-import {
-  projectGroupKey,
-  type ProjectGroupOrder,
-} from "../sidebar/buildSidebarRows.ts";
+import type { ProjectGroupOrder } from "../sidebar/buildSidebarRows.ts";
 import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
 import { projectListSections } from "../sidebar/projectListSections.ts";
 import type { ProjectSection } from "../sidebar/sidebarRow.ts";
@@ -49,22 +47,16 @@ export function buildGrid({ visits, ...forest }: GridInput): {
   const { entries } = buildPaletteEntries({ ...forest, visits });
   return {
     sections: projectListSections(forest),
-    work: workByGroup(entries),
+    work: workByGroup(projectGroups(entries, forest.projects, forest.remote)),
   };
 }
 
-// Each project's entries, in the palette's order, by the group key its
-// tile goes by.
-function workByGroup(entries: readonly PaletteEntry[]): Map<string, GroupWork> {
-  const groups = new Map<string, PaletteEntry[]>();
-  for (const entry of entries) {
-    const key = projectGroupKey(entry.project, entry.device?.deviceId);
-    const trees = groups.get(key);
-    if (trees) trees.push(entry);
-    else groups.set(key, [entry]);
-  }
+// Each project group's work, by the group key its tile goes by.
+function workByGroup(
+  groups: ReadonlyMap<string, ProjectGroupEntries>,
+): Map<string, GroupWork> {
   return new Map(
-    [...groups].map(([key, trees]) => {
+    [...groups].map(([key, { project, device, trees }]) => {
       const shown = trees.filter((entry) => !entry.hidden);
       const prs = new Set(
         shown.flatMap((entry) =>
@@ -75,6 +67,8 @@ function workByGroup(entries: readonly PaletteEntry[]): Map<string, GroupWork> {
         key,
         {
           lead: projectLead(trees),
+          project,
+          device,
           lastActivity: Math.max(
             0,
             ...shown.map((entry) => worktreeLastActivityAt(entry.worktree)),

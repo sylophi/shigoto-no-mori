@@ -2,16 +2,13 @@ import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
 
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 
-import {
-  useAllowAgentWorking,
-  useShowDeviceBadges,
-} from "@/hooks/config/useSidebarMarks";
+import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
 
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 
-import { isAgentWorking } from "@shigomori/contracts/schemas";
+import { SHELF_LABELS } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
 import type { PaletteProject } from "@shigomori/ui/views/palette/paletteEntries.ts";
 
@@ -58,22 +55,13 @@ function WorktreeRow({
   now: number;
 }) {
   const { worktree, project, device } = entry;
-  const allowAgentWorking = useAllowAgentWorking();
   const showBadge = useShowDeviceBadges();
   return (
     <WorktreeRowView
       entry={entry}
       query={query}
       now={now}
-      status={
-        worktree.mergedIntoPrimary
-          ? "merged"
-          : isAgentWorking(worktree, allowAgentWorking)
-            ? "agent working"
-            : worktree.shelved
-              ? "shelved"
-              : undefined
-      }
+      status={entry.shelf ? SHELF_LABELS[entry.shelf].toLowerCase() : undefined}
       showBadge={showBadge}
       icon={
         <ProjectIcon

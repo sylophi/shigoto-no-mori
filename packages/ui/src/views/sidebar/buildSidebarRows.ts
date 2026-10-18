@@ -26,6 +26,7 @@ import type { SidebarDeviceBadge } from "./DeviceBadgeView.tsx";
 import {
   GROUP_SHELVES,
   type GroupShelf,
+  type InboxShelf,
   type RemoteProjectMember,
   type SidebarRow,
   type SidebarViewModel,
@@ -149,6 +150,27 @@ export function groupShelfOf(
   if (isAgentWorking(worktree, allowAgentWorking)) return "agentWorking";
   if (worktree.shelved) return "shelved";
   return isHiddenByPrefix(worktree, prefixes) ? "hidden" : null;
+}
+
+// Which inbox shelf a worktree sits on, null for the live box. Its own
+// fold (groupShelfOf) outranks mergedness: a shelved branch that also
+// merged stays where the user filed it, and the hidden prefixes are a
+// filing made ahead of time. Merged is into the primary or by its pull
+// request (a squash leaves the branch unmerged). A primary is always
+// live: it can't be shelved, and a merged PR on whatever branch it
+// happens to have checked out doesn't make the project's root "done".
+// The palette sinks by it too.
+export function worktreeShelfOf(
+  worktree: Worktree,
+  pr: PullRequest | undefined,
+  prefixes: readonly string[],
+  allowAgentWorking: boolean,
+): InboxShelf | null {
+  if (worktree.isPrimary) return null;
+  const shelf = groupShelfOf(worktree, prefixes, allowAgentWorking);
+  if (shelf !== null) return shelf;
+  if (worktree.mergedIntoPrimary || pr?.state === "MERGED") return "merged";
+  return null;
 }
 
 // Flattens `projects` plus their per-project worktree queries into the

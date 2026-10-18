@@ -10,7 +10,9 @@
 // an unreachable device's while a reachable one has one, and falls
 // back to one when it has nothing else. A peer's checkout of the same
 // repo counts toward its project, and a pull request counts once
-// however many worktrees carry its branch.
+// however many worktrees carry its branch. With no worktree, a repo
+// only peers hold opens its form on a reachable one, as the palette's
+// project does.
 //
 // Run: pnpm test project-grid.
 import assert from "node:assert/strict";
@@ -218,4 +220,39 @@ it("a pull request counts once, every device's", () => {
 it("last activity leaves hidden work out", () => {
   // wip (1000) is hidden. elm (900) is shelved, which still counts.
   assert.equal(work().get(keyOf(forest))?.lastActivity, 900);
+});
+
+it("a repo only peers hold opens its form on a reachable one", () => {
+  const reed = project("reed", "rin");
+  const holder = (deviceId: string, reachable: boolean): RemoteForestItem => ({
+    ...peerForest,
+    deviceId,
+    reachable,
+    project: { ...reed, id: `${deviceId}-reed` },
+    worktrees: [],
+    pullRequests: {},
+  });
+  const remote = [holder("asleep", false), holder("awake", true)];
+  const { work: groups } = buildGrid({
+    projects: [],
+    worktreeQueries: [],
+    pullRequestQueries: [],
+    order: projectGroupOrder({
+      projects: [],
+      remote,
+      sortMode: "manual",
+      pinned: new Set(),
+    }),
+    hiddenPrefixes: [],
+    allowAgentWorking: false,
+    byOwner: false,
+    remote,
+    mirrors: [],
+    deviceBadges: new Map(),
+    visits: {},
+  });
+  const tile = groups.get(projectGroupKey(reed, "asleep"));
+  assert.equal(tile?.lead, undefined);
+  assert.equal(tile?.device?.deviceId, "awake");
+  assert.equal(tile?.project.id, "awake-reed");
 });

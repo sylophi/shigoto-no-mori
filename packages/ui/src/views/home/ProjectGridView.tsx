@@ -27,7 +27,11 @@ import { useNow } from "../../hooks/useNow.ts";
 import { pluralize } from "../../lib/pluralize.ts";
 import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import { cn } from "../../lib/utils.ts";
-import { DeviceBadgeClusterView } from "../sidebar/DeviceBadgeView.tsx";
+import type { Project } from "@shigomori/contracts/schemas";
+import {
+  DeviceBadgeClusterView,
+  type SidebarDeviceBadge,
+} from "../sidebar/DeviceBadgeView.tsx";
 import { StatusPillView } from "../sidebar/StatusPillView.tsx";
 import type { ProjectListRow, ProjectSection } from "../sidebar/sidebarRow.ts";
 import type { PaletteEntry } from "../palette/paletteEntries.ts";
@@ -37,6 +41,11 @@ export interface GroupWork {
   // Where the tile lands (projectLead): the worktree visited last,
   // else the one worked in last.
   lead: PaletteEntry | undefined;
+  // With no worktree to land on, where its new-worktree form opens, as
+  // the palette's ↩ on the project does: the checkout the group goes
+  // by (projectGroups), on its device.
+  project: Project;
+  device: SidebarDeviceBadge | undefined;
   lastActivity: number;
   openPullRequests: number;
 }

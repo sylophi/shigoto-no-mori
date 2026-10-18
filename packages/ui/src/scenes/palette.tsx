@@ -55,7 +55,7 @@ const entryOf = (worktree: Worktree): PaletteEntry => ({
   mirror: undefined,
   pr: PRS[worktree.branch],
   hidden: false,
-  sunk: false,
+  shelf: null,
 });
 
 const icon = (project: Project, size = "size-4") => (

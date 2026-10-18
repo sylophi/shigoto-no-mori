@@ -295,6 +295,48 @@ it("merged and shelved sink, and still come up", () => {
   assert.equal(ranked("feat")[0], onPeer("pine"), "live work leads");
 });
 
+// The inbox's shelf rule (worktreeShelfOf), not a copy: a squash
+// merge leaves the branch unmerged and its pull request MERGED, and a
+// primary is live whatever it has checked out.
+it("sinks by the inbox's shelf rule", () => {
+  const merged: PullRequest = {
+    number: 150,
+    url: "https://example.com/pull/150",
+    title: "Squash me",
+    state: "MERGED",
+    isDraft: false,
+    baseRefName: "main",
+  };
+  const list = buildPaletteEntries({
+    projects: [forest],
+    worktreeQueries: [
+      loaded([
+        worktree(forest.id, "root", "main", 50, { isPrimary: true }),
+        worktree(forest.id, "squashed", "feat/squashed", 400),
+        worktree(forest.id, "oak", "feat/oak", 300),
+      ]),
+    ],
+    pullRequestQueries: [loaded({ main: merged, "feat/squashed": merged })],
+    remote: [],
+    mirrors: [],
+    deviceBadges: new Map(),
+    hiddenPrefixes: [],
+    allowAgentWorking: false,
+    visits: { [local("squashed")]: 9 },
+  }).entries;
+  assert.deepEqual(keys(list), [
+    local("oak"),
+    local("root"),
+    local("squashed"),
+  ]);
+  const shelf = (id: string) =>
+    list.find((entry) => entry.key === local(id))?.shelf;
+  assert.equal(shelf("squashed"), "merged");
+  assert.equal(shelf("root"), null, "a primary is live");
+  const [row] = rankPaletteProjects("forest", list, [forest], []);
+  assert.equal(row?.lead?.key, local("oak"), "↩ skips the merged one");
+});
+
 it("a pull request by number or title", () => {
   const list = entries();
   const ranked = (q: string) => keys(rankPaletteEntries(q, list));

@@ -14,10 +14,9 @@ import type { ProjectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebar
 import { DeviceBadgeView } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
   useGroupCreator,
-  useGroupMembers,
-  useIconMember,
-  type GroupMember,
+  useProjectGroup,
   type LiveMember,
+  type ProjectGroupIcon,
 } from "../ProjectGroupActions";
 import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import type { ProjectListRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
@@ -83,21 +82,17 @@ export function NewWorktreeButton({
 
 // The project's checkouts as the header's actions see them, the one a
 // create lands on (useGroupCreator), and whose icon the project wears
-// (useIconMember). What's inside runs under the creator's scope, so
+// (useProjectGroup). What's inside runs under the creator's scope, so
 // the create hook there lands on its device.
 function CreatorScope({
   target,
   children,
 }: {
   target: ProjectListRow;
-  children: (creator: LiveMember, icon: GroupMember | undefined) => ReactNode;
+  children: (creator: LiveMember, icon: ProjectGroupIcon) => ReactNode;
 }) {
-  const members = useGroupMembers(
-    target.members,
-    target.local ? target.project : undefined,
-  );
-  const creator = useGroupCreator(members, target.project.identity);
-  const icon = useIconMember(members, target.local);
+  const { group, icon } = useProjectGroup(target);
+  const creator = useGroupCreator(group, target.project.identity);
   if (creator === undefined) return null;
   return (
     <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
@@ -234,7 +229,7 @@ function TargetItem({
 }: {
   target: ProjectListRow;
   creator: LiveMember;
-  icon: GroupMember | undefined;
+  icon: ProjectGroupIcon;
   creating: string | null;
   onPick: (
     key: string,
@@ -265,13 +260,7 @@ function TargetItem({
       busy={busy}
       disabled={creating !== null}
       onSelect={onSelect}
-      icon={
-        <ProjectIcon
-          projectId={icon?.project.id ?? target.project.id}
-          name={target.project.name}
-          deviceId={icon?.deviceId}
-        />
-      }
+      icon={<ProjectIcon {...icon} name={target.project.name} />}
       badge={badge && <DeviceBadgeView badge={badge} />}
     />
   );
