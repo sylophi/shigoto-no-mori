@@ -77,7 +77,7 @@ function newWorktreePage(form: ReactNode) {
 }
 
 // What every form here shares but its source and its folder.
-const FORM = {
+export const NEW_WORKTREE_FORM = {
   onMode: noop,
   prOptionOff: undefined,
   busy: false,
@@ -118,7 +118,7 @@ export function NewWorktreeScene() {
   const folder = selected?.headRefName ?? "";
   return newWorktreePage(
     <NewWorktreeFormView
-      {...FORM}
+      {...NEW_WORKTREE_FORM}
       mode="pull-request"
       sourcePicker={branchPicker}
       prSource={
@@ -150,7 +150,7 @@ export function NewWorktreeScene() {
 export function NewWorktreeBranchScene() {
   return newWorktreePage(
     <NewWorktreeFormView
-      {...FORM}
+      {...NEW_WORKTREE_FORM}
       mode="branch-from"
       sourcePicker={branchPicker}
       prSource={null}

@@ -3,7 +3,7 @@
 // spelled out beside it because an inline editor has no obvious edges.
 // A device's name (DeviceNameFieldView) and a worktree's folder
 // (WorktreeLocationView) are renamed with it.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../primitives/button.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { cn } from "../../lib/utils.ts";
@@ -27,10 +27,15 @@ export function InlineNameEditorView({
   className?: string;
 }) {
   const [draft, setDraft] = useState(name);
+  const [seededFrom, setSeededFrom] = useState(name);
 
-  // Keep the draft in step when the stored name changes underneath us (a
-  // broadcast from another window or tab, or the mutation settling).
-  useEffect(() => setDraft(name), [name]);
+  // Keep an untouched draft in step when the stored name changes
+  // underneath us (a broadcast from another window or tab, or the
+  // mutation settling); one being typed in stays the person's.
+  if (name !== seededFrom) {
+    setSeededFrom(name);
+    if (draft === seededFrom) setDraft(name);
+  }
 
   const trimmed = draft.trim();
   const canSave = trimmed.length > 0 && trimmed !== name && !pending;
@@ -61,6 +66,7 @@ export function InlineNameEditorView({
           autoFocus
           type="text"
           value={draft}
+          selectOutsideChanges
           disabled={pending}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
