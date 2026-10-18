@@ -15,11 +15,11 @@ import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import {
   addProject,
+  defaultBranchOf,
   findProject,
   freshProjects,
   listProjectsWithStatus,
   loadProjects,
-  primaryRef,
   refresh,
   relocateProject,
 } from "@host/lib/projects";
@@ -244,10 +244,11 @@ export const projectsHandlers = {
       yield* refresh;
     }).pipe(reorders.withPermits(1)),
 
-  // The primary ref every row is measured against, which the engine
-  // resolves once per project (the configured override first).
   defaultBranch: ({ projectId }) =>
-    Effect.flatMap(findProject(projectId), primaryRef),
+    Effect.map(
+      Effect.flatMap(findProject(projectId), defaultBranchOf),
+      ({ ref }) => ref,
+    ),
 
   cloneUrl: ({ projectId }) =>
     Effect.gen(function* () {
