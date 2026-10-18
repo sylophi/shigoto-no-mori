@@ -14,7 +14,7 @@ import { SHELL_PORT_CHANNEL, shellLink } from "@shared/ipc/shell";
 import { type HostAddress, hostLink } from "@shared/remote/hostLink";
 import type { ElectronBridge } from "../../../main/preload";
 import { ClientLinks } from "./ClientLinks";
-import { hostAnswering, hostRestarted } from "./hostAnswering";
+import { followHostRestarts, hostAnswering } from "./hostAnswering";
 
 export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
   Layer.effect(
@@ -36,21 +36,14 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
       const shell = yield* shellLink(port);
       const runFork = yield* FiberSet.makeRuntime<never>();
       // Each landing asks the shell how many times it has started the
-      // host again: a count that moved since the last is a restart this
-      // window lived through, and the band says why.
-      let seen: number | null = null;
-      const askWhy = shell.call("window:hostRestarts", undefined).pipe(
-        Effect.tap((answer) =>
-          Effect.sync(() => {
-            const { count, reason } = answer as typeof HostRestartsSchema.Type;
-            if (seen !== null && count > seen && reason !== null) {
-              hostRestarted.publish({ reason });
-            }
-            seen = count;
-          }),
-        ),
-        Effect.ignore,
+      // host again, and the band says why when the count moved.
+      const restarts = yield* followHostRestarts(
+        shell.call("window:hostRestarts", undefined) as Effect.Effect<
+          typeof HostRestartsSchema.Type,
+          unknown
+        >,
       );
+      runFork(restarts.baseline);
       const host = yield* hostLink({
         address: shell.call("window:hostAddress", undefined) as Effect.Effect<
           HostAddress,
@@ -60,7 +53,7 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
         openSocket: (url) => new WebSocket(url),
         onAnswering: (answering) => {
           hostAnswering.publish(answering);
-          if (answering) runFork(askWhy);
+          if (answering) runFork(restarts.landed);
         },
       });
       // The shell is this window's own build.
