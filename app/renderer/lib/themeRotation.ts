@@ -59,5 +59,6 @@ export function startThemeRotation(
     void api.run(api.clientConfig.rotate({ launching: false })).catch(warn);
   }, CHECK_MS);
   signal.addEventListener("abort", () => clearInterval(checks));
-  return turnAtLaunch(api, registry);
+  // Whatever goes wrong, the window still renders.
+  return turnAtLaunch(api, registry).catch(warn);
 }

@@ -22,13 +22,7 @@
 //
 // Run: pnpm test client-config.
 import assert from "node:assert/strict";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -112,11 +106,13 @@ it("the store turns an Each launch rotation once per run, and a check with none 
   assert.equal(made.length, 1, "two windows' launch asks, one turn");
   assert.equal(stored().themeRotatedAt, made[0]);
   assert.equal(stored().lightTheme, "latte");
+  // Unindented, as no write of the store's leaves it.
   const file = join(dir, "clientConfig.json");
-  const { ino } = statSync(file);
+  const untouched = JSON.stringify(stored());
+  writeFileSync(file, untouched);
   assert.equal(await rotatePalette(true), null, "a window opened later");
   assert.equal(await rotatePalette(false), null, "a minute's check");
-  assert.equal(statSync(file).ino, ino, "nothing written");
+  assert.equal(readFileSync(file, "utf8"), untouched, "nothing written");
   assert.equal(stored().lightTheme, "latte");
 });
 
