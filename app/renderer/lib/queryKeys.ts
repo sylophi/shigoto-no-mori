@@ -63,10 +63,6 @@ export const queryKeys = {
   account: () => ["account"] as const,
   accountStatus: () => ["account", "status"] as const,
   accountDevices: () => ["account", "devices"] as const,
-  // Whether this host accepts commands from the account's other
-  // devices. Kept OUTSIDE the "account" prefix so the toggle (which
-  // fans out on commandAccessChanged) writes only this query and
-  // never thrashes status or the device list.
 
   // Client-scoped: the port-forward engine (its listeners and conns)
   // lives in this machine's host process, whichever device a

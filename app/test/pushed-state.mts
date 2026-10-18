@@ -5,8 +5,9 @@
 //   - the read seeds it, and a push is the newer word: a read answered
 //     after a push landed during it is dropped, where a push written
 //     into a request's cache was put back by the older read still out,
-//   - a reseed (a change of account) reads again,
-//   - a read that fails fails the stream, so it is asked again.
+//   - a read that fails fails the stream, which a view's redial asks
+//     again or ends (redialing), and a peer's answer this build does not
+//     read ends it.
 //
 // Run: pnpm test pushed-state.
 import assert from "node:assert/strict";
@@ -30,14 +31,14 @@ const PUSH = callOf(accountContract, "commandAccessChanged");
 // once the stream listens.
 function stand() {
   const listeners = new Set<(value: boolean) => void>();
-  const answers: Deferred.Deferred<boolean, Error>[] = [];
+  const answers: Deferred.Deferred<unknown, Error>[] = [];
   let reads = 0;
   const link: Link = {
     local: true,
     call: (channel) => {
       assert.equal(channel, channelOf(READ));
       reads += 1;
-      const answer = Deferred.makeUnsafe<boolean, Error>();
+      const answer = Deferred.makeUnsafe<unknown, Error>();
       answers.push(answer);
       return Deferred.await(answer);
     },
@@ -59,7 +60,7 @@ function stand() {
   return {
     link,
     reads: () => reads,
-    answer: (index: number, value: boolean | Error) => {
+    answer: (index: number, value: unknown) => {
       const answer = answers[index];
       assert.ok(answer !== undefined, `no read ${index} out`);
       Effect.runSync(
@@ -118,30 +119,18 @@ it("a push is the newer word than a read still out", async () => {
   await Effect.runPromise(Fiber.interrupt(fiber));
 });
 
-it("the read seeds it, and a reseed reads again", async () => {
+it("a peer's answer this build does not read ends the stream", async () => {
   const host = stand();
-  let reseed: (() => void) | undefined;
-  const reseeds = Stream.callback<unknown>((queue) =>
-    Effect.sync(() => {
-      reseed = () => Queue.offerUnsafe(queue, undefined);
-    }),
-  );
-  const { seen, fiber } = collect(
-    pushedState(host.link, {
-      read: READ,
-      push: PUSH,
-      reseeds,
-    }) as Stream.Stream<boolean, unknown, ClientLinks>,
+  const { fiber } = collect(
+    pushedState(
+      { ...host.link, local: false },
+      { read: READ, push: PUSH },
+    ) as Stream.Stream<boolean, unknown, ClientLinks>,
   );
   await until(() => host.reads() === 1);
-  host.answer(0, false);
-  await until(() => seen.length === 1 && reseed !== undefined);
-  reseed?.();
-  await until(() => host.reads() === 2);
-  host.answer(1, true);
-  await until(() => seen.length === 2);
-  assert.deepEqual(seen, [false, true]);
-  await Effect.runPromise(Fiber.interrupt(fiber));
+  host.answer(0, "not a boolean");
+  const exit = await Effect.runPromise(Fiber.await(fiber));
+  assert.ok(Exit.isFailure(exit) && Exit.hasDies(exit));
 });
 
 it("a read that fails fails the stream", async () => {

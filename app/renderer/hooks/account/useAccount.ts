@@ -31,7 +31,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 import { callOf } from "@shigomori/contracts/contract";
 import * as Atom from "effect/reactivity/Atom";
-import { clientAtoms, clientPushes, shellState } from "@/lib/runtime/atoms";
+import { clientAtoms, shellState } from "@/lib/runtime/atoms";
 import { useView, useViewErrorToast } from "@/lib/runtime/viewHooks";
 
 // Account status: configured/signedIn plus this device's stored name.
@@ -222,18 +222,14 @@ export function useSetDeviceIcon() {
 }
 
 // Whether this host accepts commands from the account's other devices,
-// for the current account, as the shell says it and pushes each flip,
-// read again as the account changes. The handler answers false signed
+// for the current account, as the shell says it and pushes each flip
+// (a change of account included). The handler answers false signed
 // out.
 const acceptsCommandsAtom = Atom.keepAlive(
   clientAtoms.atom(
     shellState(accountContract, {
       read: callOf(accountContract, "acceptsCommands"),
       push: callOf(accountContract, "commandAccessChanged"),
-      reseeds: clientPushes(
-        accountContract,
-        callOf(accountContract, "changed"),
-      ),
     }),
   ),
 );

@@ -1,9 +1,7 @@
-import { useAtomValue } from "@effect/atom-react";
 import { callOf } from "@shigomori/contracts/contract";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
-import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
@@ -19,7 +17,7 @@ import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import { toast } from "@/lib/toast";
 import { hostStateAtom } from "@/lib/runtime/atoms";
 import { useApi } from "@/lib/runtime/pageApi";
-import { useView } from "@/lib/runtime/viewHooks";
+import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
 
 // One device's updater state, as its host pushes it on every change,
 // seeded by its read (pushedState). A peer's starts again on each new
@@ -31,37 +29,24 @@ const updaterStateAtom = Atom.family((deviceId: string) =>
   }).pipe(Atom.setIdleTTL("1 minute")),
 );
 
-// Several devices' states at once, by their ids joined (atom families
-// key on a value).
-const updaterStatesAtom = Atom.family((deviceIds: string) =>
-  Atom.make((get) =>
-    (deviceIds === "" ? [] : deviceIds.split("\n")).map((deviceId) => {
-      const result = get(updaterStateAtom(deviceId));
-      return AsyncResult.isSuccess(result) ? result.value : undefined;
-    }),
-  ),
-);
+const updaterStatesAtom = viewsOf(updaterStateAtom);
 
 const useUpdaterStates = (deviceIds: readonly string[]) =>
-  useAtomValue(updaterStatesAtom(deviceIds.join("\n")));
+  useViews(updaterStatesAtom, deviceIds).map((state) => state.data);
 
-// Seeded from `updater:get` and then driven entirely by the
-// `updater:state` broadcast, with no polling. The serving process is
-// the single source of truth. The renderer just mirrors it, at boot
-// scope rather than here (see the staleTime note above). Reads its
-// device from the host scope: this window's own updater with no
+// The updater of the device the host scope names: this window's own updater with no
 // provider mounted, or a peer's over its direct session inside one,
 // so the same Settings card answers for whichever device is selected.
 export function useUpdater() {
   const { deviceId, api } = useHostScope();
   const view = useView(updaterStateAtom(deviceId));
 
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
   const check = useMutation({
     mutationFn: () => api.run(api.updater.check()),
     meta: { errorTitle: "Couldn't check for updates" },
   });
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
   const install = useMutation({
     mutationFn: () => restartIntoUpdate(api),
     meta: { errorTitle: "Couldn't install the update" },
@@ -184,7 +169,7 @@ export function useUpdateAll(
   const localDeviceId = useApi().deviceId;
   const targets = useUpdateTargets();
 
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
   return useMutation({
     mutationFn: async () => {
       const chosen = targets.flatMap((target) => {

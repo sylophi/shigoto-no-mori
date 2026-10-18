@@ -208,21 +208,14 @@ export const clientPushes = <R extends ContractCall>(
 
 // State a device or this window's shell keeps whole and pushes on
 // every change (the updater's, the guide's), as its stream: the pushes,
-// with a read as the seed until the first push, which is newer, and
-// read again on each of `reseeds` (a change of account). A read that
-// fails fails it, to be asked again on REDIAL.
+// with a read as the seed, kept only if no push reached the stream's
+// reader between the read's start and its answer, so the order is the
+// reader's, not the fibers'. A read that fails fails the stream.
 export function pushedState<R extends ContractCall, P extends ContractCall>(
   link: Link,
-  options: {
-    readonly read: R;
-    readonly push: P;
-    readonly reseeds?: Stream.Stream<unknown, never, ClientLinks>;
-  },
+  options: { readonly read: R; readonly push: P },
 ): Stream.Stream<Decoded<PayloadOf<P>>, unknown, ClientLinks> {
   type A = Decoded<PayloadOf<P>>;
-  // Pushes as they reach the stream's reader: a read is kept only if
-  // none came between its start and its answer reaching the reader, so
-  // the order is the reader's, not the fibers'.
   let pushes = 0;
   const read = Effect.suspend(() => {
     const after = pushes;
@@ -230,20 +223,18 @@ export function pushedState<R extends ContractCall, P extends ContractCall>(
       Effect.flatMap((output) =>
         link.local === true
           ? Effect.succeed(output as A)
-          : Schema.decodeUnknownEffect(outputOf(options.read))(output),
+          : Effect.orDie(
+              Schema.decodeUnknownEffect(outputOf(options.read))(output),
+            ),
       ),
       Effect.map((value) => ({ value: value as A, after })),
     );
   });
-  const seeds = Stream.concat(
-    Stream.make(undefined),
-    options.reseeds ?? Stream.empty,
-  ).pipe(Stream.mapEffect(() => read));
   return Stream.merge(
     (pushesOn(link, options.push) as Stream.Stream<A>).pipe(
       Stream.map((value) => ({ value, after: undefined })),
     ),
-    seeds,
+    Stream.fromEffect(read),
   ).pipe(
     Stream.filter((next) => {
       if (next.after === undefined) {
@@ -256,33 +247,45 @@ export function pushedState<R extends ContractCall, P extends ContractCall>(
   );
 }
 
-// The same over this window's own link for a module of its shell.
+// The same over this window's own link for a module of its shell,
+// asked again as a view is (redialing).
 export const shellState = <R extends ContractCall, P extends ContractCall>(
   module: ContractModule,
   options: Parameters<typeof pushedState<R, P>>[1],
-) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const { linkOf } = yield* ClientLinks;
-      return pushedState(linkOf(module), options);
-    }),
-  ).pipe(Stream.retry(REDIAL));
+) => {
+  const memory = { seen: false };
+  return redialing(
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const { linkOf } = yield* ClientLinks;
+        return pushedState(linkOf(module), options);
+      }),
+    ),
+    { peer: false, memory },
+  );
+};
 
 // The same for one device's host module: a peer's starts again on each
 // new session to it, which covers a restart into a new build.
 export const hostStateAtom = <R extends ContractCall, P extends ContractCall>(
   deviceId: string,
   options: Parameters<typeof pushedState<R, P>>[1],
-) =>
-  clientAtoms.atom((get) => {
+) => {
+  const memory = { seen: false };
+  return clientAtoms.atom((get) => {
     const localDeviceId = get(localDeviceIdAtom);
-    if (deviceId !== localDeviceId) get(peerSessionAtom(deviceId));
-    return Stream.unwrap(
-      Effect.map(hostLinkOf(deviceId, localDeviceId), (link) =>
-        pushedState(link, options),
+    const peer = deviceId !== localDeviceId;
+    if (peer) get(peerSessionAtom(deviceId));
+    return redialing(
+      Stream.unwrap(
+        Effect.map(hostLinkOf(deviceId, localDeviceId), (link) =>
+          pushedState(link, options),
+        ),
       ),
-    ).pipe(Stream.retry(REDIAL));
+      { peer, memory },
+    );
   });
+};
 
 // One device's host calls as Promises, for an atom whose methods a
 // caller outside an effect uses (the script runs): each runs on the
@@ -335,6 +338,43 @@ export function valueNow<A>(
     : new Error("the atom answers when read");
 }
 
+// A view's stream (or pushed state's) asked again on REDIAL while
+// anything reads it, ended by the device's own failure (endsView). A
+// peer's that has never shown a value gives up after a few asks that
+// found no way to it, as v2's queries did, so a peer listed and never
+// reached reads empty and says so; a new session to it starts it again.
+// One that has shown a value keeps it and redials. This machine's is
+// asked for good. `memory` lives as long as the atom: a new session
+// starts its stream again, not its history.
+function redialing<A, R>(
+  values: Stream.Stream<A, unknown, R>,
+  options: { readonly peer: boolean; readonly memory: { seen: boolean } },
+): Stream.Stream<A, never, R> {
+  let failures = 0;
+  return values.pipe(
+    Stream.tap(() =>
+      Effect.sync(() => {
+        options.memory.seen = true;
+        failures = 0;
+      }),
+    ),
+    // A refusal is the peer's answer, which a grant may change: only
+    // asks that found no way to it count.
+    Stream.tapError((error) =>
+      Effect.sync(() => {
+        if (!isPeerRefusal(error)) failures += 1;
+      }),
+    ),
+    Stream.catchIf(
+      (error) =>
+        endsView(error) ||
+        (options.peer && !options.memory.seen && failures >= PEER_TRIES),
+      (error) => Stream.die(error),
+    ),
+    Stream.retry(REDIAL),
+  ) as Stream.Stream<A, never, R>;
+}
+
 // A host view's values, decoded where they may come from another build
 // (a peer's), as an atom. The device's own failure (an unknown project)
 // is what the view ends with; a refusal and a dropped link are asked
@@ -357,17 +397,9 @@ export function hostViewAtom<R extends ContractCall>(options: {
 }): Atom.Atom<AsyncResult.AsyncResult<Decoded<PayloadOf<R>>, unknown>> {
   type A = Decoded<PayloadOf<R>>;
   const decode = Schema.decodeUnknownEffect(payloadOf(options.view));
-  // Whether this view ever showed a value, for as long as the atom
-  // lives: a new session starts its stream again, not its history.
-  let seen = false;
+  const memory = { seen: false };
   const valuesOn = (localDeviceId: string) => {
-    // A peer's view that has never shown a value gives up after a few
-    // asks, as v2's queries did, so a peer listed and never reached
-    // reads empty and says so; a new session to it starts it again.
-    // One that has shown rows keeps them, and redials for as long as
-    // anything reads it. This machine's host is asked for good.
     const peer = options.deviceId !== localDeviceId;
-    let failures = 0;
     return Stream.unwrap(
       Effect.map(hostLinkOf(options.deviceId, localDeviceId), (link: Link) =>
         link
@@ -381,24 +413,7 @@ export function hostViewAtom<R extends ContractCall>(options: {
           ),
       ),
     ).pipe(
-      Stream.tap(() =>
-        Effect.sync(() => {
-          seen = true;
-          failures = 0;
-        }),
-      ),
-      // A refusal is the peer's answer, which a grant may change: only
-      // asks that found no way to it count.
-      Stream.tapError((error) =>
-        Effect.sync(() => {
-          if (!isPeerRefusal(error)) failures += 1;
-        }),
-      ),
-      Stream.catchIf(
-        (error) => endsView(error) || (peer && !seen && failures >= PEER_TRIES),
-        (error) => Stream.die(error),
-      ),
-      Stream.retry(REDIAL),
+      (values) => redialing(values, { peer, memory }),
       Stream.tap((value) => Effect.sync(() => options.onValue?.(value))),
       Stream.ensuring(Effect.sync(() => options.onStop?.())),
     );
