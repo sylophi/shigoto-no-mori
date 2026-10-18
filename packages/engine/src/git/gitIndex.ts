@@ -1,6 +1,5 @@
 // Git's index: undoing commits, hard resets, and discarding changes into snapshots that put them back.
 import { pluralize } from "@shigomori/contracts/words";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -17,6 +16,7 @@ import {
   SHOWN,
   stderrOf,
   UndoRefusedError,
+  ZERO_SHA,
 } from "./documents.ts";
 import type { OperationArea } from "./operation.ts";
 import type { RunningArea } from "./running.ts";
@@ -112,7 +112,7 @@ export const makeGitIndex = ({
     // A commit of `paths` as they are on disk now, under
     // DISCARD_REF_PREFIX, built in a scratch index so the real one is
     // untouched. The ref keeps its objects through gc, and the newest
-    // DISCARD_SNAPSHOTS_KEPT are kept.
+    // DISCARD_SNAPSHOTS_KEPT, by number, are kept.
     const snapshotPaths = (worktree: string, paths: readonly string[]) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -153,23 +153,42 @@ export const makeGitIndex = ({
             ],
             { env },
           )).trim();
-          yield* run(worktree, [
-            "update-ref",
-            `${DISCARD_REF_PREFIX}${yield* Clock.currentTimeMillis}`,
-            snapshot,
-          ]);
-          // Ref names are equal-width millisecond stamps, so a reverse name
-          // sort is newest first. Best effort: a failed prune leaves a ref.
-          yield* run(worktree, [
+          // Named by a number one past the repository's highest and made
+          // only where no ref is yet, so a snapshot from another worktree
+          // taking the number first sends this one to the next, and no
+          // clock orders them.
+          const numbered = run(worktree, [
             "for-each-ref",
             "--format=%(refname)",
-            "--sort=-refname",
             DISCARD_REF_PREFIX,
           ]).pipe(
-            Effect.flatMap((stdout) =>
+            Effect.map((stdout) =>
+              splitLines(stdout).flatMap((ref) => {
+                const n = Number(ref.slice(DISCARD_REF_PREFIX.length));
+                return Number.isSafeInteger(n) && n > 0 ? [n] : [];
+              }),
+            ),
+          );
+          yield* Effect.gen(function* () {
+            const next = Math.max(0, ...(yield* numbered)) + 1;
+            yield* run(worktree, [
+              "update-ref",
+              `${DISCARD_REF_PREFIX}${next}`,
+              snapshot,
+              ZERO_SHA,
+            ]);
+          }).pipe(Effect.retry({ times: 8 }));
+          // Best effort: a failed prune leaves a ref.
+          yield* numbered.pipe(
+            Effect.flatMap((numbers) =>
               Effect.forEach(
-                splitLines(stdout).slice(DISCARD_SNAPSHOTS_KEPT),
-                (ref) => run(worktree, ["update-ref", "-d", ref]),
+                numbers.toSorted((a, b) => b - a).slice(DISCARD_SNAPSHOTS_KEPT),
+                (n) =>
+                  run(worktree, [
+                    "update-ref",
+                    "-d",
+                    `${DISCARD_REF_PREFIX}${n}`,
+                  ]),
               ),
             ),
             Effect.ignore,

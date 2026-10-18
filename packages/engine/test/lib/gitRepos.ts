@@ -54,6 +54,27 @@ export const write = (
 export const rev = (repo: string, ref: string): string =>
   git(repo, "rev-parse", ref).trim();
 
+// A clone of this repository at the commit checked out, shaped like a
+// user's project: main tracking origin/main, origin the checkout it
+// came from. Its own commit, not a pinned one: CI's checkout is
+// shallow and holds no other. Read from the root, the one place the
+// tests' isolation lets git find this repository (gitIsolation.ts).
+export function realClone(dir = tempDir("real-")): string {
+  const source = join(import.meta.dirname, "..", "..", "..", "..");
+  const head = rev(source, "HEAD");
+  const repo = join(dir, "shigoto-no-mori");
+  git(dir, "clone", "-q", "--shared", "--no-checkout", source, repo);
+  git(repo, "update-ref", "refs/remotes/origin/main", head);
+  git(
+    repo,
+    "symbolic-ref",
+    "refs/remotes/origin/HEAD",
+    "refs/remotes/origin/main",
+  );
+  git(repo, "checkout", "-q", "-B", "main", "--track", "origin/main");
+  return repo;
+}
+
 // A repository on main with one commit holding a.txt, b.txt and
 // dir/c.txt.
 export function seedRepo(dir = tempDir("repo-")): string {

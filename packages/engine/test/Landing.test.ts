@@ -83,11 +83,15 @@ const QUEUED = JSON.stringify({
 // branch's PR #5 has `verdict` (BLOCKED: waiting on its checks), armed
 // already with `armed`. Each read of the PR's progress (the read-back
 // after a merge, then every poll of the wait) takes the next of
-// `polls`, the last one answering every read after it. Every call is
-// logged.
+// `polls`, the last one answering every read after it. `onMerge` runs
+// as gh merges. Every call is logged.
 function fakeGh(
   polls: ReadonlyArray<string>,
-  options: { readonly verdict?: string; readonly armed?: boolean } = {},
+  options: {
+    readonly verdict?: string;
+    readonly armed?: boolean;
+    readonly onMerge?: string;
+  } = {},
 ) {
   const log = join(box.home, "gh.log");
   const pollFile = join(box.home, "polls");
@@ -104,7 +108,7 @@ case "$*" in
       tail -n +2 '${pollFile}' > '${pollFile}.next' && mv '${pollFile}.next' '${pollFile}'
     fi;;
   "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":true}}}';;
-  "pr merge 5 --auto --squash"|"pr merge 5 --squash") ;;
+  "pr merge 5 --auto --squash"|"pr merge 5 --squash") ${options.onMerge ?? ""};;
   "pr view 5 --json headRefOid") printf '{"headRefOid":"%s"}' "$(cat '${headFile()}')";;
   *) echo "unexpected gh $*" >&2; exit 1;;
 esac`,
@@ -124,10 +128,11 @@ esac`,
 // Where the fakes read the commit PR #5's head is at on GitHub.
 const headFile = () => join(box.home, "pr-5-head");
 
-// A project cloned from an upstream, with a worktree `fox` a commit
-// ahead on its own branch, pushed: PR #5's head is that commit.
+// A project cloned from an upstream holding this repository, with a
+// worktree `fox` a commit ahead on its own branch, pushed: PR #5's head
+// is that commit.
 async function landFixture() {
-  const upstream = box.repo("upstream", { "README.md": "hi\n" });
+  const upstream = box.realRepo("upstream");
   const repo = join(box.home, "repo");
   execFileSync("git", ["clone", "-q", upstream, repo]);
   const located = await box.engine(
@@ -473,6 +478,22 @@ describe("commits the pull request never had", () => {
     );
     assert.deepEqual(gh.merges(), [], "nothing merged");
     assert.equal(await foxSurvives(located), true);
+  });
+
+  it("land refuses them after a merge GitHub answered at once", async () => {
+    const located = await landFixture();
+    const gh = fakeGh([poll("MERGED", "UNKNOWN", "", false)], {
+      onMerge: `git -C '${located.worktree.path}' commit -q --allow-empty -m late`,
+    });
+    const doc = await land(located);
+    assert.equal(doc["code"], "unpushed-commits", JSON.stringify(doc));
+    assert.match(String(doc["error"]), /[0-9a-f]+ late\. /);
+    assert.deepEqual(gh.merges(), ["pr merge 5 --auto --squash"]);
+    assert.equal(await foxSurvives(located), true);
+    assert.match(
+      box.git(located.project.path, "log", "-1", "--format=%s", "fox"),
+      /^late/,
+    );
   });
 
   it("land leaves them be when the removal keeps the branch", async () => {
