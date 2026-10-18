@@ -8,12 +8,12 @@ import { useApi } from "@/lib/runtime/pageApi";
 export function GuideMenu() {
   const api = useApi();
   const harnesses = useGuideHarnesses();
-  // Once per list: `harnesses` is a fresh array per render. A menu that
-  // didn't take it keeps the last list it had, which the next one
-  // replaces.
+  // Once per list: `harnesses` is a fresh array per render.
   const shown = harnesses?.join(",");
   const tellMenu = useEffectEvent(() => {
     if (harnesses === undefined) return;
+    // A menu that didn't take it keeps the last list it had, which the
+    // next one replaces.
     void api.run(api.menu.setGuideHarnesses(harnesses)).catch(() => {});
   });
   useEffect(() => tellMenu(), [api, shown]);

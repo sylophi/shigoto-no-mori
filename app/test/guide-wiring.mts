@@ -38,6 +38,11 @@ vi.mock("@/hooks/system/useUpdater", () => ({ useStagedUpdates: () => ({}) }));
 vi.mock("@/lib/agentWatch", () => ({ useWaitingAgents: () => [] }));
 vi.mock("@/lib/localHost", () => ({ useHasLocalHost: () => true }));
 
+// React's act, without its warning that the place isn't set up for it.
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
 const { SidebarFooter } = await import("@/components/sidebar/SidebarFooter");
 const { GuideMenu } = await import("@/components/guide/GuideMenu");
 
@@ -100,6 +105,7 @@ function fakeApi() {
 let unmount: (() => void) | undefined;
 afterEach(() => {
   act(() => unmount?.());
+  unmount = undefined;
   document.body.innerHTML = "";
 });
 
@@ -107,7 +113,11 @@ async function mount(api: RendererApi) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  unmount = () => root.unmount();
+  const client = new QueryClient();
+  unmount = () => {
+    root.unmount();
+    client.clear();
+  };
   await act(async () => {
     root.render(
       createElement(
@@ -115,7 +125,7 @@ async function mount(api: RendererApi) {
         { api },
         createElement(
           QueryClientProvider,
-          { client: new QueryClient() },
+          { client },
           createElement(
             Fragment,
             null,
@@ -161,7 +171,8 @@ it("the Help menu's push starts its agent, and the menu hears this machine's age
   await mount(api);
   await settle();
   assert.deepEqual(menus(), [["claude", "codex"]]);
-  await act(async () => push(navContract, "showAround", "claude"));
+  // The second agent, so a listener that starts a fixed one fails.
+  await act(async () => push(navContract, "showAround", "codex"));
   await settle();
-  assert.deepEqual(starts(), [{ harness: "claude" }]);
+  assert.deepEqual(starts(), [{ harness: "codex" }]);
 });
