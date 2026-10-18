@@ -19,7 +19,6 @@ import { watchHost, type WatchedHostApi } from "@/lib/hostWatch";
 import { queryKeys, queryKeysFor } from "@/lib/queryKeys";
 import { throughCancel } from "@/lib/queryClientOptions";
 import { fetchAgain, refreshQueries } from "@/lib/askAgain";
-import { waitFor } from "./lib/checkKit.mts";
 
 const DEVICE = "device-1";
 const keys = queryKeysFor(DEVICE);
@@ -244,17 +243,11 @@ it("a device's externalChange reads its own requests again, not this window's no
   const own = shownQuery(client, keys.branches("p1"));
   const releases = shownQuery(client, queryKeys.releases());
   const peer = shownQuery(client, queryKeysFor("device-2").branches("p1"));
-  await waitFor(
-    () =>
-      own.counts.reads === 1 &&
-      releases.counts.reads === 1 &&
-      peer.counts.reads === 1,
-    "the first reads",
-  );
+  await sleep(150);
   host.push("externalChange", undefined);
   // The sweep starts every read it asks for at once, so the device's own
   // read again is the fence for the two it must not have asked.
-  await waitFor(() => own.counts.reads === 2, "the device's own read again");
+  assert.equal(own.counts.reads, 2);
   assert.equal(releases.counts.reads, 1);
   assert.equal(peer.counts.reads, 1);
   for (const read of [own, releases, peer]) read.unsubscribe();

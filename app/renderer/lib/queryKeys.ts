@@ -347,8 +347,8 @@ function hostKeyProjectId(queryKey: readonly unknown[]): unknown {
 // local change (and vice versa). Client-scoped keys are this app
 // instance's, which no device's state moving touches. The
 // exemptions above are the whole point of this entry: "state on that
-// device moved" says nothing about GitHub, hygiene or forwards, so
-// those sit the ping out. See invalidateDeviceSession for
+// device moved" says nothing about GitHub or hygiene, so those sit
+// the ping out. See invalidateDeviceSession for
 // the sibling that must NOT sit them out.
 export function invalidateHostDevice(
   queryClient: QueryClient,
@@ -402,8 +402,7 @@ export function invalidateHostProject(
 // moment ago. Same device-id scoping as invalidateHostDevice and
 // deliberately NO domain exemption, because the exempt list is tuned
 // for "that host's git state moved" and is exactly wrong here: runtime,
-// githubCli, fs, portForwards, worktreeHygiene and
-// worktreeDiskUsage are the queries that hard-failed with "no direct
+// githubCli, fs, worktreeHygiene and worktreeDiskUsage are the queries that hard-failed with "no direct
 // connection" while the keeper was still dialing, so exempting them
 // would skip precisely what needs refetching. Client-scoped keys are
 // left alone in the other direction: they belong to this app instance,
