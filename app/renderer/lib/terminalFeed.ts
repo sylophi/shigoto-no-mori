@@ -5,6 +5,7 @@
 // host's history no longer reaches back that far, starts over from all
 // of it.
 import { isUnknownTerminalError } from "@shigomori/contracts/errors";
+import { backoffDelayMs } from "@shared/remote/supervisor";
 import type { TerminalScreen } from "@shigomori/ui/views/terminal/TerminalView.tsx";
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import type { HostApi } from "@/hooks/remote/useHostScope";
@@ -13,7 +14,9 @@ import type { HostApi } from "@/hooks/remote/useHostScope";
 const noop = (): void => {};
 
 // The waits between attaches that ended with the link.
-const RETRY_DELAYS_MS = [250, 500, 1_000, 2_000, 5_000] as const;
+const RETRY_DELAYS_MS: readonly [number, ...number[]] = [
+  250, 500, 1_000, 2_000, 5_000,
+];
 
 export function attachTerminal(
   api: Pick<HostApi, "view" | "listen">,
@@ -69,8 +72,7 @@ export function attachTerminal(
           onEnd(null);
           return;
         }
-        const wait =
-          RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+        const wait = backoffDelayMs(RETRY_DELAYS_MS, attempt);
         attempt += 1;
         timer = setTimeout(watch, wait);
       },

@@ -143,6 +143,11 @@ export class NotSharingError extends Schema.TaggedError<NotSharingError>()(
 
 export const isNotSharingError = Schema.is(NotSharingError);
 
+// A device's no to this one: a switch on that device (its command
+// access, its sharing) that may flip back, never a failure to retry.
+export const isPeerRefusal = (error: unknown): boolean =>
+  isCommandRefusedError(error) || isNotSharingError(error);
+
 // The message is the reason's marker.
 export class ChannelRefusedError extends Schema.TaggedError<ChannelRefusedError>()(
   "ChannelRefusedError",

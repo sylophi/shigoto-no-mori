@@ -2,8 +2,9 @@
 // switch on it: an action a peer turned away toasts "Read-only until
 // <its name> turns on “Allow control from other devices” on its account
 // page", with the name the window's registry has for it, which the
-// end that asked fills in (this host's peer calls, the window's peer
-// api).
+// end that asked fills in (this host's peer calls, and the window's
+// peer link, under every call and view the window makes of a peer, its
+// atoms' included).
 //
 // Run: pnpm test consent-words.
 import assert from "node:assert/strict";
@@ -13,6 +14,8 @@ import { createAppQueryClient } from "@/lib/queryClientOptions";
 import * as Effect from "effect/Effect";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { make as makePeerReach } from "@host/ipc/PeerReach";
+import * as Stream from "effect/Stream";
+import { peerLink } from "@/lib/runtime/peerLink";
 
 const toasts: string[] = [];
 vi.mock("@/lib/toast", () => ({
@@ -71,4 +74,25 @@ it("a refusal reached through this host's peer calls names the peer, for the win
   );
   assert.ok(refusal instanceof CommandRefusedError);
   assert.equal(refusal.deviceId, "kiwi");
+});
+
+it("a refusal through the window's peer link names the peer, a call's and a view's", async () => {
+  const peer = peerLink(
+    {
+      call: () => Effect.fail(new CommandRefusedError()),
+      view: () => Stream.fail(new CommandRefusedError()),
+      pushes: () => Stream.never,
+    },
+    "kiwi",
+  );
+  const called = await Effect.runPromise(
+    Effect.flip(peer.call("scripts:attach", {})),
+  );
+  const viewed = await Effect.runPromise(
+    Effect.flip(Stream.runDrain(peer.view("scripts:watch", undefined))),
+  );
+  for (const refusal of [called, viewed]) {
+    assert.ok(refusal instanceof CommandRefusedError);
+    assert.equal(refusal.deviceId, "kiwi");
+  }
 });

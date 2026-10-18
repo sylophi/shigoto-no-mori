@@ -429,7 +429,13 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
     hub: hubCalls,
     peerApi: noPeerApi,
   } as RendererApi;
-  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  startRemoteDeviceSync(
+    api,
+    queryClient,
+    registry,
+    () => () => {},
+    new AbortController().signal,
+  );
   const hub = () => registry.get(hubStatusAtom);
   assert.ok(AsyncResult.isInitial(hub()), "nothing until the first snapshot");
 
@@ -523,7 +529,13 @@ it("remote devices: a burst of hub pushes naming a device the list lacks reads t
     hub: hubCalls,
     peerApi: noPeerApi,
   } as RendererApi;
-  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  startRemoteDeviceSync(
+    api,
+    queryClient,
+    registry,
+    () => () => {},
+    new AbortController().signal,
+  );
   for (let push = 0; push < 25; push++) {
     await hubPush(ghostly);
     await new Promise((resolve) => setTimeout(resolve, 5));
@@ -575,7 +587,13 @@ it("remote devices: an account change during the list's first read, which no pag
   } as unknown as RendererApi;
   // The boot's pass starts the first read; an account change (an
   // enroll, a rename) lands during it.
-  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  startRemoteDeviceSync(
+    api,
+    queryClient,
+    registry,
+    () => () => {},
+    new AbortController().signal,
+  );
   await waitFor(() => asked === 1, "the first read");
   handlers.get("changed")?.({ accountId: "account" });
   await new Promise((resolve) => setTimeout(resolve, 400));
@@ -607,7 +625,13 @@ it("remote devices: a peer that stops taking commands is refused before the devi
     hub: { status: () => Effect.sync(() => latest) },
     peerApi: noPeerApi,
   } as unknown as RendererApi;
-  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  startRemoteDeviceSync(
+    api,
+    queryClient,
+    registry,
+    () => () => {},
+    new AbortController().signal,
+  );
   const peer = () => registry.get(remoteDevicesAtom)[0];
   const send = async (next: HubStatus) => {
     latest = next;
@@ -671,7 +695,13 @@ it("remote devices: a pass out since before a refusal doesn't hand the peer its 
     hub: { status: () => Effect.sync(() => latest) },
     peerApi: noPeerApi,
   } as unknown as RendererApi;
-  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  startRemoteDeviceSync(
+    api,
+    queryClient,
+    registry,
+    () => () => {},
+    new AbortController().signal,
+  );
   const peer = () => registry.get(remoteDevicesAtom)[0];
   const send = async (next: HubStatus) => {
     latest = next;
@@ -727,7 +757,13 @@ it("hub status: a failed boot fetch falls back on the next pass's", async () => 
     },
     peerApi: noPeerApi,
   } as unknown as RendererApi;
-  startRemoteDeviceSync(api, queryClient, registry, () => () => {});
+  startRemoteDeviceSync(
+    api,
+    queryClient,
+    registry,
+    () => () => {},
+    new AbortController().signal,
+  );
   const hub = () => registry.get(hubStatusAtom);
   await waitFor(() => asked >= 1, "the boot's fetch");
   assert.ok(AsyncResult.isInitial(hub()), "nothing while the fetch failed");
