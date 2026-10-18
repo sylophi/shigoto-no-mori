@@ -214,8 +214,12 @@ import {
   DIRECT_TICKET_PREFIX,
 } from "@host/direct/tickets";
 import { makeConnectInfo, TUNNEL_HOLD_MS } from "@host/direct/connectInfo";
+import { mintHexId } from "@host/lib/hexId";
 import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
-import { CLOSE_HANDSHAKE_FAILED } from "@shared/remote/sealedSocket";
+import {
+  CLOSE_HANDSHAKE_FAILED,
+  STALE_TICKET,
+} from "@shared/remote/sealedSocket";
 import {
   decodeRelayFrame,
   encodeRelayFrame,
@@ -1212,8 +1216,7 @@ it("per-connection ticket bookkeeping: one connection's mint replaces only its o
   assert.equal(await consumeTicket(store, entryAt(dropped, 0), "D"), false);
   assert.equal(await consumeTicket(store, entryAt(kept, 0), "K"), true);
   // The global backstop refuses the overflowing mint outright and
-  // never evicts another peer's pending tickets (an eviction would
-  // feed the per-IP lockout against the innocent peer's dial).
+  // never evicts another peer's pending tickets.
   const keeper = mintTickets(store, "keeper", 2);
   for (let i = 0; i < 200; i += 1) mintTickets(store, `peer-${i}`, 1);
   assert.equal(
@@ -1224,6 +1227,92 @@ it("per-connection ticket bookkeeping: one connection's mint replaces only its o
     null,
   );
   assert.equal(await consumeTicket(store, entryAt(keeper, 0), "keeper"), true);
+});
+
+it("stale tickets: one the store issued and let go (spent, replaced, expired, dropped, or presented on another path) reads as stale, and only one it never issued as unknown", async () => {
+  let now = 0;
+  const store = createConnectTicketStore({ ttlMs: 1_000, now: () => now });
+  const one = (peer: string) => entryAt(mintTickets(store, peer, 1), 0);
+  const pair = mintTickets(store, "A", 2);
+  assert.equal(store.consume(entryAt(pair, 0), "lan"), "A");
+  assert.equal(store.check(entryAt(pair, 0), "lan"), STALE_TICKET);
+  assert.equal(store.check(entryAt(pair, 1), "tunnel"), STALE_TICKET);
+  const replaced = one("A");
+  one("A");
+  assert.equal(store.check(replaced, "lan"), STALE_TICKET);
+  const expired = one("B");
+  now += 1_000;
+  assert.equal(store.check(expired, "lan"), STALE_TICKET);
+  // Swept by the next mint, still known.
+  one("C");
+  assert.equal(store.check(expired, "lan"), STALE_TICKET);
+  const dropped = one("D");
+  store.keepDevices(["C"]);
+  assert.equal(store.check(dropped, "lan"), STALE_TICKET);
+  assert.equal(store.check("smpt_never_minted", "lan"), null);
+});
+
+// The ticket an answer carries for a candidate of `kind`.
+function ticketOf(info: DirectConnectInfo, kind: "lan" | "tunnel"): string {
+  assert.ok(info.available);
+  const candidate = info.candidates.find((each) => each.kind === kind);
+  assert.ok(candidate !== undefined);
+  return candidate.ticket;
+}
+
+it("tunnel recheck: a device whose last two asks, each under a fresh connection id as the dialer makes them, were handed a tunnel ticket that reached nothing rechecks an up tunnel once per run of failures, and a link from any of its connections starts the count over", async () => {
+  const store = createConnectTicketStore();
+  let tunnel: string | null = "wss://sm-0123456789ab.sm.example.test";
+  let rechecks = 0;
+  const connectInfo = makeConnectInfo({
+    listenerPort: () => 42017,
+    mintTickets: (peer, kinds) => store.mint(peer, kinds),
+    candidateAddresses: () => ["127.0.0.1"],
+    tunnelUrl: () => tunnel,
+    tunnelUndialed: (deviceId, runs) =>
+      store.claimUndialed(deviceId, "tunnel", runs),
+    recheckTunnel: () => {
+      rechecks += 1;
+    },
+    acceptsCommands: () => false,
+    sharesData: () => true,
+  });
+  // One dial's ask, as directDial.ts makes it: a connection of its own.
+  const ask = (deviceId: string, dialableKinds: string[]) =>
+    connectInfo(deviceId, { dialableKinds, connectionId: mintHexId() });
+  const web = ["tunnel"];
+  const desktop = ["lan", "tunnel"];
+  // A first ask, then one after its dial reached nothing.
+  await ask(DIALER, web);
+  await ask(DIALER, web);
+  assert.equal(rechecks, 0, "one failed dial rechecked");
+  // After two: once, and not again for the same run.
+  const third = await ask(DIALER, web);
+  assert.equal(rechecks, 1);
+  await ask(DIALER, web);
+  await ask(DIALER, web);
+  assert.equal(rechecks, 1, "a run of failures rechecked twice");
+  // A link, here from an earlier connection (another tab), ends the run.
+  assert.equal(store.consume(ticketOf(third, "tunnel"), "tunnel"), DIALER);
+  await ask(DIALER, web);
+  await ask(DIALER, web);
+  assert.equal(rechecks, 1);
+  await ask(DIALER, web);
+  assert.equal(rechecks, 2);
+  // Another device keeps its own count, and a desktop whose lan
+  // candidate won leaves its tunnel ticket be.
+  const raced = await ask("E", desktop);
+  assert.equal(store.consume(ticketOf(raced, "lan"), "lan"), "E");
+  await ask("E", desktop);
+  await ask("E", desktop);
+  assert.equal(rechecks, 2);
+  // Two whose every candidate failed.
+  await ask("E", desktop);
+  assert.equal(rechecks, 3);
+  // A tunnel already down is not asked.
+  tunnel = null;
+  for (let turn = 0; turn < 3; turn++) await ask("F", web);
+  assert.equal(rechecks, 3);
 });
 
 it("identity binding: a ticket minted for one device refuses another, and a wrong expected welcome identity fails the handshake", async () => {

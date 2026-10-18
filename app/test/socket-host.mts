@@ -21,7 +21,8 @@
 // their handlers run, and its pushes are withheld, save for the mirror
 // this device asked for, whose calls on its copy are still served and
 // whose copy's pushes still arrive. Flipped while a peer is linked,
-// its calls and views under way end, and it hears the switch both ways.
+// its calls and views under way end, its byte channels drop, and it
+// hears the switch both ways.
 //
 // Interruption: a call its caller cancels, or whose link drops, is
 // interrupted on the host, its handler's signal aborted. Views stream
@@ -100,10 +101,13 @@ import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
-import { LINK_MAX_FRAME_BYTES, LinkGroup } from "@shigomori/contracts/link";
+import {
+  CLOSE_TRY_AGAIN,
+  LINK_MAX_FRAME_BYTES,
+  LinkGroup,
+} from "@shigomori/contracts/link";
 import {
   CLOSE_HANDSHAKE_FAILED,
-  CLOSE_TRY_AGAIN,
   SEAL_OVERHEAD_BYTES,
   sealDialer,
 } from "@shared/remote/sealedSocket";
@@ -523,6 +527,20 @@ it("refusal: a ticket the host never minted is a blocked verdict, and five of th
   assert.equal(locked.code, 4003);
 });
 
+it("refusal: a pending ticket presented with a key other than the roster's counts as a guess, and five lock the address out", async () => {
+  const track = trackTest;
+  const { listener } = await listen(track);
+  const ticket = mintTicket(listener.tickets, DIALER);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const refused = await dialFails(listener, {
+      ticket,
+      localKey: generateKeyPair(),
+    });
+    assert.ok(refused.refusal instanceof LinkRefusedError);
+  }
+  assert.equal((await dialFails(listener)).code, 4003);
+});
+
 it("lockout: an address is benched for 30 s of time awake, which neither a sleep nor a step of the wall clock either way spends", async () => {
   const track = trackTest;
   const clock = testClock();
@@ -549,6 +567,32 @@ it("lockout: an address is benched for 30 s of time awake, which neither a sleep
   // Stopped for 30 s: both clocks ran on.
   await lockOut();
   stop(30_000);
+  await dialListener(track, listener);
+});
+
+it("lockout: tickets that lapsed (replaced by the connection's next ask, expired, or replaced between the handshake and the hello) are refused past the threshold and leave a correct dial from the same address accepted", async () => {
+  const track = trackTest;
+  let now = 0;
+  const { listener } = await listen(track, {
+    ticketOpts: { ttlMs: 60_000, now: () => now },
+  });
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const raw = await rawLink(track, listener);
+    mintTicket(listener.tickets, DIALER);
+    assert.ok(failureOf(await raw.hello()) instanceof LinkRefusedError);
+    const replaced = mintTicket(listener.tickets, DIALER);
+    mintTicket(listener.tickets, DIALER);
+    assert.notEqual(
+      (await dialFails(listener, { ticket: replaced })).code,
+      4003,
+    );
+    const expired = mintTicket(listener.tickets, DIALER);
+    now += 60_000;
+    assert.notEqual(
+      (await dialFails(listener, { ticket: expired })).code,
+      4003,
+    );
+  }
   await dialListener(track, listener);
 });
 
@@ -667,7 +711,7 @@ it("frame cap: a call's frame of 1 MiB crosses the real listener, sealed, whethe
     // sealed frame over it, and the answer arrives on the same link.
     const answer = await Effect.runPromiseExit(
       raw.call("projects:defaultBranch", {
-        projectId: "p".repeat((1 << 20) - 128),
+        projectId: "p".repeat(MAX_MESSAGE_BYTES - 128),
       }),
     );
     assert.ok(
@@ -689,7 +733,7 @@ it("frame cap: an inbound frame over 1 MiB and its tag closes the socket", async
   track(() => ws.terminate());
   await new Promise((resolve) => ws.once("open", resolve));
   const closed = new Promise<number>((resolve) => ws.on("close", resolve));
-  ws.send("x".repeat((1 << 20) + SEAL_OVERHEAD_BYTES + 1));
+  ws.send("x".repeat(MAX_MESSAGE_BYTES + SEAL_OVERHEAD_BYTES + 1));
   assert.equal(await closed, 1009);
 });
 
@@ -924,7 +968,7 @@ it("what a granted call left going reaches its peer only while commands and shar
   assert.equal(has(heard, "not-sharing"), false);
 });
 
-it("invited calls: with commands off a call the host asked for runs while the rest stay refused, and the byte channel it attached survives the switch-off drop that resets every other", async () => {
+it("invited calls: with commands off a call the host asked for runs while the rest stay refused, and the byte channel it attached survives the switch-off drop that resets every other as the switch turns, no bytes moving", async () => {
   const track = trackTest;
   const invitedPort = 1;
   const { listener, seen } = await listen(track, {
@@ -956,12 +1000,19 @@ it("invited calls: with commands off a call the host asked for runs while the re
     port: 2,
     channelId: "0123456789abcdef0123456789abcdef",
   });
-  listener.setAccepts(false);
   const invited = read("fedcba9876543210fedcba9876543210");
   await invoke(connection, "forward:open", {
     port: invitedPort,
     channelId: "fedcba9876543210fedcba9876543210",
   });
+  // The switch turning off drops the granted channel then, idle as it
+  // is, and the invited one carries on.
+  listener.setAccepts(false);
+  await waitFor(
+    () => seen.channels.get("0123456789abcdef0123456789abcdef")?.reset === true,
+    "the granted channel to drop",
+  );
+  await waitFor(() => granted.reset(), "the dialer to hear the drop");
   const refused = await rejection(
     invoke(connection, "forward:open", {
       port: 3,
@@ -969,16 +1020,39 @@ it("invited calls: with commands off a call the host asked for runs while the re
     }),
   );
   assert.ok(refused instanceof CommandRefusedError);
-  // The next bytes find the switch off: the granted channel goes, the
-  // invited one carries on.
   invited.handle.write(Buffer.from("hello"));
   await waitFor(() => invited.got.join("") === "hello", "the echo");
+  assert.equal(invited.reset(), false);
+  assert.equal(
+    seen.channels.get("fedcba9876543210fedcba9876543210")?.reset,
+    false,
+  );
+});
+
+it("sharing turned off under a linked peer drops its byte channels then, no bytes moving", async () => {
+  const track = trackTest;
+  const { listener, seen } = await listen(track);
+  listener.setAccepts(true);
+  const connection = await dialListener(track, listener);
+  let reset = false;
+  connection.channels.attach("0123456789abcdef0123456789abcdef", {
+    onData: (_data, consumed) => consumed(),
+    onEnd: () => {},
+    onReset: () => {
+      reset = true;
+    },
+    onWritable: () => {},
+  });
+  await invoke(connection, "forward:open", {
+    port: 2,
+    channelId: "0123456789abcdef0123456789abcdef",
+  });
+  listener.setSharing(false);
   await waitFor(
     () => seen.channels.get("0123456789abcdef0123456789abcdef")?.reset === true,
-    "the granted channel to drop",
+    "the channel to drop",
   );
-  await waitFor(() => granted.reset(), "the dialer to hear the drop");
-  assert.equal(invited.reset(), false);
+  await waitFor(() => reset, "the dialer to hear the drop");
 });
 
 it("sharing gate: with sharing off a peer's reads and commands are refused and never run, and its pushes withheld, while the mirror this device asked for is still served and still hears its copy, and turning it back on needs no reconnect", async () => {
@@ -1487,6 +1561,35 @@ it("liveness: the host's cut of a silent peer is monotonic, and a sweep that cam
   assert.equal(cut, false, "a late sweep or a clock step cut the peer");
   // Silent on on-time sweeps: cut.
   await sweeps(4);
+  assert.equal(await raw.closed, 1001);
+});
+
+it("liveness: a sweep's lateness is no peer's silence, a stall short of twice the sweep included", async () => {
+  const track = trackTest;
+  const clock = testClock();
+  const { wall, stop } = sleepingClock(clock);
+  const { listener } = await listen(track, {
+    start: { livenessTimeoutMs: 300 },
+    provide: Layer.succeed(Clock.Clock, wall),
+  });
+  const raw = await rawLink(track, listener, { pingInterval: 60_000 });
+  assert.ok(Exit.isSuccess(await raw.hello()));
+  let cut = false;
+  void raw.closed.then(() => (cut = true));
+  // Its last frame between two sweeps (75 ms apart).
+  await clock.advance(10);
+  await Effect.runPromise(raw.call("link:ping"));
+  await clock.advance(65);
+  await clock.advance(75);
+  await clock.advance(75);
+  await delay(20);
+  // 215 ms silent, then the host stalls 60 ms: its next sweep comes
+  // 135 ms after the last, and finds 290 ms of silence awake.
+  stop(60);
+  await clock.advance(75);
+  await delay(20);
+  assert.equal(cut, false, "the stall counted as silence");
+  await clock.advance(75);
   assert.equal(await raw.closed, 1001);
 });
 

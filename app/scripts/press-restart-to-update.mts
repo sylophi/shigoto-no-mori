@@ -13,9 +13,11 @@ import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { LINK_MAX_FRAME_BYTES, LoopbackGroup } from "@shigomori/contracts/link";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import { LOOPBACK_FILE, LoopbackFile } from "@shigomori/engine/Control";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Socket from "effect/socket/Socket";
@@ -25,9 +27,9 @@ if (dataDir === undefined) {
   console.error("usage: press-restart-to-update.mts <data dir>");
   process.exit(2);
 }
-const { port, token } = JSON.parse(
-  readFileSync(join(dataDir, "loopback.json"), "utf8"),
-) as { port: number; token: string };
+const { port, token } = Schema.decodeUnknownSync(LoopbackFile)(
+  readFileSync(join(dataDir, LOOPBACK_FILE), "utf8"),
+);
 
 const hex = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>

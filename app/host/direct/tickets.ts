@@ -16,9 +16,12 @@
 // tickets, and sibling tabs asking at once each keep theirs. A device
 // holds at most MAX_DEVICE_CONNECTIONS sets, its oldest giving way. The
 // global cap is a refusing backstop, never an eviction of another
-// peer's in-flight tickets: evicting would feed the listener's per-IP
-// auth lockout against innocent peers whose dials then present a
-// vanished ticket.
+// peer's in-flight tickets, which would refuse their dials.
+//
+// A ticket this store issued and has since let go is remembered a
+// while (RETIRED_TICKETS), so a dial presenting it reads as stale and
+// not as a guess: only a ticket never issued counts toward the
+// listener's lockout.
 //
 // This file must stay Electron free (pnpm test host-boundary).
 import {
@@ -27,6 +30,7 @@ import {
 } from "@shigomori/contracts/modules/direct";
 import { MAX_DEVICE_CONNECTIONS } from "@shigomori/contracts/hubProtocol";
 import { mintHexId } from "@host/lib/hexId";
+import { STALE_TICKET } from "@shared/remote/sealedSocket";
 
 // The distinguishing prefix, following the hub worker's smrt_/smdc_
 // convention (hub/src/ticket.ts): smpt_ for a peer-to-peer connect
@@ -39,6 +43,10 @@ export const DIRECT_TICKET_PREFIX = "smpt_";
 // host answers available:false) rather than evicting another peer's
 // pending set.
 const MAX_PENDING_TICKETS = 256;
+
+// How many let-go tickets are remembered as issued, the oldest
+// forgotten first: a few full turns of the pending cap.
+const RETIRED_TICKETS = 4 * MAX_PENDING_TICKETS;
 
 // Who a ticket set was minted for: the peer device, and the connection
 // of it that asked (shared/hub/directDial.ts mints one per dial).
@@ -56,20 +64,36 @@ export type ConnectTicketStore = {
     peer: TicketPeer,
     kinds: readonly DirectCandidateKind[],
   ): string[] | null;
-  // The peer device a pending ticket was minted for, or null when none
-  // matches, spending nothing: what lets a socket open. A socket that
+  // The peer device a pending ticket was minted for, spending nothing:
+  // what lets a socket open. STALE_TICKET for one this store issued that
+  // opens nothing now, null for one it never issued. A socket that
   // fails its handshake leaves the ticket for the dialer it belongs to.
   //
   // `arrivedAs` is the path the connection came in on, and must equal
   // the kind the ticket was minted for, so a ticket handed out for one
   // path opens nothing on another, and stays pending for the path it
   // belongs to.
-  check(ticket: string, arrivedAs: DirectCandidateKind): string | null;
+  check(
+    ticket: string,
+    arrivedAs: DirectCandidateKind,
+  ): string | null | typeof STALE_TICKET;
   // Spends the ticket, answering the peer device it was minted for, or
   // null when it is not pending (spent by another socket meanwhile,
   // expired, or dropped). Single use: a ticket links one socket, the
   // one whose hello spends it first.
   consume(ticket: string, arrivedAs: DirectCandidateKind): string | null;
+  // Whether the device's last `runs` sets in a row, whichever of its
+  // connections asked, were minted with a ticket of `kind` and none of
+  // its tickets reached this host since: dials that reached nothing
+  // (a dialer asks again, under a fresh connection id, after one
+  // fails). True once per run of such failures: a ticket of any of its
+  // sets reaching a hello ends the run, so several tabs of one web
+  // device share the count, and any tab linking resets it.
+  claimUndialed(
+    deviceId: string,
+    kind: DirectCandidateKind,
+    runs: number,
+  ): boolean;
   // Drops the pending tickets of every device not in `deviceIds`, the
   // account's live roster: a device removed from the account spends
   // nothing it was handed before.
@@ -110,10 +134,32 @@ export function createConnectTicketStore(
   // Each connection's pending set, in minting order, which mint's
   // replacement and the per-device cap run on.
   const sets = new Map<string, { deviceId: string; tickets: Set<string> }>();
+  // Each device's asks since a ticket of its last reached a hello: the
+  // kinds its latest set was minted with, how many sets before it held
+  // each kind, and the kinds this run already answered true for.
+  const asks = new Map<
+    string,
+    {
+      latest: ReadonlySet<DirectCandidateKind>;
+      before: Map<DirectCandidateKind, number>;
+      claimed: Set<DirectCandidateKind>;
+    }
+  >();
+  // The tickets let go, oldest first.
+  const retired = new Set<string>();
+
+  function retire(ticket: string): void {
+    pending.delete(ticket);
+    retired.add(ticket);
+    for (const oldest of retired) {
+      if (retired.size <= RETIRED_TICKETS) break;
+      retired.delete(oldest);
+    }
+  }
 
   // Removes one ticket and keeps its set in step.
   function forget(ticket: string, set: string): void {
-    pending.delete(ticket);
+    retire(ticket);
     const entry = sets.get(set);
     if (entry === undefined) return;
     entry.tickets.delete(ticket);
@@ -124,7 +170,7 @@ export function createConnectTicketStore(
     const entry = sets.get(set);
     if (entry === undefined) return;
     sets.delete(set);
-    for (const ticket of entry.tickets) pending.delete(ticket);
+    for (const ticket of entry.tickets) retire(ticket);
   }
 
   // Lazy sweep on mint: absolute TTL stands (consume checks it), this
@@ -140,8 +186,9 @@ export function createConnectTicketStore(
 
   return {
     clear() {
-      pending.clear();
+      for (const ticket of pending.keys()) retire(ticket);
       sets.clear();
+      asks.clear();
     },
     mint(peer, kinds) {
       sweepExpired();
@@ -181,16 +228,37 @@ export function createConnectTicketStore(
       }
       if (set.size > 0)
         sets.set(key, { deviceId: peer.deviceId, tickets: set });
+      const asked = asks.get(peer.deviceId);
+      const before = new Map<DirectCandidateKind, number>();
+      for (const kind of asked?.latest ?? []) {
+        before.set(kind, (asked?.before.get(kind) ?? 0) + 1);
+      }
+      asks.set(peer.deviceId, {
+        latest: new Set(kinds),
+        before,
+        claimed: asked?.claimed ?? new Set(),
+      });
       return tickets;
     },
 
     check(ticket, arrivedAs) {
       const entry = pending.get(ticket);
-      return entry === undefined ||
-        entry.kind !== arrivedAs ||
-        entry.expiresAt <= now()
-        ? null
+      if (entry === undefined) {
+        return retired.has(ticket) ? STALE_TICKET : null;
+      }
+      return entry.kind !== arrivedAs || entry.expiresAt <= now()
+        ? STALE_TICKET
         : entry.peerDeviceId;
+    },
+
+    claimUndialed(deviceId, kind, runs) {
+      const asked = asks.get(deviceId);
+      if (asked === undefined || asked.claimed.has(kind)) return false;
+      const undialed =
+        (asked.before.get(kind) ?? 0) + (asked.latest.has(kind) ? 1 : 0);
+      if (undialed < runs) return false;
+      asked.claimed.add(kind);
+      return true;
     },
 
     keepDevices(deviceIds) {
@@ -198,11 +266,15 @@ export function createConnectTicketStore(
       for (const [key, entry] of sets) {
         if (!keep.has(entry.deviceId)) dropSet(key);
       }
+      for (const deviceId of asks.keys()) {
+        if (!keep.has(deviceId)) asks.delete(deviceId);
+      }
     },
 
     consume(ticket, arrivedAs) {
       const entry = pending.get(ticket);
       if (entry === undefined || entry.kind !== arrivedAs) return null;
+      asks.delete(entry.peerDeviceId);
       forget(ticket, entry.set);
       return entry.expiresAt > now() ? entry.peerDeviceId : null;
     },

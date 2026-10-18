@@ -296,7 +296,8 @@ export class Tunnel extends Context.Service<
     readonly startingThenUp: (
       within: Duration.Duration,
     ) => Effect.Effect<boolean>;
-    // Whether a tunnel that is up still routes, asked after a wake. One
+    // Whether a tunnel that is up still routes, asked after a wake and
+    // when a peer asks again after a dial that reached nothing. One
     // that doesn't stops being advertised and is probed on as a reused
     // tunnel is at its start, so a network still coming back costs
     // nothing, and past that deadline its child (a stopped one, a
@@ -478,9 +479,9 @@ const make = (options: Options) =>
     // the probe ladder until routable, then advertise. A child that is
     // merely not routable yet is kept and probed on (the ladder's note),
     // up to the deadline. Not polled after "up": the child's exit is the
-    // down signal, and a wake (`recheck`) the one time a live child is
-    // asked again, since a sleep is what leaves a connector that is
-    // running but routes nothing.
+    // down signal, and `recheck` (a wake, a peer's dial that reached
+    // nothing) asks a live child again, since a sleep or a wedge leaves
+    // a connector that is running but routes nothing.
     // Set while a child is up, or the runner asks the Worker for a
     // provision, for `recheck`.
     const rechecks = yield* Ref.make(Option.none<Queue.Queue<void>>());

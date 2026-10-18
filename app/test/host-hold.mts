@@ -28,6 +28,9 @@
 //   - a host gone unasked leaves no loopback behind: its pid's
 //     loopback.json and the one it was writing aside go, and a
 //     loopback.json another host published stays.
+//   - terminal callers (stopped `sm`s holding their sockets) fill a
+//     place of their own on the loopback: past it the next terminal is
+//     turned away as busy, while a window and the shell still link.
 //
 // Run: pnpm test host-hold.
 import { LOOPBACK_FILE } from "@shigomori/engine/Control";
@@ -43,10 +46,16 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
+import * as Socket from "effect/socket/Socket";
 import { afterAll, it } from "vitest";
 import { WebSocket as WsWebSocket } from "ws";
+import { CLOSE_TRY_AGAIN, LoopbackGroup } from "@shigomori/contracts/link";
 import { sessionContract } from "@shigomori/contracts/modules/session";
+import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { effectClient } from "@shared/ipc/effectClient";
 import { createServed } from "@shared/ipc/served";
 import { type HostAddress, hostLink } from "@shared/remote/hostLink";
@@ -232,11 +241,12 @@ async function startHost(dataDir: string, clock?: Clock.Clock) {
         : Effect.provideService(Clock.Clock, clock),
     ) as Effect.Effect<Context.Context<Loopback.Loopback>, never, never>,
   );
-  const { port, shellToken } = await Effect.runPromise(
+  const { port, token, shellToken } = await Effect.runPromise(
     Context.get(context, Loopback.Loopback).address,
   );
   return {
     address: { port, token: shellToken, deviceId: "this-device" },
+    token,
     stop: () => Effect.runPromise(Scope.close(scope, Exit.void)),
   };
 }
@@ -426,5 +436,88 @@ it("a host gone unasked leaves no loopback behind, and another host's stays", as
     assert.ok(existsSync(file));
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// A caller's hello on the loopback, its socket held until `scope`
+// closes: a terminal's (no Origin), a window's (its page's Origin), or
+// the shell's (its token).
+async function helloOn(
+  port: number,
+  token: string,
+  scope: Scope.Scope,
+  origin?: string,
+) {
+  let closedWith: number | undefined;
+  const ws = new WsWebSocket(
+    `ws://127.0.0.1:${port}`,
+    origin === undefined ? {} : { origin },
+  );
+  ws.on("close", (code) => {
+    closedWith = code;
+  });
+  const exit = await Effect.runPromiseExit(
+    Effect.gen(function* () {
+      // ws's socket is a WebSocketLike at runtime, but its event types differ
+      const socket = yield* Socket.fromWebSocket(
+        Effect.succeed(ws as Socket.WebSocketLike),
+      );
+      const protocol = yield* RpcClient.makeProtocolSocket({
+        retryPolicy: Schedule.recurs(0),
+      }).pipe(
+        Effect.provideService(Socket.Socket, socket),
+        Effect.provide(RpcSerialization.layerSchemaBinary()),
+      );
+      // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
+      const client = (yield* RpcClient.make(LoopbackGroup, {
+        flatten: true,
+      }).pipe(
+        Effect.provideService(RpcClient.Protocol, protocol),
+      )) as unknown as (
+        tag: string,
+        payload: unknown,
+      ) => Effect.Effect<unknown, unknown>;
+      return yield* client("link:hello", {
+        deviceId: "this-device",
+        deviceKind: "desktop",
+        connectionId: "c".repeat(32),
+        appVersion: "9.9.9",
+        protocolVersion: PROTOCOL_VERSION,
+        token,
+      });
+    }).pipe(Scope.provide(scope)),
+  );
+  return { exit, closedWith: () => closedWith };
+}
+
+it("stopped terminals fill only the terminals' places on the loopback: the next is turned away as busy, and a window and the shell still link", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "host-hold-"));
+  dataDirs.push(dataDir);
+  const host = await startHost(dataDir);
+  const scope = Scope.makeUnsafe();
+  try {
+    const { port } = host.address;
+    for (let terminal = 0; terminal < 48; terminal++) {
+      const linked = await helloOn(port, host.token, scope);
+      assert.ok(Exit.isSuccess(linked.exit), `terminal ${terminal} linked`);
+    }
+    const turnedAway = await helloOn(port, host.token, scope);
+    assert.ok(Exit.isFailure(turnedAway.exit), "a 49th terminal linked");
+    await waitFor(
+      () => turnedAway.closedWith() === CLOSE_TRY_AGAIN,
+      "the terminal turned away as busy",
+    );
+    const window = await helloOn(
+      port,
+      host.token,
+      scope,
+      "http://localhost:5173",
+    );
+    assert.ok(Exit.isSuccess(window.exit), "a window was turned away");
+    const shell = await helloOn(port, host.address.token, scope);
+    assert.ok(Exit.isSuccess(shell.exit), "the shell was turned away");
+  } finally {
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await host.stop();
   }
 });
