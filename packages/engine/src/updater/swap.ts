@@ -33,7 +33,7 @@ export const makeSwap = ({
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const stagedDir = files.at.staged;
-    const { removeAll, run } = files;
+    const { removeAll, prune, run } = files;
     const { signerOf, verify } = signatures;
     const { lock, readManifest, clearStaged, bundleVersion } = staging;
     // Replaces `target` with `staged`, in an order that leaves every crash
@@ -68,13 +68,13 @@ export const makeSwap = ({
         // that keeps the metadata instead.
         const copied = yield* run("ditto", [staged, incoming]);
         if (!copied.ok) {
-          yield* removeAll(incoming);
+          yield* prune(incoming);
           return yield* new SwapFailed({
             reason: "move-next-to",
             cause: new Error(copied.output.trim()),
           });
         }
-        yield* removeAll(staged);
+        yield* prune(staged);
       }
       // Verified against the installed app's Team ID read afresh, as the
       // app may have changed since staging, and never older than the app
@@ -96,7 +96,7 @@ export const makeSwap = ({
             }
           }),
         ),
-        Effect.tapError(() => removeAll(incoming)),
+        Effect.tapError(() => prune(incoming)),
       );
       const aside = path.join(dir, asideName(base, pid));
       yield* removeAll(aside);
@@ -120,7 +120,7 @@ export const makeSwap = ({
               yield* bundleVersion(target).pipe(Effect.option),
               version.value,
             ));
-        if (landed) return yield* removeAll(incoming);
+        if (landed) return yield* prune(incoming);
       }
       // Not interruptible: an interruption between the two renames would
       // leave no app at the target.
@@ -128,7 +128,7 @@ export const makeSwap = ({
         Effect.gen(function* () {
           const setAside = yield* fs.rename(target, aside).pipe(Effect.result);
           if (Result.isFailure(setAside)) {
-            yield* removeAll(incoming);
+            yield* prune(incoming);
             return yield* new SwapFailed({
               reason: "move-aside",
               cause: setAside.failure,
@@ -141,7 +141,7 @@ export const makeSwap = ({
             const restored = yield* fs
               .rename(aside, target)
               .pipe(Effect.result);
-            yield* removeAll(incoming);
+            yield* prune(incoming);
             return yield* Result.isFailure(restored)
               ? new SwapFailed({
                   reason: "rollback",
@@ -153,7 +153,7 @@ export const makeSwap = ({
           }
         }),
       );
-      yield* removeAll(aside);
+      yield* prune(aside);
     });
 
     // Installs the staged update over `target` and clears the staging
@@ -175,7 +175,9 @@ export const makeSwap = ({
       const manifest = yield* readManifest;
       if (Option.isNone(manifest)) return yield* new NothingStaged();
       yield* swap(path.join(stagedDir, manifest.value.bundleName), target, pid);
-      yield* clearStaged;
+      // The update is in: a staged copy left over is this version, which
+      // nothing offers again, and the next stage clears it.
+      yield* clearStaged.pipe(Effect.ignore);
       return manifest.value;
     }, Effect.scoped);
 
