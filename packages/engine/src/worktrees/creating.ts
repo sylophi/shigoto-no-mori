@@ -18,7 +18,6 @@ import * as Git from "../Git.ts";
 import { splitRemoteRef } from "../gitParse.ts";
 import * as Layout from "../Layout.ts";
 import * as Lifecycle from "../Lifecycle.ts";
-import { shellQuote } from "../Lifecycle.ts";
 import { entryExists } from "../entries.ts";
 import { pickWorktreeName } from "../names.ts";
 import { parsePortPoolConfig, PORT_POOL_CONFIG } from "../ports.ts";
@@ -30,8 +29,8 @@ import {
   type WorktreeIdentity,
   WorktreeRefused,
   isPrimaryKeyword,
+  lifecycleCommand,
   namesUsed,
-  scriptOf,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
 import type { KeptArea } from "./kept.ts";
@@ -177,21 +176,21 @@ export const makeCreating = ({
     // setting is on, port-pool is installed, the worktree is configured for
     // it, and the app made the worktree (no provision ever ran for an
     // external one, so none is released either).
-    const portPoolActive = (worktree: WorktreeIdentity) =>
-      Effect.gen(function* () {
-        if (worktree.isExternal || !(yield* deviceFlag("portPool")))
-          return false;
-        const installed = yield* findExecutable("port-pool").pipe(
-          Effect.map(Option.isSome),
-          Effect.provideContext(platform),
-        );
-        return (
-          installed &&
-          parsePortPoolConfig(
-            yield* readOptional(path.join(worktree.path, PORT_POOL_CONFIG)),
-          ).configured
-        );
-      });
+    const portPoolActive = Effect.fn("Worktrees.portPoolActive")(function* (
+      worktree: Pick<WorktreeIdentity, "path" | "isExternal">,
+    ) {
+      if (worktree.isExternal || !(yield* deviceFlag("portPool"))) return false;
+      const installed = yield* findExecutable("port-pool").pipe(
+        Effect.map(Option.isSome),
+        Effect.provideContext(platform),
+      );
+      return (
+        installed &&
+        parsePortPoolConfig(
+          yield* readOptional(path.join(worktree.path, PORT_POOL_CONFIG)),
+        ).configured
+      );
+    });
 
     // The setup script, then port-pool's provision (never for an external
     // worktree, whose release never runs). Answers the failures and the
@@ -207,7 +206,9 @@ export const makeCreating = ({
       Effect.gen(function* () {
         const failures: Lifecycle.ScriptFailure[] = [];
         const ran: string[] = [];
-        const setup = skipSetup ? "" : scriptOf(settings, "setup");
+        const setup = skipSetup
+          ? ""
+          : lifecycleCommand({ kind: "setup" }, settings, worktree.path);
         const pool = yield* portPoolActive(worktree);
         if (setup === "" && !pool) return { failures, ran };
         const context = yield* scriptContext(project, worktree, found);
@@ -226,11 +227,12 @@ export const makeCreating = ({
         if (setup !== "")
           yield* step("setup", "setup", setup, { kind: "setup" });
         if (pool) {
+          const slot = { kind: "portPool", phase: "provision" } as const;
           yield* step(
             "port-pool provision",
             "portPoolProvision",
-            `port-pool provision ${shellQuote(worktree.path)}`,
-            { kind: "portPool", phase: "provision" },
+            lifecycleCommand(slot, settings, worktree.path),
+            slot,
           );
         }
         return { failures, ran };

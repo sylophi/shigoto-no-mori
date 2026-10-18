@@ -47,7 +47,7 @@ export const makeRelocating = ({
     const paths = yield* Paths.Paths;
     const binary = paths.binaryName;
     const { identities } = listing;
-    const { move } = moving;
+    const { move, carryLease } = moving;
 
     // The linked worktrees that moved along with the repo: git lists them
     // at a path that is gone, and they sit at the same place relative to
@@ -122,6 +122,7 @@ export const makeRelocating = ({
           readonly from: string;
           readonly to: string;
           readonly where: Moved;
+          readonly worktree: WorktreeIdentity;
         }> = [];
         for (const [oldPath, newPath] of moved) {
           const resolved = yield* fs
@@ -138,6 +139,7 @@ export const makeRelocating = ({
               from,
               to: now.id,
               where: { fromPath: oldPath, toPath: now.path },
+              worktree: now,
             });
           }
         }
@@ -151,7 +153,8 @@ export const makeRelocating = ({
       moved: ReadonlyMap<string, string>,
     ) {
       const { rekeys, repaired } = yield* rekeysOf(project, moved);
-      for (const { from, to, where } of rekeys) {
+      for (const { from, to, where, worktree } of rekeys) {
+        yield* carryLease(where.fromPath, worktree);
         yield* kept.rekey(project, from, to, { moved: where });
       }
       if (Result.isFailure(repaired)) return yield* repaired.failure;
@@ -244,13 +247,14 @@ export const makeRelocating = ({
           .pipe(Effect.catchTags({ SqlError: Effect.die }));
         // Best effort from here: the entry already points at the new path.
         // A capture that didn't follow is said, and stays under the old id.
-        for (const { from, to: now } of rekeys) {
+        for (const { from, to: now, where, worktree } of rekeys) {
           const carried = yield* kept.rekeyCapture(relocated, from, now);
           if (carried !== "followed") {
             yield* Effect.logWarning(
               new CaptureNotCarried({ from, to: now, reason: carried }).message,
             );
           }
+          yield* carryLease(where.fromPath, worktree);
         }
         yield* rehomeManaged(relocated, project.path);
       }

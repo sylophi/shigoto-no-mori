@@ -164,8 +164,9 @@ const settled = <A, E, R>(
 // own copy only, its journal last), which waited till then so a power
 // loss before the copy reached the disk still had it; re-points every
 // link again, the journal's entries and any worktree git lists under the
-// old folder; removes the journal; and lets the store write, last. Each
-// step is idempotent, so a process that finds the journal runs it again.
+// old folder; carries each entry's port-pool lease; removes the journal;
+// and lets the store write, last. Each step is idempotent, so a process
+// that finds the journal runs it again.
 export const finishMove = (
   journal: Journal,
   at: string,
@@ -230,6 +231,28 @@ export const finishMove = (
         }),
       { discard: true },
     ).pipe((repair) => settled(repair, "a moved worktree's link", "finishing"));
+    // Only at the new place does the layout count a moved worktree as
+    // managed, which is what port-pool's lease there hangs on.
+    if (options.settle && repaired) {
+      yield* Effect.forEach(
+        listed,
+        (project) =>
+          Effect.gen(function* () {
+            const moved = journal.moved.filter(
+              (entry) => entry.projectId === project.id,
+            );
+            if (moved.length === 0) return;
+            const found = yield* worktrees.identities(project);
+            for (const entry of moved) {
+              const landed = found.find((one) => one.path === entry.newPath);
+              if (landed !== undefined) {
+                yield* worktrees.carryLease(entry.oldPath, landed);
+              }
+            }
+          }).pipe(Effect.ignore),
+        { discard: true },
+      );
+    }
     if (!(options.settle && cleaned && repaired)) return;
     yield* letGo(options.file, "finishing");
   });

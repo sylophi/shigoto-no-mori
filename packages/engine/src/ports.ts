@@ -3,7 +3,8 @@
 // files are the contract both sides agree on.
 
 import { parseEnv } from "node:util";
-import * as Predicate from "effect/Predicate";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 // A port name, the port it holds, and where it was found.
 export type PortInfo = {
@@ -25,40 +26,34 @@ export type PortPoolConfig = {
 
 export const PORT_POOL_CONFIG = "port-pool.config.json";
 
+const decodeDocument = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
+);
+const decodePortNames = Schema.decodeUnknownOption(Schema.Array(Schema.String));
+const decodeEnvFiles = Schema.decodeUnknownOption(
+  Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String)),
+);
+
 // Key by key, tolerantly: "is this worktree configured" is what
 // provision and release both hinge on, and a portNames or envFiles shape
 // this build doesn't model must not turn it into a no, since release
 // would then skip and leak the worktree's ports. Unreadable text reads
 // as no config at all.
 export function parsePortPoolConfig(text: string | undefined): PortPoolConfig {
-  const none = { configured: false, portNames: [], envFiles: {} };
-  if (text === undefined) return none;
-  let doc: unknown;
-  try {
-    doc = JSON.parse(text);
-  } catch {
-    return none;
+  const doc = text === undefined ? Option.none() : decodeDocument(text);
+  if (Option.isNone(doc)) {
+    return { configured: false, portNames: [], envFiles: {} };
   }
-  if (!Predicate.isObject(doc)) return none;
-  const names = doc["portNames"];
-  const portNames =
-    Array.isArray(names) && names.every((name) => typeof name === "string")
-      ? names
-      : [];
-  const files = doc["envFiles"];
-  const envFiles =
-    Predicate.isObject(files) &&
-    Object.values(files).every(
-      (vars) =>
-        Predicate.isObject(vars) &&
-        Object.values(vars).every((template) => typeof template === "string"),
-    )
-      ? (files as Record<string, Record<string, string>>)
-      : {};
   return {
-    configured: "schemaVersion" in doc,
-    portNames,
-    envFiles,
+    configured: "schemaVersion" in doc.value,
+    portNames: Option.getOrElse(
+      decodePortNames(doc.value["portNames"]),
+      () => [],
+    ),
+    envFiles: Option.getOrElse(
+      decodeEnvFiles(doc.value["envFiles"]),
+      () => ({}),
+    ),
   };
 }
 

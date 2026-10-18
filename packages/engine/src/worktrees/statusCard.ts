@@ -65,26 +65,35 @@ export const makeStatusCard = ({
         .readFileString(file)
         .pipe(Effect.option, Effect.map(Option.getOrUndefined));
 
+    // The worktree's port-pool config and the ports port-pool wrote into
+    // its env files: what the status card and the app's port list read.
+    const poolPorts = Effect.fn("Worktrees.poolPorts")(function* (
+      worktree: string,
+    ) {
+      const config = parsePortPoolConfig(
+        yield* readOptional(path.join(worktree, PORT_POOL_CONFIG)),
+      );
+      const files = new Map(
+        (yield* Effect.forEach(
+          // A name that would leave the worktree is no env file of its.
+          Object.keys(config.envFiles).filter(isSafeRelPath),
+          (name) =>
+            readOptional(path.join(worktree, name)).pipe(
+              Effect.map((content) => [name, content] as const),
+            ),
+          { concurrency: "unbounded" },
+        )).flatMap(([name, content]) =>
+          content === undefined ? [] : [[name, content] as const],
+        ),
+      );
+      return { config, ports: matchPorts(config, files) };
+    });
+
     // The ports port-pool provisioned here, and whether it is set up.
     const portsOf = (worktree: string) =>
       Effect.gen(function* () {
-        const pool = parsePortPoolConfig(
-          yield* readOptional(path.join(worktree, PORT_POOL_CONFIG)),
-        );
-        const files = new Map(
-          (yield* Effect.forEach(
-            // A name that would leave the worktree is no env file of its.
-            Object.keys(pool.envFiles).filter(isSafeRelPath),
-            (name) =>
-              readOptional(path.join(worktree, name)).pipe(
-                Effect.map((content) => [name, content] as const),
-              ),
-            { concurrency: "unbounded" },
-          )).flatMap(([name, content]) =>
-            content === undefined ? [] : [[name, content] as const],
-          ),
-        );
-        const [enabled, installed] = yield* Effect.all([
+        const [{ config, ports }, enabled, installed] = yield* Effect.all([
+          poolPorts(worktree),
           deviceFlag("portPool"),
           findExecutable("port-pool").pipe(
             Effect.map(Option.isSome),
@@ -92,8 +101,8 @@ export const makeStatusCard = ({
           ),
         ]);
         return {
-          ports: matchPorts(pool, files),
-          portPool: { enabled, installed, configured: pool.configured },
+          ports,
+          portPool: { enabled, installed, configured: config.configured },
         };
       });
 
@@ -184,7 +193,7 @@ export const makeStatusCard = ({
       } satisfies StatusCard;
     });
 
-    return { readOptional, status };
+    return { readOptional, poolPorts, status };
   });
 
 export type StatusCardArea = Effect.Success<ReturnType<typeof makeStatusCard>>;

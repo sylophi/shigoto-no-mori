@@ -3,6 +3,7 @@
 // so they import it from there.
 import { isValidWorktreeDirName } from "@shigomori/contracts/predicates/worktreeDirName";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
+import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
@@ -697,6 +698,18 @@ export const scriptOf = (
   const value = Predicate.isObject(scripts) ? scripts[key] : undefined;
   return typeof value === "string" ? value.trim() : "";
 };
+
+// The command a lifecycle slot runs in the worktree at `path`, empty
+// when the project has no such script: the lifecycle's own runs and a
+// run asked for by hand both start this.
+export const lifecycleCommand = (
+  slot: LifecycleSlot,
+  settings: Readonly<Record<string, unknown>> | null,
+  path: string,
+) =>
+  slot.kind === "portPool"
+    ? `port-pool ${slot.phase} ${Lifecycle.shellQuote(path)}`
+    : scriptOf(settings, slot.kind);
 
 export const NO_CHANGES = {
   staged: 0,

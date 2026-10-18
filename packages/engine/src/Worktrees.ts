@@ -12,6 +12,7 @@ import type { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
 import { splitRemoteRef } from "./gitParse.ts";
 import * as Lifecycle from "./Lifecycle.ts";
+import type { PortInfo, PortPoolConfig } from "./ports.ts";
 import * as Registry from "./Registry.ts";
 import type { RegisteredProject } from "./Registry.ts";
 import type * as GitHub from "./GitHub.ts";
@@ -70,6 +71,7 @@ export {
   cleanupErrorOf,
   cleanupFailureWords,
   isShelfable,
+  lifecycleCommand,
   projectsHint,
   scriptOf,
   trimGoSpace,
@@ -125,6 +127,16 @@ export class Worktrees extends Context.Service<
       located: Located,
       options: { readonly pullRequest: boolean },
     ) => Effect.Effect<StatusCard>;
+    // The worktree's port-pool config and the ports port-pool wrote into
+    // its env files, as the status card reads them.
+    readonly poolPorts: (path: string) => Effect.Effect<{
+      readonly config: PortPoolConfig;
+      readonly ports: ReadonlyArray<PortInfo>;
+    }>;
+    // Whether port-pool provisions and releases the worktree.
+    readonly portPoolActive: (
+      worktree: Pick<WorktreeIdentity, "path" | "isExternal">,
+    ) => Effect.Effect<boolean>;
 
     // Where `cwd` is among the registered projects.
     readonly here: (cwd: string) => Effect.Effect<Here>;
@@ -303,6 +315,12 @@ export class Worktrees extends Context.Service<
       fromPath: string,
       toPath: string,
     ) => Effect.Effect<WorktreeRow, WorktreeRefused | Git.GitError>;
+    // port-pool's lease carried from the folder a checkout left to the
+    // one git lists it at now (`moved`), wherever its path is re-keyed.
+    readonly carryLease: (
+      fromPath: string,
+      moved: WorktreeIdentity,
+    ) => Effect.Effect<void>;
     // The moves a crash or an interrupt cut short, whose process is gone,
     // finished where git lists the checkout at its destination and undone
     // elsewhere (worktrees/moving.ts).
@@ -403,7 +421,7 @@ const make = Effect.gen(function* () {
   const relocating = yield* makeRelocating({ listing, kept, moving });
   const { identities, primaryRefOf, list, row, identityList, identityRow } =
     listing;
-  const { status } = statusCard;
+  const { status, poolPorts } = statusCard;
   const {
     locate,
     resolveProject,
@@ -412,9 +430,10 @@ const make = Effect.gen(function* () {
     resolve,
   } = resolving;
   const { setShelved, setAutoPull, description, describe } = describing;
-  const { destination, scriptContext, create } = creating;
+  const { destination, scriptContext, create, portPoolActive } = creating;
   const { removable, remove } = removing;
-  const { move, carryMoved, rename, rekey, resume, interrupted } = moving;
+  const { move, carryMoved, carryLease, rename, rekey, resume, interrupted } =
+    moving;
   const { adopt, setup } = adopting;
   const { relocateProject, relocationPlan, relink } = relocating;
 
@@ -425,6 +444,8 @@ const make = Effect.gen(function* () {
     list,
     row,
     status,
+    poolPorts,
+    portPoolActive,
     here: locate,
     resolveProject,
     resolveProjectById,
@@ -448,6 +469,7 @@ const make = Effect.gen(function* () {
     move,
     rename,
     carryMoved,
+    carryLease,
     resumeMoves: resume,
     interruptedMoves: interrupted,
     rekey,
