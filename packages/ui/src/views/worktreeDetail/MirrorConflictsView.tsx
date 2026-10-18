@@ -5,6 +5,7 @@
 // out of reach of a keyboard or a touch screen, so they sit in a menu
 // the chip opens instead, with what each side did to them and the one
 // sentence that clears them.
+import { capitalized } from "@shigomori/contracts/words";
 import { FolderOpen, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import { ChipButton } from "../../primitives/chip-button.tsx";
@@ -56,8 +57,8 @@ function ConflictRow({
         {conflictLabel(conflict.root)}
       </span>
       <span className="text-muted-foreground">
-        {names.runner}: {summarize(conflict.localChanges)}, {names.copy}:{" "}
-        {summarize(conflict.remoteChanges)}
+        {capitalized(names.runner)}: {summarize(conflict.localChanges)},{" "}
+        {names.copy}: {summarize(conflict.remoteChanges)}
       </span>
     </span>
   );

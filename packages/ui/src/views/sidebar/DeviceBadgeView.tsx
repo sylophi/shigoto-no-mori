@@ -4,6 +4,7 @@
 // its connection tone (shared/DeviceGlyphView.tsx DeviceMarkView), the same
 // tile its row wears on the account page, so a badge and a dot can
 // never disagree about a machine, and the name rides the tooltip.
+import { capitalized } from "@shigomori/contracts/words";
 import { RefreshCw } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceMarkView } from "../shared/DeviceGlyphView.tsx";
@@ -23,7 +24,7 @@ export interface SidebarDeviceBadge {
 export function DeviceBadgeView({ badge }: { badge: SidebarDeviceBadge }) {
   return (
     <SimpleTooltip
-      tip={`${badge.label}${badge.reachable ? "" : " (not reachable right now, last known state)"}`}
+      tip={`${capitalized(badge.label)}${badge.reachable ? "" : " (not reachable right now, last known state)"}`}
     >
       <span className="inline-flex shrink-0" aria-label={`On ${badge.label}`}>
         <DeviceMarkView icon={badge.icon} tone={badge.tone} />
