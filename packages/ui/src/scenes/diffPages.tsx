@@ -454,17 +454,7 @@ export function DiffPartsScene() {
           </div>
         </Part>
         <Part label="A pull request's image, its commits not fetched">
-          <MediaDiffView>
-            {(["old", "new"] as const).map((side) => (
-              <MediaDiffSideView
-                key={side}
-                side={side}
-                file={undefined}
-                reading={false}
-                unnamed={{ onRetry: noop, retrying: false }}
-              />
-            ))}
-          </MediaDiffView>
+          <MediaDiffView unnamed={{ onRetry: noop, retrying: false }} />
         </Part>
         <Part label="A peer's foot">
           <ChangesFooterView

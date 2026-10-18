@@ -26,6 +26,18 @@ export function MediaDiff({
   const { type, prevObjectId, newObjectId, name } = fileDiff;
   const before = type === "new" ? undefined : prevObjectId;
   const after = type === "deleted" ? undefined : newObjectId;
+  // GitHub's patch shortens both of a changed file's ids alike, so the
+  // file says it once rather than once a side.
+  const unnamed = [before, after].some(
+    (oid) => oid !== undefined && !isFullObjectId(oid),
+  );
+  if (unnamed) {
+    return (
+      <MediaDiffView
+        unnamed={{ onRetry: retry?.retry, retrying: retry?.retrying ?? false }}
+      />
+    );
+  }
   return (
     <MediaDiffView>
       {before !== undefined && (
@@ -35,7 +47,6 @@ export function MediaDiff({
           oid={before}
           path={fileDiff.prevName ?? name}
           side="old"
-          retry={retry}
         />
       )}
       {after !== undefined && (
@@ -45,7 +56,6 @@ export function MediaDiff({
           oid={after}
           path={name}
           side="new"
-          retry={retry}
         />
       )}
     </MediaDiffView>
@@ -59,34 +69,20 @@ function MediaDiffSide({
   oid,
   path,
   side,
-  retry,
 }: {
   projectId: string;
   worktreeId: string;
   oid: string;
   path: string;
   side: "old" | "new";
-  retry: { readonly retry: () => void; readonly retrying: boolean } | undefined;
 }) {
   const [ref, seen] = useSeen<HTMLDivElement>();
-  const named = isFullObjectId(oid);
-  const { data, isError } = useGitBlob(
-    projectId,
-    worktreeId,
-    oid,
-    path,
-    seen && named,
-  );
+  const { data, isError } = useGitBlob(projectId, worktreeId, oid, path, seen);
   return (
     <MediaDiffSideView
       side={side}
       file={data}
       reading={data === undefined && !isError}
-      unnamed={
-        named
-          ? undefined
-          : { onRetry: retry?.retry, retrying: retry?.retrying ?? false }
-      }
       sideRef={ref}
     />
   );

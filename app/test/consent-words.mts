@@ -50,11 +50,11 @@ it("an action a peer refused names that peer and the switch on its account page"
   );
 });
 
-it("a peer the registry no longer knows reads as the other device", async () => {
+it("a peer the registry no longer knows reads as another device", async () => {
   assert.deepEqual(
     await refusedBy(new CommandRefusedError({ deviceId: "gone" })),
     [
-      "Read-only until the other device turns on “Allow control from other devices” on its account page.",
+      "Read-only until another device turns on “Allow control from other devices” on its account page.",
     ],
   );
 });

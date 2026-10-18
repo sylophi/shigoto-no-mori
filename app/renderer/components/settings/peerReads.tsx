@@ -3,6 +3,7 @@ import {
   isCommandRefusedError,
 } from "@shigomori/contracts/errors";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { PeerReadErrorView } from "@shigomori/ui/views/settings/PeerReadErrorView.tsx";
 
 // The sections that read a device's disk (the CLI, the agent hooks). Each
@@ -29,10 +30,12 @@ export function PeerReadError({
   heading?: string;
 }) {
   const { remote } = useHostScope();
+  const device = useScopedDeviceLabel();
   if (!remote || !error || isCommandRefusedError(error)) return null;
   return (
     <PeerReadErrorView
       what={what}
+      device={device}
       message={errorMessageOf(error)}
       heading={heading}
     />

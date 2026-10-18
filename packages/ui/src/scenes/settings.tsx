@@ -431,11 +431,13 @@ export function SettingsPartsScene() {
           <PeerVersionLineView appVersion="" />
           <PeerReadErrorView
             what="the CLI install"
+            device={thinkpad.label}
             message="the device closed the connection"
             heading="Command line tool"
           />
           <PeerReadErrorView
             what="the agent hooks"
+            device={thinkpad.label}
             message="the device closed the connection"
             heading="Coding agents"
           />

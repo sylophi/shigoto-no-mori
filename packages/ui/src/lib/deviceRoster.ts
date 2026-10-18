@@ -5,6 +5,11 @@ import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { Project } from "@shigomori/contracts/schemas";
 import type { DeviceStatusView } from "./deviceStatus.ts";
 
+// A peer the reader can't be told the name of (the account no longer
+// lists it), as every sentence and badge names it: the raw id would
+// mean nothing to them.
+export const UNNAMED_DEVICE = "another device";
+
 export interface DeviceRosterEntry {
   deviceId: string;
   label: string;

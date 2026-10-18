@@ -1,3 +1,4 @@
+import { UNNAMED_DEVICE } from "../../lib/deviceRoster.ts";
 import { type Owner, ownerOf } from "./sidebarRow.ts";
 import {
   placeByStack,
@@ -129,7 +130,7 @@ export function mirrorBadgeLookup(
     return (
       deviceBadges.get(peer) ?? {
         deviceId: peer,
-        label: "another device",
+        label: UNNAMED_DEVICE,
         icon: MACHINE_FALLBACK_ICON,
         tone: "slate",
         reachable: false,

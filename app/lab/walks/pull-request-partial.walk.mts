@@ -1,9 +1,9 @@
 // A pull request whose commits can't be fetched here (GitHub names a
 // head no remote serves, as a network that can't reach it would leave
 // it), in the packaged build against a fake gh: its diff still shows,
-// from `gh pr diff`, and the image it changes says on each side that it
-// isn't here, with a retry, rather than a blank side; once the commits
-// can be reached, the retry draws them.
+// from `gh pr diff`, and each image it changes says once that it isn't
+// here, with a retry, rather than a blank side; once the commits can be
+// reached, the retry draws them.
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -53,7 +53,7 @@ afterAll(() => lab?.close());
 const unexpected = () =>
   existsSync(github.ghLog) ? readFileSync(github.ghLog, "utf8") : "";
 
-it("shows the diff, and each image side as not here with a retry", async () => {
+it("shows the diff, and each image as not here with a retry", async () => {
   const { page } = lab;
   await main(page).getByText("Images", { exact: true }).first().waitFor();
   await main(page)
@@ -65,10 +65,10 @@ it("shows the diff, and each image side as not here with a retry", async () => {
   await expect
     .poll(() => deepText(page), { message: unexpected() })
     .toContain("Not shown: this needs the pull request's commits");
-  // The changed image's two sides and the copy's one.
+  // Once a file: the changed image's and the copy's.
   await expect
     .poll(() => main(page).getByRole("button", { name: "Try again" }).count())
-    .toBe(3);
+    .toBe(2);
 });
 
 it("draws the sides once Try again finds the commits", async () => {
