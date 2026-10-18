@@ -1,47 +1,39 @@
 // @vitest-environment happy-dom
-// Proof that a default arriving in a focused field doesn't join what the
-// person is typing (the walks after #1014: New worktree's branch name came
-// out "sylviawalk-branch"). The picked animal name lands after the page
-// opens with the field focused; a typing gesture that began on the empty
-// field (its selection taken, its text not yet in) must replace the
-// default, not append to it. Input's selectOutsideChanges selects a value
-// set from outside under focus, so the text goes in over it.
+// Proof that a value arriving in a field the person is in doesn't merge
+// with what they type (the walks after #1014: New worktree's branch name
+// came out "sylviawalk-branch"). The picked animal name lands after the
+// page opens with the field focused, so a typing gesture that began on
+// the empty field (its selection taken, its text not yet in) must replace
+// it. And a rename being typed keeps what is typed when the stored name
+// changes underneath it. The real views, mounted in a DOM.
 //
 // Run: pnpm test seeded-field.
 import assert from "node:assert/strict";
-import { act, createElement, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { act, createElement, createRef, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, it } from "vitest";
 import { Input } from "@shigomori/ui/primitives/input.tsx";
+import { NEW_WORKTREE_FORM } from "@shigomori/ui/scenes/newCheckouts.tsx";
+import { NewWorktreeFormView } from "@shigomori/ui/views/newWorktree/NewWorktreeView.tsx";
+import { InlineNameEditorView } from "@shigomori/ui/views/shared/InlineNameEditorView.tsx";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+let root: Root | undefined;
 let host: HTMLElement | undefined;
-afterEach(() => host?.remove());
+afterEach(() => {
+  act(() => root?.unmount());
+  host?.remove();
+});
 
-// The field as New worktree holds it: what the person typed, else the
-// seed once it has arrived.
-function mountSeeded() {
+function mount(element: React.ReactElement): HTMLElement {
   host = document.body.appendChild(document.createElement("div"));
-  let seed: ((value: string) => void) | undefined;
-  function Field() {
-    const [typed, setTyped] = useState<string | null>(null);
-    const [seeded, setSeeded] = useState<string | null>(null);
-    seed = setSeeded;
-    return createElement(Input, {
-      "aria-label": "Branch name",
-      value: typed ?? seeded ?? "",
-      onChange: (event) => setTyped(event.target.value),
-      selectOutsideChanges: true,
-    });
-  }
-  const root = createRoot(host);
-  act(() => root.render(createElement(Field)));
-  const field = host.querySelector("input");
-  assert.ok(field);
-  return { field, seed: (value: string) => act(() => seed?.(value)) };
+  const mounted = createRoot(host);
+  root = mounted;
+  act(() => mounted.render(element));
+  return host;
 }
 
 // The browser's insert of typed text over the selection, and its input
@@ -63,9 +55,45 @@ function insertText(field: HTMLInputElement, text: string) {
   });
 }
 
-it("a default landing mid-gesture is replaced by the text typed", () => {
-  const { field, seed } = mountSeeded();
-  field.focus();
+const fieldIn = (scope: HTMLElement, label: string) => {
+  const field = scope.querySelector<HTMLInputElement>(
+    `input[aria-label="${label}"], input#${label}`,
+  );
+  assert.ok(field, `no ${label} field`);
+  return field;
+};
+
+// New worktree's form as its container holds the branch name: what the
+// person typed, else the picked name once it has arrived.
+function mountNewWorktree() {
+  let seed: ((name: string) => void) | undefined;
+  function Form() {
+    const [typed, setTyped] = useState<string | null>(null);
+    const [picked, setPicked] = useState<string | null>(null);
+    seed = setPicked;
+    return createElement(NewWorktreeFormView, {
+      ...NEW_WORKTREE_FORM,
+      mode: "branch-from",
+      sourcePicker: null,
+      prSource: null,
+      branchName: typed ?? picked ?? "",
+      onBranchName: setTyped,
+      useBranchAsFolder: true,
+      prFolderFrom: "branch",
+      folderName: "",
+      folderSourceRaw: "",
+      destPath: "",
+      villager: null,
+      canSubmit: false,
+    });
+  }
+  const field = fieldIn(mount(createElement(Form)), "branch-name");
+  return { field, seed: (name: string) => act(() => seed?.(name)) };
+}
+
+it("New worktree: a picked name landing mid-gesture is replaced by the text typed", () => {
+  const { field, seed } = mountNewWorktree();
+  assert.equal(field.ownerDocument.activeElement, field, "opens focused");
   field.select();
   seed("sylvia");
   assert.equal(field.value, "sylvia");
@@ -73,10 +101,37 @@ it("a default landing mid-gesture is replaced by the text typed", () => {
   assert.equal(field.value, "walk-branch");
 });
 
-it("text typed before the default arrives keeps the field", () => {
-  const { field, seed } = mountSeeded();
-  field.focus();
+it("New worktree: text typed before the picked name arrives keeps the field", () => {
+  const { field, seed } = mountNewWorktree();
   insertText(field, "walk");
   seed("sylvia");
   assert.equal(field.value, "walk");
+});
+
+it("a rename being typed keeps what is typed when the stored name changes", () => {
+  let rename: ((name: string) => void) | undefined;
+  function Editor() {
+    const [name, setName] = useState("huck");
+    rename = setName;
+    return createElement(InlineNameEditorView, {
+      name,
+      label: "Worktree",
+      pending: false,
+      onSave: () => {},
+      onCancel: () => {},
+    });
+  }
+  const field = fieldIn(mount(createElement(Editor)), "Worktree name");
+  act(() => rename?.("otter"));
+  assert.equal(field.value, "otter", "an untouched draft follows the name");
+  field.setSelectionRange(field.value.length, field.value.length);
+  insertText(field, "-2");
+  act(() => rename?.("badger"));
+  assert.equal(field.value, "otter-2");
+});
+
+it("a caller's ref reaches the field", () => {
+  const ref = createRef<HTMLInputElement>();
+  mount(createElement(Input, { ref, "aria-label": "Port" }));
+  assert.ok(ref.current instanceof HTMLInputElement);
 });

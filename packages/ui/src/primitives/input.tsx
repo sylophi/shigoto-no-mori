@@ -18,6 +18,7 @@ export function Input({
   className,
   selectOutsideChanges = false,
   onChange,
+  ref,
   ...props
 }: WithoutTitle<ComponentProps<"input">> & {
   // For a field whose value can arrive while the person is in it (an
@@ -42,12 +43,22 @@ export function Input({
       input.select();
     }
   }, [props.value, selectOutsideChanges]);
+  // An edit the parent refused leaves the value, and so the effect above,
+  // as they were: the next render still starts unmarked.
+  useLayoutEffect(() => {
+    typed.current = false;
+  });
+  const attach = (node: HTMLInputElement | null) => {
+    field.current = node;
+    if (typeof ref === "function") ref(node);
+    else if (ref) ref.current = node;
+  };
   return (
     <input
       data-slot="input"
       className={cn(fieldClass, className)}
       {...props}
-      ref={field}
+      ref={attach}
       onChange={(event: ChangeEvent<HTMLInputElement>) => {
         typed.current = true;
         onChange?.(event);
