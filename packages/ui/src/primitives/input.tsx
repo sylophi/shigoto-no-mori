@@ -1,4 +1,9 @@
-import type { ComponentProps } from "react";
+import {
+  type ChangeEvent,
+  type ComponentProps,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { cn } from "../lib/utils.ts";
 import type { WithoutTitle } from "./tooltip.tsx";
 
@@ -11,9 +16,42 @@ export const fieldClass =
 
 export function Input({
   className,
+  selectOutsideChanges = false,
+  onChange,
   ...props
-}: WithoutTitle<ComponentProps<"input">>) {
+}: WithoutTitle<ComponentProps<"input">> & {
+  // For a field whose value can arrive while the person is in it (an
+  // async default): a value that changed from outside, under focus, is
+  // selected, so what they type next replaces it rather than joining it.
+  readonly selectOutsideChanges?: boolean;
+}) {
+  const field = useRef<HTMLInputElement>(null);
+  const shown = useRef(props.value);
+  const typed = useRef(false);
+  useLayoutEffect(() => {
+    const outside = !typed.current && shown.current !== props.value;
+    typed.current = false;
+    shown.current = props.value;
+    const input = field.current;
+    if (
+      selectOutsideChanges &&
+      outside &&
+      input !== null &&
+      input === input.ownerDocument.activeElement
+    ) {
+      input.select();
+    }
+  }, [props.value, selectOutsideChanges]);
   return (
-    <input data-slot="input" className={cn(fieldClass, className)} {...props} />
+    <input
+      data-slot="input"
+      className={cn(fieldClass, className)}
+      {...props}
+      ref={field}
+      onChange={(event: ChangeEvent<HTMLInputElement>) => {
+        typed.current = true;
+        onChange?.(event);
+      }}
+    />
   );
 }

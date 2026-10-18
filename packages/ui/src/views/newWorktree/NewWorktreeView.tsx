@@ -215,6 +215,8 @@ export function NewWorktreeFormView({
               disabled={busy || mode === "checkout"}
               // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
               autoFocus
+              // The picked name lands after the page opens, focused.
+              selectOutsideChanges
               className={TEXT_INPUT_CLASS}
             />
             {branchTaken && (
