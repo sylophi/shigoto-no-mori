@@ -23,6 +23,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { LoopbackGroup } from "@shigomori/contracts/link";
+import { LoopbackFile, loopbackPartialOf } from "@shigomori/engine/Control";
 import { mintHexId } from "@host/lib/hexId";
 import {
   type LateServices,
@@ -101,7 +102,7 @@ const make = (options: {
       return yield* new LoopbackBindError({ reason: status.error ?? "" });
     }
     const port = status.port;
-    const content = JSON.stringify({
+    const content = Schema.encodeSync(LoopbackFile)({
       pid: process.pid,
       port,
       token,
@@ -110,7 +111,7 @@ const make = (options: {
     // Written aside and renamed in, so a terminal never reads half of it.
     const publish = Effect.gen(function* () {
       const file = options.file();
-      const partial = `${file}.${process.pid}`;
+      const partial = loopbackPartialOf(file, process.pid);
       yield* fs.writeFileString(partial, content, { mode: 0o600 });
       yield* fs.rename(partial, file);
     }).pipe(Effect.ignore, Effect.withSpan("Loopback.publish"));

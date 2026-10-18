@@ -60,7 +60,7 @@ import { accountContract } from "@shigomori/contracts/modules/account";
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
-import { boundedMessages } from "./boundedMessages";
+import { boundedMessages, MAX_MESSAGE_BYTES } from "./boundedMessages";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -88,6 +88,7 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import {
+  CLOSE_TRY_AGAIN,
   CommandGate,
   LINK_MAX_FRAME_BYTES,
   LinkGroup,
@@ -98,10 +99,10 @@ import {
 } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
 import {
-  CLOSE_TRY_AGAIN,
   ROSTER_UNAVAILABLE,
   SEAL_OVERHEAD_BYTES,
   sealListener,
+  STALE_TICKET,
 } from "@shared/remote/sealedSocket";
 import { sameKey } from "@shared/crypto/deviceKey";
 import {
@@ -128,14 +129,16 @@ export type WsServerTicketAuth = {
   readonly opens:
     | {
         // What a ticket opens, spending nothing: the device it was
-        // minted for and the key the hub's roster holds for it, or null,
-        // or ROSTER_UNAVAILABLE while the roster cannot be read.
+        // minted for and the key the hub's roster holds for it, null for
+        // a ticket never issued, STALE_TICKET for one that opens nothing
+        // now, or ROSTER_UNAVAILABLE while the roster cannot be read.
         readonly check: (
           ticket: string,
           arrivedAs: DirectCandidateKind,
         ) =>
           | { deviceId: string; publicKey: Uint8Array }
           | null
+          | typeof STALE_TICKET
           | typeof ROSTER_UNAVAILABLE;
         // Spends the ticket on its socket's hello, answering the device
         // it was minted for, or null when it is no longer pending.
@@ -231,13 +234,13 @@ type LinkServerStatus = {
 
 // Total sockets (linked plus pending) the listener holds.
 const MAX_CONNECTIONS = 64;
+// The loopback's linked terminal callers (a terminal `sm`, neither a
+// window nor the shell): a stopped one holds its socket, and this many
+// leave the rest for the windows and the shell.
+const MAX_TERMINAL_CONNECTIONS = 48;
 // Sockets before their hello, a tighter cap so a flood that never says
 // hello cannot crowd out real peers.
 const MAX_PREAUTH_CONNECTIONS = 16;
-// The largest inbound frame: a call well past any a peer makes (a
-// channel write is at most 32 KiB of bytes), and what bounds the
-// messages of a stream the other way too (boundedMessages.ts).
-const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 // Lets a refusal's answer flush before the socket is cut.
 const REJECT_TERMINATE_DELAY_MS = 250;
 // How long a socket asked to close has before it is cut.
@@ -253,7 +256,6 @@ const ORIGIN_REJECT_LOG_THROTTLE_MS = 60_000;
 // lockout is temporary and keyed on the client's address, so the
 // dialer backs off through it rather than reading it as a refusal.
 const CLOSE_GOING_AWAY = 1001;
-const CLOSE_OVER_CAPACITY = 1013;
 const CLOSE_HELLO_FAILED = 4002;
 const CLOSE_AUTH_LOCKED_OUT = 4003;
 // The standard code for data a socket can't take.
@@ -432,8 +434,10 @@ type Connection = {
     readonly publicKey: Uint8Array;
   } | null;
   helloSeen: boolean;
-  // The loopback's: whether the hello carried the shell's token.
+  // The loopback's: whether the hello carried the shell's token, and
+  // whether a page dialed (its Origin), which only a window does.
   shell: boolean;
+  readonly fromPage: boolean;
   deviceId: string | null;
   connectionId: string | null;
   inFlight: number;
@@ -658,13 +662,32 @@ export const make = (options: {
                   sameKey(rosterKey, opened.publicKey) &&
                   opens.spend(opened.ticket, connection.arrivalKind) ===
                     opened.deviceId;
+            // Counts nothing toward the lockout: a peer's socket got
+            // here on a ticket the host issued and a key it proved, and
+            // on the loopback every caller shares one address.
             if (!admitted) {
-              // Not on the loopback, where every caller shares one
-              // address and a wrong token is no guess at a right one.
-              if (!local) recordAuthFailure(connection.ip);
               log.warn(`[link] refused a hello from ${connection.ip}`);
               yield* killSoon(connection, "auth failed");
               return yield* new LinkRefusedError();
+            }
+            // Closed before the answer, so the terminal reads the code
+            // (Control.ts's AppBusy).
+            if (local && !shell && !connection.fromPage) {
+              let terminals = 0;
+              for (const other of connections.values()) {
+                if (
+                  !other.dead &&
+                  other.deviceId !== null &&
+                  !other.shell &&
+                  !other.fromPage
+                ) {
+                  terminals += 1;
+                }
+              }
+              if (terminals >= MAX_TERMINAL_CONNECTIONS) {
+                connection.kill(CLOSE_TRY_AGAIN, "over capacity");
+                return yield* new LinkRefusedError();
+              }
             }
             failedAuth.delete(connection.ip);
             preAuth -= 1;
@@ -696,7 +719,9 @@ export const make = (options: {
           });
 
         // The bytes the switches gave: gone the moment either is off,
-        // the ones an invited call opened aside.
+        // the ones an invited call opened aside. Dropped as the switch
+        // turns (below), and again at a read or write, for a channel a
+        // call attached as it turned.
         const underSwitch = (connection: Connection) =>
           Effect.gen(function* () {
             const shared = yield* sharingNow;
@@ -1061,7 +1086,7 @@ export const make = (options: {
           host: opts.bindAddress,
           port: opts.port,
           // A frame at the cap, sealed, carries its tag too.
-          maxPayload: MAX_INBOUND_FRAME_BYTES + SEAL_OVERHEAD_BYTES,
+          maxPayload: MAX_MESSAGE_BYTES + SEAL_OVERHEAD_BYTES,
           // No permessage-deflate: every frame is ciphertext, which does
           // not compress, so deflate would only add to each frame and
           // push one at the cap past it.
@@ -1092,13 +1117,13 @@ export const make = (options: {
             : forwardedFor;
           const ip = clientIdentityOf(req.socket.remoteAddress, cfConnectingIp);
           if (connections.size >= MAX_CONNECTIONS) {
-            closeThenTerminate(ws, CLOSE_OVER_CAPACITY, "over capacity", 50);
+            closeThenTerminate(ws, CLOSE_TRY_AGAIN, "over capacity", 50);
             return;
           }
           if (preAuth >= MAX_PREAUTH_CONNECTIONS) {
             closeThenTerminate(
               ws,
-              CLOSE_OVER_CAPACITY,
+              CLOSE_TRY_AGAIN,
               "too many pending connections",
               50,
             );
@@ -1148,24 +1173,27 @@ export const make = (options: {
                         localKey,
                         admit: async (ticket) => {
                           const peer = opens.check(ticket, arrivalKind);
-                          return peer === ROSTER_UNAVAILABLE
-                            ? peer
-                            : (peer?.publicKey ?? null);
+                          return typeof peer === "object" && peer !== null
+                            ? peer.publicKey
+                            : peer;
                         },
                         opened: (ticket, publicKey) => {
                           const peer = opens.check(ticket, arrivalKind);
                           if (
+                            typeof peer === "object" &&
                             peer !== null &&
-                            peer !== ROSTER_UNAVAILABLE &&
                             sameKey(peer.publicKey, publicKey)
                           ) {
                             connection.opened = { ticket, ...peer };
                           }
                         },
-                        // Only a ticket or a key that did not hold counts
-                        // toward the lockout: a device on another version
-                        // dialing in the middle of an upgrade is refused
-                        // without benching its address.
+                        // Only a ticket never issued or a key that did not
+                        // hold counts toward the lockout: a device on
+                        // another version dialing in the middle of an
+                        // upgrade, or a dial whose ticket lapsed (a
+                        // keeper's next ask replaced it, a clock step
+                        // expired it), is refused without benching its
+                        // address.
                         refused: (reason, guessed) => {
                           if (guessed) recordAuthFailure(ip);
                           log.warn(
@@ -1182,6 +1210,7 @@ export const make = (options: {
                 opened: null,
                 helloSeen: false,
                 shell: false,
+                fromPage: req.headers.origin !== undefined,
                 deviceId: null,
                 connectionId: null,
                 inFlight: 0,
@@ -1234,26 +1263,48 @@ export const make = (options: {
         // dropped it. Never a process on this machine: one that dies
         // closes its socket, and a wall clock that jumped over a sleep
         // would cut the app's own windows at every wake (V3.md, "Local
-        // links and liveness"). Silence is monotonic elapsed time, and a
-        // sweep that comes late (this host stopped, or its machine
-        // asleep) is no verdict: every peer's silence counts again from
-        // it, since frames waiting to be read may answer it.
+        // links and liveness"). Silence is monotonic elapsed time, and
+        // however late a sweep comes (this host stopped, or its machine
+        // asleep) its lateness is no peer's silence: frames waiting to
+        // be read may answer it, and the sweep runs before they are.
         const livenessMs = opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
         const sweepMs = Math.max(50, Math.floor(livenessMs / 4));
         let lastSweep = elapsedMillisUnsafe(clock);
         if (!local)
           yield* Effect.sync(() => {
             const now = elapsedMillisUnsafe(clock);
-            const late = now - lastSweep > 2 * sweepMs;
+            const late = Math.max(0, now - lastSweep - sweepMs);
             lastSweep = now;
             for (const connection of connections.values()) {
-              if (late) connection.lastInboundAt = now;
-              else if (now - connection.lastInboundAt > livenessMs) {
+              connection.lastInboundAt = Math.min(
+                now,
+                connection.lastInboundAt + late,
+              );
+              if (now - connection.lastInboundAt > livenessMs) {
                 connection.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
               }
             }
           }).pipe(
             Effect.repeat(Schedule.spaced(sweepMs)),
+            Effect.forkIn(scope),
+          );
+
+        if (!local)
+          yield* Stream.merge(
+            hostPushes
+              .stream(COMMAND_ACCESS_CHANGED)
+              .pipe(Stream.filter(() => !auth.isCommandGranted())),
+            sharing === undefined
+              ? Stream.empty
+              : sharing.changes.pipe(Stream.filter((on) => !on)),
+          ).pipe(
+            Stream.runForEach(() =>
+              Effect.sync(() => {
+                for (const connection of connections.values()) {
+                  connection.channels.dropUninvited();
+                }
+              }),
+            ),
             Effect.forkIn(scope),
           );
 

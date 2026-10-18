@@ -5,7 +5,7 @@
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
 import { LOOPBACK_FILE } from "@shigomori/engine/Control";
-import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
+import { ROSTER_UNAVAILABLE, STALE_TICKET } from "@shared/remote/sealedSocket";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -115,13 +115,15 @@ export const deviceLinkLayer = () =>
       opens: {
         check: (ticket, arrivedAs) => {
           const deviceId = directTickets.check(ticket, arrivedAs);
-          if (deviceId === null) return null;
+          if (deviceId === null || deviceId === STALE_TICKET) return deviceId;
           const hub = remote.now()?.hub;
           if (hub === undefined || !hub.rosterKnown()) {
             return ROSTER_UNAVAILABLE;
           }
           const publicKey = hub.peerKey(deviceId);
-          return publicKey === undefined ? null : { deviceId, publicKey };
+          return publicKey === undefined
+            ? STALE_TICKET
+            : { deviceId, publicKey };
         },
         spend: (ticket, arrivedAs) => directTickets.consume(ticket, arrivedAs),
         keepDevices: (deviceIds) => directTickets.keepDevices(deviceIds),
@@ -266,6 +268,10 @@ const serveConnectInfo = makeConnectInfo({
     Graph.run(
       onTunnel((tunnel) => tunnel.startingThenUp(Duration.millis(withinMs))),
     ).catch(() => false),
+  tunnelUndialed: (peer) => directTickets.undialed(peer, "tunnel"),
+  recheckTunnel: () => {
+    void Graph.run(onTunnel((tunnel) => tunnel.recheck)).catch(() => {});
+  },
   acceptsCommands: acceptsPeerCommands,
   // Before the graph is up the link serves nobody, so it reads as off.
   sharesData: () =>

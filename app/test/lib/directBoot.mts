@@ -5,7 +5,7 @@
 // drives the REAL shared composition (shared/hub/directPlane.ts) or
 // dials the listener straight. What each proof adds is its own
 // handlers and what it asserts (README.md, "Shared fakes").
-import { ROSTER_UNAVAILABLE } from "@shared/remote/sealedSocket";
+import { ROSTER_UNAVAILABLE, STALE_TICKET } from "@shared/remote/sealedSocket";
 import assert from "node:assert/strict";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import * as DeviceLink from "@host/socket/DeviceLink";
@@ -204,11 +204,13 @@ export async function startDirectListener(
               opens: {
                 check: (ticket, arrivedAs) => {
                   const deviceId = tickets.check(ticket, arrivedAs);
-                  if (deviceId === null) return null;
+                  if (deviceId === null || deviceId === STALE_TICKET) {
+                    return deviceId;
+                  }
                   if (rosterUnavailable) return ROSTER_UNAVAILABLE;
                   const publicKey = rosterKey(deviceId);
                   return publicKey === undefined
-                    ? null
+                    ? STALE_TICKET
                     : { deviceId, publicKey };
                 },
                 spend: (ticket, arrivedAs) =>

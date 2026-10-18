@@ -19,6 +19,7 @@
 // Pure: no node builtins, so the host, the desktop dialer and the web
 // client run the same code.
 import type * as Socket from "effect/socket/Socket";
+import { CLOSE_TRY_AGAIN } from "@shigomori/contracts/link";
 import { sameKey } from "@shared/crypto/deviceKey";
 import {
   HandshakeState,
@@ -33,13 +34,13 @@ import {
 // dialed (deviceLink.ts reads it as the blocked verdict).
 export const CLOSE_HANDSHAKE_FAILED = 4004;
 
-// The listener's close when it cannot check a ticket now (the account's
-// roster is unavailable, the hub out of reach): the standard "try again
-// later", which a dialer reads as nothing against the ticket.
-export const CLOSE_TRY_AGAIN = 1013;
-
 // What a ticket check answers while the roster is unavailable.
 export const ROSTER_UNAVAILABLE = "roster unavailable";
+
+// What it answers for a ticket the listener issued that opens nothing
+// now (spent, expired, replaced by its connection's next ask, dropped
+// with its device, or for another path): refused, but no guess.
+export const STALE_TICKET = "stale ticket";
 
 // The dialer's own close when the far end failed it: an answer that did
 // not open or a frame that did not authenticate. Whoever answered at
@@ -251,20 +252,24 @@ export function sealDialer(
 
 // The listener's end: checks the ticket, reads the dialer's first
 // message, checks the key it proves is the roster's for the device the
-// ticket was minted for, and answers. `admit` answers that key, or null
-// for a ticket that is not good, spending nothing: the listener spends
-// the ticket on the hello this socket then sends, and `opened` hears the
-// ticket and the key the handshake proved once it has; `refused` hears every failure, for the
-// listener's log, and whether it was a guess (a ticket or a key that
-// did not hold), which alone counts toward the listener's lockout: a
-// device on another version is refused, not suspected.
+// ticket was minted for, and answers. `admit` answers that key, null
+// for a ticket the listener never issued, or STALE_TICKET, spending
+// nothing: the listener spends the ticket on the hello this socket then
+// sends, and `opened` hears the ticket and the key the handshake proved
+// once it has; `refused` hears every failure, for the listener's log,
+// and whether it was a guess (a ticket never issued, a key that did not
+// hold), which alone counts toward the listener's lockout: a device on
+// another version, or a dial that came after its ticket lapsed, is
+// refused, not suspected.
 export function sealListener(
   ws: Socket.WebSocketLike,
   options: {
     readonly localKey: KeyPair;
     readonly admit: (
       ticket: string,
-    ) => Promise<Uint8Array | null | typeof ROSTER_UNAVAILABLE>;
+    ) => Promise<
+      Uint8Array | null | typeof ROSTER_UNAVAILABLE | typeof STALE_TICKET
+    >;
     readonly opened: (ticket: string, publicKey: Uint8Array) => void;
     readonly refused: (reason: string, guessed: boolean) => void;
   },
@@ -293,6 +298,9 @@ export function sealListener(
           );
         }
         if (peerKey === null) return refuse("the ticket was refused", true);
+        if (peerKey === STALE_TICKET) {
+          return refuse("the ticket is no longer pending");
+        }
         const handshake = new HandshakeState({
           initiator: false,
           prologue: prologueOf(first.ticket),

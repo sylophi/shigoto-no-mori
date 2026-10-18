@@ -45,6 +45,12 @@ type ConnectInfoDeps = {
   // Whether a tunnel that is starting comes up within `withinMs`
   // (Tunnel's startingThenUp). Without it, nothing is held.
   tunnelStartingThenUp?(withinMs: number): Promise<boolean>;
+  // Whether the connection's last set held a tunnel ticket and nothing
+  // of it was spent (the ticket store's `undialed`), and Tunnel's
+  // `recheck`, asked when it did: an ask again after a dial that reached
+  // nothing is the evidence a connector wedged with no wake leaves.
+  tunnelUndialed?(peer: TicketPeer): boolean;
+  recheckTunnel?(): void;
   // The command-access switch the link's CommandGate reads, reported to
   // the asker so its UI and CLI know up front. The gate stays the only
   // thing that enforces it.
@@ -94,6 +100,15 @@ export function makeConnectInfo(
   };
   return async (callerDeviceId, rawInput) => {
     const input = decodeConnectInfoInput(rawInput);
+    if (
+      deps.tunnelUrl() !== null &&
+      deps.tunnelUndialed?.({
+        deviceId: callerDeviceId,
+        connectionId: input.connectionId,
+      }) === true
+    ) {
+      deps.recheckTunnel?.();
+    }
     const now = offer(callerDeviceId, input);
     if (
       now.available ||
