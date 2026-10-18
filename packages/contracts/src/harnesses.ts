@@ -2,13 +2,13 @@
 // hooks and `sm agents resume` resumes their sessions
 // (engine/src/agentHooks.ts), the guide opens one, and the views name a
 // session by its harness.
-const KNOWN = { claude: "Claude Code", codex: "Codex" } as const;
-
-export const KNOWN_HARNESS_IDS = [
-  "claude",
-  "codex",
-] as const satisfies ReadonlyArray<keyof typeof KNOWN>;
+export const KNOWN_HARNESS_IDS = ["claude", "codex"] as const;
 export type KnownHarness = (typeof KNOWN_HARNESS_IDS)[number];
+
+const KNOWN: Record<KnownHarness, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
+};
 
 // One harness's id and name, for the engine's fuller description.
 export const knownHarness = (id: KnownHarness) => ({ id, label: KNOWN[id] });

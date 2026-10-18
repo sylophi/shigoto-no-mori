@@ -1,5 +1,5 @@
 // What the Worktrees service's areas (../Worktrees.ts) share.
-import { pluralize } from "@shigomori/contracts/words";
+import { listed, plural, pluralize } from "@shigomori/contracts/words";
 import {
   type ScriptEvent,
   ScriptEventSchema,
@@ -27,8 +27,8 @@ export class RunningWorkError extends Schema.TaggedError<RunningWorkError>()(
       ...counted(this.scripts, "script"),
       ...counted(this.terminals, "terminal"),
     ];
-    const one = this.scripts + this.terminals === 1;
-    return `Can't ${this.verb} ${this.name} while ${running.join(" and ")} ${one ? "is" : "are"} running there. Stop ${one ? "it" : "them"} first.`;
+    const total = this.scripts + this.terminals;
+    return `Can't ${this.verb} ${this.name} while ${listed(running)} ${plural(total, "is", "are")} running there. Stop ${plural(total, "it", "them")} first.`;
   }
 }
 

@@ -1,5 +1,5 @@
 // The doctor's data dir checks: where it is, its settings and registry, the store, the updater's leftovers.
-import { plural, pluralize } from "@shigomori/contracts/words";
+import { listed, plural, pluralize } from "@shigomori/contracts/words";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import { parse } from "semver";
 import * as Clock from "effect/Clock";
@@ -659,7 +659,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const checkBookkeeping = (
       projects: ReadonlyArray<ListedProject>,
       complete: boolean,
-      listed: ReadonlyMap<string, ReadonlyArray<WorktreeIdentity>>,
+      listings: ReadonlyMap<string, ReadonlyArray<WorktreeIdentity>>,
       kept: ReadonlyArray<{
         readonly projectId: string;
         readonly worktreeId: string;
@@ -672,7 +672,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         const known = new Set<string>();
         const idsOf = new Map<string, ReadonlySet<string>>();
         for (const project of projects) {
-          const found = Option.fromUndefinedOr(listed.get(project.id));
+          const found = Option.fromUndefinedOr(listings.get(project.id));
           // A project whose checks stopped early is listed here.
           const identities = Option.isSome(found)
             ? found
@@ -712,7 +712,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         ];
         return [
           line.warn(
-            `${parts.join(" and ")} belong to worktrees that no longer exist`,
+            `${listed(parts)} ${plural(leftover + dataFiles, "belongs", "belong")} to worktrees that no longer exist`,
             `Harmless, and some may belong to a project that isn't listed right now. Removing worktrees with \`${binaryName} rm\` or from the app leaves none behind.`,
           ),
         ];

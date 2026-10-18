@@ -9,6 +9,7 @@
 // first start's
 // moves are reported to the migration as they go (Migration.ts), and
 // a start that resumes them counts the ones made before.
+import { WORKTREES_DIR } from "@shigomori/contracts/git/worktreeLayout";
 import { listed, plural } from "@shigomori/contracts/words";
 import type { WorktreeMoveStep } from "@shigomori/contracts/schemas/migration";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -288,17 +289,20 @@ const make = Effect.gen(function* () {
     const name = path.basename(projectPath);
     const volume = externalVolumeRoot(projectPath);
     return [
-      [path.join(dataDir, "worktrees", name), path.join(dataDir, "wt", name)],
+      [
+        path.join(dataDir, "worktrees", name),
+        path.join(dataDir, WORKTREES_DIR, name),
+      ],
       [
         path.join(projectPath, ".shigomori", "worktrees"),
-        path.join(projectPath, ".shigomori", "wt"),
+        path.join(projectPath, ".shigomori", WORKTREES_DIR),
       ],
       ...(volume === undefined
         ? []
         : [
             [
               path.join(volume, dataDirName, "worktrees", name),
-              path.join(volume, dataDirName, "wt", name),
+              path.join(volume, dataDirName, WORKTREES_DIR, name),
             ],
           ]),
     ] as const;

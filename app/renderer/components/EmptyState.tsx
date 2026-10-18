@@ -21,10 +21,13 @@ export function EmptyState() {
   if (projects.length === 0) {
     // Named once this build's data dir is known (a v2 install, v3, the
     // dev app's each have their own).
-    if (runtime === undefined) return null;
     return (
       <FirstRunView
-        worktreesDir={`${tildify(runtime.dataDir, runtime.homedir)}/${WORKTREES_DIR}/`}
+        worktreesDir={
+          runtime
+            ? `${tildify(runtime.dataDir, runtime.homedir)}/${WORKTREES_DIR}/`
+            : null
+        }
         addKeys={keys?.label ?? null}
         onAdd={() => openAddProject()}
       />

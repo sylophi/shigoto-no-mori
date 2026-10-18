@@ -59,11 +59,9 @@ export function DangerZone() {
     });
   };
 
-  // Named once this build's data dir is known.
-  if (runtime === undefined) return null;
   return (
     <DangerZoneView
-      root={tildify(runtime.dataDir, runtime.homedir)}
+      root={runtime ? tildify(runtime.dataDir, runtime.homedir) : null}
       nuking={nuking}
       progress={progress}
       left={left}
