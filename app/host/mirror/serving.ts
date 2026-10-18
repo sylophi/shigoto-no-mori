@@ -16,6 +16,7 @@ import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Stream from "effect/Stream";
 import { FileSync } from "@host/fileSync/FileSync";
 import { dataDir } from "@shared/paths";
 import { findProjectAndWorktree } from "@host/lib/projects";
@@ -29,14 +30,11 @@ import { MirrorSignals } from "./MirrorSignals";
 // pair is what identifies a stream host-wide): what mirror:list
 // reports as `serving`, so a worktree shows "mirrored to <device>" on
 // the machine it lives on. Entries live exactly as long as their
-// channel. Each carries the served worktree's index watcher: a stage
-// or unstage there is the one git change the peer's follower cannot
-// learn from the git-directory watcher.
-type Served = { entry: MirrorServing; stopIndexWatch: (() => void) | null };
-const serving = new Map<string, Served>();
+// channel.
+const serving = new Map<string, MirrorServing>();
 
 export function listMirrorServing(): MirrorServing[] {
-  return [...serving.values()].map((served) => served.entry);
+  return [...serving.values()];
 }
 
 // The mirror list changed without a session doing so (a stop's copy
@@ -50,10 +48,7 @@ function servingKey(ctx: HandlerContext, channelId: string): string {
 }
 
 function forgetServing(signals: MirrorSignals["Service"], key: string): void {
-  const served = serving.get(key);
-  if (served === undefined) return;
-  served.stopIndexWatch?.();
-  serving.delete(key);
+  if (!serving.delete(key)) return;
   signals.servingChanged();
 }
 
@@ -108,36 +103,30 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
       return callFailureOf(error);
     },
   });
-  const served: Served = {
-    entry: {
-      channelId,
-      projectId,
-      worktreeId: worktree.id,
-      peerDeviceId: ctx.callerDeviceId ?? "",
-      ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
-      // oxlint-disable-next-line shigomori/no-wall-clock -- when serving began, for display
-      since: Date.now(),
-    },
-    stopIndexWatch: null,
-  };
-  serving.set(key, served);
-  // Under the id the peer's session holds, and this device's own.
-  const indexChanged = () => {
-    signals.gitChanged({ projectId, worktreeId });
-    if (worktree.id !== worktreeId) {
-      signals.gitChanged({ projectId, worktreeId: worktree.id });
-    }
-  };
-  yield* Effect.forkDetach(
-    watchIndexFile(worktreePath, indexChanged).pipe(
-      Effect.tap((stop) =>
-        Effect.sync(() => {
-          if (serving.get(key) === served) served.stopIndexWatch = stop;
-          else stop();
-        }),
-      ),
-      Effect.ignore,
+  serving.set(key, {
+    channelId,
+    projectId,
+    worktreeId: worktree.id,
+    peerDeviceId: ctx.callerDeviceId ?? "",
+    ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
+    // oxlint-disable-next-line shigomori/no-wall-clock -- when serving began, for display
+    since: Date.now(),
+  });
+  // A stage or unstage in the served worktree is the one git change the
+  // peer's follower cannot learn from the git-directory watcher. Told
+  // under the id the peer's session holds, and this device's own, for as
+  // long as the child serves.
+  yield* watchIndexFile(worktreePath).pipe(
+    Stream.runForEach(() =>
+      Effect.sync(() => {
+        signals.gitChanged({ projectId, worktreeId });
+        if (worktree.id !== worktreeId) {
+          signals.gitChanged({ projectId, worktreeId: worktree.id });
+        }
+      }),
     ),
+    Effect.ignore,
+    Effect.forkIn(child.scope),
   );
   signals.servingChanged();
 });

@@ -57,6 +57,8 @@ export class MirrorEngine extends Context.Service<
     // Why a "failing" engine last stopped or couldn't start.
     readonly failure: Effect.Effect<string | undefined>;
     readonly sessions: Effect.Effect<readonly MirrorSessionRaw[]>;
+    // Whether `sessions` is the running daemon's own (MirrorDaemon.ts).
+    readonly fresh: Effect.Effect<boolean>;
     readonly create: (
       input: MirrorCreateInput,
     ) => Effect.Effect<string, MirrorError>;
@@ -86,6 +88,13 @@ export class MirrorEngine extends Context.Service<
       kind: MirrorEventKind,
       detail: string,
     ) => void;
+    // Tells the copy's device a session's copy is no longer mirrored, so
+    // the invitation it left for this device (host/mirror/invites.ts)
+    // goes and the copy is an ordinary worktree there. Best effort and in
+    // the engine's background: a peer away, or on a build without the
+    // verb, keeps the invitation until the copy is deleted, which only
+    // ever admits this device's calls on that copy.
+    readonly releaseCopy: (raw: MirrorSessionRaw) => Effect.Effect<void>;
     // Drops a worktree's thread, once the worktree itself is gone.
     readonly forgetHistory: (localWorktreeId: string) => void;
     // Moves a worktree's thread to the id it has after a move.

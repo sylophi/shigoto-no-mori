@@ -152,11 +152,16 @@ export function createMirrorHistory(deps: {
     queueFlush();
   }
 
+  // The daemon restarted: the sessions it brings back are seen for the
+  // first time, as they come back as they were.
+  function restarted(): void {
+    seen.clear();
+  }
+
   // Reads every session against what was last seen of it and notes
   // the transitions. A session seen for the first time sets its
   // baseline silently: its start was noted by the handler that made
-  // it, and after a daemon restart the sessions come back as they
-  // were.
+  // it.
   function observe(
     sessions: readonly MirrorSessionRaw[],
     gitStatusOf: (session: string) => MirrorGitStatus | undefined,
@@ -233,6 +238,7 @@ export function createMirrorHistory(deps: {
     note,
     forget,
     move,
+    restarted,
     observe,
     eventsFor: (localWorktreeId: string): readonly MirrorEvent[] =>
       all()[localWorktreeId] ?? [],

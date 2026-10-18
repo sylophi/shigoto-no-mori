@@ -102,11 +102,17 @@ const fileSync = Layer.succeed(
   FileSync.FileSync,
   FileSync.FileSync.of({
     spawn: () => Effect.die(new Error("not in this check")),
-    serve: (root) =>
-      Effect.sync(() => {
+    serve: (root, _env, until) =>
+      Effect.gen(function* () {
         served.push(root);
+        const scope = yield* Scope.make();
+        yield* until.pipe(
+          Effect.andThen(Scope.close(scope, Exit.void)),
+          Effect.forkDetach,
+        );
         return {
           pid: 0,
+          scope,
           stream: new Duplex({
             read() {},
             write(_chunk, _encoding, done) {

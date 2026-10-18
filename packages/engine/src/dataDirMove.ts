@@ -65,7 +65,7 @@ export const rekeyForward = (entry: Entry) =>
         project,
         worktreeIdFromPath(entry.oldPath),
         entry.newPath,
-        { expect: entry.capture ?? null },
+        { expect: entry.capture ?? null, fromPath: entry.oldPath },
       ),
     );
   });
@@ -78,7 +78,7 @@ const rekeyBack = (entry: Entry) =>
         project,
         worktreeIdFromPath(entry.newPath),
         entry.oldPath,
-        { expect: entry.capture ?? null, back: true },
+        { expect: entry.capture ?? null, back: true, fromPath: entry.newPath },
       ),
     );
   });

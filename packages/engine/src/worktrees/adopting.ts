@@ -123,7 +123,9 @@ export const makeAdopting = ({
           // to carry; one that failed to follow is said, not fatal.
           if (added.made.id !== worktree.id) {
             yield* kept
-              .rekey(project, worktree.id, added.made.id)
+              .rekey(project, worktree.id, added.made.id, {
+                moved: { fromPath: worktree.path, toPath: added.made.path },
+              })
               .pipe(
                 Effect.catchTag("CaptureNotCarried", (error) =>
                   Effect.logWarning(error.message),

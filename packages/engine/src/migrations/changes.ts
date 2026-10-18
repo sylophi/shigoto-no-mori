@@ -5,8 +5,8 @@ import * as SqlClient from "effect/sql/SqlClient";
 // clone_verified) are left out: nothing shows them, and a clone checkout
 // writes a row per file. So are the saved terminals, the running
 // scripts and the mirrors' agreements, history and invitations, which
-// only the host reads, and the one-time move into wt/'s (wt_moves,
-// wt_move_scan), which only the doctor reads.
+// only the host reads, and the one-time scan into wt/ (wt_move_scan),
+// which only the doctor reads.
 const firstTables = [
   "projects",
   "project_order",
@@ -23,7 +23,11 @@ const firstTables = [
   "agent_sessions",
 ] as const;
 
-export const watchedTables = [...firstTables, "unshelved_at"] as const;
+export const watchedTables = [
+  ...firstTables,
+  "unshelved_at",
+  "wt_moves",
+] as const;
 
 // A version per watched table, which a trigger moves on every row any
 // connection writes, so a reader learns which tables changed by reading

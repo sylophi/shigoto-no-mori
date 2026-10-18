@@ -1,8 +1,7 @@
 // The mirror sessions this device runs, the executor behind the mirror
 // handlers (host/ipc/modules/mirror.ts): starting one, stopping it with
-// its copy, pausing, re-opening it on a new rule, and the list. The
-// daemon that owns the sessions (host/mirror/MirrorDaemon.ts) arrives
-// through the registry's slot.
+// its copy, pausing, re-opening it on a new rule, and the list, over the
+// mirror engine (MirrorEngine.ts).
 //
 // start = send, then mirror. The send (sync's, reused verbatim) lands
 // the worktree's branch, commits and uncommitted changes on the peer
@@ -100,28 +99,17 @@ const reopening = new Set<string>();
 // until it vanishes.
 const stopping = new Map<string, MirrorSession>();
 
-// The sessions as last listed by a running daemon. A daemon that is
-// restarting (a crash, the restart ladder) reports none, and the same
-// sessions come back with it: listed as nothing meanwhile, every pair
-// would unfold, every pill and Mirror button vanish, an open dialog
-// close and the start buttons come back, for as long as the restart
-// takes. So the last list stands until the daemon runs again, under
-// the daemon status that says why nothing moves.
-let lastListed: MirrorSession[] = [];
-
 // A device's mirror picture: what mirror:list answers and what
-// mirror:changed carries. The same for every caller.
+// mirror:changed carries. The same for every caller. A daemon that is
+// restarting lists the sessions it had, which come back with it, under
+// the daemon status that says why nothing moves.
 export const mirrorList = (given?: Daemon) =>
   Effect.gen(function* () {
     const daemon = given ?? (yield* MirrorEngine);
     const status = yield* daemon.status;
-    const running = status === "running";
-    const sessions = running
-      ? (yield* mirrorSessions(daemon)).map((raw) =>
-          annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
-        )
-      : [...lastListed];
-    if (running) lastListed = [...sessions];
+    const sessions = (yield* mirrorSessions(daemon)).map((raw) =>
+      annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
+    );
     const live = new Set(sessions.map((session) => session.session));
     for (const [id, session] of stopping) {
       if (!live.has(id)) sessions.push(session);

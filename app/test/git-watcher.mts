@@ -21,6 +21,7 @@
 import assert from "node:assert/strict";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
@@ -43,7 +44,6 @@ import {
 import { trackTest } from "./lib/vitestKit.mts";
 import { runHost } from "./lib/hostRuntime.mts";
 import { watchIndexFile } from "../host/mirror/gitState.ts";
-import { EventEmitter } from "node:events";
 import { it } from "vitest";
 
 // The sandbox's git commands run under the scrubbed environment: this
@@ -349,17 +349,22 @@ it("the mirror's index watch: a stage whose event was lost still fires, once", a
   writeFileSync(join(repo, "a.txt"), "one\n");
   git(repo, "add", "a.txt");
   git(repo, "commit", "-q", "-m", "one");
-  // A watch that hears nothing.
-  // oxlint-disable-next-line shigomori/no-double-cast -- a watcher that never emits, for the one shape watchIndexFile uses
-  const deaf = (() =>
-    Object.assign(new EventEmitter(), {
-      close: () => {},
-    })) as unknown as typeof watch;
   let fired = 0;
-  const stop = await runHost(
-    watchIndexFile(repo, () => fired++, { backstopMs: 200, watchDir: deaf }),
+  // A watch that hears nothing.
+  const watching = await runHost(
+    watchIndexFile(repo, {
+      backstop: "200 millis",
+      watch: () => Stream.never,
+    }).pipe(
+      Stream.runForEach(() =>
+        Effect.sync(() => {
+          fired += 1;
+        }),
+      ),
+      Effect.forkDetach,
+    ),
   );
-  trackTest(stop);
+  trackTest(() => Effect.runPromise(Fiber.interrupt(watching)));
   await delay(600);
   assert.equal(fired, 0, "a tick with nothing moved fired");
   writeFileSync(join(repo, "b.txt"), "two\n");

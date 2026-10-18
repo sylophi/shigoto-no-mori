@@ -439,8 +439,9 @@ export const makeCreating = ({
           });
         }
         // The id is the path's, so what a worktree removed from here left
-        // under it (a removal a crash cut short) isn't this one's.
-        yield* kept.forget(project, made.id);
+        // under it (a removal a crash cut short) isn't this one's, nor is
+        // the move of one that left it.
+        yield* kept.forget(project, made.id, [...new Set([place, made.path])]);
         return { made, found, cloned, baseBranch };
       });
 

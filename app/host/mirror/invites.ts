@@ -31,9 +31,9 @@
 // The v3 migration moved every worktree into wt/, and a worktree's id is
 // a hash of its path, so a copy that landed before it has a new id while
 // the peer running its mirror still names the old one. The invitations
-// are re-keyed to the new ids as they load, and as a move or a rename
-// here lands, and admit a call naming an old id as the copy it became
-// (WtFolder.movedIds).
+// are re-keyed to the new ids as they load, and as any re-key here is
+// recorded (MirrorEngineLayer.ts), and admit a call naming an old id as
+// the copy it became (WtFolder.movedIds).
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -140,9 +140,9 @@ export const forgetMirrorInvitesOf = (worktreeId: string) =>
       invite.copy === undefined || !namesCopy(invite.copy, worktreeId),
   );
 
-// A worktree here moved while the app runs (a move, a rename): the
-// invitation of a copy it was follows it, and the peer's calls by the
-// id it had still name it.
+// A worktree here was re-keyed while the app runs (a move, a rename, an
+// adopt, a relocate): the invitation of a copy it was follows it, and
+// the peer's calls by the id it had still name it.
 export const moveMirrorInvitesOf = (fromId: string, toId: string) =>
   Effect.suspend(() => {
     const ids = new Map(

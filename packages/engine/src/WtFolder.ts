@@ -59,7 +59,9 @@ export class WtFolder extends Context.Service<
       projectId: string,
     ) => Effect.Effect<ReadonlyArray<Unmoved>>;
     // Where a worktree's folder went, moved by the migration, `worktrees
-    // move` or a rename, for state kept by its path.
+    // move`, a rename, an adopt, a project relocate or the data-folder
+    // move (every re-key whose checkout moved, worktrees/kept.ts), for
+    // state kept by its path.
     readonly movedTo: (
       fromPath: string,
     ) => Effect.Effect<Option.Option<string>>;
@@ -515,40 +517,39 @@ const make = Effect.gen(function* () {
     return (yield* unmoved).filter((row) => row.projectId === projectId);
   });
 
-  // Through every later move of the folder, a few deep at most.
-  const movedTo = Effect.fn("WtFolder.movedTo")(function* (fromPath: string) {
-    let at: string | undefined;
-    for (let hop = 0; hop < 8; hop++) {
-      const [row] = yield* sql<{ to_path: string }>`
-        SELECT to_path FROM wt_moves
-        WHERE from_path = ${at ?? fromPath} AND moved = 1`.pipe(Effect.orDie);
-      if (row === undefined || row.to_path === fromPath) break;
-      at = row.to_path;
+  // Where each recorded folder is now, its moves applied in the order
+  // they were made (a move's record is written anew each time, so its
+  // rowid orders it): a move undone and made again ends where it was made
+  // last, and a folder that came back is where it started, whether or
+  // not either path can be looked at (a drive away). A later move from a
+  // path is the folder that took that path since.
+  const placed = Effect.gen(function* () {
+    const rows = yield* sql<{ from_path: string; to_path: string }>`
+      SELECT from_path, to_path FROM wt_moves WHERE moved = 1
+      ORDER BY rowid`.pipe(Effect.orDie);
+    const at = new Map<string, string>();
+    for (const { from_path, to_path } of rows) {
+      for (const [start, now] of at) {
+        if (now === from_path) at.set(start, to_path);
+      }
+      at.set(from_path, to_path);
     }
-    return Option.fromNullishOr(at);
+    return at;
+  });
+
+  const movedTo = Effect.fn("WtFolder.movedTo")(function* (fromPath: string) {
+    const now = (yield* placed).get(fromPath);
+    return Option.fromNullishOr(now === fromPath ? undefined : now);
   });
 
   const movedIds = Effect.gen(function* () {
-    const rows = yield* sql<{ from_path: string; to_path: string }>`
-      SELECT from_path, to_path FROM wt_moves WHERE moved = 1`.pipe(
-      Effect.orDie,
-    );
-    const next = new Map(rows.map((row) => [row.from_path, row.to_path]));
     const ids = new Map<string, string>();
-    for (const { from_path } of rows) {
+    for (const [start, now] of yield* placed) {
+      if (now === start) continue;
       const taken = yield* fs
-        .exists(from_path)
+        .exists(start)
         .pipe(Effect.orElseSucceed(() => true));
-      if (taken) continue;
-      let at = from_path;
-      for (let hop = 0; hop < 8; hop++) {
-        const to = next.get(at);
-        if (to === undefined || to === from_path) break;
-        at = to;
-      }
-      if (at !== from_path) {
-        ids.set(worktreeIdFromPath(from_path), worktreeIdFromPath(at));
-      }
+      if (!taken) ids.set(worktreeIdFromPath(start), worktreeIdFromPath(now));
     }
     return ids as ReadonlyMap<string, string>;
   }).pipe(Effect.withSpan("WtFolder.movedIds"));

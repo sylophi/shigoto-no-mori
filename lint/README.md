@@ -41,8 +41,7 @@ off the list by the pull request that changes it:
 
 - Durable facts and process identity: `app/main/hostProcess.ts`,
   `packages/engine/src/worktrees/moving.ts`.
-- In-memory TTLs and small gates: `app/host/mirror/gitFollow.ts`,
-  `app/main/electron/liveness.ts`,
+- In-memory TTLs and small gates: `app/main/electron/liveness.ts`,
   `app/main/electron/notifications.ts`.
 
 ## Adding a rule
