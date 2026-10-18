@@ -53,8 +53,8 @@ export function useLocalGlobalConfig() {
 // externalChange, which leaves gh's keys out for their cost; the host
 // gates them on this switch (GithubCli.unavailableReason). Held beside
 // each device's push watch, so a peer's config view stays up for the
-// account's life, asked again on the view's ladders while it is away or
-// not sharing.
+// account's life: retried while the peer refuses it, and started again
+// with each new session to it.
 export function followDeviceSettings(
   registry: AtomRegistry.AtomRegistry,
   queryClient: QueryClient,

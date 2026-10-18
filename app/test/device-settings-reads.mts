@@ -5,7 +5,8 @@
 // absent key included. Before, only the window's own Settings save asked
 // them again, so `sm config` or another device's form left them stale.
 // The rest of a device's settings reach its requests through the push
-// watch's externalChange (push-reads).
+// watch's externalChange: the host announces a write to its device
+// config as it does any forest table's.
 //
 // Run: pnpm test device-settings-reads.
 import assert from "node:assert/strict";
