@@ -29,7 +29,8 @@ export const makeUnderWay = ({
           // moved is that removal or move, counted once.
           engineChanges: engineChanges
             .underWay()
-            .filter((ids) => !marks.underRemoval(ids)).length,
+            .filter(({ ids }) => !marks.underRemoval(ids))
+            .map(({ kind }) => kind),
           busyTerminals,
         }),
       ).pipe(Effect.withSpan("Scripts.busy")),

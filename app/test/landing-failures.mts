@@ -12,7 +12,9 @@
 //     branch, and the same landing then lands, its capture applied,
 //   - the copy's undo runs under the tombstone: announced as going and
 //     gone, counted as a removal, a delete of it meanwhile refused,
-//   - an undo whose teardown script fails still removes the copy,
+//   - an undo whose teardown script fails still removes the copy, and
+//     one another removal beat reads as removed and still takes the
+//     branch the landing made,
 //   - the landing's hold of the data-folder lock is counted as a change
 //     between its create and its last ref step.
 //
@@ -164,7 +166,7 @@ const land = (
             here,
             () => {},
             move,
-          ),
+          ).pipe(Effect.tap(({ keep }) => keep)),
         ),
       ).pipe(Effect.provideService(Git.Git, stood)),
     ),
@@ -268,6 +270,37 @@ it("the undo of a copy runs under the tombstone, and a teardown that fails still
   await landsAfter("kite");
 });
 
+it("a copy another removal took first still has its branch undone, and reads as removed", async () => {
+  // Branches kept on removal, so only the undo takes the one the
+  // landing made.
+  await runHost(Ops.patchGlobalConfig({ deleteBranchOnRemove: false }));
+  const { path } = await runHost(Ops.worktreeDestination(project.id, "tern"));
+  announced.length = 0;
+  try {
+    await assert.rejects(
+      land("tern", (step) =>
+        step === "ref"
+          ? Effect.andThen(
+              Effect.sync(() =>
+                git(repo, "worktree", "remove", "--force", path),
+              ),
+              failAt("ref")(step),
+            )
+          : Effect.void,
+      ),
+      /git update-ref/,
+    );
+    assert.deepEqual(
+      announced.map((entry) => entry.split(" ")[1]),
+      ["removing", "removed"],
+    );
+    await leftNothing("tern");
+    await landsAfter("tern");
+  } finally {
+    await runHost(Ops.patchGlobalConfig({ deleteBranchOnRemove: true }));
+  }
+});
+
 it("the landing counts as a change between its create and its last ref step", async () => {
   const atRef = await runHost(Deferred.make<void>());
   const release = await runHost(Deferred.make<void>());
@@ -280,21 +313,21 @@ it("the landing counts as a change between its create and its last ref step", as
   );
   try {
     await runHost(Deferred.await(atRef));
-    assert.equal(
+    assert.deepEqual(
       (
         await runHost(
           Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy),
         )
       ).engineChanges,
-      1,
+      ["land"],
     );
   } finally {
     await runHost(Deferred.succeed(release, undefined));
   }
   assert.equal((await landing).worktree.branch, "lark");
-  assert.equal(
+  assert.deepEqual(
     (await runHost(Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy)))
       .engineChanges,
-    0,
+    [],
   );
 });

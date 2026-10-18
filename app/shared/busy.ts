@@ -2,6 +2,7 @@
 // interrupt, in words: the host counts it (host/lib/Scripts.ts, busy)
 // and the shell asks before going ahead (main/electron/busyPrompt.ts).
 // Both sides word it from the counts.
+import type { ChangeKind } from "@shigomori/contracts/modules/session";
 
 export type BusyOperations = {
   // PTY runs and the engine's lifecycle runs alike.
@@ -10,8 +11,9 @@ export type BusyOperations = {
   readonly inflightDeletes: number;
   // Worktree moves and renames, the data-folder move's included.
   readonly inflightMoves: number;
-  // Any other change the engine is making.
-  readonly engineChanges: number;
+  // The other git work a person started (or an auto-pull's), one
+  // entry each.
+  readonly engineChanges: ReadonlyArray<ChangeKind>;
   // Terminals whose shell runs something.
   readonly busyTerminals: number;
 };
@@ -44,7 +46,7 @@ function isBusy(busy: BusyOperations): boolean {
     busy.busyTerminals > 0 ||
     busy.inflightDeletes > 0 ||
     busy.inflightMoves > 0 ||
-    busy.engineChanges > 0
+    busy.engineChanges.length > 0
   );
 }
 
@@ -76,12 +78,50 @@ function worktreeWords(n: number): { subject: string; obj: string } {
   };
 }
 
-// "1 change is", and the pronoun for it.
-function changeWords(busy: BusyOperations): { subject: string; obj: string } {
-  const n = busy.engineChanges;
+// Each kind of change as one of it and as several, in the order they
+// are listed.
+const CHANGE_NOUNS: ReadonlyArray<readonly [ChangeKind, string, string]> = [
+  ["pull", "a pull", "pulls"],
+  ["push", "a push", "pushes"],
+  ["fetch", "a fetch", "fetches"],
+  ["commit", "a commit", "commits"],
+  ["merge", "a merge", "merges"],
+  ["pullRequest", "a pull request", "pull requests"],
+  ["autoPull", "an auto-pull", "auto-pulls"],
+  ["create", "a new worktree", "new worktrees"],
+  ["land", "an incoming worktree", "incoming worktrees"],
+  ["move", "a worktree move", "worktree moves"],
+  ["remove", "a worktree removal", "worktree removals"],
+];
+
+const capitalized = (words: string) =>
+  words.charAt(0).toUpperCase() + words.slice(1);
+
+// "A pull is", "2 pulls are", or "3 git operations are" with what they
+// are (": 2 pulls and a push"), and the pronoun for them.
+function changeWords(busy: BusyOperations): {
+  subject: string;
+  which: string;
+  obj: string;
+} {
+  const named = CHANGE_NOUNS.flatMap(([kind, one, many]) => {
+    const n = busy.engineChanges.filter((change) => change === kind).length;
+    return n === 0 ? [] : [n === 1 ? one : `${n} ${many}`];
+  });
+  const n = busy.engineChanges.length;
+  const obj = pluralize(n, "it", "them");
+  if (named.length === 1) {
+    return {
+      subject: `${capitalized(named[0] ?? "")} ${pluralize(n, "is", "are")}`,
+      which: "",
+      obj,
+    };
+  }
+  const last = named.at(-1) ?? "";
   return {
-    subject: pluralize(n, `${n} change is`, `${n} changes are`),
-    obj: pluralize(n, "it", "them"),
+    subject: `${n} git operations are`,
+    which: `: ${named.slice(0, -1).join(", ")} and ${last}`,
+    obj,
   };
 }
 
@@ -106,7 +146,7 @@ export function busyDetail(
     return `${subject} being moved. ${gerund} now will interrupt ${obj}.`;
   }
   const changes = changeWords(busy);
-  return `${changes.subject} still being made. ${gerund} now will interrupt ${changes.obj}.`;
+  return `${changes.subject} still being made${changes.which}. ${gerund} now will interrupt ${changes.obj}.`;
 }
 
 // The same verdict worded for ANOTHER device's screen, for an action a
@@ -135,5 +175,5 @@ export function busyRemoteRefusal(
     return `${worktreeWords(busy.inflightMoves).subject} still being moved there. Wait for that to finish before ${verb}.`;
   }
   const changes = changeWords(busy);
-  return `${changes.subject} still being made there. Wait for ${changes.obj} to finish before ${verb}.`;
+  return `${changes.subject} still being made there${changes.which}. Wait for ${changes.obj} to finish before ${verb}.`;
 }

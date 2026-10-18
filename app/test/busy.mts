@@ -31,22 +31,30 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import { afterAll, beforeAll, it } from "vitest";
 import type { Project } from "@shigomori/contracts/schemas";
 import { runtimeHandlers } from "../host/ipc/modules/runtime.ts";
 import { worktreesHandlers } from "../host/ipc/modules/worktrees.ts";
-import { asChange } from "../host/lib/Engine.ts";
+import * as BackgroundFetch from "../host/lib/BackgroundFetch.ts";
+import { asChange, changing } from "../host/lib/Engine.ts";
+import { changeKindOf } from "../host/socket/changeKinds.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { autoPullWorktree } from "../host/lib/worktrees/autoPullSweep.ts";
 import * as Scripts from "../host/lib/Scripts.ts";
 import * as HostWorktrees from "../host/lib/Worktrees.ts";
 import * as Terminals from "../host/lib/terminals/Terminals.ts";
-import { busyDetail, busyRemoteRefusal } from "../shared/busy.ts";
+import {
+  type BusyOperations,
+  busyDetail,
+  busyRemoteRefusal,
+} from "../shared/busy.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
 import { engineDataDir, runHost } from "./lib/hostRuntime.mts";
@@ -165,7 +173,7 @@ it("one delete reads as one worktree being removed", async () => {
     await waitFor(() => existsSync(holding), "the delete's status check");
     const counted = await busy();
     assert.equal(counted.inflightDeletes, 1);
-    assert.equal(counted.engineChanges, 0);
+    assert.deepEqual(counted.engineChanges, []);
     assert.equal(
       busyDetail(await busy(), "quit"),
       "1 worktree is being removed. Quitting now will interrupt cleanup and may leave files behind.",
@@ -178,39 +186,123 @@ it("one delete reads as one worktree being removed", async () => {
   assert.equal(busyDetail(await busy(), "quit"), null);
 });
 
-it("an engine change counts while it runs", async () => {
+it("git work a person started counts while it runs, and a write that names none doesn't", async () => {
   const release = await runHost(Deferred.make<void>());
-  const held = runHost(
+  const pulling = runHost(
+    asChange(
+      Deferred.await(release),
+      { projectId: project.id },
+      changeKindOf("worktrees:pull"),
+    ),
+  );
+  const writing = runHost(
     asChange(Deferred.await(release), { projectId: project.id }),
   );
   try {
     await waitFor(
-      async () => (await busy()).engineChanges === 1,
-      "the change to be counted",
+      async () => (await busy()).engineChanges.length === 1,
+      "the pull to be counted",
+    );
+    assert.equal(
+      busyDetail(await busy(), "quit"),
+      "A pull is still being made. Quitting now will interrupt it.",
     );
   } finally {
     await runHost(Deferred.succeed(release, undefined));
-    await held;
+    await Promise.all([pulling, writing]);
   }
-  assert.equal((await busy()).engineChanges, 0);
+  assert.deepEqual((await busy()).engineChanges, []);
 });
 
-it("any other engine change reads as a change being made", () => {
-  const one = {
-    runningScripts: 0,
-    inflightDeletes: 0,
-    inflightMoves: 0,
-    engineChanges: 1,
-    busyTerminals: 0,
-  };
+const busyWith = (...engineChanges: BusyOperations["engineChanges"]) => ({
+  runningScripts: 0,
+  inflightDeletes: 0,
+  inflightMoves: 0,
+  engineChanges,
+  busyTerminals: 0,
+});
+
+it("the words name the git work under way", () => {
   assert.equal(
-    busyDetail(one, "quit"),
-    "1 change is still being made. Quitting now will interrupt it.",
+    busyDetail(busyWith("commit"), "quit"),
+    "A commit is still being made. Quitting now will interrupt it.",
   );
   assert.equal(
-    busyRemoteRefusal({ ...one, engineChanges: 2 }, "move"),
-    "2 changes are still being made there. Wait for them to finish before moving the data folder.",
+    busyDetail(busyWith("autoPull"), "restart"),
+    "An auto-pull is still being made. Restarting now will interrupt it.",
   );
+  assert.equal(
+    busyDetail(busyWith("push", "push"), "quit"),
+    "2 pushes are still being made. Quitting now will interrupt them.",
+  );
+  assert.equal(
+    busyRemoteRefusal(busyWith("push", "pull", "pull"), "move"),
+    "3 git operations are still being made there: 2 pulls and a push. Wait for them to finish before moving the data folder.",
+  );
+});
+
+it("the background's fetches and a page's refresh as it opens make no quit ask", async () => {
+  // An origin whose upload-pack waits while `slow` exists, so a fetch
+  // from it holds.
+  const origin = join(root, "slow-origin.git");
+  const slow = join(root, "fetch.slow");
+  const holding = join(root, "fetch.holding");
+  const uploadPack = join(root, "slow-upload-pack");
+  git(root, "init", "-q", "--bare", "-b", "main", origin);
+  git(repo, "push", "-q", origin, "HEAD:main");
+  writeFileSync(
+    uploadPack,
+    `#!/bin/sh
+if [ -f '${slow}' ]; then touch '${holding}'; while [ -f '${slow}' ]; do sleep 0.05; done; fi
+exec git-upload-pack "$@"
+`,
+  );
+  chmodSync(uploadPack, 0o755);
+  git(repo, "remote", "add", "origin", origin);
+  git(repo, "config", "remote.origin.uploadpack", uploadPack);
+  writeFileSync(slow, "");
+  try {
+    await runHost(
+      Effect.scoped(
+        Effect.gen(function* () {
+          // Its first pass fetches every project.
+          const context = yield* Layer.build(
+            BackgroundFetch.layer({
+              broadcast: () => {},
+              announceProjectChanged: () => {},
+            }),
+          );
+          const fetches = Context.get(context, BackgroundFetch.BackgroundFetch);
+          yield* Effect.promise(() =>
+            waitFor(() => existsSync(holding), "the sweep's fetch"),
+          );
+          // A page's refresh as it opens joins the fetch under way.
+          const inside = yield* Deferred.make<void>();
+          const refreshing = yield* Effect.forkChild(
+            changing(
+              Effect.andThen(
+                Deferred.succeed(inside, undefined),
+                fetches.refreshProject(project.id, repo),
+              ),
+              { projectId: project.id },
+              changeKindOf("git:refreshProject"),
+            ),
+          );
+          yield* Deferred.await(inside);
+          const counted = yield* Effect.flatMap(
+            Scripts.Scripts,
+            (scripts) => scripts.busy,
+          );
+          assert.equal(busyDetail(counted, "quit"), null);
+          rmSync(slow);
+          yield* Fiber.join(refreshing);
+        }),
+      ),
+    );
+  } finally {
+    rmSync(slow, { force: true });
+    git(repo, "remote", "remove", "origin");
+  }
 });
 
 const terminals = <A, E>(
@@ -395,10 +487,13 @@ it("an auto-pull's fast-forward counts as a change while it runs", async () => {
   );
   try {
     await waitFor(() => existsSync(holding), "the pull's status check");
-    assert.equal((await busy()).engineChanges, 1);
+    assert.equal(
+      busyDetail(await busy(), "quit"),
+      "An auto-pull is still being made. Quitting now will interrupt it.",
+    );
   } finally {
     rmSync(slow);
   }
   assert.deepEqual(await pull, { kind: "pulled", commits: 1 });
-  assert.equal((await busy()).engineChanges, 0);
+  assert.deepEqual((await busy()).engineChanges, []);
 });

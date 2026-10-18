@@ -65,6 +65,7 @@ export const autoPullWorktree = Effect.fnUntraced(function* (
       return { kind: "pulled", commits: counts.behind } as AutoPullOutcome;
     }),
     { projectId: worktree.projectId, worktreeId: worktree.id },
+    "autoPull",
   ).pipe(
     Effect.catchTag(
       ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],

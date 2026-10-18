@@ -229,6 +229,13 @@
     "remote": true,
     "gated": false
   },
+  "git:fetchProject": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "changeCode"
+  },
   "git:projectChanged": {
     "kind": "push",
     "scope": "host",

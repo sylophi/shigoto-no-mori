@@ -168,8 +168,9 @@ export type Landing = {
 // and the dirty state is still safe on the source device.
 //
 // The landing commits when it answers: the create is held in `move`
-// (Worktrees.createHeld) and kept as the landing ends, so a failure of
-// any step after it (the capture's ref) removes the copy, and so does
+// (Worktrees.createHeld) until the caller runs the `keep` it answers
+// with, once nothing of its own is left to fail, so a failure of any
+// step after the create (the capture's ref) removes the copy, and so does
 // an interrupt (the move's cancel) at any step of the move, which
 // stops whichever step is waiting (the link's question, the engine's
 // create). The destination is then as it was, bar a clone that got
@@ -323,8 +324,8 @@ export const landWorktree = (
         progress,
         move,
       );
-      yield* keep;
       return {
+        keep,
         worktree,
         captured,
         dirtyApplied,
@@ -362,7 +363,7 @@ export const landForSender: EffectHandlers<
   return Effect.gen(function* () {
     const move = yield* Effect.scope;
     const source = yield* linkSource(link);
-    const { receipt, ...landed } = yield* landWorktree(
+    const { receipt, keep, ...landed } = yield* landWorktree(
       source,
       { ...landing, landBranch: landBranch ?? landing.branch },
       ctx,
@@ -376,6 +377,7 @@ export const landForSender: EffectHandlers<
       projectId: landed.worktree.projectId,
       worktreeId: landed.worktree.id,
     });
+    yield* keep;
     return { ...landed, receipt };
   }).pipe(
     Effect.scoped,
@@ -417,9 +419,11 @@ const landIncoming = (
   // The create, the capture's ref and its apply, held as one change
   // while no data-folder move can start: a move between them would
   // carry the worktree to its new id and leave the ref under the old.
-  changing(landWhole(project, input, ctx, progress, move), {
-    projectId: project.id,
-  }).pipe(
+  changing(
+    landWhole(project, input, ctx, progress, move),
+    { projectId: project.id },
+    "land",
+  ).pipe(
     Effect.catchTag(
       ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
       (error) => Effect.fail(callFailureOf(error)),

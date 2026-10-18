@@ -438,6 +438,11 @@
       "active": false
     }
   },
+  "git:fetchProject": {
+    "payload": {
+      "projectId": "-1"
+    }
+  },
   "git:projectChanged": {
     "payload": {
       "projectId": "jW"
@@ -1938,7 +1943,7 @@
       "runningScripts": 3,
       "inflightDeletes": 1,
       "inflightMoves": 1,
-      "engineChanges": 2,
+      "engineChanges": ["pull", "push"],
       "busyTerminals": 1
     }
   },

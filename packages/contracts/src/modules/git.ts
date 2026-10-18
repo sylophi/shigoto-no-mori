@@ -12,6 +12,13 @@ export const gitContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
+  // refreshProject a person asked for (the page's refresh), which a quit
+  // waits on as it does on any git work someone started.
+  invoke("fetchProject", ProjectScopedPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
   // A peer looking at this host: runs the background sweep if stale and
   // keeps it ticking for the returned lease. Read-class: a request only
   // decides when the host's own pass runs, never more often than its

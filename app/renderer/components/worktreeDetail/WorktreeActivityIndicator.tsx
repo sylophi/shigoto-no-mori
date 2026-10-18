@@ -26,7 +26,7 @@ export function WorktreeActivityIndicator({
     // as they were, which the next sweep catches up.
     if (!remote) {
       api
-        .run(api.git.refreshProject({ projectId: worktree.projectId }))
+        .run(api.git.fetchProject({ projectId: worktree.projectId }))
         .catch(() => undefined);
     }
     if (!worktree.detached) {

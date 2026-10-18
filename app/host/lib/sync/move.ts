@@ -102,7 +102,7 @@ export const pullWorktree = (
   const pull = Effect.gen(function* () {
     const move = yield* Effect.scope;
     // The link to the source lives for the landing alone.
-    const { receipt, ...landed } = yield* peerSource(sourceDeviceId, {
+    const { receipt, keep, ...landed } = yield* peerSource(sourceDeviceId, {
       projectId: sourceProjectId,
       worktreeId: sourceWorktreeId,
     }).pipe(
@@ -125,6 +125,7 @@ export const pullWorktree = (
       ),
       Effect.scoped,
     );
+    yield* keep;
 
     // The ignored files, once the tree has settled: the leave-out
     // rule admits them and git never carried them, so the mirror

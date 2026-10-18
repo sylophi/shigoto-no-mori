@@ -70,7 +70,12 @@ import {
   type PeerReach,
   peerSyncFor,
 } from "@host/ipc/PeerReach";
-import { standInDeviceId, standInPeers } from "./lib/hostStandIns.mts";
+import {
+  standInDeviceId,
+  standInMirror,
+  standInPeers,
+} from "./lib/hostStandIns.mts";
+import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree as sendWorktreeOn } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
@@ -1642,8 +1647,10 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
 // removed, the branch (kept by `sm rm` under the setting) and
 // incoming ref gone and the source untouched. Once over, there is nothing left to cancel. The same
 // for a send, where the landing runs on the peer and meets the
-// cancel as the link torn down under it, and for a caller that
-// goes away (its call interrupted), which cancels like a click.
+// cancel as the link torn down under it, for a caller that goes
+// away (its call interrupted), which cancels like a click, and for a
+// cancel after the landing committed (the files step), which still
+// takes the copy.
 describe("cancelMove", () => {
   let targetConfigBefore: ShigomoriConfig | null;
   const setupPidPath = join(sandbox, "setup.pid");
@@ -1851,6 +1858,66 @@ describe("cancelMove", () => {
       "the setup script to die",
     );
     await landedNothing("cancel3", wtCancel3Path);
+  });
+
+  it("cancelMove (pull, after its landing committed): a cancel at the files step still takes the copy, its branch and its incoming ref", async () => {
+    // (d) Past the landing's commit point (Worktrees.createHeld's keep):
+    // the files step, held by a transfer session that never settles.
+    const wtCancel4Path = await addWorktree(
+      sourceRepo,
+      "wt-cancel4",
+      "cancel4",
+    );
+    const wtCancel4Id = worktreeIdFromPath(wtCancel4Path);
+    let atFiles!: () => void;
+    const reachedFiles = new Promise<void>((resolve) => {
+      atFiles = resolve;
+    });
+    standInMirror(
+      inertMirrorImpl({
+        create: () =>
+          Effect.sync(() => {
+            atFiles();
+            return "cancel4-files";
+          }),
+        sessions: Effect.succeed([
+          rawMirrorSession({ session: "cancel4-files" }),
+        ]),
+        terminate: () => Effect.void,
+      }),
+    );
+    try {
+      const cancelledPull = Promise.resolve(
+        pullWorktree(
+          {
+            sourceDeviceId: LISTENER,
+            sourceProjectId,
+            sourceWorktreeId: wtCancel4Id,
+            sourceIdentity: identity,
+            branch: "cancel4",
+            runSetup: false,
+            ignoreMode: "everything",
+          },
+          pullCtx,
+        ),
+      );
+      cancelledPull.catch(() => {});
+      await reachedFiles;
+      assert.ok(
+        await refExists(targetRepo, "refs/heads/cancel4"),
+        "the landing answered before the files step",
+      );
+      assert.deepEqual(
+        await runHost(
+          syncHandlers.cancelMove({ sourceWorktreeId: wtCancel4Id }, pullCtx),
+        ),
+        { cancelled: true },
+      );
+      await assert.rejects(cancelledPull, /The move was cancelled/);
+      await landedNothing("cancel4", wtCancel4Path);
+    } finally {
+      standInMirror(inertMirrorImpl());
+    }
   });
 });
 

@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import type { Project } from "@shigomori/contracts/schemas";
 import * as Registry from "@shigomori/engine/Registry";
+import * as Terrier from "@shigomori/engine/Terrier";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { holdRootChecks } from "@host/mirror/registry";
 import * as Ops from "../engineOps";
@@ -28,6 +29,7 @@ export const makeRemoving = ({
     const fs = yield* FileSystem.FileSystem;
     const worktrees = yield* Worktrees.Worktrees;
     const registry = yield* Registry.Registry;
+    const terrier = yield* Terrier.Terrier;
 
     // The protocol over the worktrees one mutation removes or moves (a
     // stack cleanup removes several): refuse a concurrent mutation of any
@@ -173,27 +175,35 @@ export const makeRemoving = ({
     // the app (projects.remove), the doctor's repair, or a terminal's `sm
     // projects remove`, which the store's change tells
     // (host/process/layer.ts). Gone is what a fresh list no longer names,
-    // so one a removal kept (terrier still registers it) keeps them, and a
-    // list that can't be read takes nothing.
-    // It re-reads the list the sync readers (the git watcher, the fetch
+    // so one a removal kept (terrier still registers it) keeps them. A
+    // list that can't be read takes nothing, and neither does a terrier
+    // project missing from a list terrier couldn't answer for (it lists
+    // none then). The runs are the ones there before the list was read,
+    // so a project added again meanwhile keeps a run started since. It
+    // re-reads the list the sync readers (the git watcher, the fetch
     // sweep) hold.
     const reapRemovedProjects = Effect.gen(function* () {
+      const runsBefore = runs.list().filter(({ interactive }) => interactive);
+      const sourceOf = new Map(
+        loadProjects().map(({ id, source }) => [id, source ?? "registry"]),
+      );
       const listed = yield* refresh.pipe(
         Effect.map((projects) => new Set(projects.map(({ id }) => id))),
         Effect.option,
         Effect.provideService(Registry.Registry, registry),
       );
       if (Option.isSome(listed)) {
-        const gone = new Set(
-          runs
-            .worktrees()
-            .map(({ projectId }) => projectId)
-            .filter((id) => !listed.value.has(id)),
+        const terrierTold = Option.isNone((yield* terrier.listing).trouble);
+        const gone = (projectId: string) =>
+          !listed.value.has(projectId) &&
+          (terrierTold || sourceOf.get(projectId) === "registry");
+        yield* runs.stopRuns(
+          new Set(
+            runsBefore
+              .filter(({ projectId }) => gone(projectId))
+              .map(({ runId }) => runId),
+          ),
         );
-        yield* Effect.forEach(gone, runs.stopProject, {
-          concurrency: "unbounded",
-          discard: true,
-        });
       }
       yield* terminals.closeMissing;
     }).pipe(Effect.withSpan("Scripts.reapRemovedProjects"));

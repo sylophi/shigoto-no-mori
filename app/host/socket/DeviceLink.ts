@@ -114,6 +114,7 @@ import * as HostPushes from "@host/lib/HostPushes";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import * as Sharing from "@host/lib/Sharing";
 import type { HostServices } from "@host/process/services";
+import { changeKindOf } from "./changeKinds";
 import { type HostChannels, makeHostChannels } from "./channels";
 
 // The listener's auth: what opens a socket, and the host's command
@@ -353,8 +354,8 @@ export type LateServices = Effect.Effect<
 >;
 
 // The calls that change code (a peer needs the grant for them), which
-// run only while no data-folder move can start, counted as a change
-// while they run (`changing`).
+// run only while no data-folder move can start, and the git work among
+// them a quit waits on (`changing`, ./changeKinds.ts).
 const changesCode: ReadonlySet<string> = new Set(GRANTS.changeCode.calls);
 
 // A contract call: the registered handler, run with the graph's
@@ -379,7 +380,7 @@ const serve =
       });
       return yield* (
         changesCode.has(channel)
-          ? changing(call, {}).pipe(
+          ? changing(call, {}, changeKindOf(channel)).pipe(
               Effect.catchTag(
                 ["DataDirMoving", "DataDirMoved", "DataDirLockUnavailable"],
                 (error) => Effect.fail(callFailureOf(error)),

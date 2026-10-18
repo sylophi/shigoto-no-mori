@@ -96,7 +96,7 @@ type Ids = { projectId: string; worktreeId?: string };
 
 // A create's or an adopt's run, as a change, its guard's refusal kept.
 const asCreate = <A, E, R>(effect: Effect.Effect<A, E, R>, ids: Ids) =>
-  changing(effect, ids).pipe(
+  changing(effect, ids, "create").pipe(
     Effect.mapError(
       (error) => guardRefusal(error) ?? engineFailure(error, ids),
     ),
@@ -206,10 +206,11 @@ export const deleteWorktree = Effect.fnUntraced(function* (
         }),
       );
   });
-  return yield* asChange(removal, {
-    projectId: project.id,
-    worktreeId: input.worktreeId,
-  });
+  return yield* asChange(
+    removal,
+    { projectId: project.id, worktreeId: input.worktreeId },
+    "remove",
+  );
 });
 
 // The merged layers of a stack under the worktree `worktreeId` names,
@@ -250,6 +251,7 @@ export const deleteStack = Effect.fnUntraced(function* (
       }),
     ),
     { projectId: project.id, worktreeId: removal.located.worktree.id },
+    "remove",
   );
   const removed = removedIdsOf(doc);
   if (doc.ok === true) {
@@ -311,6 +313,7 @@ export const mergePullRequest = Effect.fnUntraced(function* (
       );
     }),
     { projectId: project.id },
+    "merge",
   );
   return { outcome: mergeOutcomeOf(doc) };
 });
@@ -646,6 +649,7 @@ export const moveWorktree = Effect.fnUntraced(function* (
       return yield* (yield* Worktrees.Worktrees).move(located, destinationPath);
     }),
     { projectId: project.id, worktreeId },
+    "move",
   );
   return decodeWorktree(moved.worktree);
 });
@@ -662,6 +666,7 @@ export const renameWorktree = Effect.fnUntraced(function* (
       worktrees.rename(project, worktreeId, name),
     ),
     { projectId: project.id, worktreeId },
+    "move",
   );
   return decodeWorktree(renamed.worktree);
 });

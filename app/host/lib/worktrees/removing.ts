@@ -171,7 +171,8 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
     // without it, since leaving the worktree behind is not an option. The
     // cleanup runs on a clock: the nuke, or the cancel of something that
     // hung, must not wait on a teardown that hangs the same way. It
-    // overlaps a removal already under way rather than wait for it.
+    // overlaps a removal already under way rather than wait for it, and
+    // reads a worktree that removal took first as removed.
     const forceRemove = Effect.fn("Worktrees.forceRemove")(function* (input: {
       readonly projectId: string;
       readonly worktreeId: string;
@@ -206,14 +207,20 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
           { kind: "remove", busy: undefined },
           Effect.gen(function* () {
             // A cleanup the clock stopped reads as a cleanup failure. A
-            // worktree that is not there is not tried again.
+            // worktree already gone (another removal beat this one) is
+            // what this one was for.
             const first = yield* once({ skipCleanup: false }).pipe(
-              Effect.catchIf(
-                (error) => !isEntityGoneError(error),
-                () => Effect.succeed({ ok: false as const }),
+              Effect.catch((error) =>
+                Effect.succeed({ ok: isEntityGoneError(error) }),
               ),
             );
-            removed = first.ok || (yield* once({ skipCleanup: true })).ok;
+            removed =
+              first.ok ||
+              (yield* once({ skipCleanup: true }).pipe(
+                Effect.catchIf(isEntityGoneError, () =>
+                  Effect.succeed({ ok: true }),
+                ),
+              )).ok;
           }),
           () => (removed ? stopMirrors([worktreeId]) : Effect.void),
         )

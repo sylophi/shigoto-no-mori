@@ -17,6 +17,7 @@ import {
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
+import type { ChangeKind } from "@shigomori/contracts/modules/session";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -35,15 +36,21 @@ export class EngineRuns extends Context.Service<
 
 type Ids = { readonly projectId?: string; readonly worktreeId?: string };
 
-// The engine changes under way (`changing`), each with the project and
-// worktree it names, which the busy count reads (Scripts.busy).
+// The changes under way a quit asks about (`changing`): work a person
+// started, or an auto-pull's fast-forward, each with what it is and the
+// project and worktree it names (Scripts.busy).
+export type UnderWay = { readonly ids: Ids; readonly kind: ChangeKind };
+
 export class EngineChanges extends Context.Service<
   EngineChanges,
   {
-    readonly underWay: () => ReadonlyArray<Ids>;
+    readonly underWay: () => ReadonlyArray<UnderWay>;
+    // `effect` counted as a change of `kind` while it runs, or not at all
+    // with none, unless it runs inside a counted change.
     readonly counted: <A, E, R>(
       effect: Effect.Effect<A, E, R>,
       ids: Ids,
+      kind: ChangeKind | undefined,
     ) => Effect.Effect<A, E, R>;
   }
 >()("sm/host/EngineChanges") {}
@@ -59,8 +66,8 @@ const runsLayer = Layer.effect(
 // The change a running effect is counted under: a change nested in it
 // (a landing's create, the create's run forked to outlive its call)
 // holds that one, which ends with the last of them, and names it when
-// it was counted with no names (a peer's call, DeviceLink).
-type Change = { ids: Ids; holders: number };
+// it was counted with no names (a call over the device link).
+type Change = { ids: Ids; readonly kind: ChangeKind; holders: number };
 const Counting = Context.Reference<Change | undefined>(
   "sm/host/EngineChanges/Counting",
   { defaultValue: () => undefined },
@@ -69,12 +76,16 @@ const Counting = Context.Reference<Change | undefined>(
 const changesLayer = Layer.sync(EngineChanges, () => {
   const changes = new Set<Change>();
   return EngineChanges.of({
-    underWay: () => [...changes].map((change) => change.ids),
+    underWay: () => [...changes].map(({ ids, kind }) => ({ ids, kind })),
     counted: Effect.fn("EngineChanges.counted")(function* <A, E, R>(
       effect: Effect.Effect<A, E, R>,
       ids: Ids,
+      kind: ChangeKind | undefined,
     ) {
-      const change = (yield* Counting) ?? { ids: {}, holders: 0 };
+      const change =
+        (yield* Counting) ??
+        (kind === undefined ? undefined : { ids: {}, kind, holders: 0 });
+      if (change === undefined) return yield* effect;
       if (change.ids.projectId === undefined) change.ids = { ...ids };
       return yield* Effect.acquireUseRelease(
         Effect.sync(() => {
@@ -166,15 +177,22 @@ export const hostCallFailure = (error: unknown) => {
   );
 };
 
-// An operation that changes something, counted while it runs
-// (Scripts.busy), and run only while no data-folder move can start
-// (`DataDirLock`): every hold of the lock the host takes passes here, so
-// a quit sees each one.
-export const changing = <A, E, R>(effect: Effect.Effect<A, E, R>, ids: Ids) =>
+// An operation that changes something, run only while no data-folder
+// move can start (`DataDirLock`): every hold of the lock the host takes
+// passes here. Counted while it runs (Scripts.busy) when it is work a
+// quit should wait on, which `kind` names: something a person started,
+// or an auto-pull's fast-forward. A write that ends in moments (a
+// setting, a mark, the order) and the background's work name none.
+export const changing = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  ids: Ids,
+  kind?: ChangeKind,
+) =>
   Effect.flatMap(EngineChanges, (changes) =>
     changes.counted(
       Effect.flatMap(DataDirLock.DataDirLock, (lock) => lock.guard(effect)),
       ids,
+      kind,
     ),
   );
 
@@ -183,7 +201,8 @@ export const changing = <A, E, R>(effect: Effect.Effect<A, E, R>, ids: Ids) =>
 export const asChange = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   ids: Ids = {},
-) => asCall(changing(effect, ids), ids);
+  kind?: ChangeKind,
+) => asCall(changing(effect, ids, kind), ids);
 
 // The engine's view of where the host stands: nowhere, since a host
 // call names its project and worktree by id.

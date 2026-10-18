@@ -73,7 +73,7 @@ const IDLE = {
   runningScripts: 0,
   inflightDeletes: 0,
   inflightMoves: 0,
-  engineChanges: 0,
+  engineChanges: [],
   busyTerminals: 0,
 };
 

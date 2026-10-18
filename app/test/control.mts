@@ -203,7 +203,7 @@ async function startLoopback(options: {
       runningScripts: 0,
       inflightDeletes: 0,
       inflightMoves: 0,
-      engineChanges: 0,
+      engineChanges: [],
       busyTerminals: 0,
     }),
   );
@@ -743,7 +743,7 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
       runningScripts: 0,
       inflightDeletes: 0,
       inflightMoves: 0,
-      engineChanges: 0,
+      engineChanges: [],
       busyTerminals: 0,
     }),
   );

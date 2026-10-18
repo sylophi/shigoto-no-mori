@@ -17,15 +17,20 @@
 //     worktree's terminal closes, and the delete's mirror follow-up and
 //     its "removed" announcement still happen,
 //   - a project gone takes its scripts and terminals, whether the app
-//     removed it or a terminal's `sm projects remove` did.
+//     removed it or a terminal's `sm projects remove` did; a terrier
+//     project missing from a listing terrier failed is not gone, and a
+//     run started while the reap reads the list stays; the store's
+//     sweep makes no quit ask.
 //
 // Run: pnpm test worktree-removals.
 import assert from "node:assert/strict";
 import {
   appendFileSync,
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -38,10 +43,11 @@ import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import { projectsHandlers } from "../host/ipc/modules/projects.ts";
 import { worktreesHandlers } from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
-import { addProject } from "../host/lib/projects/index.ts";
+import { addProject, freshProjects } from "../host/lib/projects/index.ts";
 import * as Scripts from "../host/lib/Scripts.ts";
 import * as HostWorktrees from "../host/lib/Worktrees.ts";
 import * as Terminals from "../host/lib/terminals/Terminals.ts";
+import * as Terrier from "@shigomori/engine/Terrier";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
 import { engineDataDir, hostContext, runHost } from "./lib/hostRuntime.mts";
@@ -492,6 +498,149 @@ it("a project gone takes its scripts and terminals, removed in the app or from a
     assert.ok(
       !(await openIds()).includes(terminalId),
       `${name}: its terminal closed`,
+    );
+  }
+});
+
+// The next terrier listing asks it again.
+const fresh = () =>
+  runHost(Effect.flatMap(Terrier.Terrier, (terrier) => terrier.invalidate));
+
+// A `terrier` first on PATH listing `listed`, failing while `broken`
+// exists and holding while `held` exists, with the setting on, read
+// afresh on every listing.
+const fakeTerrier = async (name: string, listed: () => readonly string[]) => {
+  const dir = join(root, `${name}-terrier`);
+  mkdirSync(dir);
+  const held = join(dir, "held");
+  const holding = join(dir, "holding");
+  const broken = join(dir, "broken");
+  const answer = join(dir, "answer.json");
+  const write = () =>
+    writeFileSync(
+      answer,
+      JSON.stringify({ projects: listed().map((path) => ({ path })) }),
+    );
+  write();
+  writeFileSync(
+    join(dir, "terrier"),
+    `#!/bin/sh\nif [ -f '${held}' ]; then touch '${holding}'; while [ -f '${held}' ]; do sleep 0.05; done; fi\n[ -f '${broken}' ] && exit 3\ncat '${answer}'\n`,
+  );
+  chmodSync(join(dir, "terrier"), 0o755);
+  const path = process.env.PATH;
+  process.env.PATH = `${dir}:${path ?? ""}`;
+  await runHost(Ops.patchGlobalConfig({ terrier: true }));
+  return {
+    held,
+    holding,
+    broken,
+    relist: async () => {
+      write();
+      await fresh();
+    },
+    fresh,
+    off: async () => {
+      process.env.PATH = path;
+      await runHost(Ops.patchGlobalConfig({ terrier: false }));
+      await fresh();
+    },
+  };
+};
+
+const reapRemovedProjects = () =>
+  runHost(
+    Effect.flatMap(Scripts.Scripts, (scripts) => scripts.reapRemovedProjects),
+  );
+
+const busyNow = () =>
+  runHost(Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy));
+
+it("a terrier that can't be read takes no terrier project's scripts, and the store's sweep makes no quit ask", async () => {
+  const tracked = join(root, "tracked");
+  mkdirSync(tracked);
+  git(tracked, "init", "-q", "-b", "main");
+  git(tracked, "commit", "-q", "--allow-empty", "-m", "a");
+  let listed: readonly string[] = [tracked];
+  const terrier = await fakeTerrier("unread", () => listed);
+  try {
+    const project = (await runHost(freshProjects)).find(
+      ({ path }) => path === tracked,
+    );
+    assert.ok(project !== undefined, "terrier lists the repo");
+    // The sweep a store change runs, held in its read of the list.
+    writeFileSync(terrier.held, "");
+    await terrier.fresh();
+    const sweeping = reapRemovedProjects();
+    await waitFor(() => existsSync(terrier.holding), "the sweep's read");
+    // Earlier proofs' scripts still run: what this sweep adds is nothing.
+    const { engineChanges, inflightDeletes, inflightMoves } = await busyNow();
+    assert.deepEqual(
+      { engineChanges, inflightDeletes, inflightMoves },
+      { engineChanges: [], inflightDeletes: 0, inflightMoves: 0 },
+    );
+    rmSync(terrier.held);
+    await sweeping;
+    const [primary] = await runHost(
+      Ops.listWorktreeIdentities({ projectId: project.id }),
+    );
+    assert.ok(primary !== undefined);
+    const pid = join(root, "unread.pid");
+    await runIn(
+      project,
+      { ...primary, projectId: project.id } as Worktree,
+      pid,
+    );
+    await waitFor(() => existsSync(pid), "the script to start");
+    writeFileSync(terrier.broken, "");
+    await terrier.fresh();
+    await reapRemovedProjects();
+    assert.equal(
+      await running(primary as Worktree),
+      1,
+      "a listing terrier failed is no removal",
+    );
+    rmSync(terrier.broken);
+    listed = [];
+    await terrier.relist();
+    await reapRemovedProjects();
+    assert.equal(
+      await running(primary as Worktree),
+      0,
+      "one terrier no longer lists is",
+    );
+  } finally {
+    rmSync(terrier.held, { force: true });
+    await terrier.off();
+  }
+});
+
+it("a run started while the reap reads the list is not the reap's", async () => {
+  const { repo, project } = await repoAt("readded");
+  const lynx = await create(project, { worktreeName: "lynx" });
+  const before = join(root, "readded-before.pid");
+  await runIn(project, lynx, before);
+  await waitFor(() => existsSync(before), "the first script to start");
+  await runHost(Ops.removeProject(project.id));
+  const terrier = await fakeTerrier("readded", () => []);
+  try {
+    writeFileSync(terrier.held, "");
+    await terrier.fresh();
+    const reaping = reapRemovedProjects();
+    await waitFor(() => existsSync(terrier.holding), "the reap's read");
+    const after = join(root, "readded-after.pid");
+    await runIn(project, lynx, after);
+    await waitFor(() => existsSync(after), "the second script to start");
+    rmSync(terrier.held);
+    await reaping;
+    assert.equal(await running(lynx), 1, "the run started since stays");
+    await runHost(addProject(repo));
+  } finally {
+    rmSync(terrier.held, { force: true });
+    await terrier.off();
+    await runHost(
+      Effect.flatMap(Scripts.Scripts, (scripts) =>
+        scripts.stopWorktree(lynx.id),
+      ),
     );
   }
 });

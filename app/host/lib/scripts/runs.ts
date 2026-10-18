@@ -558,6 +558,10 @@ export const makeRuns = ({
       stopProject: Effect.fn("Scripts.stopProject")((projectId: string) =>
         stopMatching((r) => r.projectId === projectId, "Project removed"),
       ),
+      // The PTY runs `runIds` names, their project gone.
+      stopRuns: Effect.fn("Scripts.stopRuns")((runIds: ReadonlySet<string>) =>
+        stopMatching((r) => runIds.has(r.runId), "Project removed"),
+      ),
       stopAll: Effect.fn("Scripts.stopAll")(
         (options: { readonly graceMs?: number } = {}) =>
           stopMatching(() => true, "App quit", options.graceMs),
