@@ -2,6 +2,7 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useState } from "react";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { getBrowseParentPath } from "@shigomori/contracts/projectPaths";
 import { notifyError, toast } from "@/lib/toast";
@@ -13,8 +14,9 @@ import { useApi } from "@/lib/runtime/pageApi";
 export function DataLocationSection() {
   const page = useApi();
   const { api, remote } = useHostScope();
+  const deviceLabel = useScopedDeviceLabel();
   // Whose app the copy below is talking about.
-  const there = remote ? " on that device" : "";
+  const there = remote ? ` on ${deviceLabel}` : "";
   const { data: runtime } = useRuntimeInfo();
   const root = runtime?.dataDir ?? null;
   const home = runtime?.homedir ?? null;
@@ -61,6 +63,7 @@ export function DataLocationSection() {
   return (
     <DataLocationSectionView
       remote={remote}
+      deviceLabel={deviceLabel}
       root={root}
       home={home}
       moving={moving}

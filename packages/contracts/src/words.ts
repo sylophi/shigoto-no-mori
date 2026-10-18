@@ -25,3 +25,9 @@ export function listed(parts: readonly string[]): string {
   if (parts.length < 2) return parts[0] ?? "";
   return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1) ?? ""}`;
 }
+
+// A sentence's first word as it starts one: "the other device" leads
+// "The other device is offline".
+export function capitalized(words: string): string {
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}

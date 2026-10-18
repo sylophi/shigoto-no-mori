@@ -3,13 +3,54 @@ import { Loader2 } from "lucide-react";
 import type { WorktreeFile } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
+import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { cn } from "../../lib/utils.ts";
 import { MediaFileView } from "../files/FileViewerView.tsx";
 
 // An image, video or audio file's sides in a diff (MediaDiff.tsx binds
-// each to its blob), drawn under the file's header.
-export function MediaDiffView({ children }: { children: ReactNode }) {
+// each to its blob), drawn under the file's header. With `unnamed` the
+// patch names a side's blob only in short (a pull request's diff from
+// GitHub, its commits not fetched here), so neither side is read, and
+// the file says so once: what to do about it.
+export function MediaDiffView({
+  unnamed,
+  children,
+}: {
+  unnamed?: {
+    readonly onRetry: (() => void) | undefined;
+    // The ask is out.
+    readonly retrying: boolean;
+  };
+  children?: ReactNode;
+}) {
+  if (unnamed) {
+    return (
+      <div className="pt-2">
+        <EmptyPanel>
+          <div className="flex flex-col items-center gap-2">
+            <span>
+              Not shown: this needs the pull request&apos;s commits, which
+              couldn&apos;t be read here.
+            </span>
+            {unnamed.onRetry && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={unnamed.retrying}
+                onClick={unnamed.onRetry}
+              >
+                {unnamed.retrying && (
+                  <Loader2 aria-hidden className="size-3.5 animate-spin" />
+                )}
+                Try again
+              </Button>
+            )}
+          </div>
+        </EmptyPanel>
+      </div>
+    );
+  }
   return <div className="flex gap-2 pt-2 phone:flex-col">{children}</div>;
 }
 
@@ -19,7 +60,6 @@ export function MediaDiffSideView({
   side,
   file,
   reading,
-  unnamed,
   sideRef,
 }: {
   side: "old" | "new";
@@ -27,14 +67,6 @@ export function MediaDiffSideView({
   // couldn't be read.
   file: WorktreeFile | undefined;
   reading: boolean;
-  // Set when the patch names the side's blob only in short (a pull
-  // request's diff from GitHub, its commits not fetched here), so it
-  // can't be read: what to do about it.
-  unnamed?: {
-    readonly onRetry: (() => void) | undefined;
-    // The ask is out.
-    readonly retrying: boolean;
-  };
   // Read once scrolled near: a patch that regenerates a hundred
   // screenshots would otherwise ship every one of them up front.
   sideRef?: Ref<HTMLDivElement>;
@@ -47,27 +79,7 @@ export function MediaDiffSideView({
         side === "old" ? "bg-rose-500/10" : "bg-green-500/10",
       )}
     >
-      {unnamed ? (
-        <CenteredMessage className="flex-col gap-2 px-6 text-center">
-          <span>
-            Not shown: this needs the pull request&apos;s commits, which
-            couldn&apos;t be read here.
-          </span>
-          {unnamed.onRetry && (
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={unnamed.retrying}
-              onClick={unnamed.onRetry}
-            >
-              {unnamed.retrying && (
-                <Loader2 aria-hidden className="size-3.5 animate-spin" />
-              )}
-              Try again
-            </Button>
-          )}
-        </CenteredMessage>
-      ) : reading ? (
+      {reading ? (
         <CenteredMessage>
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
         </CenteredMessage>

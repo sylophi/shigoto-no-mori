@@ -3,6 +3,7 @@
 // without any polling or prop threading. Read side only: no settings
 // UI and no scoped data live here, just the live list the scoped
 // surfaces resolve their device from.
+import { UNNAMED_DEVICE } from "@shigomori/ui/lib/deviceRoster.ts";
 import { useAtomValue } from "@effect/atom-react";
 import {
   MACHINE_FALLBACK_ICON,
@@ -102,11 +103,9 @@ export function useDeviceIcon(deviceId: string): DeviceIcon {
   return deviceId === localDeviceId ? localIcon : remoteIcon;
 }
 
-// The device's name for prose ("on Thinkpad", "Thinkpad:3000"). Falls
-// back to a neutral phrase rather than the raw id, which means nothing
-// to the reader.
+// The device's name for prose ("on Thinkpad", "Thinkpad:3000").
 export function useRemoteDeviceLabel(deviceId: string): string {
-  return useRemoteDevice(deviceId)?.label ?? "the device";
+  return useRemoteDevice(deviceId)?.label ?? UNNAMED_DEVICE;
 }
 
 // The same for the device the caller's host scope reads.
@@ -116,13 +115,12 @@ export function useScopedDeviceLabel(): string {
 
 // Either party of a cross-device pair by name, where either may be
 // this machine, which the registry does not list: "this device" for
-// it, a peer's label, and a neutral phrase for an id the registry no
-// longer knows.
+// it, a peer's label otherwise.
 function useDeviceName(deviceId: string): string {
   const localDeviceId = useApi().deviceId;
   const label = useRemoteDevice(deviceId)?.label;
   if (deviceId === localDeviceId) return "this device";
-  return label ?? "another device";
+  return label ?? UNNAMED_DEVICE;
 }
 
 // The same with this machine by its own name, for a title or a label
