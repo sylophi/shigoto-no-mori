@@ -10,7 +10,6 @@ import * as Ops from "@host/lib/engineOps";
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { captureWithin } from "@shigomori/engine/processes";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
-import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -19,7 +18,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { answersFor } from "../util/cacheTtl";
+import { keptAnswers } from "../util/kept";
 
 // The engine resolves rc locations from ZDOTDIR / XDG_CONFIG_HOME, which
 // a Finder-launched app doesn't have (launchd sources no shell
@@ -60,7 +59,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const lifecycle = yield* Lifecycle.Lifecycle;
-    const probes = yield* Cache.makeWith(
+    const probes = yield* keptAnswers(
       (shell: string) =>
         captureWithin(
           spawner,
@@ -77,14 +76,14 @@ export const layer = Layer.effect(
             Effect.fromOption(code === 0 ? hookPlaceOf(output) : Option.none()),
           ),
         ),
-      { capacity: 1, timeToLive: answersFor(Duration.hours(1)) },
+      Duration.hours(1),
     );
     return HookShell.of({
       read: Effect.gen(function* () {
         const { shell, args } = yield* lifecycle.loginShell;
         // /bin/sh, when no login shell is named: none to integrate with.
         if (args.length === 0) return { zdotdir: "", loginShell: "" };
-        const place = yield* Cache.get(probes, shell).pipe(Effect.option);
+        const place = yield* probes.get(shell).pipe(Effect.option);
         return Option.match(place, {
           onNone: () => ({ zdotdir: "", loginShell: shell }),
           onSome: (found) => ({ ...found, loginShell: shell }),

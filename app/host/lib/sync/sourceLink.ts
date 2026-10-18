@@ -381,11 +381,11 @@ function coalescedProgress(
   onProgress: ((bytes: number, totalBytes: number) => void) | undefined,
 ): (bytes: number) => void {
   let lastMark = 0;
-  let lastAt = Date.now();
+  let lastAt = performance.now();
   return (bytes) => {
     if (onProgress === undefined) return;
     const mark = Math.floor((bytes / Math.max(1, totalBytes)) * 200);
-    const now = Date.now();
+    const now = performance.now();
     const final = bytes >= totalBytes;
     if (!final && mark === lastMark && now - lastAt < 100) return;
     lastMark = mark;

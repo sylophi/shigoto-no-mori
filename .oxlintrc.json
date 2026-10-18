@@ -69,11 +69,9 @@
       "files": [
         "app/main/hostProcess.ts",
         "packages/engine/src/worktrees/moving.ts",
-        "app/host/lib/sync/sourceLink.ts",
         "app/host/mirror/gitFollow.ts",
         "app/main/electron/liveness.ts",
-        "app/main/electron/notifications.ts",
-        "app/shared/hub/link.ts"
+        "app/main/electron/notifications.ts"
       ],
       "rules": { "shigomori/no-wall-clock": "off" }
     }

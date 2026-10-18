@@ -21,6 +21,7 @@ import {
   pullRequestsEqual,
   summarizeChecks,
 } from "@shigomori/contracts/schemas";
+import { ageOf, type Stamp } from "../util/kept";
 import { gh } from "./exec";
 import {
   checkedOutPullRequest,
@@ -392,13 +393,6 @@ function toReviews(pr: GqlExtrasPullRequest): PullRequestReviews {
 // token names.
 const SIGNED_URL_REUSE_MS = 4 * 60_000;
 const SIGNED_URL_MARGIN_MS = 60_000;
-
-// An observation's time on both clocks, and its age by whichever reads
-// older, so neither a sleep nor a step of the wall clock either way
-// keeps it past its age.
-export type Stamp = { readonly elapsed: number; readonly wall: number };
-export const ageOf = (at: Stamp, now: Stamp): number =>
-  Math.max(now.elapsed - at.elapsed, now.wall - at.wall);
 
 // By attachment (host/id): the URL, when it was signed, and its token's
 // expiry on the wall clock, null when it names none (an Enterprise

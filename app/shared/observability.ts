@@ -19,6 +19,10 @@ import { logger } from "@shared/log";
 
 const millis = (nanos: bigint) => Number(nanos) / 1_000_000;
 
+// The spans that have started and not ended, each with its start on
+// performance.now().
+export type OpenSpans = Map<Tracer.Span, number>;
+
 function outcome(exit: Exit.Exit<unknown, unknown>) {
   if (Exit.isSuccess(exit)) return { outcome: "ok" };
   if (Cause.hasInterruptsOnly(exit.cause)) return { outcome: "interrupted" };
@@ -44,14 +48,17 @@ function serialize(line: Record<string, unknown>): string {
   }
 }
 
+// A span's duration is measured on performance.now(): its start and end
+// times are the Clock's wall readings, which a clock step moves.
 const fileTracer = (
   writeTraceLine: (line: string) => void,
-  open: Set<Tracer.Span> | undefined,
+  open: OpenSpans | undefined,
 ) =>
   Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
-      open?.add(span);
+      const startedAt = performance.now();
+      open?.set(span, startedAt);
       const end = span.end;
       span.end = function (endTime, exit) {
         end.call(this, endTime, exit);
@@ -64,7 +71,7 @@ const fileTracer = (
             spanId: span.spanId,
             parentId: Option.getOrUndefined(span.parent)?.spanId,
             start: new Date(startTime).toISOString(),
-            durationMs: millis(endTime) - startTime,
+            durationMs: performance.now() - startedAt,
             ...outcome(exit),
             attributes: Object.fromEntries(span.attributes),
             events:
@@ -96,8 +103,7 @@ const devTools = (packaged: boolean) =>
 export const layer = (options: {
   readonly packaged: boolean;
   readonly writeTraceLine: (line: string) => void;
-  // Kept filled with the spans that have started and not ended.
-  readonly openSpans?: Set<Tracer.Span>;
+  readonly openSpans?: OpenSpans;
 }) =>
   devTools(options.packaged).pipe(
     Layer.provideMerge(

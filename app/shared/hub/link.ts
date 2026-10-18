@@ -83,9 +83,10 @@ export function relayPrologue(askerId: string, askedId: string): Uint8Array {
 const ANSWER_OVERHEAD_BYTES = 32 + 16;
 
 // How long a device remembers an ask it has answered, from when it
-// received it, on its own clock: no time is compared across devices,
-// so one whose clock is off is answered like any other. A replay within
-// the window is turned away. One older than it opens nothing a fresh
+// received it, on its own monotonic clock, which neither a sleep nor a
+// clock step moves: no time is compared across devices, so one whose
+// clock is off is answered like any other. A replay within the window
+// is turned away. One older than it opens nothing a fresh
 // ask from the same device could not: it reaches a connection whose
 // tickets were long since spent, or replaces that connection's pending
 // set as a fresh ask would, which keying the tickets per connection
@@ -181,6 +182,8 @@ type HubLinkDeps = {
   localKey: KeyPair;
   // The asks this device has read (SeenAsks above).
   seenAsks: SeenAsks;
+  // Monotonic milliseconds, which the asks' retention is measured on.
+  now(): number;
   // Writes one text message to the raw hub socket. May throw when the
   // socket is unusable, and the caller of the failed operation sees it.
   send(text: string): void;
@@ -373,7 +376,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       !freshAsk(
         deps.seenAsks,
         toBase64Url(handshake.handshakeHash()),
-        Date.now(),
+        deps.now(),
       )
     ) {
       warnDrop(() => `dropping a repeated ask from ${truncateId(from)}`);

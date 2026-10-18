@@ -523,6 +523,35 @@ it("refusal: a ticket the host never minted is a blocked verdict, and five of th
   assert.equal(locked.code, 4003);
 });
 
+it("lockout: an address is benched for 30 s of time awake, which neither a sleep nor a step of the wall clock either way spends", async () => {
+  const track = trackTest;
+  const clock = testClock();
+  const { wall, sleep, stop } = sleepingClock(clock);
+  const { listener } = await listen(track, {
+    provide: Layer.succeed(Clock.Clock, wall),
+  });
+  const lockOut = async () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await dialFails(listener, { ticket: "smpt_never_minted" });
+    }
+  };
+  const lockedOut = async (why: string) =>
+    assert.equal((await dialFails(listener)).code, 4003, why);
+  await lockOut();
+  // A two-hour sleep: the wall clock ran on, monotonic time stood.
+  sleep(2 * 3_600_000);
+  await lockedOut("a sleep or a forward step ended the lockout");
+  sleep(-4 * 3_600_000);
+  await lockedOut("a backward step ended the lockout");
+  // 30 s awake, the wall clock still two hours behind.
+  await clock.advance(30_000);
+  await dialListener(track, listener);
+  // Stopped for 30 s: both clocks ran on.
+  await lockOut();
+  stop(30_000);
+  await dialListener(track, listener);
+});
+
 it("lockout: a device on another version, refused past the threshold, leaves a correct dial from the same address accepted", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
