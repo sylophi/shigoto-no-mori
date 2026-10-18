@@ -13,15 +13,15 @@ import { join } from "node:path";
 // between instances to clone a sign-in).
 export const CLERK_TOKEN_STORE = "clerk-tokens";
 
-// Dev profiles: a second, third, ... dev instance on one machine, each
-// a separate device (its own userData, so its own single-instance
-// lock, hub credential and Clerk tokens). Dev only. The env
-// var names the profile. The launcher that sets it also sets
-// SHIGOMORI_DATA_DIR to the profile's own data dir, and main refuses a
-// profile without one: two devices over the same forest would be a
-// lie the hub cannot see through. The profile's userData nests under
-// the plain dev userData so Application Support stays one folder per
-// flavor.
+// Profiles: a second, third, ... instance of a dev run or a test
+// flavor on one machine, each a separate device (its own userData, so
+// its own single-instance lock, hub credential and Clerk tokens). Never
+// a release build's (profileFromEnv). The env var names the profile.
+// The launcher that sets it also sets SHIGOMORI_DATA_DIR to the
+// profile's own data dir, and main refuses a profile without one: two
+// devices over the same forest would be a lie the hub cannot see
+// through. The profile's userData nests under its flavor's, so
+// Application Support stays one folder per flavor.
 export const DEV_PROFILE_ENV = "SHIGOMORI_PROFILE";
 
 // Written into a dev profile's userData beside its Clerk token store
@@ -52,13 +52,23 @@ export function assertDevProfileName(name: string): void {
 }
 
 // The profile named in an environment, or null when unset or empty.
-export function devProfileFromEnv(
+function devProfileFromEnv(
   env: Record<string, string | undefined>,
 ): string | null {
   const raw = env[DEV_PROFILE_ENV]?.trim() ?? "";
   if (raw === "") return null;
   assertDevProfileName(raw);
   return raw;
+}
+
+// The profile a build runs as, or null: a dev run's, or a test flavor's
+// (the lab's walks run one build as two devices). A release build never
+// runs as one, whatever its environment says.
+export function profileFromEnv(
+  build: { readonly packaged: boolean; readonly debuggable: boolean },
+  env: Record<string, string | undefined>,
+): string | null {
+  return build.packaged && !build.debuggable ? null : devProfileFromEnv(env);
 }
 
 // The folder in the plain dev userData that holds the profiles'.

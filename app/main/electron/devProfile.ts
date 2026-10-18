@@ -7,19 +7,24 @@
 import { app } from "electron";
 import {
   DEV_PROFILE_ENV,
-  devProfileFromEnv,
   devProfileNameSuffix,
+  profileFromEnv,
 } from "@shared/packaging/appName.mts";
 import { envSetting } from "@shared/config";
+import { names } from "../flavor";
+
+const build = () => ({
+  packaged: app.isPackaged,
+  debuggable: names.debuggable,
+});
+const profileEnv = () => ({ [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV) });
 
 let profile: string | null | undefined;
 
 function current(): string | null {
   if (profile === undefined) {
     try {
-      profile = app.isPackaged
-        ? null
-        : devProfileFromEnv({ [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV) });
+      profile = profileFromEnv(build(), profileEnv());
     } catch {
       // Malformed: initDevProfile reports it, readers see no profile.
       profile = null;
@@ -28,17 +33,14 @@ function current(): string | null {
   return profile;
 }
 
-// Null for a packaged build and for the plain dev instance. Throws on
+// Null for a release build and for the plain dev instance. Throws on
 // a malformed name, and on a profile without SHIGOMORI_DATA_DIR: that
 // would enroll a second device over the same forest, so it is refused
 // at boot rather than discovered on the account page. A refused
 // profile leaves the readers seeing no profile at all.
 export function initDevProfile(): string | null {
-  if (app.isPackaged) return null;
   profile = null;
-  const name = devProfileFromEnv({
-    [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV),
-  });
+  const name = profileFromEnv(build(), profileEnv());
   if (name !== null && envSetting("SHIGOMORI_DATA_DIR") === undefined) {
     throw new Error(
       `${DEV_PROFILE_ENV} needs SHIGOMORI_DATA_DIR set to the profile's own ` +
