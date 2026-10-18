@@ -47,6 +47,7 @@ import {
 import { watchPortForwards } from "./hooks/remote/usePortForwards";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { watchHost } from "./lib/hostWatch";
+import { askAgainOnHostReturn } from "./lib/runtime/hostAnswering";
 import { followDeviceSettings } from "./hooks/config/useGlobalConfig";
 import {
   onAccountLeft,
@@ -300,6 +301,7 @@ function startLocalHost(
   // land in theirs.
   watchHost(queryClient, api.deviceId, api);
   followDeviceSettings(registry, queryClient, api.deviceId);
+  askAgainOnHostReturn(queryClient, signal);
   registry.mount(scriptRunsAtom(api.deviceId));
   registry.mount(worktreeLifecycleAtom(api.deviceId));
   registry.mount(gitFetchingAtom(api.deviceId));
