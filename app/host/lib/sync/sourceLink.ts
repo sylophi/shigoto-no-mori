@@ -646,6 +646,8 @@ const cloneFactsOf = (project: Project) =>
     ),
     ([{ ref, branch }, remotes]): CloneFacts => ({
       branch,
+      // The branch is the ref exactly when the ref is a local branch
+      // (the engine's worktrees/listing.ts).
       ref: ref === branch ? `refs/heads/${branch}` : `refs/remotes/${ref}`,
       remoteUrl: pickCloneUrl(remotes),
     }),

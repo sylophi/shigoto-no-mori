@@ -28,10 +28,10 @@ import { strict } from "../schemas/strict.ts";
 
 // The refs a peer may request into a bundle: a branch, a remote-tracking
 // branch (a clone's default branch, when the project's is one), a dirty
-// capture, a mirror's index snapshot. These cross into git argv, hence the narrow
-// charset. The engine's gate (Bundle.ts) differs on purpose: it admits
-// any refs/* but bans a trailing "/" or ".lock", which this one admits.
-// Only what clears both goes through.
+// capture, a mirror's index snapshot. These cross into git argv, hence
+// the narrow charset. The engine's gate (Bundle.ts) differs on purpose:
+// it admits any refs/* but bans a trailing "/" or ".lock", which this
+// one admits. Only what clears both goes through.
 const BUNDLE_REF_RE =
   /^refs\/((heads|remotes)\/[A-Za-z0-9][A-Za-z0-9._/-]*|shigomori\/(dirty|index)\/[0-9a-f]{12})$/;
 

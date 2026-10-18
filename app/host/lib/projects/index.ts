@@ -115,24 +115,20 @@ class NoLocalBranchesError extends Schema.TaggedError<NoLocalBranchesError>()(
 }
 
 // The project's default branch, as the engine resolves it once per
-// project (the configured override first), in its two senses: `ref`,
+// project (the configured override first), in its two senses. `ref` is
 // what every row is measured against and a new worktree branches from
-// ("origin/main" for a remote-tracking setting), which
-// projects:defaultBranch answers, and `branch`, the local branch it
-// names ("main"), which a clone of the project on another device checks
-// out (host/lib/sync/cloneFromPeer.ts).
+// ("origin/main" for a remote-tracking one), which projects:defaultBranch
+// answers. `branch` is the local branch it names ("main"), which a clone
+// of the project on another device checks out (sync/cloneFromPeer.ts).
 export const defaultBranchOf = Effect.fnUntraced(function* (project: Project) {
   const [first] = yield* Ops.listWorktreeIdentities(
     { projectId: project.id },
     { primaryRef: true },
   );
-  if (first?.primaryRef === undefined) {
+  if (first?.primaryRef === undefined || first.primaryBranch === undefined) {
     return yield* new NoLocalBranchesError({ path: project.path });
   }
-  return {
-    ref: first.primaryRef,
-    branch: first.primaryBranch ?? first.primaryRef,
-  };
+  return { ref: first.primaryRef, branch: first.primaryBranch };
 });
 
 // Resolves which LOCAL project a peer's project corresponds to, by repo

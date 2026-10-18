@@ -365,10 +365,16 @@ export class Git extends Context.Service<
       repo: string,
       override?: string,
     ) => Effect.Effect<Option.Option<string>>;
-    // The short-named primary ref a row is measured against, which may
-    // also fall back to the first local branch: a merge target only
+    // The fully qualified primary ref a row is measured against, which
+    // may also fall back to the first local branch: a merge target only
     // has to exist. `remotes` saves a `git remote` for a caller that
     // has them.
+    readonly resolvePrimaryRef: (
+      repo: string,
+      override?: string,
+      remotes?: readonly string[],
+    ) => Effect.Effect<Option.Option<string>>;
+    // The same ref, short-named ("main", "origin/main").
     readonly resolveDefaultBranch: (
       repo: string,
       override?: string,
@@ -867,6 +873,7 @@ const make = Effect.gen(function* () {
     branchRefs,
     appendExcludes,
     resolveDefaultBranch,
+    resolvePrimaryRef,
     resolveDefaultRef,
     checkoutBranch,
     createBranch,
@@ -1031,6 +1038,7 @@ const make = Effect.gen(function* () {
     remoteRefExists,
     resolveDefaultRef,
     resolveDefaultBranch,
+    resolvePrimaryRef,
     resolveCheckoutRef,
     checkoutBranch,
     createBranch,

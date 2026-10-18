@@ -2071,11 +2071,12 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
 });
 
 it("mirror start into a device with no checkout, the project's default branch a remote-tracking ref: the clone checks out the remote's branch at the remote ref's tip, origin/HEAD on it, and the copy lands in the clone", async () => {
-  // ---- The settings a laptop project has (the owner's, read off a
-  // real device): the default branch is origin/main, a remote-tracking
-  // ref, which local main lags behind; gitignored files carried over;
-  // a setup script. A clone made for the copy checks out main, made of
-  // the source's origin/main, not a branch named "origin/main".
+  // ---- A project as a laptop has it: a clone with a fetched origin,
+  // whose default branch resolves to origin/main with or without a
+  // setting (the candidates go remote first, and `projects add` seeds
+  // the setting from them), local main lagging behind it, and the rest
+  // of the owner's settings. A clone made for the copy checks out main,
+  // made of the source's origin/main, not a branch named "origin/main".
   const otherDataDir = join(sandbox, "data-tracking");
   mkdirSync(otherDataDir);
   const otherCli = createCliRunner(fixture.smBinary, {

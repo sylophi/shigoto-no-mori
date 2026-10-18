@@ -10,7 +10,7 @@ import * as Result from "effect/Result";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Config from "../Config.ts";
 import * as Git from "../Git.ts";
-import { splitRemoteRef } from "../gitParse.ts";
+import { shortRefName, splitRemoteRef } from "../gitParse.ts";
 import * as Layout from "../Layout.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
@@ -128,13 +128,18 @@ export const makeListing = Effect.gen(function* () {
       [git.listRemotes(project.path), projectSettings(project)],
       { concurrency: 2 },
     );
-    const primaryRef = Option.getOrElse(
-      yield* git.resolveDefaultBranch(project.path, defaultBranch, remotes),
+    const fullRef = Option.getOrElse(
+      yield* git.resolvePrimaryRef(project.path, defaultBranch, remotes),
       () => "",
     );
-    // The ref's local branch: "main" for "origin/main".
-    const primaryBranch =
-      splitRemoteRef(primaryRef, remotes)?.branch ?? primaryRef;
+    const primaryRef = shortRefName(fullRef);
+    // The ref's local branch: "main" for "origin/main", and for a remote
+    // ref whose remote is gone, its name past the first segment. So the
+    // branch equals the ref exactly when the ref is a local branch.
+    const primaryBranch = fullRef.startsWith("refs/remotes/")
+      ? (splitRemoteRef(primaryRef, remotes)?.branch ??
+        primaryRef.slice(primaryRef.indexOf("/") + 1))
+      : primaryRef;
     return { remotes, primaryRef, primaryBranch, settings };
   });
 
