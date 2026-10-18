@@ -239,6 +239,17 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
   }
 }
 
+// A removal a later step needs (a clear folder to stage or swap into)
+// failed: `rm -rf` of `path`.
+export class RemoveFailed extends Schema.TaggedError<RemoveFailed>()(
+  "RemoveFailed",
+  { path: Schema.String, cause: Schema.Defect() },
+) {
+  override get message(): string {
+    return `Couldn't remove ${this.path}: ${causeText(this.cause)}`;
+  }
+}
+
 export class NothingStaged extends Schema.TaggedError<NothingStaged>()(
   "NothingStaged",
   {},
@@ -418,13 +429,15 @@ export type StageError =
   | QueryError
   | LockError
   | DownloadFailed
-  | SignatureRejected;
+  | SignatureRejected
+  | RemoveFailed;
 
 export type InstallError =
   | LockError
   | NothingStaged
   | SwapFailed
-  | SignatureRejected;
+  | SignatureRejected
+  | RemoveFailed;
 
 // --- the pipeline -------------------------------------------------------------
 

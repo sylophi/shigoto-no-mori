@@ -11,7 +11,12 @@ import { parseJson } from "../json.ts";
 import * as Paths from "../Paths.ts";
 import { captureWithin } from "../processes.ts";
 import { type AppStatus, appStatusOf } from "../updateFeed.ts";
-import { NotInBundle, type Ran, updaterFiles } from "./documents.ts";
+import {
+  NotInBundle,
+  type Ran,
+  RemoveFailed,
+  updaterFiles,
+} from "./documents.ts";
 
 export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
   Effect.gen(function* () {
@@ -53,7 +58,24 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     // .app fails on it, leaving a husk a rename onto then refuses
     // (v3.0.0-alpha.4 to alpha.6 never staged an update).
     const removeAll = (target: string) =>
-      run("rm", ["-rf", "--", target]).pipe(Effect.asVoid);
+      run("rm", ["-rf", "--", target]).pipe(
+        Effect.flatMap((ran) =>
+          ran.ok
+            ? Effect.void
+            : Effect.fail(
+                new RemoveFailed({
+                  path: target,
+                  cause:
+                    ran.output.trim() === ""
+                      ? ran.cause
+                      : new Error(ran.output.trim()),
+                }),
+              ),
+        ),
+      );
+    // A removal of what nothing needs gone: a leftover the next run's
+    // prune sweeps again, its failure no step's.
+    const prune = (target: string) => removeAll(target).pipe(Effect.ignore);
 
     // A file the terminal, the app and a v2 Go sm share, read leniently: one
     // that is missing, unreadable or malformed reads as absent.
@@ -137,6 +159,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
     return {
       at,
       removeAll,
+      prune,
       run,
       readShared,
       writeShared,

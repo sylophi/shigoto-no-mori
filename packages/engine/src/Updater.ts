@@ -55,6 +55,7 @@ export {
   NothingStaged,
   RateLimited,
   RelaunchFailed,
+  RemoveFailed,
   SignatureRejected,
   SwapFailed,
   UpdatesUnavailable,

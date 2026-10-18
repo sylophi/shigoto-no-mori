@@ -56,7 +56,7 @@ export const makeStaging = ({
       download: downloadPath,
       extract: extractDir,
     } = files.at;
-    const { removeAll, run, readShared, writeShared } = files;
+    const { removeAll, prune, run, readShared, writeShared } = files;
     const { send, queryFeed } = feeds;
     const { verify } = signatures;
     // The stager's pidfile for the rest of the run, its folder's failure
@@ -111,8 +111,8 @@ export const makeStaging = ({
     const pruneLeftovers = Effect.fn("Updater.pruneLeftovers")(function* (
       target: string,
     ) {
-      yield* removeAll(downloadPath);
-      yield* removeAll(extractDir);
+      yield* prune(downloadPath);
+      yield* prune(extractDir);
       if (Option.isNone(yield* fs.stat(target).pipe(Effect.option))) return;
       const dir = path.dirname(target);
       const base = path.basename(target);
@@ -121,7 +121,7 @@ export const makeStaging = ({
         .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
       for (const name of names) {
         if (isAsideName(base, name) || isIncomingName(base, name)) {
-          yield* removeAll(path.join(dir, name));
+          yield* prune(path.join(dir, name));
         }
       }
     });
@@ -177,7 +177,7 @@ export const makeStaging = ({
           Effect.fail(new DownloadFailed({ reason: "finish", cause })),
         ),
       );
-      yield* written.pipe(Effect.tapError(() => removeAll(downloadPath)));
+      yield* written.pipe(Effect.tapError(() => prune(downloadPath)));
     });
 
     // A directory entry that is a directory itself, not a link to one.
@@ -324,7 +324,7 @@ export const makeStaging = ({
       yield* report(input, { phase: "verifying", version: release.version });
       yield* verify(installed, candidate).pipe(
         Effect.andThen(offeredBundle(candidate, release.version, running)),
-        Effect.tapError(() => removeAll(extractDir)),
+        Effect.tapError(() => prune(extractDir)),
       );
       yield* clearStaged;
       yield* makeDirectory(stagedDir);
@@ -336,7 +336,7 @@ export const makeStaging = ({
             (cause) => new StagingFailed({ reason: "stage", cause }),
           ),
         );
-      yield* removeAll(extractDir);
+      yield* prune(extractDir);
       // Empty fields left out, as Go's omitempty leaves them.
       const manifest: StagedManifest = {
         version: release.version,
