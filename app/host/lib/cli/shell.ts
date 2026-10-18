@@ -5,10 +5,9 @@
 // ours, or which shells qualify. The app contributes where the login
 // shell's config lives.
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
-import { CAPTURE_TIMEOUT_MS } from "@shared/shellEnv";
+import { CAPTURE_TIMEOUT_MS, outputUntil } from "@shared/shellEnv";
 import * as Ops from "@host/lib/engineOps";
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
-import { captureWithin } from "@shigomori/engine/processes";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -17,6 +16,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { keptAnswers } from "../util/kept";
 
@@ -30,16 +30,18 @@ import { keptAnswers } from "../util/kept";
 // only, and a ZDOTDIR a .zshenv sets without exporting still names the
 // rc file.
 const SENTINEL = "__SHIGOMORI_HOOK_ENV__";
+const END = "__SHIGOMORI_HOOK_ENV_END__";
 
-// What the probe printed after its sentinel: ZDOTDIR, then
+// What the probe printed between its sentinels: ZDOTDIR, then
 // XDG_CONFIG_HOME. Empty values still count: they neutralize a stale
 // variable in the app's own environment the same way an unset one
 // would.
 const hookPlaceOf = (output: string) => {
-  const at = output.lastIndexOf(SENTINEL);
+  const end = output.lastIndexOf(END);
+  const at = end < 0 ? -1 : output.lastIndexOf(SENTINEL, end);
   if (at < 0) return Option.none();
   const [zdotdir = "", configHome = ""] = output
-    .slice(at + SENTINEL.length)
+    .slice(at + SENTINEL.length, end)
     .split("\x1f");
   return Option.some({ zdotdir, configHome });
 };
@@ -59,23 +61,30 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const lifecycle = yield* Lifecycle.Lifecycle;
+    // Read up to END, then the shell's exit, which a job its startup
+    // files left holding stdout doesn't hold. Past the budget its scope
+    // ends it.
     const probes = yield* keptAnswers(
       (shell: string) =>
-        captureWithin(
-          spawner,
-          shell,
-          [
-            "-ilc",
-            `printf '%s%s\x1f%s' '${SENTINEL}' "$ZDOTDIR" "$XDG_CONFIG_HOME"`,
-          ],
-          Duration.millis(CAPTURE_TIMEOUT_MS),
-        ).pipe(
+        Effect.gen(function* () {
+          const handle = yield* spawner.spawn(
+            ChildProcess.make(
+              shell,
+              [
+                "-ilc",
+                `printf '%s%s\x1f%s%s' '${SENTINEL}' "$ZDOTDIR" "$XDG_CONFIG_HOME" '${END}'`,
+              ],
+              { stdin: "ignore", stderr: "ignore" },
+            ),
+          );
+          const output = yield* outputUntil(handle, END);
+          const code = yield* handle.exitCode;
           // A shell that failed, its logout files included, answered
           // nothing to keep.
-          Effect.flatMap(({ output, code }) =>
-            Effect.fromOption(code === 0 ? hookPlaceOf(output) : Option.none()),
-          ),
-        ),
+          return yield* Effect.fromOption(
+            code === 0 ? Option.flatMap(output, hookPlaceOf) : Option.none(),
+          );
+        }).pipe(Effect.scoped, Effect.timeout(CAPTURE_TIMEOUT_MS)),
       Duration.hours(1),
     );
     return HookShell.of({

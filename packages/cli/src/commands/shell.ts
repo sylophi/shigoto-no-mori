@@ -27,6 +27,13 @@ import { interactive } from "../prompt.ts";
 import { handOver, withoutCdFile } from "../handOver.ts";
 import { pickProject, pickWorktree } from "../pickers.ts";
 
+// The terminal's shell: its own ZDOTDIR and XDG_CONFIG_HOME, and the
+// login shell the engine runs.
+const terminalShell = Effect.gen(function* () {
+  const { shell } = yield* (yield* Lifecycle.Lifecycle).loginShell;
+  return { loginShell: shell };
+});
+
 // The wrapper's names, which init prints.
 const names = Effect.gen(function* () {
   return hookPlace(yield* Paths.Paths, "").names;
@@ -56,18 +63,21 @@ const installCommand = Command.make(
       const { binaryName, json, stderrColor } = yield* Effect.service(Output);
       const usage = `Usage: ${binaryName} shell install [<zsh|bash|fish>]`;
       const integration = yield* ShellIntegration.ShellIntegration;
+      const terminal = yield* terminalShell;
       const kind = Option.isSome(shell)
         ? shell.value
-        : yield* integration.loginShell();
+        : yield* integration.loginShell(terminal);
       if (!isShellKind(kind)) {
         return yield* new UsageError({
           problem: Option.isSome(shell)
             ? `Unsupported shell ${JSON.stringify(kind)}. ${usage}`
-            : `Couldn't tell your shell from $SHELL. Usage: ${binaryName} shell install <zsh|bash|fish>`,
+            : `Couldn't tell your login shell. Usage: ${binaryName} shell install <zsh|bash|fish>`,
         });
       }
-      const target = yield* integration.install(kind);
-      if (json) return yield* emit((yield* integration.status()).document);
+      const target = yield* integration.install(kind, terminal);
+      if (json) {
+        return yield* emit((yield* integration.status(terminal)).document);
+      }
       const { cyan, dim } = styles(stderrColor);
       yield* note(
         `Hooked ${cyan(binaryName)} shell integration into ${cyan(target)}.`,
@@ -89,9 +99,10 @@ const uninstallCommand = Command.make("uninstall", {}, () =>
     const { json, stderrColor } = yield* Effect.service(Output);
     const { cyan, dim, yellow } = styles(stderrColor);
     const integration = yield* ShellIntegration.ShellIntegration;
+    const terminal = yield* terminalShell;
     let removedAny = false;
     let failed = false;
-    for (const removed of yield* integration.uninstall()) {
+    for (const removed of yield* integration.uninstall(terminal)) {
       if (Result.isFailure(removed)) {
         failed = true;
         yield* note(yellow(removed.failure.message));
@@ -104,7 +115,7 @@ const uninstallCommand = Command.make("uninstall", {}, () =>
       }
     }
     if (json) {
-      yield* emit((yield* integration.status()).document);
+      yield* emit((yield* integration.status(terminal)).document);
     } else if (!removedAny && !failed) {
       yield* note("No shell integration hooks were installed.");
     } else if (removedAny) {
@@ -121,7 +132,9 @@ const statusCommand = Command.make("status", {}, () =>
   Effect.gen(function* () {
     const { json, binaryName, stdoutColor } = yield* Effect.service(Output);
     const { document: found, shown } =
-      yield* (yield* ShellIntegration.ShellIntegration).status();
+      yield* (yield* ShellIntegration.ShellIntegration).status(
+        yield* terminalShell,
+      );
     if (json) return yield* emit(found);
     const { dim, green, yellow } = styles(stdoutColor);
     const label = {
@@ -153,8 +166,8 @@ const statusCommand = Command.make("status", {}, () =>
   }),
 ).pipe(Command.withDescription("Show hook and session state"));
 
-// Needs Paths and the platform alone, never the store: init runs in
-// every new shell.
+// Needs Paths, the login shell and the platform alone, never the
+// store: init runs in every new shell.
 export const shellCommand = Command.make("shell").pipe(
   Command.withDescription("Shell integration: cd without subshells"),
   Command.withSubcommands([

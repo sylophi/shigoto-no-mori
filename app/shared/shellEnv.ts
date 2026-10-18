@@ -20,6 +20,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { userInfo } from "node:os";
+import { loginShellOf } from "@shigomori/contracts/loginShell";
 import { log } from "@shared/log";
 
 type Env = Record<string, string>;
@@ -80,24 +81,24 @@ const END = "__SHIGOMORI_ENV_END__";
 
 const MAX_OUTPUT = 4 * 1024 * 1024;
 
-// Same budget as the other login-shell probe (lib/cli/shell.ts).
+// Same budget as the other login-shell probe (host/lib/cli/shell.ts).
 // Past it the app runs on the Finder-launch environment.
 export const CAPTURE_TIMEOUT_MS = 5000;
 
 // How long output may trail the shell's exit.
 const EXIT_GRACE_MS = 250;
 
-// The user's login shell, from the user database first: $SHELL is
-// whatever the launcher had.
-function loginShell(launchEnv: NodeJS.ProcessEnv): string | null {
-  let shell: string | null = null;
-  try {
-    shell = userInfo().shell;
-  } catch {
-    // No user database entry, fall through to $SHELL.
-  }
-  return shell || launchEnv["SHELL"] || null;
-}
+// The user's login shell, the account's first: $SHELL is whatever the
+// launcher had.
+export const loginShell = (launchEnv: NodeJS.ProcessEnv) =>
+  loginShellOf({
+    environment: "launcher",
+    shellVar: launchEnv["SHELL"] ?? "",
+    account: Effect.try(() => userInfo().shell ?? "").pipe(
+      // No user database entry.
+      Effect.orElseSucceed(() => ""),
+    ),
+  }).pipe(Effect.map((shell) => (shell === "" ? null : shell)));
 
 // The environment a Finder launch would have handed this process:
 // launchd's variables out of whatever launch environment this one got.
@@ -137,17 +138,48 @@ export function parseShellEnv(stdout: string): Env | null {
   return env;
 }
 
+// What a shell printed up to its `end` marker, settled the moment the
+// marker arrives, not on the shell's exit or its stdout closing: a
+// startup file that leaves an agent or a `nohup x &` behind leaves the
+// pipe open with it. None when the shell exited without it (after a
+// moment for the last of its output), or said too much first. The
+// host's probe of the login shell's config (host/lib/cli/shell.ts)
+// reads it too.
+export const outputUntil = (
+  handle: ChildProcessSpawner.ChildProcessHandle,
+  end: string,
+) => {
+  const read = handle.stdout.pipe(
+    Stream.decodeText(),
+    Stream.scan(
+      () => "",
+      (text, chunk) => text + chunk,
+    ),
+    Stream.takeUntil((text) => text.includes(end) || text.length > MAX_OUTPUT),
+    Stream.runLast,
+  );
+  // A shell that exits without the marker may have left a child holding
+  // the pipe open, so its exit settles the read.
+  const exited = handle.exitCode.pipe(
+    Effect.ignore,
+    Effect.andThen(Effect.sleep(EXIT_GRACE_MS)),
+    Effect.as(Option.none<string>()),
+  );
+  return Effect.raceFirst(read, exited).pipe(
+    Effect.map(
+      Option.filter((text) => text.includes(end) && text.length <= MAX_OUTPUT),
+    ),
+  );
+};
+
 // What an interactive login shell started from `base` exports. -i
 // sources the interactive init file (.zshrc / .bashrc) where most users
 // put their exports. -l also sources the login files (.zprofile,
-// .bash_profile). `command` skips an alias named env. Settles the
-// moment END has arrived, not on the shell's exit or its stdout
-// closing: a startup file that leaves an agent or a `nohup x &`
-// behind leaves the pipe open with it. Null when the shell failed,
-// ran out of time, or never reached END. The shell is SIGKILLed
-// either way: an interactive zsh ignores SIGTERM. It shares the app's
-// process group, so what its startup files left behind is not
-// signalled with it.
+// .bash_profile). `command` skips an alias named env. Null when the
+// shell failed, ran out of time, or never reached END. The shell is
+// SIGKILLed either way: an interactive zsh ignores SIGTERM. It shares
+// the app's process group, so what its startup files left behind is
+// not signalled with it.
 export const captureShellEnv = (
   shell: string,
   base: Env,
@@ -171,35 +203,14 @@ export const captureShellEnv = (
         },
       ),
     );
-    const read = handle.stdout.pipe(
-      Stream.decodeText(),
-      Stream.scan(
-        () => "",
-        (text, chunk) => text + chunk,
-      ),
-      Stream.takeUntil(
-        (text) => text.includes(END) || text.length > MAX_OUTPUT,
-      ),
-      Stream.runLast,
-    );
-    // A shell that exits without END may have left a child holding the
-    // pipe open, so its exit settles the capture, after a moment for
-    // the last of its output.
-    const exited = handle.exitCode.pipe(
-      Effect.ignore,
-      Effect.andThen(Effect.sleep(EXIT_GRACE_MS)),
-      Effect.as(Option.none<string>()),
-    );
-    const output = yield* Effect.raceFirst(read, exited);
-    return Option.getOrElse(output, () => "");
+    return yield* outputUntil(handle, END);
   }).pipe(
     Effect.scoped,
     Effect.timeoutOption(timeoutMs),
     Effect.map((output) =>
-      Option.match(output, {
+      Option.match(Option.flatten(output), {
         onNone: () => null,
-        onSome: (text) =>
-          text.length > MAX_OUTPUT ? null : parseShellEnv(text),
+        onSome: parseShellEnv,
       }),
     ),
     Effect.orElseSucceed(() => null),
@@ -246,7 +257,7 @@ export function replaceProcessEnv(env: Env): void {
 // brings the platform's services along itself.
 export async function applyUserShellEnv(): Promise<void> {
   const launchEnv = { ...process.env };
-  const shell = loginShell(launchEnv);
+  const shell = Effect.runSync(loginShell(launchEnv));
   const base = launchBaseEnv(launchEnv, shell);
   const captured =
     shell === null
