@@ -47,6 +47,7 @@ import {
 import { watchPortForwards } from "./hooks/remote/usePortForwards";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { watchHost } from "./lib/hostWatch";
+import { followDeviceSettings } from "./hooks/config/useGlobalConfig";
 import {
   onAccountLeft,
   onSessionLanded,
@@ -146,9 +147,14 @@ export function startApp({
   // through the same watchHost this machine's do (startLocalHost),
   // from the moment the peer is first seen. On a hostless client that
   // is the ONLY thing keeping the forest live between focus refetches.
-  startRemoteDeviceSync(api, queryClient, registry, (deviceId, peer) =>
-    watchHost(queryClient, deviceId, peer),
-  );
+  startRemoteDeviceSync(api, queryClient, registry, (deviceId, peer) => {
+    const stopPushes = watchHost(queryClient, deviceId, peer);
+    const stopSettings = followDeviceSettings(registry, queryClient, deviceId);
+    return () => {
+      stopPushes();
+      stopSettings();
+    };
+  });
 
   // The other direction: a host sweeps while someone is looking, and
   // this window says so to the hosts it is looking at.
@@ -275,6 +281,7 @@ function startLocalHost(
   // This machine's broadcasts, into its cache, exactly as a peer's
   // land in theirs.
   watchHost(queryClient, api.deviceId, api);
+  followDeviceSettings(registry, queryClient, api.deviceId);
   registry.mount(scriptRunsAtom(api.deviceId));
   registry.mount(worktreeLifecycleAtom(api.deviceId));
   registry.mount(gitFetchingAtom(api.deviceId));
