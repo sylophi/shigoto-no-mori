@@ -13,6 +13,7 @@ import { join } from "node:path";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
 import { it } from "vitest";
 import {
   DISCARD_REF_PREFIX,
@@ -24,6 +25,7 @@ import {
   failureAs,
   failureOf,
   git,
+  realClone,
   rev,
   seedRepo,
   tempDir,
@@ -359,6 +361,77 @@ it("only the newest 40 discard snapshots are kept", async () => {
     seeded.slice(2),
   );
   assert.equal(refs.at(-1)?.[1], snapshot);
+});
+
+// What each discard ref holds, by name.
+const discardTips = (repo: string): Map<string, string> =>
+  new Map(
+    git(
+      repo,
+      "for-each-ref",
+      "--format=%(refname) %(objectname)",
+      DISCARD_REF_PREFIX,
+    )
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.split(" ") as [string, string]),
+  );
+
+it("a discard after the clock stepped back keeps its snapshot", async () => {
+  const repo = realClone();
+  const head = rev(repo, "HEAD");
+  execFileSync("git", ["update-ref", "--stdin"], {
+    cwd: repo,
+    input: Array.from(
+      { length: 41 },
+      (_, i) =>
+        `create ${DISCARD_REF_PREFIX}${1_800_000_000_000 + i} ${head}\n`,
+    ).join(""),
+  });
+  write(repo, "README.md", "edited\n");
+  // The test clock reads 1970, long before the seeded refs' stamps.
+  const snapshot = await withGit((g) =>
+    g
+      .discard({ worktree: repo, paths: ["README.md"] })
+      .pipe(Effect.provide(TestClock.layer())),
+  );
+  const tips = discardTips(repo);
+  assert.equal(tips.size, 40);
+  assert.ok(new Set(tips.values()).has(snapshot));
+});
+
+it("two worktrees discarding at the same moment keep both snapshots", async () => {
+  const repo = realClone();
+  const other = join(tempDir("other-"), "other");
+  git(repo, "worktree", "add", "-q", "-b", "other", other);
+  write(repo, "README.md", "edited here\n");
+  write(other, "README.md", "edited there\n");
+  const snapshots = await withGit((g) =>
+    Effect.all(
+      [repo, other].map((worktree) =>
+        g.discard({ worktree, paths: ["README.md"] }),
+      ),
+      { concurrency: "unbounded" },
+    ).pipe(Effect.provide(TestClock.layer())),
+  );
+  const held = new Set(discardTips(repo).values());
+  assert.equal(new Set(snapshots).size, 2);
+  for (const snapshot of snapshots) assert.ok(held.has(snapshot));
+});
+
+it("a discard in a sha256 repository keeps its snapshot", async () => {
+  const repo = tempDir("sha256-");
+  git(repo, "init", "-q", "--object-format=sha256", "-b", "main");
+  write(repo, "a.txt", "one\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "init");
+  write(repo, "a.txt", "edited\n");
+  const snapshot = await withGit((g) =>
+    g.discard({ worktree: repo, paths: ["a.txt"] }),
+  );
+  assert.equal(snapshot.length, 64);
+  assert.ok(new Set(discardTips(repo).values()).has(snapshot));
+  assert.equal(read(repo, "a.txt"), "one\n");
 });
 
 it("undoing a discard fails when a file it would delete can't go", async () => {

@@ -13,6 +13,7 @@
 import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -256,6 +257,7 @@ const find = (bound: Registry.BoundSessions, ref: SessionRef) => {
 const make = (binary: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const crypto = yield* Crypto.Crypto;
     const path = yield* Path.Path;
     const { home, binaryName, dataDir } = yield* Paths.Paths;
     const registry = yield* Registry.Registry;
@@ -403,7 +405,9 @@ const make = (binary: string) =>
         );
         const temp = path.join(
           path.dirname(file),
-          `.${path.basename(file)}.tmp-${yield* Clock.currentTimeMillis}`,
+          // Unique to this write: the app and a terminal `sm` can both
+          // write in one millisecond, and a shared temp would interleave.
+          `.${path.basename(file)}.tmp-${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
         );
         yield* fs.writeFileString(temp, text, { mode }).pipe(
           // The mode given is masked by the umask on creation.

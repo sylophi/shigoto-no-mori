@@ -274,8 +274,10 @@ export const FIRST_PARENT_LIMIT = 2000;
 
 export const LOCAL_TIPS_LIMIT = 256;
 
-// A ref that must not exist yet, in update-ref's compare-and-set.
-export const ZERO_SHA = "0".repeat(40);
+// A ref that must not exist yet, in update-ref's compare-and-set: the
+// empty old value, which git takes in a sha1 and a sha256 repository
+// alike (forty zeros is sha1's alone).
+export const ABSENT_REF = "";
 
 export const DISCARD_SNAPSHOTS_KEPT = 40;
 

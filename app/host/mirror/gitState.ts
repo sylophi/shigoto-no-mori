@@ -505,7 +505,7 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
           repo: project.path,
           ref: targetRef,
           commit: state.tip,
-          expected: existingTip ?? Git.ZERO_SHA,
+          expected: existingTip ?? Git.ABSENT_REF,
         });
       }
       yield* git.run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);

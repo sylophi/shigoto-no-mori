@@ -13,7 +13,8 @@
 // purpose.
 import { spawnSync } from "node:child_process";
 
-const repositoryRoot = import.meta.dirname;
+// The one place a test's git still finds this repository from.
+export const repositoryRoot = import.meta.dirname;
 
 // A variable of git's that came from outside: every GIT_* but the
 // ceiling, which a test's own scrub must keep.
