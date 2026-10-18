@@ -938,6 +938,22 @@
       }
     ]
   },
+  "RotatePalettePayloadSchema": {
+    "accepts": [
+      {
+        "launching": true
+      },
+      {
+        "launching": false
+      }
+    ],
+    "rejects": [
+      {},
+      {
+        "launching": "yes"
+      }
+    ]
+  },
   "WriteShigomoriPayloadSchema": {
     "accepts": [
       {

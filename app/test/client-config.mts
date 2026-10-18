@@ -8,6 +8,9 @@
 //     a change at once,
 //   - a key a newer build wrote, which this build does not model, stays
 //     on disk,
+//   - the store turns an Each launch palette rotation once per run
+//     however many windows ask at once, and a check with none due
+//     writes nothing,
 //   - a Save writes only the keys the form changed from what it last
 //     saved: a form seeded from defaults because its read failed writes
 //     the one key changed, not every default over what is stored,
@@ -42,7 +45,7 @@ vi.mock("electron", () => ({
   app: { getPath: () => dir },
   nativeTheme: {},
 }));
-const { layer, clientConfigChanges, patchClientConfig } =
+const { layer, clientConfigChanges, patchClientConfig, rotatePalette } =
   await import("../main/electron/clientConfig");
 const { peerSettingsWrite, settingsWrites } =
   await import("../renderer/hooks/config/useSettingsSave");
@@ -94,6 +97,23 @@ it("two windows' patches keep each other's keys, the watch says each, and an unm
   assert.equal(stored().theme, undefined, "a cleared key goes");
   assert.equal(stored().fromANewerBuild, 1, "an unmodeled key stays");
   await Effect.runPromise(Fiber.interrupt(watching));
+});
+
+it("the store turns an Each launch rotation once per run, and a check with none due writes nothing", async () => {
+  await patchClientConfig({ themeRotation: "launch" }, []);
+  const stamps = await Promise.all([rotatePalette(true), rotatePalette(true)]);
+  const made = stamps.filter((stamp) => stamp !== null);
+  assert.equal(made.length, 1, "two windows' launch asks, one turn");
+  assert.equal(stored().themeRotatedAt, made[0]);
+  assert.equal(stored().lightTheme, "latte");
+  // Unindented, as no write of the store's leaves it.
+  const file = join(dir, "clientConfig.json");
+  const untouched = JSON.stringify(stored());
+  writeFileSync(file, untouched);
+  assert.equal(await rotatePalette(true), null, "a window opened later");
+  assert.equal(await rotatePalette(false), null, "a minute's check");
+  assert.equal(readFileSync(file, "utf8"), untouched, "nothing written");
+  assert.equal(stored().lightTheme, "latte");
 });
 
 it("a Save writes only what the form changed: a form seeded from defaults writes the one key", () => {

@@ -85,6 +85,15 @@ export function clientConfigNow(
   return AsyncResult.isSuccess(result) ? result.value : undefined;
 }
 
+// Settles once this window's config passes `shows`, or after a few
+// seconds whatever it shows.
+export function whenClientConfigShows(
+  registry: AtomRegistry.AtomRegistry,
+  shows: (config: ClientConfig) => boolean,
+): Promise<void> {
+  return whenViewShows(registry, clientConfigAtom, shows);
+}
+
 // The config once it has loaded, for a reader outside React.
 export function clientConfigOnce(
   registry: AtomRegistry.AtomRegistry,

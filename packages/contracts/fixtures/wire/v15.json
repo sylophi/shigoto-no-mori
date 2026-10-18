@@ -252,6 +252,12 @@
       "ZJ": "f"
     }
   },
+  "clientConfig:rotate": {
+    "payload": {
+      "launching": true
+    },
+    "success": -1.797693134862315e308
+  },
   "clientConfig:watch": {
     "success": {
       "inlineWorktrees": true,

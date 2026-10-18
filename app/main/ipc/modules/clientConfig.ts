@@ -5,6 +5,7 @@ import {
   clientConfigChanges,
   patchClientConfig,
   readClientConfigSync,
+  rotatePalette,
 } from "../../electron/clientConfig";
 import { reconcileLaunchAtLogin } from "../../electron/liveness";
 
@@ -25,6 +26,7 @@ export const clientConfigHandlers: Handlers<typeof clientConfigContract> = {
       reconcileLaunchAtLogin();
     }
   },
+  rotate: ({ launching }) => rotatePalette(launching),
 };
 
 export const clientConfigViews: ViewHandlers<

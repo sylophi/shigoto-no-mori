@@ -1,7 +1,9 @@
 // How a stored client config decodes into the doubutsu switch and the
 // two palette picks (ui's lib/themes.ts): the switch defaults on, each
 // pick to its list's default, and a pick keeps while the switch is
-// off so it comes back with it.
+// off so it comes back with it. And the palette rotation: which pair
+// a turn moves to, when one is due (a clock set back included), and
+// that its owner makes a launch's turn once however many windows ask.
 //
 // covers: app/web/public/boot-theme.js
 import assert from "node:assert/strict";
@@ -19,6 +21,7 @@ import {
   LIGHT_THEMES,
   nextVariant,
   resolveDoubutsuPicks,
+  rotationOwner,
   rotationTurn,
   darkTwin,
   lightTwin,
@@ -168,4 +171,21 @@ it("the boot script paints the catalog's defaults and reads its mirrors", () => 
   ]) {
     assert.ok(src.includes(needle), `boot-theme.js lost ${needle}`);
   }
+});
+
+it("a clock set back since the last turn turns again", () => {
+  const day = 24 * 60 * 60 * 1000;
+  const config = { themeRotation: "weekly", themeRotatedAt: 10 * day } as const;
+  assert.notEqual(rotationTurn(config, 9 * day, false), null);
+});
+
+it("the owner makes a launch's turn once, the timed ones whenever due", () => {
+  const hour = 60 * 60 * 1000;
+  const turnOf = rotationOwner();
+  const launch = { themeRotation: "launch" } as const;
+  assert.notEqual(turnOf(launch, hour, true), null, "the first window");
+  assert.equal(turnOf(launch, hour, true), null, "a second window, a reload");
+  const hourly = { themeRotation: "hourly", themeRotatedAt: 0 } as const;
+  assert.notEqual(turnOf(hourly, hour, false), null);
+  assert.notEqual(turnOf(hourly, hour, true), null, "due, launch or not");
 });
