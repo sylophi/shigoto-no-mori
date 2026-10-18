@@ -8,6 +8,7 @@ import {
   type DeviceSettingsPatch,
   type LauncherCommand,
 } from "@shigomori/contracts/schemas";
+import { storedClientSetting } from "@shigomori/contracts/schemas/config";
 import { storedPicks } from "@shigomori/ui/lib/themes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
@@ -69,39 +70,49 @@ function toLocalDeviceSettingsPatch(
   };
 }
 
-// Appearance saves through the client-scoped store, not the device
-// config, omitting a key at its default to keep the file tidy.
+// Appearance saves through the client-scoped store, each key omitted
+// at its default.
 export function toClientConfig(state: SettingsFormState): ClientConfig {
   return {
-    // Default is "system"; omit when on the default to keep the file tidy.
-    theme: state.theme === "system" ? undefined : state.theme,
-    // Default is on; omit when on, store explicit `false` when off so
-    // the user's opt-out survives reads (same as deleteBranchOnRemove).
-    doubutsu: state.doubutsu ? undefined : false,
+    theme: storedClientSetting("theme", state.theme),
+    doubutsu: storedClientSetting("doubutsu", state.doubutsu),
     // Kept while the switch is off, so they come back with it.
     ...storedPicks(state.lightTheme, state.darkTheme),
     themeRotation: state.themeRotation ? state.themeRotationEvery : undefined,
-    // Default is on, with the same opt-out serialization as doubutsu.
-    pauseAnimationsOnBattery: state.pauseAnimationsOnBattery
-      ? undefined
-      : false,
-    // Default is off, so off is omitted and the opt-in stored as `true`.
-    villageLife: state.villageLife ? true : undefined,
-    // Default is on, with the same opt-out serialization as doubutsu.
-    villageNews: state.villageNews ? undefined : false,
-    // Default is off, the same opt-in serialization as villageLife.
-    markTerrierProjects: state.markTerrierProjects ? true : undefined,
-    // Default is on, with the same opt-out serialization as doubutsu.
-    showDeviceBadges: state.showDeviceBadges ? undefined : false,
-    // Default is off, the same opt-in serialization as villageLife.
-    allowAgentWorking: state.allowAgentWorking ? true : undefined,
-    // Default is on, with the same opt-out serialization as doubutsu.
-    markAgentsWaiting: state.markAgentsWaiting ? undefined : false,
-    notifyAgentWaiting: state.notifyAgentWaiting ? undefined : false,
-    // Default is off, the same opt-in serialization as villageLife.
-    notifyAgentDone: state.notifyAgentDone ? true : undefined,
-    // Default is off, the same opt-in serialization as villageLife.
-    inlineWorktrees: state.inlineWorktrees ? true : undefined,
+    pauseAnimationsOnBattery: storedClientSetting(
+      "pauseAnimationsOnBattery",
+      state.pauseAnimationsOnBattery,
+    ),
+    villageLife: storedClientSetting("villageLife", state.villageLife),
+    villageNews: storedClientSetting("villageNews", state.villageNews),
+    markTerrierProjects: storedClientSetting(
+      "markTerrierProjects",
+      state.markTerrierProjects,
+    ),
+    showDeviceBadges: storedClientSetting(
+      "showDeviceBadges",
+      state.showDeviceBadges,
+    ),
+    allowAgentWorking: storedClientSetting(
+      "allowAgentWorking",
+      state.allowAgentWorking,
+    ),
+    markAgentsWaiting: storedClientSetting(
+      "markAgentsWaiting",
+      state.markAgentsWaiting,
+    ),
+    notifyAgentWaiting: storedClientSetting(
+      "notifyAgentWaiting",
+      state.notifyAgentWaiting,
+    ),
+    notifyAgentDone: storedClientSetting(
+      "notifyAgentDone",
+      state.notifyAgentDone,
+    ),
+    inlineWorktrees: storedClientSetting(
+      "inlineWorktrees",
+      state.inlineWorktrees,
+    ),
     // Only an action bound off its default is stored, so none is nothing.
     keybindings:
       Object.keys(state.keybindings).length > 0 ? state.keybindings : undefined,
@@ -121,6 +132,18 @@ export function settingsWrites(
     ),
     clientPatch: changedKeys(toClientConfig(saved), toClientConfig(state)),
   };
+}
+
+// What a peer's Save writes: the device keys its form changed from what
+// it last saved.
+export function peerSettingsWrite(
+  saved: SettingsFormState,
+  state: SettingsFormState,
+): DeviceSettingsPatch {
+  return changedKeys(
+    toDeviceSettingsPatch(saved),
+    toDeviceSettingsPatch(state),
+  );
 }
 
 // The keys of `now` that differ from `was`, a key gone from `now`

@@ -1,5 +1,6 @@
 import {
   type ClientConfig,
+  clientSetting,
   DEVICE_SETTINGS_DEFAULTS as DEFAULTS,
   type GlobalConfig,
   type LauncherCommand,
@@ -12,17 +13,17 @@ import {
   type LightTheme,
   resolveDoubutsuPicks,
 } from "./themes.ts";
-import { villageNewsEnabled } from "./villageLife.ts";
 
-// The settings form's staged state. One flat shape across both stores:
-// the first seventeen fields are client config (appearance, the keymap),
-// the rest are device config.
-export interface SettingsFormState {
+// The settings form's staged state, one flat shape across both stores:
+// what this window shows (client config) and what the device stores.
+export type SettingsFormState = ClientFormState & DeviceFormState;
+
+interface ClientFormState {
   theme: Theme;
   doubutsu: boolean;
   lightTheme: LightTheme;
   darkTheme: DarkTheme;
-  // The interval stays while rotation is off, for when it comes back.
+  // The interval stays while rotation is off, until the form saves.
   themeRotation: boolean;
   themeRotationEvery: ThemeRotation;
   pauseAnimationsOnBattery: boolean;
@@ -40,6 +41,9 @@ export interface SettingsFormState {
   // The keymap's actions bound to keys other than their defaults
   // (lib/keymap.ts), as the client config stores them.
   keybindings: Readonly<Record<string, string>>;
+}
+
+interface DeviceFormState {
   launchers: readonly LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
@@ -60,31 +64,43 @@ export interface SettingsFormState {
   githubCli: boolean;
 }
 
-// Decode, the encoders' other half (useSettingsSave.ts). Device defaults come from the shared table
-// the host's patch write stores by omission, never respelled here.
+// Decode, the encoders' other half (useSettingsSave.ts). Each default
+// comes from the table its store omits it by, never respelled here.
 export function fromConfig(
   config: GlobalConfig,
   clientConfig: ClientConfig,
 ): SettingsFormState {
+  return { ...fromClientConfig(clientConfig), ...fromDeviceConfig(config) };
+}
+
+function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
   const picks = resolveDoubutsuPicks(clientConfig);
   return {
-    theme: clientConfig.theme ?? "system",
+    theme: clientSetting(clientConfig, "theme"),
     doubutsu: picks.doubutsu,
     lightTheme: picks.light,
     darkTheme: picks.dark,
     themeRotation: clientConfig.themeRotation !== undefined,
     themeRotationEvery: clientConfig.themeRotation ?? "launch",
-    pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
-    villageLife: clientConfig.villageLife ?? false,
-    villageNews: villageNewsEnabled(clientConfig),
-    markTerrierProjects: clientConfig.markTerrierProjects ?? false,
-    showDeviceBadges: clientConfig.showDeviceBadges ?? true,
-    allowAgentWorking: clientConfig.allowAgentWorking ?? false,
-    markAgentsWaiting: clientConfig.markAgentsWaiting ?? true,
-    notifyAgentWaiting: clientConfig.notifyAgentWaiting ?? true,
-    notifyAgentDone: clientConfig.notifyAgentDone ?? false,
-    inlineWorktrees: clientConfig.inlineWorktrees ?? false,
+    pauseAnimationsOnBattery: clientSetting(
+      clientConfig,
+      "pauseAnimationsOnBattery",
+    ),
+    villageLife: clientSetting(clientConfig, "villageLife"),
+    villageNews: clientSetting(clientConfig, "villageNews"),
+    markTerrierProjects: clientSetting(clientConfig, "markTerrierProjects"),
+    showDeviceBadges: clientSetting(clientConfig, "showDeviceBadges"),
+    allowAgentWorking: clientSetting(clientConfig, "allowAgentWorking"),
+    markAgentsWaiting: clientSetting(clientConfig, "markAgentsWaiting"),
+    notifyAgentWaiting: clientSetting(clientConfig, "notifyAgentWaiting"),
+    notifyAgentDone: clientSetting(clientConfig, "notifyAgentDone"),
+    inlineWorktrees: clientSetting(clientConfig, "inlineWorktrees"),
     keybindings: clientConfig.keybindings ?? {},
+  };
+}
+
+function fromDeviceConfig(config: GlobalConfig): DeviceFormState {
+  return {
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
@@ -111,4 +127,37 @@ export function fromConfig(
     terrier: config.terrier ?? DEFAULTS.terrier,
     githubCli: config.githubCli ?? DEFAULTS.githubCli,
   };
+}
+
+const CLIENT_FIELDS = Object.keys(
+  fromClientConfig({}),
+) as (keyof ClientFormState)[];
+
+// `form` with its client-config fields as `client` has them: the
+// snapshot after a save whose device write landed and client write
+// didn't.
+export function withClientFields(
+  form: SettingsFormState,
+  client: SettingsFormState,
+): SettingsFormState {
+  const merged = { ...form };
+  for (const key of CLIENT_FIELDS)
+    Object.assign(merged, { [key]: client[key] });
+  return merged;
+}
+
+// A draft over a seed that moved: what the form changed stays, the rest
+// takes the new seed.
+export function keepTouched(
+  form: SettingsFormState,
+  saved: SettingsFormState,
+  next: SettingsFormState,
+): SettingsFormState {
+  const merged = { ...next };
+  for (const key of Object.keys(form) as (keyof SettingsFormState)[]) {
+    if (JSON.stringify(form[key]) !== JSON.stringify(saved[key])) {
+      Object.assign(merged, { [key]: form[key] });
+    }
+  }
+  return merged;
 }

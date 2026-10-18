@@ -10,7 +10,12 @@
 //     on disk,
 //   - a Save writes only the keys the form changed from what it last
 //     saved: a form seeded from defaults because its read failed writes
-//     the one key changed, not every default over what is stored.
+//     the one key changed, not every default over what is stored,
+//   - a peer's form whose device changed a key meanwhile keeps the
+//     fields edited here over it and takes the rest, and its Save
+//     writes only what was edited, so the device's own change stays,
+//   - a Save whose device half landed and client half failed leaves
+//     only the client fields unsaved.
 //
 // Run: pnpm test client-config.
 import assert from "node:assert/strict";
@@ -19,7 +24,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
-import { fromConfig } from "@shigomori/ui/lib/settingsForm.ts";
+import {
+  fromConfig,
+  keepTouched,
+  withClientFields,
+} from "@shigomori/ui/lib/settingsForm.ts";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -35,7 +44,7 @@ vi.mock("electron", () => ({
 }));
 const { layer, clientConfigChanges, patchClientConfig } =
   await import("../main/electron/clientConfig");
-const { settingsWrites } =
+const { peerSettingsWrite, settingsWrites } =
   await import("../renderer/hooks/config/useSettingsSave");
 
 const stored = () =>
@@ -103,4 +112,39 @@ it("a Save writes only what the form changed: a form seeded from defaults writes
   );
   assert.deepEqual(back.clientPatch, { theme: undefined });
   assert.ok("theme" in back.clientPatch);
+});
+
+it("a peer's form keeps its edits over the device's own change, and its Save writes only those", () => {
+  const saved = fromConfig({}, {});
+  const form = { ...saved, autoPullNew: true };
+  // The device's own user turned terrier on while the form was open.
+  const moved = fromConfig({ terrier: true }, {});
+  const next = keepTouched(form, saved, moved);
+  assert.equal(next.autoPullNew, true);
+  assert.equal(next.terrier, true);
+  assert.deepEqual(peerSettingsWrite(moved, next), { autoPullNew: true });
+  assert.deepEqual(peerSettingsWrite(moved, moved), {});
+});
+
+it("a Save advances only the fields it carried, so a change made meanwhile stays", () => {
+  const saved = fromConfig({}, {});
+  const form = { ...saved, autoPullNew: true };
+  // The device turned terrier on while the Save was out.
+  const prev = fromConfig({ terrier: true }, {});
+  const snapshot = keepTouched(form, saved, prev);
+  assert.equal(snapshot.autoPullNew, true);
+  assert.equal(snapshot.terrier, true);
+  const merged = keepTouched(form, saved, prev);
+  assert.deepEqual(peerSettingsWrite(snapshot, merged), {});
+});
+
+it("a Save whose client half failed leaves only the client fields unsaved", () => {
+  const saved = fromConfig({}, {});
+  const form = { ...saved, theme: "dark" as const, autoPullNew: true };
+  const snapshot = withClientFields(form, saved);
+  assert.equal(snapshot.autoPullNew, true);
+  assert.equal(snapshot.theme, "system");
+  const { devicePatch, clientPatch } = settingsWrites(snapshot, form);
+  assert.deepEqual(devicePatch, {});
+  assert.deepEqual(clientPatch, { theme: "dark" });
 });

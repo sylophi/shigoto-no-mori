@@ -10,6 +10,7 @@
 // where the sidebar's mark can't be seen, and a list seen for the first
 // time (or again after its stream stopped) tells nothing: nothing
 // changed that this window saw.
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import type {
   AgentSession,
   ClientConfig,
@@ -140,7 +141,7 @@ function noticeFor(
 ): { title: string; body: string } | null {
   if (
     now.state === "waiting" &&
-    config.notifyAgentWaiting !== false &&
+    clientSetting(config, "notifyAgentWaiting") &&
     (before?.state !== "waiting" ||
       before.at !== now.at ||
       before.tool !== now.tool ||
@@ -153,7 +154,7 @@ function noticeFor(
     now.state === "idle" &&
     before !== undefined &&
     (before.state !== "idle" || before.at !== now.at) &&
-    config.notifyAgentDone === true
+    clientSetting(config, "notifyAgentDone")
   ) {
     return {
       title: `${harnessLabel(now.harness)} finished`,

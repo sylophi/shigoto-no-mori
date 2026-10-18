@@ -2,10 +2,8 @@
 // Unlike appearance, which stages in the settings form and persists on
 // Save, this toggle takes effect at once: flipping it should register or
 // clear the OS login item right away, which the main-side write handler
-// does when the value changes. keepReachable is on by default
-// (keepReachableOn in packages/contracts/src/schemas/config.ts), so off is stored as an
-// explicit false: an omitted key would read as on again. The write
-// protocol is useClientConfigPatch's.
+// does when the value changes. Both values are stored as they are. The
+// write protocol is useClientConfigPatch's.
 import { useClientConfigPatch } from "./useClientConfigPatch";
 
 export function useKeepReachableUpdate() {

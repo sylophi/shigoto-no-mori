@@ -1,3 +1,4 @@
+import { clientSetting } from "@shigomori/contracts/schemas/config";
 import { useEffect, useState } from "react";
 import { useClientConfig } from "../config/useClientConfig";
 import { useWindowRoot } from "@/lib/themeRoot";
@@ -7,7 +8,7 @@ import { useWindowRoot } from "@/lib/themeRoot";
 export const batterySupported =
   typeof navigator !== "undefined" && navigator.getBattery !== undefined;
 
-// Keeps `.battery-pause` on <html> while this machine runs on battery
+// Keeps `.battery-pause` on the theme root while this machine runs on battery
 // and the user has not switched the pause off. doubutsu.css pauses the
 // wallpaper drift under it the same way it does under `.unfocused`
 // (boot.tsx): the drift asks the compositor for a frame every vsync,
@@ -16,7 +17,7 @@ export const batterySupported =
 // and a frozen one in a window being looked at reads as a hang.
 export function usePauseAnimationsOnBattery(): void {
   const { data: config } = useClientConfig();
-  const enabled = config?.pauseAnimationsOnBattery ?? true;
+  const enabled = clientSetting(config ?? {}, "pauseAnimationsOnBattery");
   const onBattery = useOnBattery();
   const root = useWindowRoot();
 
