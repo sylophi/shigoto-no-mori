@@ -215,12 +215,7 @@ const program = goArgs(sm, canonical(rest)).pipe(
       // it not.
       if (error instanceof Killed && error.raised) {
         process.once("exit", () => process.kill(process.pid, error.signal));
-        return;
       }
-      // A child a script left running (a dev server) holds pipes that keep
-      // sm up until the child ends. Unreferenced, this ends it only then,
-      // a second on, its output long out.
-      setTimeout(() => process.exit(code), 1000).unref();
     }),
   ),
 );

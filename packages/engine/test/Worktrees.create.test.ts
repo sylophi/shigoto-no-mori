@@ -162,39 +162,46 @@ it(
     process.env["npm_config_offline"] = "true";
     process.env["npm_config_ignore_scripts"] = "true";
     const said: string[] = [];
-    const created = (await sandboxed.engine(
-      Effect.gen(function* () {
-        const project = yield* (yield* Registry.Registry).register({
-          name: "shigoto-no-mori",
-          path: repo,
-        });
-        yield* (yield* Config.Config).set(
-          { kind: "project", projectId: project.id, path: project.path },
-          "scripts.setup",
-          "pnpm install && pnpm run postinstall",
-        );
-        return yield* (yield* Worktrees.Worktrees).create(
-          project,
-          { name: "fox" },
-          {
-            report: (event) =>
-              Effect.sync(() => {
-                if (event.event === "script" && event.kind === "data") {
-                  said.push(event.data);
-                }
-              }),
-            color: false,
-          },
-        );
-      }).pipe(Effect.timeout("90 seconds")),
-    )) as { worktree?: Worktrees.WorktreeRow; error?: string };
-    for (const [key, value] of [
-      ["npm_config_offline", saved.offline],
-      ["npm_config_ignore_scripts", saved.ignoreScripts],
-    ] as const) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    const restore = () => {
+      for (const [key, value] of [
+        ["npm_config_offline", saved.offline],
+        ["npm_config_ignore_scripts", saved.ignoreScripts],
+      ] as const) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    };
+    const created = (await sandboxed
+      .engine(
+        Effect.gen(function* () {
+          const project = yield* (yield* Registry.Registry).register({
+            name: "shigoto-no-mori",
+            path: repo,
+          });
+          yield* (yield* Config.Config).set(
+            { kind: "project", projectId: project.id, path: project.path },
+            "scripts.setup",
+            "pnpm install && pnpm run postinstall",
+          );
+          return yield* (yield* Worktrees.Worktrees).create(
+            project,
+            { name: "fox" },
+            {
+              report: (event) =>
+                Effect.sync(() => {
+                  if (event.event === "script" && event.kind === "data") {
+                    said.push(event.data);
+                  }
+                }),
+              color: false,
+            },
+          );
+        }).pipe(Effect.timeout("90 seconds")),
+      )
+      .finally(restore)) as {
+      worktree?: Worktrees.WorktreeRow;
+      error?: string;
+    };
     const pids = existsSync(watchers)
       ? readFileSync(watchers, "utf8").trim().split("\n").map(Number)
       : [];
@@ -202,6 +209,7 @@ it(
       assert.equal(created.error, undefined, said.join("").slice(-2000));
       assert.equal(created.worktree?.branch, "fox");
       assert.match(said.join(""), /\[icons\] synced[\s\S]*watching/);
+      assert.ok(pids.length > 0 && pids.every((pid) => pid > 0));
       assert.doesNotThrow(() => process.kill(pids.at(-1) ?? 0, 0));
     } finally {
       for (const pid of pids) {

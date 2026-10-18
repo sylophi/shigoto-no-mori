@@ -82,8 +82,13 @@ it("a custom launcher's command keeps running once it is launched", async () => 
       yield* (yield* Open.Open).open(located, "Watcher");
     }),
   );
-  await vi.waitFor(() => assert.ok(existsSync(pidFile)), { timeout: 5000 });
+  await vi.waitFor(
+    () =>
+      assert.ok(existsSync(pidFile) && readFileSync(pidFile, "utf8") !== ""),
+    { timeout: 5000 },
+  );
   const pid = Number(readFileSync(pidFile, "utf8"));
+  assert.ok(pid > 0);
   try {
     // The launch's close waits out a group it signalled, so a killed one
     // is gone by now.
