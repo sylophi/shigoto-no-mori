@@ -1,8 +1,4 @@
-import {
-  type QueryClient,
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import {
   type ClientConfig,
   type DeviceSettingsPatch,
@@ -11,7 +7,6 @@ import {
 import { storedClientSetting } from "@shigomori/contracts/schemas/config";
 import { storedPicks } from "@shigomori/ui/lib/themes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { queryKeysFor, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { patchClientConfig } from "./useClientConfig";
 import { useRegistry } from "@/lib/runtime/viewHooks";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
@@ -176,31 +171,6 @@ export class SettingsSaveError extends Error {
   }
 }
 
-interface SettingsSaveResult {
-  devicePersisted: boolean;
-  clientPersisted: boolean;
-}
-
-// What a device-settings write stales, for whichever device's registry
-// it is handed: the local save below passes the LOCAL keys (it writes
-// through the page's api, so the caches it staled are exactly this
-// machine's), and useDeviceSettingsSave passes the scoped registry of
-// the peer it patched.
-// The config itself, the projects and the worktree lists are the host's
-// views, which read the device config again themselves (terrier's
-// projects, Codex-style names, the idle shelf).
-export function invalidateDeviceSettingsQueries(
-  queryClient: QueryClient,
-  keys: QueryKeyRegistry,
-): void {
-  // Launcher catalogs for every project depend on global custom launchers.
-  void queryClient.invalidateQueries({ queryKey: keys.launchersAll() });
-  // Toggling the GitHub CLI integration flips both readiness gating
-  // and the project PR list -- refetch immediately rather than wait
-  // for the next focus/mount.
-  void queryClient.invalidateQueries({ queryKey: keys.githubCliAll() });
-}
-
 // One Save over two stores, as ONE mutation so isPending, isSuccess and
 // error reset atomically per save (two mutations left a failed half's
 // error sticky across later successful saves). Each store is sent only
@@ -214,7 +184,6 @@ export function invalidateDeviceSettingsQueries(
 export function useSettingsSave() {
   const page = useApi();
   const registry = useRegistry();
-  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
       state,
@@ -222,7 +191,7 @@ export function useSettingsSave() {
     }: {
       state: SettingsFormState;
       saved: SettingsFormState;
-    }): Promise<SettingsSaveResult> => {
+    }): Promise<void> => {
       const { devicePatch, clientPatch } = settingsWrites(saved, state);
       const devicePersisted = Object.keys(devicePatch).length > 0;
       const clientPersisted = Object.keys(clientPatch).length > 0;
@@ -253,26 +222,6 @@ export function useSettingsSave() {
         } catch (error) {
           throw new SettingsSaveError(devicePersisted, error);
         }
-      }
-      return { devicePersisted, clientPersisted };
-    },
-    onSuccess: ({ devicePersisted }) => {
-      if (devicePersisted) {
-        invalidateDeviceSettingsQueries(
-          queryClient,
-          queryKeysFor(page.deviceId),
-        );
-      }
-    },
-    onError: (error) => {
-      // A SettingsSaveError with devicePersisted means the device write
-      // landed before the appearance write failed, so its caches are
-      // stale exactly as on success.
-      if (error instanceof SettingsSaveError && error.devicePersisted) {
-        invalidateDeviceSettingsQueries(
-          queryClient,
-          queryKeysFor(page.deviceId),
-        );
       }
     },
     meta: { errorTitle: "Couldn't save settings" },
