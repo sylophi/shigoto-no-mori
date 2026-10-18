@@ -147,6 +147,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
+import * as PlatformError from "effect/PlatformError";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
@@ -2549,7 +2550,14 @@ async function tunnelHarness(deps: {
           Effect.flatMap((ended) =>
             typeof ended === "number"
               ? Effect.succeed(ChildProcessSpawner.ExitCode(ended))
-              : Effect.die(new Error(`killed by ${ended}`)),
+              : Effect.fail(
+                  PlatformError.systemError({
+                    _tag: "Unknown",
+                    module: "ChildProcess",
+                    method: "exitCode",
+                    description: `Process interrupted due to receipt of signal: '${ended}'`,
+                  }),
+                ),
           ),
         ),
         isRunning: Deferred.isDone(exit).pipe(Effect.map((done) => !done)),

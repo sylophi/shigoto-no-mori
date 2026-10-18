@@ -129,7 +129,7 @@ export function attachRenderProcessRecovery(
     const { verdict, recent } = rendererGone({
       ownTeardown: deps.isShuttingDown() || closing || window.isDestroyed(),
       recent: recentRendererCrashes,
-      now: Date.now(),
+      now: performance.now(),
     });
     recentRendererCrashes = recent;
     if (verdict === "ignore") return;

@@ -287,7 +287,14 @@ function create(
   attachRenderProcessRecovery(window, {
     isShuttingDown,
     recreateWindow: () => {
-      create(entry.route, { bounds: entry.bounds });
+      // As it was: an app kept hidden, or a window minimized, stays so.
+      const minimized = !window.isDestroyed() && window.isMinimized();
+      create(entry.route, {
+        bounds: entry.bounds,
+        ...(app.isHidden() || minimized
+          ? { restart: { visibility: { hidden: app.isHidden() }, minimized } }
+          : {}),
+      });
       if (!window.isDestroyed()) window.destroy();
     },
     onGiveUp: () => {

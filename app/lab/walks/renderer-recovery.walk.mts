@@ -89,11 +89,16 @@ it("a window the person closes stays closed", async () => {
   await expect
     .poll(() => (opened === undefined ? true : !renderers().includes(opened)))
     .toBe(true);
-  await expect.poll(() => pages().length).toBe(1);
+  // A call through the shell once its renderer is gone, so whatever the
+  // shell did with that is done by its answer.
+  await withPageApi(lab.page, (api) => api.run(api.window.hostRestarts()));
+  expect(pages()).toHaveLength(1);
   expect(renderers()).toEqual(before);
   expect(shellLog()).not.toContain("renderer gone");
 });
 
+// The kills below are three recreations within the crash-loop budget's
+// 30 s, its whole budget: a fourth would give up.
 for (const signal of ["SIGTERM", "SIGKILL"] as const) {
   it(`a window whose renderer gets ${signal} comes back`, async () => {
     const before = renderers();

@@ -10,6 +10,7 @@ import {
   CRASH_LOOP,
   FATAL_RELAUNCH,
   decide,
+  GONE_TOGETHER_MS,
   rendererGone,
 } from "../main/core/liveness/rateLimit.ts";
 import { it } from "vitest";
@@ -112,7 +113,11 @@ it("a renderer gone again and again gives up past the crash-loop budget", () => 
   let recent: number[] = [];
   const verdicts: string[] = [];
   for (let i = 0; i <= CRASH_LOOP.max; i++) {
-    const next = rendererGone({ ownTeardown: false, recent, now: 1_000 + i });
+    const next = rendererGone({
+      ownTeardown: false,
+      recent,
+      now: 1_000 + i * GONE_TOGETHER_MS,
+    });
     verdicts.push(next.verdict);
     recent = next.recent;
   }
@@ -120,4 +125,25 @@ it("a renderer gone again and again gives up past the crash-loop budget", () => 
     ...Array.from({ length: CRASH_LOOP.max }, () => "recreate"),
     "give-up",
   ]);
+});
+
+it("every window gone in one kill spends the budget once", () => {
+  let recent: number[] = [];
+  for (let window = 0; window < CRASH_LOOP.max + 3; window++) {
+    const next = rendererGone({
+      ownTeardown: false,
+      recent,
+      now: 1_000 + window * 10,
+    });
+    assert.equal(next.verdict, "recreate", `window ${window + 1} came back`);
+    recent = next.recent;
+  }
+  assert.deepEqual(recent, [1_000]);
+  const later = rendererGone({
+    ownTeardown: false,
+    recent,
+    now: 1_000 + GONE_TOGETHER_MS,
+  });
+  assert.equal(later.verdict, "recreate");
+  assert.equal(later.recent.length, 2, "a later one counts again");
 });
