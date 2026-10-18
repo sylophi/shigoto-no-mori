@@ -2,9 +2,10 @@
 // app's proof runner and vitest configs, the packages', the walks', the
 // smoke, the scene comparison, the Go tests and the hub's suite through
 // `node testTemp.mts`) takes a run folder,
-// `<temp>/sm-test/<family>/<id>/`, and points TMPDIR at it before any
-// test starts, so whatever a test, the code under it or a process it
-// spawns puts in the temp dir lands there. A run removes its folder as
+// `<temp>/sm-test/<family>/<id>/`, and points TMPDIR and
+// XDG_CONFIG_HOME at it before any test starts, so whatever a test, the
+// code under it or a process it spawns puts in the temp dir or the
+// config folder lands there. A run removes its folder as
 // it exits, and `sm-test` with it once no other run is left. One that
 // never gets to (killed, a crash proof's SIGKILL, an interrupted
 // `pnpm test`) leaves a folder whose pid file names only dead
@@ -46,6 +47,13 @@ export function ownTestTemp(family: string): string {
   process.env[ROOT] = root;
   process.env[RUN] = run;
   process.env["TMPDIR"] = run;
+  // The config folder too, where the engine keeps the data dir's pointer
+  // and the data-folder lock beside it (Paths, DataDirLock): the
+  // machine's own were one lock for every run here and the plain dev
+  // app, so a run's move or settle stalled another's changes.
+  const config = join(run, "config");
+  mkdirSync(config, { recursive: true });
+  process.env["XDG_CONFIG_HOME"] = config;
   process.on("exit", () => {
     if (!heldByOthers(run)) remove(run);
     sweep(root);
