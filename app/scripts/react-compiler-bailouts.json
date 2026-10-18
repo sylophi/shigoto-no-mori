@@ -1,11 +1,5 @@
 [
   {
-    "file": "app/renderer/components/guide/GuideMenu.tsx",
-    "function": "GuideMenu",
-    "category": "Suppression",
-    "reason": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
-  },
-  {
     "file": "app/renderer/components/sidebar/SidebarList.tsx",
     "function": "SidebarList",
     "category": "IncompatibleLibrary",
