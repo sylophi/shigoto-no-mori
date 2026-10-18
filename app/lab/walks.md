@@ -20,7 +20,8 @@ and the newest five of the runs before, and never inside a checkout,
 whose typecheck would read its copy of the repo. It holds the
 shell's `main.log` and trace under `home/Library/Logs`, and the host's
 trace beside it in `host-logs`, which every walk of the run appends to.
-CI keeps every walk's logs (`SM_WALK_LOGS`) and a failed walk's root,
+A worktree a walk made in it still names the removed root in its `.git`
+file: `git worktree repair` from the kept repo links it again. CI keeps every walk's logs (`SM_WALK_LOGS`) and a failed walk's root,
 and uploads them when one fails.
 
 The root holds a home with a git identity, a fake `gh`
@@ -115,9 +116,12 @@ it("does what the person did", async () => {
   the page's api is there for a walk that needs it). It hands back
   the page, `git` for the walk's repos, `sm` for the bundle's
   terminal command, `restart`, which quits the app as the menu's
-  Quit does and starts it again on the same root, and `followWindow`,
-  the window drawn after the shell put up a new one. `gh` takes a script, or a function of the root
-  that makes one.
+  Quit does and starts it again on the same root, `followWindow`,
+  the window drawn after the shell put up a new one, and
+  `followRelaunch`, the app an installer opened again on the same
+  debugging port. `gh` takes a script, or a function of the root that
+  makes one; `env` adds to the app's environment (the update stand-ins)
+  and `prepare` fills the data folder before its first start.
 - `lib/demoRepo.mts` is the repo most walks start from: a history
   with a long file and media, a bare origin, a branch with a commit
   of its own, a stash, and uncommitted changes of every kind. A walk
@@ -152,6 +156,7 @@ build's single-instance lock is machine-wide.
 | `terminals` | A terminal from the worktree's footer runs what is typed; after the app quits as a person quits it and starts again, it is back in its folder with its lines above |
 | `pull-request` | A pull request on its branch's page and its diff page with images, against the fake gh |
 | `pull-request-partial` | A pull request whose commits can't be fetched: its diff from `gh pr diff`, each image saying once that it isn't here, with Try again, which draws them once the commits are reachable |
+| `update-button` | Settings' Restart to update with an update staged from a stand-in release list and a terminal job running: declined in the busy dialog, the app stays and the update is still offered; gone ahead with, the installer's refused swap brings the app back saying "The update didn't finish" |
 | `renderer-recovery` | A window whose renderer is SIGTERMed, then SIGKILLed, then every process under the app SIGTERMed at once: each time the window is back on its page and reads the repo, the host restarted too; a window the person closes stays closed |
 | `cross-device` | Two devices and a real project: the other device's worktree read-only while its control is off, its actions once it is on; mirror to it and from it, send and bring, each into the project there at another path and into a device without it, cloned first; the clone on `main` at the remote's tip with `origin/HEAD` and the upstream on `origin/main`, the copy clean with its carried files, the source torn down after a transplant |
 | `host-restart` | The host killed, then stopped until the watchdog restarts it: the band says it is reconnecting and why it restarted, no error toast, and the page reads the new host's state. The window's timers stopped past every link limit, and the whole app stopped as a sleep stops it with a commit sent as it stopped: no band, no toast, no restart, and the commit lands once. About 4 minutes |

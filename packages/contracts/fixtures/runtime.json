@@ -239,29 +239,38 @@
     "accepts": [
       {
         "action": "install",
-        "requestedAt": 1791380000000
+        "id": "5f0c3a9e-1b7d-4c2e-9a41-8d6e2f7b3c10",
+        "appPid": 48213,
+        "requesterPid": 51022
       }
     ],
     "normalizes": [
       {
         "input": {
           "action": "install",
-          "requestedAt": 1791380000000,
-          "pid": 48213
+          "id": "5f0c3a9e-1b7d-4c2e-9a41-8d6e2f7b3c10",
+          "appPid": 48213,
+          "requesterPid": 51022,
+          "requestedAt": 1791380000000
         },
         "output": {
           "action": "install",
-          "requestedAt": 1791380000000
+          "id": "5f0c3a9e-1b7d-4c2e-9a41-8d6e2f7b3c10",
+          "appPid": 48213,
+          "requesterPid": 51022
         }
       }
     ],
     "rejects": [
       {
         "action": "check",
-        "requestedAt": 1791380000000
+        "id": "5f0c3a9e-1b7d-4c2e-9a41-8d6e2f7b3c10",
+        "appPid": 48213,
+        "requesterPid": 51022
       },
       {
-        "action": "install"
+        "action": "install",
+        "requestedAt": 1791380000000
       }
     ]
   },

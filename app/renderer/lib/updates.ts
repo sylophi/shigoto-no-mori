@@ -86,18 +86,24 @@ export function findOutdated(devices: readonly DeviceUpdater[]): KnownUpdates {
   return { latest, oldest, outdated };
 }
 
-// Restarts a device into its staged update, through its api (a
-// HostApi's `updater` and `run`). This machine's own app going away
-// under the call is that restart under way, or a host restart the
-// shell's install carries on through: no failure of the install's,
-// which the updater's state reports (the next app start's, when the
-// swap or its relaunch failed).
-export async function restartIntoUpdate(api: {
-  readonly updater: Pick<EffectClient<typeof updaterContract>, "install">;
-  readonly run: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
-}): Promise<void> {
+// Asks a device to install or update, through its api (a HostApi's
+// `updater` and `run`). This machine's own app going away under the
+// call is the restart under way, or a host restart the shell's install
+// carries on through: no failure of the install's, which the updater's
+// state reports (the next app start's, when the swap or its relaunch
+// failed).
+export async function restartIntoUpdate(
+  api: {
+    readonly updater: Pick<
+      EffectClient<typeof updaterContract>,
+      "install" | "update"
+    >;
+    readonly run: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
+  },
+  how: "install" | "update" = "install",
+): Promise<void> {
   try {
-    await api.run(api.updater.install());
+    await api.run(api.updater[how]());
   } catch (error) {
     if (isOwnAppDrop(error)) return;
     throw error;

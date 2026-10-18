@@ -11,9 +11,16 @@ import { app } from "electron";
 import { envSetting } from "@shared/config";
 import { names } from "../flavor";
 
+let opened: string | undefined;
+
 export function enableDevCdpPort(): void {
   const port = envSetting("SHIGOMORI_DEBUG_PORT");
   if ((!app.isPackaged || names.debuggable) && port) {
     app.commandLine.appendSwitch("remote-debugging-port", port);
+    opened = port;
   }
 }
+
+// The port opened, for the installer to hand the app it brings back:
+// the environment rebuild at launch drops the variable.
+export const debugPortOpened = (): string | undefined => opened;

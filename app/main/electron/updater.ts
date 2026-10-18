@@ -36,7 +36,12 @@ import { hostBusy, noteUpdaterState } from "../hostProcess";
 import { confirmBusyAction } from "./busyPrompt";
 import { requireCliBinary } from "./cliBinary";
 import { QUIT_AFTER_ANSWER_MS } from "./relaunch";
-import { publishUpdaterState, updaterBridge } from "./updaterBridge";
+import {
+  type InstallOutcome,
+  publishUpdaterState,
+  updaterBridge,
+} from "./updaterBridge";
+import { debugPortOpened } from "./devCdp";
 import { updateEndpoints } from "./updateEndpoints";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Updater from "@shigomori/engine/Updater";
@@ -140,6 +145,7 @@ function runningApp(): Updater.Running {
 function spawnInstaller(): Promise<void> {
   const binary = requireCliBinary();
   const { feedUrl, releasesUrl } = updateEndpoints();
+  const debugPort = debugPortOpened();
   return new Promise((resolve, reject) => {
     const child = spawn(
       binary,
@@ -151,7 +157,13 @@ function spawnInstaller(): Promise<void> {
         ...(feedUrl ? ["--feed-url", feedUrl] : []),
         ...(releasesUrl ? ["--releases-url", releasesUrl] : []),
       ],
-      { detached: true, stdio: "ignore" },
+      {
+        detached: true,
+        stdio: "ignore",
+        ...(debugPort === undefined
+          ? {}
+          : { env: { ...process.env, SHIGOMORI_DEBUG_PORT: debugPort } }),
+      },
     );
     child.once("error", reject);
     child.once("spawn", () => {
@@ -308,9 +320,9 @@ async function hasInstallableStaged(): Promise<boolean> {
 // the detached installer and quit. An UNATTENDED install (asked for
 // from another device) cannot confirm anything, so a busy host throws
 // the refusal instead and the caller's toast carries it.
-async function installUpdate(unattended: boolean): Promise<void> {
-  if (installing) return;
-  if (!(await hasInstallableStaged())) return;
+async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
+  if (installing) return "installing";
+  if (!(await hasInstallableStaged())) return "nothing-staged";
   if (unattended) {
     const refusal = busyRemoteRefusal(
       await Effect.runPromise(hostBusy()),
@@ -321,14 +333,14 @@ async function installUpdate(unattended: boolean): Promise<void> {
     if (
       !(await confirmBusyAction("restart", await Effect.runPromise(hostBusy())))
     )
-      return;
+      return "declined";
     // The dialog can sit open arbitrarily long. Re-check that another
     // path didn't start the install during it, and that the staged
     // update still exists -- a terminal run whose feed answered 204
     // clears it, and quitting with nothing staged would be a quit the
     // installer can't follow with a relaunch.
-    if (installing) return;
-    if (!(await hasInstallableStaged())) return;
+    if (installing) return "installing";
+    if (!(await hasInstallableStaged())) return "nothing-staged";
   }
   installing = true;
   try {
@@ -354,6 +366,7 @@ async function installUpdate(unattended: boolean): Promise<void> {
   // update that is installing fine. `installing` blocks a second run
   // in the gap.
   setTimeout(() => app.quit(), QUIT_AFTER_ANSWER_MS);
+  return "installing";
 }
 
 // Update this device, whether or not its update is here yet: Update
@@ -396,7 +409,8 @@ export function currentUpdaterState(): UpdaterState {
 // host.
 export const updaterCalls = {
   check: async () => checkForUpdates(),
-  install: installUpdate,
+  install: async (unattended: boolean) =>
+    void (await installUpdate(unattended)),
   update: updateNow,
 };
 
@@ -417,8 +431,11 @@ export const layer = Layer.effectDiscard(
         run = null;
       }),
     );
-    // A dev run, or a test flavor, has no releases to move to.
-    if (!app.isPackaged || names.updates === null) {
+    // A dev run, or a test flavor, has no releases to move to, but a
+    // test flavor the lab hands a stand-in list.
+    const { feedUrl, releasesUrl } = updateEndpoints();
+    const standIn = names.debuggable && Boolean(feedUrl || releasesUrl);
+    if (!app.isPackaged || (names.updates === null && !standIn)) {
       setState({ kind: "unsupported" });
       return;
     }
@@ -426,8 +443,7 @@ export const layer = Layer.effectDiscard(
     // The CLI runs at this machine's own terminal, so its install is
     // attended.
     yield* updaterBridge({
-      // A failure is the updater's state already.
-      install: () => void installUpdate(false).catch(() => undefined),
+      install: () => installUpdate(false),
       failed: (error) => {
         const message = `Couldn't read the update request: ${Updater.causeText(error)}`;
         // Once, not on every poll it keeps failing.

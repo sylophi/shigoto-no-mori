@@ -21,7 +21,6 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
-  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -469,6 +468,30 @@ describe("a dev build", () => {
       );
     }
     assert.equal(seen.length, 0);
+  });
+
+  it("has none with a stand-in list either, which only a test flavor takes", async () => {
+    const box = newBox();
+    const { client, seen } = network(() => undefined);
+    const input = {
+      running: running(box),
+      releasesUrl: "http://127.0.0.1:9/releases",
+    };
+    const dev = await failure({ box, http: client, flavor: "dev" }, (u) =>
+      u.check(input),
+    );
+    assert.ok(dev instanceof Updater.UpdatesUnavailable);
+    const lab = { box, http: client, flavor: "lab" };
+    const bare = await failure(lab, (u) => u.check({ running: running(box) }));
+    assert.ok(bare instanceof Updater.UpdatesUnavailable);
+    assert.equal(seen.length, 0, "a build with no line asked a feed");
+    // Given one, a test flavor asks it, and only it.
+    const asked = await failure(lab, (u) => u.check(input));
+    assert.ok(!(asked instanceof Updater.UpdatesUnavailable));
+    assert.deepEqual(
+      [...new Set(seen.map((request) => new URL(request.url).host))],
+      ["127.0.0.1:9"],
+    );
   });
 });
 
@@ -1684,6 +1707,22 @@ describe("finishing an install for the app", () => {
     );
   });
 
+  it("hands a test build's debugging port to the app it brings back", async () => {
+    const { box, http } = await readyBox();
+    const pid = deadPid();
+    await using({ box, http }, (u) =>
+      u.finishInstall({
+        running: running(box),
+        appPid: pid,
+        debugPort: "9333",
+      }),
+    );
+    assert.equal(
+      calls().at(-1),
+      `open --env SHIGOMORI_DATA_DIR=${box.dataDir} --env SHIGOMORI_DEBUG_PORT=9333 ${box.installed}`,
+    );
+  });
+
   it("won't put a staged release over a newer app installed since", async () => {
     const { box, http } = await readyBox();
     makeBundle(box.installed, "3.0.0");
@@ -1864,7 +1903,9 @@ describe("updating under a running app", () => {
           yield* until(() => existsSync(request(box)));
           const asked = JSON.parse(readFileSync(request(box), "utf8"));
           assert.equal(asked.action, "install");
-          assert.equal(typeof asked.requestedAt, "number");
+          assert.equal(typeof asked.id, "string");
+          assert.equal(asked.appPid, app);
+          assert.equal(asked.requesterPid, process.pid);
           // The relaunched app publishes its own state.
           const relaunched = livePid();
           touch("app-pids", `${app}\n${relaunched}\n`);
@@ -1888,7 +1929,11 @@ describe("updating under a running app", () => {
     assert.deepEqual(seen.at(-1), { phase: "restarting", version: "2.0.0" });
   });
 
-  it("reports the app's own failure once it publishes one", async () => {
+  // The id of the request the update wrote.
+  const askedId = (box: Box): string =>
+    JSON.parse(readFileSync(request(box), "utf8")).id;
+
+  it("reports the app's own failure of this request", async () => {
     const { box, http } = await readyBox();
     const app = livePid();
     touch("app-pids", `${app}\n`);
@@ -1900,6 +1945,11 @@ describe("updating under a running app", () => {
           pid: app,
           appVersion: "1.0.0",
           state: { kind: "error", message: "disk full" },
+          handoff: {
+            id: askedId(box),
+            outcome: "failed",
+            message: "disk full",
+          },
         });
         return yield* driven(fiber, "200 millis").pipe(Effect.flip);
       }),
@@ -1907,7 +1957,129 @@ describe("updating under a running app", () => {
     assert.equal(words(error), "Install failed: disk full");
   });
 
-  it("pays no mind to an error from before the request, and times out tentatively", async () => {
+  it("says at once that the restart was declined in the app", async () => {
+    const { box, http } = await readyBox();
+    const app = livePid();
+    touch("app-pids", `${app}\n`);
+    status(box, { pid: app, appVersion: "1.0.0", state: { kind: "idle" } });
+    const error = await updating({ box, http }, (fiber) =>
+      Effect.gen(function* () {
+        yield* until(() => existsSync(request(box)));
+        status(box, {
+          pid: app,
+          appVersion: "1.0.0",
+          state: { kind: "ready", version: "2.0.0", releaseDate: null },
+          handoff: { id: askedId(box), outcome: "declined" },
+        });
+        return yield* driven(fiber, "200 millis").pipe(Effect.flip);
+      }),
+    );
+    assert.equal(
+      words(error),
+      "The restart was declined in the app, so the update wasn't installed. It stays staged for the next restart.",
+    );
+  });
+
+  it("says at once that the app found nothing it could install", async () => {
+    const { box, http } = await readyBox();
+    const app = livePid();
+    touch("app-pids", `${app}\n`);
+    status(box, { pid: app, appVersion: "1.0.0", state: { kind: "idle" } });
+    const error = await updating({ box, http }, (fiber) =>
+      Effect.gen(function* () {
+        yield* until(() => existsSync(request(box)));
+        status(box, {
+          pid: app,
+          appVersion: "1.0.0",
+          state: { kind: "idle" },
+          handoff: { id: askedId(box), outcome: "nothing-staged" },
+        });
+        return yield* driven(fiber, "200 millis").pipe(Effect.flip);
+      }),
+    );
+    assert.equal(
+      words(error),
+      "The app found no update newer than itself to install.",
+    );
+  });
+
+  it("waits on a request the app took and then said nothing of, and times out tentatively", async () => {
+    const { box, http } = await readyBox();
+    const app = livePid();
+    touch("app-pids", `${app}\n`);
+    status(box, { pid: app, appVersion: "1.0.0", state: { kind: "idle" } });
+    const error = await updating({ box, http }, (fiber) =>
+      Effect.gen(function* () {
+        yield* until(() => existsSync(request(box)));
+        // Claimed, as the bridge does, and the app gone quiet after.
+        rmSync(request(box));
+        return yield* driven(fiber, "5 seconds").pipe(Effect.flip);
+      }),
+    );
+    assert.equal(
+      words(error),
+      "The app hasn't restarted yet. It may still be waiting on a confirmation in the app (confirming there will still install the update), or the install failed. Check the app.",
+    );
+  });
+
+  it("says so when the request can't be taken back", async () => {
+    const { box, http } = await readyBox();
+    const app = livePid();
+    touch("app-pids", `${app}\n`);
+    status(box, { pid: app, appVersion: "1.0.0", state: { kind: "idle" } });
+    const error = await updating(
+      {
+        box,
+        http,
+        fault: (from) =>
+          from === request(box)
+            ? Effect.fail(
+                PlatformError.systemError({
+                  _tag: "PermissionDenied",
+                  module: "FileSystem",
+                  method: "rename",
+                  pathOrDescriptor: from,
+                }),
+              )
+            : undefined,
+      },
+      (fiber) => driven(fiber, "1 second").pipe(Effect.flip),
+    );
+    assert.match(words(error), /^Couldn't take the update request back: /);
+    assert.equal(existsSync(request(box)), true);
+    rmSync(request(box));
+  });
+
+  it("takes its request back when it is interrupted", async () => {
+    const { box, http } = await readyBox();
+    const app = livePid();
+    touch("app-pids", `${app}\n`);
+    status(box, { pid: app, appVersion: "1.0.0", state: { kind: "idle" } });
+    await updating({ box, http }, (fiber) =>
+      Effect.gen(function* () {
+        yield* until(() => existsSync(request(box)));
+        yield* Fiber.interrupt(fiber);
+      }),
+    );
+    assert.equal(existsSync(request(box)), false, "the request was left");
+  });
+
+  it("withdraws a request no app takes, and says so", async () => {
+    const { box, http } = await readyBox();
+    const app = livePid();
+    touch("app-pids", `${app}\n`);
+    status(box, { pid: app, appVersion: "1.0.0", state: { kind: "idle" } });
+    const error = await updating({ box, http }, (fiber) =>
+      driven(fiber, "1 second").pipe(Effect.flip),
+    );
+    assert.equal(
+      words(error),
+      "The app didn't pick up the update request. Quit the app and run the update again.",
+    );
+    assert.equal(existsSync(request(box)), false, "the request was left");
+  });
+
+  it("pays no mind to another request's outcome or an earlier error, and times out tentatively once the app took it", async () => {
     const { box, http } = await readyBox();
     const app = livePid();
     touch("app-pids", `${app}\n`);
@@ -1915,13 +2087,22 @@ describe("updating under a running app", () => {
       pid: app,
       appVersion: "1.0.0",
       state: { kind: "error", message: "old" },
+      handoff: { id: "an-earlier-one", outcome: "failed", message: "old" },
     });
-    const past = new Date(Date.now() - 3_600_000);
-    utimesSync(join(box.dataDir, "updater.json"), past, past);
     const { seen, progress } = progressLog();
     const error = await updating(
       { box, http },
-      (fiber) => driven(fiber, "5 seconds").pipe(Effect.flip),
+      (fiber) =>
+        Effect.gen(function* () {
+          yield* until(() => existsSync(request(box)));
+          status(box, {
+            pid: app,
+            appVersion: "1.0.0",
+            state: { kind: "error", message: "old" },
+            handoff: { id: askedId(box), outcome: "claimed" },
+          });
+          return yield* driven(fiber, "5 seconds").pipe(Effect.flip);
+        }),
       progress,
     );
     assert.equal(
@@ -1939,6 +2120,8 @@ describe("updating under a running app", () => {
     const error = await updating({ box, http }, (fiber) =>
       Effect.gen(function* () {
         yield* until(() => existsSync(request(box)));
+        // The app took it, as its bridge does.
+        rmSync(request(box));
         const relaunched = livePid();
         touch("app-pids", `${app}\n${relaunched}\n`);
         status(box, {
