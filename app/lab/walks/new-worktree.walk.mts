@@ -41,7 +41,7 @@ it("branches off a source under the name typed", async () => {
     .fill("walk-branch");
   await main(page).getByRole("button", { name: "Create worktree" }).click();
   await main(page)
-    .getByRole("heading", { level: 1, name: "walk-branch" })
+    .getByRole("heading", { level: 1, name: "walk-branch", exact: true })
     .waitFor();
   await expect.poll(checkedOut).toContain("walk-branch");
   assert.equal(

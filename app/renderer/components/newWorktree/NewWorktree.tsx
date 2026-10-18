@@ -128,7 +128,9 @@ function NewWorktreeForm({
   // what the user typed; null means "not edited yet" and falls through
   // to the seed. This keeps the form interactive the moment it mounts
   // (the seeds fill in when they land) without a seed-once effect, and
-  // an explicit edit is never clobbered by a late-arriving seed.
+  // an explicit edit is never clobbered by a late-arriving seed, nor
+  // joined by one landing as typing starts (the field's
+  // selectOutsideChanges).
   const [branchNameInput, setBranchNameInput] = useState<string | null>(null);
   const [baseInput, setBaseInput] = useState<string | null>(null);
   const branchName = branchNameInput ?? pickedName ?? "";

@@ -165,6 +165,8 @@ export function CreatePullRequestDialogView({
             disabled={busy}
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- the dialog only exists because the user just asked to write the PR, so the caret starts in its title
             autoFocus
+            // The draft's title lands after the dialog opens, focused.
+            selectOutsideChanges
           />
           <DescriptionEditorView
             value={form.body}
