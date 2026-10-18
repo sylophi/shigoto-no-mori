@@ -29,7 +29,11 @@ import {
 } from "../ipc/modules/account";
 import { scheduleRelaunch } from "./relaunch";
 import { rememberVisibilityForRestart } from "./restartVisibility";
-import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
+import {
+  decide,
+  FATAL_RELAUNCH,
+  rendererGone,
+} from "../core/liveness/rateLimit";
 import { log } from "@shared/log";
 import { names } from "../flavor";
 
@@ -103,11 +107,6 @@ export function reconcileLaunchAtLogin(): void {
 // list, which is correct: a crash right after launch is not a loop.
 let recentRendererCrashes: number[] = [];
 
-// Reasons a render-process-gone event means an intended teardown rather
-// than a crash to recover from. "clean-exit" is a normal exit, "killed"
-// is a deliberate kill (typically during our own shutdown).
-const INTENTIONAL_GONE_REASONS = new Set(["clean-exit", "killed"]);
-
 // Attach the renderer-crash and unresponsive handlers to a window. Called
 // from createWindow for every window, including the ones recreated after
 // a crash, so a second crash lands on a live handler too. The recreate
@@ -121,30 +120,27 @@ export function attachRenderProcessRecovery(
   },
 ): void {
   const webContents = window.webContents;
+  const id = webContents.id;
+  let closing = false;
+  window.on("close", () => {
+    closing = true;
+  });
   webContents.on("render-process-gone", (_event, details) => {
-    // Never recreate while the app is tearing down: the renderer going
-    // away is expected there, and a recreate would fight the quit.
-    if (deps.isShuttingDown()) return;
-    if (INTENTIONAL_GONE_REASONS.has(details.reason)) {
-      log.info(
-        `[liveness] renderer exited (${details.reason}), not recreating`,
-      );
-      return;
-    }
-    const { allow: recreate, recent } = decide(
-      recentRendererCrashes,
-      Date.now(),
-      CRASH_LOOP,
-    );
+    const { verdict, recent } = rendererGone({
+      ownTeardown: deps.isShuttingDown() || closing || window.isDestroyed(),
+      recent: recentRendererCrashes,
+      now: Date.now(),
+    });
     recentRendererCrashes = recent;
-    if (recreate) {
+    if (verdict === "ignore") return;
+    if (verdict === "recreate") {
       log.error(
-        `[liveness] renderer gone (${details.reason}), recreating the window`,
+        `[liveness] window ${id}'s renderer gone (${details.reason}), recreating the window`,
       );
       deps.recreateWindow();
     } else {
       log.error(
-        `[liveness] renderer crash loop (${details.reason}), giving up to avoid thrashing`,
+        `[liveness] window ${id}'s renderer gone (${details.reason}) again, a crash loop: giving up to avoid thrashing`,
       );
       deps.onGiveUp();
     }

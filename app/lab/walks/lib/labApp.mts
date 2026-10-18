@@ -66,6 +66,9 @@ export interface Lab {
   // The app's host process (main/hostProcess.ts), the one Electron
   // utility process it forks that runs node.
   hostPid(): number;
+  // The window the app shows now, once it has drawn: after the shell
+  // put up a new one in place of one whose renderer went, `page` is it.
+  followWindow(): Promise<Page>;
   close(): Promise<void>;
 }
 
@@ -288,6 +291,32 @@ async function launch(
       if (host === undefined)
         throw new Error("the lab app has no host process");
       return host.pid;
+    },
+    followWindow: async () => {
+      const browser = current.run.browser;
+      if (browser === null) throw new Error("the lab app has no browser");
+      let drawn: Page | undefined;
+      await waitFor(
+        async () => {
+          for (const page of browser.contexts()[0]?.pages() ?? []) {
+            if (page.isClosed()) continue;
+            const ok = await page
+              .evaluate(
+                () =>
+                  (document.querySelector("#root")?.childElementCount ?? 0) > 0,
+              )
+              .catch(() => false);
+            if (ok) drawn = page;
+          }
+          return drawn !== undefined;
+        },
+        "the lab app's window drawn again",
+        30_000,
+      );
+      if (drawn === undefined) throw new Error("the lab app has no window");
+      drawn.setDefaultTimeout(10_000);
+      current.page = drawn;
+      return drawn;
     },
     close,
   };

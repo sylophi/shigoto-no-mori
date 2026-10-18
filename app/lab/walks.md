@@ -63,8 +63,9 @@ it("does what the person did", async () => {
 - `lib/labApp.mts` starts the build (`bootLab`, with `--sm-lab`, so
   the page's api is there for a walk that needs it). It hands back
   the page, `git` for the walk's repos, `sm` for the bundle's
-  terminal command, and `restart`, which quits the app as the menu's
-  Quit does and starts it again on the same root. `gh` takes a script, or a function of the root
+  terminal command, `restart`, which quits the app as the menu's
+  Quit does and starts it again on the same root, and `followWindow`,
+  the window drawn after the shell put up a new one. `gh` takes a script, or a function of the root
   that makes one.
 - `lib/demoRepo.mts` is the repo most walks start from: a history
   with a long file and media, a bare origin, a branch with a commit
@@ -100,4 +101,5 @@ build's single-instance lock is machine-wide.
 | `terminals` | A terminal from the worktree's footer runs what is typed; after the app quits as a person quits it and starts again, it is back in its folder with its lines above |
 | `pull-request` | A pull request on its branch's page and its diff page with images, against the fake gh |
 | `pull-request-partial` | A pull request whose commits can't be fetched: its diff from `gh pr diff`, each image saying once that it isn't here, with Try again, which draws them once the commits are reachable |
+| `renderer-recovery` | A window whose renderer is SIGTERMed, then SIGKILLed, then every process under the app SIGTERMed at once: each time the window is back on its page and reads the repo, the host restarted too; a window the person closes stays closed |
 | `host-restart` | The host killed, then stopped until the watchdog restarts it: the band says it is reconnecting and why it restarted, no error toast, and the page reads the new host's state. The window's timers stopped past every link limit, and the whole app stopped as a sleep stops it with a commit sent as it stopped: no band, no toast, no restart, and the commit lands once. About 4 minutes |

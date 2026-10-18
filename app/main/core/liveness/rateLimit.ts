@@ -35,3 +35,21 @@ export function decide(
   if (within.length >= policy.max) return { allow: false, recent: within };
   return { allow: true, recent: [...within, now] };
 }
+
+// What a window does when its renderer is gone. Only the app's own
+// teardown (a quit, or the window closing) explains it: an exit's
+// reason doesn't, since "killed" and "clean-exit" are also what a
+// signal from outside the app (another tool, macOS under memory
+// pressure) reads as, and a window left on a dead renderer is blank for
+// good. Anything else recreates the window, within the crash-loop
+// budget.
+export function rendererGone(input: {
+  readonly ownTeardown: boolean;
+  readonly recent: readonly number[];
+  readonly now: number;
+}): { verdict: "ignore" | "recreate" | "give-up"; recent: number[] } {
+  if (input.ownTeardown)
+    return { verdict: "ignore", recent: [...input.recent] };
+  const { allow, recent } = decide(input.recent, input.now, CRASH_LOOP);
+  return { verdict: allow ? "recreate" : "give-up", recent };
+}
