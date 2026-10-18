@@ -57,17 +57,37 @@ export function parsePortPoolConfig(text: string | undefined): PortPoolConfig {
   };
 }
 
+const PLACEHOLDER = /\$\{([^}]*)\}/g;
+const escaped = (literal: string) =>
+  literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// A template naming one declared port once ("${web}",
+// "http://localhost:${api}"), as the name and a pattern whose one group
+// is the value written in its place: Go's Atoi, an optional sign and
+// digits. Null for any other template, whose value can't be read back.
+const reversed = (template: string, names: ReadonlySet<string>) => {
+  const found = [...template.matchAll(PLACEHOLDER)];
+  const [only] = found;
+  if (found.length !== 1 || only === undefined) return null;
+  const name = only[1] ?? "";
+  if (!names.has(name)) return null;
+  const before = template.slice(0, only.index);
+  const after = template.slice(only.index + only[0].length);
+  return {
+    name,
+    pattern: new RegExp(`^${escaped(before)}([+-]?\\d+)${escaped(after)}$`),
+  };
+};
+
 // The value each declared port name holds in the env files `files`
-// (name to content). Only a whole-value template ("${renderer}") can be
-// reversed: a name inside a larger string (a URL) goes unreported
-// rather than guessed at. The first file to carry a name wins.
+// (name to content), read back through a template that names it once,
+// alone or inside literal text (a URL). The first file, then the first
+// variable, to carry a name wins.
 export function matchPorts(
   config: PortPoolConfig,
   files: ReadonlyMap<string, string>,
 ): PortInfo[] {
-  const byTemplate = new Map(
-    config.portNames.map((name) => [`\${${name}}`, name]),
-  );
+  const names = new Set(config.portNames);
   const ports: PortInfo[] = [];
   const seen = new Set<string>();
   for (const file of Object.keys(config.envFiles).toSorted()) {
@@ -76,15 +96,14 @@ export function matchPorts(
     const env = parseEnv(content);
     const vars = config.envFiles[file] ?? {};
     for (const key of Object.keys(vars).toSorted()) {
-      const name = byTemplate.get(vars[key] ?? "");
-      if (name === undefined || seen.has(name)) continue;
-      const raw = env[key] ?? "";
-      // Go's Atoi: an optional sign and digits, nothing else.
-      if (!/^[+-]?\d+$/.test(raw)) continue;
+      const template = reversed(vars[key] ?? "", names);
+      if (template === null || seen.has(template.name)) continue;
+      const raw = template.pattern.exec(env[key] ?? "")?.[1];
+      if (raw === undefined) continue;
       const port = Number.parseInt(raw, 10);
       if (port <= 0) continue;
-      seen.add(name);
-      ports.push({ name, port, file, key });
+      seen.add(template.name);
+      ports.push({ name: template.name, port, file, key });
     }
   }
   return ports;

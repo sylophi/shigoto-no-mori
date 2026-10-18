@@ -445,7 +445,7 @@ it("finishes a move past a registered project whose folder is gone", async () =>
 // port-pool keys a lease by folder, and only at the new place does the
 // layout count a moved worktree managed: the first start there carries
 // each one's lease.
-it("carries a moved worktree's port-pool lease when the move settles at the new place", async () => {
+it("carries each moved worktree's port-pool lease when the move settles at the new place, one the journal doesn't name too", async () => {
   box.write("config.json", { portPool: true });
   const dataDir = box.side("engine");
   const log = join(box.home, "port-pool.log");
@@ -457,6 +457,11 @@ it("carries a moved worktree's port-pool lease when the move settles at the new 
   const oldPath = join(box.home, "old-data", "wt", "proj", "fox");
   const newPath = join(dataDir, "wt", "proj", "fox");
   box.git(repo, "worktree", "add", "-q", "-b", "fox", newPath);
+  // One the journal doesn't name, which git still lists where it was.
+  const oldOwl = join(box.home, "old-data", "wt", "proj", "owl");
+  const newOwl = join(dataDir, "wt", "proj", "owl");
+  box.git(repo, "worktree", "add", "-q", "-b", "owl", oldOwl);
+  renameSync(oldOwl, newOwl);
   const projectId = (await box.engine(
     Effect.map(
       Effect.flatMap(Registry.Registry, (registry) =>
@@ -479,6 +484,8 @@ it("carries a moved worktree's port-pool lease when the move settles at the new 
   assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), [
     `release ${oldPath}`,
     `ensure ${newPath}`,
+    `release ${oldOwl}`,
+    `ensure ${newOwl}`,
   ]);
 });
 

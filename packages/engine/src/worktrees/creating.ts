@@ -178,12 +178,13 @@ export const makeCreating = ({
     // external one, so none is released either).
     const portPoolActive = Effect.fn("Worktrees.portPoolActive")(function* (
       worktree: Pick<WorktreeIdentity, "path" | "isExternal">,
-    ) {
-      if (worktree.isExternal || !(yield* deviceFlag("portPool"))) return false;
-      const installed = yield* findExecutable("port-pool").pipe(
+      installedNow: Effect.Effect<boolean> = findExecutable("port-pool").pipe(
         Effect.map(Option.isSome),
         Effect.provideContext(platform),
-      );
+      ),
+    ) {
+      if (worktree.isExternal || !(yield* deviceFlag("portPool"))) return false;
+      const installed = yield* installedNow;
       return (
         installed &&
         parsePortPoolConfig(

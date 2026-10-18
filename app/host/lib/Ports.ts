@@ -1,10 +1,11 @@
 // A worktree's ports (packages/contracts/src/modules/ports.ts): the ones
-// port-pool provisioned there when it is active for the worktree, then
-// the user-added entries from the worktree's data, each probed on this
-// machine's loopback. Whether port-pool is active and which ports it
-// provisioned are the engine's (Worktrees.portPoolActive and
-// Worktrees.poolPorts), which `sm worktrees status` reads too.
+// port-pool wrote into the worktree's env files, then the user-added
+// entries from its data, each probed on this machine's loopback. Which
+// ports port-pool wrote is the engine's reading (Worktrees.poolPorts),
+// the one `sm worktrees status` prints; whether sm provisions and
+// releases them there is Worktrees.portPoolActive.
 import { findExecutable } from "@shigomori/engine/executables";
+import * as EngineConfig from "@shigomori/engine/Config";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import { type WorktreePort } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
@@ -32,7 +33,8 @@ export class Ports extends Context.Service<
   {
     readonly list: (worktree: Worktree) => Effect.Effect<WorktreePort[]>;
     readonly portPoolInstalled: Effect.Effect<boolean>;
-    // The one decision both the preflight and the list read. A stale
+    // Whether sm provisions and releases port-pool's ports in the
+    // worktree: the preflight and the Scripts section's rows. A stale
     // worktree id reads false.
     readonly portPoolActive: (worktree: Worktree) => Effect.Effect<boolean>;
   }
@@ -44,6 +46,11 @@ const INSTALLED_TTL = Duration.seconds(30);
 // the path, relocation mints a new one), so it is safe to hold: a
 // deleted worktree's page is gone before the entry matters.
 const IDENTITY_TTL = Duration.minutes(1);
+// A worktree's port list polls every few seconds while shown (its page,
+// the Ports dialog, a Live card): its config and env files are read once
+// per window across every open list, and a fresh provision still shows
+// within it.
+const POOL_TTL = Duration.seconds(10);
 
 // A loopback dial answers in microseconds when something listens and
 // is refused just as fast when nothing does. The deadline only matters
@@ -74,41 +81,50 @@ const make = Effect.gen(function* () {
       Effect.provide(engine),
     );
   }, IDENTITY_TTL);
-
-  // The checkout port-pool is active for, or null.
-  const active = Effect.fn("Ports.active")(function* (worktree: Worktree) {
-    const found = yield* identities
-      .get(worktreeKey(worktree.projectId, worktree.worktreeId))
-      .pipe(
-        Effect.map(Option.some),
-        Effect.catchTag("UnknownWorktreeError", () => Effect.succeedNone),
-        Effect.orDie,
-      );
-    if (Option.isNone(found)) return null;
-    const on = yield* read(
-      Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
-        worktrees.portPoolActive(found.value),
-      ),
+  const identityOf = (worktree: Worktree) =>
+    identities.get(worktreeKey(worktree.projectId, worktree.worktreeId)).pipe(
+      Effect.map(Option.some),
+      Effect.catchTag("UnknownWorktreeError", () => Effect.succeedNone),
+      Effect.orDie,
     );
-    return on ? found.value.path : null;
-  });
 
-  // port-pool's ports for a checkout, in the project's declared order,
-  // the order the user thinks in.
-  const poolPorts = (dir: string) =>
-    read(
-      Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
-        worktrees.poolPorts(dir),
-      ),
-    ).pipe(
-      Effect.map(({ config, ports }) =>
-        config.portNames.flatMap((name) =>
-          ports
-            .filter((port) => port.name === name)
-            .map(({ port }) => ({ name, port })),
+  // In the project's declared order, the order the user thinks in.
+  const poolPorts = yield* keptAnswers(
+    (dir: string) =>
+      read(
+        Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+          worktrees.poolPorts(dir),
+        ),
+      ).pipe(
+        Effect.map(({ config, ports }) =>
+          config.portNames.flatMap((name) =>
+            ports
+              .filter((port) => port.name === name)
+              .map(({ port }) => ({ name, port })),
+          ),
         ),
       ),
+    POOL_TTL,
+  );
+
+  // The toggle first, before anything forks git: off is the default.
+  const active = Effect.fn("Ports.portPoolActive")(function* (
+    worktree: Worktree,
+  ) {
+    const enabled = yield* read(
+      Effect.flatMap(EngineConfig.Config, (config) =>
+        config.device("portPool"),
+      ),
     );
+    if (!enabled) return false;
+    const found = yield* identityOf(worktree);
+    if (Option.isNone(found)) return false;
+    return yield* read(
+      Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+        worktrees.portPoolActive(found.value, installed),
+      ),
+    );
+  });
 
   return Ports.of({
     list: Effect.fn("Ports.list")(function* (worktree) {
@@ -116,8 +132,10 @@ const make = Effect.gen(function* () {
       yield* read(findProject(worktree.projectId));
       const [pool, data] = yield* Effect.all(
         [
-          Effect.flatMap(active(worktree), (dir) =>
-            dir === null ? Effect.succeed([]) : poolPorts(dir),
+          Effect.flatMap(identityOf(worktree), (found) =>
+            Option.isNone(found)
+              ? Effect.succeed([])
+              : poolPorts.get(found.value.path),
           ),
           read(Ops.readWorktreeData(worktree.projectId, worktree.worktreeId)),
         ],
@@ -135,9 +153,7 @@ const make = Effect.gen(function* () {
     portPoolInstalled: installed.pipe(
       Effect.withSpan("Ports.portPoolInstalled"),
     ),
-    portPoolActive: Effect.fn("Ports.portPoolActive")(function* (worktree) {
-      return (yield* active(worktree)) !== null;
-    }),
+    portPoolActive: active,
   });
 });
 

@@ -173,6 +173,37 @@ it("carries port-pool's lease of a managed worktree a relocated project took alo
   ]);
 });
 
+// The doctor's relink of a worktree moved by hand carries its lease.
+it("carries port-pool's lease of a managed worktree moved by hand when it is re-linked", async () => {
+  const { repo, dataDir, log } = pooled();
+  const fox = join(dataDir, "wt", "proj", "fox");
+  const otter = join(dataDir, "wt", "proj", "otter");
+  const project = (await box.engine(
+    Effect.gen(function* () {
+      const registered = yield* (yield* Registry.Registry).register({
+        name: "proj",
+        path: repo,
+      });
+      yield* (yield* Worktrees.Worktrees).create(
+        registered,
+        { name: "fox", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      );
+      return registered;
+    }),
+  )) as Registry.RegisteredProject;
+  renameSync(fox, otter);
+  await box.engine(
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.relink(project, new Map([[fox, otter]])),
+    ),
+  );
+  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n").slice(-2), [
+    `release ${fox}`,
+    `ensure ${otter}`,
+  ]);
+});
+
 it("refuses a rename of the primary, to a taken, reserved or unfit name", async () => {
   const { repo, dataDir } = pooled();
   for (const name of ["fox", "owl"]) {

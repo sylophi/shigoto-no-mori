@@ -133,9 +133,11 @@ export class Worktrees extends Context.Service<
       readonly config: PortPoolConfig;
       readonly ports: ReadonlyArray<PortInfo>;
     }>;
-    // Whether port-pool provisions and releases the worktree.
+    // Whether port-pool provisions and releases the worktree. `installed`
+    // answers whether port-pool is on PATH, for a caller that keeps it.
     readonly portPoolActive: (
       worktree: Pick<WorktreeIdentity, "path" | "isExternal">,
+      installed?: Effect.Effect<boolean>,
     ) => Effect.Effect<boolean>;
 
     // Where `cwd` is among the registered projects.

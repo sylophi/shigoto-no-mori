@@ -1,13 +1,12 @@
 // Durable proof for the worktree port list's parts, under plain Node
 // with no Electron:
-//   - port-pool counts for a worktree by the engine's rule: an external
-//     worktree set up for it shows no port-pool rows, a managed one does.
-//   - the list's port-pool rows and `sm worktrees status`'s ports are
-//     one reading of the env files port-pool wrote (port-pool's own
-//     state saying otherwise is not read), the list in the declared
-//     order.
-//   - a worktree's port-pool config that could not be read is read
-//     again at the next ask, not taken for "not configured".
+//   - every worktree's port-pool rows are the ports port-pool wrote into
+//     its env files, the external ones' and the primary's too, read as
+//     `sm worktrees status` reads them (port-pool's own state saying
+//     otherwise is not read, a name only a URL carries included), in the
+//     declared order; only a managed one counts as sm's to provision and
+//     release.
+//   - with port-pool off, whether it is active asks git nothing.
 //   - the merge (shared/ports/mergeWorktreePorts.ts) lists pool rows first and
 //     shadows a custom row on a pool-allocated number.
 //   - the loopback probe and dial (host/lib/net.ts) see a listener on
@@ -15,7 +14,8 @@
 //     closed port as not listening within the deadline.
 // Run: pnpm test worktree-ports.
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
@@ -52,16 +52,16 @@ const git = sandboxGit();
 const POOL_CONFIG = JSON.stringify({
   schemaVersion: 1,
   portNames: ["web", "api"],
-  envFiles: { ".env": { PORT: "${web}", API: "${api}" } },
+  envFiles: { ".env": { PORT: "${web}", API_URL: "http://localhost:${api}" } },
 });
-const ENV = "PORT=4100\nAPI=4200\n";
+const ENV = "PORT=4100\nAPI_URL=http://localhost:4200\n";
 
 let projectId: string;
 let repo: string;
 let ports: Ports.Ports["Service"];
 // A worktree of the project's at `at`, as port-pool would leave it.
 const checkout = async (name: string, at: string) => {
-  git(repo, "worktree", "add", "-q", "-b", name, at);
+  if (at !== repo) git(repo, "worktree", "add", "-q", "-b", name, at);
   writeFileSync(join(at, ".env"), ENV);
   const found = (await runHost(Ops.listWorktreeIdentities({ projectId }))).find(
     (row) => row.path === at,
@@ -98,11 +98,13 @@ beforeAll(async () => {
   writeFileSync(
     join(dataHome, "port-pool", "state.json"),
     JSON.stringify({
-      allocations: ["fox", "hare", "owl"].flatMap((name) =>
-        [join(engineDataDir, "wt", "repo", name), join(root, name)].map(
-          (dir) => ({ dir, ports: { web: 5100, api: 5200 } }),
+      allocations: [
+        repo,
+        join(root, "owl"),
+        ...["fox", "hare"].map((name) =>
+          join(engineDataDir, "wt", "repo", name),
         ),
-      ),
+      ].map((dir) => ({ dir, ports: { web: 5100, api: 5200 } })),
     }),
   );
   process.env["XDG_DATA_HOME"] = dataHome;
@@ -113,29 +115,33 @@ const poolRows = async (worktree: { projectId: string; worktreeId: string }) =>
   (await Effect.runPromise(ports.list(worktree)))
     .filter((row) => row.source === "pool")
     .map(({ label, port }) => ({ label, port }));
+const active = (worktree: { projectId: string; worktreeId: string }) =>
+  Effect.runPromise(ports.portPoolActive(worktree));
+const DECLARED = [
+  { label: "web", port: 4100 },
+  { label: "api", port: 4200 },
+];
 
-it("active: an external worktree set up for port-pool shows no port-pool rows, a managed one does", async () => {
-  const root = join(repo, "..");
-  const external = await checkout("owl", join(root, "owl"));
+it("rows: the primary and an external worktree show the ports port-pool wrote, and only a managed one is sm's to provision", async () => {
+  const primary = await checkout("main", repo);
+  const external = await checkout("owl", join(repo, "..", "owl"));
   const managed = await checkout(
     "fox",
     join(engineDataDir, "wt", "repo", "fox"),
   );
-  assert.equal(await Effect.runPromise(ports.portPoolActive(external)), false);
-  assert.deepEqual(await poolRows(external), []);
-  assert.equal(await Effect.runPromise(ports.portPoolActive(managed)), true);
-  assert.equal((await poolRows(managed)).length, 2);
+  assert.deepEqual(await poolRows(primary), DECLARED);
+  assert.deepEqual(await poolRows(external), DECLARED);
+  assert.deepEqual(await poolRows(managed), DECLARED);
+  assert.equal(await active(primary), false);
+  assert.equal(await active(external), false);
+  assert.equal(await active(managed), true);
 });
 
 it("ports: the list and `sm worktrees status` read the env files port-pool wrote, the list in the declared order", async () => {
-  const at = join(engineDataDir, "wt", "repo", "fox");
-  const worktree = {
-    projectId,
-    worktreeId:
-      (await runHost(Ops.listWorktreeIdentities({ projectId }))).find(
-        (row) => row.path === at,
-      )?.id ?? "",
-  };
+  const worktree = await checkout(
+    "hare",
+    join(engineDataDir, "wt", "repo", "hare"),
+  );
   const card = await runHost(
     Effect.gen(function* () {
       const worktrees = yield* EngineWorktrees.Worktrees;
@@ -147,30 +153,48 @@ it("ports: the list and `sm worktrees status` read the env files port-pool wrote
     }),
   );
   assert.deepEqual(card.ports, [
-    { name: "api", port: 4200, file: ".env", key: "API" },
+    { name: "api", port: 4200, file: ".env", key: "API_URL" },
     { name: "web", port: 4100, file: ".env", key: "PORT" },
   ]);
-  assert.deepEqual(await poolRows(worktree), [
-    { label: "web", port: 4100 },
-    { label: "api", port: 4200 },
-  ]);
+  assert.deepEqual(await poolRows(worktree), DECLARED);
 });
 
-it("config: a port-pool config that could not be read is read again at the next ask", async () => {
-  const at = join(engineDataDir, "wt", "repo", "hare");
-  const worktree = await checkout("hare", at);
-  const config = join(at, "port-pool.config.json");
-  // A directory where the file goes: the read fails.
-  rmSync(config);
-  mkdirSync(config);
-  assert.equal(await Effect.runPromise(ports.portPoolActive(worktree)), false);
-  rmSync(config, { recursive: true });
-  writeFileSync(config, POOL_CONFIG);
-  assert.equal(
-    await Effect.runPromise(ports.portPoolActive(worktree)),
-    true,
-    "the failed read was kept as not configured",
+it("toggle: with port-pool off, whether it is active asks git nothing", async () => {
+  const root = join(repo, "..");
+  const quiet = join(root, "quiet");
+  mkdirSync(quiet);
+  git(quiet, "init", "-q", "-b", "main");
+  git(quiet, "commit", "-q", "--allow-empty", "-m", "a");
+  const project = await runHost(addProject(quiet));
+  const [primary] = await runHost(
+    Ops.listWorktreeIdentities({ projectId: project.id }),
   );
+  assert.ok(primary !== undefined);
+  // git on PATH as a stand-in that notes each run, then runs git.
+  const real = execFileSync("sh", ["-c", "command -v git"], {
+    encoding: "utf8",
+  }).trim();
+  const bin = join(root, "git-bin");
+  const asked = join(root, "git-asked");
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, "git"),
+    `#!/bin/sh\necho "$@" >> '${asked}'\nexec '${real}' "$@"\n`,
+  );
+  chmodSync(join(bin, "git"), 0o755);
+  const path = process.env["PATH"];
+  await runHost(Ops.patchGlobalConfig({ portPool: false }));
+  process.env["PATH"] = `${bin}${delimiter}${path ?? ""}`;
+  try {
+    assert.equal(
+      await active({ projectId: project.id, worktreeId: primary.id }),
+      false,
+    );
+  } finally {
+    process.env["PATH"] = path;
+    await runHost(Ops.patchGlobalConfig({ portPool: true }));
+  }
+  assert.equal(existsSync(asked), false, "git was asked");
 });
 
 it("merge: pool rows first in declared order, a custom row on a pool number is shadowed", async () => {
