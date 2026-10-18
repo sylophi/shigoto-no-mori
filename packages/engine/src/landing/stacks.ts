@@ -6,7 +6,8 @@ import * as Result from "effect/Result";
 import { elapsedMillis } from "../elapsed.ts";
 import { errorDocument } from "../errorDocument.ts";
 import * as GitHub from "../GitHub.ts";
-import type { MergeMethod, PullRequestSummary } from "../GitHub.ts";
+import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
+import type { PullRequestSummary } from "../GitHub.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 import {

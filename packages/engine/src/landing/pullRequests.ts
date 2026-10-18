@@ -5,11 +5,13 @@ import * as Result from "effect/Result";
 import * as Config from "../Config.ts";
 import { mergeProblem, mergeWaitingOn } from "../mergeProgress.ts";
 import * as GitHub from "../GitHub.ts";
-import type {
-  MergeMethod,
-  MergeSettings,
-  PullRequestSummary,
-} from "../GitHub.ts";
+import type { PullRequestSummary } from "../GitHub.ts";
+import {
+  autoMergeArms,
+  pickMergeMethod,
+  type MergeSettings,
+} from "@shigomori/contracts/mergeMethods";
+import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
 import * as Paths from "../Paths.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import {
@@ -21,7 +23,6 @@ import {
   type MergeOutcome,
   MergePollInterval,
   type Reporter,
-  autoMergeArms,
   projectScope,
 } from "./documents.ts";
 
@@ -69,8 +70,7 @@ export const makePullRequests = Effect.gen(function* () {
       const { settings } = Config.projectSettingsOf(
         yield* config.read(projectScope(project)),
       );
-      const last = settings?.["lastMergeMethod"];
-      return allowed.find((method) => method === last) ?? first;
+      return pickMergeMethod(allowed, settings?.["lastMergeMethod"]) ?? first;
     });
 
   // Best effort, as the app does it.

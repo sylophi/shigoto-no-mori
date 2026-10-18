@@ -21,7 +21,7 @@ import * as Bundle from "@shigomori/engine/Bundle";
 import * as Dirty from "@shigomori/engine/Dirty";
 import * as Doctor from "@shigomori/engine/Doctor";
 import { codeOf } from "@shigomori/engine/errorDocument";
-import type { MergeMethod } from "@shigomori/engine/GitHub";
+import type { MergeMethod } from "@shigomori/contracts/schemas";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Identity from "@shigomori/engine/Identity";
 import * as Landing from "@shigomori/engine/Landing";

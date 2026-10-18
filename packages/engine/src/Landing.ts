@@ -10,7 +10,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as GitHub from "./GitHub.ts";
-import type { MergeMethod } from "./GitHub.ts";
+import type { MergeMethod } from "@shigomori/contracts/schemas/pullRequest";
 import type { RegisteredProject } from "./Registry.ts";
 import * as Worktrees from "./Worktrees.ts";
 import { makePullRequests } from "./landing/pullRequests.ts";
