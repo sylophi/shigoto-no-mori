@@ -44,6 +44,7 @@ import * as Transfer from "../../src/Transfer.ts";
 import * as Usage from "../../src/Usage.ts";
 import { doctorLayer, migratingEngineLayer } from "../../src/layer.ts";
 import * as Migration from "../../src/Migration.ts";
+import * as Open from "../../src/Open.ts";
 import * as Paths from "../../src/Paths.ts";
 import * as Store from "../../src/Store.ts";
 import { openNode } from "./nodeStore.ts";
@@ -73,6 +74,7 @@ export type Engine =
   | Icons.Icons
   | Launchers.Launchers
   | Layout.Layout
+  | Open.Open
   | Projects.Projects
   | Registry.Registry
   | Scripts.Scripts

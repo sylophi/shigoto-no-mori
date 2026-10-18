@@ -20,7 +20,7 @@ import {
   identity,
   stderrOf,
 } from "./documents.ts";
-import { readAll, readAllBytes } from "../processes.ts";
+import { readAll, readAllBytes, readToExit } from "../processes.ts";
 
 // A transfer that stalls (a connection left half open by a sleep or a
 // network that changed) ends rather than waiting for good: http's own
@@ -142,23 +142,32 @@ export const makeRunning = Effect.gen(function* () {
               ),
             )
             .pipe(Effect.mapError(failed(null)));
-          const [stdout, stderr] = yield* Effect.all(
-            [
-              read(
-                handle.stdout.pipe(Stream.mapError(failed(null))),
-                limit,
-                tooLarge,
-              ),
-              readAll(
-                handle.stderr.pipe(Stream.mapError(failed(null))),
-                DEFAULT_MAX_OUTPUT,
-                { decoder },
-              ),
-            ],
-            { concurrency: 2 },
-          );
-          const code = yield* handle.exitCode.pipe(
-            Effect.mapError(failed(null)),
+          // Its exit ends its process group: git hands a hook its pipes,
+          // and what a hook leaves running would hold them open.
+          const {
+            read: [stdout, stderr],
+            code,
+          } = yield* readToExit(
+            handle,
+            Effect.all(
+              [
+                read(
+                  handle.stdout.pipe(Stream.mapError(failed(null))),
+                  limit,
+                  tooLarge,
+                ),
+                readAll(
+                  handle.stderr.pipe(Stream.mapError(failed(null))),
+                  DEFAULT_MAX_OUTPUT,
+                  { decoder },
+                ),
+              ],
+              { concurrency: 2 },
+            ),
+          ).pipe(
+            Effect.catchTag("PlatformError", (cause) =>
+              Effect.fail(failed(null)(cause)),
+            ),
           );
           if (
             code !== 0 &&

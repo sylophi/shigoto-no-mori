@@ -489,7 +489,7 @@ describe("commits the pull request never had", () => {
     assert.equal(doc["code"], "unpushed-commits", JSON.stringify(doc));
     assert.match(
       String(doc["error"]),
-      /^Branch fox has a commit PR #5 doesn't have, which landing would delete: [0-9a-f]+ late\. /,
+      /^Branch fox has a commit its merged PR #5 never had, which removing it would delete: [0-9a-f]+ late\. Push them to a new PR/,
     );
     assert.deepEqual(gh.merges(), ["pr merge 5 --auto --squash"]);
     assert.equal(await foxSurvives(located), true);

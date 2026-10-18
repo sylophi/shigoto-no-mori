@@ -47,6 +47,16 @@ const run = (command: string) =>
     ),
   );
 
+// Signal 0 only asks whether the process is there.
+const processAlive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const output = (events: ReadonlyArray<Lifecycle.LifecycleEvent>) =>
   events
     .flatMap((event) =>
@@ -75,5 +85,45 @@ it("leaves what the script started in the background running", async () => {
     assert.doesNotThrow(() => process.kill(pid, 0));
   } finally {
     process.kill(pid, "SIGKILL");
+  }
+});
+
+it("ends at the shell's exit while a child it left holds the output, which keeps running and writing", async () => {
+  // Without redirections: the child holds the run's pipes, writing to
+  // them, as a dev server started from a setup script does.
+  const answered = await Effect.runPromise(
+    Effect.gen(function* () {
+      const lifecycle = yield* Lifecycle.Lifecycle;
+      const events: Lifecycle.LifecycleEvent[] = [];
+      const answer = yield* lifecycle.run({
+        command:
+          // A hundred ticks, so a run that fails still leaves nothing.
+          "(for i in $(seq 100); do echo tick; sleep 0.05; done) & echo $!; echo ready",
+        slot: { kind: "setup" },
+        context,
+        color: false,
+        report: (event) => Effect.sync(() => void events.push(event)),
+      });
+      const pid = Number(output(events).split("\n")[0]);
+      // Past the pipe's buffer's worth of ticks, it still runs: the
+      // service reads on, so it never blocks or meets a closed pipe.
+      yield* Effect.sleep("1500 millis");
+      const alive = processAlive(pid);
+      return { events, answer, pid, alive };
+    }).pipe(
+      Effect.provide(Lifecycle.layer.pipe(Layer.provide(NodeServices.layer))),
+      Effect.timeout("10 seconds"),
+    ),
+  );
+  try {
+    assert.equal(answered.answer.code, 0);
+    assert.equal(answered.alive, true);
+    const kinds = answered.events.map((event) =>
+      event.event === "script" ? event.kind : event.event,
+    );
+    assert.equal(kinds.at(-1), "exit");
+    assert.match(output(answered.events), /^\d+\n(tick\n)*ready\n/);
+  } finally {
+    process.kill(answered.pid, "SIGKILL");
   }
 });

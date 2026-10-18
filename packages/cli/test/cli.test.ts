@@ -2308,7 +2308,7 @@ esac`,
     assert.equal(landed.code, 1, landed.stderr);
     assert.match(
       landed.stderr,
-      /Branch fox has a commit PR #5 doesn't have, which landing would delete: [0-9a-f]+ late\./,
+      /Branch fox has a commit its merged PR #5 never had, which removing it would delete: [0-9a-f]+ late\./,
     );
     assert.ok(existsSync(fox), "the worktree stays");
   });

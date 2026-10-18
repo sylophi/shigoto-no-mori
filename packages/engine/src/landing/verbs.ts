@@ -352,13 +352,14 @@ export const makeVerbs = ({
             yield* worktrees.checkRemovable(located, options.force);
           }
           if (guarded) {
+            // Refused in a removal's words: the PRs merged.
             yield* guardCommits(
               project.path,
               branch,
               pr.number,
               yield* github.headOf(project.path, pr.number),
               remote,
-              "land",
+              "rm",
             );
           }
           plan = yield* planCleanup;
@@ -413,13 +414,14 @@ export const makeVerbs = ({
           yield* worktrees.checkRemovable(located, options.force);
         }
         if (guarded) {
+          // Refused in a removal's words: the PR merged.
           yield* guardCommits(
             project.path,
             branch,
             pr.number,
             yield* github.headOf(project.path, pr.number),
             remote,
-            "land",
+            "rm",
           );
         }
         method = outcome.method;
