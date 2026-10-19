@@ -13,6 +13,7 @@ import type {
 import type { Handlers } from "@shigomori/contracts/types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as Semaphore from "effect/Semaphore";
 import { joinInFlight } from "@shared/inFlight";
 import type { AccountStore, StoredAccount } from "./credentialStore";
 import {
@@ -54,8 +55,16 @@ export type AccountShell = {
   // Whether peers' commands are taken here, and its switch.
   readonly acceptsCommands: () => boolean;
   readonly setAcceptsCommands: (enabled: boolean) => void;
-  // Ahead of a sign-out's revoke (the desktop's switch, off at once).
+  // Ahead of a sign-out's revoke (the desktop's switch, off at once,
+  // before the sign-out waits its turn).
   readonly beforeSignOut?: (record: StoredAccount) => void;
+  // The account's changes, one at a time and each whole, its
+  // publication included: a sign-out that comes while an enrollment
+  // waits on the hub follows it and removes what it stored, where the
+  // two ran side by side and the enrollment's late write signed the
+  // device back in. The shell's own, so its other sign-outs (a nuke's)
+  // take their turn too.
+  readonly transitions: Semaphore.Semaphore;
   readonly onRevokeFailure?: (error: unknown) => void;
 };
 
@@ -91,14 +100,19 @@ export function makeAccountHandlers(
     };
   };
 
-  // Runs a change to the account and tells the shell, under the account
-  // it was before.
-  const changing = async <A>(change: () => Promise<A>): Promise<A> => {
-    const before = accountIdOf();
-    const result = await change();
-    await shell.changed({ before, after: accountIdOf() });
-    return result;
-  };
+  // A change to the account, in its turn (shell.transitions).
+  const inTurn = <A>(change: () => Promise<A>): Promise<A> =>
+    Effect.runPromise(shell.transitions.withPermit(Effect.promise(change)));
+
+  // Runs a change to the account in its turn and tells the shell, under
+  // the account it was before.
+  const changing = <A>(change: () => Promise<A>): Promise<A> =>
+    inTurn(async () => {
+      const before = accountIdOf();
+      const result = await change();
+      await shell.changed({ before, after: accountIdOf() });
+      return result;
+    });
 
   // The calls a signed-in device makes on its account's behalf.
   const signedIn = () => {
@@ -208,10 +222,12 @@ export function makeAccountHandlers(
         detectedIcon: await shell.detectedIcon(),
       };
       // A peer's rename of this device, taken from the listing.
-      if (syncHubDevice(device, account.record, devices)) {
-        const accountId = account.record.accountId;
-        await shell.changed({ before: accountId, after: accountId });
-      }
+      await inTurn(async () => {
+        if (syncHubDevice(device, account.record, devices)) {
+          const accountId = account.record.accountId;
+          await shell.changed({ before: accountId, after: accountId });
+        }
+      });
       shell.devicesListed(devices);
       return devices;
     },

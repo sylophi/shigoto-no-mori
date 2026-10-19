@@ -112,7 +112,11 @@ type EnrollFields = {
 };
 
 export type AccountService = {
-  enroll(sessionToken: string, fields: EnrollFields): Promise<EnrollResponse>;
+  enroll(
+    sessionToken: string,
+    fields: EnrollFields,
+    signal?: AbortSignal,
+  ): Promise<EnrollResponse>;
   listDevices(credential: string, signal?: AbortSignal): Promise<DeviceInfo[]>;
   revoke(
     credential: string,
@@ -189,12 +193,14 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     });
 
   return {
-    async enroll(sessionToken, fields) {
+    async enroll(sessionToken, fields, signal) {
       // The device as the hub stored it, mapped to this build's icon
       // catalog.
       return Schema.decodeSync(EnrollResponseSchema)(
-        await call(sessionToken, (client) =>
-          client.enroll({ payload: fields }),
+        await call(
+          sessionToken,
+          (client) => client.enroll({ payload: fields }),
+          signal,
         ),
       );
     },

@@ -22,6 +22,7 @@
 // Run: pnpm test account.
 import { callOf } from "@shigomori/contracts/contract";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -720,6 +721,7 @@ it("handlers: both shells' calls show a signed-out device's remembered name, ask
     platform: "darwin",
     sharedSignIn: () => false,
     changed: (change) => void changes.push(change),
+    transitions: Semaphore.makeUnsafe(1),
     devicesListed: () => {},
     acceptsCommands: () => false,
     setAcceptsCommands: () => {},
@@ -749,6 +751,109 @@ it("handlers: both shells' calls show a signed-out device's remembered name, ask
     departed({ before: "a", after: "a" }),
     false,
     "a rename dropped",
+  );
+});
+
+// A device signed in to user_abc with control on, re-enrolling under a
+// hub that holds the enrollment's answer until `release`, through the
+// handlers with the desktop's switch rules: off at once ahead of a
+// sign-out, kept on the record.
+const reEnrolling = () => {
+  const store = memoryStore();
+  store.write({
+    credential: "cred-old",
+    deviceKey: "device-key",
+    accountId: "user_abc",
+    deviceName: "d",
+    acceptsCommands: true,
+  });
+  const held: { release?: () => void } = {};
+  const answered = new Promise<void>((resolve) => {
+    held.release = resolve;
+  });
+  const release = () => held.release?.();
+  let enrollsAsked = 0;
+  const { service, calls } = stubService(async (_url, init) => {
+    if (init.method === "DELETE") return new Response(null, { status: 204 });
+    enrollsAsked += 1;
+    await answered;
+    return json({ credential: "cred-new", device: DEVICE });
+  }, CONFIG.hubUrl);
+  const changes: { before: string | null; after: string | null }[] = [];
+  const handlers = makeAccountHandlers({
+    config: () => CONFIG,
+    store: () => store,
+    service: () => service,
+    deviceId: async () => "device-uuid",
+    defaultName: async () => ({ name: "d", provisional: false }),
+    detectedIcon: async () => "laptop",
+    platform: "darwin",
+    sharedSignIn: () => false,
+    changed: (change) => void changes.push(change),
+    transitions: Semaphore.makeUnsafe(1),
+    devicesListed: () => {},
+    acceptsCommands: () => store.read()?.acceptsCommands === true,
+    setAcceptsCommands: (enabled) => {
+      const record = readRecord(store);
+      store.write({ ...record, acceptsCommands: enabled });
+    },
+    beforeSignOut: (record) => {
+      store.write({ ...record, acceptsCommands: false });
+    },
+  });
+  const enroll = handlers.enroll as (token: string) => Promise<AccountStatus>;
+  const enrolling = enroll(fakeSessionJwt("user_abc"));
+  return {
+    store,
+    calls,
+    changes,
+    handlers,
+    enrolling,
+    release,
+    asked: () => vi.waitFor(() => assert.equal(enrollsAsked, 1)),
+  };
+};
+
+it("handlers: a sign-out while an enrollment waits on the hub takes its turn after it, so the device ends signed out with control off and the credential it stored revoked", async () => {
+  const held = reEnrolling();
+  await held.asked();
+  const signOut = held.handlers.signOut as () => Promise<void>;
+  let signedOut = false;
+  const signingOut = signOut().then(() => {
+    signedOut = true;
+  });
+  // Control goes off at once, ahead of the turn.
+  await vi.waitFor(() =>
+    assert.equal(held.store.read()?.acceptsCommands, undefined),
+  );
+  assert.equal(signedOut, false, "the sign-out ran beside the enrollment");
+  held.release();
+  await held.enrolling;
+  await signingOut;
+  assert.equal(held.store.read(), null, "the enrollment signed back in");
+  const revoke = held.calls.find((call) => call.init.method === "DELETE");
+  assert.equal(
+    revoke?.init.headers["authorization"],
+    "Bearer cred-new",
+    "the revoke was of the credential the enrollment replaced",
+  );
+  assert.deepEqual(held.changes.at(-1), { before: "user_abc", after: null });
+});
+
+it("handlers: control turned off while a re-enrollment waits on the hub stays off once it is stored", async () => {
+  const held = reEnrolling();
+  await held.asked();
+  const setAcceptsCommands = held.handlers.setAcceptsCommands as (
+    enabled: boolean,
+  ) => void;
+  setAcceptsCommands(false);
+  held.release();
+  await held.enrolling;
+  assert.equal(readRecord(held.store).credential, "cred-new");
+  assert.equal(
+    readRecord(held.store).acceptsCommands,
+    undefined,
+    "the enrollment wrote back the switch from before it asked",
   );
 });
 

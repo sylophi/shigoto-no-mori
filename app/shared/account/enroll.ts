@@ -55,6 +55,11 @@ export function effectiveDeviceIcon(
   return record?.deviceIcon ?? store.rememberedDeviceIcon() ?? detectedIcon;
 }
 
+// How long an enrollment waits on the hub. The account's other changes
+// (a sign-out above all) wait behind it (AccountShell.transitions), so
+// a hub that takes the enroll and never answers must not hold them.
+const ENROLL_TIMEOUT_MS = 30_000;
+
 // Exchanges a fresh Clerk session token (minted by the renderer's
 // ClerkAccountSync off the live session) for the hub device
 // credential, registering a fresh key pair's public half with it, and
@@ -67,8 +72,8 @@ export async function enrollDevice(
     throw new Error("the device hub is not configured on this build");
   }
   // A record from before device keys counts as the one this enrollment
-  // replaces: the same device, keeping its name, its pick and its
-  // command-access switch.
+  // replaces: the same device, keeping its name, its pick and (read
+  // when the enrollment is stored) its command-access switch.
   const stored = deps.store.read() ?? deps.store.readWithoutKey();
   const deviceName =
     stored?.deviceName ??
@@ -86,7 +91,11 @@ export async function enrollDevice(
   };
   let enrollment: EnrollResponse;
   try {
-    enrollment = await deps.service.enroll(token, fields);
+    enrollment = await deps.service.enroll(
+      token,
+      fields,
+      AbortSignal.timeout(ENROLL_TIMEOUT_MS),
+    );
   } catch (error) {
     // The hub still lists this device under another account, from a
     // sign-out whose revoke never reached it: deliver that revoke and
@@ -100,9 +109,16 @@ export async function enrollDevice(
     const parked = await retryParkedRevoke(deps);
     if (parked.kind === "failed") throw parked.error;
     if (parked.kind === "none") throw error;
-    enrollment = await deps.service.enroll(token, fields);
+    enrollment = await deps.service.enroll(
+      token,
+      fields,
+      AbortSignal.timeout(ENROLL_TIMEOUT_MS),
+    );
   }
   const accountId = deriveAccountId(token);
+  // The switch as it is now, not as it was before the hub answered: an
+  // off set while the enrollment waited stays off.
+  const current = deps.store.read() ?? deps.store.readWithoutKey();
   deps.store.write({
     credential: enrollment.credential,
     deviceKey: deviceKey.privateKey,
@@ -113,7 +129,7 @@ export async function enrollDevice(
     hubIcon: fields.icon,
     // A re-enrollment under the same account keeps the command-access
     // switch. Another account starts with it off.
-    ...(stored?.accountId === accountId && stored.acceptsCommands === true
+    ...(current?.accountId === accountId && current.acceptsCommands === true
       ? { acceptsCommands: true }
       : {}),
   });
