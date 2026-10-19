@@ -98,6 +98,9 @@ export type StubHub = {
   injectTo(deviceId: string, envelopeOrText: ServerEnvelope | string): void;
   pingsFrom(deviceId: string): number;
   setAnswerPings(value: boolean): void;
+  // Answers every upgrade with the Worker's 429 and this Retry-After,
+  // as its 60 opens a minute does; null accepts them again.
+  rateLimitConnects(retryAfterSeconds: number | null): void;
   dropSocket(deviceId: string, code?: number, reason?: string): void;
   close(): Promise<void>;
 };
@@ -112,7 +115,17 @@ export function startStubHub(
     testDeviceKey(deviceId).publicKey,
 ): Promise<StubHub> {
   return new Promise((resolve) => {
-    const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    let limited: number | null = null;
+    const wss = new WebSocketServer({
+      host: "127.0.0.1",
+      port: 0,
+      verifyClient: (_info, accept) =>
+        limited === null
+          ? accept(true)
+          : accept(false, 429, "Too Many Requests", {
+              "retry-after": String(limited),
+            }),
+    });
     // Each device's sockets by connection id.
     const sockets = new Map<string, Map<string, WebSocket>>();
     const socketsOf = (deviceId: string) => [
@@ -243,6 +256,9 @@ export function startStubHub(
         // The liveness seams: how many pings a device sent, and whether
         // the stub answers them (off plays a silently dead hub).
         pingsFrom: (deviceId) => pings.get(deviceId) ?? 0,
+        rateLimitConnects(retryAfterSeconds) {
+          limited = retryAfterSeconds;
+        },
         setAnswerPings(value) {
           answerPings = value;
         },

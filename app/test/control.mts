@@ -133,7 +133,10 @@ import { sessionContract } from "@shigomori/contracts/modules/session";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
-import { LinkUnauthenticatedError } from "@shigomori/contracts/errors";
+import {
+  HubRateLimitedError,
+  LinkUnauthenticatedError,
+} from "@shigomori/contracts/errors";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { LoopbackGroup } from "@shigomori/contracts/link";
 import * as Context from "effect/Context";
@@ -1441,7 +1444,7 @@ it("a peer with no session is reported offline", async () => {
   );
 });
 
-it("the hub out of reach says so with its cause, and a revoked credential reads as signed out", async () => {
+it("the hub out of reach says so with its cause, a revoked credential reads as signed out, and the hub's rate limit as one", async () => {
   // ---- (8b) The account's hub unreachable, as in a network outage.
   registryFails = new TypeError("fetch failed");
   try {
@@ -1457,6 +1460,15 @@ it("the hub out of reach says so with its cause, and a revoked credential reads 
     }
     registryFails = new HubDeviceRevokedError();
     await refused(["devices"], "signed-out", /removed/);
+    // The hub's rate limit is said as one, with when to try again, and
+    // not as the network.
+    registryFails = new HubRateLimitedError({ retryAfterSeconds: 60 });
+    const limited = await refused(
+      ["devices"],
+      "rate-limited",
+      /^Your account's hub is rate-limiting this device\. Try again in 60 s\.$/,
+    );
+    assert.doesNotMatch(limited.error, /network/);
   } finally {
     registryFails = null;
   }

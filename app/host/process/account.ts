@@ -74,9 +74,14 @@ export function provisionDeviceTunnel(
   );
 }
 
-// The account's device registry, for the terminal's cross-device verbs.
+// The account's device registry, for the terminal's cross-device verbs,
+// which wait on it: a hub that takes the call and never answers ends in
+// the account out of reach, as one that can't be reached does.
 export async function listAccountDevices(): Promise<DeviceInfo[]> {
   if (account().facts === null) return [];
   const current = signedIn();
-  return current.service.listDevices(current.facts.credential);
+  return current.service.listDevices(
+    current.facts.credential,
+    AbortSignal.timeout(15_000),
+  );
 }

@@ -11,6 +11,7 @@
 import {
   CommandRefusedError,
   errorMessageOf,
+  isHubRateLimitedError,
   isProtocolVersionMismatchError,
   LinkRefusedError,
   RemoteCallError,
@@ -89,6 +90,22 @@ class ConnectionLost extends Schema.TaggedError<ConnectionLost>()(
   }
 }
 
+// The account's hub turned the app's read of it away for a while.
+class HubRateLimited extends Schema.TaggedError<HubRateLimited>()(
+  "HubRateLimited",
+  { retryAfterSeconds: Schema.optional(Schema.Number) },
+) {
+  override get message(): string {
+    return this.retryAfterSeconds === undefined
+      ? "Your account's hub is rate-limiting this device. Try again shortly."
+      : `Your account's hub is rate-limiting this device. Try again in ${this.retryAfterSeconds} s.`;
+  }
+
+  get documentCode(): string {
+    return "rate-limited";
+  }
+}
+
 // The app turned the call down, in its own words and with its code.
 class ControlRefused extends Schema.TaggedError<ControlRefused>()(
   "ControlRefused",
@@ -111,6 +128,7 @@ export type ControlError =
   | AppNotRunning
   | AppBusy
   | ConnectionLost
+  | HubRateLimited
   | ControlRefused;
 
 export class Control extends Context.Service<
@@ -266,9 +284,17 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
       error instanceof AppNotRunning ||
       error instanceof AppBusy ||
       error instanceof ConnectionLost ||
+      error instanceof HubRateLimited ||
       error instanceof ControlRefused
     ) {
       return error;
+    }
+    if (isHubRateLimitedError(error)) {
+      return new HubRateLimited(
+        error.retryAfterSeconds === undefined
+          ? {}
+          : { retryAfterSeconds: error.retryAfterSeconds },
+      );
     }
     if (error instanceof RemoteCallError) {
       return new ControlRefused({

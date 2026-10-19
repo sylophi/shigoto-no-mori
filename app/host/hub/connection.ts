@@ -70,6 +70,18 @@ function openWsSocket(url: string): Shared.HubSocketAdapter {
     onClose(handler) {
       socket.on("close", (code) => handler(code));
     },
+    onRefused(handler) {
+      // Heard, ws leaves the handshake to its listener: cut here, which
+      // closes the socket as an unanswered upgrade does.
+      socket.on("unexpected-response", (_request, response) => {
+        const seconds = Number(response.headers["retry-after"]);
+        handler(
+          response.statusCode ?? 0,
+          Number.isFinite(seconds) && seconds > 0 ? seconds : undefined,
+        );
+        socket.terminate();
+      });
+    },
   };
 }
 

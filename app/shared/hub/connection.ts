@@ -13,7 +13,10 @@
 // host-boundary): everything platform specific lives in the injected
 // adapter, and everything account flavored (deviceId, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts.
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import {
+  errorMessageOf,
+  HubRateLimitedError,
+} from "@shigomori/contracts/errors";
 import {
   HELLO_TIMEOUT_MS,
   PING_INTERVAL_MS,
@@ -111,6 +114,13 @@ export type HubSocketAdapter = {
   // events carry no useful detail and are always followed by close, so
   // the adapter swallows them and this is the one teardown signal.
   onClose(handler: (code: number) => void): void;
+  // Delivers the status the hub answered the upgrade with instead of
+  // accepting it, and its Retry-After, ahead of the close. Only where
+  // the platform shows it (node ws): a browser's socket reports a
+  // refused upgrade as a bare close.
+  onRefused?(
+    handler: (status: number, retryAfterSeconds: number | undefined) => void,
+  ): void;
 };
 
 export type HubConnectionDeps = {
@@ -375,6 +385,16 @@ export const make = (
           },
         });
 
+        // The hub's rate limit on the upgrade itself (its 60 opens a
+        // minute), which the supervisor waits out before dialing again.
+        let rateLimited: HubRateLimitedError | undefined;
+        socket.onRefused?.((status, retryAfterSeconds) => {
+          if (status !== 429) return;
+          rateLimited = new HubRateLimitedError(
+            retryAfterSeconds === undefined ? {} : { retryAfterSeconds },
+          );
+        });
+
         // Inbound frames so far: a probe is answered by any frame after
         // its own ping, whatever the clocks did meanwhile.
         let framesSeen = 0;
@@ -412,11 +432,18 @@ export const make = (
             Deferred.doneUnsafe(
               accepted,
               Exit.fail(
-                new RemoteConnectError(
-                  `hub closed before accept (code ${code})`,
-                  code,
-                  hubCloseClassifier(code) !== null,
-                ),
+                rateLimited === undefined
+                  ? new RemoteConnectError(
+                      `hub closed before accept (code ${code})`,
+                      code,
+                      hubCloseClassifier(code) !== null,
+                    )
+                  : new RemoteConnectError(
+                      rateLimited.message,
+                      code,
+                      false,
+                      rateLimited,
+                    ),
               ),
             );
           } else if (!ownerClosed) {
