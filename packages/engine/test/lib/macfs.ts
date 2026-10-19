@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
+import { isolatedGitEnv } from "../../../../gitIsolation.ts";
 
 const dir = join(import.meta.dirname, "..", "..", "..", "..", "macfs");
 let built: string | undefined;
@@ -44,14 +44,7 @@ export function macfs(): string {
     const partial = `${binary}.${process.pid}`;
     execFileSync("go", ["build", "-buildvcs=false", "-o", partial, "."], {
       cwd: dir,
-      env: {
-        ...Object.fromEntries(
-          Object.entries(process.env).filter(
-            ([key]) => !isOutsideGitVariable(key),
-          ),
-        ),
-        LC_ALL: "C",
-      },
+      env: { ...isolatedGitEnv(), LC_ALL: "C" },
       stdio: ["ignore", "ignore", "inherit"],
     });
     renameSync(partial, binary);

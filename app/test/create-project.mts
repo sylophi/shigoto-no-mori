@@ -21,19 +21,14 @@ import {
   scrubProcessGitEnv,
   tempDir,
 } from "./lib/checkKit.mts";
+import { GIT_IDENTITY } from "../../gitIsolation.ts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // createRepository runs git under this process's environment: the hook's
 // GIT_* variables go (clone.mts says why), and an identity stands in
 // for the user's config, which the scrub cuts off.
-const IDENTITY = {
-  GIT_AUTHOR_NAME: "sm",
-  GIT_AUTHOR_EMAIL: "sm@example.test",
-  GIT_COMMITTER_NAME: "sm",
-  GIT_COMMITTER_EMAIL: "sm@example.test",
-};
 const gitEnv = scrubbedGitEnv();
-scrubProcessGitEnv(IDENTITY);
+scrubProcessGitEnv(GIT_IDENTITY);
 
 const { createRepo } = promised({
   createRepo: (parentDir: string, name: string) =>
@@ -117,7 +112,7 @@ it("a folder already there, or a parent that isn't, is left alone", async () => 
 
 it("a commit git refuses (no identity) leaves no folder behind", async () => {
   const parent = tempDir("sm-create-", trackTest);
-  for (const key of Object.keys(IDENTITY)) delete process.env[key];
+  for (const key of Object.keys(GIT_IDENTITY)) delete process.env[key];
   try {
     // Without this, git guesses an identity from the machine's
     // user and host names, and on most machines that works.
@@ -125,7 +120,7 @@ it("a commit git refuses (no identity) leaves no folder behind", async () => {
       await assert.rejects(createRepo(parent, "fresh"));
     });
   } finally {
-    Object.assign(process.env, IDENTITY);
+    Object.assign(process.env, GIT_IDENTITY);
   }
   assert.ok(!existsSync(join(parent, "fresh")));
 });

@@ -24,18 +24,14 @@ import {
   scrubProcessGitEnv,
   tempDir,
 } from "./lib/checkKit.mts";
+import { GIT_IDENTITY } from "../../gitIsolation.ts";
 import { it } from "vitest";
 import type { IntegrateMethod } from "@shigomori/contracts/schemas";
 import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
-scrubProcessGitEnv({
-  GIT_AUTHOR_NAME: "sm",
-  GIT_AUTHOR_EMAIL: "sm@example.test",
-  GIT_COMMITTER_NAME: "sm",
-  GIT_COMMITTER_EMAIL: "sm@example.test",
-});
+scrubProcessGitEnv(GIT_IDENTITY);
 
 const mergeBranch = (
   worktree: string,

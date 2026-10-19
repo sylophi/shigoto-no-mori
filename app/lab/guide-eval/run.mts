@@ -22,7 +22,12 @@ import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import type { Page } from "playwright-core";
 import { DevApp } from "../reliability/devApp.mts";
 import { pageApi, withPageApi } from "../reliability/pageApi.mts";
+import { isolateGit } from "../../../gitIsolation.ts";
 import { appDir, git, repoDir, sleep, waitFor } from "../reliability/util.mts";
+
+// The fixture repository's git, the app's and the agents' off this
+// repository and this machine's config (../../../gitIsolation.ts).
+isolateGit();
 
 type Harness = "claude" | "codex";
 

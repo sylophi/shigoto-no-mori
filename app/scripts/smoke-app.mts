@@ -56,6 +56,7 @@ import type { AddressInfo } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { isolateGit } from "../../gitIsolation.ts";
 import { ownTestTemp } from "../../testTemp.mts";
 
 const OPEN_WITHIN_MS = 60_000;
@@ -87,8 +88,10 @@ if (
 }
 const bundle: string = argument;
 // The launches' temp files, the app's own with them, in a folder of
-// this run's (../../testTemp.mts).
+// this run's (../../testTemp.mts), and their git kept off this
+// repository and this machine's config (../../gitIsolation.ts).
 ownTestTemp("smoke");
+isolateGit();
 const appName = basename(bundle, ".app");
 const executableIn = (app: string) => join(app, "Contents", "MacOS", appName);
 const logs = join(homedir(), "Library", "Logs", appName);

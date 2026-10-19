@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { isolatedGitEnv } from "../../../../gitIsolation.ts";
 import { type Lab, WALK_AUTHOR } from "./labApp.mts";
 
 const FIXTURES = join(import.meta.dirname, "..", "fixtures");
@@ -30,9 +31,7 @@ export function seedDemo(reposDir: string, git: Lab["git"]): string {
     execFileSync("git", ["commit", "-q", "-m", subject], {
       cwd: repo,
       env: {
-        PATH: process.env["PATH"],
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_CONFIG_NOSYSTEM: "1",
+        ...isolatedGitEnv(),
         GIT_AUTHOR_NAME: WALK_AUTHOR.name,
         GIT_AUTHOR_EMAIL: WALK_AUTHOR.email,
         GIT_COMMITTER_NAME: WALK_AUTHOR.name,

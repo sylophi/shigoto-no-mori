@@ -1,7 +1,8 @@
 // What every test runner here applies to its own process before a test
-// starts (the vitest configs, the app's proof runner, and the Go suites
-// through testTemp.mts), so no test's git can reach this repository
-// however it runs git.
+// starts (the vitest configs, the app's proof runner, the Go suites
+// through testTemp.mts, the smoke, the scene comparison, the
+// reliability harness and the guide's evaluation), so no test's git
+// can reach this repository however it runs git.
 //
 // The pre-commit hook exports GIT_DIR and GIT_INDEX_FILE for the
 // repository being committed. A test that inherited them ran its
@@ -44,6 +45,23 @@ export function isolateGit(env: NodeJS.ProcessEnv = process.env): void {
   env.GIT_CEILING_DIRECTORIES = repositoryRoot;
   Object.assign(env, ISOLATING);
 }
+
+// `env` isolated, as a copy, for a git given an environment of its own.
+export function isolatedGitEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const copy = { ...env };
+  isolateGit(copy);
+  return copy;
+}
+
+// The identity a fixture's commits are made as, with no config to name one.
+export const GIT_IDENTITY = {
+  GIT_AUTHOR_NAME: "sm",
+  GIT_AUTHOR_EMAIL: "sm@example.test",
+  GIT_COMMITTER_NAME: "sm",
+  GIT_COMMITTER_EMAIL: "sm@example.test",
+} as const;
 
 // Fails unless this process is isolated: a GIT_* variable from outside
 // is left, or a git started in `dir` finds the repository.

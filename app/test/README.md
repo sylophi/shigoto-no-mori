@@ -67,8 +67,8 @@ variable is removed, so the pre-commit hook's `GIT_DIR` and
 a git started in a folder inside the repository from finding it.
 `git-isolation` fails if either gets through. A proof still builds its
 repositories under the temp dir and runs git there, through
-`sandboxGit` or `scrubProcessGitEnv` (`lib/checkKit.mts`), which also
-cut off the global and system git config.
+`sandboxGit` or `scrubProcessGitEnv` (`lib/checkKit.mts`), which apply
+the same isolation (`../../gitIsolation.ts`) with a fixture's identity.
 
 Every run's temp files go in a folder of the run's own,
 `$TMPDIR/sm-test/<family>/<id>/`: the runner and each vitest config
