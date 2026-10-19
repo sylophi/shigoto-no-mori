@@ -81,12 +81,6 @@ const onProgress = Effect.map(
           : note(styles(stderrColor).dim(`  ${line}`)),
 );
 
-// What a source whose fate was carried out became.
-const FATE_DONE: Readonly<Record<string, string>> = {
-  shelve: "shelved",
-  teardown: "removed",
-};
-
 // A finished transfer: the story on stderr and the copy's path alone on
 // stdout, as create's, so `cd "$(sm bring <name>)"` works. A copy on the
 // other device has no path here, so it is part of the story. It exits 3
@@ -108,7 +102,7 @@ const report = ({ document, headline, result }: Transfer.Transferred) =>
       }
       const source = result.source;
       if (source !== undefined && source.done && source.fate !== "keep") {
-        yield* note(dim(`  source ${FATE_DONE[source.fate] ?? ""}`));
+        yield* note(dim(`  source ${Transfer.sourceFateDone(source.fate)}`));
       }
       for (const caveat of document.caveats) {
         yield* note(yellow(`! ${caveat}`));

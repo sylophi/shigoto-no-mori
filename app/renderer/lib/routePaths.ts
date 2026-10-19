@@ -1,3 +1,5 @@
+import { WORKTREE_PAGE_PATH } from "@shigomori/contracts/worktreePage";
+
 // The device pages' route paths, spelled once. Every worktree and
 // project page lives under /devices/$deviceId, this machine's included
 // (the route's scope resolves its id to the page's api, see
@@ -11,7 +13,7 @@
 // infer a route's params from the path's literal type, so these must
 // never widen to string.
 export const WORKTREE_ROUTE_PATHS = {
-  detail: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId",
+  detail: WORKTREE_PAGE_PATH,
   diff: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/diff",
   prDiff:
     "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/pr-diff",
