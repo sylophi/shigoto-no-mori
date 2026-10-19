@@ -26,6 +26,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -446,6 +447,15 @@ it("a peer's data-folder move is refused over a busy terminal", async () => {
   } finally {
     await terminals((service) => service.close(terminalId));
   }
+  // What was typed is in the run's history, not the developer's
+  // (hostRuntime.mts's ZDOTDIR).
+  const history = join(process.env["ZDOTDIR"] ?? "", ".zsh_history");
+  await waitFor(
+    () =>
+      existsSync(history) &&
+      readFileSync(history, "utf8").includes("job.running"),
+    "the shell's history in the run",
+  );
 });
 
 it("a tombstone interrupted or dead leaves no mark behind", async () => {

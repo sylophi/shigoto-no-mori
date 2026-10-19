@@ -3,10 +3,17 @@
 // instead of waiting for a graph that never comes (EFFECT.md, runtime
 // boundaries). Every proof's file starts and disposes it (hostSetup.mts);
 // a bench under plain node disposes it itself.
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { shellQuote as quoted } from "@shigomori/contracts/lifecycleScripts";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -57,6 +64,24 @@ process.env.SHIGOMORI_DATA_DIR = engineDataDir;
 // developer's own. A proof that installs a fake gh before then points it
 // at its own.
 process.env.GH_CONFIG_DIR = join(engineDataDir, "..", "gh-config");
+// The shells the host opens keep their history in the run, not in the
+// developer's ~/.zsh_history, which a terminal a proof types into would
+// add to: macOS's /etc/zshrc sets HISTFILE from ZDOTDIR, so this ZDOTDIR
+// has startup files that read the developer's own, then name the run's.
+const userZdotdir = process.env.ZDOTDIR ?? homedir();
+const zdotdir = join(engineDataDir, "..", "zdotdir");
+mkdirSync(zdotdir, { recursive: true });
+for (const file of [".zshenv", ".zprofile", ".zshrc", ".zlogin"]) {
+  const own = join(userZdotdir, file);
+  writeFileSync(
+    join(zdotdir, file),
+    `[ -f ${quoted(own)} ] && . ${quoted(own)}\n` +
+      (file === ".zshrc"
+        ? `HISTFILE=${quoted(join(zdotdir, ".zsh_history"))}\n`
+        : ""),
+  );
+}
+process.env.ZDOTDIR = zdotdir;
 const engine = Engine.layer({
   flavor: "dev",
   macfs: macfs(),
