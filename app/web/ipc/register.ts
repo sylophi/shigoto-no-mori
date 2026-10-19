@@ -13,6 +13,7 @@
 // browser global read at module scope, so the headless bridge check
 // drives the whole factory under node with in-memory storage and a
 // recording fetch.
+import { hubConnectInputs } from "@shared/account/hubConnect";
 import { createAccountService } from "@shared/account/service";
 import { makeAccountHandlers } from "@shared/account/handlers";
 import * as Effect from "effect/Effect";
@@ -175,30 +176,14 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     return Effect.runPromise(
       connection
         .refresh(
-          Effect.sync(() => {
-            if (!isConfigured(config)) return null;
-            const record = store.read();
-            if (record === null) return null;
-            return {
-              hubUrl: config.hubUrl,
-              accountId: record.accountId,
-              deviceId,
-              deviceKey: record.deviceKey,
-              mintTicket: async (connectionId, signal) => {
-                const fresh = store.read();
-                if (fresh === null) {
-                  throw new Error("signed out, no hub credential");
-                }
-                return (
-                  await service.mintTicket(
-                    fresh.credential,
-                    connectionId,
-                    signal,
-                  )
-                ).ticket;
-              },
-            };
-          }),
+          Effect.sync(() =>
+            hubConnectInputs(() => {
+              const record = isConfigured(config) ? store.read() : null;
+              return record === null
+                ? null
+                : { ...record, hubUrl: config.hubUrl, service };
+            }, deviceId),
+          ),
         )
         .pipe(
           Effect.ignoreCause({
@@ -220,16 +205,19 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // is kept here, since another tab's change arrives with no call of
   // this tab's (notifyAccountChanged).
   let knownAccountId: string | null = store.read()?.accountId ?? null;
-  function accountChanged(): void {
+  async function accountChanged(): Promise<void> {
     const before = knownAccountId;
     const after = store.read()?.accountId ?? null;
     knownAccountId = after;
-    // The shared settings' copy was built under the account before.
-    if (after !== before) sharedSettingsCopy.clear();
+    // The old account's sessions close first: a peer's push landing
+    // between the clear and their close would refill the copy, as the
+    // host orders it too (host/process/handlers.ts).
+    await refreshHub();
     if (departed({ before, after })) {
-      // The client config's peer-keyed picks (withoutPeerState): in
-      // localStorage they would outlive even the person, on a shared
-      // browser profile.
+      // The shared settings' copy and the client config's peer-keyed
+      // picks (withoutPeerState): in localStorage they would outlive
+      // even the person, on a shared browser profile.
+      sharedSettingsCopy.clear();
       writeKey(
         deps.localStorage,
         CLIENT_CONFIG_KEY,
@@ -247,7 +235,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       clientConfigChanged();
     }
     tab.push(accountContract, "changed", { accountId: after });
-    void refreshHub();
   }
 
   const accountHandlers = makeAccountHandlers({
@@ -439,7 +426,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     api,
     links: client.links,
 
-    notifyAccountChanged: accountChanged,
+    notifyAccountChanged: () => void accountChanged(),
     notifyClientConfigChanged: clientConfigChanged,
 
     refreshHub,

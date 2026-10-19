@@ -537,6 +537,55 @@ it('enroll: exchanges the Clerk session token for a credential with platform "we
   assert.equal(after.accountId, "acct_1");
 });
 
+it("account change: a sign-in from signed out keeps the picks made signed out, and a sign-out drops them", async () => {
+  const localStorage = memoryStorage();
+  const fetchImpl: typeof fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url === `${HUB_URL}/devices/enroll`) {
+      assert(init.body instanceof Uint8Array);
+      const body = JSON.parse(new TextDecoder().decode(init.body));
+      return jsonResponse(200, {
+        credential: "cred-1",
+        device: {
+          ...body,
+          createdAt: Date.now(),
+          lastSeenAt: null,
+          online: false,
+        },
+      });
+    }
+    if (init.method === "DELETE") return new Response(null, { status: 204 });
+    // The hub refresh's ticket mint, which parks the supervisor.
+    return jsonResponse(500, { error: "no device hub in this check" });
+  };
+  const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
+  trackTest(() => bridge.stop());
+  const picks = async () => ({
+    collapsed: (await bridge.api.run(bridge.api.clientConfig.read()))
+      .collapsedProjects,
+    shared: (await bridge.api.run(bridge.api.sharedSettings.read())).entries[
+      "pinnedProject/p1"
+    ]?.value,
+  });
+  await bridge.api.run(
+    bridge.api.clientConfig.patch({
+      set: { collapsedProjects: ["p1"] },
+      clear: [],
+    }),
+  );
+  await bridge.api.run(
+    bridge.api.sharedSettings.set({ key: "pinnedProject/p1", value: "1" }),
+  );
+  await bridge.api.run(bridge.api.account.enroll(fakeSessionJwt("acct_1")));
+  assert.deepEqual(
+    await picks(),
+    { collapsed: ["p1"], shared: "1" },
+    "a sign-in from signed out dropped the picks made signed out",
+  );
+  await bridge.api.run(bridge.api.account.signOut());
+  assert.deepEqual(await picks(), { collapsed: undefined, shared: undefined });
+});
+
 it("sign-out: revokes THIS device on the device hub, clears the envelope, and still signs out when the revoke fails", async () => {
   const localStorage = memoryStorage();
   localStorage.setItem("sm.web.account", STORED_ENVELOPE);

@@ -4,6 +4,7 @@
 // (host/socket/Loopback.ts) for this machine's windows, its shell and
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
+import { hubConnectInputs } from "@shared/account/hubConnect";
 import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import { ROSTER_UNAVAILABLE, STALE_TICKET } from "@shared/remote/sealedSocket";
 import * as Duration from "effect/Duration";
@@ -64,7 +65,7 @@ import * as DeviceLink from "@host/socket/DeviceLink";
 import {
   acceptsPeerCommands,
   allowedWebOrigin,
-  hubConnectInputs,
+  hubAccount,
   provisionDeviceTunnel,
 } from "./account";
 import { hostBinaryPath, hostFacts, tunnelPidFile } from "./facts";
@@ -409,20 +410,7 @@ export async function refreshHubConnection(): Promise<void> {
       Effect.all([remote.get, DeviceId.current]),
       ([{ hub }, thisDevice]) =>
         hub.refresh(
-          Effect.sync(() => {
-            const inputs = hubConnectInputs();
-            if (inputs === null) return null;
-            return {
-              hubUrl: inputs.hubUrl,
-              // A different account rotates the credential, so accountId is
-              // in the opts to force a reconnect onto the new account's
-              // object instead of leaving the old socket live.
-              accountId: inputs.accountId,
-              deviceKey: inputs.deviceKey,
-              mintTicket: inputs.mintTicket,
-              deviceId: thisDevice,
-            };
-          }),
+          Effect.sync(() => hubConnectInputs(hubAccount, thisDevice)),
         ),
     ).pipe(
       Effect.ignoreCause({
@@ -471,7 +459,7 @@ export async function refreshDirectHost(): Promise<void> {
         link,
         listenerPortPath(),
         Effect.promise(async () => {
-          const inputs = hubConnectInputs();
+          const inputs = hubAccount();
           if (inputs === null) return null;
           // The device-scoped opt-out: absent means enrolled, explicit
           // false stops the listener.
