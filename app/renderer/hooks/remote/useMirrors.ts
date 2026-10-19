@@ -40,6 +40,7 @@ import {
   useRemoteDeviceApi,
 } from "@/hooks/remote/useRemoteDevices";
 import { useHasLocalHost } from "@/lib/localHost";
+import { useViewsWanted } from "@/hooks/remote/useRemoteForests";
 import { invalidateHostDevice } from "@/lib/queryKeys";
 import { forgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { notifyError, toast } from "@/lib/toast";
@@ -205,10 +206,13 @@ function useOtherHostMirrors<T>(
   const candidates = useEveryHost().filter(
     (candidate) => candidate.deviceId !== exceptDeviceId,
   );
+  // Read while it can be asked, and kept once it had a session (the
+  // forest's rule): reachability is not whether its mirrors exist.
+  const wanted = useViewsWanted(candidates);
   const lists = useViews(
     hostsMirrorsAtom,
-    candidates.map(({ deviceId, api }) =>
-      api === undefined ? null : deviceId,
+    candidates.map((candidate) =>
+      wanted(candidate) ? candidate.deviceId : null,
     ),
   );
   return candidates.map(({ deviceId, api }, index) => {

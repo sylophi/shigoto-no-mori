@@ -56,7 +56,11 @@ The cross-device walks (`cross-device.walk.mts`) run the lab build as
 several devices of one account, on a real project with the owner's
 settings, because the flows between devices broke on what a
 generated repo and default settings never have (V3.md, the clone of a
-remote-tracking default branch).
+remote-tracking default branch). `peer-away.walk.mts` uses the same
+devices for what a window keeps when another device stops answering
+or taking commands: a device tab switched to one never reached, a
+terminal when control goes off, a mirror whose runner quits. What a
+person does in both is in `lib/crossDevice.mts`.
 
 - **The devices** (`lib/devices.mts`): each is the lab build launched
   as a profile (`SHIGOMORI_PROFILE`, which a test flavor takes and a

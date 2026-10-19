@@ -13,15 +13,27 @@ import type { RemoteDevice, RemoteDeviceApi } from "@/lib/remote/devices";
 // next session landing. undefined until the device has ever had one,
 // and again once the device is gone from the registry: a blip keeps
 // the device with no api, a departure drops the device, and only the
-// first is worth riding out.
+// first is worth riding out. Kept with the device it belongs to: a
+// caller that switches devices (the shared device panel) gets the new
+// device's api or none, never the last device's.
 export function useLastGoodApi(
   device: RemoteDevice | undefined,
 ): RemoteDeviceApi | undefined {
-  const [api, setApi] = useState(device?.api);
+  const [kept, setKept] = useState(
+    device === undefined
+      ? undefined
+      : { deviceId: device.deviceId, api: device.api },
+  );
   if (device === undefined) {
-    if (api !== undefined) setApi(undefined);
+    if (kept !== undefined) setKept(undefined);
     return undefined;
   }
-  if (device.api !== undefined && device.api !== api) setApi(device.api);
-  return api;
+  if (kept?.deviceId !== device.deviceId) {
+    setKept({ deviceId: device.deviceId, api: device.api });
+    return device.api;
+  }
+  if (device.api !== undefined && device.api !== kept.api) {
+    setKept({ deviceId: device.deviceId, api: device.api });
+  }
+  return device.api ?? kept.api;
 }
