@@ -17,7 +17,8 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
-import { handOver, withoutCdFile } from "../handOver.ts";
+import { handOver } from "../handOver.ts";
+import { childEnv } from "@shigomori/engine/processes";
 import { given, here } from "../here.ts";
 import { alignRows, emit, note, out, Output, styles } from "../output.ts";
 
@@ -107,7 +108,10 @@ export const runCommand = Command.make(
       // not retarget the run.
       yield* handOver("exec", command.program, command.args, {
         cwd: worktree.path,
-        env: { ...withoutCdFile(), ...scriptEnvOf(context, command.script) },
+        env: {
+          ...childEnv(process.env),
+          ...scriptEnvOf(context, command.script),
+        },
       });
     }),
 ).pipe(Command.withDescription("List or run the worktree's scripts"));

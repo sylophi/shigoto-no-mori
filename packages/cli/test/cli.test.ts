@@ -6,23 +6,18 @@ import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import {
   chmodSync,
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   renameSync,
-  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
-  afterAll,
   afterEach,
   beforeAll,
   beforeEach,
@@ -31,7 +26,8 @@ import {
   onTestFinished,
   vi,
 } from "vitest";
-import { macfs, type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
+import { type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
+import { builtBinary } from "./lib/binary.ts";
 import {
   type FakeApp,
   fakeApp,
@@ -39,21 +35,13 @@ import {
   success,
 } from "../../engine/test/lib/fakeApp.ts";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { NAMESPACE_USAGE } from "../src/errors.ts";
 import { documentedCommands } from "../src/help.ts";
 
 let built: string;
-let buildDir: string;
 beforeAll(() => {
-  buildDir = mkdtempSync(join(tmpdir(), "sm-cli-"));
-  built = join(buildDir, "smd");
-  execFileSync(process.execPath, ["build.mts", built], {
-    cwd: join(import.meta.dirname, ".."),
-    stdio: "ignore",
-  });
-  // The darwin helper beside the binary, as the app ships it.
-  copyFileSync(macfs(), join(buildDir, "macfs"));
+  built = builtBinary("dev");
 }, 300_000);
-afterAll(() => rmSync(buildDir, { recursive: true, force: true }));
 
 let box: Sandbox;
 beforeEach(() => {
@@ -265,6 +253,20 @@ describe("a command line", () => {
       (_, i) => runs[i]?.stderr !== 'smd: Unknown option "--zzz".\n',
     );
     assert.deepEqual(missing, []);
+  });
+
+  it("tells an unknown subcommand the verbs the help documents", () => {
+    const documented = documentedCommands(flavorNames("dev"));
+    for (const namespace of ["projects", "config", "agents", "shell"]) {
+      const told = /<([^>]+)>/.exec(NAMESPACE_USAGE[namespace] ?? "")?.[1];
+      assert.deepEqual(
+        told?.split("|"),
+        documented.flatMap(([first, second]) =>
+          first === namespace && second !== undefined ? [second] : [],
+        ),
+        namespace,
+      );
+    }
   });
 
   it("refuses the variables the stand-in flags replaced", async () => {
@@ -1775,7 +1777,7 @@ describe("the Go sm's command line", () => {
 
   it("names a mistyped verb as Go's dispatchers did, flags or not", async () => {
     const projects =
-      "Usage: smd projects <list|add|remove|relocate|reorder|config|icon> [args]";
+      "Usage: smd projects <list|icon|add|remove|relocate|reorder|config> [args]";
     const refusals: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
       [["projects", "ad", "--all"], `Unknown subcommand "ad". ${projects}`],
       [
@@ -1784,11 +1786,15 @@ describe("the Go sm's command line", () => {
       ],
       [
         ["agents", "--harness", "claude", "status"],
-        'Unknown subcommand "--harness". Usage: smd agents <bind|unbind|idle|resume|install|uninstall|status> [args]',
+        'Unknown subcommand "--harness". Usage: smd agents <install|uninstall|status|bind|unbind|idle|resume|event> [args]',
       ],
       [
         ["config", "lst", "--data", "x"],
-        'Unknown subcommand "lst". Usage: smd config <list|get|set|unset|edit|launcher> [args]',
+        'Unknown subcommand "lst". Usage: smd config <list|read|get|set|unset|launcher|edit> [args]',
+      ],
+      [
+        ["projects", "config", "lst"],
+        'Unknown subcommand "lst". Usage: smd projects config <list|get|set|unset|edit|read|launcher|carryover> [args]',
       ],
       // The config namespaces parsed every flag first.
       [["config", "lst", "--bogus"], 'Unknown option "--bogus".'],
@@ -1894,6 +1900,20 @@ describe("the Go sm's command line", () => {
       ]).ended;
       assert.deepEqual(lastDoc(unbound.stdout), { ok: true, unbound: true });
     }
+  });
+
+  it("says terrier's trouble once when an agent session lists the projects", async () => {
+    const { alpha } = await fixture();
+    box.fakeBin("terrier", "exit 1");
+    assert.equal(
+      (await runAt(box.home, "config", "set", "terrier", "true")).code,
+      0,
+    );
+    const listed = await start(alpha, ["projects", "list"], {
+      CLAUDE_CODE_SESSION_ID: "session",
+    }).ended;
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.equal(listed.stderr.match(/warning:/g)?.length, 1, listed.stderr);
   });
 });
 

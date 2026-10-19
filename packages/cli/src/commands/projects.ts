@@ -1,4 +1,4 @@
-// sm projects <list|add|remove|relocate|reorder|icon|config>: the registered
+// sm projects <list|icon|add|remove|relocate|reorder|config>: the registered
 // projects, terrier's included, and each one's settings.
 import { basename } from "node:path";
 import {
