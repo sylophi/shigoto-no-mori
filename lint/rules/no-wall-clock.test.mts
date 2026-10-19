@@ -16,6 +16,7 @@ testRule("no-wall-clock", rule, {
     },
     { code: "Date.now();", filename: "/repo/packages/engine/test/sandbox.ts" },
     { code: "Date.now();", filename: "/repo/app/lab/walks/run.ts" },
+    { code: "Date.now();", filename: "/repo/packages/cli/test/cli.test.ts" },
   ],
   invalid: [
     { code: "const at = Date.now();", filename: service, errors: 1 },
@@ -40,6 +41,11 @@ testRule("no-wall-clock", rule, {
     {
       code: "Date.now();",
       filename: "/repo/packages/contracts/src/sharedSettings.ts",
+      errors: 1,
+    },
+    {
+      code: "Date.now();",
+      filename: "/repo/packages/cli/src/commands/nuke.ts",
       errors: 1,
     },
   ],

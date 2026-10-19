@@ -73,7 +73,7 @@ const RELAY_PER_SECOND = 30;
 // it every half minute. Judged when the object runs anyway (a message,
 // a roster read), never on a timer of its own, which would bill a
 // request and wake a hibernated object every time.
-const SILENT_AFTER_MS = 90_000;
+export const SILENT_AFTER_MS = 90_000;
 
 // The standard close code for a message over the size the socket
 // accepts.
@@ -125,10 +125,10 @@ export class DeviceHub extends DurableObject<Env> {
     WebSocket,
     { tokens: number; at: number }
   >();
-  // The budget's clock, which the proofs stop to send a burst at once.
-  relayClock: () => number = () => Date.now();
-  // How long a socket may stay silent, which the proofs shorten.
-  silentAfterMs = SILENT_AFTER_MS;
+  // The clock of the relay budget, the silence sweep and the sockets'
+  // connection order, which the proofs stop: real time on a loaded
+  // runner outlasts any window short enough to wait out.
+  clock: () => number = () => Date.now();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -287,7 +287,7 @@ export class DeviceHub extends DurableObject<Env> {
       `${KEY_TAG_PREFIX}${publicKey}`,
     ]);
     pair[1].serializeAttachment({
-      connectedAt: Date.now(),
+      connectedAt: this.clock(),
     } satisfies SocketAttachment);
     // Full presence to everyone, including the fresh socket: joining
     // devices learn the room, present devices learn about the join.
@@ -315,7 +315,7 @@ export class DeviceHub extends DurableObject<Env> {
 
   // Whether the socket may send one more message now (RELAY_BURST).
   private withinRelayBudget(ws: WebSocket): boolean {
-    const now = this.relayClock();
+    const now = this.clock();
     const budget = this.relayBudget.get(ws) ?? { tokens: RELAY_BURST, at: now };
     budget.tokens = Math.min(
       RELAY_BURST,
@@ -338,7 +338,7 @@ export class DeviceHub extends DurableObject<Env> {
   override webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
     ws.serializeAttachment({
       connectedAt: connectedAt(ws),
-      heardAt: Date.now(),
+      heardAt: this.clock(),
     } satisfies SocketAttachment);
     // The protocol is JSON text. Binary frames are not part of it.
     if (typeof message !== "string") return;
@@ -476,16 +476,16 @@ export class DeviceHub extends DurableObject<Env> {
     for (const ws of sockets) this.safeSend(ws, text);
   }
 
-  // Closes every socket silent past silentAfterMs, answering the ones it
+  // Closes every socket silent past SILENT_AFTER_MS, answering the ones it
   // closed, which the caller leaves out of the roster it announces or
   // reads.
   private evictSilent(): ReadonlySet<WebSocket> {
-    const now = Date.now();
+    const now = this.clock();
     const evicted = new Set<WebSocket>();
     for (const ws of this.ctx.getWebSockets()) {
       const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws);
       const heard = Math.max(pinged?.getTime() ?? 0, heardAt(ws));
-      if (now - heard <= this.silentAfterMs) continue;
+      if (now - heard <= SILENT_AFTER_MS) continue;
       evicted.add(ws);
       try {
         ws.close(CLOSE_SILENT, "silent");

@@ -15,6 +15,7 @@ import {
   type UtilityProcess,
   utilityProcess,
 } from "electron";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -135,7 +136,8 @@ const crashes: number[] = [];
 // so a window redialing meanwhile waits for the next one.
 let address = deferred<Reported>();
 // The hosts that exited unasked since one was last up, for the next to
-// stop what their scripts left (HostFacts.replacesHosts).
+// stop what their scripts left (HostFacts.replacesHosts): each start an
+// instant, each exit on performance.now().
 let replaced: { pid: number; startedAt: number; exitedAt: number }[] = [];
 let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
@@ -170,7 +172,7 @@ let restartReason: HostRestartReason | null = null;
 function noteStop(running: UtilityProcess, why: string): void {
   log.warn(`[host] ${why}`);
   const beat = held.get(running)?.lastBeat ?? null;
-  const now = Date.now();
+  const now = performance.now();
   void lastEndedSpans(app.getPath("logs")).then((ended) => {
     for (const line of restartDetail({ beat, now, ended })) log.info(line);
   });
@@ -325,7 +327,12 @@ function fork(): void {
   let spawned: { pid: number; startedAt: number } | undefined;
   forked.once("spawn", () => {
     if (forked.pid !== undefined) {
-      spawned = { pid: forked.pid, startedAt: Date.now() };
+      // An instant, which the host's orphan sweep compares with when a
+      // script's process started.
+      spawned = {
+        pid: forked.pid,
+        startedAt: DateTime.toEpochMillis(DateTime.nowUnsafe()),
+      };
     }
   });
   // The host's console, into the shell's (and so its log file).
@@ -341,7 +348,9 @@ function fork(): void {
   // Its loop's beats, until it is up (START_SILENT_LIMIT_S).
   const beat = beats();
   forked.on("message", (message: unknown) => {
-    if (isHostBeat(message)) state.lastBeat = { at: Date.now(), beat: message };
+    if (isHostBeat(message)) {
+      state.lastBeat = { at: performance.now(), beat: message };
+    }
     beat.beat();
   });
   Effect.runFork(
@@ -394,7 +403,9 @@ function fork(): void {
     }
     // One that died before it was up leaves its waiters to the next.
     if (address.settled()) address = deferred<Reported>();
-    const now = Date.now();
+    // Elapsed, awake: a clock step neither spends the budget nor gives
+    // one back.
+    const now = performance.now();
     crashes.push(now);
     while (crashes[0] !== undefined && crashes[0] < now - CRASH_WINDOW_MS) {
       crashes.shift();

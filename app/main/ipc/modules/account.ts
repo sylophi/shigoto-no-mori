@@ -51,10 +51,10 @@ import {
   resolveServiceConfig,
   type AccountServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
+import { joinInFlight } from "@shared/inFlight";
 import { log } from "@shared/log";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 
 // Built lazily on first handler use, never at import time. This module is
@@ -444,18 +444,11 @@ export function makeAccountHandlers(
   // two revokes, where the second would 401 against the credential the
   // first already deleted. A caller arriving while one runs rides it
   // (an enroll's own token unused), and the first after it settles
-  // starts afresh: each is cached with no time to live.
-  const enrollOnce = Effect.runSync(
-    Effect.cachedWithTTL(
-      Effect.flatMap(EnrollToken, (token) =>
-        Effect.promise(() => enroll(token)),
-      ),
-      Duration.zero,
-    ),
+  // starts afresh.
+  const enrollOnce = joinInFlight(
+    Effect.flatMap(EnrollToken, (token) => Effect.promise(() => enroll(token))),
   );
-  const signOutOnce = Effect.runSync(
-    Effect.cachedWithTTL(Effect.promise(signOut), Duration.zero),
-  );
+  const signOutOnce = joinInFlight(Effect.promise(signOut));
   return {
     status: async () => {
       const defaultName = await defaultDeviceName();

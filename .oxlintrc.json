@@ -64,15 +64,6 @@
         "packages/*/test/**"
       ],
       "rules": { "no-await-in-loop": "off" }
-    },
-    {
-      "files": [
-        "app/main/hostProcess.ts",
-        "packages/engine/src/worktrees/moving.ts",
-        "app/main/electron/liveness.ts",
-        "app/main/electron/notifications.ts"
-      ],
-      "rules": { "shigomori/no-wall-clock": "off" }
     }
   ],
   "ignorePatterns": [

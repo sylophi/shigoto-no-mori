@@ -5,6 +5,8 @@ import * as Paths from "@shigomori/engine/Paths";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as DateTime from "effect/DateTime";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
@@ -31,8 +33,9 @@ const CHECKS_SUFFIX = 24;
 
 // How long before `now` an ISO time was, in the coarsest unit that fits.
 const relativeAge = (iso: string, now: number) => {
-  const stamp = Date.parse(iso);
-  if (Number.isNaN(stamp)) return "";
+  const parsed = DateTime.make(iso);
+  if (Option.isNone(parsed)) return "";
+  const stamp = DateTime.toEpochMillis(parsed.value);
   const since = now - stamp;
   const minute = 60_000;
   const hour = 60 * minute;

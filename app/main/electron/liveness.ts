@@ -15,6 +15,7 @@
 import { clientSetting } from "@shigomori/contracts/schemas/config";
 import { app, type BrowserWindow } from "electron";
 import { platform } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -30,8 +31,8 @@ import {
 import { scheduleRelaunch } from "./relaunch";
 import { rememberVisibilityForRestart } from "./restartVisibility";
 import {
-  decide,
   FATAL_RELAUNCH,
+  relaunchAllowed,
   rendererGone,
 } from "../core/liveness/rateLimit";
 import { log } from "@shared/log";
@@ -106,6 +107,7 @@ export function reconcileLaunchAtLogin(): void {
 // guard sees the whole burst. A fresh app process starts with an empty
 // list, which is correct: a crash right after launch is not a loop.
 let recentRendererCrashes: number[] = [];
+let lastGiveUp: number | undefined;
 
 // Attach the renderer-crash and unresponsive handlers to a window. Called
 // from createWindow for every window, including the ones recreated after
@@ -116,7 +118,8 @@ export function attachRenderProcessRecovery(
   deps: {
     isShuttingDown: () => boolean;
     recreateWindow: () => void;
-    onGiveUp: () => void;
+    // Whether to say so: once for every window one kill took.
+    onGiveUp: (sayIt: boolean) => void;
   },
 ): void {
   const webContents = window.webContents;
@@ -126,10 +129,12 @@ export function attachRenderProcessRecovery(
     closing = true;
   });
   webContents.on("render-process-gone", (_event, details) => {
+    const now = performance.now();
     const { verdict, recent } = rendererGone({
       ownTeardown: deps.isShuttingDown() || closing || window.isDestroyed(),
       recent: recentRendererCrashes,
-      now: performance.now(),
+      now,
+      lastGiveUp,
     });
     recentRendererCrashes = recent;
     if (verdict === "ignore") return;
@@ -142,7 +147,11 @@ export function attachRenderProcessRecovery(
       log.error(
         `[liveness] window ${id}'s renderer gone (${details.reason}) again, a crash loop: giving up to avoid thrashing`,
       );
-      deps.onGiveUp();
+      lastGiveUp = now;
+      deps.onGiveUp(verdict === "give-up");
+      // Its dialog blocks, and the gone windows' events wait behind it:
+      // they are still the same kill once it is dismissed.
+      lastGiveUp = performance.now();
     }
   });
   // Not a crash: the renderer is alive but wedged. Log it so a hang is
@@ -174,31 +183,35 @@ function relaunchMarkerPath(): string {
   return join(app.getPath("userData"), "livenessRelaunch.json");
 }
 
-// Read the recent-relaunch timestamps, ask the rate limiter whether one
-// more is allowed, and if so persist the appended list before returning
-// true. Read and write go through the exit-path file helpers so the
-// write is temp-plus-rename atomic: this runs right before app.exit, so a
-// raw write could be truncated by the exit mid-flush. A marker that
+// Read the relaunches since the last stable run, and if one more is
+// allowed persist the count before returning true. Read and write go
+// through the exit-path file helpers so the write is temp-plus-rename
+// atomic: this runs right before app.exit, so a raw write could be
+// truncated by the exit mid-flush. A marker that
 // cannot be READ is treated as no recent relaunches (fine: a marker that
 // cannot be WRITTEN vetoes the relaunch just below, so an unwritable
 // userData can never loop).
-const RelaunchMarkerSchema = Schema.Array(Schema.Finite);
+const RelaunchMarkerSchema = Schema.Struct({ relaunches: Schema.Int });
 
-function consumeRelaunchBudget(now: number): boolean {
-  let recent: readonly number[] = [];
+function consumeRelaunchBudget(): boolean {
+  let relaunches = 0;
   try {
-    recent =
-      readJsonOrNullSync(relaunchMarkerPath(), RelaunchMarkerSchema) ?? [];
+    relaunches =
+      readJsonOrNullSync(relaunchMarkerPath(), RelaunchMarkerSchema)
+        ?.relaunches ?? 0;
   } catch {
     // Missing, unreadable, or corrupt marker: no known recent relaunches.
     // The next successful write re-accumulates from empty.
   }
-  const { allow: relaunch, recent: next } = decide(recent, now, FATAL_RELAUNCH);
-  if (!relaunch) return false;
+  if (!relaunchAllowed(relaunches)) return false;
   try {
     // 0o600: the marker lives in userData beside other per-user state and
     // holds nothing secret, but there is no reason to widen it.
-    atomicWriteJsonSync(relaunchMarkerPath(), next, { mode: 0o600 });
+    atomicWriteJsonSync(
+      relaunchMarkerPath(),
+      { relaunches: relaunches + 1 },
+      { mode: 0o600 },
+    );
   } catch (error) {
     log.error(
       `[liveness] could not persist the relaunch marker, not relaunching: ${errorMessageOf(error)}`,
@@ -219,7 +232,7 @@ export function tryFatalRelaunch(rememberWindows: () => void): boolean {
   // must not become a restart, so respawn only a machine the user
   // asked to keep reachable.
   if (!keepReachableEnabled()) return false;
-  if (!consumeRelaunchBudget(Date.now())) {
+  if (!consumeRelaunchBudget()) {
     log.error(
       "[liveness] fatal-relaunch rate limit reached, letting the crash stand",
     );
@@ -256,6 +269,15 @@ export function installFatalRecovery(deps: {
   rememberWindows: () => void;
 }): void {
   const tryRelaunch = () => tryFatalRelaunch(deps.rememberWindows);
+  // A run this long was no crash loop: the relaunches before it are
+  // forgotten.
+  setTimeout(() => {
+    try {
+      rmSync(relaunchMarkerPath(), { force: true });
+    } catch (error) {
+      log.warn("[liveness] could not forget the relaunches:", error);
+    }
+  }, FATAL_RELAUNCH.stableMs).unref();
   process.on("uncaughtException", (error) => {
     log.error("[liveness] uncaughtException:", error);
     // A process uncaughtException listener suppresses Node and Electron's

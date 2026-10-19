@@ -289,17 +289,19 @@ function create(
     recreateWindow: () => {
       // As it was: an app kept hidden, or a window minimized, stays so.
       const minimized = !window.isDestroyed() && window.isMinimized();
+      // macOS's alone: Electron has no hidden app elsewhere.
+      const hidden = process.platform === "darwin" && app.isHidden();
       create(entry.route, {
         bounds: entry.bounds,
-        ...(app.isHidden() || minimized
-          ? { restart: { visibility: { hidden: app.isHidden() }, minimized } }
+        ...(hidden || minimized
+          ? { restart: { visibility: { hidden }, minimized } }
           : {}),
       });
       if (!window.isDestroyed()) window.destroy();
     },
-    onGiveUp: () => {
+    onGiveUp: (sayIt) => {
       entry.dead = true;
-      showCrashGiveUpDialog();
+      if (sayIt) showCrashGiveUpDialog();
     },
   });
 
