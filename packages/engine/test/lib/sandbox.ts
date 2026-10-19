@@ -53,7 +53,8 @@ import * as SqlClient from "effect/sql/SqlClient";
 import * as WorktreeData from "../../src/WorktreeData.ts";
 import * as WtFolder from "../../src/WtFolder.ts";
 import {
-  isOutsideGitVariable,
+  GIT_IDENTITY,
+  isolateGit,
   repositoryRoot,
 } from "../../../../gitIsolation.ts";
 import { macfs } from "./macfs.ts";
@@ -100,12 +101,8 @@ export const HOOK_BINARY =
 // the user's git config would reach the sandbox's repos. The engine's
 // Git service runs git under this process's environment, so the
 // process's own goes the same way.
-for (const key of Object.keys(process.env)) {
-  if (isOutsideGitVariable(key)) delete process.env[key];
-}
+isolateGit();
 Object.assign(process.env, {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
   // No background gc or maintenance: a sandbox's repos are copied while
   // git runs, and a pack rewritten mid-copy loses files.
   GIT_CONFIG_COUNT: "2",
@@ -262,13 +259,7 @@ export function sandbox(
     );
 
   // Read when a command runs, so a test's PATH change reaches it.
-  const gitEnv = () => ({
-    ...childEnv(),
-    GIT_AUTHOR_NAME: "t",
-    GIT_AUTHOR_EMAIL: "t@t",
-    GIT_COMMITTER_NAME: "t",
-    GIT_COMMITTER_EMAIL: "t@t",
-  });
+  const gitEnv = () => ({ ...childEnv(), ...GIT_IDENTITY });
 
   // What a binary sees of this process's environment, as the engine sees
   // only what its runtime is given: PATH, the temp dir, and git's

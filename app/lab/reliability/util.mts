@@ -4,6 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
+import { GIT_IDENTITY, isolatedGitEnv } from "../../../gitIsolation.ts";
 
 export const appDir = resolve(import.meta.dirname, "../..");
 export const repoDir = resolve(appDir, "..");
@@ -69,17 +70,12 @@ export type TraceLine = {
   readonly text: string;
 };
 
-// A commit's author and committer, whatever this machine's git config.
+// git for a seed repository: isolated (../../../gitIsolation.ts), with
+// a fixture's identity.
 export function git(cwd: string, ...args: string[]): void {
   execFileSync("git", args, {
     cwd,
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: "lab",
-      GIT_AUTHOR_EMAIL: "lab@example.com",
-      GIT_COMMITTER_NAME: "lab",
-      GIT_COMMITTER_EMAIL: "lab@example.com",
-    },
+    env: { ...isolatedGitEnv(), ...GIT_IDENTITY },
     stdio: "ignore",
   });
 }

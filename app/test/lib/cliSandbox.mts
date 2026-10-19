@@ -8,6 +8,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { GIT_IDENTITY } from "../../../gitIsolation.ts";
 import { createCliRunner, scrubProcessGitEnv } from "./checkKit.mts";
 import {
   addProject,
@@ -50,13 +51,7 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
   // real repository. Plus the locale and the fixture identity, pinned
   // so commit-tree in `sm dirty capture` never depends on the
   // machine's git config.
-  scrubProcessGitEnv({
-    LC_ALL: "C",
-    GIT_AUTHOR_NAME: "t",
-    GIT_AUTHOR_EMAIL: "t@t",
-    GIT_COMMITTER_NAME: "t",
-    GIT_COMMITTER_EMAIL: "t@t",
-  });
+  scrubProcessGitEnv({ LC_ALL: "C", ...GIT_IDENTITY });
   const baseEnv = { ...process.env };
   const smEnv = { ...baseEnv, SHIGOMORI_DATA_DIR: dataDir, ...extraSmEnv };
 

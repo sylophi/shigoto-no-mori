@@ -26,18 +26,14 @@ import {
   scrubProcessGitEnv,
   tempDir,
 } from "./lib/checkKit.mts";
+import { GIT_IDENTITY } from "../../gitIsolation.ts";
 import { it } from "vitest";
 import type { CommitRequest } from "@shigomori/engine/Git";
 import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const gitEnv = scrubbedGitEnv();
-scrubProcessGitEnv({
-  GIT_AUTHOR_NAME: "sm",
-  GIT_AUTHOR_EMAIL: "sm@example.test",
-  GIT_COMMITTER_NAME: "sm",
-  GIT_COMMITTER_EMAIL: "sm@example.test",
-});
+scrubProcessGitEnv(GIT_IDENTITY);
 
 // The engine's Git, in the shapes these cases call it by.
 const readHunks = (worktree: string, path: string) =>

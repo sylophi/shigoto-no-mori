@@ -22,6 +22,7 @@ import {
   scrubProcessGitEnv,
   tempDir,
 } from "./lib/checkKit.mts";
+import { GIT_IDENTITY } from "../../gitIsolation.ts";
 import { it } from "vitest";
 import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
@@ -29,12 +30,7 @@ import { trackTest } from "./lib/vitestKit.mts";
 // Same as git-changes: the hook's GIT_* variables go before the git
 // modules load, and commits need a pinned identity.
 const gitEnv = scrubbedGitEnv();
-scrubProcessGitEnv({
-  GIT_AUTHOR_NAME: "sm",
-  GIT_AUTHOR_EMAIL: "sm@example.test",
-  GIT_COMMITTER_NAME: "sm",
-  GIT_COMMITTER_EMAIL: "sm@example.test",
-});
+scrubProcessGitEnv(GIT_IDENTITY);
 
 const revertCommit = (worktree: string, hash: string) =>
   engineGit.revertCommit(worktree, hash);

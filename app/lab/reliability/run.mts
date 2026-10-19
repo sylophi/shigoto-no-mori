@@ -8,6 +8,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { isolateGit } from "../../../gitIsolation.ts";
 import {
   CLIENT_KINDS,
   Lab,
@@ -26,6 +27,10 @@ import {
   terminalRoundTrip,
   type Scenario,
 } from "./scenarios.mts";
+
+// The seed repositories' git and the apps' own off this repository and
+// this machine's config (../../../gitIsolation.ts).
+isolateGit();
 
 const { values } = parseArgs({
   options: {
