@@ -75,3 +75,16 @@ it("every call is classified as fixtures/wire/classification.json holds", () => 
     "the classification changed: if it is meant to, run pnpm -F @shigomori/contracts classification",
   );
 });
+
+// A quit waits only on the calls that change code (the host's
+// `changing`), so a busy kind on any other would never be counted.
+it("every call a quit waits on changes code", () => {
+  for (const [channel, call] of Object.entries(derived)) {
+    if (call["busy"] === undefined) continue;
+    assert.equal(
+      call["grant"],
+      "changeCode",
+      `${channel} has a busy kind but not the changeCode grant`,
+    );
+  }
+});

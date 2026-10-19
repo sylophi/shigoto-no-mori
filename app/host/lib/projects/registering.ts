@@ -189,20 +189,19 @@ export const removeProject = Effect.fn("projects.remove")(function* (
 // any place. Each move goes over the list the previous one left (see
 // reorders), and the engine checks the ids against its own read (one
 // added meanwhile lands last, a stale id is ignored).
-export const reorderProject = (input: {
+export const reorderProject = Effect.fn("projects.reorder")(function* (input: {
   readonly draggedId: string;
   readonly targetId: string;
   readonly position: Parameters<typeof reorderProjects>[3];
-}) =>
-  Effect.gen(function* () {
-    const current = loadProjects();
-    const next = reorderProjects(
-      current,
-      input.draggedId,
-      input.targetId,
-      input.position,
-    );
-    if (next === current) return;
-    yield* Ops.storeProjectOrder(next.map((p) => p.id));
-    yield* refresh;
-  }).pipe(reorders.withPermits(1), Effect.withSpan("projects.reorder"));
+}) {
+  const current = loadProjects();
+  const next = reorderProjects(
+    current,
+    input.draggedId,
+    input.targetId,
+    input.position,
+  );
+  if (next === current) return;
+  yield* Ops.storeProjectOrder(next.map((p) => p.id));
+  yield* refresh;
+}, reorders.withPermits(1));
