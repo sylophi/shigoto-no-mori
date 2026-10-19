@@ -119,6 +119,8 @@ export type WebBridge = {
 };
 
 export const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
+// How long a tab waits for another tab's enroll.
+const ENROLL_WAIT_MS = 30_000;
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = resolveServiceConfig(deps.env);
@@ -287,7 +289,13 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     const run = (
       locks === undefined
         ? enrollHere()
-        : locks.request("sm.web.enroll", enrollHere)
+        : // A tab whose enroll hangs (no timeout of its own) holds the
+          // others for a while, not for good: theirs then fail, and retry.
+          locks.request(
+            "sm.web.enroll",
+            { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
+            enrollHere,
+          )
     ).finally(() => {
       enrolling = undefined;
     });

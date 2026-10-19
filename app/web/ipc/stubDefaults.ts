@@ -42,7 +42,7 @@ export function stubValueFor(
 
 // Objects with required members are built recursively from the same
 // rules, so a nested enum still blocks the whole stub unless
-// fabrication was allowed. Fabrication, allowlist-only: literals and
+// fabrication was allowed. Fabrication, the fake host's alone: literals and
 // enums pin or pick a value, a union (discriminated included) takes its
 // first arm, and bounded scalars get an obviously synthetic placeholder.
 function stubFromAst(

@@ -964,7 +964,12 @@ it("device names: client hints name the Chromium forks whose user agent says Chr
 function sharedLocks(): Pick<LockManager, "request"> {
   const tails = new Map<string, Promise<unknown>>();
   return {
-    request: ((name: string, callback: () => Promise<unknown>) => {
+    // As the tab asks: a name, its options, the callback.
+    request: ((
+      name: string,
+      _options: { signal?: AbortSignal },
+      callback: () => Promise<unknown>,
+    ) => {
       const run = (tails.get(name) ?? Promise.resolve()).then(callback);
       tails.set(
         name,
@@ -985,7 +990,8 @@ it("two tabs enrolling at once: one enrolls, and the profile keeps the credentia
       const credential = `cred-${minted}`;
       assert(init.body instanceof Uint8Array);
       const body = JSON.parse(new TextDecoder().decode(init.body));
-      // The first enroll answers last, so the two land out of order.
+      // The first enroll answers last, so the two would land out of
+      // order, unlocked.
       if (minted === 1) await new Promise((done) => setTimeout(done, 200));
       return jsonResponse(200, {
         credential,

@@ -110,7 +110,8 @@ export function createLocalRegistrar(options: {
   });
   const fanOut = pushFanOut();
   const invokeIndex = invokeIndexFor();
-  const viewIndex = invokeIndexFor(undefined, true);
+  // Views among the calls, which viewOf picks out.
+  const callIndex = invokeIndexFor(undefined, true);
   // Fallback verdicts are computed once per channel: the policy is
   // deterministic and some stub outputs are sizeable object shapes. A
   // verdict is either a resolvable stub value or the refusal.
@@ -187,7 +188,7 @@ export function createLocalRegistrar(options: {
     },
     pushes: fanOut.pushes,
     view(channel, input) {
-      const call = viewIndex.get(channel);
+      const call = callIndex.get(channel);
       const view = call === undefined ? undefined : served.viewOf(call);
       if (call === undefined || view === undefined) {
         return Stream.fail(refusal(channel, "unavailable"));
