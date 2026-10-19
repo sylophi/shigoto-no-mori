@@ -954,15 +954,13 @@
       }
     ]
   },
-  "WriteShigomoriPayloadSchema": {
+  "PatchShigomoriPayloadSchema": {
     "accepts": [
       {
         "projectId": "shigoto-no-mori",
-        "config": {
-          "scripts": {
-            "setup": "pnpm install",
-            "teardown": "pnpm run clean"
-          },
+        "patch": {
+          "scripts.setup": "pnpm install",
+          "scripts.teardown": null,
           "launchers": [
             {
               "id": "claude",
@@ -970,82 +968,71 @@
               "command": "claude"
             }
           ],
-          "portBase": 5730,
-          "defaultBranch": "main",
           "carryOver": [
             {
               "path": ".env.local",
               "mode": "copy"
-            },
-            {
-              "path": ".claude/settings.local.json",
-              "mode": "symlink"
             }
           ],
           "useWorktreeInclude": false,
           "worktreeLayout": "custom",
           "customWorktreePath": "/Users/alex/worktrees",
-          "lastMergeMethod": "squash",
-          "showPrimaryInInbox": true
+          "showPrimaryInInbox": null
         }
       },
       {
         "projectId": "shigoto-no-mori",
-        "config": {
+        "patch": {
           "defaultBranch": "main"
         }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "patch": {}
       }
     ],
     "normalizes": [
       {
         "input": {
           "projectId": "shigoto-no-mori",
-          "config": {
-            "defaultBranch": "main",
-            "futureSetting": true
-          }
-        },
-        "output": {
-          "projectId": "shigoto-no-mori",
-          "config": {
-            "defaultBranch": "main"
-          }
-        }
-      },
-      {
-        "input": {
-          "projectId": "shigoto-no-mori",
-          "config": {
-            "defaultBranch": "main"
-          },
+          "patch": {},
           "worktreeId": "a1b2c3d4e5f6"
         },
         "output": {
           "projectId": "shigoto-no-mori",
-          "config": {
-            "defaultBranch": "main"
-          }
+          "patch": {}
         }
       }
     ],
     "rejects": [
       {
-        "config": {
-          "defaultBranch": "main"
-        }
-      },
-      {
-        "projectId": "",
-        "config": {
-          "defaultBranch": "main"
-        }
-      },
-      {
         "projectId": "shigoto-no-mori"
       },
       {
         "projectId": "shigoto-no-mori",
-        "config": {}
+        "patch": {
+          "defaultBranch": null
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "patch": {
+          "defaultBranch": ""
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "patch": {
+          "lastMergeMethod": "squash"
+        }
+      },
+      {
+        "projectId": "shigoto-no-mori",
+        "patch": {
+          "scripts": {
+            "setup": "x"
+          }
+        }
       }
     ]
   },
@@ -1090,27 +1077,22 @@
       }
     ]
   },
-  "WriteWorktreeDataPayloadSchema": {
+  "PatchWorktreePortsPayloadSchema": {
     "accepts": [
       {
         "projectId": "shigoto-no-mori",
         "worktreeId": "a1b2c3d4e5f6",
-        "data": {
-          "ports": [
-            {
-              "port": 8787,
-              "label": "api"
-            },
-            {
-              "port": 5555
-            }
-          ]
-        }
+        "remove": [5555],
+        "put": [
+          {
+            "port": 8787,
+            "label": "api"
+          }
+        ]
       },
       {
         "projectId": "shigoto-no-mori",
-        "worktreeId": "a1b2c3d4e5f6",
-        "data": {}
+        "worktreeId": "a1b2c3d4e5f6"
       }
     ],
     "normalizes": [
@@ -1118,125 +1100,43 @@
         "input": {
           "projectId": "shigoto-no-mori",
           "worktreeId": "a1b2c3d4e5f6",
-          "data": {
-            "title": "Worktree titles",
-            "ports": []
-          }
+          "put": [
+            {
+              "port": 6006,
+              "label": " storybook "
+            }
+          ]
         },
         "output": {
           "projectId": "shigoto-no-mori",
           "worktreeId": "a1b2c3d4e5f6",
-          "data": {
-            "ports": []
-          }
-        }
-      },
-      {
-        "input": {
-          "projectId": "shigoto-no-mori",
-          "worktreeId": "a1b2c3d4e5f6",
-          "data": {
-            "ports": [
-              {
-                "port": 6006,
-                "label": " storybook "
-              }
-            ]
-          }
-        },
-        "output": {
-          "projectId": "shigoto-no-mori",
-          "worktreeId": "a1b2c3d4e5f6",
-          "data": {
-            "ports": [
-              {
-                "port": 6006,
-                "label": "storybook"
-              }
-            ]
-          }
+          "put": [
+            {
+              "port": 6006,
+              "label": "storybook"
+            }
+          ]
         }
       }
     ],
     "rejects": [
       {
         "projectId": "shigoto-no-mori",
-        "worktreeId": "a1b2c3d4e5f6"
-      },
-      {
-        "projectId": "shigoto-no-mori",
-        "worktreeId": "wt_sm_badger",
-        "data": {}
+        "worktreeId": "wt_sm_badger"
       },
       {
         "projectId": "shigoto-no-mori",
         "worktreeId": "a1b2c3d4e5f6",
-        "data": {
-          "ports": [
-            {
-              "port": 70000
-            }
-          ]
-        }
+        "put": [
+          {
+            "port": 70000
+          }
+        ]
       },
       {
         "projectId": "shigoto-no-mori",
         "worktreeId": "a1b2c3d4e5f6",
-        "data": {
-          "ports": [
-            {
-              "port": 5100
-            },
-            {
-              "port": 5101
-            },
-            {
-              "port": 5102
-            },
-            {
-              "port": 5103
-            },
-            {
-              "port": 5104
-            },
-            {
-              "port": 5105
-            },
-            {
-              "port": 5106
-            },
-            {
-              "port": 5107
-            },
-            {
-              "port": 5108
-            },
-            {
-              "port": 5109
-            },
-            {
-              "port": 5110
-            },
-            {
-              "port": 5111
-            },
-            {
-              "port": 5112
-            },
-            {
-              "port": 5113
-            },
-            {
-              "port": 5114
-            },
-            {
-              "port": 5115
-            },
-            {
-              "port": 5116
-            }
-          ]
-        }
+        "remove": [70000]
       }
     ]
   },

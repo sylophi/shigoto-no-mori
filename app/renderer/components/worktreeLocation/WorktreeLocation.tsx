@@ -50,7 +50,6 @@ function LocationBody({ project }: { project: Project }) {
         device={device}
         worktrees={worktrees}
         config={seed.config}
-        resolvedDefaultBranch={seed.resolvedDefaultBranch}
       />
     </LocationPaneView>
   );

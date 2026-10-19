@@ -522,9 +522,31 @@ export const RotatePalettePayloadSchema = Schema.Struct({
   launching: Schema.Boolean,
 });
 
-export const WriteShigomoriPayloadSchema = Schema.Struct({
+// What a project's settings forms change, a peer's included: each key
+// given is set, or removed when null, and the rest stay, so what the
+// terminal or another device changed meanwhile survives the save. Keyed
+// by the settings' names (`projects config list`); strict, as the
+// device's.
+const cleared = <S extends Schema.Top>(schema: S) =>
+  Schema.optional(Schema.NullOr(schema));
+const ProjectSettingsPatchSchema = strict(
+  Schema.Struct({
+    defaultBranch: Schema.optional(ShigomoriConfigSchema.fields.defaultBranch),
+    "scripts.setup": cleared(Schema.String),
+    "scripts.teardown": cleared(Schema.String),
+    launchers: cleared(Schema.Array(LauncherCommandSchema)),
+    carryOver: cleared(Schema.Array(CarryOverEntrySchema)),
+    useWorktreeInclude: cleared(Schema.Boolean),
+    worktreeLayout: cleared(WorktreeLayoutSchema),
+    customWorktreePath: cleared(Schema.String),
+    showPrimaryInInbox: cleared(Schema.Boolean),
+  }),
+);
+export type ProjectSettingsPatch = typeof ProjectSettingsPatchSchema.Type;
+
+export const PatchShigomoriPayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,
-  config: ShigomoriConfigSchema,
+  patch: ProjectSettingsPatchSchema,
 });
 
 // worktreeIdFromPath's shape. Held exactly, since the worktree data
@@ -538,10 +560,20 @@ export const ReadWorktreeDataPayloadSchema = Schema.Struct({
   worktreeId: WorktreeIdSchema,
 });
 
-// The custom ports only: the title and description have their own writer.
-export const WriteWorktreeDataPayloadSchema = Schema.Struct({
+// A change to a worktree's custom ports, each by its number: `remove`
+// takes those numbers away, then `put` sets each entry, replacing one on
+// its number. Ports another device or the terminal changed meanwhile
+// stay. The title and description have their own writer.
+export const PatchWorktreePortsPayloadSchema = Schema.Struct({
   ...ReadWorktreeDataPayloadSchema.fields,
-  data: Schema.Struct({ ports: ShigomoriWorktreeDataSchema.fields.ports }),
+  remove: Schema.optional(
+    Schema.Array(CustomPortSchema.fields.port).check(
+      Schema.isMaxLength(MAX_CUSTOM_PORTS),
+    ),
+  ),
+  put: Schema.optional(
+    Schema.Array(CustomPortSchema).check(Schema.isMaxLength(MAX_CUSTOM_PORTS)),
+  ),
 });
 
 export const WriteWorktreeDescriptionPayloadSchema = Schema.Struct({

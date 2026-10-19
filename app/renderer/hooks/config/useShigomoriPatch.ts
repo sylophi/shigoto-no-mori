@@ -1,18 +1,20 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
+import type { ProjectSettingsPatch } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
-interface WriteVariables {
+interface PatchVariables {
   projectId: string;
-  config: ShigomoriConfig;
+  patch: ProjectSettingsPatch;
 }
 
-export function useShigomoriWrite() {
+// Saves the project settings a form changed, each set or removed (null),
+// so what the terminal or another device changed meanwhile stays.
+export function useShigomoriPatch() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation({
-    mutationFn: async ({ projectId, config }: WriteVariables) => {
-      await api.run(api.shigomori.write({ projectId, config }));
+    mutationFn: async ({ projectId, patch }: PatchVariables) => {
+      await api.run(api.shigomori.patch({ projectId, patch }));
       return { projectId };
     },
     // The config's read is returned, so a save answers once it is in.

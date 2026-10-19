@@ -145,19 +145,3 @@ export function withClientFields(
     Object.assign(merged, { [key]: client[key] });
   return merged;
 }
-
-// A draft over a seed that moved: what the form changed stays, the rest
-// takes the new seed.
-export function keepTouched(
-  form: SettingsFormState,
-  saved: SettingsFormState,
-  next: SettingsFormState,
-): SettingsFormState {
-  const merged = { ...next };
-  for (const key of Object.keys(form) as (keyof SettingsFormState)[]) {
-    if (JSON.stringify(form[key]) !== JSON.stringify(saved[key])) {
-      Object.assign(merged, { [key]: form[key] });
-    }
-  }
-  return merged;
-}

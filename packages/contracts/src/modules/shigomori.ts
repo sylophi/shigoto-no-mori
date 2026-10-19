@@ -4,7 +4,7 @@ import {
   ProjectScopedPayloadSchema,
   StoredShigomoriConfigSchema,
   VoidSchema,
-  WriteShigomoriPayloadSchema,
+  PatchShigomoriPayloadSchema,
 } from "../schemas/index.ts";
 
 export const shigomoriContract = defineContract(
@@ -16,7 +16,7 @@ export const shigomoriContract = defineContract(
     Schema.NullOr(StoredShigomoriConfigSchema),
     { remote: true, gated: false },
   ),
-  invoke("write", WriteShigomoriPayloadSchema, VoidSchema, {
+  invoke("patch", PatchShigomoriPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
