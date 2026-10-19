@@ -803,10 +803,10 @@ it("a stop's fresh git check that doesn't finish in its limit answers no status,
     deviceId: "B",
     projectId: "p",
     worktreeId: "copy",
+    localWorktreeId: "w1",
     labels: {
       [MIRROR_LABEL_MODE]: "mirror",
       [MIRROR_LABEL_LOCAL_PROJECT]: project.id,
-      [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
     },
   });
   const clock = testClock();
