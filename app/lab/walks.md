@@ -39,13 +39,13 @@ else.
 
 - **After every landing on release/v3**, in the `Walks` workflow
   (`.github/workflows/walks.yml`), which packages the lab build on a
-  macOS runner and runs every walk: about 13 minutes of walks (the
+  macOS runner and runs every walk: 8 to 13 minutes of walks (the
   cross-device ones about 6 of that, where a laptop takes a minute and
-  a half) and 1 of packaging, too long for every pull request. It checks out the whole
-  history, since the cross-device walks' project is this repository
-  at a pinned commit. It can also be started
-  by hand (`workflow_dispatch`). A regression shows within the hour
-  after a merge and before any cut.
+  a half) and 1 of packaging, about 17 minutes in all, too long for
+  every pull request. It checks out the whole history, since the
+  cross-device walks' project is this repository at a pinned commit.
+  It can also be started by hand (`workflow_dispatch`). A regression
+  shows within the hour after a merge and before any cut.
 - **Before every prerelease cut**, as the packaged check
   (`V3.md`, Process), on the build about to be cut.
 - **By hand**, with `pnpm walks`, for a change that touches a page.

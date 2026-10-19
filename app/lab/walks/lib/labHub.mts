@@ -109,11 +109,20 @@ export async function startLabHub(): Promise<LabHub> {
       process.kill(-child.pid, name);
     } catch {}
   };
-  // Detached, it hears no Ctrl-C of the run's: the run's exit takes it.
+  // Detached, it hears no Ctrl-C of the run's: the run's end takes it,
+  // an exit or a signal that would end the run without one.
   const onExit = () => signal("SIGKILL");
+  const ending = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+  const onSignal = (name: NodeJS.Signals) => {
+    signal("SIGKILL");
+    for (const each of ending) process.off(each, onSignal);
+    process.kill(process.pid, name);
+  };
   process.once("exit", onExit);
+  for (const each of ending) process.on(each, onSignal);
   const stop = async () => {
     process.off("exit", onExit);
+    for (const each of ending) process.off(each, onSignal);
     signal("SIGTERM");
     await waitFor(() => exited, "the lab hub to stop", 10_000).catch(() =>
       signal("SIGKILL"),

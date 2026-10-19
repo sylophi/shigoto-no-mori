@@ -5,6 +5,7 @@
 // another path and with it missing (cloned first), each started from
 // the window a person would start it in. The windows are checked for
 // what they say and the disks for what git did.
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
@@ -15,10 +16,11 @@ import {
   applyOwnerSettings,
   CARRIED,
   REAL_NAME,
+  REAL_URL,
   type RealOrigin,
   seedRealProject,
   startRealOrigin,
-  writeUserExcludes,
+  writeUserGit,
 } from "./lib/realRepo.mts";
 
 let origin: RealOrigin;
@@ -29,7 +31,7 @@ let a: Lab;
 let b: Lab;
 
 const blank = (_reposDir: string, _git: Lab["git"], home: string) =>
-  writeUserExcludes(home);
+  writeUserGit(home, origin);
 
 beforeAll(async () => {
   origin = await startRealOrigin();
@@ -87,6 +89,25 @@ const quickCreate = async (lab: Lab): Promise<string> => {
     .click();
   const heading = main(lab.page).getByRole("heading", { level: 1 });
   const before = await heading.textContent();
+  // Whether the new worktree's page ever shows the newest commit of the
+  // branch it came from, which isn't one of its own.
+  const tip = lab
+    .git(projectOn(a), "log", "-1", "--format=%s", "origin/main")
+    .trim();
+  await lab.page.evaluate(`(() => {
+    const was = ${JSON.stringify(before ?? "")};
+    const subject = ${JSON.stringify(tip)};
+    window.smWalkBaseTipWatch?.disconnect();
+    window.smWalkSawBaseTip = false;
+    window.smWalkBaseTipWatch = new MutationObserver(() => {
+      const page = document.querySelector("main");
+      const title = page?.querySelector("h1")?.textContent;
+      if (title !== was && title !== "Projects" && page?.textContent?.includes(subject)) {
+        window.smWalkSawBaseTip = true;
+      }
+    });
+    window.smWalkBaseTipWatch.observe(document.body, { subtree: true, childList: true, characterData: true });
+  })()`);
   await sidebar(lab.page)
     .getByRole("button", { name: `Quick-create worktree in ${REAL_NAME}` })
     .first()
@@ -96,6 +117,14 @@ const quickCreate = async (lab: Lab): Promise<string> => {
     .not.toMatch(new RegExp(`^(Projects|${before ?? ""})$`));
   const name = (await heading.textContent()) ?? "";
   await main(lab.page).getByText("No uncommitted changes").waitFor();
+  await main(lab.page).getByText("No commits yet").waitFor();
+  const sawBaseTip = await lab.page.evaluate(
+    "window.smWalkBaseTipWatch.disconnect(), window.smWalkSawBaseTip",
+  );
+  expect(
+    sawBaseTip,
+    "a new worktree's History showed its base's newest commit",
+  ).toBe(false);
   return name;
 };
 
@@ -186,6 +215,7 @@ const transplant = async (lab: Lab, device?: string) => {
   await main(lab.page).getByRole("button", { name: "Options" }).click();
   await lab.page.getByText("Transplant", { exact: true }).click();
   const dialog = lab.page.getByRole("dialog", { name: "Transplant worktree" });
+  await dialog.getByRole("radiogroup", { name: "What to leave out" }).waitFor();
   if (device !== undefined) await pickDevice(lab.page, dialog, device);
   await dialog.getByRole("button", { name: "Start transplant" }).click();
   await settle(lab.page, "Transplant complete", "Transplant stopped");
@@ -209,6 +239,9 @@ const checkouts = (lab: Lab, repo: string) =>
     });
 
 const cloneOn = (lab: Lab) => join(lab.home, REAL_NAME);
+const worktreeOn = (lab: Lab, name: string) =>
+  checkouts(lab, projectOn(lab)).find((each) => each.branch === name)?.path ??
+  "";
 const projectOn = (lab: Lab) =>
   lab === a ? join(a.root, "repos", REAL_NAME) : cloneOn(lab);
 
@@ -226,6 +259,10 @@ const expectCloneOfRemote = (lab: Lab) => {
   expect(
     lab.git(clone, "rev-parse", "--abbrev-ref", "main@{upstream}").trim(),
   ).toBe("origin/main");
+  // The remote as the source configured it, which this device fetches
+  // through its own url.insteadOf, not the source's rewrite of it.
+  expect(lab.git(clone, "config", "remote.origin.url").trim()).toBe(REAL_URL);
+  lab.git(clone, "fetch", "-q", "origin");
 };
 
 // The worktree is on `lab`, on its branch, clean, its carried files
@@ -318,10 +355,21 @@ it("mirrors the other device's worktree here, into the project here", async () =
   await expectLanded(b, name);
 });
 
-it("sends a worktree to a device with the project at another path, and tears the source down", async () => {
+it("sends a worktree to a device with the project at another path, its own ignored files over the project's carry-over there, and tears the source down", async () => {
+  // B's project as the owner keeps it there: the same settings, its own
+  // carried files.
+  applyOwnerSettings(b);
+  for (const path of Object.keys(CARRIED)) {
+    writeFileSync(join(projectOn(b), path), "B's project's\n");
+  }
   const name = await quickCreate(a);
+  const source = worktreeOn(a, name);
+  writeFileSync(join(source, "CLAUDE.local.md"), "the worktree's own\n");
   await transplant(a, "b");
   await expectLanded(b, name);
+  expect(
+    readFileSync(join(worktreeOn(b, name), "CLAUDE.local.md"), "utf8"),
+  ).toBe("the worktree's own\n");
   await expectGone(a, name);
 });
 

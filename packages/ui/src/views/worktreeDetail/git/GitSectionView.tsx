@@ -39,7 +39,9 @@ export function GitSectionView({
   // newest commits.
   files: readonly ChangedFile[];
   stashes: readonly StashEntry[];
-  commits: readonly CommitSummary[];
+  // Undefined until the branch's history is read: none is shown rather
+  // than commits that may not be the branch's own.
+  commits: readonly CommitSummary[] | undefined;
   // How the branch stands against the primary branch: its own commits
   // and whether there are more than were read.
   branch?: { base: string; own: number; more: boolean };
@@ -124,7 +126,11 @@ export function GitSectionView({
             </Aside>
           </EntryRow>
         )}
-        {commits.length === 0 ? (
+        {commits === undefined ? (
+          <EntryRow label="History" onOpen={undefined}>
+            {null}
+          </EntryRow>
+        ) : commits.length === 0 ? (
           <EntryRow label="History" onOpen={undefined}>
             <Muted>No commits yet</Muted>
           </EntryRow>

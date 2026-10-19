@@ -1,4 +1,4 @@
-import { cloneFolderName, pickCloneUrl } from "@shared/cloneUrl";
+import { cloneFolderName } from "@shared/cloneUrl";
 import { fetchRemoteImage } from "@host/lib/projects/remoteImage";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { reorderProjects } from "@shared/reorder";
@@ -18,6 +18,7 @@ import {
   defaultBranchOf,
   findProject,
   freshProjects,
+  handedCloneUrl,
   listProjectsWithStatus,
   loadProjects,
   refresh,
@@ -251,12 +252,9 @@ export const projectsHandlers = {
     ),
 
   cloneUrl: ({ projectId }) =>
-    Effect.gen(function* () {
-      const project = yield* findProject(projectId);
-      return pickCloneUrl(
-        yield* (yield* Git.Git).listRemoteEntries(project.path),
-      );
-    }),
+    Effect.flatMap(findProject(projectId), (project) =>
+      handedCloneUrl(project.path),
+    ),
 
   listBranches: ({ projectId }) =>
     Effect.gen(function* () {
