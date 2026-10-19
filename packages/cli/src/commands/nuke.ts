@@ -20,6 +20,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { ExitCode, UsageError } from "../errors.ts";
 import { rest } from "../here.ts";
 import { note, out } from "../output.ts";
@@ -160,7 +161,20 @@ export const nuke = Command.make(
           id === "logs" ||
           id === "preferences"
         ) {
-          rmSync(path, { recursive: true, force: true });
+          // What the app's start couldn't delete, this can't either: said
+          // as the app says it.
+          const failed = yield* Effect.try(() =>
+            rmSync(path, { recursive: true, force: true }),
+          ).pipe(
+            Effect.as(null),
+            Effect.catch((error) =>
+              Effect.succeed(errorMessageOf(error.cause)),
+            ),
+          );
+          if (failed !== null) {
+            left = true;
+            yield* out(`[nuke] left: ${path}: ${failed}`);
+          }
         }
       }
       if (!input.keepApp) {
@@ -178,7 +192,7 @@ export const nuke = Command.make(
       if (left) {
         yield* note(
           marked && input.keepApp
-            ? "Some of it stayed, as said above. Once it's gone, the app's next start finishes the nuke."
+            ? `Some of it stayed, as said above. Once nothing holds it, ${names.appName}'s next start finishes the nuke.`
             : "Some of it stayed, as said above.",
         );
         return yield* new ExitCode({ code: 1 });

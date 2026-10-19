@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import { app, dialog, session } from "electron";
+import { app, dialog, session, shell } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { platform } from "node:os";
@@ -16,7 +16,8 @@ import { clerkPublishableKey } from "./ipc/modules/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { unmountedVolume } from "@shared/unmountedVolume";
-import { finishPendingNuke, NUKE_MARKER } from "./core/nuke/finish";
+import { finishPendingNuke } from "./core/nuke/finish";
+import { openPastStuckNuke } from "./electron/nuke";
 import {
   finishHeadlessNuke,
   headless as headlessNuke,
@@ -135,23 +136,16 @@ takeUpdateEndpointOverrides();
 // prompt about busy work, and it can't reap scripts that belong to the
 // instance owning the data dir. It tells the user nothing, because raising
 // the running window is what launching the app asked for.
+// What a nuke's start couldn't delete, asked about before the app opens.
+let stuckNuke: readonly { readonly path: string; readonly why: string }[] = [];
 if (!app.requestSingleInstanceLock()) {
   app.exit(headlessNuke ? NUKE_EXIT.running : 0);
 } else {
   // A nuke's files (main/electron/nuke.ts), before anything opens one:
   // with the lock held, so no other instance is using them.
   const nuked = finishPendingNuke(app.getPath("userData"));
-  if (nuked !== null && headlessNuke) {
-    finishHeadlessNuke(nuked.left);
-  } else if (nuked !== null && nuked.left.length > 0) {
-    // Run on, it would delete what it makes at the next start, which
-    // finishes the nuke.
-    dialog.showErrorBox(
-      `${names.appName} couldn't finish erasing itself`,
-      `${nuked.left.map((stayed) => `${stayed.path}: ${stayed.why}`).join("\n")}\n\nDelete what's named here, then open the app again. To open it without finishing, delete ${path.join(app.getPath("userData"), NUKE_MARKER)}.`,
-    );
-    app.exit(1);
-  }
+  if (nuked !== null && headlessNuke) finishHeadlessNuke(nuked.left);
+  else if (nuked !== null && nuked.left.length > 0) stuckNuke = nuked.left;
 }
 
 // After the rename above, which names the log folder, and the nuke's
@@ -283,6 +277,10 @@ if (process.argv.includes(LAB_FLAG)) {
 }
 
 app.on("ready", async () => {
+  if (stuckNuke.length > 0 && !(await openPastStuckNuke(stuckNuke))) {
+    app.exit(1);
+    return;
+  }
   // Electron grants most permission requests by default, and this
   // window hosts remote content (Clerk's script and captcha iframe), so
   // everything is refused except what the app uses: copy buttons, which
@@ -336,11 +334,16 @@ app.on("ready", async () => {
           "it and relaunch. To fall back to the default location, delete " +
           `the pointer file at ${pointer}.`
         : "Check the folder's permissions, or move it aside to start fresh.";
-    dialog.showErrorBox(
-      "Shigoto no Mori can't access its data folder",
-      `${dataDirOrNone()} could not be created or accessed.\n\n${recovery}\n\n` +
+    const { response } = await dialog.showMessageBox({
+      type: "error",
+      message: "Shigoto no Mori can't access its data folder",
+      detail:
+        `${dataDirOrNone()} could not be created or accessed.\n\n${recovery}\n\n` +
         `${errorMessageOf(err)}`,
-    );
+      buttons: pointer !== null ? ["Show in Finder", "Quit"] : ["Quit"],
+      defaultId: 0,
+    });
+    if (pointer !== null && response === 0) shell.showItemInFolder(pointer);
     app.exit(1);
     return;
   }

@@ -57,6 +57,8 @@ export interface Lab {
   readonly root: string;
   readonly home: string;
   readonly dataDir: string;
+  // The app's userData: the build's own, or the profile's under it.
+  readonly userData: string;
   readonly page: Page;
   // The window's debugging port, for a weblab session to attach to a
   // walk held at a breakpoint.
@@ -65,9 +67,14 @@ export interface Lab {
   git(cwd: string, ...args: string[]): string;
   // The bundle's terminal command on this lab's data folder.
   sm(...args: string[]): string;
-  // Quits the app as a person does and starts it again on the same root.
-  // Not for a walk's devices: the quit goes to every instance of the build.
-  restart(): Promise<void>;
+  // Quits the app as a person does and starts it again on the same root:
+  // `between` runs once it has quit, and `atStart` has the new app's pid
+  // before its window is waited for (a dialog it shows first). Not for a
+  // walk's devices: the quit goes to every instance of the build.
+  restart(options?: {
+    readonly between?: () => void;
+    readonly atStart?: (pid: number) => Promise<void>;
+  }): Promise<void>;
   // The app's processes: its main one first, then every helper it
   // started, each with its command line.
   pids(): { pid: number; command: string }[];
@@ -368,16 +375,18 @@ async function launch(
     });
 
   // The windows a previous walk left open would reopen on its pages.
-  const userData = join(
+  const buildUserData = join(
     userInfo().homedir,
     "Library",
     "Application Support",
     NAME,
   );
-  rmSync(
+  const userData =
     options.profile === undefined
-      ? join(userData, "windows.json")
-      : join(userData, "profiles", options.profile),
+      ? buildUserData
+      : join(buildUserData, "profiles", options.profile);
+  rmSync(
+    options.profile === undefined ? join(userData, "windows.json") : userData,
     { recursive: true, force: true },
   );
 
@@ -387,7 +396,7 @@ async function launch(
     sm("projects", "add", reposDir, "--all", "--yes");
   }
 
-  const start = async () => {
+  const start = async (atStart?: (pid: number) => Promise<void>) => {
     const port = await freeLoopbackPort();
     // --sm-lab hands the page api to the walks (labHandle.ts).
     const child = spawn(executable, ["--sm-lab"], {
@@ -424,6 +433,7 @@ async function launch(
       );
     };
     try {
+      if (child.pid !== undefined) await atStart?.(child.pid);
       await waitFor(
         async () => {
           if (run.exited) throw new Error(`the lab app exited: ${stderr}`);
@@ -476,10 +486,7 @@ async function launch(
     // build's, and a profile's are named for it.
     // Retried: a helper the app left can still be writing its last file.
     if (options.profile !== undefined) {
-      for (const folder of [
-        join(userData, "profiles", options.profile),
-        hostLogsOf(options.profile),
-      ]) {
+      for (const folder of [userData, hostLogsOf(options.profile)]) {
         rmSync(folder, {
           recursive: true,
           force: true,
@@ -489,18 +496,20 @@ async function launch(
       }
     }
   };
-  const restart = async () => {
+  const restart: Lab["restart"] = async (hooks) => {
     await current.run.browser?.close().catch(() => {});
     // As the menu's Quit does, so the app saves what it keeps across a
-    // start.
-    quitByBundleId();
+    // start. One a dialog at its start quit is gone already.
+    if (!current.run.exited) quitByBundleId();
     await waitFor(() => current.run.exited, "the lab app to quit", 20_000);
-    current = await start();
+    hooks?.between?.();
+    current = await start(hooks?.atStart);
   };
   return {
     root,
     home,
     dataDir,
+    userData,
     get page() {
       return current.page;
     },

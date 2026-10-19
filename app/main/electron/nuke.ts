@@ -11,7 +11,9 @@
 // deletes the rest. A signed build's keychain item goes with the marker
 // beside it (main/core/keychain/reset.ts recreates its own once that
 // marker is gone).
-import { app } from "electron";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import { app, dialog, shell } from "electron";
 import type { NukeReport } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
@@ -20,7 +22,8 @@ import {
   dataDirSource,
   legacyDataDirPointerPath,
 } from "@shared/paths";
-import { writeNukeMarker } from "../core/nuke/finish";
+import { NUKE_MARKER, writeNukeMarker } from "../core/nuke/finish";
+import { names } from "../flavor";
 import { signOutForNuke } from "../ipc/modules/account";
 import { setsLoginItem } from "./liveness";
 
@@ -61,4 +64,28 @@ export async function nukeShell(): Promise<NukeReport> {
   }
   writeNukeMarker(app.getPath("userData"), pathsToDelete());
   return { left };
+}
+
+// A start whose nuke left files it couldn't delete: run on, it would
+// delete at its next start what it made meanwhile. Whether to open
+// anyway, the marker dropped (the person's call, on what is left), or
+// to quit, revealing the first file to delete.
+export async function openPastStuckNuke(
+  left: readonly { readonly path: string; readonly why: string }[],
+): Promise<boolean> {
+  const { response } = await dialog.showMessageBox({
+    type: "warning",
+    message: `${names.appName} couldn't finish erasing itself`,
+    detail: `${left.map((stayed) => `${stayed.path}: ${stayed.why}`).join("\n")}\n\nDelete what's named here, then open the app again to finish.`,
+    buttons: ["Show in Finder", "Open Without Finishing", "Quit"],
+    defaultId: 0,
+    cancelId: 2,
+  });
+  if (response === 1) {
+    rmSync(join(app.getPath("userData"), NUKE_MARKER), { force: true });
+    return true;
+  }
+  const first = left[0];
+  if (response === 0 && first !== undefined) shell.showItemInFolder(first.path);
+  return false;
 }
