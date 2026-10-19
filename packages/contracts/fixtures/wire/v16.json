@@ -2073,7 +2073,10 @@
   "shellCalls:failed": {
     "payload": {
       "message": "0",
-      "storeReport": "e"
+      "store": {
+        "report": "e",
+        "newer": true
+      }
     }
   },
   "shellCalls:guide": {
@@ -2505,13 +2508,10 @@
       "deviceId": "-1"
     }
   },
-  "window:hostRestarts": {
-    "success": {
-      "count": 0,
-      "reason": {
-        "kind": "exited",
-        "code": null
-      }
+  "window:hostRestarted": {
+    "payload": {
+      "kind": "silent",
+      "seconds": 1
     }
   },
   "window:networkChanged": {},

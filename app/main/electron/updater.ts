@@ -325,13 +325,16 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
   if (!(await hasInstallableStaged())) return "nothing-staged";
   if (unattended) {
     const refusal = busyRemoteRefusal(
-      await Effect.runPromise(hostBusy()),
+      await Effect.runPromise(hostBusy(true)),
       "restart",
     );
     if (refusal !== null) throw new Error(refusal);
   } else {
     if (
-      !(await confirmBusyAction("restart", await Effect.runPromise(hostBusy())))
+      !(await confirmBusyAction(
+        "restart",
+        await Effect.runPromise(hostBusy(true)),
+      ))
     )
       return "declined";
     // The dialog can sit open arbitrarily long. Re-check that another
@@ -389,7 +392,7 @@ async function updateNow(unattended: boolean): Promise<void> {
   if (!started) throw new Error("This build doesn't update itself.");
   if (unattended) {
     const refusal = busyRemoteRefusal(
-      await Effect.runPromise(hostBusy()),
+      await Effect.runPromise(hostBusy(false)),
       "restart",
     );
     if (refusal !== null) throw new Error(refusal);

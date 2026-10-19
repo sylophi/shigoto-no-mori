@@ -91,7 +91,7 @@ it("a window the person closes stays closed", async () => {
     .toBe(true);
   // A call through the shell once its renderer is gone, so whatever the
   // shell did with that is done by its answer.
-  await withPageApi(lab.page, (api) => api.run(api.window.hostRestarts()));
+  await withPageApi(lab.page, (api) => api.run(api.window.hostAddress()));
   expect(pages()).toHaveLength(1);
   expect(renderers()).toEqual(before);
   expect(shellLog()).not.toContain("renderer gone");
