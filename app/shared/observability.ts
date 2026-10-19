@@ -5,6 +5,7 @@
 // main/electron/logFile.ts, the host's beside it). A dev build run with
 // SHIGOMORI_DEVTOOLS=1 also streams its spans to the Effect devtools on
 // their default port.
+import * as Schema from "effect/Schema";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as DevTools from "effect/devtools/DevTools";
@@ -23,7 +24,40 @@ const millis = (nanos: bigint) => Number(nanos) / 1_000_000;
 // performance.now().
 export type OpenSpans = Map<Tracer.Span, number>;
 
-function outcome(exit: Exit.Exit<unknown, unknown>) {
+// One line of a trace log (trace.log, host-trace.log), as the tracer
+// below writes it and main.log's restart detail reads it
+// (main/core/host/restartLog.ts).
+export const TraceLineSchema = Schema.Struct({
+  name: Schema.String,
+  traceId: Schema.String,
+  spanId: Schema.String,
+  parentId: Schema.optional(Schema.String),
+  start: Schema.String,
+  durationMs: Schema.Number,
+  outcome: Schema.Literals(["ok", "interrupted", "failed"]),
+  error: Schema.optional(Schema.String),
+  // "unserializable" where they couldn't be written (serialize).
+  attributes: Schema.optional(
+    Schema.Union([
+      Schema.Record(Schema.String, Schema.Unknown),
+      Schema.Literal("unserializable"),
+    ]),
+  ),
+  events: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        name: Schema.String,
+        at: Schema.Number,
+        attributes: Schema.optional(Schema.Unknown),
+      }),
+    ),
+  ),
+});
+type TraceLine = typeof TraceLineSchema.Type;
+
+function outcome(
+  exit: Exit.Exit<unknown, unknown>,
+): Pick<TraceLine, "outcome" | "error"> {
   if (Exit.isSuccess(exit)) return { outcome: "ok" };
   if (Cause.hasInterruptsOnly(exit.cause)) return { outcome: "interrupted" };
   return {
@@ -82,7 +116,7 @@ const fileTracer = (
                     attributes,
                   }))
                 : undefined,
-          }),
+          } satisfies TraceLine),
         );
       };
       return span;

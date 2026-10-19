@@ -92,6 +92,8 @@ const dirs: string[] = [];
 const span = (name: string, outcome: string, error?: string) =>
   JSON.stringify({
     name,
+    traceId: "t1",
+    spanId: "s1",
     start: "2026-10-16T15:17:18.002Z",
     durationMs: 4.6,
     outcome,
@@ -111,12 +113,17 @@ it("a restart's lines name what the host was in and what it last finished", asyn
       "Worktrees.list",
       "failed",
       "git exited 128",
-    )}\n`,
+    )}\n${JSON.stringify({
+      ...JSON.parse(span("Graph.cycle", "ok")),
+      // The tracer's line for attributes it couldn't write.
+      attributes: "unserializable",
+    })}\n`,
   );
   const ended = await lastEndedSpans(logs);
-  assert.equal(ended.length, 2);
+  assert.equal(ended.length, 3);
   assert.match(ended[0] ?? "", /Views\.view 5 ms ok$/);
   assert.match(ended[1] ?? "", /Worktrees\.list 5 ms failed: git exited 128$/);
+  assert.match(ended[2] ?? "", /Graph\.cycle 5 ms ok$/);
   const lines = restartDetail({
     beat: {
       at: 1_000,
@@ -130,6 +137,6 @@ it("a restart's lines name what the host was in and what it last finished", asyn
     "[host]   at its last beat, 4.0 s before: in GitWatcher.start (2.5 s)",
   );
   assert.equal(lines[1], "[host]   the last spans it finished:");
-  assert.equal(lines.length, 4);
+  assert.equal(lines.length, 5);
   assert.deepEqual(await lastEndedSpans(join(logs, "missing")), []);
 });

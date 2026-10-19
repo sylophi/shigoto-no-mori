@@ -6,21 +6,28 @@
 //   - heading "Settings" [ref=41] level=1
 //     - button "Save" [ref=57] disabled
 
-type AxValue = { readonly value?: unknown };
-type AxNode = {
-  readonly nodeId: string;
-  readonly ignored?: boolean;
-  readonly role?: AxValue;
-  readonly name?: AxValue;
-  readonly value?: AxValue;
-  readonly properties?: ReadonlyArray<{
-    readonly name: string;
-    readonly value: AxValue;
-  }>;
-  readonly childIds?: ReadonlyArray<string>;
-  readonly parentId?: string;
-  readonly backendDOMNodeId?: number;
-};
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+const AxValueSchema = Schema.Struct({ value: Schema.optional(Schema.Unknown) });
+type AxValue = typeof AxValueSchema.Type;
+const AxNodeSchema = Schema.Struct({
+  nodeId: Schema.String,
+  ignored: Schema.optional(Schema.Boolean),
+  role: Schema.optional(AxValueSchema),
+  name: Schema.optional(AxValueSchema),
+  value: Schema.optional(AxValueSchema),
+  properties: Schema.optional(
+    Schema.Array(Schema.Struct({ name: Schema.String, value: AxValueSchema })),
+  ),
+  childIds: Schema.optional(Schema.Array(Schema.String)),
+  parentId: Schema.optional(Schema.String),
+  backendDOMNodeId: Schema.optional(Schema.Number),
+});
+type AxNode = typeof AxNodeSchema.Type;
+const decodeTree = Schema.decodeUnknownOption(
+  Schema.Struct({ nodes: Schema.Array(AxNodeSchema) }),
+);
 
 // Roles that only hold others: their children stand in their place.
 const HOLDERS = new Set(["generic", "none", "presentation", "LineBreak"]);
@@ -48,8 +55,10 @@ const quoted = (value: string) =>
   JSON.stringify(value.length > 120 ? `${value.slice(0, 119)}…` : value);
 
 export function axOutline(answer: unknown): string {
-  const nodes =
-    (answer as { nodes?: ReadonlyArray<AxNode> } | undefined)?.nodes ?? [];
+  const nodes = Option.match(decodeTree(answer), {
+    onNone: () => [],
+    onSome: (tree) => tree.nodes,
+  });
   const byId = new Map(nodes.map((node) => [node.nodeId, node]));
   const root = nodes.find(
     (node) => node.parentId === undefined || !byId.has(node.parentId),

@@ -58,6 +58,8 @@ function makeWindow(windowId: number) {
     detached: false,
     nodes: new Map<number, Facts>(),
     focused: {} as Facts,
+    // The page's script throws: an evaluation answers no value.
+    throws: false,
     inputs: () =>
       sent.filter(({ method }) => method.startsWith("Input.")).length,
   };
@@ -70,6 +72,12 @@ function makeWindow(windowId: number) {
           return window.nodes.has(ref)
             ? { object: { objectId: `${ref}` } }
             : {};
+        }
+        if (
+          window.throws &&
+          (method === "Runtime.callFunctionOn" || method === "Runtime.evaluate")
+        ) {
+          return { exceptionDetails: { text: "Uncaught" } };
         }
         if (method === "Runtime.callFunctionOn") {
           const facts = window.nodes.get(Number(params?.["objectId"]));
@@ -520,6 +528,35 @@ it("refuses a click or a key on what the page declares the user's alone, whateve
         "access",
       );
       assert.equal(page.inputs(), 0);
+    }),
+  );
+});
+
+it("refuses a key on a control when the page can't say what it is, and acts on no element it can't describe", async () => {
+  const shell = makeShell();
+  const page = shell.window(1);
+  page.nodes.set(18, { name: "Save" });
+  page.throws = true;
+  await run(shell.layer, (guide) =>
+    Effect.gen(function* () {
+      const token = yield* shell.start(guide, 1, "claude");
+      assert.equal(
+        refusedFor(
+          yield* Effect.exit(
+            guide.drive(token, { _tag: "press", key: "Enter" }),
+          ),
+        ),
+        "destructive",
+      );
+      assert.ok(
+        failure(
+          yield* Effect.exit(guide.drive(token, { _tag: "click", ref: 18 })),
+        ) instanceof Guide.GuideTargetGone,
+      );
+      assert.equal(page.inputs(), 0);
+      // Moving off a control is the guide's still.
+      yield* guide.drive(token, { _tag: "press", key: "Tab" });
+      assert.equal(page.inputs() > 0, true);
     }),
   );
 });

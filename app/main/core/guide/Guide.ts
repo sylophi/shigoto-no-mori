@@ -19,6 +19,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
@@ -265,15 +266,28 @@ const SELECT = `function () {
   selection.addRange(range);
 }`;
 
-type Facts = {
-  readonly controls: ReadonlyArray<{
-    readonly variant: string;
-    readonly name: string;
-  }>;
-  readonly alone: string | null;
-  readonly terminal: boolean;
+const factsFields = {
+  controls: Schema.Array(
+    Schema.Struct({ variant: Schema.String, name: Schema.String }),
+  ),
+  alone: Schema.NullOr(Schema.String),
+  terminal: Schema.Boolean,
 };
-type Spot = Facts & { readonly x: number; readonly y: number };
+type Facts = Schema.Struct<typeof factsFields>["Type"];
+// What the page says of an element, or null when it is gone.
+const decodeSpot = Schema.decodeUnknownOption(
+  Schema.NullOr(
+    Schema.Struct({ ...factsFields, x: Schema.Number, y: Schema.Number }),
+  ),
+);
+const decodeFacts = Schema.decodeUnknownOption(Schema.Struct(factsFields));
+// Facts the page couldn't give (it threw): the user's, so nothing that
+// acts on a control goes through.
+const UNREADABLE: Facts = {
+  controls: [],
+  alone: "unreadable",
+  terminal: false,
+};
 
 // What `press` sends for each key: its code, its Windows key code (which
 // Chromium routes by), and the text it types.
@@ -305,7 +319,11 @@ const stateOf = (session: Session): GuideState => ({
   point: session.point,
 });
 
-const mouse = (page: GuidePage, type: string, spot: Spot) =>
+const mouse = (
+  page: GuidePage,
+  type: string,
+  spot: { readonly x: number; readonly y: number },
+) =>
   page.send("Input.dispatchMouseEvent", {
     type,
     x: spot.x,
@@ -334,8 +352,19 @@ const sendKey = (page: GuidePage, key: GuideKey) =>
     });
   });
 
+const decodeEvaluated = Schema.decodeUnknownOption(
+  Schema.Struct({
+    result: Schema.Struct({ value: Schema.optional(Schema.Unknown) }),
+  }),
+);
+// The value an evaluate answered with, by value.
 const valueOf = (answer: unknown): unknown =>
-  (answer as { result?: { value?: unknown } } | undefined)?.result?.value;
+  Option.getOrUndefined(
+    Option.map(decodeEvaluated(answer), ({ result }) => result.value),
+  );
+const decodeObjectId = Schema.decodeUnknownOption(
+  Schema.Struct({ object: Schema.Struct({ objectId: Schema.String }) }),
+);
 
 const make = Effect.gen(function* () {
   const windows = yield* GuideWindows;
@@ -440,9 +469,10 @@ const make = Effect.gen(function* () {
 
   const objectOf = (page: GuidePage, ref: number) =>
     page.send("DOM.resolveNode", { backendNodeId: ref }).pipe(
-      Effect.map(
-        (answer) =>
-          (answer as { object?: { objectId?: string } }).object?.objectId,
+      Effect.map((answer) =>
+        Option.getOrUndefined(
+          Option.map(decodeObjectId(answer), ({ object }) => object.objectId),
+        ),
       ),
       Effect.orElseSucceed(() => undefined),
       Effect.filterOrFail(
@@ -464,7 +494,11 @@ const make = Effect.gen(function* () {
   const spotOf = (page: GuidePage, ref: number) =>
     Effect.gen(function* () {
       const objectId = yield* objectOf(page, ref);
-      const spot = (yield* call(page, objectId, INSPECT)) as Spot | null;
+      // One the page couldn't say (it threw) is gone as far as an action
+      // on it goes.
+      const spot = Option.getOrNull(
+        decodeSpot(yield* call(page, objectId, INSPECT)),
+      );
       if (spot === null) return yield* new GuideTargetGone({ ref });
       return { ...spot, objectId };
     });
@@ -475,7 +509,8 @@ const make = Effect.gen(function* () {
         expression: FOCUSED,
         returnByValue: true,
       }),
-      (answer) => valueOf(answer) as Facts,
+      (answer) =>
+        Option.getOrElse(decodeFacts(valueOf(answer)), () => UNREADABLE),
     );
 
   const act = (

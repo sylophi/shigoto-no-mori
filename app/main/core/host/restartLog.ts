@@ -6,17 +6,16 @@
 import { open } from "node:fs/promises";
 import { join } from "node:path";
 import type { HostBeat } from "@shared/hostBeat";
+import { TraceLineSchema } from "@shared/observability";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 const TAIL_BYTES = 64 * 1024;
 const ENDED = 8;
 
-type Ended = {
-  readonly name?: unknown;
-  readonly start?: unknown;
-  readonly durationMs?: unknown;
-  readonly outcome?: unknown;
-  readonly error?: unknown;
-};
+const decodeLine = Schema.decodeUnknownOption(
+  Schema.fromJsonString(TraceLineSchema),
+);
 
 const two = (n: number) => String(n).padStart(2, "0");
 
@@ -48,21 +47,16 @@ export async function lastEndedSpans(logsPath: string): Promise<string[]> {
   // The first line may be cut by the tail, and fails to parse.
   for (const line of text.split("\n").toReversed()) {
     if (spans.length === ENDED) break;
-    let span: Ended;
-    try {
-      span = JSON.parse(line) as Ended;
-    } catch {
-      continue;
-    }
-    if (typeof span.name !== "string") continue;
-    const at = typeof span.start === "string" ? clockTime(span.start) : "?";
-    const ms =
-      typeof span.durationMs === "number" ? Math.round(span.durationMs) : "?";
+    const decoded = decodeLine(line);
+    if (Option.isNone(decoded)) continue;
+    const span = decoded.value;
     const failed =
-      span.outcome === "failed" && typeof span.error === "string"
+      span.outcome === "failed" && span.error !== undefined
         ? `: ${span.error.slice(0, 160)}`
         : "";
-    spans.push(`${at} ${span.name} ${ms} ms ${String(span.outcome)}${failed}`);
+    spans.push(
+      `${clockTime(span.start)} ${span.name} ${Math.round(span.durationMs)} ms ${span.outcome}${failed}`,
+    );
   }
   return spans.toReversed();
 }

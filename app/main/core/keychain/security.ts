@@ -12,6 +12,7 @@
 //
 // Electron-free, so test/keychain.mts can run the real thing
 // against a probe item.
+import * as Predicate from "effect/Predicate";
 import { execFileSync } from "node:child_process";
 
 // `security` exits with the OSStatus of the failing call, and
@@ -35,9 +36,7 @@ export function deleteGenericPassword(
     return "deleted";
   } catch (error) {
     if (
-      typeof error === "object" &&
-      error !== null &&
-      "status" in error &&
+      Predicate.hasProperty(error, "status") &&
       error.status === ITEM_NOT_FOUND_EXIT
     ) {
       return "missing";
