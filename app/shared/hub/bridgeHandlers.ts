@@ -34,8 +34,13 @@ import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
 import type { ChannelMux } from "@shared/remote/channels";
 import type { InvokeOptions } from "@shared/ipc/transport";
 import type { Handlers, ViewObserver } from "@shigomori/contracts/types";
-import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
+import type { PeerConnection } from "@shared/hub/directDial";
+import * as Deferred from "effect/Deferred";
+import * as Exit from "effect/Exit";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FiberSet from "effect/FiberSet";
+import type * as Scope from "effect/Scope";
 import * as Cause from "effect/Cause";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
@@ -128,8 +133,7 @@ type HubHandlerDeps = {
   // the connectInfo ask stays private to the dialer.
   connectDirect(
     deviceId: string,
-    opts?: ConnectPeerOpts,
-  ): Promise<PeerConnection>;
+  ): Effect.Effect<PeerConnection, unknown, Scope.Scope>;
   // Fired whenever a direct session is cached or a cached one drops,
   // so the owner can fan a fresh status snapshot out exactly like the
   // hub's own transitions.
@@ -150,8 +154,9 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // One dial attempt (or a join onto the cached session or in-flight
   // dial) for one peer. Not a contract channel: the keeper is its only
   // production caller, which is what makes sessions desired state
-  // instead of use-triggered.
-  dialPeer(deviceId: string): Promise<void>;
+  // instead of use-triggered. Interrupting the wait leaves the dial to
+  // its owner, the bridge: the sweeps and the scope's close end it.
+  dialPeer(deviceId: string): Effect.Effect<void, unknown>;
   // invokePeer for this device's own callers, who may cancel the call
   // and hand it the span it continues (InvokeOptions).
   invokeOnPeer(
@@ -210,32 +215,50 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // Close and drop every cached direct session, for the quit path:
   // without it the remote host keeps a dead socket in its per-device
   // slot and relaunch lands on the supersede path instead of a clean
-  // reconnect. Owners do NOT call this -- directPlane.stop() owns
+  // reconnect. Owners do NOT call this -- the plane's scope owns
   // teardown, keeper latch first -- but it stays exported because the
   // direct-plane check tears its bare bridges down with it.
   closeDirectPeers(): void;
 };
 
-export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
-  // Peer sessions opened by the keeper's dials, cached by deviceId,
-  // and dropped the moment they die (the transport fires onClose on
-  // its own failure mode), so the keeper's redial lands on an empty
-  // slot and handshakes fresh. The entry holds the promise, not the
-  // connection, so a dialPeer overlapping an in-flight dial shares one
-  // handshake. The welcome's version
-  // lives on the entry itself, set on the exact entry object the dial
-  // belongs to (held lexically, never re-read from the map: a re-read
-  // after an await could stamp a NEW entry if this one was dropped and
+// The bridge, until its scope closes, which ends every dial and
+// session it holds.
+export const makeHubHandlers = (
+  deps: HubHandlerDeps,
+): Effect.Effect<HubHandlers, never, Scope.Scope> =>
+  Effect.map(
+    Effect.all([
+      FiberSet.makeRuntime<never>(),
+      FiberSet.makeRuntimePromise<never>(),
+    ]),
+    ([run, runPromise]) => hubHandlers(deps, run, runPromise),
+  );
+
+function hubHandlers(
+  deps: HubHandlerDeps,
+  run: <A, E>(effect: Effect.Effect<A, E>) => Fiber.Fiber<A, E>,
+  runPromise: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>,
+): HubHandlers {
+  // Peer sessions opened by the keeper's dials, cached by deviceId, and
+  // dropped the moment they die, so the keeper's redial lands on an
+  // empty slot and handshakes fresh. Each entry is one fiber, its dial
+  // and then its session, up until the link drops or the fiber is
+  // interrupted (a sweep, the quit, the scope's close), which closes
+  // whatever it opened, mid-dial or established. A dialPeer overlapping
+  // an in-flight dial joins it. The welcome's version lives on the
+  // entry itself, set on the exact entry the dial belongs to (held
+  // lexically, never re-read from the map: the entry may be dropped and
   // replaced mid-dial). A non-null version is also the established
-  // marker directPeerVersions derives from, so a still-dialing entry
-  // is never reported as a live session. acceptsCommands and
-  // sharesData ride the same entry for the same reason, set with the
-  // version.
+  // marker directPeerVersions derives from, so a still-dialing entry is
+  // never reported as a live session. acceptsCommands and sharesData
+  // ride the same entry for the same reason, set with the version.
   type PeerEntry = {
-    promise: Promise<PeerConnection>;
+    connection: Deferred.Deferred<PeerConnection, unknown>;
+    fiber: Fiber.Fiber<void> | null;
     version: string | null;
     acceptsCommands: boolean;
     sharesData: boolean;
+    probe: () => void;
   };
   const peers = new Map<string, PeerEntry>();
 
@@ -247,7 +270,7 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
     const cached = peers.get(deviceId);
     if (cached === undefined) return;
     // When the caller names an entry, drop only that one: a stale
-    // close callback must not evict the replacement session.
+    // close must not evict the replacement session.
     if (entry !== undefined && cached !== entry) return;
     peers.delete(deviceId);
     // Only an actual transition notifies: dropping an entry whose dial
@@ -260,58 +283,67 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
     }
   }
 
-  // Close a cached direct session and drop its entry. The transports'
-  // owner-initiated close is deliberately silent (no onClose), so the
-  // drop happens here rather than waiting on a callback.
+  // Close a cached direct session, or end its dial, and drop its entry.
+  // An owner close is silent (no onPeerDropped).
   function closeDirectPeer(deviceId: string, entry: PeerEntry): void {
     dropPeer(deviceId, entry);
-    entry.promise
-      .then((connection) => {
-        connection.close();
-      })
-      .catch(() => {
-        // The handshake failed on its own. Nothing to close.
-      });
+    if (entry.fiber !== null) run(Fiber.interrupt(entry.fiber));
   }
 
-  function openPeer(deviceId: string): Promise<PeerConnection> {
+  function openPeer(deviceId: string): PeerEntry {
     const existing = peers.get(deviceId);
-    if (existing !== undefined) return existing.promise;
-    // The entry object is created first and held lexically by the
-    // async chain below, so the version is stamped on exactly the
-    // entry this dial owns, whatever the map holds by then. A failed
-    // dial rejects THROUGH here untouched: the dialer's errors are
-    // typed (structural vs transient) and user-explainable, and there
-    // is deliberately nothing to fall back to.
+    if (existing !== undefined) return existing;
+    // A failed dial fails THROUGH here untouched: the dialer's errors are
+    // typed (structural vs transient) and user-explainable, and there is
+    // deliberately nothing to fall back to.
     const entry: PeerEntry = {
-      // oxlint-disable-next-line shigomori/no-double-cast -- the dial below fills this in, and refers to the entry, so the entry has to exist first
-      promise: undefined as unknown as Promise<PeerConnection>,
+      connection: Deferred.makeUnsafe<PeerConnection, unknown>(),
+      fiber: null,
       version: null,
       acceptsCommands: false,
       sharesData: false,
+      probe: noop,
     };
-    entry.promise = (async (): Promise<PeerConnection> => {
-      const connection = await deps.connectDirect(deviceId, {
-        onClose: () => dropPeer(deviceId, entry, true),
-      });
-      entry.version = connection.remoteAppVersion;
-      entry.acceptsCommands = connection.acceptsCommands;
-      entry.sharesData = connection.sharesData;
-      // A dial can complete after a sweep already evicted this entry
-      // (the peer left the roster mid-dial). The sweep's continuation
-      // closes the connection, and an orphan must not fan a status
-      // change out for a session the map never reports.
-      if (peers.get(deviceId) === entry) deps.onDirectChange?.();
-      return connection;
-    })();
     peers.set(deviceId, entry);
-    entry.promise.catch(() => {
-      // A failed dial must not poison the cache, or the peer would
-      // stay unreachable until restart even after its listener came
-      // back.
-      dropPeer(deviceId, entry);
-    });
-    return entry.promise;
+    entry.fiber = run(
+      Effect.gen(function* () {
+        const connection = yield* deps.connectDirect(deviceId);
+        entry.version = connection.remoteAppVersion;
+        entry.acceptsCommands = connection.acceptsCommands;
+        entry.sharesData = connection.sharesData;
+        entry.probe = connection.probe;
+        yield* Deferred.succeed(entry.connection, connection);
+        if (peers.get(deviceId) === entry) deps.onDirectChange?.();
+        yield* connection.dropped;
+        // The established link ended on its own: the keeper's redial
+        // signal.
+        dropPeer(deviceId, entry, true);
+      }).pipe(
+        Effect.scoped,
+        Effect.onExit((exit) => {
+          if (Exit.isSuccess(exit)) return Effect.void;
+          if (Cause.hasInterruptsOnly(exit.cause)) {
+            return Deferred.fail(
+              entry.connection,
+              new NoDirectConnectionError({ deviceId, reason: "closed" }),
+            );
+          }
+          // A failed dial, or one that died, must not poison the cache,
+          // or the peer would stay unreachable until restart even after
+          // its listener came back.
+          // A session that ends so after it was up dropped on its own,
+          // which the keeper hears.
+          return Effect.andThen(
+            Deferred.fail(entry.connection, Cause.squash(exit.cause)),
+            Effect.sync(() =>
+              dropPeer(deviceId, entry, entry.version !== null),
+            ),
+          );
+        }),
+        Effect.ignore,
+      ),
+    );
+    return entry;
   }
 
   // The keeper's session, or the honest refusal. A present entry may
@@ -330,8 +362,8 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
         ),
       );
     }
-    return entry.promise.catch((error: unknown) =>
-      Promise.reject(noSession(deviceId, error)),
+    return runPromise(Deferred.await(entry.connection)).catch(
+      (error: unknown) => Promise.reject(noSession(deviceId, error)),
     );
   }
 
@@ -360,9 +392,8 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
   return {
     status: () => deps.status(),
 
-    dialPeer: async (deviceId) => {
-      await openPeer(deviceId);
-    },
+    dialPeer: (deviceId) =>
+      Effect.suspend(() => Deferred.await(openPeer(deviceId).connection)),
 
     invokeOnPeer: invokeOn,
 
@@ -432,28 +463,16 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
     },
 
     probeDirectPeers: () => {
-      for (const entry of peers.values()) {
-        if (entry.version === null) continue;
-        entry.promise
-          .then((connection) => {
-            connection.probe();
-          })
-          .catch(() => {
-            // Established entries never reject, and a rejected one has
-            // nothing to probe.
-          });
-      }
+      for (const entry of peers.values()) entry.probe();
     },
 
     // Both sweeps below cover mid-dial entries too, not just
     // established sessions: a dial completing AFTER its peer left the
     // roster would otherwise install a live session for a device the
     // control plane stopped vouching for (including a just-revoked
-    // one), and quit would leave an in-flight dial's socket unclosed.
-    // closeDirectPeer handles both shapes: it evicts the entry now and
-    // attaches a continuation that closes the resulting connection
-    // whenever the promise settles (a rejection means there is nothing
-    // to close).
+    // one), and quit would leave an in-flight dial's sockets open.
+    // closeDirectPeer ends both at once: it evicts the entry and
+    // interrupts its fiber, which closes what it opened.
     dropDirectPeersNotIn: (online) => {
       const live = new Set(online);
       for (const [deviceId, entry] of peers) {

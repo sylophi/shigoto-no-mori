@@ -322,21 +322,30 @@ const WORKTREE = { projectId: "p", worktreeId: "w" };
 
 // The bridge a window's host serves hub:watchPeer from, its one peer
 // session this link.
-const bridgeOver = (connection: DeviceConnection) =>
-  makeHubHandlers({
-    status: () => ({
-      socket: { phase: "connected" },
-      onlineDeviceIds: [],
-      peerAppVersions: {},
-      peerAcceptsCommands: {},
-      peerSharesData: {},
-    }),
-    connectDirect: async () => ({
-      ...connection,
-      acceptsCommands: true,
-      sharesData: true,
-    }),
-  });
+const bridgeOver = (connection: DeviceConnection) => {
+  const scope = Scope.makeUnsafe();
+  trackTest(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  return Effect.runSync(
+    Scope.provide(scope)(
+      makeHubHandlers({
+        status: () => ({
+          socket: { phase: "connected" },
+          onlineDeviceIds: [],
+          peerAppVersions: {},
+          peerAcceptsCommands: {},
+          peerSharesData: {},
+        }),
+        connectDirect: () =>
+          Effect.succeed({
+            ...connection,
+            acceptsCommands: true,
+            sharesData: true,
+            dropped: Effect.never,
+          }),
+      }),
+    ),
+  );
+};
 
 const rejection = (promise: Promise<unknown>) =>
   promise.then(
@@ -1307,7 +1316,7 @@ it("relay: a window that falls behind a peer's flood has its view ended as no se
   listener.setAccepts(true);
   const connection = await dialListener(track, listener);
   const hub = bridgeOver(connection);
-  await hub.dialPeer(LISTENER);
+  await Effect.runPromise(hub.dialPeer(LISTENER));
   // A window that takes three values, then nothing until it is let go.
   let taken = 0;
   const behind = Deferred.makeUnsafe<void>();
@@ -1346,7 +1355,7 @@ it("views: a view on a link this side closes ends as a disconnect, which a windo
   const { listener } = await listen(track);
   const connection = await dialListener(track, listener);
   const hub = bridgeOver(connection);
-  await hub.dialPeer(LISTENER);
+  await Effect.runPromise(hub.dialPeer(LISTENER));
   const watched = new Promise<unknown>((resolve) => {
     connection.transport.watch?.("ports:watch", WORKTREE, {
       value: () => {},

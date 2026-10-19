@@ -144,6 +144,7 @@ export type HubConnection = {
     deviceId: string,
     input: unknown,
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<unknown>;
   // Reconciles the connection with the wanted state, one refresh at a
   // time so a fast account double-toggle cannot interleave one
@@ -559,11 +560,11 @@ export const make = (
         return link !== null;
       },
 
-      askConnectInfo(deviceId, input, askMs) {
+      askConnectInfo(deviceId, input, askMs, signal) {
         if (link === null) {
           return Promise.reject(new HubLinkDownError());
         }
-        return link.askConnectInfo(deviceId, input, askMs);
+        return link.askConnectInfo(deviceId, input, askMs, signal);
       },
 
       refresh: (resolve) =>

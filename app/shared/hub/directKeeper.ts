@@ -66,10 +66,10 @@ import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
 
 type DirectKeeperDeps = {
-  // One dial attempt for one peer: the bridge's dialPeer. Resolving
-  // means an established session (or one already cached), rejecting
+  // One dial attempt for one peer: the bridge's dialPeer. Succeeding
+  // means an established session (or one already cached), failing
   // means the attempt failed with the dialer's typed error.
-  dial(deviceId: string): Promise<unknown>;
+  dial(deviceId: string): Effect.Effect<unknown, unknown>;
 };
 
 export type DirectKeeper = {
@@ -163,15 +163,7 @@ export const make = (
       Effect.gen(function* () {
         const dropped = yield* Deferred.make<void>();
         state.dropped = dropped;
-        const dialed = yield* Effect.callback<Result.Result<unknown, unknown>>(
-          (resume) => {
-            const dialing = Promise.resolve().then(() => deps.dial(deviceId));
-            dialing.then(
-              (session) => resume(Effect.succeed(Result.succeed(session))),
-              (error: unknown) => resume(Effect.succeed(Result.fail(error))),
-            );
-          },
-        );
+        const dialed = yield* Effect.result(deps.dial(deviceId));
         if (Result.isFailure(dialed)) {
           const error = dialed.failure;
           const message = errorMessageOf(error);

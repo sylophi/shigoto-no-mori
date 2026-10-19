@@ -5,13 +5,15 @@
 // another path and with it missing (cloned first), each started from
 // the window a person would start it in. The windows are checked for
 // what they say and the disks for what git did.
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { type Devices, startDevices } from "./lib/devices.mts";
 import type { Lab } from "./lib/labApp.mts";
 import {
+  confirmTwice,
   mirror,
+  openOwnWorktree,
   openPeerWorktree,
   pickDevice,
   quickCreate,
@@ -220,6 +222,90 @@ it("sends a worktree to a device with the project at another path, its own ignor
   expect(
     readFileSync(join(worktreeOn(b, name), "CLAUDE.local.md"), "utf8"),
   ).toBe("the worktree's own\n");
+  await expectGone(a, name);
+});
+
+// What a device's window reads off the hub, and its own id.
+const hubView = (lab: Lab) =>
+  lab.page.evaluate(
+    `((api) => Promise.all([api.run(api.hub.status()), api.deviceId]))(window.__smLab.api)`,
+  ) as Promise<[{ onlineDeviceIds: string[] }, string]>;
+
+it("sends a worktree while the hub goes away: it completes over the direct link and both windows show it, or it stops with words and a retry starts clean, with no half state on either disk", async () => {
+  const name = await quickCreate(a, projectOn(a));
+  const source = worktreeOn(a, name);
+  const head = a.git(source, "rev-parse", "HEAD").trim();
+  // Ignored and large, so the files step is under way when the hub goes.
+  const big = join("node_modules", "sm-walk-big.bin");
+  const bigBytes = 300 * 1024 * 1024;
+  mkdirSync(join(source, "node_modules"), { recursive: true });
+  writeFileSync(join(source, big), Buffer.alloc(bigBytes, 7));
+  const send = async () => {
+    await main(a.page).getByRole("button", { name: "Options" }).click();
+    await a.page.getByText("Transplant", { exact: true }).click();
+    const dialog = a.page.getByRole("dialog", { name: "Transplant worktree" });
+    await dialog
+      .getByRole("radiogroup", { name: "What to leave out" })
+      .waitFor();
+    await pickDevice(a.page, dialog, "b");
+    await dialog.getByRole("button", { name: "Start transplant" }).click();
+  };
+  const ended = a.page.getByRole("heading", {
+    name: /^(Transplant complete|Transplant stopped)$/,
+  });
+  const ids = [(await hubView(a))[1], (await hubView(b))[1]] as const;
+  await send();
+  let outcome: string | null = null;
+  try {
+    expect(
+      await ended.isVisible(),
+      "the send ended before the hub was cut",
+    ).toBe(false);
+    await devices.hub.pause();
+    await ended.waitFor({ timeout: 180_000 });
+    outcome = await ended.textContent();
+    if (outcome === "Transplant stopped") {
+      const said = await a.page.getByRole("dialog").last().innerText();
+      expect(said.replace("Transplant stopped", "").trim()).not.toBe("");
+      await a.page.keyboard.press("Escape");
+    }
+  } finally {
+    await devices.hub.resume();
+  }
+  // Back on the hub, each sees the other, as the device it was.
+  for (const [lab, other, otherBefore] of [
+    [a, b, ids[1]],
+    [b, a, ids[0]],
+  ] as const) {
+    const otherId = (await hubView(other))[1];
+    expect(otherId).toBe(otherBefore);
+    await expect
+      .poll(async () => (await hubView(lab))[0].onlineDeviceIds, {
+        timeout: 60_000,
+      })
+      .toContain(otherId);
+  }
+  if (outcome === "Transplant stopped") {
+    // Nothing of it on B, and A's worktree as it was.
+    expect(
+      checkouts(b, projectOn(b)).some((each) => each.branch === name),
+    ).toBe(false);
+    expect(b.git(projectOn(b), "branch", "--list", name).trim()).toBe("");
+    expect(a.git(source, "rev-parse", "HEAD").trim()).toBe(head);
+    expect(statSync(join(source, big)).size).toBe(bigBytes);
+    // A retry starts clean.
+    await transplant(a, "b");
+  } else {
+    // Both windows show it: A's dialog its end, B the worktree's page.
+    const done = a.page.getByRole("dialog", { name: "Transplant complete" });
+    await confirmTwice(
+      done.getByRole("button", { name: "Tear down and finish" }),
+    );
+    await done.waitFor({ state: "hidden", timeout: 60_000 });
+    await openOwnWorktree(b.page, name);
+  }
+  await expectLanded(b, name);
+  expect(statSync(join(worktreeOn(b, name), big)).size).toBe(bigBytes);
   await expectGone(a, name);
 });
 

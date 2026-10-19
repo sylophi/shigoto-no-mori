@@ -55,6 +55,7 @@ type DirectPlaneConnection = {
     deviceId: string,
     input: unknown,
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<unknown>;
 };
 
@@ -134,8 +135,8 @@ export const make = (
         // The ONLY consumer of the hub connection's ask. The bridge
         // below never sees it, and it carries one question only, so
         // contract traffic structurally cannot ride the device hub.
-        askConnectInfo: (deviceId, input, timeoutMs) =>
-          deps.connection().askConnectInfo(deviceId, input, timeoutMs),
+        askConnectInfo: (deviceId, input, timeoutMs, signal) =>
+          deps.connection().askConnectInfo(deviceId, input, timeoutMs, signal),
         localDeviceId: deps.localDeviceId(),
         localAppVersion: deps.localAppVersion(),
         localKey: () => deps.connection().localKey(),
@@ -205,10 +206,9 @@ export const make = (
     // gets the dialer and nothing else, and a direct session opening or
     // closing fires the same statusChanged fan-out a device hub
     // transition does so the snapshot stays live.
-    const handlers = makeHubHandlers({
+    const handlers: HubHandlers = yield* makeHubHandlers({
       status,
-      connectDirect: (deviceId, opts) =>
-        getDialer().connectDirect(deviceId, opts),
+      connectDirect: (deviceId) => getDialer().connectDirect(deviceId),
       onDirectChange: notifyStatusChanged,
       // The keeper's redial signal and its no-session explanation. Both
       // close over the binding below (created after the handlers because
@@ -230,7 +230,7 @@ export const make = (
     // The supervisor of the data plane: the ONLY caller of
     // dialPeer, so every direct session exists because presence said the
     // device does, never because a renderer asked.
-    const keeper = yield* DirectKeeper.make({
+    const keeper: DirectKeeper.DirectKeeper = yield* DirectKeeper.make({
       dial: (deviceId) => handlers.dialPeer(deviceId),
     });
 
