@@ -462,7 +462,7 @@ function heldDial() {
   let changes = 0;
   const handlers = makeHubHandlers({
     status: () => ({
-      socket: { phase: "connected", remoteDeviceId: "", remoteAppVersion: "" },
+      socket: { phase: "connected" },
       onlineDeviceIds: [],
       peerAppVersions: {},
       peerAcceptsCommands: {},
@@ -1428,11 +1428,7 @@ it("one round trip: a winning dial costs the device hub exactly one ask and one 
 });
 
 it("presence scopes the data plane: a peer leaving a LIVE roster loses its direct sessions on both sides, our own hub link going down leaves them alone, and a stopped or revoked socket closes them all", async () => {
-  const CONNECTED: SupervisorStatus = {
-    phase: "connected",
-    remoteDeviceId: "",
-    remoteAppVersion: "",
-  };
+  const CONNECTED: SupervisorStatus = { phase: "connected" };
   const listener = await startDirectListener(trackTest);
   const { bridge } = await bridgeTo(trackTest, listener);
   const reconcileCalls: string[][] = [];

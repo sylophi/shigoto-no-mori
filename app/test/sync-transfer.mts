@@ -1151,7 +1151,7 @@ it("transplant (dirty): the capture lands applied and force removes the still-di
   );
 });
 
-it("transplant (scripts running): the teardown refuses with the scripts-running marker and the source survives", async () => {
+it("transplant (scripts running): the teardown refuses, saying the scripts still run, and the source survives", async () => {
   // (11) Scripts-running refusal: a live script in the source worktree
   // makes the teardown refuse (never kill), so the pull half succeeds
   // and the source survives with the worktree on both sides.
@@ -1192,8 +1192,7 @@ it("transplant (scripts running): the teardown refuses with the scripts-running 
     assert.equal(refusedTransplant.sourceRemoved, false);
     assert.match(
       refusedTransplant.sourceError ?? "",
-      /scripts-running/,
-      "the refusal must carry the stable scripts-running marker",
+      /^1 script is still running there\.$/,
     );
     assert.equal(
       existsSync(wt5Path),

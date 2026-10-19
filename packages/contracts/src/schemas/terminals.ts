@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { WorktreeScopedPayloadSchema } from "./payloads.ts";
+import { HexId32Schema } from "./hexId.ts";
 
 const TerminalIdPayloadSchema = Schema.Struct({
   terminalId: Schema.NonEmptyString,
@@ -44,22 +45,30 @@ export const OpenTerminalPayloadSchema = Schema.Struct({
 
 export const CloseTerminalPayloadSchema = TerminalIdPayloadSchema;
 
+// A point in a terminal's output: its shell's incarnation (a restart
+// starts another) and a chunk's seq in it.
+const TerminalMarkSchema = Schema.Struct({
+  incarnation: HexId32Schema,
+  seq: Schema.Natural,
+});
+
 export const AttachTerminalPayloadSchema = Schema.Struct({
   ...TerminalIdPayloadSchema.fields,
-  // The last chunk's seq the client holds, when it is reconnecting.
-  after: Schema.optional(Schema.Natural),
+  // The last chunk the client holds, when it is reconnecting.
+  after: Schema.optional(TerminalMarkSchema),
 });
 
 // What an attach streams, in order: the history (after `after` when the
-// ring still holds it, else all of it with `reset`, and the client
-// starts over), the size, then output and size changes as they come,
-// then the exit. A chunk's `seq` counts the session's output chunks, so
-// a reconnect asks for what came after the last one it holds.
+// ring still holds it in the same incarnation, else all of it with
+// `reset`, and the client starts over), the size, then output and size
+// changes as they come, then the exit. A chunk's `seq` counts the
+// incarnation's output chunks, so a reconnect asks for what came after
+// the last one it holds.
 export const TerminalEventSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("history"),
     data: Schema.String,
-    seq: Schema.Natural,
+    ...TerminalMarkSchema.fields,
     reset: Schema.Boolean,
   }),
   Schema.Struct({

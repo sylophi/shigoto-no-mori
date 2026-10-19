@@ -1808,11 +1808,7 @@ function posedDevices(keys: string, into: Set<string>): void {
     if (id !== undefined) into.add(id);
   }
 }
-let socketPhase: HubStatus["socket"] = {
-  phase: "connected",
-  remoteDeviceId: "",
-  remoteAppVersion: "",
-};
+let socketPhase: HubStatus["socket"] = { phase: "connected" };
 
 function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};

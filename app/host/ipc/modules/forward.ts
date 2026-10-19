@@ -9,13 +9,13 @@
 // or the link dropping tears it down. No
 // registry, no idle sweep, nothing to leak past the connection.
 import type { Socket } from "node:net";
-import { callFailureOf } from "@shigomori/contracts/errors";
+import {
+  callFailureOf,
+  ForwardConnectFailedError,
+} from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Effect from "effect/Effect";
-import {
-  FORWARD_CONNECT_FAILED,
-  forwardContract,
-} from "@shigomori/contracts/modules/forward";
+import { forwardContract } from "@shigomori/contracts/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import { dialLoopback } from "@host/lib/net";
@@ -23,10 +23,6 @@ import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 
 // How long a dial may sit unanswered before the open refuses.
 const DIAL_TIMEOUT_MS = 5_000;
-
-// Error messages here are stable markers, not prose (the FORWARD_*
-// constants beside the contract), which the client side and the UI
-// match.
 
 export const forwardHandlers: EffectHandlers<
   typeof forwardContract,
@@ -43,7 +39,7 @@ async function open(port: number, channelId: string, ctx: HandlerContext) {
   // The schema already pinned the range. Re-check so this handler
   // stays fail-closed even if it is ever reached off-contract.
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`${FORWARD_CONNECT_FAILED}: port out of range`);
+    throw new ForwardConnectFailedError({ port, reason: "out of range" });
   }
   requireChannels(ctx, channelId);
   // Loopback only, always: the feature is reaching the host's OWN
@@ -55,8 +51,9 @@ async function open(port: number, channelId: string, ctx: HandlerContext) {
   try {
     socket = await dialLoopback(port, DIAL_TIMEOUT_MS);
   } catch (error) {
-    throw new Error(`${FORWARD_CONNECT_FAILED}: ${errorWordsOf(error)}`, {
-      cause: error,
+    throw new ForwardConnectFailedError({
+      port,
+      reason: errorWordsOf(error),
     });
   }
   // Nagle batches small writes against the wire's round trips, so

@@ -26,7 +26,7 @@ export function attachTerminal(
   // terminal is gone from the host.
   onEnd: (code: number | null) => void,
 ): () => void {
-  let after: number | undefined;
+  let after: { incarnation: string; seq: number } | undefined;
   let stopped = false;
   let attempt = 0;
   let stop = noop;
@@ -49,12 +49,12 @@ export function attachTerminal(
         switch (event.kind) {
           case "history":
             screen.replay(event.data, event.reset);
-            after = event.seq;
+            after = { incarnation: event.incarnation, seq: event.seq };
             return;
           case "output":
-            if (after !== undefined && event.seq <= after) return;
+            if (after === undefined || event.seq <= after.seq) return;
             screen.write(event.data);
-            after = event.seq;
+            after = { ...after, seq: event.seq };
             return;
           case "size":
             screen.resize(event.cols, event.rows);

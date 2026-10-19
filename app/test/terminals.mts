@@ -12,7 +12,8 @@
 //   - a close ends every attach with an exit and leaves the list,
 //   - a quit saves each terminal, and the next start opens it again
 //     under its history in the folder it was in, the history's lines
-//     left where they are,
+//     left where they are, and a client that held it before starts over
+//     (another incarnation),
 //   - a host killed while a terminal floods comes back with what it
 //     saved when the output last paused: whole, in that folder,
 //   - a terminal that keeps changing is saved within a minute of awake
@@ -223,7 +224,11 @@ const withTerminals = <A, E>(
 ) => app.runPromise(Effect.flatMap(Terminals.Terminals, f));
 
 // An attach, collecting what it streams until it ends.
-function attach(app: App, terminalId: string, after?: number) {
+function attach(
+  app: App,
+  terminalId: string,
+  after?: { incarnation: string; seq: number },
+) {
   const events: TerminalEvent[] = [];
   const fiber = app.runFork(
     Effect.flatMap(Terminals.Terminals, (terminals) =>
@@ -239,13 +244,18 @@ function attach(app: App, terminalId: string, after?: number) {
       .filter((event) => event.kind === "history" || event.kind === "output")
       .map((event) => event.data)
       .join("");
-  const lastSeq = () =>
-    events.reduce(
-      (seq, event) =>
-        event.kind === "history" || event.kind === "output" ? event.seq : seq,
+  // The last chunk it holds, in the incarnation its history named.
+  const mark = () => {
+    const history = events[0];
+    assert.ok(history?.kind === "history");
+    const seq = events.reduce(
+      (last, event) =>
+        event.kind === "history" || event.kind === "output" ? event.seq : last,
       0,
     );
-  return { events, output, lastSeq, fiber };
+    return { incarnation: history.incarnation, seq };
+  };
+  return { events, output, mark, fiber };
 }
 
 describe("the service", () => {
@@ -267,7 +277,7 @@ describe("the service", () => {
         terminals.write(terminalId, "echo one-$((40+2))\r"),
       );
       await waitFor(() => first.output().includes("one-42"), "the echo");
-      const held = first.lastSeq();
+      const held = first.mark();
       await app.runPromise(Fiber.interrupt(first.fiber));
 
       await withTerminals(app, (terminals) =>
@@ -281,7 +291,7 @@ describe("the service", () => {
       const seqs = again.events.flatMap((event) =>
         event.kind === "output" ? [event.seq] : [],
       );
-      assert.ok(seqs.every((seq, i) => seq > (seqs[i - 1] ?? held)));
+      assert.ok(seqs.every((seq, i) => seq > (seqs[i - 1] ?? held.seq)));
 
       await withTerminals(app, (terminals) =>
         terminals.resize(terminalId, { cols: 80, rows: 24 }),
@@ -385,6 +395,7 @@ describe("the service", () => {
     mkdirSync(folder);
     const first = launch();
     let terminalId: string;
+    let held: { incarnation: string; seq: number };
     try {
       ({ terminalId } = await withTerminals(first, (terminals) =>
         terminals.open({ owner: { kind: "device" } }),
@@ -394,6 +405,7 @@ describe("the service", () => {
         terminals.write(terminalId, `cd ${folder} && echo moved-$((1+1))\r`),
       );
       await waitFor(() => attached.output().includes("moved-2"), "the cd");
+      held = attached.mark();
     } finally {
       await first.dispose();
     }
@@ -414,8 +426,12 @@ describe("the service", () => {
         reopened.map((terminal) => [terminal.terminalId, terminal.cwd]),
         [[terminalId, folder]],
       );
-      const attached = attach(second, terminalId);
+      // A client that held the shell before the restart starts over.
+      const attached = attach(second, terminalId, held);
       await waitFor(() => attached.events.length >= 2, "the attach's head");
+      const history = attached.events[0];
+      assert.ok(history?.kind === "history" && history.reset);
+      assert.notEqual(history.incarnation, held.incarnation);
       assert.ok(attached.output().includes("moved-2"), "the history came back");
       // On the main screen, leaving the alternate one would restore a
       // cursor never saved, and the new prompt would clear what came back.

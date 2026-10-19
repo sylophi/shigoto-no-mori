@@ -7,16 +7,10 @@ import { VoidSchema } from "../schemas/index.ts";
 // second one per device), so windows reach peers through it.
 // Client-scoped, so the bridge can never be served back to a peer.
 
-// On "connected" the identity fields are empty: the hub socket has no
-// welcome of its own.
 const HubSocketStatusSchema = Schema.Union([
   Schema.Struct({ phase: Schema.Literal("idle") }),
   Schema.Struct({ phase: Schema.Literal("connecting") }),
-  Schema.Struct({
-    phase: Schema.Literal("connected"),
-    remoteDeviceId: Schema.String,
-    remoteAppVersion: Schema.String,
-  }),
+  Schema.Struct({ phase: Schema.Literal("connected") }),
   Schema.Struct({
     phase: Schema.Literal("backoff"),
     attempt: Schema.Int,

@@ -10,7 +10,7 @@
 //
 // A side in the middle of a git operation (a rebase, a merge, a
 // cherry-pick, a revert, a bisect) refuses to be read or written
-// (gitState.ts GIT_OPERATION_IN_PROGRESS), and the session reads
+// (GitOperationInProgressError, a refusal), and the session reads
 // blocked until it finishes, naming the side. Mirroring the half-way
 // state would carry a detached HEAD or a conflicted index to the other
 // side, and the finished operation would then collide with it there.
@@ -27,7 +27,10 @@
 // changed (or that finds a waiting session's files caught up), and a
 // slow periodic sweep as the backstop. Reconciles are coalesced per
 // session: one in flight, one queued.
-import { isEntityGoneError } from "@shigomori/contracts/errors";
+import {
+  isEntityGoneError,
+  isGitOperationInProgressError,
+} from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
@@ -57,7 +60,6 @@ import {
   onMirrorBranch,
 } from "./registry";
 import {
-  CHANGED_LOCALLY,
   core,
   type FollowableSession,
   describeDivergence,
@@ -71,7 +73,6 @@ import { chooseDirection, pull, push } from "./followTransfer";
 import {
   type GitState,
   type GitStateCore,
-  operationInRefusal,
   readGitState,
   sameHead,
   watchIndexFile,
@@ -298,28 +299,27 @@ const reconcileOf = (
         );
       }
       const peerFailure = failureOf(peerRead);
-      const peerOperation =
-        peerFailure === undefined
-          ? null
-          : operationInRefusal(errorWordsOf(peerFailure));
       if (peerFailure !== undefined && isEntityGoneError(peerFailure)) {
         yield* copyGone(session);
       }
       if (Exit.isFailure(localRead)) {
         const failure = Cause.squash(localRead.cause);
-        const operation = operationInRefusal(errorWordsOf(failure));
-        if (operation === null) return yield* Effect.fail(failure);
+        if (!isGitOperationInProgressError(failure)) {
+          return yield* Effect.fail(failure);
+        }
         setStatus(record, {
           status: "blocked",
-          detail: operationDetail(operation, "here"),
+          detail: operationDetail(failure.operation, "here"),
         });
         return;
       }
       if (Exit.isFailure(peerRead)) {
-        if (peerOperation === null) return yield* Effect.fail(peerFailure);
+        if (!isGitOperationInProgressError(peerFailure)) {
+          return yield* Effect.fail(peerFailure);
+        }
         setStatus(record, {
           status: "blocked",
-          detail: operationDetail(peerOperation, "there"),
+          detail: operationDetail(peerFailure.operation, "there"),
         });
         return;
       }
@@ -375,13 +375,13 @@ const reconcileOf = (
         direction === "pull"
           ? yield* pull(round, peerAsIs.head, record.agreed?.tip ?? null)
           : yield* push(round, headThere, peerAsIs.head);
-      if (outcome.applied) {
+      if (outcome.kind === "applied") {
         setAgreed(record, direction === "pull" ? core(peer) : core(local));
         setStatus(record, { status: "synced", detail: "" });
         if (direction === "pull") deps.onLocalApplied?.(localProjectId);
         return;
       }
-      if (outcome.reason === CHANGED_LOCALLY) {
+      if (outcome.kind === "moved") {
         // The side being written moved between our read and the
         // apply. Look again right away.
         record.pending = true;

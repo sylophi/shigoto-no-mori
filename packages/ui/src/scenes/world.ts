@@ -12,7 +12,6 @@ import {
 } from "../lib/deviceStatus.ts";
 import {
   accountDevices,
-  FAKE_APP_VERSION,
   forests,
   LOCAL_DEVICE_ID,
 } from "../fixtures/fixtures.ts";
@@ -31,13 +30,7 @@ const devices: SceneDevice[] = accountDevices.map((device) => ({
   label: device.name,
   icon: device.icon ?? "desktop",
   status: deviceStatusView(
-    device.online
-      ? {
-          phase: "connected",
-          remoteDeviceId: device.deviceId,
-          remoteAppVersion: FAKE_APP_VERSION,
-        }
-      : { phase: "stopped" },
+    device.online ? { phase: "connected" } : { phase: "stopped" },
   ),
 }));
 

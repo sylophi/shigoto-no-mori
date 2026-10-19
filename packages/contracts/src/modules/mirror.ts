@@ -197,12 +197,45 @@ const MirrorApplyGitStatePayloadSchema = strict(
 export type MirrorApplyGitStatePayload =
   typeof MirrorApplyGitStatePayloadSchema.Type;
 
-const MirrorApplyGitStateResultSchema = strict(
-  Schema.Struct({
-    applied: Schema.Boolean,
-    reason: Schema.optional(Schema.String),
-  }),
-);
+// Why an apply left the worktree as it was. Each side says it in its own
+// words, naming the devices from where it shows. changed-locally: the
+// worktree moved since the caller read it, and the caller reads again.
+const GitApplyRefusalSchema = Schema.Union([
+  strict(
+    Schema.Struct({
+      kind: Schema.Literal("operation-in-progress"),
+      operation: Schema.String,
+    }),
+  ),
+  strict(Schema.Struct({ kind: Schema.Literal("changed-locally") })),
+  strict(Schema.Struct({ kind: Schema.Literal("missing-objects") })),
+  strict(
+    Schema.Struct({
+      kind: Schema.Literal("branch-checked-out"),
+      branch: Schema.String,
+      path: Schema.String,
+    }),
+  ),
+  strict(
+    Schema.Struct({
+      kind: Schema.Literal("branch-ahead"),
+      branch: Schema.String,
+    }),
+  ),
+]);
+export type GitApplyRefusal = typeof GitApplyRefusalSchema.Type;
+
+const MirrorApplyGitStateResultSchema = Schema.Union([
+  strict(Schema.Struct({ applied: Schema.Literal(true) })),
+  strict(
+    Schema.Struct({
+      applied: Schema.Literal(false),
+      refusal: GitApplyRefusalSchema,
+    }),
+  ),
+]);
+export type MirrorApplyGitStateResult =
+  typeof MirrorApplyGitStateResultSchema.Type;
 
 // diverged: both sides changed since they last agreed, and neither is
 // touched. blocked: the other side's state can't land here (detail says

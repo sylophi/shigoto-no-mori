@@ -29,18 +29,6 @@ import { invalidateHostDevice, queryKeysFor } from "@/lib/queryKeys";
 import { quietVillagerMoves } from "@/lib/villagers/moves";
 import { useApi } from "@/lib/runtime/pageApi";
 
-// The teardown reports a kept source with its raw reason. scripts-running
-// is the one code worth spelling out, and every surface that reports a
-// kept source says it from here. Phrased for mid-sentence use, which is
-// where both callers put it.
-export function keptSourceReason(
-  sourceError: string | undefined,
-): string | undefined {
-  return sourceError !== undefined && sourceError.includes("scripts-running")
-    ? "scripts are still running there."
-    : sourceError;
-}
-
 // What a pull does once the worktree is here: the landed project's
 // branches refresh (its lists are the host's views, which follow on
 // their own). Also what a send's teardown refreshes, the removed source

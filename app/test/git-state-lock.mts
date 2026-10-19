@@ -136,7 +136,7 @@ for (const [moved, move] of [
     const head = git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim();
     assert.deepEqual(await apply(), {
       applied: false,
-      reason: "changed-locally",
+      refusal: { kind: "changed-locally" },
     });
     assert.equal(git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim(), head);
   });

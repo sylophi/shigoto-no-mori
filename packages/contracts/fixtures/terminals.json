@@ -101,17 +101,31 @@
       },
       {
         "terminalId": "7c1e9a52",
-        "after": 0
+        "after": { "incarnation": "9f86d081884c7d659a2feaa0c55ad015", "seq": 0 }
       },
       {
         "terminalId": "7c1e9a52",
-        "after": 42
+        "after": {
+          "incarnation": "9f86d081884c7d659a2feaa0c55ad015",
+          "seq": 42
+        }
       }
     ],
     "rejects": [
       {
         "terminalId": "7c1e9a52",
-        "after": -1
+        "after": {
+          "incarnation": "9f86d081884c7d659a2feaa0c55ad015",
+          "seq": -1
+        }
+      },
+      {
+        "terminalId": "7c1e9a52",
+        "after": 42
+      },
+      {
+        "terminalId": "7c1e9a52",
+        "after": { "incarnation": "not-hex", "seq": 1 }
       },
       {
         "terminalId": ""
@@ -123,6 +137,7 @@
       {
         "kind": "history",
         "data": "$ ls\r\n",
+        "incarnation": "9f86d081884c7d659a2feaa0c55ad015",
         "seq": 12,
         "reset": true
       },
@@ -146,6 +161,12 @@
       }
     ],
     "rejects": [
+      {
+        "kind": "history",
+        "data": "$ ",
+        "seq": 1,
+        "reset": false
+      },
       {
         "kind": "output",
         "data": "x"

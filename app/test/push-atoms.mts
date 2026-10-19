@@ -378,7 +378,7 @@ it("git fetches: a peer's, mounted as its session lands, heard with no page read
 });
 
 const status = (over: Partial<HubStatus> = {}): HubStatus => ({
-  socket: { phase: "connected", remoteDeviceId: "", remoteAppVersion: "" },
+  socket: { phase: "connected" },
   onlineDeviceIds: [],
   peerAppVersions: {},
   peerAcceptsCommands: {},
