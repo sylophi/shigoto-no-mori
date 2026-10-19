@@ -48,6 +48,18 @@ async function signedTicket(accountId: string, random: string) {
   return await buildTicket(env.TICKET_SIGNING_KEY ?? "", accountId, random);
 }
 
+// Pings as a device does, and answers once the hub's runtime has
+// answered.
+async function ping(socket: { ws: WebSocket }): Promise<void> {
+  const pong = new Promise<void>((resolve) => {
+    socket.ws.addEventListener("message", (event) => {
+      if (event.data === HUB_PONG) resolve();
+    });
+  });
+  socket.ws.send(HUB_PING);
+  await pong;
+}
+
 describe("GET /connect", () => {
   it("accepts a fresh ticket and sends the presence list", async () => {
     const { socket } = await enrollAndConnect("acct-conn", "dev-conn");
@@ -384,13 +396,7 @@ describe("relaying", () => {
     // bare "pong" is not an envelope, so it is read raw here.
     const a = await enrollAndConnect("acct-ping", "dev-ping-a");
     await a.socket.untilPresence(["dev-ping-a"]);
-    const pong = new Promise<string>((resolve) => {
-      a.socket.ws.addEventListener("message", (event) => {
-        if (event.data === HUB_PONG) resolve(event.data);
-      });
-    });
-    a.socket.ws.send(HUB_PING);
-    expect(await pong).toBe(HUB_PONG);
+    await ping(a.socket);
     // The socket is untouched by the exchange: a relay still works.
     const b = await enrollAndConnect("acct-ping", "dev-ping-b");
     await b.socket.untilPresence(["dev-ping-a", "dev-ping-b"]);
@@ -512,18 +518,6 @@ async function silenceSoFar(accountId: string) {
       hub.clock = () => stopped;
     },
   );
-}
-
-// Pings as a device does, and answers once the hub's runtime has
-// answered.
-async function ping(socket: { ws: WebSocket }): Promise<void> {
-  const pong = new Promise<void>((resolve) => {
-    socket.ws.addEventListener("message", (event) => {
-      if (event.data === HUB_PONG) resolve();
-    });
-  });
-  socket.ws.send(HUB_PING);
-  await pong;
 }
 
 describe("a device that went silent", () => {

@@ -125,9 +125,9 @@ export class DeviceHub extends DurableObject<Env> {
     WebSocket,
     { tokens: number; at: number }
   >();
-  // The clock of the relay budget and the silence sweep, which the
-  // proofs stop: real time on a loaded runner outlasts any window short
-  // enough to wait out.
+  // The clock of the relay budget, the silence sweep and the sockets'
+  // connection order, which the proofs stop: real time on a loaded
+  // runner outlasts any window short enough to wait out.
   clock: () => number = () => Date.now();
 
   constructor(ctx: DurableObjectState, env: Env) {
