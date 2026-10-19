@@ -133,6 +133,14 @@ const legacyFlags = {
 // The project settings' parent. -p and --project-id go before or after
 // the verb. With no verb it prints the settings as stored, or with the
 // flags sets them.
+// A script flag as the patch takes it: none untouched, an empty one
+// cleared.
+const script = (flag: Option.Option<string>) =>
+  Option.match(flag, {
+    onNone: () => ({}),
+    onSome: (value) => ({ value: value === "" ? null : value }),
+  });
+
 const settingsOf = Command.make("config", legacyFlags, (input) =>
   Effect.gen(function* () {
     // The shared flags reach the parent's handler too, untyped there.
@@ -159,11 +167,20 @@ const settingsOf = Command.make("config", legacyFlags, (input) =>
           "--default-branch can't be empty: it's required, so set a ref instead of clearing it.",
       });
     }
-    // An empty script clears it.
-    for (const [key, flag] of updates) {
-      if (Option.isSome(flag))
-        yield* config.set(settings.scope, key, flag.value);
-    }
+    // In one commit.
+    const setup = script(input.setup);
+    const teardown = script(input.teardown);
+    yield* config.patchProject(
+      { kind: "project", projectId: project.id, path: project.path },
+      {
+        ...Option.match(input.defaultBranch, {
+          onNone: () => ({}),
+          onSome: (defaultBranch) => ({ defaultBranch }),
+        }),
+        ...("value" in setup ? { "scripts.setup": setup.value } : {}),
+        ...("value" in teardown ? { "scripts.teardown": teardown.value } : {}),
+      },
+    );
     yield* json
       ? emit({ ok: true, project: project.name })
       : out(styles(stdoutColor).green(`configured ${project.name}`));

@@ -262,3 +262,52 @@ it("reads a device setting as it applies, its default when unset or unreadable",
     editor: null,
   });
 });
+
+it("writes nothing for a change that answers none: no default branch filled in, nothing excluded", async () => {
+  const repo = box.repo("untouched");
+  const stored = await box.engine(
+    Effect.gen(function* () {
+      const c = yield* config;
+      const project = yield* (yield* Registry.Registry).register({
+        name: "untouched",
+        path: repo,
+      });
+      const scope = {
+        kind: "project",
+        projectId: project.id,
+        path: repo,
+      } as const;
+      yield* c.change(scope, () => null);
+      return yield* c.read(scope);
+    }),
+  );
+  assert.equal(stored, null, "a change that answered none wrote");
+});
+
+it("writes over the settings as they were read, and refuses once they changed meanwhile, writing nothing", async () => {
+  const race = Effect.gen(function* () {
+    const c = yield* config;
+    const scope = { kind: "device" } as const;
+    const read = (yield* c.read(scope)) ?? {};
+    yield* c.write(scope, { ...read, deleteBranchOnRemove: false }, read);
+    const afterFirst = (yield* c.read(scope)) ?? {};
+    // Another save lands between this read and its write.
+    yield* c.set(scope, "autoPullNew", "true");
+    const refused = yield* Effect.flip(
+      c.write(scope, { ...afterFirst, githubCli: false }, afterFirst),
+    );
+    return {
+      afterFirst,
+      refused: refused instanceof Config.ConfigChangedMeanwhile,
+      now: yield* c.read(scope),
+    };
+  });
+  const outcome = (await box.engine(race)) as Effect.Success<typeof race>;
+  assert.equal(outcome.afterFirst["deleteBranchOnRemove"], false);
+  assert.equal(outcome.refused, true, "a write over a stale read went");
+  assert.deepEqual(
+    outcome.now,
+    { ...outcome.afterFirst, autoPullNew: true },
+    "the refused write wrote",
+  );
+});
