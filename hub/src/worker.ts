@@ -54,7 +54,6 @@ import { CONNECT_RANDOM_PARAM, type EnrollOutcome } from "./hubObject.ts";
 import * as Registry from "./Registry.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
-  TICKET_TTL_MS,
   buildTicket,
   parseTicket,
 } from "./ticket.ts";
@@ -150,9 +149,6 @@ const deviceAuth = Layer.effect(
           return yield* Effect.provideService(effect, HubDevice, {
             deviceId: device.device_id,
             accountId: device.account_id,
-            // The web client enrolls every browser profile as platform
-            // "web", which is what makes it a web device.
-            kind: device.platform === "web" ? "web" : "desktop",
             credentialHash: hash,
           });
         }).pipe(Effect.catchTags({ RegistryError: unavailable("credential") })),
@@ -203,11 +199,6 @@ function toDeviceInfo(
   };
 }
 
-function ticketTtlMs(env: Env): number {
-  const override = Number(env.TICKET_TTL_MS);
-  return Number.isInteger(override) && override > 0 ? override : TICKET_TTL_MS;
-}
-
 const handlers = Effect.gen(function* () {
   const env = yield* WorkerEnv;
   const registry = yield* Registry.Registry;
@@ -236,19 +227,6 @@ const handlers = Effect.gen(function* () {
     if (cf === null) return;
     const waitUntil = yield* WaitUntil;
     waitUntil(teardownTunnel(cf, cfFetch, accountId, deviceId));
-  });
-
-  // The revocation itself, for the revoke route. The object deletes the
-  // row scoped to the account, so a row concurrently re-enrolled under
-  // another account survives a stale revoke.
-  const revokeAccountDevice = Effect.fn("revokeAccountDevice")(function* (
-    accountId: string,
-    deviceId: string,
-  ) {
-    yield* Effect.tryPromise(() =>
-      accountHub(env, accountId).revoke(deviceId, accountId),
-    );
-    yield* tearDownTunnel(accountId, deviceId);
   });
 
   const enrollment = HttpApiBuilder.group(HubApi, "enrollment", (handle) =>
@@ -319,23 +297,22 @@ const handlers = Effect.gen(function* () {
         }).pipe(Effect.catchTags({ RegistryError: unavailable("list") })),
       )
       // A device of another account gets the same refusal as a
-      // nonexistent one, so the route leaks nothing about foreign ids.
+      // nonexistent one, so the route leaks nothing about foreign ids:
+      // the object deletes the row scoped to the account, which also
+      // spares a row concurrently re-enrolled under another account.
       .handle("revokeDevice", ({ params }) =>
         Effect.gen(function* () {
           const { accountId } = yield* HubDevice;
-          const target = yield* registry.byId(params.deviceId);
-          if (target === null || target.account_id !== accountId) {
+          const removed = yield* Effect.tryPromise(() =>
+            accountHub(env, accountId).revoke(params.deviceId, accountId),
+          );
+          if (!removed) {
             return yield* new HubUnknownDeviceError({
               deviceId: params.deviceId,
             });
           }
-          yield* revokeAccountDevice(accountId, params.deviceId);
-        }).pipe(
-          Effect.catchTags({
-            RegistryError: unavailable("revoke"),
-            UnknownError: unavailable("revoke"),
-          }),
-        ),
+          yield* tearDownTunnel(accountId, params.deviceId);
+        }).pipe(Effect.catchTags({ UnknownError: unavailable("revoke") })),
       )
       .handle("updateDevice", ({ params, payload }) =>
         Effect.gen(function* () {
@@ -359,22 +336,17 @@ const handlers = Effect.gen(function* () {
           if (signingKey === "") {
             return yield* new HubTicketSigningUnconfiguredError();
           }
-          const ttlMs = ticketTtlMs(env);
           const random = yield* Effect.tryPromise(() =>
-            accountHub(env, device.accountId).mintTicket(
-              {
-                deviceId: device.deviceId,
-                kind: device.kind,
-                connectionId: payload.connectionId,
-                credentialHash: device.credentialHash,
-              },
-              ttlMs,
-            ),
+            accountHub(env, device.accountId).mintTicket({
+              deviceId: device.deviceId,
+              connectionId: payload.connectionId,
+              credentialHash: device.credentialHash,
+            }),
           ).pipe(Effect.catchTags({ UnknownError: unavailable("ticket") }));
           const ticket = yield* Effect.promise(() =>
             buildTicket(signingKey, device.accountId, random),
           );
-          return { ticket, expiresInMs: ttlMs };
+          return { ticket };
         }),
       )
       // Creates or reuses this device's named tunnel, points its ingress

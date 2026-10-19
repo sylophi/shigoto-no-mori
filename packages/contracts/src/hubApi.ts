@@ -9,7 +9,6 @@ import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
 import * as HttpApiSecurity from "effect/http-api/HttpApiSecurity";
-import type { DeviceKind } from "./modules/link.ts";
 import { PROTOCOL_VERSION } from "./protocol.ts";
 import { HexId32Schema } from "./schemas/hexId.ts";
 import {
@@ -216,7 +215,6 @@ export class HubDevice extends Context.Service<
   {
     readonly deviceId: string;
     readonly accountId: string;
-    readonly kind: DeviceKind;
     readonly credentialHash: string;
   }
 >()("sm/contracts/HubDevice") {}

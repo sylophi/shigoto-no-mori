@@ -20,10 +20,9 @@ import { PortNumberSchema } from "./schemas/ports.ts";
 // presence roster must fit (hub.spec.ts asserts it).
 export const MAX_HUB_MESSAGE_BYTES = 64 * 1024;
 
-// The DO measures the deliver envelope, which differs from the send
-// envelope the sender encodes by a fixed routing delta (`extraBytes`).
 // A UTF-16 unit is one to three UTF-8 bytes, so only the band between
-// needs a real count.
+// needs a real count. `extraBytes` is what the text grows by on its way
+// (deliveredRelayGrowth).
 const utf8 = new TextEncoder();
 export function hubTextWithinLimit(text: string, extraBytes = 0): boolean {
   const budget = MAX_HUB_MESSAGE_BYTES - extraBytes;
@@ -150,10 +149,8 @@ export const DeviceListResponseSchema = Schema.Struct({
   devices: Schema.Array(DeviceInfoSchema),
 });
 
-// Relative, so the client needs no synchronized clock.
 export const TicketResponseSchema = Schema.Struct({
   ticket: Schema.String,
-  expiresInMs: Schema.Int,
 });
 export type TicketResponse = typeof TicketResponseSchema.Type;
 
@@ -188,6 +185,17 @@ const HubDeliverEnvelopeSchema = Schema.Struct({
   from: DeviceIdSchema,
   frame: Schema.String,
 });
+
+// The relay the hub delivers for one it was sent: the same frame, the
+// sender's id in place of the target's. The hub measures this against
+// MAX_HUB_MESSAGE_BYTES, and a sender predicts it from its own envelope
+// by deliveredRelayGrowth, so the two cannot disagree on the shape.
+export const deliveredRelay = (from: string, frame: string): string =>
+  encodeEnvelope({ t: "relay", from, frame });
+
+// How many bytes the delivered relay is longer than the one sent.
+export const deliveredRelayGrowth = (from: string, to: string): number =>
+  utf8ByteLength(`"from":"${from}"`) - utf8ByteLength(`"to":"${to}"`);
 
 const OnlineDeviceSchema = Schema.Struct({
   deviceId: DeviceIdSchema,

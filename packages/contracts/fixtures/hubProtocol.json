@@ -470,21 +470,13 @@
   "TicketResponseSchema": {
     "accepts": [
       {
-        "ticket": "t:dev-enroll:1",
-        "expiresInMs": 30000
+        "ticket": "t:dev-enroll:1"
       }
     ],
     "rejects": [
+      {},
       {
-        "ticket": "t:dev-enroll:1"
-      },
-      {
-        "ticket": "t:dev-enroll:1",
-        "expiresInMs": 1.5
-      },
-      {
-        "ticket": 1,
-        "expiresInMs": 30000
+        "ticket": 1
       }
     ]
   },

@@ -4,7 +4,7 @@
 -- row, a desktop for a machine. Those rows get that same shape here,
 -- and from now on the column refuses NULL, so a row is never without
 -- one: an enrollment sends the kind beside the name
--- (shared/hub/protocol.ts EnrollRequestSchema). SQLite cannot add NOT
+-- (packages/contracts/src/hubProtocol.ts EnrollRequestSchema). SQLite cannot add NOT
 -- NULL to a column in place, so the table is rebuilt. The index goes
 -- with the old table and is recreated.
 UPDATE devices

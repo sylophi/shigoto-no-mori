@@ -45,12 +45,7 @@ export function tunnelEnvOf(env: Env): TunnelEnv | null {
 // The width is a security bound. A name hit is reused, connector token
 // and all, so the name IS the ownership check, and a device picks its
 // own deviceId: at 128 bits nobody can search for one that lands on
-// another device's name, where the old 48 made that an offline search.
-// For the same reason a tunnel made under the old width is not looked
-// up at all, not even to tear it down: a name that short could be
-// another device's. Such a tunnel is idle configuration once its
-// device re-provisions under the new name, and is removed from the
-// Cloudflare dashboard.
+// another device's name.
 const NAME_HEX = 32;
 
 async function tunnelNameFor(
@@ -211,20 +206,12 @@ async function writeIngress(
   throw new Error(`the tunnel's ingress did not take port ${port}`);
 }
 
-// Create-or-reuse provisioning, idempotent by the deterministic name:
-//   1. reuse the named tunnel or create it (remotely managed config),
-//   2. PUT the ingress config routing the hostname to the device's
-//      loopback listener port (plus the catch-all 404),
-//   3. ensure the proxied CNAME `<name>.<domain>` to
-//      `<tunnelId>.cfargotunnel.com`, on every provision: a device
-//      re-provisions when its tunnel stopped routing, and a deleted or
-//      stale record is exactly what that repairs,
-//   4. fetch and return the connector run token.
-// Steps 2 to 4 need only the tunnel id and are independent of each
-// other, so they run concurrently. The loopback-only shape is pinned
-// here: the ingress service the Worker writes is always
-// http://127.0.0.1:<port>, so a tunnel can never front anything but
-// the host's own loopback listener.
+// Create-or-reuse provisioning, idempotent by the deterministic name.
+// The CNAME is ensured on every provision: a device re-provisions when
+// its tunnel stopped routing, and a deleted or stale record is exactly
+// what that repairs. The ingress is always http://127.0.0.1:<port>, so
+// a tunnel can never front anything but the host's own loopback
+// listener.
 export async function provisionTunnel(
   cf: TunnelEnv,
   cfFetch: typeof fetch,

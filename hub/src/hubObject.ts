@@ -5,16 +5,17 @@
 // so there is no account check on the forwarding path because there
 // is nothing to check against.
 //
-// The Worker calls the object's methods directly (mintTicket, online,
-// revoke). Its fetch takes one request only, the websocket upgrade the
-// Worker forwards for GET /connect, since an upgrade cannot ride a
-// method call.
+// The Worker calls the object's methods directly (enroll, mintTicket,
+// online, revoke). Its fetch takes one request only, the websocket
+// upgrade the Worker forwards for GET /connect, since an upgrade cannot
+// ride a method call.
 //
 // Sockets use the WebSocket Hibernation API: each is tagged with its
 // device id, its connection (connectionTag) and the public key its
 // device enrolled with, and tags survive hibernation, so the handlers
-// still know the socket after the object was evicted from memory. A web device holds a connection per tab and
-// the object relays to each. A desktop device holds one.
+// still know the socket after the object was evicted from memory. A web
+// device holds a connection per tab and the object relays to each. A
+// desktop device holds one.
 import * as SqliteClient from "@effect/sql-sqlite-do/SqliteClient";
 import { DurableObject } from "cloudflare:workers";
 import * as Clock from "effect/Clock";
@@ -38,7 +39,9 @@ import {
   MAX_ACCOUNT_DEVICES,
   MAX_DEVICE_CONNECTIONS,
   type OnlineDevice,
+  deliveredRelay,
 } from "@shigomori/contracts/hubProtocol";
+import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import { type Env, WorkerEnv } from "./env.ts";
 import * as Registry from "./Registry.ts";
 import * as Tickets from "./Tickets.ts";
@@ -125,9 +128,10 @@ export class DeviceHub extends DurableObject<Env> {
     WebSocket,
     { tokens: number; at: number }
   >();
-  // The clock of the relay budget, the silence sweep and the sockets'
-  // connection order, which the proofs stop: real time on a loaded
-  // runner outlasts any window short enough to wait out.
+  // The clock of the tickets' expiry, the relay budget, the silence
+  // sweep and the sockets' connection order, which the proofs stop: real
+  // time on a loaded runner outlasts any window short enough to wait
+  // out.
   clock: () => number = () => Date.now();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -152,21 +156,19 @@ export class DeviceHub extends DurableObject<Env> {
     void ctx.blockConcurrencyWhile(() => this.runtime.runPromise(Effect.void));
   }
 
-  async mintTicket(
-    holder: Tickets.TicketHolder,
-    ttlMs: number,
-  ): Promise<string> {
+  async mintTicket(holder: Tickets.TicketHolder): Promise<string> {
+    const now = this.clock();
     return await this.runtime.runPromise(
-      Effect.flatMap(Tickets.Tickets, (tickets) => tickets.mint(holder, ttlMs)),
+      Effect.flatMap(Tickets.Tickets, (tickets) => tickets.mint(holder, now)),
     );
   }
 
   online(): string[] {
     const evicted = this.evictSilent();
-    if (evicted.size > 0) this.announcePresence(evicted);
-    return this.onlineIds(
+    if (evicted.size > 0) this.announcePresence(evicted, evicted);
+    return this.onlineDevices(
       this.ctx.getWebSockets().filter((ws) => !evicted.has(ws)),
-    );
+    ).map((device) => device.deviceId);
   }
 
   // Revocation is one operation owned by this object: the D1 row, the
@@ -176,10 +178,17 @@ export class DeviceHub extends DurableObject<Env> {
   // "revoked" device that reconnects with a still-valid credential while
   // the user was told it failed. Only after the row is gone are the
   // tickets dropped (a pre-minted ticket must not let a revoked device
-  // back in within its TTL) and the sockets closed.
-  async revoke(deviceId: string, accountId: string): Promise<void> {
-    await this.runtime.runPromise(removeDevice(deviceId, accountId));
-    this.closeDevice(deviceId, CLOSE_DEVICE_REVOKED, "device revoked");
+  // back in within its TTL) and the sockets closed. It holds the
+  // admission permit, so no socket is admitted between the row's read
+  // and its delete. False when the account had no such device.
+  async revoke(deviceId: string, accountId: string): Promise<boolean> {
+    const removed = await this.runtime.runPromise(
+      this.admission.withPermits(1)(removeDevice(deviceId, accountId)),
+    );
+    if (removed) {
+      this.closeDevice(deviceId, CLOSE_DEVICE_REVOKED, "device revoked");
+    }
+    return removed;
   }
 
   // Enrolls the device, or enrolls it again, which rotates its
@@ -230,6 +239,7 @@ export class DeviceHub extends DurableObject<Env> {
   // dropped by a revoke.
   override async fetch(request: Request): Promise<Response> {
     const random = new URL(request.url).searchParams.get(CONNECT_RANDOM_PARAM);
+    const now = this.clock();
     const admitted =
       random === null
         ? null
@@ -237,7 +247,7 @@ export class DeviceHub extends DurableObject<Env> {
             Effect.gen(function* () {
               const tickets = yield* Tickets.Tickets;
               const registry = yield* Registry.Registry;
-              const holder = yield* tickets.take(random);
+              const holder = yield* tickets.take(random, now);
               if (holder === null) return null;
               // The device must still be enrolled, under the credential
               // the ticket was minted with. A mint racing a revoke or a
@@ -251,7 +261,12 @@ export class DeviceHub extends DurableObject<Env> {
               const device = yield* registry.byId(holder.deviceId);
               return device?.credential_hash === holder.credentialHash &&
                 device.public_key !== null
-                ? { ...holder, publicKey: device.public_key }
+                ? {
+                    ...holder,
+                    publicKey: device.public_key,
+                    // Every browser profile enrolls as the web platform.
+                    web: device.platform === WEB_PLATFORM,
+                  }
                 : null;
             }).pipe(
               this.admission.withPermits(1),
@@ -261,12 +276,8 @@ export class DeviceHub extends DurableObject<Env> {
     if (admitted === null) {
       return this.refuseSocket(CLOSE_TICKET_REJECTED, "ticket rejected");
     }
-    // There is deliberately NO admission cap against MAX_ONLINE_DEVICES:
-    // getWebSockets can still list sockets that just closed, so a
-    // count-based refusal would burn a legitimate device's ticket for a
-    // slot that is actually free. The bound holds as the client's
-    // presence schema cap and the proof that a full roster fits the
-    // message cap (hub/test/hub.spec.ts).
+    // No cap on the roster here: a socket needs its device's row, and an
+    // account holds at most MAX_ACCOUNT_DEVICES of them.
     //
     // A connection dialing again supersedes its own older socket, so a
     // reconnect never fights its own half-dead one. On a desktop device
@@ -274,12 +285,11 @@ export class DeviceHub extends DurableObject<Env> {
     // means two app instances on one root. A web device's tabs stand
     // side by side, up to MAX_DEVICE_CONNECTIONS, past which the oldest
     // gives way.
-    const { deviceId, kind, connectionId, publicKey } = admitted;
+    const { deviceId, web, connectionId, publicKey } = admitted;
     const tag = connectionTag(deviceId, connectionId);
-    const superseded =
-      kind === "desktop"
-        ? this.ctx.getWebSockets(deviceId)
-        : this.overCap(deviceId, tag);
+    const superseded = web
+      ? this.overCap(deviceId, tag)
+      : this.ctx.getWebSockets(deviceId);
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], [
       deviceId,
@@ -287,7 +297,7 @@ export class DeviceHub extends DurableObject<Env> {
       `${KEY_TAG_PREFIX}${publicKey}`,
     ]);
     pair[1].serializeAttachment({
-      connectedAt: this.clock(),
+      connectedAt: now,
     } satisfies SocketAttachment);
     // Full presence to everyone, including the fresh socket: joining
     // devices learn the room, present devices learn about the join.
@@ -317,9 +327,10 @@ export class DeviceHub extends DurableObject<Env> {
   private withinRelayBudget(ws: WebSocket): boolean {
     const now = this.clock();
     const budget = this.relayBudget.get(ws) ?? { tokens: RELAY_BURST, at: now };
+    // A clock stepped back refills nothing, never drains.
     budget.tokens = Math.min(
       RELAY_BURST,
-      budget.tokens + ((now - budget.at) / 1000) * RELAY_PER_SECOND,
+      budget.tokens + (Math.max(0, now - budget.at) / 1000) * RELAY_PER_SECOND,
     );
     budget.at = now;
     this.relayBudget.set(ws, budget);
@@ -362,7 +373,7 @@ export class DeviceHub extends DurableObject<Env> {
     // An ask to a device that went silent is where its peers find out:
     // it leaves the roster, and the ask is nacked as offline.
     const evicted = this.evictSilent();
-    if (evicted.size > 0) this.announcePresence(evicted);
+    if (evicted.size > 0) this.announcePresence(evicted, evicted);
     const targets = this.ctx
       .getWebSockets(envelope.to)
       .filter((target) => !evicted.has(target));
@@ -375,11 +386,7 @@ export class DeviceHub extends DurableObject<Env> {
     }
     // The frame is copied verbatim into the outbound envelope. The
     // hub never reads it.
-    const outbound = encodeEnvelope({
-      t: "relay",
-      from,
-      frame: envelope.frame,
-    });
+    const outbound = deliveredRelay(from, envelope.frame);
     if (!hubTextWithinLimit(outbound)) {
       this.safeSend(
         ws,
@@ -430,10 +437,6 @@ export class DeviceHub extends DurableObject<Env> {
     return this.ctx.getTags(ws)[0];
   }
 
-  private onlineIds(sockets: WebSocket[]): string[] {
-    return this.onlineDevices(sockets).map((device) => device.deviceId);
-  }
-
   // Each device once, with the key its sockets were admitted under,
   // sorted by id.
   private onlineDevices(sockets: WebSocket[]): OnlineDevice[] {
@@ -463,9 +466,12 @@ export class DeviceHub extends DurableObject<Env> {
   // Everyone still standing gets the full roster. `exclude` is
   // required because getWebSockets can still list sockets that just
   // closed or are closing: callers name the departing ones instead of
-  // trusting the listing.
-  private announcePresence(exclude: ReadonlySet<WebSocket>): void {
-    const evicted = this.evictSilent();
+  // trusting the listing. A caller that swept the silent already passes
+  // what it evicted.
+  private announcePresence(
+    exclude: ReadonlySet<WebSocket>,
+    evicted: ReadonlySet<WebSocket> = this.evictSilent(),
+  ): void {
     const sockets = this.ctx
       .getWebSockets()
       .filter((ws) => !exclude.has(ws) && !evicted.has(ws));
@@ -523,12 +529,14 @@ function heardAt(ws: WebSocket): number {
 }
 
 // The row delete and the tickets of a revoke, in that order (revoke).
+// False when the account had no such device.
 const removeDevice = (deviceId: string, accountId: string) =>
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
     const tickets = yield* Tickets.Tickets;
-    yield* registry.remove(deviceId, accountId);
+    const removed = yield* registry.remove(deviceId, accountId);
     yield* tickets.dropDevice(deviceId);
+    return removed;
   });
 
 // The enrollment's reads and writes, run under the account's admission

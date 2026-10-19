@@ -2,14 +2,13 @@
 // own SQLite storage. Only the random half of a ticket lives here: the
 // account half of the ticket string is routing the Worker handles.
 import * as SqliteMigrator from "@effect/sql-sqlite-do/SqliteMigrator";
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
-import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import { randomBase64url } from "./crypto.ts";
+import { TICKET_TTL_MS } from "./ticket.ts";
 
 // Upper bound on a single account's unconsumed tickets. A device that
 // mints in a loop would otherwise grow the object's storage without
@@ -19,12 +18,12 @@ import { randomBase64url } from "./crypto.ts";
 // connect and mints again.
 const MAX_UNCONSUMED_TICKETS = 64;
 
-// Who a ticket admits: the device, its kind, the connection its dialer
-// named, and the credential it was minted with, which must still be the
-// device's when the ticket is spent.
+// Who a ticket admits: the device, the connection its dialer named, and
+// the credential it was minted with, which must still be the device's
+// when the ticket is spent. The device's kind is read off its row as
+// the ticket is spent.
 export interface TicketHolder {
   readonly deviceId: string;
-  readonly kind: DeviceKind;
   readonly connectionId: string;
   readonly credentialHash: string;
 }
@@ -32,15 +31,17 @@ export interface TicketHolder {
 export class Tickets extends Context.Service<
   Tickets,
   {
-    // Stores a fresh ticket for the holder and answers its random half.
+    // Stores a fresh ticket for the holder, good for TICKET_TTL_MS from
+    // `now` (the object's clock), and answers its random half.
     readonly mint: (
       holder: TicketHolder,
-      ttlMs: number,
+      now: number,
     ) => Effect.Effect<string, SqlError>;
     // Burns the ticket, answering who it was minted for while it is
-    // unexpired, so a replay or a late dial gets null.
+    // unexpired at `now`, so a replay or a late dial gets null.
     readonly take: (
       random: string,
+      now: number,
     ) => Effect.Effect<TicketHolder | null, SqlError>;
     // Drops the device's unconsumed tickets, at its revoke and when it
     // enrolls again.
@@ -78,9 +79,8 @@ const make = Effect.gen(function* () {
 
   const mint = Effect.fn("Tickets.mint")(function* (
     holder: TicketHolder,
-    ttlMs: number,
+    now: number,
   ) {
-    const now = yield* Clock.currentTimeMillis;
     // Expired tickets are garbage. Minting is the natural low-frequency
     // moment to sweep them, and to hold the live set under the cap.
     yield* sql`DELETE FROM tickets WHERE expires_at <= ${now}`;
@@ -92,31 +92,30 @@ const make = Effect.gen(function* () {
     yield* sql`INSERT INTO tickets ${sql.insert({
       random,
       device_id: holder.deviceId,
-      kind: holder.kind,
       connection_id: holder.connectionId,
       credential_hash: holder.credentialHash,
-      expires_at: now + ttlMs,
+      expires_at: now + TICKET_TTL_MS,
     })}`;
     return random;
   });
 
-  const take = Effect.fn("Tickets.take")(function* (random: string) {
-    const now = yield* Clock.currentTimeMillis;
+  const take = Effect.fn("Tickets.take")(function* (
+    random: string,
+    now: number,
+  ) {
     // Single use: the ticket is burned before any validity verdict, so
     // a replay races nothing.
     const rows = yield* sql<{
       device_id: string;
-      kind: DeviceKind;
       connection_id: string;
       credential_hash: string;
       expires_at: number;
     }>`DELETE FROM tickets WHERE random = ${random}
-       RETURNING device_id, kind, connection_id, credential_hash, expires_at`;
+       RETURNING device_id, connection_id, credential_hash, expires_at`;
     const [row] = rows;
     if (row === undefined || row.expires_at <= now) return null;
     return {
       deviceId: row.device_id,
-      kind: row.kind,
       connectionId: row.connection_id,
       credentialHash: row.credential_hash,
     };
