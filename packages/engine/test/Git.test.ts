@@ -9,6 +9,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { once } from "node:events";
@@ -286,34 +287,66 @@ it("a person's commits in a terminal are never refused by the app's reads beside
   }
   git(repo, "add", ".");
   git(repo, "commit", "-q", "-m", "many");
+  // An edit the person never commits, so every read has an answer, and
+  // a file they save unchanged each round, so every read finds the
+  // index's stat cache stale and has something to write back.
+  const SAVED = "many/0.txt";
+  write(repo, "b.txt", "bee, edited\n");
   const refused: string[] = [];
+  const answered = new Map<string, number>();
   await withGit((g) =>
     Effect.gen(function* () {
       let finished = false;
       // The app reading, as fast as it can: a listing's status, a page's
-      // changes and an open diff.
+      // changes, an open diff and its hunks, each with what it answered.
+      const reads = {
+        status: g
+          .status(repo)
+          .pipe(Effect.map((files) => files.some((f) => f.path === "b.txt"))),
+        changes: g
+          .changes(repo)
+          .pipe(
+            Effect.map((files) =>
+              files.some((f) => f.path === "b.txt" && f.counts),
+            ),
+          ),
+        // A diff git writes back for is one of a file saved unchanged, so
+        // these read that file too.
+        diff: g
+          .fileDiff({
+            worktree: repo,
+            paths: [SAVED, "b.txt"],
+            untracked: false,
+          })
+          .pipe(Effect.map((patch) => patch.includes("+bee, edited"))),
+        hunks: g.readHunks(repo, SAVED).pipe(
+          Effect.andThen(g.readHunks(repo, "b.txt")),
+          Effect.map((hunks) => hunks.changes.length === 1),
+        ),
+      };
       const reading = yield* Effect.forkChild(
         Effect.forEach(
-          [
-            g.status(repo),
-            g.changes(repo),
-            g.fileDiff({ worktree: repo, paths: ["a.txt"], untracked: false }),
-          ],
-          (read) =>
+          Object.entries(reads),
+          ([name, read]) =>
             Effect.whileLoop({
               while: () => !finished,
-              body: () => Effect.ignore(read),
+              body: () =>
+                read.pipe(
+                  Effect.map((answer) => {
+                    if (answer)
+                      answered.set(name, (answered.get(name) ?? 0) + 1);
+                  }),
+                  Effect.ignore,
+                ),
               step: () => {},
             }),
           { concurrency: "unbounded", discard: true },
         ),
       );
-      // The person: an edit, an add and a commit, two hundred times, with
-      // a file saved unchanged each round, so every read finds the index's
-      // stat cache stale and has something to write back.
+      // The person: an edit, an add and a commit, two hundred times.
       for (let round = 0; round < 200; round += 1) {
         write(repo, "a.txt", `round ${round}\n`);
-        write(repo, `many/${round}.txt`, `${round}\n`);
+        write(repo, SAVED, "0\n");
         for (const args of [
           ["add", "a.txt"],
           [
@@ -344,6 +377,50 @@ it("a person's commits in a terminal are never refused by the app's reads beside
     [],
     `${refused.length} of 400 writes refused, the first: ${refused[0] ?? ""}`,
   );
+  assert.deepEqual(
+    [...answered.keys()].toSorted(),
+    ["changes", "diff", "hunks", "status"],
+    "every read answered with what was there",
+  );
+});
+
+it("a file saved unchanged doesn't stop an undo of a merge or an abort", async () => {
+  const repo = seedRepo();
+  // The same content, a newer mtime: the index's stat cache no longer
+  // matches, and the app's status, beside it, leaves it so.
+  const savedUnchanged = (file: string) => {
+    write(repo, file, readFileSync(join(repo, file), "utf8"));
+    const later = new Date(Date.now() + 10_000);
+    utimesSync(join(repo, file), later, later);
+  };
+  const first = rev(repo, "HEAD");
+  git(repo, "checkout", "-q", "-b", "side");
+  write(repo, "b.txt", "bee, from side\n");
+  write(repo, "a.txt", "one\ntwo\nside\n");
+  git(repo, "commit", "-q", "-am", "side");
+  git(repo, "checkout", "-q", "main");
+  git(repo, "merge", "-q", "--no-ff", "-m", "merge side", "side");
+  savedUnchanged("b.txt");
+  await withGit((g) =>
+    Effect.gen(function* () {
+      assert.deepEqual(yield* g.status(repo), []);
+      yield* g.resetSoft({ worktree: repo, target: first });
+    }),
+  );
+  assert.equal(rev(repo, "HEAD"), first, "the merge came off whole");
+
+  write(repo, "a.txt", "one\ntwo\nmain\n");
+  git(repo, "commit", "-q", "-am", "main");
+  // a.txt conflicts; b.txt merges cleanly, and is saved again.
+  assert.throws(() => git(repo, "merge", "-q", "side"));
+  savedUnchanged("b.txt");
+  await withGit((g) =>
+    Effect.gen(function* () {
+      yield* g.status(repo);
+      yield* g.abortOperation(repo);
+    }),
+  );
+  assert.ok(!existsSync(join(repo, ".git", "MERGE_HEAD")), "the merge is gone");
 });
 
 it("a write held by the user's hook leaves the probes their slots", async () => {

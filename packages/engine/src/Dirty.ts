@@ -283,13 +283,9 @@ const make = Effect.gen(function* () {
         count: colliding.length,
       });
     }
-    // read-tree checks the files by the index's stat cache alone, which
-    // the status above no longer writes back (git/running.ts): refreshed
-    // first, so a file touched with its content unchanged isn't read as
-    // in the way.
     yield* git.withIndexLock(
       worktreePath,
-      git.runLenient(worktreePath, ["update-index", "-q", "--refresh"]).pipe(
+      git.refreshIndex(worktreePath).pipe(
         Effect.andThen(
           git.run(worktreePath, [
             "read-tree",
