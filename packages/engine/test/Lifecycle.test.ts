@@ -9,6 +9,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { afterAll, it } from "vitest";
 import * as Lifecycle from "../src/Lifecycle.ts";
+import * as Paths from "../src/Paths.ts";
+import * as ConfigProvider from "effect/ConfigProvider";
 
 const scratch = mkdtempSync(join(tmpdir(), "engine-lifecycle-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -28,6 +30,23 @@ const context: Lifecycle.ScriptContext = {
   description: "With\0a NUL",
 };
 
+// The runner over this machine's shells, its data dir the scratch
+// folder (where a run's output file goes).
+const lifecycleLayer = Lifecycle.layer.pipe(
+  Layer.provide(
+    Paths.layer("prod").pipe(
+      Layer.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({
+            env: { HOME: scratch, SHIGOMORI_DATA_DIR: scratch },
+          }),
+        ),
+      ),
+    ),
+  ),
+  Layer.provide(NodeServices.layer),
+);
+
 // The script's events and its answer.
 const run = (command: string) =>
   Effect.runPromise(
@@ -42,9 +61,7 @@ const run = (command: string) =>
         report: (event) => Effect.sync(() => void events.push(event)),
       });
       return { events, answer };
-    }).pipe(
-      Effect.provide(Lifecycle.layer.pipe(Layer.provide(NodeServices.layer))),
-    ),
+    }).pipe(Effect.provide(lifecycleLayer)),
   );
 
 // Signal 0 only asks whether the process is there.
@@ -110,10 +127,7 @@ it("ends at the shell's exit while a child it left holds the output, which keeps
       yield* Effect.sleep("1500 millis");
       const alive = processAlive(pid);
       return { events, answer, pid, alive };
-    }).pipe(
-      Effect.provide(Lifecycle.layer.pipe(Layer.provide(NodeServices.layer))),
-      Effect.timeout("10 seconds"),
-    ),
+    }).pipe(Effect.provide(lifecycleLayer), Effect.timeout("10 seconds")),
   );
   try {
     assert.equal(answered.answer.code, 0);

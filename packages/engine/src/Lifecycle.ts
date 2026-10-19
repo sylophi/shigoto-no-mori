@@ -16,11 +16,15 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { outputUntilExit } from "./processes.ts";
+import { errorMessageOf } from "@shigomori/contracts/errors";
+import { fileUntilExit } from "./processes.ts";
+import * as Paths from "./Paths.ts";
+import { scriptOutputDir, scriptOutputPath } from "./scriptOutput.ts";
 
 // Where a lifecycle step stands, as `sm --json` reports it.
 export type Phase = "carryOver" | "setup" | "portPoolProvision" | "idle";
@@ -95,7 +99,8 @@ export class Lifecycle extends Context.Service<
 const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const crypto = yield* Crypto.Crypto;
-  const background = yield* Effect.scope;
+  const fs = yield* FileSystem.FileSystem;
+  const paths = yield* Paths.Paths;
 
   // The user's login shell (contracts' loginShellOf), run as one (no -i)
   // so .zprofile sets PATH up without zsh's interactive init. The
@@ -147,33 +152,64 @@ const make = Effect.gen(function* () {
     const exit = (code: number | null) =>
       script({ runId, kind: "exit", code }).pipe(Effect.as({ code, runId }));
     const { shell, args } = yield* loginShell;
+    // The run's output goes to a file, the worktree's last of this
+    // script, not to pipes: a child the script leaves in the background
+    // keeps writing there, findable after, and holds nothing of this
+    // process's (the terminal's `sm` waited on its pipes for good).
+    const output = scriptOutputPath(
+      paths.dataDir,
+      context.worktree.id,
+      lifecycleScriptName(slot),
+    );
+    const spawned = Effect.gen(function* () {
+      yield* fs.makeDirectory(
+        scriptOutputDir(paths.dataDir, context.worktree.id),
+        { recursive: true },
+      );
+      yield* fs.writeFileString(output, "");
+      return yield* spawner.spawn(
+        // A POSIX shell opens the file and becomes the login shell with
+        // it as stdout and stderr, whatever shell the user runs.
+        ChildProcess.make(
+          "/bin/sh",
+          [
+            "-c",
+            'exec "$@" >>"$0" 2>&1',
+            output,
+            shell,
+            ...args,
+            "-c",
+            input.command,
+          ],
+          {
+            cwd: context.worktree.path,
+            // In this process's group, as a terminal runs it: Ctrl-C
+            // reaches the whole tree, and what the script leaves running
+            // in the background (a dev database) outlives it.
+            detached: false,
+            extendEnv: true,
+            env: {
+              ...scriptEnvOf(context, lifecycleScriptName(slot)),
+              ...UNATTENDED_ENV,
+              COLUMNS: "120",
+              ...(input.color ? { COLORTERM: "truecolor" } : {}),
+            },
+            stdin: "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+          },
+        ),
+      );
+    }).pipe(Effect.result);
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const handle = yield* spawner
-          .spawn(
-            ChildProcess.make(shell, [...args, "-c", input.command], {
-              cwd: context.worktree.path,
-              // In this process's group, as a terminal runs it: Ctrl-C
-              // reaches the whole tree, and what the script leaves running
-              // in the background (a dev database) outlives it.
-              detached: false,
-              extendEnv: true,
-              env: {
-                ...scriptEnvOf(context, lifecycleScriptName(slot)),
-                ...UNATTENDED_ENV,
-                COLUMNS: "120",
-                ...(input.color ? { COLORTERM: "truecolor" } : {}),
-              },
-              stdin: "ignore",
-            }),
-          )
-          .pipe(Effect.result);
+        const handle = yield* spawned;
         if (Result.isFailure(handle)) {
           yield* started();
           yield* script({
             runId,
             kind: "error",
-            data: String(handle.failure.cause ?? handle.failure.message),
+            data: errorMessageOf(handle.failure),
           });
           return yield* exit(null);
         }
@@ -182,10 +218,9 @@ const make = Effect.gen(function* () {
         // One decoder for the run, so a character split across two reads
         // comes out whole.
         const decoder = new TextDecoder();
-        // The shell's exit ends the run. What it left in the background
-        // keeps the pipes, which the service's scope reads on.
-        const code = yield* outputUntilExit(
-          handle.success.all,
+        // The shell's exit ends the run.
+        const code = yield* fileUntilExit(
+          output,
           // A signal death is no exit code, like a run that never started.
           handle.success.exitCode.pipe(
             Effect.map(Number),
@@ -197,7 +232,9 @@ const make = Effect.gen(function* () {
               kind: "data",
               data: decoder.decode(chunk, { stream: true }),
             }),
-          background,
+        ).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.orElseSucceed(() => null),
         );
         const rest = decoder.decode();
         if (rest !== "") yield* script({ runId, kind: "data", data: rest });

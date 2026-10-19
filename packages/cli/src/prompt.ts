@@ -3,6 +3,7 @@
 import { createInterface } from "node:readline";
 import * as Effect from "effect/Effect";
 import { note, Output } from "./output.ts";
+import { attachStdin } from "./stdinFd.ts";
 
 export const interactive = Effect.map(
   Effect.service(Output),
@@ -14,6 +15,8 @@ export const interactive = Effect.map(
 export const confirm = (question: string) =>
   Effect.gen(function* () {
     const answer = yield* Effect.callback<string | undefined>((resume) => {
+      // Stdin's first reader, as a menu's is (stdinFd.ts).
+      attachStdin();
       // A plain line, as the Go sm read it: the terminal stays cooked, so
       // Ctrl-C stops the command rather than answering no.
       const lines = createInterface({
