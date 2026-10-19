@@ -393,8 +393,13 @@ async function launch(
     const stop = async () => {
       await run.browser?.close().catch(() => {});
       if (!run.exited) child.kill("SIGTERM");
-      await waitFor(() => run.exited, "the lab app to quit", 10_000).catch(() =>
-        child.kill("SIGKILL"),
+      await waitFor(() => run.exited, "the lab app to quit", 10_000).catch(
+        async () => {
+          child.kill("SIGKILL");
+          await waitFor(() => run.exited, "the lab app to die", 10_000).catch(
+            () => {},
+          );
+        },
       );
     };
     try {
@@ -448,12 +453,19 @@ async function launch(
     rmSync(root, { recursive: true, force: true });
     // A device's own folders, which the walks' nuke leaves: it clears the
     // build's, and a profile's are named for it.
+    // Retried: a helper the app left can still be writing its last file.
     if (options.profile !== undefined) {
-      rmSync(join(userData, "profiles", options.profile), {
-        recursive: true,
-        force: true,
-      });
-      rmSync(hostLogsOf(options.profile), { recursive: true, force: true });
+      for (const folder of [
+        join(userData, "profiles", options.profile),
+        hostLogsOf(options.profile),
+      ]) {
+        rmSync(folder, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 200,
+        });
+      }
     }
   };
   const restart = async () => {

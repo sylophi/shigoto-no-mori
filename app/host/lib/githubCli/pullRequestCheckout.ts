@@ -241,8 +241,8 @@ const resolveSameRepoHead = Effect.fnUntraced(function* (
   } else {
     yield* git(cwd, ["fetch", "--quiet", remote, branch]);
     // Explicit rather than leaning on `git worktree add`'s DWIM, which
-    // only fires when exactly one remote has the branch. createLocalBranch
-    // sets --track for a remote-tracking base, which is what this is.
+    // only fires when exactly one remote has the branch. createBranch
+    // tracks the remote branch of its own name, which is what this is.
     yield* repo.createBranch({
       repo: cwd,
       name: branch,

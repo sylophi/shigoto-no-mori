@@ -398,6 +398,26 @@ export function parseRemoteEntries(
   return entries;
 }
 
+// Every remote's URLs as configured (`git config --get-regexp` over
+// remote.<name>.url and .pushurl), before this machine's url.insteadOf
+// rewrites them, deduped: what another machine is handed, as it has
+// rules of its own.
+export function parseConfiguredRemoteEntries(
+  stdout: string,
+): { name: string; url: string }[] {
+  const entries: { name: string; url: string }[] = [];
+  const seen = new Set<string>();
+  for (const line of stdout.split("\n")) {
+    const match = /^remote\.(.+)\.(?:url|pushurl) (\S+)$/.exec(line);
+    const name = match?.[1];
+    const url = match?.[2];
+    if (!name || !url || seen.has(`${name}\t${url}`)) continue;
+    seen.add(`${name}\t${url}`);
+    entries.push({ name, url });
+  }
+  return entries;
+}
+
 // --- ignore rules -----------------------------------------------------
 
 // A .gitignore's rules, comments and blank lines dropped.

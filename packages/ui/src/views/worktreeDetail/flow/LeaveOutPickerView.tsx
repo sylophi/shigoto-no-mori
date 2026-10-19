@@ -128,7 +128,7 @@ export function LeaveOutPickerView({
       <div className="flex items-center justify-between gap-3">
         <SectionHeading>Leave out</SectionHeading>
         <SegmentedControl
-          aria-label="What the mirror leaves out"
+          aria-label="What to leave out"
           value={value.base}
           onChange={(base) => onChange({ ...value, base })}
           disabled={disabled}

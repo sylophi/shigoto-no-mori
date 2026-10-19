@@ -27,10 +27,7 @@ export function GitSection({ worktree }: { worktree: Worktree }) {
       worktree={worktree}
       files={files}
       stashes={stashes}
-      commits={(history?.commits ?? worktree.recentCommits).slice(
-        0,
-        SHOWN_COMMITS,
-      )}
+      commits={history?.commits.slice(0, SHOWN_COMMITS)}
       branch={
         history?.base && history.commits.length > 0
           ? {

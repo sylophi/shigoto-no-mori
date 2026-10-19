@@ -44,7 +44,6 @@ import * as Fiber from "effect/Fiber";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import { pickCloneUrl } from "@shared/cloneUrl";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import {
@@ -69,7 +68,7 @@ import { incomingRef } from "@shigomori/engine/Bundle";
 import * as Git from "@shigomori/engine/Git";
 import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
-import { defaultBranchOf } from "@host/lib/projects";
+import { defaultBranchOf, handedCloneUrl } from "@host/lib/projects";
 import { requireChannels } from "@host/socket/channelStreams";
 
 // What the source's answers reach: the engine (its captures and
@@ -637,19 +636,15 @@ export const serveSource = (
 // the clone payload's own rule, shared/cloneUrl.ts).
 const cloneFactsOf = (project: Project) =>
   Effect.map(
-    Effect.all(
-      [
-        defaultBranchOf(project),
-        Effect.flatMap(Git.Git, (git) => git.listRemoteEntries(project.path)),
-      ],
-      { concurrency: 2 },
-    ),
-    ([{ ref, branch }, remotes]): CloneFacts => ({
+    Effect.all([defaultBranchOf(project), handedCloneUrl(project.path)], {
+      concurrency: 2,
+    }),
+    ([{ ref, branch }, remoteUrl]): CloneFacts => ({
       branch,
       // The branch is the ref exactly when the ref is a local branch
       // (the engine's worktrees/listing.ts).
       ref: ref === branch ? `refs/heads/${branch}` : `refs/remotes/${ref}`,
-      remoteUrl: pickCloneUrl(remotes),
+      remoteUrl,
     }),
   );
 

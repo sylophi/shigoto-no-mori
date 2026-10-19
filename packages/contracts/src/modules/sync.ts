@@ -295,6 +295,8 @@ const SyncReceiveWorktreePayloadSchema = strict(
     landBranch: Schema.optional(GitRefNameSchema),
     sourceWorktreeId: WorktreeIdSchema,
     runSetup: pullFields.runSetup,
+    ignoreMode: pullFields.ignoreMode,
+    ignores: pullFields.ignores,
     cloneInto: pullFields.cloneInto,
     channelId: ChannelIdSchema,
   }),

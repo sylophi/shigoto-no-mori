@@ -9,6 +9,8 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import {
+  type MirrorIgnoreMode,
+  pullBringsIgnoredFiles,
   type SyncCloneInto,
   type SyncPullProgress,
   type SyncReceipt,
@@ -142,6 +144,10 @@ export type Landing = {
   landBranch: string;
   worktreeName?: string;
   runSetup?: boolean;
+  // The move's leave-out rule, whose files step brings the source's
+  // ignored files after the create.
+  ignoreMode?: MirrorIgnoreMode;
+  ignores?: readonly string[];
   cloneInto?: SyncCloneInto;
   sourceWorktreeId: string;
 };
@@ -312,6 +318,9 @@ export const landWorktree = (
           incomingRef,
           worktreeName: landing.worktreeName,
           runSetup: landing.runSetup,
+          ignoredFilesFollow: pullBringsIgnoredFiles(landing.ignoreMode)
+            ? (landing.ignores ?? [])
+            : undefined,
           capture:
             captured && capture.commit !== undefined
               ? { sourceWorktreeId, commit: capture.commit }
@@ -406,6 +415,7 @@ const landIncoming = (
     incomingRef: string;
     worktreeName: string | undefined;
     runSetup: boolean | undefined;
+    ignoredFilesFollow: readonly string[] | undefined;
     // The capture commit, and the worktree id its ref arrived under.
     capture: { sourceWorktreeId: string; commit: string } | undefined;
   },
@@ -452,6 +462,7 @@ const landWhole = (
           base: input.incomingRef,
           worktreeName: input.worktreeName,
           skipSetup: input.runSetup === false,
+          ignoredFilesFollow: input.ignoredFilesFollow,
         },
         {
           ...notify,

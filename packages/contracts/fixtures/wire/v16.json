@@ -2257,6 +2257,8 @@
       "identity": "\t",
       "branch": "u",
       "sourceWorktreeId": "bf1188b6f3bc",
+      "ignoreMode": "custom",
+      "ignores": ["/node_modules"],
       "channelId": "813d371ffa16f6ca81f8acaea1c5e68b"
     },
     "success": {

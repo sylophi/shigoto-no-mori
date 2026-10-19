@@ -250,6 +250,7 @@ export const makeCreating = ({
       baseBranch: Effect.Effect<string>,
       skipSetup: boolean,
       reporter: Reporter,
+      ignoredFilesFollow?: ReadonlyArray<string>,
     ) =>
       Effect.gen(function* () {
         const { settings } = yield* projectSettings(project);
@@ -259,6 +260,7 @@ export const makeCreating = ({
           checkouts,
           destination: worktree.path,
           baseBranch,
+          ignoredFilesFollow,
         });
         if (Option.isSome(carried)) {
           yield* reporter.report({ event: "phase", phase: "carryOver" });
@@ -460,6 +462,7 @@ export const makeCreating = ({
           | Pick<AgentSession, "harness" | "session" | "state">
           | undefined;
         readonly clone?: boolean | undefined;
+        readonly ignoredFilesFollow?: ReadonlyArray<string> | undefined;
       },
       reporter: Reporter,
     ) {
@@ -503,6 +506,7 @@ export const makeCreating = ({
         baseBranch,
         input.skipSetup ?? false,
         reporter,
+        input.ignoredFilesFollow,
       );
       return { worktree, failures };
     });

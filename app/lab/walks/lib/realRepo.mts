@@ -6,7 +6,13 @@
 // of them ignored only by the user's own excludes, and a setup script.
 // No network: the commits come from this checkout.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
@@ -75,12 +81,17 @@ export function applyOwnerSettings(lab: Lab, project: string = REAL_NAME) {
 }
 
 export interface RealOrigin {
-  // What the clones name as origin: a git:// URL on loopback, which a
-  // clone from a peer carries as a remote (a path it would not).
+  // Where `git daemon` serves it on loopback, which each device's
+  // url.insteadOf (writeUserGit) maps REAL_URL to.
   readonly url: string;
   readonly path: string;
   stop(): Promise<void>;
 }
+
+// The remote as the owner's clones name it. No network: each device's
+// own git config rewrites it to the walk's daemon, as a user's
+// url.insteadOf rewrites a remote to a mirror or to ssh.
+export const REAL_URL = `https://github.com/sylophi/${REAL_NAME}.git`;
 
 // The project's remote: a bare repository of this checkout's commits,
 // served by `git daemon` on loopback for the walk's devices to fetch.
@@ -151,15 +162,20 @@ export async function startRealOrigin(): Promise<RealOrigin> {
   return { url, path, stop };
 }
 
-// The user's own excludes, as the owner's machines have them: the one
-// place CLAUDE.local.md is ignored.
-export function writeUserExcludes(home: string) {
+// What of the user's git setup a device has: the rewrite of REAL_URL to
+// the walk's origin, and their own excludes, the one place
+// CLAUDE.local.md is ignored on the owner's machines.
+export function writeUserGit(home: string, origin: RealOrigin) {
+  appendFileSync(
+    join(home, ".gitconfig"),
+    `[url "${origin.url}"]\n\tinsteadOf = ${REAL_URL}\n`,
+  );
   const ignore = join(home, ".config", "git", "ignore");
   mkdirSync(dirname(ignore), { recursive: true });
   writeFileSync(ignore, "CLAUDE.local.md\n");
 }
 
-// A clone of the project at `reposDir/<at>`, with the user's excludes
+// A clone of the project at `reposDir/<at>`, with the user's git setup
 // and the carried files in place. Answers the clone's path.
 export function seedRealProject(
   reposDir: string,
@@ -168,9 +184,9 @@ export function seedRealProject(
   origin: RealOrigin,
   at: string = REAL_NAME,
 ): string {
-  writeUserExcludes(home);
+  writeUserGit(home, origin);
   const repo = join(reposDir, at);
-  git(reposDir, "clone", "-q", origin.url, repo);
+  git(reposDir, "clone", "-q", REAL_URL, repo);
   for (const [path, text] of Object.entries(CARRIED)) {
     mkdirSync(dirname(join(repo, path)), { recursive: true });
     writeFileSync(join(repo, path), text);

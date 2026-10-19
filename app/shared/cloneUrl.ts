@@ -18,8 +18,8 @@ export function cloneFolderName(source: string): string | null {
   return repoNameFromUrl(cloneUrlOf(source));
 }
 
-// The URL another device should clone to get this repo, out of `git
-// remote -v`'s fetch rows. `origin` first: it is what this checkout was
+// The URL another device should clone to get this repo, out of its
+// remotes' URLs. `origin` first: it is what this checkout was
 // cloned from and pushes to, where identity prefers `upstream` because
 // it is asking a different question (whose repo is this). Only a URL
 // that normalizes counts, the same rule the clone payload holds its
@@ -35,6 +35,26 @@ export function pickCloneUrl(
     usable.toSorted((a, b) => a.name.localeCompare(b.name))[0];
   return picked === undefined ? null : stripUrlCredentials(picked.url);
 }
+
+// The remotes to pick that URL from: each as configured, which the
+// other device rewrites by its own url.insteadOf, unless its URL names
+// no real host (an alias like `gh:owner/repo`, which only this
+// machine's rewrite makes a URL). Then that remote as this machine
+// rewrites it.
+export function handedRemotes(
+  configured: readonly { name: string; url: string }[],
+  effective: readonly { name: string; url: string }[],
+): { name: string; url: string }[] {
+  return configured.flatMap((remote) =>
+    namesAHost(remote.url)
+      ? [remote]
+      : effective.filter((each) => each.name === remote.name),
+  );
+}
+
+const namesAHost = (url: string) =>
+  /^[a-z][a-z0-9+.-]*:\/\//i.test(url.trim()) ||
+  (normalizeRemoteUrl(url)?.split("/")[0]?.includes(".") ?? false);
 
 // Drops the userinfo of an http(s) URL. An ssh URL's `git@` is the
 // login every user of the host shares, not a secret, and the clone

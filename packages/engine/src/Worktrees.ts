@@ -226,6 +226,8 @@ export class Worktrees extends Context.Service<
         // Clone the files from an existing checkout where it can (the
         // default), instead of having git write them all.
         readonly clone?: boolean | undefined;
+        // A move's files step follows (CarryOver.apply).
+        readonly ignoredFilesFollow?: ReadonlyArray<string> | undefined;
       },
       reporter: Reporter,
     ) => Effect.Effect<
