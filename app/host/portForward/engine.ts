@@ -3,22 +3,29 @@
 // bridges each accepted socket onto a channel of the peer's direct
 // session, opened with forward:open (the host side in
 // host/ipc/modules/forward.ts, the wire rules in
-// packages/contracts/src/modules/forward.ts). Electron-free on purpose, node:net
-// plus injected dependencies, so the e2e check drives the real engine
-// over a real device wire (test/port-forward.mts) while
-// host/process/handlers.ts wires the peer reach over the bridge's
-// shared direct sessions.
+// packages/contracts/src/modules/forward.ts). Its peer reach is
+// injected (PortForwards.ts passes PeerReach's), so the proof drives
+// the real engine over a real device wire (test/port-forward.mts).
 //
 // The per-socket bridging (attach, open, the adapter's backpressure and
 // teardown) lives in bridge.ts, shared with the mirror gateway. This
 // file owns the listeners, the per-device conn cap and the forward
-// registry.
-import { createServer, type Server, type Socket } from "node:net";
+// registry. Each forward is a scope of the engine's: its listener, its
+// conns and their opens end when it closes, which a stop and the
+// engine's own close do.
+import { createServer, type Socket } from "node:net";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FiberSet from "effect/FiberSet";
+import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { forwardContract } from "@shigomori/contracts/modules/forward";
-import { isForwardConnectFailedError } from "@shigomori/contracts/errors";
+import {
+  callFailureOf,
+  isForwardConnectFailedError,
+} from "@shigomori/contracts/errors";
 import type {
   PortForwardSummary,
   PortForwardWorktree,
@@ -57,27 +64,29 @@ type Forward = {
   localPort: number;
   // The worktree it was switched on from, the last one to ask for it.
   worktree: PortForwardWorktree | undefined;
-  server: Server;
+  // Holds the listener, the conns and their opens.
+  scope: Scope.Closeable;
   // Every accepted socket, for the cap and teardown.
   conns: Set<BridgedConn>;
   // The ones whose far end opened, which is what the summary counts: a
   // dial to a port with nothing behind it never shows as a conn.
   opened: Set<BridgedConn>;
-  api: ForwardApi;
-  channels: PeerChannels;
 };
 
 export type PortForwardEngine = Effect.Success<
   ReturnType<typeof makePortForwardEngine>
 >;
 
-// The changed signal runs in the caller's scope.
+// The changed signal and every forward run in the caller's scope.
 export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
   forwardApiFor: (deviceId: string) => ForwardApi;
   // The peer session's byte channels (bridge.ts PeerChannels).
   channelsFor: (deviceId: string) => PeerChannels;
   onChange?: () => void;
 }) {
+  const engineScope = yield* Effect.scope;
+  // The conns' opens run on the engine's own services, not a caller's.
+  const services = yield* Effect.context<never>();
   const forwards = new Map<string, Forward>();
   // A change waiting to go out: one is all a burst needs.
   const changes = yield* Queue.sliding<void>(1);
@@ -108,29 +117,6 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     return count;
   }
 
-  function handleConnection(forward: Forward, socket: Socket): void {
-    if (liveConnsTo(forward.deviceId) >= MAX_CONNS_PER_DEVICE) {
-      socket.destroy();
-      return;
-    }
-    const conn = bridgeSocket(socket, {
-      channels: forward.channels,
-      open: (channelId) =>
-        Effect.runPromise(
-          forward.api.open({ port: forward.remotePort, channelId }),
-        ),
-      onOpened: () => {
-        forward.opened.add(conn);
-        changed();
-      },
-      onClosed: () => {
-        forward.conns.delete(conn);
-        if (forward.opened.delete(conn)) changed();
-      },
-    });
-    forward.conns.add(conn);
-  }
-
   // A start answered by a forward already held, whether found up front
   // or bound by a concurrent twin. A worktree's start claims it (from
   // the account page, or another worktree listing the same port), so
@@ -146,104 +132,180 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     return { forwardId: forward.forwardId, localPort: forward.localPort };
   }
 
-  async function startForward(input: {
-    deviceId: string;
-    remotePort: number;
-    localPort?: number;
-    worktree?: PortForwardWorktree;
-  }): Promise<{ forwardId: string; localPort: number }> {
-    // One forward per (deviceId, remotePort): starting an existing pair
-    // returns it unchanged, unless the caller names a different local
-    // port, which moves the listener there. The old listener stays up
-    // until the new one is bound (below), so a move that fails (port
-    // taken, peer gone) leaves the working forward exactly as it was.
-    // Idempotent otherwise, the simpler contract for a UI whose start
-    // doubles as "make sure this is forwarded".
-    const existing = findForward(input.deviceId, input.remotePort);
-    if (
-      existing !== undefined &&
-      (input.localPort === undefined || input.localPort === existing.localPort)
-    ) {
-      return reuse(existing, input.worktree);
-    }
+  // Probe the peer before binding anything: one channel opened and
+  // reset at once, so a revoked grant or an offline peer rejects the
+  // start with its coded error instead of minting a listener whose
+  // conns die on arrival. A port with nothing listening yet is NOT a
+  // rejection: the forward is a standing intent, so it binds anyway
+  // and each conn dials the port afresh, which means a dev server
+  // started later is reached without touching the switch again. Until
+  // then a local dial is accepted and closed, which a browser shows
+  // as an empty response.
+  const probe = Effect.fnUntraced(function* (
+    api: ForwardApi,
+    channels: PeerChannels,
+    remotePort: number,
+  ) {
+    const mux = yield* Effect.tryPromise({
+      try: () => channels(),
+      catch: callFailureOf,
+    });
+    const channelId = mintHexId();
+    const handle = yield* Effect.try({
+      try: () =>
+        mux.attach(channelId, {
+          onData: (_data, consumed) => consumed(),
+          onEnd: () => {},
+          onReset: () => {},
+          onWritable: () => {},
+        }),
+      catch: callFailureOf,
+    });
+    yield* api.open({ port: remotePort, channelId }).pipe(
+      Effect.catchIf(isForwardConnectFailedError, () => Effect.void),
+      Effect.ensuring(Effect.sync(() => handle.reset())),
+    );
+  });
+
+  // Every step acquires into the forward's scope, which the start
+  // closes if it fails or is interrupted.
+  const bindForward = Effect.fnUntraced(function* (
+    input: {
+      deviceId: string;
+      remotePort: number;
+      localPort?: number;
+      worktree?: PortForwardWorktree;
+    },
+    existing: Forward | undefined,
+    scope: Scope.Closeable,
+  ) {
     const api = deps.forwardApiFor(input.deviceId);
     const channels = deps.channelsFor(input.deviceId);
-    // Probe the peer before binding anything: one channel opened and
-    // reset at once, so a revoked grant or an offline peer rejects the
-    // start with its coded error instead of minting a listener whose
-    // conns die on arrival. A port with nothing listening yet is NOT a
-    // rejection: the forward is a standing intent, so it binds anyway
-    // and each conn dials the port afresh, which means a dev server
-    // started later is reached without touching the switch again. Until
-    // then a local dial is accepted and closed, which a browser shows
-    // as an empty response.
-    const probeMux = await channels();
-    const probeId = mintHexId();
-    const probe = probeMux.attach(probeId, {
-      onData: (_data, consumed) => consumed(),
-      onEnd: () => {},
-      onReset: () => {},
-      onWritable: () => {},
-    });
-    try {
-      await Effect.runPromise(
-        api.open({ port: input.remotePort, channelId: probeId }),
-      );
-    } catch (error) {
-      if (!isForwardConnectFailedError(error)) throw error;
-    } finally {
-      probe.reset();
-    }
+    yield* probe(api, channels, input.remotePort);
     // allowHalfOpen: a client FIN must not tear the conn down (the
     // adapter in host/socket/channelStreams.ts ends one direction and
     // keeps the other flowing), but node's default would auto-end the
     // writable side and drop the remote's response.
     const server = createServer({ allowHalfOpen: true });
-    const localPort = await listenLoopback(server, input.localPort ?? 0);
-    // The dedupe scan above ran before two awaits, so a concurrent
-    // start for the same pair may have bound in the meantime: yield to
-    // the twin and release the just-bound listener. The forward being
-    // moved is not a twin: it is what the new listener replaces, and
-    // only now, with the replacement bound, does it go.
+    const localPort = yield* Effect.acquireRelease(
+      Effect.tryPromise({
+        try: () => listenLoopback(server, input.localPort ?? 0),
+        catch: callFailureOf,
+      }),
+      () => Effect.sync(() => server.close()),
+    );
+    // The dedupe scan ran before the probe and the bind, so a
+    // concurrent start for the same pair may have bound in the meantime:
+    // yield to the twin and release the just-bound listener. The
+    // forward being moved is not a twin: it is what the new listener
+    // replaces, and only now, with the replacement bound, does it go.
     const twin = findForward(input.deviceId, input.remotePort);
     if (twin !== undefined && twin !== existing) {
-      server.close();
+      yield* Scope.close(scope, Exit.void);
       return reuse(twin, input.worktree);
     }
-    if (existing !== undefined) stopForward(existing.forwardId);
+    if (existing !== undefined) yield* stopForward(existing.forwardId);
+    // The engine closed while this start was under way: nothing of it
+    // stays, and the listener went as it was bound.
+    if (Predicate.isTagged(engineScope.state, "Closed")) {
+      return yield* Effect.interrupt;
+    }
+    const set = yield* FiberSet.make();
+    const run = yield* FiberSet.runtimePromise(set)<never>().pipe(
+      Effect.provideContext(services),
+    );
     const forward: Forward = {
       forwardId: mintHexId(),
       deviceId: input.deviceId,
       remotePort: input.remotePort,
       localPort,
       worktree: input.worktree ?? existing?.worktree,
-      server,
+      scope,
       conns: new Set(),
       opened: new Set(),
-      api,
-      channels,
     };
-    server.on("connection", (socket) => handleConnection(forward, socket));
+    const handleConnection = (socket: Socket): void => {
+      if (liveConnsTo(forward.deviceId) >= MAX_CONNS_PER_DEVICE) {
+        socket.destroy();
+        return;
+      }
+      const conn = bridgeSocket(socket, {
+        channels,
+        open: (channelId) =>
+          run(api.open({ port: forward.remotePort, channelId })),
+        onOpened: () => {
+          forward.opened.add(conn);
+          changed();
+        },
+        onClosed: () => {
+          forward.conns.delete(conn);
+          if (forward.opened.delete(conn)) changed();
+        },
+      });
+      forward.conns.add(conn);
+    };
+    server.on("connection", handleConnection);
     // A bound listener errors only in exotic cases, but an unlistened
     // 'error' would take the whole process down.
     server.on("error", () => {});
-    forwards.set(forward.forwardId, forward);
-    changed();
+    // Registered last, so it is the first undone: the conns go before
+    // their opens are interrupted and the listener closed.
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        forwards.set(forward.forwardId, forward);
+        changed();
+      }),
+      () =>
+        Effect.sync(() => {
+          forwards.delete(forward.forwardId);
+          // destroy deletes only the conn being visited, which Set
+          // iteration tolerates.
+          for (const conn of forward.conns) conn.destroy();
+          changed();
+        }),
+    );
     return { forwardId: forward.forwardId, localPort };
-  }
+  });
+
+  const startForward = Effect.fn("PortForwards.startForward")(
+    function* (input: {
+      deviceId: string;
+      remotePort: number;
+      localPort?: number;
+      worktree?: PortForwardWorktree;
+    }) {
+      // One forward per (deviceId, remotePort): starting an existing pair
+      // returns it unchanged, unless the caller names a different local
+      // port, which moves the listener there. The old listener stays up
+      // until the new one is bound (bindForward), so a move that fails (port
+      // taken, peer gone) leaves the working forward exactly as it was.
+      // Idempotent otherwise, the simpler contract for a UI whose start
+      // doubles as "make sure this is forwarded".
+      const existing = findForward(input.deviceId, input.remotePort);
+      if (
+        existing !== undefined &&
+        (input.localPort === undefined ||
+          input.localPort === existing.localPort)
+      ) {
+        return reuse(existing, input.worktree);
+      }
+      const scope = yield* Scope.fork(engineScope);
+      return yield* bindForward(input, existing, scope).pipe(
+        Scope.provide(scope),
+        Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+      );
+    },
+  );
 
   // Idempotent: stopping an unknown or already-stopped forward is a
-  // no-op. Live conns are torn down with a best-effort close each.
-  function stopForward(forwardId: string): void {
+  // no-op.
+  const stopForward = Effect.fn("PortForwards.stopForward")(function* (
+    forwardId: string,
+  ) {
     const forward = forwards.get(forwardId);
     if (forward === undefined) return;
-    forwards.delete(forwardId);
-    forward.server.close();
-    // destroy deletes only the conn being visited, which Set iteration
-    // tolerates.
-    for (const conn of forward.conns) conn.destroy();
-    changed();
-  }
+    yield* Scope.close(forward.scope, Exit.void);
+  });
 
   function listForwards(): PortForwardSummary[] {
     return [...forwards.values()].map((forward) => ({
@@ -256,19 +318,22 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     }));
   }
 
-  // Shutdown teardown. Synchronous on the local side (listeners and
-  // sockets die now), best-effort on the wire.
-  function stopAll(): void {
-    for (const forwardId of forwards.keys()) stopForward(forwardId);
-  }
-
   // Every forward onto a device `keep` refuses: the peer left the
   // account, so its loopback listener would only ever black-hole.
-  function stopForwardsTo(keep: (deviceId: string) => boolean): void {
-    for (const forward of forwards.values()) {
-      if (!keep(forward.deviceId)) stopForward(forward.forwardId);
-    }
-  }
+  const stopForwardsTo = Effect.fn("PortForwards.stopForwardsTo")(function* (
+    keep: (deviceId: string) => boolean,
+  ) {
+    const leaving = [...forwards.values()].filter(
+      (forward) => !keep(forward.deviceId),
+    );
+    yield* Effect.forEach(
+      leaving,
+      (forward) => stopForward(forward.forwardId),
+      {
+        discard: true,
+      },
+    );
+  });
 
-  return { startForward, stopForward, listForwards, stopAll, stopForwardsTo };
+  return { startForward, stopForward, listForwards, stopForwardsTo };
 });

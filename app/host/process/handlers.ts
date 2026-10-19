@@ -333,7 +333,7 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
   started = true;
   if (leaving) {
     clearDirectTickets();
-    stopPortForwardsTo(() => false);
+    await stopPortForwardsTo(() => false);
     await teardownStep("the mirror sweep", () =>
       Graph.run(Effect.flatMap(MirrorEngine, (engine) => engine.leaveAccount)),
     );
@@ -384,7 +384,7 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
   ).catch(() => {});
   // A forward is standing intent across a peer being asleep, so it
   // follows the account's membership, never the roster.
-  stopPortForwardsTo(stillOn);
+  void stopPortForwardsTo(stillOn);
 }
 
 // The services the root provides the graph from its own wiring: the
@@ -442,12 +442,13 @@ export const portForwardsLayer = PortForwards.layer({
 
 // The forwards onto devices no longer on the account, stopped. Before
 // the graph is up there are none.
-const stopPortForwardsTo = (keep: (deviceId: string) => boolean): void =>
-  Graph.readNow(
-    Effect.map(PortForwards.PortForwards, (engine) =>
+const stopPortForwardsTo = (
+  keep: (deviceId: string) => boolean,
+): Promise<void> =>
+  Graph.runIfUp(
+    Effect.flatMap(PortForwards.PortForwards, (engine) =>
       engine.stopForwardsTo(keep),
     ),
-    () => undefined,
   );
 
 export function registerHostHandlers(): void {
