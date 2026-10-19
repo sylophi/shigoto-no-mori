@@ -242,25 +242,30 @@ const make = Effect.gen(function* () {
       readonly put?: ReadonlyArray<CustomPort> | undefined;
     },
   ) {
-    // One entry a number, the last one given.
-    const put = [
-      ...new Map(
-        (patch.put ?? []).map((entry) => [entry.port, entry]),
-      ).values(),
-    ];
-    const gone = new Set([
-      ...(patch.remove ?? []),
-      ...put.map(({ port }) => port),
-    ]);
+    // One entry a number, the last one given. Each takes the place of
+    // the entry on its number, or else of one removed (an edit that
+    // changed the number), or else goes at the end.
+    const put = new Map((patch.put ?? []).map((entry) => [entry.port, entry]));
+    const removed = new Set(patch.remove ?? []);
     yield* sql
       .withTransaction(
         Effect.gen(function* () {
-          const next = [
-            ...(yield* ports(projectId, worktreeId)).filter(
-              ({ port }) => !gone.has(port),
-            ),
-            ...put,
-          ];
+          const stored = yield* ports(projectId, worktreeId);
+          const numbers = new Set(stored.map(({ port }) => port));
+          const strays = [...put.values()].filter(
+            ({ port }) => !numbers.has(port),
+          );
+          const next: CustomPort[] = [];
+          for (const entry of stored) {
+            const replacing = put.get(entry.port);
+            if (replacing !== undefined) next.push(replacing);
+            else if (!removed.has(entry.port)) next.push(entry);
+            else {
+              const stray = strays.shift();
+              if (stray !== undefined) next.push(stray);
+            }
+          }
+          next.push(...strays);
           if (next.length > MAX_CUSTOM_PORTS) {
             return yield* new TooManyPorts({ max: MAX_CUSTOM_PORTS });
           }

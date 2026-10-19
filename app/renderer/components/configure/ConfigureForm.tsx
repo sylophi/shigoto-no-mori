@@ -23,6 +23,7 @@ import {
   ConfigureFormView,
 } from "@shigomori/ui/views/configure/ConfigureFormView.tsx";
 import { useApi } from "@/lib/runtime/pageApi";
+import { rebaseConfigureDraft } from "@shigomori/ui/lib/configureDraft.ts";
 
 function fromConfig(
   config: ShigomoriConfig | null,
@@ -127,26 +128,10 @@ export function ConfigureForm({
   const setField = fieldSetter(setForm);
   const canSave = isDirty && form.defaultBranch.trim().length > 0;
 
-  // The config can change underneath an open draft: creating a worktree
-  // auto-removes carry-over entries that .worktreeinclude now covers.
-  // Rebase the snapshot and drop remotely-removed entries from the draft
-  // so a later Save can't resurrect them.
   useEffect(() => {
     reseed(
       fromConfig(initialConfig, resolvedDefaultBranch),
-      (prevForm, prevSnapshot, next) => {
-        const nextPaths = new Set(next.carryOver.map((e) => e.path));
-        const removedRemotely = new Set<string>();
-        for (const entry of prevSnapshot.carryOver) {
-          if (!nextPaths.has(entry.path)) removedRemotely.add(entry.path);
-        }
-        return {
-          ...prevForm,
-          carryOver: prevForm.carryOver.filter(
-            (e) => !removedRemotely.has(e.path),
-          ),
-        };
-      },
+      rebaseConfigureDraft,
     );
   }, [initialConfig, resolvedDefaultBranch, reseed]);
 

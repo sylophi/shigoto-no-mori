@@ -169,8 +169,6 @@ it("refuses a patch whose value isn't the setting's, writing nothing", async () 
   assert.deepEqual(exit.stored, exit.base);
 });
 
-// A setting read as it applies, by a key the compiler checks: unset or
-// holding something it can't be, its default.
 it("patches the project's settings it is given and keeps what changed elsewhere, a null removing its key", async () => {
   const repo = box.repo("proj");
   const stored = (await box.engine(
@@ -210,6 +208,36 @@ it("patches the project's settings it is given and keeps what changed elsewhere,
   });
 });
 
+it("patches a project with no stored settings, git naming its default branch and the in-project layout excluded", async () => {
+  const repo = box.repo("bare-proj");
+  const stored = await box.engine(
+    Effect.gen(function* () {
+      const c = yield* config;
+      const project = yield* (yield* Registry.Registry).register({
+        name: "bare-proj",
+        path: repo,
+      });
+      const scope = {
+        kind: "project",
+        projectId: project.id,
+        path: repo,
+      } as const;
+      yield* c.patchProject(scope, { worktreeLayout: "in-project" });
+      return yield* c.read(scope);
+    }),
+  );
+  assert.deepEqual(stored, {
+    defaultBranch: "main",
+    worktreeLayout: "in-project",
+  });
+  assert.match(
+    readFileSync(join(repo, ".git/info/exclude"), "utf8"),
+    /^\/\.shigomori$/m,
+  );
+});
+
+// A setting read as it applies, by a key the compiler checks: unset or
+// holding something it can't be, its default.
 it("reads a device setting as it applies, its default when unset or unreadable", async () => {
   const read = await box.engine(
     Effect.gen(function* () {

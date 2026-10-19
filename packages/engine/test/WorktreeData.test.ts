@@ -127,7 +127,7 @@ it("carries a pair described elsewhere only when it is newer", async () => {
   });
 });
 
-it("patches the custom ports by number, keeping what changed elsewhere, and refuses more than it keeps", async () => {
+it("patches the custom ports by number, an edit in its place, keeping what changed elsewhere, and refuses more than it keeps", async () => {
   const outcome = await run(
     Effect.gen(function* () {
       const data = yield* WorktreeData.WorktreeData;
@@ -155,8 +155,8 @@ it("patches the custom ports by number, keeping what changed elsewhere, and refu
     }),
   );
   assert.deepEqual(outcome.after, [
-    { port: 4000, label: "elsewhere" },
     { port: 3001, label: "web" },
+    { port: 4000, label: "elsewhere" },
   ]);
   assert.ok(outcome.refused instanceof WorktreeData.TooManyPorts);
   assert.deepEqual(outcome.kept, outcome.after);

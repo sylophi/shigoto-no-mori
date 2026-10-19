@@ -446,6 +446,7 @@ export const patchProjectConfig = Effect.fnUntraced(function* (
   );
 });
 
+// The proofs' fixture: the project's settings as a whole document.
 export const writeProjectConfig = Effect.fnUntraced(function* (
   projectId: string,
   config: ShigomoriConfig,
@@ -1185,8 +1186,8 @@ export const readWorktreeData = Effect.fnUntraced(function* (
   return Object.keys(doc).length === 0 ? null : doc;
 });
 
-// The renderer's write: the custom ports, the title and description
-// kept.
+// The renderer's write: the custom ports by number, the title and
+// description kept.
 export const patchWorktreePorts = (
   projectId: string,
   worktreeId: string,
@@ -1201,6 +1202,7 @@ export const patchWorktreePorts = (
     ),
   );
 
+// The proofs' fixture: the custom ports as a whole.
 export const writeWorktreeData = (
   projectId: string,
   worktreeId: string,
