@@ -117,7 +117,7 @@ export const pull = Effect.fnUntraced(function* (
     );
   }
   const result = yield* applyGitState(project, localWorktree, {
-    expect: { tip: local.tip, indexTree: local.indexTree },
+    expect: core(local),
     state: core(peer),
     sweep,
   });

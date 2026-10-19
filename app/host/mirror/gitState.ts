@@ -68,6 +68,12 @@ class GitStateError extends Schema.TaggedError<GitStateError>()(
 
 export type GitHead = { kind: "branch"; branch: string } | { kind: "detached" };
 
+export function sameHead(a: GitHead, b: GitHead): boolean {
+  return a.kind === "branch" && b.kind === "branch"
+    ? a.branch === b.branch
+    : a.kind === b.kind;
+}
+
 export type GitState = {
   head: GitHead;
   tip: string;
@@ -389,8 +395,11 @@ export const readGitState = Effect.fnUntraced(function* (
 export type ApplyGitStateInput = {
   // The state the caller last observed here. Anything else means the
   // worktree moved under the caller, and the apply refuses so the
-  // caller can look again.
-  expect: Pick<GitStateCore, "tip" | "indexTree">;
+  // caller can look again. A peer's push names no HEAD until the
+  // contract carries it (the wire PR); a local pull always does.
+  expect: Pick<GitStateCore, "tip" | "indexTree"> & {
+    readonly head?: GitHead;
+  };
   state: GitStateCore;
   // App-owned refs to drop once the state landed (a landed incoming
   // branch, a consumed index carrier). Best effort.
@@ -444,7 +453,9 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
   }
   if (
     current.tip !== input.expect.tip ||
-    current.indexTree !== input.expect.indexTree
+    current.indexTree !== input.expect.indexTree ||
+    (input.expect.head !== undefined &&
+      !sameHead(current.head, input.expect.head))
   ) {
     return refused("changed-locally");
   }

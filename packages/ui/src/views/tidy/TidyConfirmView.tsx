@@ -3,7 +3,7 @@ import { Button } from "../../primitives/button.tsx";
 import { Checkbox } from "../../primitives/checkbox.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
-import type { TidySummary } from "./tidyModel.ts";
+import { acknowledges, type TidySummary } from "./tidyModel.ts";
 import { TidyEntryTitleView } from "./TidyEntryTitleView.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { plural, pluralize } from "@shigomori/contracts/words";
@@ -14,14 +14,16 @@ interface TidyConfirmProps {
   // Each project's icon (ProjectIcon), by its id.
   icons: ReadonlyMap<string, ReactNode>;
   onCancel: () => void;
-  onConfirm: () => void;
+  // With the risky worktrees the user acknowledged losing.
+  onConfirm: (acknowledged: ReadonlySet<string>) => void;
 }
 
 // The last thing between a click and an irreversible removal. Everything
 // that is about to happen is spelled out here by name: which worktrees,
 // why each one was picked, and how much comes back. When the selection
 // includes anything the page would not have ticked itself, the confirm
-// button stays disabled behind an explicit acknowledgement.
+// button stays disabled behind an explicit acknowledgement of those
+// worktrees by name.
 // The dialog's content (TidyConfirm puts it in a ModalShell).
 export function TidyConfirmView({
   summary,
@@ -30,11 +32,13 @@ export function TidyConfirmView({
   onCancel,
   onConfirm,
 }: TidyConfirmProps) {
-  const [acknowledged, setAcknowledged] = useState(false);
+  const [acknowledged, setAcknowledged] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const { selected, risky, projectCount, reclaimBytes, reclaimPartial } =
     summary;
   const count = selected.length;
-  const blocked = risky.length > 0 && !acknowledged;
+  const covered = acknowledges(acknowledged, risky);
 
   return (
     <div className="flex min-h-0 flex-col p-5">
@@ -103,8 +107,14 @@ export function TidyConfirmView({
           <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md select-none">
             <Checkbox
               variant="destructive"
-              checked={acknowledged}
-              onCheckedChange={() => setAcknowledged((prev) => !prev)}
+              checked={covered}
+              onCheckedChange={() =>
+                setAcknowledged(
+                  covered
+                    ? new Set()
+                    : new Set(risky.map((entry) => entry.worktree.id)),
+                )
+              }
             />
             I understand this work will be lost
           </label>
@@ -124,8 +134,8 @@ export function TidyConfirmView({
         <Button
           variant="destructive"
           size="sm"
-          disabled={blocked}
-          onClick={onConfirm}
+          disabled={!covered}
+          onClick={() => onConfirm(acknowledged)}
         >
           Remove {pluralize(count, "worktree")}
         </Button>

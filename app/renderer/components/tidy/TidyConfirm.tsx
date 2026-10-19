@@ -13,7 +13,7 @@ export function TidyConfirm({
   summary: TidySummary;
   deleteBranches: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (acknowledged: ReadonlySet<string>) => void;
 }) {
   const icons = new Map(
     summary.selected.map(({ project }) => [

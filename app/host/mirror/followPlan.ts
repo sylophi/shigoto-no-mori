@@ -46,6 +46,7 @@ import {
   type GitState,
   type GitStateCore,
   operationInRefusal,
+  sameHead,
 } from "./gitState";
 
 // The slice of a daemon session the follower reads. `status` is the
@@ -120,12 +121,6 @@ export function describeRefusal(reason: string, side: Side): string {
   return reason.replace(/this device|the other device/g, (match) =>
     match === "this device" ? "the other device" : "this device",
   );
-}
-
-export function sameHead(a: GitHead, b: GitHead): boolean {
-  return a.kind === "branch" && b.kind === "branch"
-    ? a.branch === b.branch
-    : a.kind === b.kind;
 }
 
 export function sameState(a: GitStateCore, b: GitStateCore): boolean {

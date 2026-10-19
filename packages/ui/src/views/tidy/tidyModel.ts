@@ -190,6 +190,26 @@ export function summarize(
   };
 }
 
+// Whether an acknowledgement still covers the risk shown: it was given
+// for a set of risky worktrees, and one turning risky since (a second
+// selected worktree gone dirty) is in no acknowledgement until it is
+// given again.
+export function acknowledges(
+  acknowledged: ReadonlySet<string>,
+  risky: readonly TidyEntry[],
+): boolean {
+  return risky.every((entry) => acknowledged.has(entry.worktree.id));
+}
+
+// Whether a removal is forced: only where git would refuse and the
+// user acknowledged losing that worktree's work.
+export function forcedRemoval(
+  entry: TidyEntry,
+  acknowledged: ReadonlySet<string>,
+): boolean {
+  return entry.verdict.needsForce && acknowledged.has(entry.worktree.id);
+}
+
 // The disk walks' progress across the page, as the app's
 // useWorktreeHygiene sums it.
 export interface DiskUsageTotals {
