@@ -1,7 +1,8 @@
 // What a quit or an update hears of what the host is busy with
 // (hostProcess.ts's hostBusy), and whether the quit after it kills the
 // host rather than wait on it to close: only a host that left the latest
-// ask unanswered, while that ask still says something of it.
+// ask a quit acts on unanswered, while that ask still says something of
+// it.
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -18,8 +19,20 @@ export function busyAsks<H, B>(options: {
   // started is the one that says.
   let asks = 0;
   return {
-    ask: (host: H | null, answer: Effect.Effect<Option.Option<B>>) =>
+    // `quitAfter`: a quit acts on this ask (Quit's, an install's), where
+    // an update's look before anything is staged leaves none behind it.
+    ask: (
+      host: H | null,
+      answer: Effect.Effect<Option.Option<B>>,
+      quitAfter: boolean,
+    ) =>
       Effect.suspend(() => {
+        if (!quitAfter) {
+          return Effect.map(
+            answer,
+            Option.getOrElse(() => options.idle),
+          );
+        }
         const ask = ++asks;
         return answer.pipe(
           Effect.tap((busy) =>

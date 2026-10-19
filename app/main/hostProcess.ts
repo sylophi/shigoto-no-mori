@@ -449,9 +449,9 @@ const busy = busyAsks<UtilityProcess, HostBusy>({
   freshMs: SILENT_LIMIT_S * 1000,
   now: () => performance.now(),
 });
-export const hostBusy = () =>
+export const hostBusy = (quitAfter: boolean) =>
   Effect.suspend(() =>
-    busy.ask(child, busyWithin(host().busy(), BUSY_DEADLINE)),
+    busy.ask(child, busyWithin(host().busy(), BUSY_DEADLINE), quitAfter),
   );
 
 // The machine is going to sleep, or woke: a watchdog round around

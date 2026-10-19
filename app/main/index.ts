@@ -421,7 +421,7 @@ app.on("before-quit", (event) => {
   }
   if (askingToQuit) return;
   askingToQuit = true;
-  void Effect.runPromise(hostBusy())
+  void Effect.runPromise(hostBusy(true))
     .then((busy) => confirmBusyAction("quit", busy))
     .catch((error: unknown) => {
       // A host that cannot answer has nothing to lose to the quit.
