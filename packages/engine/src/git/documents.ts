@@ -166,6 +166,10 @@ export type RunOptions = {
   // A write asked once, not again on a held index.lock, for a caller
   // that checks before each ask (a stash's finish).
   readonly once?: boolean | undefined;
+  // A read a view runs in the background, which leaves the index as it
+  // found it (GIT_OPTIONAL_LOCKS=0) rather than write back what it
+  // refreshed: see the runner.
+  readonly background?: boolean | undefined;
 };
 
 // A commit from the changes page: the picks, and the message. Two `-m`

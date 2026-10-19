@@ -54,9 +54,12 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
 
     const conflictedPaths = Effect.fn("Git.conflictedPaths")(function* (
       worktree: string,
+      background = false,
     ) {
       return splitZ(
-        yield* run(worktree, ["diff", "--name-only", "--diff-filter=U", "-z"]),
+        yield* run(worktree, ["diff", "--name-only", "--diff-filter=U", "-z"], {
+          background,
+        }),
       );
     });
 
@@ -148,9 +151,10 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
 
     const readOperation = Effect.fn("Git.readOperation")(function* (
       worktree: string,
+      background = false,
     ) {
       const [dir, conflictedList] = yield* Effect.all(
-        [gitDir(worktree), conflictedPaths(worktree)],
+        [gitDir(worktree), conflictedPaths(worktree, background)],
         { concurrency: 2 },
       );
       const conflicted = conflictedList.length;

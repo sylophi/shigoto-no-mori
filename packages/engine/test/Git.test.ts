@@ -272,6 +272,72 @@ it("a stash whose worktree changes before its reset is finished is left alone, a
   assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "changed\n");
 });
 
+it("a person's commits in a terminal are never refused by the app's status reads beside them", async () => {
+  const repo = seedRepo();
+  // git's own automatic maintenance, racing a hundred quick commits, can
+  // repack away the commit HEAD names (2 of 15 runs with no app at all,
+  // git 2.54): off, as in every fixture of the CLI's.
+  git(repo, "config", "gc.auto", "0");
+  git(repo, "config", "maintenance.auto", "false");
+  // Enough files that a status's refresh writes back an index worth the
+  // name, as on a real project.
+  for (let file = 0; file < 2000; file += 1) {
+    write(repo, `many/${file}.txt`, `${file}\n`);
+  }
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "many");
+  const refused: string[] = [];
+  await withGit((g) =>
+    Effect.gen(function* () {
+      let finished = false;
+      // The app reading, as fast as it can, three views at once.
+      const reading = yield* Effect.forkChild(
+        Effect.forEach(
+          [1, 2, 3],
+          () =>
+            Effect.whileLoop({
+              while: () => !finished,
+              body: () => Effect.ignore(g.status(repo)),
+              step: () => {},
+            }),
+          { concurrency: "unbounded", discard: true },
+        ),
+      );
+      // The person: an edit, an add and a commit, two hundred times.
+      for (let round = 0; round < 200; round += 1) {
+        write(repo, "a.txt", `round ${round}\n`);
+        for (const args of [
+          ["add", "a.txt"],
+          [
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "-q",
+            "-m",
+            `round ${round}`,
+          ],
+        ]) {
+          try {
+            git(repo, ...args);
+          } catch (error) {
+            refused.push(
+              `${args.join(" ")}: ${String((error as { stderr?: unknown }).stderr ?? error)}`,
+            );
+          }
+        }
+        yield* Effect.promise(() => new Promise((done) => setTimeout(done, 5)));
+      }
+      finished = true;
+      yield* Fiber.join(reading);
+    }),
+  );
+  assert.deepEqual(
+    refused,
+    [],
+    `${refused.length} of 400 writes refused, the first: ${refused[0] ?? ""}`,
+  );
+});
+
 it("a write held by the user's hook leaves the probes their slots", async () => {
   const repo = seedRepo();
   const head = rev(repo, "HEAD");

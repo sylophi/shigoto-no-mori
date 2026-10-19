@@ -78,14 +78,11 @@ export const makeWorkingTree = ({
       const [files, tracked] = yield* Effect.all(
         [
           status(worktree, "all"),
-          run(worktree, [
-            "-c",
-            "core.quotePath=false",
-            "diff",
-            "HEAD",
-            "--numstat",
-            "-z",
-          ]).pipe(
+          run(
+            worktree,
+            ["-c", "core.quotePath=false", "diff", "HEAD", "--numstat", "-z"],
+            { background: true },
+          ).pipe(
             Effect.orElseSucceed(() => ""),
             Effect.map(parseNumstat),
           ),

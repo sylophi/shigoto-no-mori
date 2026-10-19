@@ -73,7 +73,7 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
                 ...paths,
               ]),
         ],
-        { anyExit: true, maxOutputBytes: PATCH_MAX_OUTPUT },
+        { anyExit: true, maxOutputBytes: PATCH_MAX_OUTPUT, background: true },
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
     });
 

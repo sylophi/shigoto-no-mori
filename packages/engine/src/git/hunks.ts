@@ -122,19 +122,28 @@ export const makeHunks = ({
     const { run, onIndex } = running;
     const { snapshotPaths } = gitIndex;
 
-    const diffHead = (worktree: string, file: string, cached: boolean) =>
-      run(worktree, [
-        ...PATH_OPTS,
-        "diff",
-        "--no-color",
-        "--no-ext-diff",
-        "--no-textconv",
-        "--no-renames",
-        "-U0",
-        ...(cached ? ["--cached"] : ["HEAD"]),
-        "--",
-        file,
-      ]);
+    const diffHead = (
+      worktree: string,
+      file: string,
+      cached: boolean,
+      background = false,
+    ) =>
+      run(
+        worktree,
+        [
+          ...PATH_OPTS,
+          "diff",
+          "--no-color",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--no-renames",
+          "-U0",
+          ...(cached ? ["--cached"] : ["HEAD"]),
+          "--",
+          file,
+        ],
+        { background },
+      );
 
     const readHead = (worktree: string, file: string) =>
       run(worktree, ["cat-file", "blob", `HEAD:${file}`]).pipe(
@@ -145,7 +154,7 @@ export const makeHunks = ({
     // be edited by the line: a symlink's text is its target, which a
     // write would follow, and text that isn't UTF-8 wouldn't survive
     // being decoded and written back.
-    const readTree = (worktree: string, file: string) =>
+    const readTree = (worktree: string, file: string, background = false) =>
       Effect.gen(function* () {
         const full = path.join(worktree, file);
         const symlink = yield* fs.readLink(full).pipe(
@@ -155,7 +164,9 @@ export const makeHunks = ({
         if (symlink) return null;
         const raw = yield* fs.readFile(full);
         if (!isUtf8(raw)) return null;
-        const changes = parseChanges(yield* diffHead(worktree, file, false));
+        const changes = parseChanges(
+          yield* diffHead(worktree, file, false, background),
+        );
         return {
           // A byte order mark stays, as the file has it.
           tree: splitLines(
@@ -241,7 +252,7 @@ export const makeHunks = ({
       file: string,
     ) {
       const [state, head] = yield* Effect.all(
-        [readTree(worktree, file), run(worktree, ["rev-parse", "HEAD"])],
+        [readTree(worktree, file, true), run(worktree, ["rev-parse", "HEAD"])],
         { concurrency: 2 },
       );
       return {
