@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { flavorNames, type Flavor } from "@shigomori/engine/flavor";
-import { isOutsideGitVariable } from "../../../../gitIsolation.ts";
+import { isolatedGitEnv } from "../../../../gitIsolation.ts";
 import { macfs } from "../../../engine/test/lib/macfs.ts";
 
 const repoRoot = join(import.meta.dirname, "..", "..", "..", "..");
@@ -71,9 +71,7 @@ export function builtBinary(flavor: Flavor): string {
   const partial = `${binary}.${process.pid}`;
   execFileSync(process.execPath, ["build.mts", partial, `--flavor=${flavor}`], {
     cwd: join(repoRoot, "packages", "cli"),
-    env: Object.fromEntries(
-      Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
-    ),
+    env: isolatedGitEnv(),
     stdio: ["ignore", "ignore", "inherit"],
   });
   renameSync(partial, binary);
