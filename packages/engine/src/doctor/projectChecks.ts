@@ -188,7 +188,12 @@ export const makeProjectChecks = ({
           real.add(Option.getOrElse(yield* realPath(base), () => base));
         }
         for (const base of real) {
-          const entries = yield* fs.readDirectory(base).pipe(Effect.option);
+          // Only a base that isn't there is empty: one it can't list
+          // could hold a worktree moved by hand.
+          const entries = yield* fs.readDirectory(base).pipe(
+            Effect.map(Option.some),
+            Effect.catchIf(isNotFound, () => Effect.succeedNone),
+          );
           if (Option.isNone(entries)) continue;
           for (const [name, entry] of yield* lstatIn(base, entries.value)) {
             const dir = path.join(base, name);
@@ -286,8 +291,8 @@ export const makeProjectChecks = ({
         if (Result.isFailure(found)) {
           return [
             check("Projects", "project-worktrees", project.name).fail(
-              `can't read this project's worktree folders (${errorText(found.failure)}), so a moved or stray worktree goes unseen`,
-              "Run the doctor again. If it keeps failing, reinstall Shigoto no Mori.",
+              `can't read this project's worktree folders, so a moved or stray worktree goes unseen: ${errorText(found.failure)}`,
+              "Fix what stops the read, then run the doctor again.",
             ),
           ];
         }
@@ -564,7 +569,7 @@ export const makeProjectChecks = ({
         if (Result.isFailure(read)) {
           return [
             line.warn(
-              `can't read ${WORKTREE_INCLUDE} (${errorText(read.failure)})`,
+              `can't read ${WORKTREE_INCLUDE}: ${errorText(read.failure)}`,
               "Run the doctor again. If it keeps failing, reinstall Shigoto no Mori.",
             ),
           ];

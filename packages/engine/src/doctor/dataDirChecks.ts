@@ -394,7 +394,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       const found = yield* Effect.result(findStaleLocks);
       if (Result.isFailure(found)) {
         return line.warn(
-          `can't read the data dir's lock files (${errorText(found.failure)})`,
+          `can't read the data dir's lock files: ${errorText(found.failure)}`,
           "Run the doctor again. If it keeps failing, reinstall Shigoto no Mori.",
         );
       }
@@ -569,7 +569,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         return [
           repairable(
             check("Data dir", "update-leftovers", "update files").warn(
-              `${shown === "" ? "Downloads" : `${shown}downloads`} left by an earlier update that nothing will install`,
+              `${shown}downloads left by an earlier update that nothing will install`,
               "Delete them, or let the next update sweep them.",
             ),
             {

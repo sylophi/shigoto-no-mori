@@ -569,6 +569,32 @@ describe("a project", () => {
     box.git(moved, "status");
   });
 
+  it("prunes nothing while a managed folder can't be listed", async () => {
+    const { repo, base, tree } = alpha();
+    const outside = join(box.home, "elsewhere", "feat");
+    box.git(repo, "worktree", "add", "-q", "-b", "feat", outside);
+    const gone = tree("gone");
+    const moved = join(base, "feat");
+    renameSync(outside, moved);
+    rmSync(gone, { recursive: true });
+    chmodSync(base, 0o311);
+    try {
+      const doc = await run();
+      assert.match(
+        only(doc, "project-worktrees", "fail").detail,
+        /^can't read this project's worktree folders, so a moved or stray worktree goes unseen: /,
+      );
+      const fixed = await run({ fix: true });
+      assert.ok(
+        !fixed.repaired.some((line) => line.startsWith("pruned")),
+        `pruned with the moved worktree unseen: ${fixed.repaired.join("; ")}`,
+      );
+    } finally {
+      chmodSync(base, 0o755);
+    }
+    box.git(moved, "status");
+  });
+
   it("says what it couldn't read when the darwin helper fails, and prunes nothing it couldn't see", async () => {
     // A helper that can't lstat, as one that can't run would be.
     const bin = realpathSync(mkdtempSync(join(tmpdir(), "engine-macfs-")));
@@ -599,15 +625,15 @@ describe("a project", () => {
       const doc = await run();
       assert.match(
         only(doc, "project-worktrees", "fail").detail,
-        /^can't read this project's worktree folders \(The darwin helper failed \(lstat, exit\)\.\), so a moved or stray worktree goes unseen$/,
+        /^can't read this project's worktree folders, so a moved or stray worktree goes unseen: The darwin helper failed \(lstat, exit\)\.$/,
       );
       assert.match(
         only(doc, "locks", "warn").detail,
-        /^can't read the data dir's lock files \(The darwin helper failed \(lstat, exit\)\.\)$/,
+        /^can't read the data dir's lock files: The darwin helper failed \(lstat, exit\)\.$/,
       );
       assert.equal(
         only(doc, "update-leftovers", "warn").detail,
-        "Downloads left by an earlier update that nothing will install",
+        "downloads left by an earlier update that nothing will install",
       );
 
       const fixed = await run({ fix: true });
