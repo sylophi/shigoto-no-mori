@@ -55,6 +55,7 @@ const nuke = (
       onProgress: (progress) => Effect.sync(() => onProgress(progress)),
       killAllScripts: Effect.void,
       closeTerminals: Effect.void,
+      holdUpdater: Effect.succeed(null),
       uninstall: Effect.sync(() => {
         uninstalled.push("hooks");
         return [];
@@ -126,6 +127,26 @@ it("refuses for a project inside the data dir, touching nothing", async () => {
   // Out of the way for the next proofs: the trap's repo, unregistered.
   await fixture.sm("projects", "remove", "--yes", inside);
   rmSync(inside, { recursive: true, force: true });
+});
+
+it("refuses while an update installs, in its words, before a script is stopped", async () => {
+  let scriptsStopped = false;
+  await assert.rejects(
+    runHost(
+      nukeEverything({
+        onProgress: () => Effect.void,
+        killAllScripts: Effect.sync(() => {
+          scriptsStopped = true;
+        }),
+        closeTerminals: Effect.void,
+        holdUpdater: Effect.succeed("3.1.0"),
+        uninstall: Effect.succeed([]),
+        home: join(sandbox, "home"),
+      }),
+    ),
+    /The update to 3\.1\.0 is installing, and the app restarts into it\. Reset after the restart\./,
+  );
+  assert.equal(scriptsStopped, false, "a script was stopped first");
 });
 
 it("removes every worktree the app made, and a second run finishes an interrupted first", async () => {
@@ -231,6 +252,7 @@ it("reports what it couldn't uninstall, with why", async () => {
       onProgress: () => Effect.void,
       killAllScripts: Effect.void,
       closeTerminals: Effect.void,
+      holdUpdater: Effect.succeed(null),
       uninstall: Effect.map(
         Effect.all([
           leftIf("The agent hooks", Effect.fail(new ReadOnly())),

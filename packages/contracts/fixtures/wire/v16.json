@@ -2065,6 +2065,12 @@
       "tree": "|"
     }
   },
+  "shellCalls:holdUpdater": {
+    "payload": {
+      "for": "reset"
+    },
+    "success": ""
+  },
   "shellCalls:migration": {
     "payload": {
       "planned": true,
@@ -2094,6 +2100,7 @@
     }
   },
   "shellCalls:relaunch": {},
+  "shellCalls:resumeUpdater": {},
   "shellCalls:stopUpdaterBridge": {},
   "shellCalls:updaterCheck": {},
   "shellCalls:updaterInstall": {

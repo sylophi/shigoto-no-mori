@@ -15,7 +15,6 @@ import * as Layer from "effect/Layer";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostAccount from "@host/lib/HostAccount";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
-import * as Shell from "@host/lib/Shell";
 import * as Loopback from "@host/socket/Loopback";
 import { refresh } from "@host/lib/projects";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
@@ -24,6 +23,7 @@ import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
+import * as Shell from "@host/lib/Shell";
 import * as CliShell from "@host/lib/cli/shell";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
 import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
@@ -191,7 +191,9 @@ const scriptGate = onQuit(
 );
 
 // What lets go of the data folder before a move takes it away: the
-// store, the updater's bridge and the loopback's address file.
+// store, the updater's bridge and the loopback's address file. The
+// updater stops starting anything earlier, as the move's last check
+// (holdUpdater).
 const dataDirHolders = Layer.effect(
   DataDirHolders,
   Effect.gen(function* () {

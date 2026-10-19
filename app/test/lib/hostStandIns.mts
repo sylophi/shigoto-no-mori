@@ -133,6 +133,8 @@ const standIns = Layer.mergeAll(
         state: Effect.succeed({ kind: "idle" }),
         noteState: () => Effect.void,
       },
+      holdUpdater: () => Effect.succeed(null),
+      resumeUpdater: Effect.void,
       stopUpdaterBridge: Effect.void,
       migration: () => Effect.void,
       guide: () => Effect.die(new Error("not in this check")),
