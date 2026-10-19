@@ -15,20 +15,17 @@ export class PortForwards extends Context.Service<
   PortForwardEngine
 >()("sm/host/PortForwards") {}
 
-// The listeners die with the process anyway, but stopping them as the
-// graph closes also best-effort closes the host-side conns, so the
-// peer is not left waiting out its idle sweep.
+// Every forward is a scope of the layer's, so the graph closing stops
+// them all, and a start under way as it closes leaves nothing bound.
 export const layer = (options: { readonly onChange: () => void }) =>
   Layer.effect(
     PortForwards,
     Effect.gen(function* () {
       const reach = yield* PeerReach;
-      const engine = yield* makePortForwardEngine({
+      return yield* makePortForwardEngine({
         forwardApiFor: (deviceId) => reach.calls(forwardContract, deviceId),
         channelsFor: reach.channels,
         onChange: options.onChange,
       });
-      yield* Effect.addFinalizer(() => Effect.sync(engine.stopAll));
-      return engine;
     }),
   );

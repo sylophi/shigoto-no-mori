@@ -206,7 +206,7 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // BEFORE opening the far end with forward:open / mirror:openStream. Same
   // session rules as invokePeer: joins an in-flight keeper dial,
   // rejects at once with the keeper's reason when there is none.
-  peerChannels(deviceId: string): Promise<Pick<ChannelMux, "attach" | "has">>;
+  peerChannels(deviceId: string): Promise<ChannelMux>;
   // Close and drop every cached direct session, for the quit path:
   // without it the remote host keeps a dead socket in its per-device
   // slot and relaunch lands on the supersede path instead of a clean
