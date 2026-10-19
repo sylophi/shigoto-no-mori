@@ -37,8 +37,12 @@ import { portLink } from "@shared/remote/portLink";
 import { createShellRegistrar } from "../main/ipc/shellRegistrar";
 import * as FiberSet from "effect/FiberSet";
 import { shellLink } from "@shared/ipc/shell";
-import { linkTransport } from "@shared/remote/rpcTransport";
-import type { HandlerContext } from "@shared/ipc/transport";
+import {
+  linkTransport,
+  RemoteDisconnectedError,
+} from "@shared/remote/rpcTransport";
+import type { HandlerContext, Link } from "@shared/ipc/transport";
+import * as Stream from "effect/Stream";
 
 const ADDRESS = {
   port: 62_814,
@@ -275,4 +279,30 @@ it("the host's link to its shell, likewise, and each call runs once", async () =
   await passes();
   await shell.invoke("shellCalls:updaterCheck", undefined);
   assert.equal(checks, 2);
+});
+
+// A transport over a link whose every call is `call`.
+const transportOver = (call: Link["call"]) =>
+  linkTransport(
+    { call, view: () => Stream.never, pushes: () => Stream.never },
+    (effect) => Effect.runFork(effect),
+  );
+
+it("a call its link's scope cut reads as the link gone, and one its caller aborted as cancelled", async () => {
+  // Interrupted with no abort: what a session closing under its calls does.
+  await assert.rejects(
+    transportOver(() => Effect.interrupt).invoke(
+      "window:hostAddress",
+      undefined,
+    ),
+    (error) => error instanceof RemoteDisconnectedError,
+  );
+  const aborted = new AbortController();
+  const asked = transportOver(() => Effect.never).invoke(
+    "window:hostAddress",
+    undefined,
+    { signal: aborted.signal },
+  );
+  aborted.abort();
+  await assert.rejects(asked, /the call was cancelled/);
 });
