@@ -63,10 +63,10 @@ export class FileSync extends Context.Service<
     >;
     // A `serve` child in a scope of its own under the service's, ended
     // when `until` completes. It reaches `root` alone, whatever root the
-    // peer's side of the stream names.
+    // peer's side of the stream names, and stages in `dataDir`.
     readonly serve: (
       root: string,
-      env: Record<string, string | undefined>,
+      dataDir: string,
       until: Effect.Effect<void>,
     ) => Effect.Effect<
       ServeChild,
@@ -100,25 +100,28 @@ const make = (binaryPath: () => string | null) =>
 
     const serve = Effect.fn("FileSync.serve")(function* (
       root: string,
-      env: Record<string, string | undefined>,
+      dataDir: string,
       until: Effect.Effect<void>,
     ) {
       const child = yield* Scope.fork(scope);
       const close = Scope.close(child, Exit.void);
       const input = new PassThrough();
-      const handle = yield* spawn(["serve", "--root", root], {
-        env,
-        stdin: NodeStream.fromReadable({
-          evaluate: () => input,
-          onError: (cause) =>
-            PlatformError.systemError({
-              _tag: "Unknown",
-              module: "FileSync",
-              method: "serve",
-              cause,
-            }),
-        }),
-      }).pipe(
+      const handle = yield* spawn(
+        ["serve", "--root", root, "--data-dir", dataDir],
+        {
+          env: {},
+          stdin: NodeStream.fromReadable({
+            evaluate: () => input,
+            onError: (cause) =>
+              PlatformError.systemError({
+                _tag: "Unknown",
+                module: "FileSync",
+                method: "serve",
+                cause,
+              }),
+          }),
+        },
+      ).pipe(
         Scope.provide(child),
         Effect.onError(() => close),
       );

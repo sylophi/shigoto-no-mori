@@ -23,6 +23,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -717,10 +718,11 @@ func TestMirrorSessionNameFolding(t *testing.T) {
 	}
 }
 
-// A data dir v2 left: its sessions persisted with v2's labels. The
-// rewrite gives each its mode, keeps every other label, leaves a
-// session with a mode or no kind alone, and changes nothing on a
-// second pass.
+// A data dir v2 left: its sessions persisted with v2's labels and the
+// root-anchored .git pointer rule. The rewrite gives each its mode,
+// keeps every other label, leaves the labels of a session with a mode
+// or no kind alone, unanchors every one's pointer rule, and changes
+// nothing on a second pass.
 func TestRelabelV2Sessions(t *testing.T) {
 	dataDir := t.TempDir()
 	dir := filepath.Join(dataDir, filesystem.MutagenSynchronizationSessionsDirectoryName)
@@ -741,7 +743,12 @@ func TestRelabelV2Sessions(t *testing.T) {
 			t.Fatal(err)
 		}
 		ids[name] = id
-		session := &synchronization.Session{Identifier: id, Name: name, Labels: labels}
+		session := &synchronization.Session{
+			Identifier:    id,
+			Name:          name,
+			Labels:        labels,
+			Configuration: &synchronization.Configuration{Ignores: []string{"node_modules", "/.git"}},
+		}
 		if err := encoding.MarshalAndSaveProtobuf(filepath.Join(dir, id), session); err != nil {
 			t.Fatal(err)
 		}
@@ -764,6 +771,11 @@ func TestRelabelV2Sessions(t *testing.T) {
 			}
 			if session.Name != name {
 				t.Errorf("%s: name became %q", name, session.Name)
+			}
+			// The root-anchored pointer rule of an older session, made the
+			// unanchored one, whatever its labels.
+			if ignores := session.Configuration.Ignores; !slices.Equal(ignores, []string{"node_modules", ".git"}) {
+				t.Errorf("%s: ignores %v", name, ignores)
 			}
 		}
 	}

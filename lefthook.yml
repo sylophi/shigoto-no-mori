@@ -8,6 +8,11 @@ pre-commit:
     - name: format
       run: node_modules/.bin/oxfmt --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
+    # Every job that runs tests starts without the repository git hands
+    # a hook (GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE): a test's git that
+    # inherited them ran against this repository. The runners scrub
+    # every GIT_* as well (gitIsolation.ts), so a runner added here
+    # without that is still covered.
     - name: checks
       group:
         parallel: true
@@ -37,42 +42,42 @@ pre-commit:
           # The lint plugin's own rules (lint/README.md).
           - name: lint-rules
             glob: "lint/**"
-            run: pnpm run check:lint-rules
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:lint-rules
           - name: format-all
             glob: "{.oxfmtrc.json,packages/ui/src/styles/index.css,package.json}"
             run: pnpm run format:check
           # The proofs the staged files reach: vitest related, plus the
           # proofs' covers lines (app/test/README.md).
           - name: proofs
-            run: pnpm -C app test --changed {staged_files}
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm -C app test --changed {staged_files}
           # hub/'s typecheck and suite, for hub/, the contracts it imports
           # and the workspace files that pin its packages.
           - name: hub
             glob: "{hub/**,packages/contracts/**,pnpm-lock.yaml,pnpm-workspace.yaml}"
-            run: pnpm -C hub run check
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm -C hub run check
           # The contracts' golden fixtures (packages/contracts/README.md).
           - name: contracts
             glob: "packages/contracts/**"
-            run: pnpm run check:contracts
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:contracts
           # The engine's tests, its boundary proof among them
           # (packages/engine/README.md).
           - name: engine
             glob: "{packages/engine/**,packages/contracts/**,macfs/**,app/shared/fixtures/git-log.json}"
-            run: pnpm run check:engine
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:engine
           # The ui package's tests (packages/ui/README.md).
           - name: ui
             glob: "packages/ui/**"
-            run: pnpm run check:ui
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:ui
           # The terminal binary, built as it ships (packages/cli/README.md).
           - name: cli
             glob: "{packages/cli/**,packages/engine/src/**,packages/engine/test/lib/**,packages/contracts/**,macfs/**}"
-            run: pnpm run check:cli
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:cli
           # The file-sync engine (continuous worktree mirroring) is its own
           # Go module, tested on its own.
           - name: file-sync-test
             glob: "file-sync/**"
-            run: CGO_CFLAGS=-Wno-deprecated-declarations node testTemp.mts go go test -C file-sync ./...
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CGO_CFLAGS=-Wno-deprecated-declarations node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON testTemp.mts go go test -C file-sync ./...
           # The darwin helper (macfs/), likewise.
           - name: macfs-test
             glob: "macfs/**"
-            run: node testTemp.mts go go test -C macfs ./...
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON testTemp.mts go go test -C macfs ./...
