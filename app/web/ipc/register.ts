@@ -121,6 +121,9 @@ export type WebBridge = {
 export const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
 // How long a tab waits for another tab's enroll.
 const ENROLL_WAIT_MS = 30_000;
+
+const isDomError = (error: unknown, name: string): boolean =>
+  error instanceof DOMException && error.name === name;
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = resolveServiceConfig(deps.env);
@@ -291,11 +294,21 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         ? enrollHere()
         : // A tab whose enroll hangs (no timeout of its own) holds the
           // others for a while, not for good: theirs then fail, and retry.
-          locks.request(
-            "sm.web.enroll",
-            { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
-            enrollHere,
-          )
+          locks
+            .request(
+              "sm.web.enroll",
+              { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
+              enrollHere,
+            )
+            .catch((error: unknown) => {
+              // Given up while waiting: said as what the user can do.
+              if (isDomError(error, "TimeoutError")) {
+                throw new Error(
+                  "Another tab of this browser is still enrolling it. Try again once it's done.",
+                );
+              }
+              throw error;
+            })
     ).finally(() => {
       enrolling = undefined;
     });
