@@ -1,16 +1,16 @@
-import { throughCancel } from "@/lib/queryClientOptions";
 import {
   queryOptions,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { ShigomoriWorktreeData } from "@shigomori/contracts/schemas";
+import type {
+  CustomPort,
+  ShigomoriWorktreeData,
+} from "@shigomori/contracts/schemas";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
-// As options so the write below can fetch the stored document through
-// the same cache entry the readers use.
 function worktreeDataQueryOptions(
   api: HostApi,
   keys: QueryKeyRegistry,
@@ -36,48 +36,28 @@ export function useWorktreeData(
   });
 }
 
-// The new custom ports, or a function of the stored document for edits
-// that depend on what is there. Undefined clears them.
-type PortsPatch = Pick<ShigomoriWorktreeData, "ports">;
-type WorktreeDataPatch =
-  | PortsPatch
-  | ((current: ShigomoriWorktreeData) => PortsPatch);
-
-interface WriteVariables {
+interface PortsPatchVariables {
   projectId: string;
   worktreeId: string;
-  patch: WorktreeDataPatch;
+  // Numbers to take away, then entries to set over one on their number.
+  remove?: readonly number[];
+  put?: readonly CustomPort[];
 }
 
-// The renderer's writer of a worktree's data file, which owns only the
-// custom ports there (worktreeData:write). A patch can depend on what
-// is stored, so it is given the document fetched fresh.
-export function useWorktreeDataWrite() {
+// Changes a worktree's custom ports by number (worktreeData:patchPorts),
+// so a port another device or the terminal added meanwhile stays.
+export function useWorktreePortsPatch() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation({
-    // One scope for every worktree-data write in the app, so two edits
-    // in flight at once (a remove clicked twice, a remove racing a
-    // port add) run one after the other instead of each merging over
-    // the same base and the later one undoing the earlier.
-    scope: { id: "worktreeData" },
-    mutationFn: async ({ projectId, worktreeId, patch }: WriteVariables) => {
-      // Fetched fresh, never from the cache: the cache lags a just-landed
-      // write until its invalidation refetch returns, and a merge over
-      // that base would resurrect what the write removed.
-      const current =
-        (await throughCancel(() =>
-          queryClient.fetchQuery({
-            ...worktreeDataQueryOptions(api, keys, projectId, worktreeId),
-            staleTime: 0,
-          }),
-        )) ?? {};
+    mutationFn: async ({
+      projectId,
+      worktreeId,
+      remove,
+      put,
+    }: PortsPatchVariables) => {
       await api.run(
-        api.worktreeData.write({
-          projectId,
-          worktreeId,
-          data: typeof patch === "function" ? patch(current) : patch,
-        }),
+        api.worktreeData.patchPorts({ projectId, worktreeId, remove, put }),
       );
       return { projectId, worktreeId };
     },

@@ -6,6 +6,7 @@ import {
   type CustomPort,
   CustomPortSchema,
   MAX_CUSTOM_PORTS,
+  patchedPorts,
 } from "@shigomori/contracts/schemas/ports";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -24,6 +25,16 @@ export type Description = {
   readonly description: string;
   readonly describedAt: number;
 };
+
+// A change to the custom ports that would leave more than the app keeps.
+export class TooManyPorts extends Schema.TaggedError<TooManyPorts>()(
+  "TooManyPorts",
+  { max: Schema.Int },
+) {
+  override get message(): string {
+    return `A worktree keeps at most ${this.max} ports.`;
+  }
+}
 
 export class WorktreeData extends Context.Service<
   WorktreeData,
@@ -62,6 +73,17 @@ export class WorktreeData extends Context.Service<
       worktreeId: string,
       ports: ReadonlyArray<CustomPort>,
     ) => Effect.Effect<void>;
+    // A change to the custom ports, each by its number, in one
+    // transaction: `remove` takes those numbers away, then `put` sets
+    // each entry over one on its number. The rest stay as stored.
+    readonly patchPorts: (
+      projectId: string,
+      worktreeId: string,
+      patch: {
+        readonly remove?: ReadonlyArray<number> | undefined;
+        readonly put?: ReadonlyArray<CustomPort> | undefined;
+      },
+    ) => Effect.Effect<void, TooManyPorts>;
     // Carries what is kept under one id to another, the checkout having
     // moved. Whatever the new id held is replaced.
     readonly move: (
@@ -213,6 +235,27 @@ const make = Effect.gen(function* () {
       ports = excluded.ports`;
   }, Effect.orDie);
 
+  const patchPorts = Effect.fn("WorktreeData.patchPorts")(function* (
+    projectId: string,
+    worktreeId: string,
+    patch: {
+      readonly remove?: ReadonlyArray<number> | undefined;
+      readonly put?: ReadonlyArray<CustomPort> | undefined;
+    },
+  ) {
+    yield* sql
+      .withTransaction(
+        Effect.gen(function* () {
+          const next = patchedPorts(yield* ports(projectId, worktreeId), patch);
+          if (next.length > MAX_CUSTOM_PORTS) {
+            return yield* new TooManyPorts({ max: MAX_CUSTOM_PORTS });
+          }
+          yield* setPorts(projectId, worktreeId, next);
+        }),
+      )
+      .pipe(Effect.catchTag("SqlError", Effect.die));
+  });
+
   const move = Effect.fn("WorktreeData.move")(function* (
     projectId: string,
     from: string,
@@ -273,6 +316,7 @@ const make = Effect.gen(function* () {
     carry,
     ports,
     setPorts,
+    patchPorts,
     move,
     forget,
     forgetProject,

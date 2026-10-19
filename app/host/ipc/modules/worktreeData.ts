@@ -25,10 +25,10 @@ export const worktreeDataHandlers = {
   // "no external state" rule would mean asking the engine for the
   // worktree list on every save. findProject + the WorktreeIdSchema
   // regex keep the keys well formed against malformed input.
-  write: ({ projectId, worktreeId, data }) =>
+  patchPorts: ({ projectId, worktreeId, remove, put }) =>
     Effect.andThen(
       findProject(projectId),
-      Ops.writeWorktreeData(projectId, worktreeId, data),
+      Ops.patchWorktreePorts(projectId, worktreeId, { remove, put }),
     ).pipe(Effect.asVoid),
 
   describe: ({ projectId, worktreeId, description }) =>

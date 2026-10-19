@@ -9,6 +9,18 @@ export function fieldSetter<T>(setForm: Dispatch<SetStateAction<T>>) {
       setForm((prev) => ({ ...prev, [key]: value }));
 }
 
+// A draft over a seed that moved: what the form changed stays, the rest
+// takes the new seed.
+export function keepTouched<T extends object>(form: T, saved: T, next: T): T {
+  const merged = { ...next };
+  for (const key of Object.keys(form) as (keyof T)[]) {
+    if (JSON.stringify(form[key]) !== JSON.stringify(saved[key])) {
+      merged[key] = form[key];
+    }
+  }
+  return merged;
+}
+
 // Tracks a form value against its last-saved snapshot. Dirty detection
 // is a JSON.stringify comparison, which is fine for the shallow,
 // JSON-serializable shapes we use in settings/configure forms.

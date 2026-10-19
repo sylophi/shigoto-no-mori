@@ -5,12 +5,10 @@ import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 
 // What the two project-entry editors (Configure, Worktree location)
 // seed from: the project file and the resolved default branch, as one
-// three-way verdict. Both editors write the WHOLE entry back (the
-// CLI's merge drops every key the payload omits, and the keys a form
-// doesn't model survive only by being spread from what was read), so a
-// form seeded from a failed read would save over everything the file
-// holds. A failed read is therefore its own state, with the reason and
-// a retry, never an empty seed. The gate is on the data being absent,
+// three-way verdict. A form seeded from a failed read would show
+// defaults for what the file holds, and a save would patch them over
+// it, so a failed read is its own state, with the reason and a retry,
+// never an empty seed. The gate is on the data being absent,
 // not on isError alone, so a failed background refetch cannot swap an
 // open form (and its unsaved edits) for the failure. A config of null
 // is a real answer (no project file yet) and seeds the form as usual.

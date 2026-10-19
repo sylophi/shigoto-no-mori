@@ -6,7 +6,6 @@ import {
 } from "@/hooks/config/useSettingsSave";
 import {
   fromConfig,
-  keepTouched,
   withClientFields,
 } from "@shigomori/ui/lib/settingsForm.ts";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
@@ -23,7 +22,11 @@ import {
   useOutdatedDevices,
   useStagedUpdates,
 } from "@/hooks/system/useUpdater";
-import { fieldSetter, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
+import {
+  fieldSetter,
+  keepTouched,
+  useDirtyForm,
+} from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { useHasLocalHost } from "@/lib/localHost";

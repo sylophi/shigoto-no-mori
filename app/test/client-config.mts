@@ -27,9 +27,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
+import { keepTouched } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import {
   fromConfig,
-  keepTouched,
   withClientFields,
 } from "@shigomori/ui/lib/settingsForm.ts";
 import * as Effect from "effect/Effect";

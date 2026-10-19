@@ -29,6 +29,7 @@ import {
   type SharedSettingsDoc,
   type ShigomoriWorktreeData,
   type Worktree,
+  patchedPorts,
 } from "@shigomori/contracts/schemas";
 import { cloneFolderName } from "@shared/cloneUrl";
 import {
@@ -416,7 +417,8 @@ function hostHandlersFor(
   const disk = fakeDisks[forest.deviceId] ?? { home: "/home/rin", dirs: {} };
   mirrorWires.set(forest.deviceId, emit);
   // The worktree data files, seeded from the fixtures and mutated by
-  // worktreeData:write so adding and removing ports shows its outcome.
+  // worktreeData:patchPorts so adding and removing ports shows its
+  // outcome.
   const worktreeData = new Map<string, ShigomoriWorktreeData>(
     Object.entries(fakeCustomPorts).map(([id, ports]) => [id, { ports }]),
   );
@@ -794,10 +796,11 @@ function hostHandlersFor(
     }),
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,
-    "worktreeData:write": ({ worktreeId, data }) => {
+    "worktreeData:patchPorts": ({ worktreeId, ...patch }) => {
+      const stored = worktreeData.get(worktreeId);
       worktreeData.set(worktreeId, {
-        ...worktreeData.get(worktreeId),
-        ports: data.ports,
+        ...stored,
+        ports: patchedPorts(stored?.ports ?? [], patch),
       });
     },
     // The host's own merge, with the posed liveness mapped on.

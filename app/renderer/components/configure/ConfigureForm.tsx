@@ -6,11 +6,12 @@ import { fieldSetter, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
+import { useShigomoriPatch } from "@/hooks/config/useShigomoriPatch";
 import { notifyError } from "@/lib/toast";
 import {
   type CarryOverEntry,
   PROJECT_CONFIG_DEFAULTS,
+  type ProjectSettingsPatch,
   type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
 import { CarryOverSection } from "./CarryOverSection";
@@ -22,6 +23,7 @@ import {
   ConfigureFormView,
 } from "@shigomori/ui/views/configure/ConfigureFormView.tsx";
 import { useApi } from "@/lib/runtime/pageApi";
+import { rebaseConfigureDraft } from "@shigomori/ui/lib/configureDraft.ts";
 
 function fromConfig(
   config: ShigomoriConfig | null,
@@ -73,6 +75,29 @@ function toConfig(
   };
 }
 
+// The settings this form edits that differ between two of its documents,
+// each as `after` has it, or null for one it left out: what a save
+// changes, and nothing it didn't touch.
+function patchOf(
+  before: ShigomoriConfig,
+  after: ShigomoriConfig,
+): ProjectSettingsPatch {
+  const fields = {
+    defaultBranch: [before.defaultBranch, after.defaultBranch],
+    "scripts.setup": [before.scripts?.setup, after.scripts?.setup],
+    "scripts.teardown": [before.scripts?.teardown, after.scripts?.teardown],
+    launchers: [before.launchers, after.launchers],
+    carryOver: [before.carryOver, after.carryOver],
+    useWorktreeInclude: [before.useWorktreeInclude, after.useWorktreeInclude],
+    showPrimaryInInbox: [before.showPrimaryInInbox, after.showPrimaryInInbox],
+  } as const;
+  return Object.fromEntries(
+    Object.entries(fields)
+      .filter(([, [was, now]]) => JSON.stringify(was) !== JSON.stringify(now))
+      .map(([key, [, now]]) => [key, now ?? null]),
+  ) as ProjectSettingsPatch;
+}
+
 interface ConfigureFormProps {
   projectId: string;
   projectPath: string;
@@ -96,44 +121,39 @@ export function ConfigureForm({
   const { deviceId, remote } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const navigate = useNavigate();
-  const write = useShigomoriWrite();
+  const write = useShigomoriPatch();
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
     useDirtyForm<FormState>(fromConfig(initialConfig, resolvedDefaultBranch));
   const setField = fieldSetter(setForm);
   const canSave = isDirty && form.defaultBranch.trim().length > 0;
 
-  // The config can change underneath an open draft: creating a worktree
-  // auto-removes carry-over entries that .worktreeinclude now covers.
-  // Rebase the snapshot and drop remotely-removed entries from the draft
-  // so a later Save can't resurrect them.
   useEffect(() => {
     reseed(
       fromConfig(initialConfig, resolvedDefaultBranch),
-      (prevForm, prevSnapshot, next) => {
-        const nextPaths = new Set(next.carryOver.map((e) => e.path));
-        const removedRemotely = new Set<string>();
-        for (const entry of prevSnapshot.carryOver) {
-          if (!nextPaths.has(entry.path)) removedRemotely.add(entry.path);
-        }
-        return {
-          ...prevForm,
-          carryOver: prevForm.carryOver.filter(
-            (e) => !removedRemotely.has(e.path),
-          ),
-        };
-      },
+      rebaseConfigureDraft,
     );
   }, [initialConfig, resolvedDefaultBranch, reseed]);
 
   const handleSave = async () => {
     const next = toConfig(initialConfig, form);
-    await write.mutateAsync({ projectId, config: next });
-    // Snapshot what was actually persisted, not the raw form: toConfig
-    // drops half-filled launcher rows and normalizes fields. Snapshotting
-    // the raw form would mark those leftovers clean, and the post-save
-    // refetch would reseed the form from disk and silently wipe them.
-    setSavedSnapshot(fromConfig(next, resolvedDefaultBranch));
+    const saved = savedSnapshot;
+    await write.mutateAsync({
+      projectId,
+      patch: patchOf(toConfig(initialConfig, saved), next),
+    });
+    // Only the fields this Save carried advance, as persisted, not the
+    // raw form: toConfig drops half-filled launcher rows and normalizes
+    // fields, and snapshotting the raw form would mark those leftovers
+    // clean, so the post-save refetch would reseed them away. A change
+    // made elsewhere while the Save was out stays in the snapshot.
+    setSavedSnapshot((prev) =>
+      rebaseConfigureDraft(
+        fromConfig(next, resolvedDefaultBranch),
+        saved,
+        prev,
+      ),
+    );
   };
 
   const handleDiscard = () => {

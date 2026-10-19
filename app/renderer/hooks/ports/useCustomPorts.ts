@@ -1,53 +1,24 @@
-// Add, edit and remove a worktree's user-added ports. They live in the
-// worktree data file beside its title, and useWorktreeDataWrite merges each
-// edit over the stored document. Uniqueness by number is this layer's
-// rule (PortFormView refuses a duplicate up front so the user hears why,
-// but the list is what must never hold two rows on one number).
+// Add, edit and remove a worktree's user-added ports, each by its number
+// (useWorktreePortsPatch), so one changed elsewhere meanwhile stays. One
+// entry a number is the engine's rule (PortFormView refuses a duplicate
+// up front so the user hears why).
 import type { CustomPort } from "@shigomori/contracts/schemas";
-import { useWorktreeDataWrite } from "@/hooks/worktrees/useWorktreeData";
+import { useWorktreePortsPatch } from "@/hooks/worktrees/useWorktreeData";
 
 export function useCustomPortsWrite(worktree: {
   projectId: string;
   id: string;
 }) {
-  const write = useWorktreeDataWrite();
-  const variables = (
-    change: (current: readonly CustomPort[]) => CustomPort[],
-  ) => ({
-    projectId: worktree.projectId,
-    worktreeId: worktree.id,
-    patch: (current: { ports?: readonly CustomPort[] }) => {
-      const ports = change(current.ports ?? []);
-      return { ports: ports.length > 0 ? ports : undefined };
-    },
-  });
+  const patch = useWorktreePortsPatch();
+  const target = { projectId: worktree.projectId, worktreeId: worktree.id };
   return {
     // add and update are awaited by the form, which shows the failure
     // in place. Remove has no form, so its failure is the global toast.
-    add: (entry: CustomPort) =>
-      write.mutateAsync(
-        variables((current) => [
-          ...current.filter((existing) => existing.port !== entry.port),
-          entry,
-        ]),
-      ),
-    // Replaces the entry at `port` in place. Its number may change, in
-    // which case any other entry already on the new number gives way.
+    add: (entry: CustomPort) => patch.mutateAsync({ ...target, put: [entry] }),
+    // Its number may change, and then any other entry already on the new
+    // number gives way.
     update: (port: number, next: CustomPort) =>
-      write.mutateAsync(
-        variables((current) =>
-          current
-            .map((existing) => (existing.port === port ? next : existing))
-            .filter(
-              (existing) => existing === next || existing.port !== next.port,
-            ),
-        ),
-      ),
-    remove: (port: number) =>
-      write.mutate(
-        variables((current) =>
-          current.filter((existing) => existing.port !== port),
-        ),
-      ),
+      patch.mutateAsync({ ...target, remove: [port], put: [next] }),
+    remove: (port: number) => patch.mutate({ ...target, remove: [port] }),
   };
 }
