@@ -397,6 +397,7 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	// Registered before the manager loads persisted sessions, which
 	// start connecting immediately.
 	synchronization.ProtocolHandlers[urlpkg.Protocol_SSH] = mirrorGatewayHandler{gateway: gateway}
+	holdGitOnLocalEndpoints()
 
 	relabelV2Sessions(dataDir, logOut)
 	logger := logging.NewLogger(logging.LevelWarn, logOut)

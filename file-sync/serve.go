@@ -46,6 +46,7 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/synchronization/endpoint/local"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/endpoint/remote"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/rsync"
+	urlpkg "github.com/mutagen-io/mutagen/pkg/url"
 )
 
 // The buffering on each side of the stream, Mutagen's own for it.
@@ -170,6 +171,38 @@ func (e guardedEndpoint) Stage(paths []string, digests [][]byte) ([]string, []*r
 		return nil, nil, nil, err
 	}
 	return e.Endpoint.Stage(paths, digests)
+}
+
+// The daemon's own side of each session, which applies what the peer's
+// scan reports, holds .git as serve does: a peer's serve can be changed
+// to report it.
+type guardedLocalHandler struct {
+	synchronization.ProtocolHandler
+}
+
+func (h guardedLocalHandler) Connect(
+	ctx context.Context,
+	logger *logging.Logger,
+	url *urlpkg.URL,
+	prompter string,
+	session string,
+	version synchronization.Version,
+	configuration *synchronization.Configuration,
+	alpha bool,
+) (synchronization.Endpoint, error) {
+	endpoint, err := h.ProtocolHandler.Connect(ctx, logger, url, prompter, session, version, configuration, alpha)
+	if err != nil {
+		return nil, err
+	}
+	return guardedEndpoint{endpoint}, nil
+}
+
+// Once, before a session connects.
+func holdGitOnLocalEndpoints() {
+	local := synchronization.ProtocolHandlers[urlpkg.Protocol_Local]
+	if _, held := local.(guardedLocalHandler); !held {
+		synchronization.ProtocolHandlers[urlpkg.Protocol_Local] = guardedLocalHandler{local}
+	}
 }
 
 func refuseGitPaths(verb string, paths []string) error {

@@ -23,6 +23,7 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/synchronization/core/ignore"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/endpoint/remote"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/rsync"
+	urlpkg "github.com/mutagen-io/mutagen/pkg/url"
 )
 
 // A client endpoint on a stream served at root, as a peer opens one.
@@ -253,3 +254,43 @@ type nopWriteCloser struct {
 }
 
 func (nopWriteCloser) Close() error { return nil }
+
+// The daemon's own side refuses .git too, whatever the peer's scan
+// asked it to write or read.
+func TestTheDaemonsLocalSideHoldsGit(t *testing.T) {
+	t.Setenv("MUTAGEN_DATA_DIRECTORY", filepath.Join(t.TempDir(), "mutagen"))
+	root := filepath.Join(t.TempDir(), "repo")
+	git(t, filepath.Dir(root), "init", "-q", "-b", "main", root)
+	holdGitOnLocalEndpoints()
+	session, err := identifier.New(identifier.PrefixSynchronization)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := synchronization.ProtocolHandlers[urlpkg.Protocol_Local].Connect(
+		context.Background(),
+		logging.NewLogger(logging.LevelDisabled, io.Discard),
+		&urlpkg.URL{Kind: urlpkg.Kind_Synchronization, Protocol: urlpkg.Protocol_Local, Path: root},
+		"",
+		session,
+		synchronization.DefaultVersion,
+		&synchronization.Configuration{},
+		false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { endpoint.Shutdown() })
+	if _, err, _ := endpoint.Scan(context.Background(), nil, true); err != nil {
+		t.Fatal(err)
+	}
+	hooks := &core.Entry{Kind: core.EntryKind_Directory}
+	if _, _, _, err := endpoint.Transition(context.Background(), []*core.Change{{Path: ".GIT/hooks2", New: hooks}}); err == nil {
+		t.Fatal("a change under .GIT was applied")
+	}
+	if _, err := os.Lstat(filepath.Join(root, ".git", "hooks2")); err == nil {
+		t.Fatal(".git/hooks2 was written")
+	}
+	if _, err := supply(endpoint, ".git/config"); err == nil {
+		t.Fatal(".git/config was read")
+	}
+}
