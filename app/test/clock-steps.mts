@@ -323,8 +323,6 @@ function flapping() {
         close = onClose;
         return Effect.succeed({
           probe: () => {},
-          remoteDeviceId: "",
-          remoteAppVersion: "",
         });
       },
       onStatus: (status) => statuses.push(status),

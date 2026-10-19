@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import { RATE_LIMITED } from "@shared/releases";
+import { isGitHubRateLimitedError } from "@shigomori/contracts/errors";
 import type { Release } from "@shigomori/contracts/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -22,7 +21,7 @@ export function useReleases() {
     staleTime: HALF_HOUR_MS,
     gcTime: HALF_HOUR_MS,
     retry: (failures, error) =>
-      failures < 3 && errorMessageOf(error) !== RATE_LIMITED,
+      failures < 3 && !isGitHubRateLimitedError(error),
     refetchOnWindowFocus: false,
     meta: { silentError: true },
   });

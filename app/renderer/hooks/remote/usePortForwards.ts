@@ -19,6 +19,7 @@ import {
   errorMessageOf,
   isChannelRefusedError,
   isCommandRefusedError,
+  isRemoteCallError,
 } from "@shigomori/contracts/errors";
 import {
   portForwardContract,
@@ -80,9 +81,9 @@ function usePortForwardList<T = PortForwardList>(
   });
 }
 
-// The host's coded refusals (the FORWARD_* markers beside the contract)
-// and node's bind errors (stable OS codes), in words a row can show
-// inline. Anything else passes through as the engine said it.
+// The host's refusals and node's bind errors (their OS codes), in words
+// a row can show inline. Anything else passes through as the engine
+// said it.
 export function describeForwardError(
   error: unknown,
   ports: { remotePort: number; localPort?: number },
@@ -91,17 +92,17 @@ export function describeForwardError(
   if (isCommandRefusedError(error)) {
     return peerReadOnlyNote(deviceLabel);
   }
-  const message = errorMessageOf(error);
-  if (message.includes("EADDRINUSE")) {
+  const code = isRemoteCallError(error) ? error.code : undefined;
+  if (code === "EADDRINUSE") {
     return `localhost:${ports.localPort ?? ports.remotePort} is already taken on this machine. Pick another local port.`;
   }
-  if (message.includes("EACCES")) {
+  if (code === "EACCES") {
     return `localhost:${ports.localPort ?? ports.remotePort} needs elevated privileges here. Pick a port above 1024.`;
   }
   if (isChannelRefusedError(error) && error.reason === "too-many-conns") {
     return `${capitalized(deviceLabel)} already has as many forwarded connections open as it allows.`;
   }
-  return message;
+  return errorMessageOf(error);
 }
 
 // Stopping a forward, from any surface that lists them. A purely

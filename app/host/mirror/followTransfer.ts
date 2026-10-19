@@ -12,13 +12,11 @@ import * as Effect from "effect/Effect";
 import { offer, peerSource } from "@host/lib/sync/sourceLink";
 import { peerMirrorFor, peerSyncFor } from "@host/ipc/PeerReach";
 import {
-  CHANGED_LOCALLY,
   core,
   decide,
-  describeRefusal,
   type Direction,
   type FollowableSession,
-  type Outcome,
+  outcomeOf,
   refsToCarry,
 } from "./followPlan";
 import {
@@ -93,7 +91,7 @@ export const pull = Effect.fnUntraced(function* (
     indexCommitIsLocal ? null : indexRefFor(session.worktreeId),
     "the other device is on a detached HEAD at a commit not present here",
   );
-  if ("applied" in carry) return carry;
+  if ("kind" in carry) return carry;
   const { wantRefs, sweep } = carry;
   if (wantRefs.length > 0) {
     // With the tip already here only the index carrier travels and
@@ -121,11 +119,7 @@ export const pull = Effect.fnUntraced(function* (
     state: core(peer),
     sweep,
   });
-  return (
-    result.applied || result.reason === CHANGED_LOCALLY
-      ? result
-      : { applied: false, reason: describeRefusal(result.reason, "here") }
-  ) as Outcome;
+  return outcomeOf(result, "here");
 });
 
 export const push = Effect.fnUntraced(function* (
@@ -152,7 +146,7 @@ export const push = Effect.fnUntraced(function* (
       : null,
     "this worktree is on a detached HEAD at a commit the other device does not have",
   );
-  if ("applied" in carry) return carry;
+  if ("kind" in carry) return carry;
   const { wantRefs, sweep } = carry;
   if (wantRefs.length > 0) {
     // The peer asks this side for the bundle over a link this side
@@ -174,11 +168,5 @@ export const push = Effect.fnUntraced(function* (
     state: { ...core(local), head: headThere },
     sweep,
   });
-  if (result.applied) return { applied: true } as Outcome;
-  const reason = result.reason ?? "refused";
-  return (
-    reason === CHANGED_LOCALLY
-      ? { applied: false, reason }
-      : { applied: false, reason: describeRefusal(reason, "there") }
-  ) as Outcome;
+  return outcomeOf(result, "there");
 });

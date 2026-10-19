@@ -17,10 +17,8 @@ import { createServer, type Server, type Socket } from "node:net";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
-import {
-  type forwardContract,
-  isForwardConnectFailedError,
-} from "@shigomori/contracts/modules/forward";
+import type { forwardContract } from "@shigomori/contracts/modules/forward";
+import { isForwardConnectFailedError } from "@shigomori/contracts/errors";
 import type {
   PortForwardSummary,
   PortForwardWorktree,

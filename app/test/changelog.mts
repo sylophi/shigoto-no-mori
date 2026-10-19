@@ -9,6 +9,7 @@
 // Run: pnpm test changelog.
 import assert from "node:assert/strict";
 import { fetchReleases } from "@shared/releases";
+import { isGitHubRateLimitedError } from "@shigomori/contracts/errors";
 import {
   changelogFor,
   compareVersions,
@@ -151,7 +152,8 @@ it("GitHub's refusals come back as sentences", async () => {
     fetchReleases(async () =>
       response(403, {}, { "x-ratelimit-remaining": "0" }),
     ),
-    /rate-limiting/,
+    (error) =>
+      isGitHubRateLimitedError(error) && /rate-limiting/.test(error.message),
   );
   await assert.rejects(
     fetchReleases(async () => response(502, {})),

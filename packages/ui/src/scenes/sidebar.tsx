@@ -65,7 +65,6 @@ import { deviceStatusView } from "../lib/deviceStatus.ts";
 import { assertNever } from "../lib/utils.ts";
 import {
   accountDevices,
-  FAKE_APP_VERSION,
   forests,
   LOCAL_DEVICE_ID,
   THINKPAD_ID,
@@ -94,13 +93,7 @@ function statusOf(shell: SceneShell, deviceId: string) {
     deviceId === THINKPAD_ID ||
     (shell === "web" && deviceId === LOCAL_DEVICE_ID);
   return deviceStatusView(
-    connected
-      ? {
-          phase: "connected",
-          remoteDeviceId: deviceId,
-          remoteAppVersion: FAKE_APP_VERSION,
-        }
-      : { phase: "stopped" },
+    connected ? { phase: "connected" } : { phase: "stopped" },
   );
 }
 

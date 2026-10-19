@@ -27,8 +27,9 @@
 // is detached or the index holds conflicts for a moment the user is
 // still working through, and carrying that to the other side would
 // leave it somewhere the finished operation never goes. Both the read
-// and the apply refuse while one is under way, in words the follower
-// recognizes (GIT_OPERATION_IN_PROGRESS).
+// and the apply refuse while one is under way, the read with
+// GitOperationInProgressError and the apply with its refusal, which the
+// follower tells apart from other failures.
 //
 // Applying a state is deliberately narrow and guarded: refs move by
 // compare-and-set against the state the caller last saw, branch
@@ -39,6 +40,11 @@
 import { copyFile, mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { GitOperationInProgressError } from "@shigomori/contracts/errors";
+import type {
+  GitApplyRefusal,
+  MirrorApplyGitStateResult,
+} from "@shigomori/contracts/modules/mirror";
 import type { Project } from "@shigomori/contracts/schemas";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Deferred from "effect/Deferred";
@@ -55,8 +61,9 @@ import * as Predicate from "effect/Predicate";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import { untilWatchable } from "@host/lib/watchPath";
 
-// A state that can't be read or applied, in the words the other device
-// hears (an operation in progress among them, operationInRefusal).
+// A state that can't be read, in the words the other device hears (an
+// operation in progress is GitOperationInProgressError instead, which
+// the follower tells apart).
 class GitStateError extends Schema.TaggedError<GitStateError>()(
   "GitStateError",
   { reason: Schema.String },
@@ -99,26 +106,6 @@ const CAPTURE_IDENT: Readonly<Record<string, string>> = {
   GIT_COMMITTER_NAME: "shigomori",
   GIT_COMMITTER_EMAIL: "shigomori@localhost",
 };
-
-// The leading words of every refusal over an operation in progress,
-// followed by ": " and the operation's name. Text rather than a code
-// because the read's refusal reaches the other device as an error, and
-// an error crosses the wire flattened to its message.
-const GIT_OPERATION_IN_PROGRESS = "A git operation is in progress";
-
-function operationRefusal(operation: string): string {
-  return `${GIT_OPERATION_IN_PROGRESS}: ${operation}`;
-}
-
-// The operation a refusal names, or null when the text is some other
-// failure. Matches anywhere in the text, since a relayed error may
-// carry a prefix of its own.
-export function operationInRefusal(text: string): string | null {
-  const at = text.indexOf(`${GIT_OPERATION_IN_PROGRESS}: `);
-  if (at === -1) return null;
-  const rest = text.slice(at + GIT_OPERATION_IN_PROGRESS.length + 2);
-  return rest.split("\n")[0]?.trim() || "git operation";
-}
 
 // HEAD, the tip, the tip's tree and the git dir in one spawn, and the
 // operation under way if any. An unborn HEAD fails the rev-parse, which
@@ -342,10 +329,9 @@ const peekGitState = Effect.fnUntraced(function* (worktreePath: string) {
 const carrierClean = new Set<string>();
 
 // The full state, with the carrier commit for a staged index minted
-// (or an obsolete one removed) so the transfer can name it. Throws
-// operationRefusal(...) while an operation is in progress, so the
-// follower reading here and the peer this read is served to both hear
-// the same words.
+// (or an obsolete one removed) so the transfer can name it. Fails with
+// GitOperationInProgressError while an operation is in progress, for
+// the follower reading here and the peer this read is served to alike.
 export const readGitState = Effect.fnUntraced(function* (
   projectPath: string,
   worktreePath: string,
@@ -354,8 +340,8 @@ export const readGitState = Effect.fnUntraced(function* (
   const peek = yield* peekGitState(worktreePath);
   const git = yield* Git.Git;
   if (peek.operation !== null) {
-    return yield* new GitStateError({
-      reason: operationRefusal(peek.operation),
+    return yield* new GitOperationInProgressError({
+      operation: peek.operation,
     });
   }
   const { headTree } = peek;
@@ -403,10 +389,6 @@ export type ApplyGitStateInput = {
   sweep?: readonly string[];
 };
 
-type ApplyGitStateResult =
-  | { applied: true }
-  | { applied: false; reason: string };
-
 // Moves this worktree's git state to `state`. Returns a refusal rather
 // than throwing for every case that is a fact about the repository
 // (someone changed it, a branch collision, missing objects), so the
@@ -434,9 +416,9 @@ export const applyGitState = (
     ),
   );
 
-const refused = (reason: string): ApplyGitStateResult => ({
+const refused = (refusal: GitApplyRefusal): MirrorApplyGitStateResult => ({
   applied: false,
-  reason,
+  refusal,
 });
 
 const applyGitStateUnswept = Effect.fnUntraced(function* (
@@ -446,14 +428,17 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
 ) {
   const current = yield* peekGitState(worktree.path);
   if (current.operation !== null) {
-    return refused(operationRefusal(current.operation));
+    return refused({
+      kind: "operation-in-progress",
+      operation: current.operation,
+    });
   }
   if (
     current.tip !== input.expect.tip ||
     current.indexTree !== input.expect.indexTree ||
     !sameHead(current.head, input.expect.head)
   ) {
-    return refused("changed-locally");
+    return refused({ kind: "changed-locally" });
   }
   const { state } = input;
   const git = yield* Git.Git;
@@ -464,7 +449,7 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
     ],
     { concurrency: 2 },
   );
-  if (!tipHere || !indexTreeHere) return refused("missing-objects");
+  if (!tipHere || !indexTreeHere) return refused({ kind: "missing-objects" });
 
   if (state.head.kind === "branch") {
     const target = state.head.branch;
@@ -491,9 +476,11 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
         (w) => w.branch === targetRef && w.path !== worktree.path,
       );
       if (elsewhere !== undefined) {
-        return refused(
-          `branch ${target} is checked out at ${elsewhere.path} on this device`,
-        );
+        return refused({
+          kind: "branch-checked-out",
+          branch: target,
+          path: elsewhere.path,
+        });
       }
       const existingTip = Option.getOrNull(
         yield* git.refTip(project.path, targetRef),
@@ -503,9 +490,7 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
         existingTip !== state.tip &&
         !(yield* git.isAncestor(project.path, existingTip, state.tip))
       ) {
-        return refused(
-          `branch ${target} on this device has commits the other device does not`,
-        );
+        return refused({ kind: "branch-ahead", branch: target });
       }
       if (existingTip !== state.tip) {
         yield* git.updateRef({
@@ -543,7 +528,7 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
         ),
       ),
   );
-  return { applied: true } as ApplyGitStateResult;
+  return { applied: true } satisfies MirrorApplyGitStateResult;
 });
 
 // Emits when the worktree's index file is rewritten (a stage, an

@@ -726,9 +726,7 @@
   "hub:status": {
     "success": {
       "socket": {
-        "phase": "connected",
-        "remoteDeviceId": "",
-        "remoteAppVersion": "F"
+        "phase": "connected"
       },
       "onlineDeviceIds": ["\ud800"],
       "peerAppVersions": {},
@@ -913,8 +911,12 @@
       }
     },
     "success": {
-      "applied": true,
-      "reason": "\n"
+      "applied": false,
+      "refusal": {
+        "kind": "branch-checked-out",
+        "branch": "main",
+        "path": "/work/demo"
+      }
     }
   },
   "mirror:changed": {
@@ -2392,7 +2394,11 @@
   },
   "terminals:attach": {
     "payload": {
-      "terminalId": "^"
+      "terminalId": "^",
+      "after": {
+        "incarnation": "9f86d081884c7d659a2feaa0c55ad015",
+        "seq": 7
+      }
     },
     "success": {
       "kind": "output",

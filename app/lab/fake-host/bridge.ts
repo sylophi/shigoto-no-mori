@@ -11,6 +11,7 @@
 import { normalizeRemoteUrl } from "@shigomori/contracts/predicates/remoteUrl";
 import {
   NotSharingError,
+  RemoteCallError,
   UnknownProjectError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
@@ -1808,11 +1809,7 @@ function posedDevices(keys: string, into: Set<string>): void {
     if (id !== undefined) into.add(id);
   }
 }
-let socketPhase: HubStatus["socket"] = {
-  phase: "connected",
-  remoteDeviceId: "",
-  remoteAppVersion: "",
-};
+let socketPhase: HubStatus["socket"] = { phase: "connected" };
 
 function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};
@@ -2077,11 +2074,12 @@ export function installFakeHostBridge(
       await sleep(500);
       const bound = localPort ?? remotePort;
       // One local port posed as taken, so the inline bind error can be
-      // seen: node's EADDRINUSE wording, as the engine would pass on.
+      // seen: node's EADDRINUSE, as the engine's call failure carries it.
       if (bound === 3000) {
-        throw new Error(
-          `listen EADDRINUSE: address already in use 127.0.0.1:${bound}`,
-        );
+        throw new RemoteCallError({
+          text: `listen EADDRINUSE: address already in use 127.0.0.1:${bound}`,
+          code: "EADDRINUSE",
+        });
       }
       // The engine's rule: one forward per (device, remote port), and a
       // start naming another local port moves it. Either way the

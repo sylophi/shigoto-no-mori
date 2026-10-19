@@ -325,7 +325,7 @@ const WORKTREE = { projectId: "p", worktreeId: "w" };
 const bridgeOver = (connection: DeviceConnection) =>
   makeHubHandlers({
     status: () => ({
-      socket: { phase: "connected", remoteDeviceId: "", remoteAppVersion: "" },
+      socket: { phase: "connected" },
       onlineDeviceIds: [],
       peerAppVersions: {},
       peerAcceptsCommands: {},

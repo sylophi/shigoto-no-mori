@@ -54,12 +54,8 @@ export const STABLE_CONNECTION_MS = 30_000;
 export type SupervisorStatus = HubStatus["socket"];
 
 // The part of an established connection the supervisor's owner
-// touches: the probe, and the remote identity the connected status
-// names.
-export type SupervisedConnection = Pick<
-  DeviceConnection,
-  "probe" | "remoteDeviceId" | "remoteAppVersion"
->;
+// touches: the probe.
+export type SupervisedConnection = Pick<DeviceConnection, "probe">;
 
 // The connect function: one attempt, handed the supervisor's close
 // handler, answering with the established connection, which lives as
@@ -260,11 +256,7 @@ export const supervise = (
       }
       const connection = connected.success;
       upSince = elapsedMillisUnsafe(clock);
-      yield* setStatus({
-        phase: "connected",
-        remoteDeviceId: connection.remoteDeviceId,
-        remoteAppVersion: connection.remoteAppVersion,
-      });
+      yield* setStatus({ phase: "connected" });
       options.onConnection?.(connection);
       const code = yield* Deferred.await(closed).pipe(
         Effect.ensuring(Effect.sync(() => options.onConnection?.(null))),

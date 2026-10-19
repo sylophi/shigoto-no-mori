@@ -242,6 +242,48 @@ export class GhUnavailableError extends Schema.TaggedError<GhUnavailableError>()
 
 export const isGhUnavailableError = Schema.is(GhUnavailableError);
 
+// A port forward's dial of the host's own port failed (nothing listens
+// there, or it never answered): about the port, not the peer or its
+// grant.
+export class ForwardConnectFailedError extends Schema.TaggedError<ForwardConnectFailedError>()(
+  "ForwardConnectFailedError",
+  { port: Schema.Int, reason: Schema.String },
+) {
+  override get message(): string {
+    return `nothing answered on port ${this.port} there: ${this.reason}`;
+  }
+}
+
+export const isForwardConnectFailedError = Schema.is(ForwardConnectFailedError);
+
+// A worktree mid rebase, merge, cherry-pick, revert or bisect: its git
+// state is not read until the operation finishes.
+export class GitOperationInProgressError extends Schema.TaggedError<GitOperationInProgressError>()(
+  "GitOperationInProgressError",
+  { operation: Schema.String },
+) {
+  override get message(): string {
+    return `a ${this.operation} is in progress`;
+  }
+}
+
+export const isGitOperationInProgressError = Schema.is(
+  GitOperationInProgressError,
+);
+
+// GitHub's hourly limit for unauthenticated calls from this network,
+// which a retry's backoff won't outlast.
+export class GitHubRateLimitedError extends Schema.TaggedError<GitHubRateLimitedError>()(
+  "GitHubRateLimitedError",
+  {},
+) {
+  override get message(): string {
+    return "GitHub is rate-limiting requests from this network. Try again later.";
+  }
+}
+
+export const isGitHubRateLimitedError = Schema.is(GitHubRateLimitedError);
+
 export const ContractErrorSchema = Schema.Union([
   UnknownProjectError,
   UnknownWorktreeError,
@@ -259,6 +301,9 @@ export const ContractErrorSchema = Schema.Union([
   ChannelRefusedError,
   HubRateLimitedError,
   GhUnavailableError,
+  ForwardConnectFailedError,
+  GitOperationInProgressError,
+  GitHubRateLimitedError,
 ]);
 
 export const isContractError = Schema.is(ContractErrorSchema);
