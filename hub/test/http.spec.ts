@@ -17,7 +17,6 @@ import {
   DEVICE_CREDENTIAL_PREFIX,
   TICKET_PREFIX,
   buildTicket,
-  TICKET_TTL_MS,
 } from "../src/ticket.ts";
 import type { Env } from "../src/env.ts";
 import { createWorker } from "../src/worker.ts";
@@ -492,11 +491,10 @@ describe("PATCH /devices/:deviceId", () => {
 });
 
 describe("POST /tickets", () => {
-  it("mints a prefixed ticket with the default TTL", async () => {
+  it("mints a prefixed ticket", async () => {
     const { credential } = await enroll("acct-ticket", "dev-ticket");
     const ticket = await mintTicket(credential);
     expect(ticket.ticket.startsWith(TICKET_PREFIX)).toBe(true);
-    expect(ticket.expiresInMs).toBe(TICKET_TTL_MS);
   });
 
   it("rejects an unknown credential with 401", async () => {

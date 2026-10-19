@@ -24,7 +24,7 @@ import {
   RELAY_BURST,
   SILENT_AFTER_MS,
 } from "../src/hubObject.ts";
-import { buildTicket } from "../src/ticket.ts";
+import { TICKET_TTL_MS, buildTicket } from "../src/ticket.ts";
 import {
   BASE,
   call,
@@ -169,11 +169,17 @@ describe("GET /connect", () => {
   });
 
   it("rejects an expired ticket", async () => {
-    const shortEnv = { ...env, TICKET_TTL_MS: "25" };
     const { credential } = await enroll("acct-expiry", "dev-expiry");
-    const { ticket, expiresInMs } = await mintTicket(credential, shortEnv);
-    expect(expiresInMs).toBe(25);
-    await sleep(60);
+    const { ticket } = await mintTicket(credential);
+    // The object's clock past the ticket's life, as the only clock its
+    // tickets read.
+    await runInDurableObject(
+      env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName("acct-expiry")),
+      (hub: DeviceHub) => {
+        const later = Date.now() + TICKET_TTL_MS;
+        hub.clock = () => later;
+      },
+    );
     const socket = await openSocket(ticket);
     expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
   });
@@ -295,15 +301,11 @@ describe("rotation", () => {
     const hub = env.DEVICE_HUB.get(
       env.DEVICE_HUB.idFromName("acct-rotate-race"),
     );
-    const random = await hub.mintTicket(
-      {
-        deviceId: "dev-rotate-race",
-        kind: "desktop",
-        connectionId: newConnectionId(),
-        credentialHash: "a credential rotated away",
-      },
-      60_000,
-    );
+    const random = await hub.mintTicket({
+      deviceId: "dev-rotate-race",
+      connectionId: newConnectionId(),
+      credentialHash: "a credential rotated away",
+    });
     const socket = await openSocket(
       await signedTicket("acct-rotate-race", random),
     );
@@ -448,6 +450,27 @@ describe("what a socket may send", () => {
     // matters. One past the burst.
     for (let i = 0; i <= RELAY_BURST; i++) socket.ws.send("{}");
     expect((await socket.closed).code).toBe(CLOSE_RATE_LIMITED);
+  });
+
+  it("keeps a socket whose object's clock stepped back", async () => {
+    const { socket } = await enrollAndConnect("acct-input-step", "dev-step");
+    await socket.untilPresence(["dev-step"]);
+    socket.ws.send("{}");
+    // Ten minutes back, which a budget that refilled by the difference
+    // would have drained into the negative.
+    await runInDurableObject(
+      env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName("acct-input-step")),
+      (hub: DeviceHub) => {
+        const earlier = Date.now() - 600_000;
+        hub.clock = () => earlier;
+      },
+    );
+    socket.ws.send("{}");
+    const cut = await Promise.race([
+      socket.closed.then(() => true),
+      sleep(300).then(() => false),
+    ]);
+    expect(cut).toBe(false);
   });
 
   it("lets a dial storm's worth of asks through", async () => {

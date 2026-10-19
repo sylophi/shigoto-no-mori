@@ -20,14 +20,12 @@ export const DEVICE_CREDENTIAL_PREFIX = "smdc_";
 // only the random part. The signature is not what makes a ticket
 // valid, the DO's stored random is. It exists because GET /connect is
 // unauthenticated: without it anyone could name a Durable Object of
-// their choosing per request, each one a billed DO request. A forged
-// ticket now dies in the Worker.
+// their choosing per request, each one a billed DO request.
 export const TICKET_PREFIX = "smrt_";
 
 // How long a minted ticket stays valid. Long enough to open one TLS
 // websocket, short enough that a leaked URL goes stale before it is
-// useful. The Worker honors a TICKET_TTL_MS env override so tests can
-// exercise expiry with real (tiny) waits instead of fake timers.
+// useful.
 export const TICKET_TTL_MS = 60_000;
 
 function base64urlEncode(text: string): string {

@@ -10,6 +10,7 @@ import {
   CLOSE_SUPERSEDED,
   decodeEnvelope,
   DeviceEnvelopeSchema,
+  deliveredRelay,
   encodeEnvelope,
   HUB_PING,
   encodeRelayFrame,
@@ -198,11 +199,7 @@ export function startStubHub(
           );
           return;
         }
-        const outbound = encodeEnvelope({
-          t: "relay",
-          from: deviceId,
-          frame: envelope.frame,
-        });
+        const outbound = deliveredRelay(deviceId, envelope.frame);
         if (!hubTextWithinLimit(outbound)) {
           ws.send(
             encodeEnvelope({ t: "nack", to: envelope.to, reason: "too-large" }),

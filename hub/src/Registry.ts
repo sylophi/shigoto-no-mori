@@ -155,7 +155,7 @@ const make = Effect.gen(function* () {
   const stalestFirst = Effect.fn("Registry.stalestFirst")(function* (
     accountId: string,
   ) {
-    const result = yield* query("list an account", () =>
+    const result = yield* query("rank an account's devices", () =>
       db
         .prepare(
           "SELECT device_id FROM devices WHERE account_id = ? ORDER BY COALESCE(last_seen_at, created_at), device_id",

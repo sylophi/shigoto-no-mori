@@ -101,7 +101,6 @@ async function boot() {
           ) as { connectionId: string };
           return Response.json({
             ticket: `t:${bridge.api.deviceId}:web:${connectionId}`,
-            expiresInMs: 60_000,
           });
         }
         throw new TypeError(`fetch is not stubbed for ${url.pathname}`);

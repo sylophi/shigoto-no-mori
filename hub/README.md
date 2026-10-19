@@ -29,7 +29,7 @@ sealed as a Noise handshake message to the addressed device's key
 (`app/shared/hub/link.ts`), as the envelope's `frame`: a string the
 object copies without reading, under the same size limit. A frame
 that is not a string is dropped like any malformed envelope. So the
-hub reads only the addressing: who sent it, to whom, and the ask's id.
+hub reads only the addressing: who sent it and to whom.
 The device an ask is addressed to remembers each one it answers for
 ten minutes from receipt, by its own clock, so one the hub replays,
 under any id, is dropped. The HTTP routes are the shared
