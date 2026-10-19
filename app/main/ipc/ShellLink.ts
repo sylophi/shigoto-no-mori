@@ -6,16 +6,13 @@
 // goes takes its port with it.
 import { channelOf, isInvoke, isPush } from "@shigomori/contracts/contract";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
-import { LINK_MAX_FRAME_BYTES } from "@shigomori/contracts/link";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
-import * as Queue from "effect/Queue";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
-import type * as RpcMessage from "effect/rpc/RpcMessage";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 import * as Socket from "effect/socket/Socket";
@@ -26,6 +23,12 @@ import { ShellGroup } from "@shared/ipc/shell";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { portSocket } from "@shared/remote/portSocket";
+import {
+  decodeFrame,
+  frameWords,
+  makeServerProtocol,
+} from "@shared/remote/rpcServer";
+import * as Result from "effect/Result";
 
 export type Push = { readonly channel: string; readonly payload: unknown };
 
@@ -54,7 +57,8 @@ export class ShellLink extends Context.Service<
 
 type Connection = {
   readonly socket: Socket.WebSocketLike;
-  readonly parser: RpcSerialization.Parser;
+  // Replaced after a frame it couldn't read.
+  parser: RpcSerialization.Parser;
   readonly webContents: WebContents | null;
   // Its id, kept: a window's calls still settle as it is destroyed.
   readonly windowId: number | null;
@@ -73,44 +77,25 @@ type Group = RpcGroup.RpcGroup<Rpc.AnyWithProps>;
 export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
   Effect.gen(function* () {
     const runFork = yield* FiberSet.makeRuntime<never>();
-    const serialization = yield* RpcSerialization.RpcSerialization.pipe(
-      Effect.provide(
-        RpcSerialization.layerSchemaBinary({
-          maxFrameSize: LINK_MAX_FRAME_BYTES,
-        }),
-      ),
-    );
     const connections = new Map<number, Connection>();
     let nextClientId = 0;
-    const disconnects = yield* Queue.unbounded<number>();
-    let writeRequest!: (
-      clientId: number,
-      message: RpcMessage.FromClientEncoded,
-    ) => Effect.Effect<void>;
-
-    const protocol = yield* RpcServer.Protocol.make((write) => {
-      writeRequest = write;
-      return Effect.succeed({
-        disconnects,
-        send: (clientId, response) =>
-          Effect.sync(() => {
-            const connection = connections.get(clientId);
-            const encoded = connection?.parser.encode(response);
-            if (connection === undefined || encoded === undefined) return;
-            if (connection.socket.readyState === 1) {
-              connection.socket.send(encoded as Uint8Array<ArrayBuffer>);
-            }
-          }),
-        end: () => Effect.void,
-        clientIds: Effect.sync(() => new Set(connections.keys())),
-        initialMessage: Effect.succeedNone,
-        supportsAck: true,
-        supportsTransferables: false,
-        supportsSpanPropagation: true,
-        supportsNotifications: true,
-        codecFor: serialization.codecFor,
-      } satisfies Omit<RpcServer.Protocol["Service"], "run">);
+    const server = yield* makeServerProtocol({
+      client: (clientId) => {
+        const connection = connections.get(clientId);
+        return connection === undefined
+          ? undefined
+          : {
+              parser: connection.parser,
+              send: (encoded) => {
+                if (connection.socket.readyState === 1) {
+                  connection.socket.send(encoded);
+                }
+              },
+            };
+      },
+      clientIds: () => new Set(connections.keys()),
     });
+    const { protocol } = server;
 
     type Options = { readonly client: { readonly id: number } };
     const connectionOf = (clientId: number) =>
@@ -214,8 +199,20 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
         const { pull } = yield* socket.reader;
         while (true) {
           for (const frame of yield* pull) {
-            for (const message of decodeFrame(connection.parser, frame)) {
-              yield* writeRequest(clientId, message);
+            const messages = decodeFrame(connection.parser, frame);
+            if (Result.isFailure(messages)) {
+              // A port keeps its messages whole, so a fresh parser reads
+              // the next one exactly; the call in this frame, whose id
+              // can't be read, goes unanswered. Said, so a bug that
+              // sends such frames is seen.
+              log.warn(
+                `[shell] dropped an unreadable frame on a ${connection.webContents === null ? "host" : "window"} port (${frameWords(frame, messages.failure)})`,
+              );
+              connection.parser = server.parser();
+              continue;
+            }
+            for (const message of messages.success) {
+              yield* server.request(clientId, message);
             }
           }
         }
@@ -226,7 +223,7 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
           Effect.sync(() => {
             connection.closed.abort();
             connections.delete(clientId);
-            Queue.offerUnsafe(disconnects, clientId);
+            server.disconnected(clientId);
           }),
         ),
       );
@@ -249,7 +246,7 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
                 port.start();
               },
             }),
-            parser: serialization.makeUnsafe(),
+            parser: server.parser(),
             webContents,
             windowId: webContents?.id ?? null,
             pushes: yield* PubSub.sliding<Push>(1024),
@@ -269,20 +266,6 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
         }),
     };
   });
-
-// One malformed frame is dropped rather than taking down the window's
-// other calls.
-function decodeFrame(
-  parser: RpcSerialization.Parser,
-  frame: Uint8Array | string,
-): ReadonlyArray<RpcMessage.FromClientEncoded> {
-  try {
-    return parser.decode(frame) as ReadonlyArray<RpcMessage.FromClientEncoded>;
-  } catch {
-    log.warn("[shell] dropping an unparseable frame");
-    return [];
-  }
-}
 
 export const layer = (registrar: ShellRegistrar) =>
   Layer.effect(

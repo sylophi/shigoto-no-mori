@@ -23,7 +23,8 @@ import { windowContract } from "@shigomori/contracts/modules/window";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import { afterEach, it } from "vitest";
+import { afterEach, it, vi } from "vitest";
+import { log } from "@shared/log";
 import { sleepingClock, testClock } from "./lib/checkKit.mts";
 import {
   layer,
@@ -97,6 +98,8 @@ async function serve(registrar: ShellRegistrar) {
     );
     return {
       transport,
+      // The window's end, for a frame no link would send.
+      port: port2,
       close: () => port2.close(),
     };
   };
@@ -305,4 +308,38 @@ it("a call its link's scope cut reads as the link gone, and one its caller abort
   );
   aborted.abort();
   await assert.rejects(asked, /the call was cancelled/);
+});
+
+it("drops a frame it can't read, says so without its bytes, and answers the port's next call", async () => {
+  const registrar = createShellRegistrar();
+  registrar.serveOne(windowContract, "hostAddress", async () => ADDRESS);
+  const { open } = await serve(registrar);
+  const { transport, port } = await open();
+  const warned = vi.spyOn(log, "warn");
+  try {
+    // A length prefix past any frame the link takes, then a token-like
+    // tail that must not reach the log.
+    port.postMessage(
+      new Uint8Array([
+        0xff,
+        0xff,
+        0xff,
+        0x7f,
+        ...new TextEncoder().encode("secret-token"),
+      ]),
+    );
+    assert.deepEqual(
+      await transport.invoke("window:hostAddress", undefined),
+      ADDRESS,
+    );
+    await until(() => warned.mock.calls.length > 0);
+    const said = String(warned.mock.calls[0]?.[0]);
+    assert.match(
+      said,
+      /dropped an unreadable frame on a window port \(16 bytes: /,
+    );
+    assert.doesNotMatch(said, /secret-token/);
+  } finally {
+    warned.mockRestore();
+  }
 });
