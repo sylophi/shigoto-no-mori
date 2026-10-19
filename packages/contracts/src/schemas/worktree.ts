@@ -267,6 +267,7 @@ export const CarryOverReportSchema = Schema.Struct({
     ),
   ),
 });
+export type CarryOverReport = typeof CarryOverReportSchema.Type;
 
 export const CreateWorktreeResultSchema = Schema.Struct({
   worktree: WorktreeSchema,

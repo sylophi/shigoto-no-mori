@@ -1095,6 +1095,23 @@ describe("staging", () => {
     assert.ok(existsSync(join(staged(box), "manifest.json")));
   });
 
+  it("answers up to date when a confirmed clear of a staged copy no newer than the build is refused", async () => {
+    const box = newBox("2.0.0-beta.2");
+    seedStaged(box, "2.0.0-beta.2");
+    const { client } = network((url) =>
+      url.toString() === LIST ? json(null) : undefined,
+    );
+    chmodSync(staged(box), 0o555);
+    try {
+      const doc = await using({ box, http: client }, (u) =>
+        u.stage({ running: running(box, "2.0.0-beta.2") }),
+      );
+      assert.equal(doc.status, "up-to-date");
+    } finally {
+      chmodSync(staged(box), 0o755);
+    }
+  });
+
   it("keeps the staged bundle when a newer download fails", async () => {
     const box = newBox();
     seedStaged(box, "1.5.0");

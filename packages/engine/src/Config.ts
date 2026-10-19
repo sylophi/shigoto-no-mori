@@ -221,6 +221,9 @@ export class Config extends Context.Service<
     readonly storedProjectIds: Effect.Effect<ReadonlyArray<string>>;
     // Drops a project's stored settings.
     readonly forgetProject: (projectId: string) => Effect.Effect<void>;
+    // Carries a project's stored settings to another id, replacing what
+    // that id held.
+    readonly rekeyProject: (from: string, to: string) => Effect.Effect<void>;
   }
 >()("sm/engine/Config") {}
 
@@ -640,6 +643,14 @@ const make = Effect.gen(function* () {
       projectId: string,
     ) {
       yield* sql`DELETE FROM project_config WHERE project_id = ${projectId}`;
+    }, Effect.orDie),
+    rekeyProject: Effect.fn("Config.rekeyProject")(function* (
+      from: string,
+      to: string,
+    ) {
+      yield* sql`DELETE FROM project_config WHERE project_id = ${to}`;
+      yield* sql`UPDATE project_config SET project_id = ${to}
+        WHERE project_id = ${from}`;
     }, Effect.orDie),
   });
 });

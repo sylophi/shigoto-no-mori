@@ -8,6 +8,8 @@ import * as Registry from "../src/Registry.ts";
 import * as Terrier from "../src/Terrier.ts";
 import { terrierProjects } from "../src/Terrier.ts";
 import { terrierProjectId } from "../src/terrierId.ts";
+import * as WorktreeData from "../src/WorktreeData.ts";
+import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -69,6 +71,48 @@ it("registers a terrier repo under its terrier id, and hands its settings back o
     [{ id, name: "repo", path: repo, source: "terrier" }],
     "trunk",
   ]);
+});
+
+it("hands a project terrier came to list after it was added its settings and worktree data, under its terrier id", async () => {
+  const repo = box.repo("repo");
+  box.fakeBin(
+    "terrier",
+    `if [ "$1" = version ]; then echo v0.1.0; else echo '{"projects":[{"path":"${repo}"}]}'; fi`,
+  );
+  const id = terrierProjectId(repo);
+  const primary = worktreeIdFromPath(repo);
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const config = yield* Config.Config;
+      const data = yield* WorktreeData.WorktreeData;
+      // Added while terrier is off, so under an id of its own.
+      const added = yield* registry.register({ name: "repo", path: repo });
+      yield* config.set(
+        { kind: "project", projectId: added.id, path: repo },
+        "defaultBranch",
+        "trunk",
+      );
+      yield* data.describe(added.id, primary, { title: "Kept" });
+      // What the terrier id held before goes for what the project brings.
+      yield* config.set(
+        { kind: "project", projectId: id, path: repo },
+        "defaultBranch",
+        "stale",
+      );
+      yield* data.describe(id, primary, { title: "Stale" });
+      yield* config.set({ kind: "device" }, "terrier", "true");
+      yield* registry.unregister(added.id);
+      const kept = yield* config.get(
+        { kind: "project", projectId: id, path: repo },
+        "defaultBranch",
+      );
+      const described = yield* data.description(id, primary);
+      const left = yield* data.description(added.id, primary);
+      return [added.id === id, kept.value, described.title, left.title];
+    }),
+  );
+  assert.deepEqual(result, [false, "trunk", "Kept", ""]);
 });
 
 it("says terrier isn't on PATH only when there is none to run", async () => {

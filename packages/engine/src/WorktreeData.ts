@@ -76,6 +76,9 @@ export class WorktreeData extends Context.Service<
     ) => Effect.Effect<void>;
     // Drops what is kept for every worktree of a project.
     readonly forgetProject: (projectId: string) => Effect.Effect<void>;
+    // Carries what is kept for a project's worktrees to another project
+    // id, replacing what that id held.
+    readonly rekeyProject: (from: string, to: string) => Effect.Effect<void>;
     // Every project and worktree id something is kept under.
     readonly kept: Effect.Effect<
       ReadonlyArray<{ readonly projectId: string; readonly worktreeId: string }>
@@ -255,6 +258,15 @@ const make = Effect.gen(function* () {
     yield* sql`DELETE FROM worktree_data WHERE project_id = ${projectId}`;
   }, Effect.orDie);
 
+  const rekeyProject = Effect.fn("WorktreeData.rekeyProject")(function* (
+    from: string,
+    to: string,
+  ) {
+    yield* sql`DELETE FROM worktree_data WHERE project_id = ${to}`;
+    yield* sql`UPDATE worktree_data SET project_id = ${to}
+      WHERE project_id = ${from}`;
+  }, Effect.orDie);
+
   return WorktreeData.of({
     description,
     describe,
@@ -264,6 +276,7 @@ const make = Effect.gen(function* () {
     move,
     forget,
     forgetProject,
+    rekeyProject,
     kept,
   });
 });

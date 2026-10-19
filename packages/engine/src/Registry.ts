@@ -10,12 +10,14 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import { type AgentSession, agentSession } from "./agentSessions.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
+import * as Config from "./Config.ts";
 import * as Icons from "./Icons.ts";
 import * as Identity from "./Identity.ts";
 import * as Terrier from "./Terrier.ts";
 import { terrierProjects } from "./Terrier.ts";
 import { terrierProjectId } from "./terrierId.ts";
 import * as Usage from "./Usage.ts";
+import * as WorktreeData from "./WorktreeData.ts";
 import { worktreeIdFromPath } from "./worktreeLayout.ts";
 
 // A project as the registry holds it.
@@ -198,6 +200,8 @@ const make = Effect.gen(function* () {
   const cloneCheckout = yield* CloneCheckout.CloneCheckout;
   const terrier = yield* Terrier.Terrier;
   const usage = yield* Usage.Usage;
+  const config = yield* Config.Config;
+  const worktreeData = yield* WorktreeData.WorktreeData;
   const crypto = yield* Crypto.Crypto;
   const randomId = Effect.orDie(crypto.randomUUIDv4);
 
@@ -254,17 +258,13 @@ const make = Effect.gen(function* () {
           if (stillListed.includes(project.path)) {
             const kept = terrierProjectId(project.path);
             if (kept !== projectId) {
-              yield* sql`DELETE FROM project_config WHERE project_id = ${kept}`;
-              yield* sql`DELETE FROM worktree_data WHERE project_id = ${kept}`;
-              yield* sql`UPDATE project_config SET project_id = ${kept}
-                WHERE project_id = ${projectId}`;
-              yield* sql`UPDATE worktree_data SET project_id = ${kept}
-                WHERE project_id = ${projectId}`;
+              yield* config.rekeyProject(projectId, kept);
+              yield* worktreeData.rekeyProject(projectId, kept);
             }
             return { id: project.id, name: project.name, path: project.path };
           }
-          yield* sql`DELETE FROM project_config WHERE project_id = ${projectId}`;
-          yield* sql`DELETE FROM worktree_data WHERE project_id = ${projectId}`;
+          yield* config.forgetProject(projectId);
+          yield* worktreeData.forgetProject(projectId);
           // What is kept by the project's path, which would greet a
           // re-add: its place in the order, its primary's marks, its icon.
           yield* sql`DELETE FROM project_order WHERE path = ${project.path}`;
