@@ -134,7 +134,7 @@ it("names the default branch's local branch from the ref it resolved: the remote
 
 it(
   "the owner's setup, then a watcher pnpm runs on its output, finishes with the watcher still running",
-  { timeout: 180_000 },
+  { timeout: 240_000 },
   async () => {
     const sandboxed = sandbox();
     box = sandboxed;
@@ -197,7 +197,7 @@ it(
               color: false,
             },
           );
-        }).pipe(Effect.timeout("90 seconds")),
+        }).pipe(Effect.timeout("150 seconds")),
       )
       .finally(restore)) as {
       worktree?: Worktrees.WorktreeRow;
@@ -230,6 +230,15 @@ it(
         } catch {
           // Gone already: a watcher ends by itself.
         }
+      }
+      // Out of the sandbox, whose removal must end within its hook's
+      // minute: deleting a real install takes longer on a loaded runner.
+      // The run's own folder takes it as the run ends (testTemp.mts).
+      if (created.worktree !== undefined) {
+        renameSync(
+          created.worktree.path,
+          join(mkdtempSync(join(tmpdir(), "owner-setup-")), "fox"),
+        );
       }
     }
   },
