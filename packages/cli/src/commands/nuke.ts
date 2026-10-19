@@ -24,9 +24,6 @@ import { note, out } from "../output.ts";
 
 const QUIT_WITHIN_MS = 30_000;
 const GONE_WITHIN_MS = 60_000;
-// A start's live half asks the hub to remove the device, and the
-// account's hub calls carry no deadline of their own.
-const START_WITHIN_MS = 120_000;
 
 // The bundle this command runs from, <bundle>/Contents/Resources/<name>.
 const bundleOf = (executable: string): string | null => {
@@ -110,30 +107,27 @@ export const nuke = Command.make(
       }
 
       let left = false;
+      // A start that couldn't delete a file keeps its marker in the app's
+      // own folder, for the next start to finish the nuke.
+      let marked = false;
       for (let start = 0; ; start += 1) {
         if (start === 3) {
           return yield* new UsageError({
             problem: `${names.appName} didn't finish its nuke.`,
           });
         }
-        const started = spawnSync(executable, [`--${NUKE_SWITCH}`], {
+        const code = spawnSync(executable, [`--${NUKE_SWITCH}`], {
           stdio: "inherit",
           env: withoutCdFile(),
-          timeout: START_WITHIN_MS,
-        });
-        if (
-          started.error !== undefined &&
-          "code" in started.error &&
-          started.error.code === "ETIMEDOUT"
-        ) {
-          return yield* new UsageError({
-            problem: `${names.appName} didn't finish its nuke within ${START_WITHIN_MS / 60_000} minutes. Its log says why; run nuke again.`,
-          });
-        }
-        const code = started.status;
+        }).status;
         if (code === NUKE_EXIT.finished) break;
         if (code === NUKE_EXIT.finishedWithLeft) {
           left = true;
+          break;
+        }
+        if (code === NUKE_EXIT.marked) {
+          left = true;
+          marked = true;
           break;
         }
         if (code === NUKE_EXIT.againWithLeft) left = true;
@@ -161,7 +155,11 @@ export const nuke = Command.make(
           yield* Effect.try(() => {
             if (readdirSync(path).length === 0) rmdirSync(path);
           }).pipe(Effect.ignore);
-        } else if (id === "userData" || id === "logs" || id === "preferences") {
+        } else if (
+          (id === "userData" && !marked) ||
+          id === "logs" ||
+          id === "preferences"
+        ) {
           rmSync(path, { recursive: true, force: true });
         }
       }

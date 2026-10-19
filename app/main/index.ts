@@ -16,7 +16,7 @@ import { clerkPublishableKey } from "./ipc/modules/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { unmountedVolume } from "@shared/unmountedVolume";
-import { finishPendingNuke } from "./core/nuke/finish";
+import { finishPendingNuke, NUKE_MARKER } from "./core/nuke/finish";
 import {
   finishHeadlessNuke,
   headless as headlessNuke,
@@ -148,7 +148,7 @@ if (!app.requestSingleInstanceLock()) {
     // finishes the nuke.
     dialog.showErrorBox(
       `${names.appName} couldn't finish erasing itself`,
-      `${nuked.left.map((stayed) => `${stayed.path}: ${stayed.why}`).join("\n")}\n\nDelete what's named here, then open the app again.`,
+      `${nuked.left.map((stayed) => `${stayed.path}: ${stayed.why}`).join("\n")}\n\nDelete what's named here, then open the app again. To open it without finishing, delete ${path.join(app.getPath("userData"), NUKE_MARKER)}.`,
     );
     app.exit(1);
   }

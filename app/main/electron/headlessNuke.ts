@@ -18,8 +18,7 @@ import { nukeShell } from "./nuke";
 export const headless = app.commandLine.hasSwitch(NUKE_SWITCH);
 
 // The start that found the marker: what is left once its files are
-// gone, and what of them it couldn't delete. The command deletes the
-// app's own folder after it, the marker with it.
+// gone, and what of them it couldn't delete.
 export function finishHeadlessNuke(
   files: readonly { readonly path: string; readonly why: string }[],
 ): void {
@@ -42,7 +41,13 @@ export function finishHeadlessNuke(
   } catch {
     // None written.
   }
-  app.exit(left ? NUKE_EXIT.finishedWithLeft : NUKE_EXIT.finished);
+  app.exit(
+    files.length > 0
+      ? NUKE_EXIT.marked
+      : left
+        ? NUKE_EXIT.finishedWithLeft
+        : NUKE_EXIT.finished,
+  );
 }
 
 // The live halves, once the host is up.

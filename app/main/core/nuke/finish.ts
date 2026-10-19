@@ -49,13 +49,12 @@ export function writeNukeMarker(
 }
 
 // What a start that found a marker couldn't delete, and why; null for
-// no marker. The lock's own files stay, since
-// this process holds the lock through them, and so do the plain dev
-// instance's profiles, other devices whose userData nests in its own. A
-// marker that can't be read deletes nothing and stays: half a nuke
-// (userData gone, the data dir kept) would be no install at all. So does
-// one with something left, for the next start to finish, after
-// deleting all it could.
+// no marker. The lock's own files stay, since this process holds the
+// lock through them, and so do the plain dev instance's profiles, other
+// devices whose userData nests in its own. A marker that can't be read
+// deletes nothing and stays: half a nuke (userData gone, the data dir
+// kept) would be no install at all. So does one with something left,
+// for the next start to finish, after deleting all it could.
 export function finishPendingNuke(userData: string): {
   readonly left: readonly { readonly path: string; readonly why: string }[];
 } | null {

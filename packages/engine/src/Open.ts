@@ -16,6 +16,7 @@ import * as Launchers from "./Launchers.ts";
 import * as Lifecycle from "./Lifecycle.ts";
 import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
+import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
 import { capture } from "./processes.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
@@ -202,7 +203,8 @@ const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const { flavor } = yield* Paths.Paths;
+  const paths = yield* Paths.Paths;
+  const { flavor } = paths;
   const launchers = yield* Launchers.Launchers;
   const lifecycle = yield* Lifecycle.Lifecycle;
   const worktrees = yield* Worktrees.Worktrees;
@@ -460,8 +462,6 @@ const make = Effect.gen(function* () {
     return absolute;
   });
 
-  // A cold launch gets this environment, which the app rebuilds at
-  // startup.
   const app = Effect.gen(function* () {
     if (flavor === "dev") return yield* new NoDevApp();
     const code = yield* Effect.scoped(
@@ -469,9 +469,18 @@ const make = Effect.gen(function* () {
         spawner.spawn(
           // The installed app's bundle id, which still finds it renamed
           // or moved.
-          ChildProcess.make("open", ["-b", flavorNames(flavor).bundleId], {
-            stdin: "ignore",
-          }),
+          ChildProcess.make(
+            "open",
+            [
+              ...openEnvArgs({
+                dataDir:
+                  paths.dataDirSource === "env" ? paths.dataDir : undefined,
+              }),
+              "-b",
+              flavorNames(flavor).bundleId,
+            ],
+            { stdin: "ignore" },
+          ),
         ),
         (handle) => handle.exitCode,
       ),

@@ -90,6 +90,9 @@ export const NUKE_EXIT = {
   finished: 0,
   // The same, with something it couldn't delete, said on its output.
   finishedWithLeft: 13,
+  // Files it couldn't delete, said on its output: the marker stays in
+  // the app's own folder, for the next start to finish.
+  marked: 14,
   // The live half ran: start it again to delete the files.
   again: 10,
   // The same, with something it couldn't take off, said on its output.
