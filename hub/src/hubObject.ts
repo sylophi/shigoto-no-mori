@@ -171,29 +171,39 @@ export class DeviceHub extends DurableObject<Env> {
     ).map((device) => device.deviceId);
   }
 
-  // Revocation is one operation owned by this object: the D1 row, the
-  // device's live sockets and its unconsumed tickets go together. The
-  // credential kill (the row delete) comes first, and a failure rejects
-  // before anything else happens, so a failed delete never leaves a
-  // "revoked" device that reconnects with a still-valid credential while
-  // the user was told it failed. Only after the row is gone are the
-  // tickets dropped (a pre-minted ticket must not let a revoked device
-  // back in within its TTL) and the sockets closed. It holds the
-  // admission permit, so no socket is admitted between the row's read
-  // and its delete. False when the account had no such device.
+  // Revocation is one operation owned by this object: the D1 row and the
+  // device's live sockets go together. The credential kill (the row
+  // delete) comes first, and a failure rejects before anything else
+  // happens, so a failed delete never leaves a "revoked" device that
+  // reconnects with a still-valid credential while the user was told it
+  // failed. Then the sockets close, with nothing that can fail between:
+  // a committed delete never leaves the device on the roster, and its
+  // sockets close even when no row went (a retry of a delete whose answer
+  // was lost), as no device of this account holds a socket without one.
+  // Its unconsumed tickets stay till they expire: admission burns a
+  // ticket and admits it only against the device's current credential
+  // (`connect`), which a revoked device no longer has. It holds the
+  // admission permit, so no socket is admitted between the row's read and
+  // its delete. False when the account had no such device.
   async revoke(deviceId: string, accountId: string): Promise<boolean> {
-    const removed = await this.runtime.runPromise(
-      this.admission.withPermits(1)(removeDevice(deviceId, accountId)),
-    );
-    if (removed) {
+    const close = () =>
       this.closeDevice(deviceId, CLOSE_DEVICE_REVOKED, "device revoked");
-    }
-    return removed;
+    return await this.runtime.runPromise(
+      this.admission.withPermits(1)(
+        Effect.gen(function* () {
+          const registry = yield* Registry.Registry;
+          const removed = yield* registry.remove(deviceId, accountId);
+          close();
+          return removed;
+        }),
+      ),
+    );
   }
 
   // Enrolls the device, or enrolls it again, which rotates its
-  // credential: only one hash is stored, its unconsumed tickets go, and
-  // its sockets close so each dials again with the new one. The cap
+  // credential: only one hash is stored (so its unconsumed tickets admit
+  // nothing, as in revoke), and its sockets close so each dials again
+  // with the new one, each close right after its row's write. The cap
   // counts new devices only, so a full account can still enroll the
   // devices it has, and it makes room by dropping its stalest offline
   // device rather than refusing: removing a device takes a device
@@ -204,19 +214,13 @@ export class DeviceHub extends DurableObject<Env> {
   async enroll(request: EnrollRequest): Promise<EnrollOutcome> {
     const online = () => new Set(this.online());
     const outcome = await this.runtime.runPromise(
-      this.admission.withPermits(1)(admit(request, online)),
+      this.admission.withPermits(1)(
+        admit(request, online, (deviceId, code, reason) =>
+          this.closeDevice(deviceId, code, reason),
+        ),
+      ),
     );
     if (outcome.status !== "enrolled") return outcome;
-    if (outcome.evicted !== null) {
-      this.closeDevice(outcome.evicted, CLOSE_DEVICE_REVOKED, "device revoked");
-    }
-    if (outcome.rotated) {
-      this.closeDevice(
-        request.deviceId,
-        CLOSE_CREDENTIAL_ROTATED,
-        "credential rotated",
-      );
-    }
     return {
       status: "enrolled",
       createdAt: outcome.createdAt,
@@ -234,9 +238,9 @@ export class DeviceHub extends DurableObject<Env> {
   // The upgrade for GET /connect. Every verdict is an accepted socket:
   // a refused one closes at once with the ticket code, which a browser's
   // websocket shows where it hides an HTTP status. The Worker only
-  // forwards tickets it signed itself (src/ticket.ts), so what reaches
-  // here unknown is a real ticket that expired, was replayed or was
-  // dropped by a revoke.
+  // forwards tickets it signed itself (src/ticket.ts), so what it refuses
+  // is a real ticket that expired, was replayed, or names a credential
+  // the device no longer has (revoked or rotated).
   override async fetch(request: Request): Promise<Response> {
     const random = new URL(request.url).searchParams.get(CONNECT_RANDOM_PARAM);
     const clock = this.clock;
@@ -253,14 +257,12 @@ export class DeviceHub extends DurableObject<Env> {
               const holder = yield* tickets.take(random, now);
               if (holder === null) return null;
               // The device must still be enrolled, under the credential
-              // the ticket was minted with. A mint racing a revoke or a
-              // rotation can store its ticket after the device's
-              // tickets were dropped, and the row changes first, so
-              // this read catches what the drop missed. It holds the
-              // admission permit, so an enrollment's rotation lands
-              // before it or after the socket is accepted, which the
-              // rotation then closes. A row with no key predates keys:
-              // its device enrolls again first.
+              // the ticket was minted with: what keeps a revoked or
+              // rotated device's unconsumed tickets from admitting it.
+              // It holds the admission permit, so an enrollment's
+              // rotation lands before it or after the socket is
+              // accepted, which the rotation then closes. A row with no
+              // key predates keys: its device enrolls again first.
               const device = yield* registry.byId(holder.deviceId);
               return device?.credential_hash === holder.credentialHash &&
                 device.public_key !== null
@@ -532,23 +534,16 @@ function heardAt(ws: WebSocket): number {
   return attachment?.heardAt ?? attachment?.connectedAt ?? 0;
 }
 
-// The row delete and the tickets of a revoke, in that order (revoke).
-// False when the account had no such device.
-const removeDevice = (deviceId: string, accountId: string) =>
-  Effect.gen(function* () {
-    const registry = yield* Registry.Registry;
-    const tickets = yield* Tickets.Tickets;
-    const removed = yield* registry.remove(deviceId, accountId);
-    yield* tickets.dropDevice(deviceId);
-    return removed;
-  });
-
 // The enrollment's reads and writes, run under the account's admission
-// permit (DeviceHub.enroll).
-const admit = (request: EnrollRequest, online: () => ReadonlySet<string>) =>
+// permit (DeviceHub.enroll). `close` withdraws a device's sockets right
+// after the write that ends their credential, with nothing between.
+const admit = (
+  request: EnrollRequest,
+  online: () => ReadonlySet<string>,
+  close: (deviceId: string, code: number, reason: string) => void,
+) =>
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
-    const tickets = yield* Tickets.Tickets;
     const { deviceId, accountId } = request;
     const existing = yield* registry.byId(deviceId);
     if (existing !== null && existing.account_id !== accountId) {
@@ -561,7 +556,8 @@ const admit = (request: EnrollRequest, online: () => ReadonlySet<string>) =>
         const present = online();
         const evict = stalestFirst.find((id) => !present.has(id));
         if (evict === undefined) return { status: "account-full" } as const;
-        yield* removeDevice(evict, accountId);
+        yield* registry.remove(evict, accountId);
+        close(evict, CLOSE_DEVICE_REVOKED, "device revoked");
         evicted = evict;
       }
     }
@@ -571,13 +567,14 @@ const admit = (request: EnrollRequest, online: () => ReadonlySet<string>) =>
     // cover: zero changes means it suppressed one.
     const wrote = yield* registry.upsert({ ...request, createdAt });
     if (!wrote) return { status: "enrolled-elsewhere" } as const;
-    if (existing !== null) yield* tickets.dropDevice(deviceId);
+    if (existing !== null) {
+      close(deviceId, CLOSE_CREDENTIAL_ROTATED, "credential rotated");
+    }
     return {
       status: "enrolled",
       createdAt,
       lastSeenAt: existing?.last_seen_at ?? null,
       online: [...online()],
       evicted,
-      rotated: existing !== null,
     } as const;
   });
