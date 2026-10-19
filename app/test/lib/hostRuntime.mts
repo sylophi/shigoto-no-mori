@@ -3,7 +3,13 @@
 // instead of waiting for a graph that never comes (EFFECT.md, runtime
 // boundaries). Every proof's file starts and disposes it (hostSetup.mts);
 // a bench under plain node disposes it itself.
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -57,6 +63,30 @@ process.env.SHIGOMORI_DATA_DIR = engineDataDir;
 // developer's own. A proof that installs a fake gh before then points it
 // at its own.
 process.env.GH_CONFIG_DIR = join(engineDataDir, "..", "gh-config");
+// The shells the host opens keep their history in the run, not in the
+// developer's, which a terminal a proof types into would add to. zsh's
+// is named from ZDOTDIR (macOS's /etc/zshrc), so the shells start in a
+// ZDOTDIR of the run's whose startup files read the developer's own under
+// the developer's ZDOTDIR, wherever their .zshenv moves it, and then name
+// the run's history; bash's is HISTFILE, which it takes from here.
+const zdotdir = join(engineDataDir, "..", "zdotdir");
+mkdirSync(zdotdir, { recursive: true });
+const ownFile = (file: string) =>
+  `ZDOTDIR=$SM_USER_ZDOTDIR\n[ -f "$ZDOTDIR/${file}" ] && . "$ZDOTDIR/${file}"\nZDOTDIR=$SM_RUN_ZDOTDIR\n`;
+writeFileSync(
+  join(zdotdir, ".zshenv"),
+  'SM_RUN_ZDOTDIR=$ZDOTDIR\nZDOTDIR=${SM_USER_ZDOTDIR:-$HOME}\n[ -f "$ZDOTDIR/.zshenv" ] && . "$ZDOTDIR/.zshenv"\nSM_USER_ZDOTDIR=$ZDOTDIR\nZDOTDIR=$SM_RUN_ZDOTDIR\n',
+);
+for (const file of [".zprofile", ".zlogin", ".zlogout"]) {
+  writeFileSync(join(zdotdir, file), ownFile(file));
+}
+writeFileSync(
+  join(zdotdir, ".zshrc"),
+  `${ownFile(".zshrc")}HISTFILE=$SM_RUN_ZDOTDIR/.zsh_history\n`,
+);
+process.env.SM_USER_ZDOTDIR = process.env.ZDOTDIR ?? "";
+process.env.ZDOTDIR = zdotdir;
+process.env.HISTFILE = join(zdotdir, ".bash_history");
 const engine = Engine.layer({
   flavor: "dev",
   macfs: macfs(),
