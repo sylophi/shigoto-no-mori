@@ -36,7 +36,13 @@ export const TraceLineSchema = Schema.Struct({
   durationMs: Schema.Number,
   outcome: Schema.Literals(["ok", "interrupted", "failed"]),
   error: Schema.optional(Schema.String),
-  attributes: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  // "unserializable" where they couldn't be written (serialize).
+  attributes: Schema.optional(
+    Schema.Union([
+      Schema.Record(Schema.String, Schema.Unknown),
+      Schema.Literal("unserializable"),
+    ]),
+  ),
   events: Schema.optional(
     Schema.Array(
       Schema.Struct({

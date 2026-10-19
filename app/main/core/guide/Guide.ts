@@ -352,15 +352,15 @@ const sendKey = (page: GuidePage, key: GuideKey) =>
     });
   });
 
+const decodeEvaluated = Schema.decodeUnknownOption(
+  Schema.Struct({
+    result: Schema.Struct({ value: Schema.optional(Schema.Unknown) }),
+  }),
+);
 // The value an evaluate answered with, by value.
 const valueOf = (answer: unknown): unknown =>
-  Option.match(
-    Schema.decodeUnknownOption(
-      Schema.Struct({
-        result: Schema.Struct({ value: Schema.optional(Schema.Unknown) }),
-      }),
-    )(answer),
-    { onNone: () => undefined, onSome: ({ result }) => result.value },
+  Option.getOrUndefined(
+    Option.map(decodeEvaluated(answer), ({ result }) => result.value),
   );
 const decodeObjectId = Schema.decodeUnknownOption(
   Schema.Struct({ object: Schema.Struct({ objectId: Schema.String }) }),
@@ -470,10 +470,9 @@ const make = Effect.gen(function* () {
   const objectOf = (page: GuidePage, ref: number) =>
     page.send("DOM.resolveNode", { backendNodeId: ref }).pipe(
       Effect.map((answer) =>
-        Option.match(decodeObjectId(answer), {
-          onNone: () => undefined,
-          onSome: ({ object }) => object.objectId,
-        }),
+        Option.getOrUndefined(
+          Option.map(decodeObjectId(answer), ({ object }) => object.objectId),
+        ),
       ),
       Effect.orElseSucceed(() => undefined),
       Effect.filterOrFail(
