@@ -151,19 +151,22 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       catch: callFailureOf,
     });
     const channelId = mintHexId();
-    const handle = yield* Effect.try({
-      try: () =>
-        mux.attach(channelId, {
-          onData: (_data, consumed) => consumed(),
-          onEnd: () => {},
-          onReset: () => {},
-          onWritable: () => {},
-        }),
-      catch: callFailureOf,
-    });
-    yield* api.open({ port: remotePort, channelId }).pipe(
-      Effect.catchIf(isForwardConnectFailedError, () => Effect.void),
-      Effect.ensuring(Effect.sync(() => handle.reset())),
+    yield* Effect.acquireUseRelease(
+      Effect.try({
+        try: () =>
+          mux.attach(channelId, {
+            onData: (_data, consumed) => consumed(),
+            onEnd: () => {},
+            onReset: () => {},
+            onWritable: () => {},
+          }),
+        catch: callFailureOf,
+      }),
+      () =>
+        api
+          .open({ port: remotePort, channelId })
+          .pipe(Effect.catchIf(isForwardConnectFailedError, () => Effect.void)),
+      (handle) => Effect.sync(() => handle.reset()),
     );
   });
 
@@ -248,8 +251,9 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
     // A bound listener errors only in exotic cases, but an unlistened
     // 'error' would take the whole process down.
     server.on("error", () => {});
-    // Registered last, so it is the first undone: the conns go before
-    // their opens are interrupted and the listener closed.
+    // Registered last, so it is the first undone: the listener stops
+    // taking sockets and the conns go before their opens are
+    // interrupted.
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         forwards.set(forward.forwardId, forward);
@@ -258,6 +262,7 @@ export const makePortForwardEngine = Effect.fnUntraced(function* (deps: {
       () =>
         Effect.sync(() => {
           forwards.delete(forward.forwardId);
+          server.close();
           // destroy deletes only the conn being visited, which Set
           // iteration tolerates.
           for (const conn of forward.conns) conn.destroy();
