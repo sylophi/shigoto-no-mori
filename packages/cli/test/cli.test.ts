@@ -35,6 +35,7 @@ import {
   success,
 } from "../../engine/test/lib/fakeApp.ts";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { said as updateSaid } from "../src/commands/update.ts";
 import { NAMESPACE_USAGE } from "../src/errors.ts";
 import { documentedCommands } from "../src/help.ts";
 
@@ -1351,6 +1352,18 @@ describe("app", () => {
     assert.equal(
       dev.stderr,
       "smd: This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.\n",
+    );
+  });
+
+  it("names the app an update restarts, each flavor's own", () => {
+    const restarting = { phase: "restarting", version: "9.9.9" } as const;
+    assert.equal(
+      updateSaid(restarting, flavorNames("prod").appName, String),
+      "restarting Shigoto no Mori to install 9.9.9",
+    );
+    assert.equal(
+      updateSaid(restarting, flavorNames("v3").appName, String),
+      "restarting Shigoto no Mori (v3) to install 9.9.9",
     );
   });
 

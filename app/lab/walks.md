@@ -50,6 +50,11 @@ else.
   (`V3.md`, Process), on the build about to be cut.
 - **By hand**, with `pnpm walks`, for a change that touches a page.
 
+`stuck-nuke` and `update-button` read the app's native dialogs through
+System Events, which a locked session doesn't show them to. On a locked
+machine they skip, saying why (`lib/session.mts`), and the `Walks`
+workflow, whose runner has an unlocked session, is where they run.
+
 ## Two devices, a real project
 
 The cross-device walks (`cross-device.walk.mts`) run the lab build as

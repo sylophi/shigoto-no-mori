@@ -29,8 +29,12 @@ const running: Updater.Running = {
   pid: process.pid,
 };
 
-// A phase as the spinner says it.
-const said = (progress: Updater.Progress, dim: (text: string) => string) => {
+// A phase as the spinner says it, `appName` being the flavor's app.
+export const said = (
+  progress: Updater.Progress,
+  appName: string,
+  dim: (text: string) => string,
+) => {
   switch (progress.phase) {
     case "checking":
       return "checking for updates";
@@ -39,7 +43,7 @@ const said = (progress: Updater.Progress, dim: (text: string) => string) => {
     case "installing":
       return `${progress.phase} ${progress.version}`;
     case "restarting":
-      return `restarting Shigoto no Mori to install ${progress.version}`;
+      return `restarting ${appName} to install ${progress.version}`;
     case "waiting-for-app":
       return "waiting for the running app";
     case "waiting-for-restart":
@@ -111,7 +115,9 @@ export const update = Command.make(
         releasesUrl: text(flags.releasesUrl),
         progress: (phase) =>
           Effect.andThen(
-            progress.set(said(phase, styles(stderrColor).dim)),
+            progress.set(
+              said(phase, flavorNames(flavor).appName, styles(stderrColor).dim),
+            ),
             json &&
               (phase.phase === "downloading" || phase.phase === "verifying")
               ? emit({ event: phase.phase, version: phase.version })

@@ -60,7 +60,6 @@ it("a packaged build runs no inline script or eval, connects to the loopback and
   assert.deepEqual(policy.get("img-src"), [
     "'self'",
     "data:",
-    "blob:",
     "https://img.clerk.com",
     "https://github.com",
     "https://*.github.com",
@@ -72,7 +71,7 @@ it("a packaged build runs no inline script or eval, connects to the loopback and
   assert.deepEqual(policy.get("frame-ancestors"), ["'none'"]);
 });
 
-it("the web client's policy shows images from the remote hosts a window's does, GitHub's each with its subdomains", () => {
+it("the web client's policy shows images from the sources a window's does, GitHub's hosts each with its subdomains", () => {
   const Vercel = Schema.fromJsonString(
     Schema.Struct({
       headers: Schema.Array(
@@ -91,16 +90,11 @@ it("the web client's policy shows images from the remote hosts a window's does, 
     .flatMap((rule) => rule.headers)
     .find((header) => header.key === "Content-Security-Policy");
   assert.ok(web !== undefined, "vercel.json sends a policy");
-  const remote = (policy: string) =>
-    new Set(
-      directives(policy)
-        .get("img-src")
-        ?.filter((source) => source.startsWith("https://")),
-    );
-  const desktop = remote(
+  const images = (policy: string) => new Set(directives(policy).get("img-src"));
+  const desktop = images(
     rendererContentPolicy({ clerkHost: null, dev: false }),
   );
-  assert.deepEqual(remote(web.value), desktop);
+  assert.deepEqual(images(web.value), desktop);
   for (const host of GITHUB_IMAGE_HOSTS) {
     assert.ok(desktop.has(`https://${host}`));
     assert.ok(desktop.has(`https://*.${host}`));
