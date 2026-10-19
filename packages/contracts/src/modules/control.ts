@@ -24,8 +24,8 @@ const ControlDeviceBlockSchema = Schema.Literals([
   "not-sharing",
   "no-project",
   "no-grant",
-  // Up, but its answer to the ask was a refusal (a protocol mismatch,
-  // its sharing turned off meanwhile), said in `refusal`.
+  // Up, but its answer to the ask was a refusal (a protocol mismatch),
+  // said in `refusal`.
   "refused",
 ]);
 

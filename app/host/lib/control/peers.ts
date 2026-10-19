@@ -2,9 +2,12 @@
 // the roster, where each peer stands for a repo, their worktrees and
 // the mirrors they run against this device, and where a send would
 // clone.
-import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
 import { errorWordsOf } from "@host/lib/errorWords";
-import { isHubRateLimitedError } from "@shigomori/contracts/errors";
+import {
+  isHubRateLimitedError,
+  isNoDirectConnectionError,
+  isNotSharingError,
+} from "@shigomori/contracts/errors";
 import { homedir } from "node:os";
 import {
   type ControlDevice,
@@ -140,13 +143,16 @@ const standingOf = (
         ? { ...base, block: "no-project" }
         : { ...base, ...holding };
     }),
-    // The session dropped between the roster read and the ask, or the
-    // peer answered with a refusal, in its words.
+    // The session dropped between the roster read and the ask (the
+    // bridge reads a drop as no direct connection), the peer stopped
+    // sharing meanwhile, or it answered with a refusal, in its words.
     Effect.catch((error) =>
       Effect.succeed<ControlDevice>(
-        error instanceof RemoteDisconnectedError
+        isNoDirectConnectionError(error)
           ? offline
-          : { ...base, block: "refused", refusal: errorWordsOf(error) },
+          : isNotSharingError(error)
+            ? { ...base, block: "not-sharing" }
+            : { ...base, block: "refused", refusal: errorWordsOf(error) },
       ),
     ),
   );

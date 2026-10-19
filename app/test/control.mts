@@ -139,6 +139,8 @@ import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import {
   HubRateLimitedError,
   LinkUnauthenticatedError,
+  NoDirectConnectionError,
+  NotSharingError,
   RemoteCallError,
 } from "@shigomori/contracts/errors";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
@@ -766,7 +768,7 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
   );
 });
 
-it("devices: a peer that turned the ask away reads as refused in its words, not as not connected", async () => {
+it("devices: a peer that turned the ask away reads as refused in its words, one whose session dropped as offline, and one that stopped sharing as not sharing", async () => {
   listener.setAccepts(true);
   peerListRefuses = new RemoteCallError({ text: "it runs an older protocol" });
   try {
@@ -787,6 +789,19 @@ it("devices: a peer that turned the ask away reads as refused in its words, not 
       "device-blocked",
       /"Studio Mac" turned the ask away \(it runs an older protocol\)/,
     );
+    const blockOf = async () =>
+      devicesDoc(await sm("devices", "-p", "source")).devices.find(
+        (device) => device.name === "Studio Mac",
+      )?.block;
+    // The bridge reads a session that dropped meanwhile as no direct
+    // connection.
+    peerListRefuses = new NoDirectConnectionError({
+      deviceId: LISTENER,
+      reason: "remote device disconnected",
+    });
+    assert.equal(await blockOf(), "offline");
+    peerListRefuses = new NotSharingError();
+    assert.equal(await blockOf(), "not-sharing");
   } finally {
     peerListRefuses = null;
     listener.setAccepts(false);
