@@ -64,7 +64,7 @@ import { holdStdinFd } from "./stdinFd.ts";
 import { verboseSpawner } from "./verbose.ts";
 import { helpPages } from "./help.ts";
 import { Killed, report } from "./errors.ts";
-import { Output } from "./output.ts";
+import { Output, outputFailure, watchStreams } from "./output.ts";
 
 // --json, --verbose and --version are global wherever they sit, up to
 // a `--`, past which everything is the command's, as in Go.
@@ -83,6 +83,8 @@ function globalFlags(args: ReadonlyArray<string>) {
 
 // Before any command runs a child (stdinFd.ts).
 holdStdinFd();
+// Before anything is written (output.ts).
+watchStreams();
 
 const {
   version: askedVersion,
@@ -189,7 +191,13 @@ const program = goArgs(sm, canonical(rest, worktreesCommand)).pipe(
     ),
   ),
   Effect.provideService(Console.Console, { ...console, log: () => {} }),
-  Effect.as({ code: 0, error: undefined as unknown }),
+  // A command whose output met a failed stream didn't say what it did.
+  Effect.andThen(() => {
+    const failed = outputFailure();
+    return failed === undefined
+      ? Effect.succeed({ code: 0, error: undefined as unknown })
+      : Effect.fail(failed);
+  }),
   // A defect reports like any failure, so --json still ends in a document.
   Effect.catchCause((cause) => {
     const error = Cause.squash(cause);

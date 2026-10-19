@@ -3,7 +3,7 @@
 // is refused, a person at a terminal, the shell's config and wrapper,
 // and a script handed the terminal, its signals and its ending.
 import assert from "node:assert/strict";
-import { execFile, execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -138,6 +138,35 @@ describe("a command line", () => {
       ),
     );
     assert.doesNotMatch((await runAt(repo, "list")).stderr, /\[git\]/);
+  });
+
+  it("lists into a reader that takes one line and quits, and ends cleanly with nothing said", async () => {
+    const repo = box.repo("headed");
+    for (let i = 0; i < 40; i++) {
+      box.git(
+        repo,
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        `w${i}`,
+        `${box.home}/w${i}`,
+      );
+    }
+    box.write("registry.json", {
+      projects: [{ id: "H", name: "headed", path: repo }],
+    });
+    await box.migrate("cli");
+    for (const args of ["worktrees list --json", "worktrees list"]) {
+      const headed = spawnSync(
+        "bash",
+        ["-o", "pipefail", "-c", `"${built}" ${args} | head -1`],
+        { cwd: repo, env: box.env("cli"), encoding: "utf8" },
+      );
+      assert.equal(headed.status, 0, `${args}: ${headed.stderr}`);
+      assert.equal(headed.stderr, "", args);
+      assert.equal(headed.stdout.split("\n").length, 2, args);
+    }
   });
 
   it("sets, reads and clears autoShelveDays, off while unset", async () => {

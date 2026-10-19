@@ -6,25 +6,23 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { note } from "./output.ts";
 
 const trace = (command: ChildProcess.Command) => {
-  if (!("command" in command)) return;
+  if (!("command" in command)) return Effect.void;
   const name = basename(command.command);
-  if (name !== "git" && name !== "gh") return;
+  if (name !== "git" && name !== "gh") return Effect.void;
   const args = command.args.join(" ");
   const cwd = command.options.cwd ?? process.cwd();
-  process.stderr.write(
-    name === "git" ? `[git] ${args} (cwd ${cwd})\n` : `[gh] ${args}\n`,
-  );
+  return note(name === "git" ? `[git] ${args} (cwd ${cwd})` : `[gh] ${args}`);
 };
 
 export const verboseSpawner = Layer.effect(
   ChildProcessSpawner.ChildProcessSpawner,
   Effect.gen(function* () {
     const inner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    return ChildProcessSpawner.make((command) => {
-      trace(command);
-      return inner.spawn(command);
-    });
+    return ChildProcessSpawner.make((command) =>
+      Effect.andThen(trace(command), inner.spawn(command)),
+    );
   }),
 );

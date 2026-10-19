@@ -5,11 +5,11 @@
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Ref from "effect/Ref";
-import { note, Output, styles } from "./output.ts";
+import { note, Output, styles, toStderr } from "./output.ts";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-const write = (text: string) => Effect.sync(() => process.stderr.write(text));
+const write = toStderr;
 
 export const spinner = Effect.gen(function* () {
   const { json, stderrColor } = yield* Effect.service(Output);
