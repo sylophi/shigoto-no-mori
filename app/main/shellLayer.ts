@@ -32,7 +32,12 @@ const resumeProbe = lifetime(
   },
 );
 
-export const layer = (host: Parameters<typeof HostProcess.layer>[0]) =>
+// A headless nuke's run leaves the login item to the nuke
+// (electron/nuke.ts), and reconciles none.
+export const layer = (
+  host: Parameters<typeof HostProcess.layer>[0],
+  { loginItem }: { readonly loginItem: boolean },
+) =>
   HostProcess.layer(host).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -41,7 +46,7 @@ export const layer = (host: Parameters<typeof HostProcess.layer>[0]) =>
         // The windows' links to the shell (ipc/ShellLink.ts).
         shellLinkLayer,
         Guide.layer,
-        loginItemLayer,
+        loginItem ? loginItemLayer : Layer.empty,
       ),
     ),
   );

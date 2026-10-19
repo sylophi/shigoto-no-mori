@@ -204,7 +204,10 @@ installShellPorts();
 // The shell's layer graph, built in the ready handler and closed by the
 // quit below, the host's process first.
 const runtime = ManagedRuntime.make(
-  ShellLayer.layer({ failed: showHostFailure, hurried: isHurriedQuit }).pipe(
+  ShellLayer.layer(
+    { failed: showHostFailure, hurried: isHurriedQuit },
+    { loginItem: !headlessNuke },
+  ).pipe(
     // The renderer asks for its Clerk session as soon as it loads.
     Layer.provideMerge(ClerkTokenStorage.layer(app.getPath("userData"))),
     // The engine's updater runs in this process, over its paths and
@@ -437,9 +440,12 @@ app.on("before-quit", (event) => {
   void Effect.runPromise(hostBusy(true))
     .then((busy) => confirmBusyAction("quit", busy))
     .catch((error: unknown) => {
-      // The ask reads an unanswering host as idle, so only a prompt
-      // that couldn't be shown lands here: it doesn't keep the app.
-      log.warn(`[quit] the host's busy check failed: ${errorMessageOf(error)}`);
+      // The ask reads an unanswering host as idle, so what lands here
+      // is a defect building the ask (the host's client, or its link)
+      // or a prompt that couldn't be shown: neither keeps the app.
+      log.warn(
+        `[quit] the busy check or its prompt failed: ${errorMessageOf(error)}`,
+      );
       return true;
     })
     .then((proceed) => {
