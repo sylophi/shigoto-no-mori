@@ -4,7 +4,7 @@
 // menu's item does, the question typed as the person would. A tour
 // passes when the window shows the guide pointing at the control that
 // answers the question. README.md has what it reports.
-import { execFileSync, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import {
   closeSync,
   createWriteStream,
@@ -20,6 +20,7 @@ import { parseArgs } from "node:util";
 import { guideCommand } from "@shigomori/engine/agentGuide";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import type { Page } from "playwright-core";
+import { onRunEnd } from "../lib/runEnd.mts";
 import { DevApp } from "../reliability/devApp.mts";
 import { pageApi, withPageApi } from "../reliability/pageApi.mts";
 import { isolateGit } from "../../../gitIsolation.ts";
@@ -308,6 +309,7 @@ function run(harness: Harness, session: string, question: string) {
     cwd: guideFolder,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  own(child);
   let stdout = "";
   child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
   child.stderr.on("data", (chunk: Buffer) => logs.write(chunk));
@@ -437,47 +439,78 @@ async function roundTrips(session: string) {
     env: app.smdEnv(),
     stdio: ["pipe", "pipe", "ignore"],
   });
+  own(server);
   let buffer = "";
-  const waiting = new Map<number, (value: unknown) => void>();
+  const waiting = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+  >();
+  // A server that ends fails what it was asked.
+  server.once("exit", (code) => {
+    for (const { reject } of waiting.values()) {
+      reject(new Error(`sm guide mcp exited (${code}) before answering`));
+    }
+    waiting.clear();
+  });
   server.stdout.on("data", (chunk: Buffer) => {
     buffer += chunk.toString();
     let newline = buffer.indexOf("\n");
     while (newline >= 0) {
       const message = JSON.parse(buffer.slice(0, newline)) as { id?: number };
       buffer = buffer.slice(newline + 1);
-      if (message.id !== undefined) waiting.get(message.id)?.(message);
+      if (message.id !== undefined) {
+        waiting.get(message.id)?.resolve(message);
+        waiting.delete(message.id);
+      }
       newline = buffer.indexOf("\n");
     }
   });
   let id = 0;
   const call = (method: string, params: unknown) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
       id += 1;
-      waiting.set(id, resolve);
+      const mine = id;
+      const timer = setTimeout(() => {
+        waiting.delete(mine);
+        reject(new Error(`sm guide mcp didn't answer ${method} in 30 s`));
+      }, 30_000);
+      waiting.set(mine, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
       server.stdin.write(
-        `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`,
+        `${JSON.stringify({ jsonrpc: "2.0", id: mine, method, params })}\n`,
       );
     });
-  await call("initialize", {
-    protocolVersion: "2025-06-18",
-    capabilities: {},
-    clientInfo: { name: "guide-eval", version: "1" },
-  });
-  const timed = async (name: string) => {
-    const times: number[] = [];
-    for (let i = 0; i < 10; i++) {
-      const started = performance.now();
-      await call("tools/call", { name, arguments: {} });
-      times.push(performance.now() - started);
-    }
-    return median(times);
-  };
-  const result = {
-    look: await timed("look"),
-    screenshot: await timed("screenshot"),
-  };
-  server.stdin.end();
-  return result;
+  try {
+    await call("initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "guide-eval", version: "1" },
+    });
+    const timed = async (name: string) => {
+      const times: number[] = [];
+      for (let i = 0; i < 10; i++) {
+        const started = performance.now();
+        await call("tools/call", { name, arguments: {} });
+        times.push(performance.now() - started);
+      }
+      return median(times);
+    };
+    return {
+      look: await timed("look"),
+      screenshot: await timed("screenshot"),
+    };
+  } finally {
+    server.stdin.end();
+    server.kill();
+  }
 }
 
 function median(values: readonly number[]): number | null {
@@ -488,6 +521,23 @@ function median(values: readonly number[]): number | null {
     ? (sorted[middle] ?? null)
     : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
 }
+
+// What the run started, ended however it ends (../lib/runEnd.mts): the
+// agents' and the guide server's processes, the Terminal it opened, the
+// app with its helpers.
+const children = new Set<ChildProcess>();
+function own(child: ChildProcess): void {
+  children.add(child);
+  child.once("exit", () => children.delete(child));
+}
+const forget = onRunEnd(() => {
+  for (const child of children) child.kill("SIGKILL");
+  try {
+    quitTerminal();
+  } finally {
+    app.kill();
+  }
+});
 
 const tours: Tour[] = [];
 const trips: Record<string, unknown> = {};
@@ -521,6 +571,7 @@ try {
   } finally {
     await app.stop();
     logs.end();
+    forget();
   }
 }
 

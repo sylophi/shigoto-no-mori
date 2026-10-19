@@ -258,6 +258,16 @@ export class DevApp {
     this.reapOrphans();
   }
 
+  // The whole tree at once, for a run ending where nothing can be
+  // awaited (../lib/runEnd.mts): its helpers are in it, so none is left
+  // to reap.
+  kill(): void {
+    const launched = this.launched;
+    this.launched = null;
+    if (launched?.pid === undefined) return;
+    for (const pid of processTree(launched.pid)) signal(pid, "SIGKILL");
+  }
+
   // The app's helpers that outlive a killed app: its cloudflared and
   // file-sync, once orphaned, from this checkout's builds.
   private reapOrphans(): void {

@@ -16,6 +16,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { isolateGit } from "../../../gitIsolation.ts";
 import { ownTestTemp } from "../../../testTemp.mts";
+import { onRunEnd, signalIfAlive } from "../lib/runEnd.mts";
 import * as Predicate from "effect/Predicate";
 import { chromium, type Browser, type Page } from "playwright-core";
 
@@ -55,23 +56,25 @@ const baseCheckout = join(scratch, "base");
 const servers: ChildProcess[] = [];
 let browser: Browser | undefined;
 
+// Each step whatever the one before did: a server already gone, a
+// checkout never added. However the run ends (../lib/runEnd.mts).
 function cleanUp(): void {
   for (const server of servers) {
-    if (server.pid) process.kill(-server.pid);
+    if (server.pid) signalIfAlive(-server.pid, "SIGTERM");
   }
   try {
     git("worktree", "remove", "--force", baseCheckout);
   } catch {
-    // Never added: the ref did not resolve.
+    // Never added (the ref did not resolve), or its folder gone.
   }
   rmSync(scratch, { recursive: true, force: true });
+  try {
+    git("worktree", "prune");
+  } catch {
+    // Nothing to prune.
+  }
 }
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    cleanUp();
-    process.exit(130);
-  });
-}
+const forget = onRunEnd(cleanUp);
 
 function freePort(): Promise<number> {
   return new Promise((done) => {
@@ -375,6 +378,7 @@ try {
   }
   process.exitCode = differing.length > 0 || unshot.length > 0 ? 1 : 0;
 } finally {
-  await browser?.close();
+  await browser?.close().catch(() => {});
   cleanUp();
+  forget();
 }

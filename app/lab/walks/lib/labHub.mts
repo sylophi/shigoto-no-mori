@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
+import { onRunEnd } from "../../lib/runEnd.mts";
 
 const HUB_DIR = join(import.meta.dirname, "..", "..", "..", "..", "hub");
 const WRANGLER = join(HUB_DIR, "node_modules", ".bin", "wrangler");
@@ -149,22 +150,16 @@ export async function startLabHub(): Promise<LabHub> {
       10_000,
     );
   };
-  // Detached, it hears no Ctrl-C of the run's: the run's end takes it,
-  // an exit or a signal that would end the run without one.
-  const onExit = () => signal("SIGKILL");
-  const ending = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
-  const onSignal = (name: NodeJS.Signals) => {
+  // Detached, it hears no Ctrl-C of the run's: the run's end takes it
+  // (../../lib/runEnd.mts).
+  const forget = onRunEnd(() => {
     signal("SIGKILL");
-    for (const each of ending) process.off(each, onSignal);
-    process.kill(process.pid, name);
-  };
-  process.once("exit", onExit);
-  for (const each of ending) process.on(each, onSignal);
+    rmSync(root, { recursive: true, force: true });
+  });
   const stop = async () => {
-    process.off("exit", onExit);
-    for (const each of ending) process.off(each, onSignal);
     await halt();
     rmSync(root, { recursive: true, force: true });
+    forget();
   };
   try {
     await launch();
