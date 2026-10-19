@@ -19,7 +19,6 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import { WebSocket as WsWebSocket } from "ws";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
@@ -57,6 +56,7 @@ import { beats, busyWithin, watchHost } from "./core/host/watchdog";
 import { clearLoopbackOf } from "./core/host/leftovers";
 import { lastEndedSpans, restartDetail } from "./core/host/restartLog";
 import { CRASH_WINDOW_MS, restartLedger } from "./core/host/restarts";
+import { busyAsks } from "./core/host/busyAsks";
 import { type HostBeat, isHostBeat } from "@shared/hostBeat";
 import { dataDir } from "@shared/paths";
 
@@ -117,13 +117,14 @@ const KILL_GRACE_MS = 5_000;
 const CLEAR_WITHIN_MS = 2_000;
 // How long a quit or an update waits to hear whether the host is busy.
 const BUSY_DEADLINE = "3 seconds";
-const IDLE = {
+type HostBusy = Effect.Success<ReturnType<ReturnType<typeof host>["busy"]>>;
+const IDLE: HostBusy = {
   runningScripts: 0,
   inflightDeletes: 0,
   inflightMoves: 0,
   engineChanges: [],
   busyTerminals: 0,
-} as const;
+};
 
 let child: UtilityProcess | null = null;
 let quitting = false;
@@ -440,32 +441,18 @@ export const hostRuntime = () => effectClient(runtimeContract, link());
 // them), and is not forked again.
 export const letHostGo = (): Promise<void> => Effect.runPromise(stop(true));
 
-// What the host is busy with, as a quit or an update asks: idle when
-// it cannot say within a few seconds, since a host that does not
-// answer has nothing to lose to them. The quit that follows kills such
-// a host rather than wait on it to close (stop).
-let unanswered: { readonly host: UtilityProcess; readonly at: number } | null =
-  null;
-// Asks overlap (a quit during an unattended install): the latest
-// started is the one that says.
-let asks = 0;
+// What the host is busy with, as a quit or an update asks, within a
+// few seconds. An ask older than the watchdog's limit says nothing of
+// the host now.
+const busy = busyAsks<UtilityProcess, HostBusy>({
+  idle: IDLE,
+  freshMs: SILENT_LIMIT_S * 1000,
+  now: () => performance.now(),
+});
 export const hostBusy = () =>
-  Effect.suspend(() => {
-    const asked = child;
-    const ask = ++asks;
-    return busyWithin(host().busy(), BUSY_DEADLINE).pipe(
-      Effect.tap((busy) =>
-        Effect.sync(() => {
-          if (ask !== asks) return;
-          unanswered =
-            Option.isNone(busy) && asked !== null
-              ? { host: asked, at: performance.now() }
-              : null;
-        }),
-      ),
-      Effect.map(Option.getOrElse(() => IDLE)),
-    );
-  });
+  Effect.suspend(() =>
+    busy.ask(child, busyWithin(host().busy(), BUSY_DEADLINE)),
+  );
 
 // The machine is going to sleep, or woke: a watchdog round around
 // either proves nothing (watchHost).
@@ -527,12 +514,7 @@ const stop = (hurried: boolean) =>
     const exited = new Promise<void>((resolve) =>
       running.once("exit", () => resolve()),
     );
-    // An ask older than the watchdog's limit says nothing of the host
-    // now.
-    if (
-      unanswered?.host === running &&
-      performance.now() - unanswered.at < SILENT_LIMIT_S * 1000
-    ) {
+    if (busy.kills(running)) {
       running.kill();
       return Effect.promise(() => exited);
     }
