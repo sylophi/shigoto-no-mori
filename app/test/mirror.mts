@@ -105,7 +105,6 @@ import {
   createNoAccountSweep,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
-  MIRROR_LABEL_LOCAL_WORKTREE,
   mirrorSessions,
   type MirrorSessionRaw,
   holdRootChecks,
@@ -1178,8 +1177,8 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         rawMirrorSession({
           session: "s-with-a",
           deviceId: LISTENER,
+          localWorktreeId: "listener-wt",
           labels: {
-            [MIRROR_LABEL_LOCAL_WORKTREE]: "listener-wt",
             [MIRROR_LABEL_MODE]: "mirror",
           },
         }),
@@ -1189,8 +1188,8 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         rawMirrorSession({
           session: "s-with-c",
           deviceId: "C",
+          localWorktreeId: "wt-c",
           labels: {
-            [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-c",
             [MIRROR_LABEL_MODE]: "mirror",
           },
         }),
@@ -1241,8 +1240,8 @@ const into = (
     deviceId,
     projectId: "p",
     worktreeId,
+    localWorktreeId: original,
     labels: {
-      [MIRROR_LABEL_LOCAL_WORKTREE]: original,
       [MIRROR_LABEL_MODE]: "mirror",
     },
   });
@@ -1309,8 +1308,8 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
         projectId: "p",
         worktreeId: `wt-${id}`,
         localRoot: liveRoot,
+        localWorktreeId: `orig-${id}`,
         labels: {
-          [MIRROR_LABEL_LOCAL_WORKTREE]: `orig-${id}`,
           [MIRROR_LABEL_MODE]: "mirror",
         },
         ...settled,
@@ -1427,8 +1426,8 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     put(sessionOf("old"));
     put(
       sessionOf("new", {
+        localWorktreeId: "orig-old",
         labels: {
-          [MIRROR_LABEL_LOCAL_WORKTREE]: "orig-old",
           [MIRROR_LABEL_MODE]: "mirror",
           [MIRROR_LABEL_REPLACES]: "old",
         },

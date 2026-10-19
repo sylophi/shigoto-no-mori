@@ -37,9 +37,7 @@ import * as Ops from "@host/lib/engineOps";
 // daemon restart without any bookkeeping of our own. Ids only: the
 // engine refuses label values outside its alphabet, and the branch is
 // the local worktree's to report.
-export const MIRROR_LABEL_LOCAL_PROJECT = "localProjectId";
-export const MIRROR_LABEL_LOCAL_WORKTREE = "localWorktreeId";
-// The ignore rule the session was opened with (a MirrorIgnoreMode),
+export const MIRROR_LABEL_LOCAL_PROJECT = "localProjectId";// The ignore rule the session was opened with (a MirrorIgnoreMode),
 // so the page can say which rule its patterns came from. Absent on a
 // session that predates it, which read as "everything".
 export const MIRROR_LABEL_IGNORE_MODE = "ignoreMode";
@@ -100,7 +98,7 @@ export type { MirrorSessionRaw };
 // The local worktree a session runs on, "" on a session that predates
 // the label.
 export function localWorktreeIdOf(raw: MirrorSessionRaw | undefined): string {
-  return raw?.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "";
+  return raw?.localWorktreeId ?? "";
 }
 
 // The ignore mode a session's labels carry, "everything" when none.
@@ -226,7 +224,7 @@ const endSessionsOnWorktree = (
   Effect.flatMap(daemon.sessions, (sessions) =>
     Effect.forEach(
       sessions.filter(
-        (raw) => raw.labels[MIRROR_LABEL_LOCAL_WORKTREE] === localWorktreeId,
+        (raw) => raw.localWorktreeId === localWorktreeId,
       ),
       (raw) =>
         daemon.terminate(raw.session).pipe(
@@ -465,9 +463,7 @@ export const moveMirrorsOfWorktree = (
             remoteRoot: raw.remoteRoot,
             name: raw.name,
             localWorktreeId: moved.id,
-            labels: carriedLabels(raw, {
-              [MIRROR_LABEL_LOCAL_WORKTREE]: moved.id,
-            }),
+            labels: carriedLabels(raw, {}),
             ignores: raw.ignores,
           })
           .pipe(

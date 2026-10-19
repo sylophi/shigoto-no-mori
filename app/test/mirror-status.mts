@@ -18,7 +18,7 @@ import { it } from "vitest";
 import { mirrorEndpoint, rawMirrorSession } from "./lib/mirrorFakes.mts";
 
 // One file at each end, as a session that has made its first pass.
-const endpoint = mirrorEndpoint({ directories: 1, files: 1, totalFileSize: 1 });
+const endpoint = mirrorEndpoint({ files: 1 });
 
 const view = (
   status: MirrorStatus,

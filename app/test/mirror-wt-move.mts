@@ -56,10 +56,7 @@ import {
   mirrorInviteAdmits,
   reconcileMirrorInvites,
 } from "@host/mirror/invites";
-import {
-  MIRROR_LABEL_LOCAL_PROJECT,
-  MIRROR_LABEL_LOCAL_WORKTREE,
-} from "@host/mirror/registry";
+import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import { listMirrorServing } from "@host/mirror/serving";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { makeTracker, waitFor } from "./lib/checkKit.mts";
@@ -299,9 +296,9 @@ it("the git follower reads the copy by the v2 id and reports synced, never the c
     worktreeId: v2Id,
     localRoot: runnerRoot,
     remoteRoot: v2Path,
+    localWorktreeId: runnerId,
     labels: {
       [MIRROR_LABEL_LOCAL_PROJECT]: RUNNER_PROJECT,
-      [MIRROR_LABEL_LOCAL_WORKTREE]: runnerId,
     },
   });
   const gone: string[] = [];

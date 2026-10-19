@@ -14,10 +14,7 @@ export const mirrorEndpoint = (
 ): MirrorEndpoint => ({
   connected: true,
   scanned: true,
-  directories: 0,
   files: 0,
-  symbolicLinks: 0,
-  totalFileSize: 0,
   problems: [],
   excludedProblems: 0,
   ...fields,
@@ -35,6 +32,7 @@ export const rawMirrorSession = (
   projectId: "",
   worktreeId: "",
   remoteRoot: "",
+  localWorktreeId: "",
   paused: false,
   ignores: [],
   createdAt: 0,

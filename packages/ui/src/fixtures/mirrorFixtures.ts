@@ -10,10 +10,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 export const endpointState = () => ({
   connected: true,
   scanned: true,
-  directories: 42,
   files: 318,
-  symbolicLinks: 0,
-  totalFileSize: 4_820_000,
   problems: [],
   excludedProblems: 0,
 });
