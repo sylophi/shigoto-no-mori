@@ -487,8 +487,6 @@ export const make = (
           probe: () => {
             if (!dead) liveness.probe();
           },
-          remoteDeviceId: "",
-          remoteAppVersion: "",
         };
       });
 

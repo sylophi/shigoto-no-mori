@@ -57,6 +57,18 @@
       {
         "_tag": "GhUnavailableError",
         "reason": "gh-signed-out"
+      },
+      {
+        "_tag": "ForwardConnectFailedError",
+        "port": 5173,
+        "reason": "connect ECONNREFUSED 127.0.0.1:5173"
+      },
+      {
+        "_tag": "GitOperationInProgressError",
+        "operation": "rebase"
+      },
+      {
+        "_tag": "GitHubRateLimitedError"
       }
     ],
     "rejects": [

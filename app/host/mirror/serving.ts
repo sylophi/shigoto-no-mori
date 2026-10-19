@@ -159,9 +159,6 @@ export const applyServedGitState = ({
       { id: worktree.id, path: worktree.path },
       { expect, state, sweep },
     );
-    if (!result.applied) {
-      return { applied: false as const, reason: result.reason };
-    }
-    (yield* MirrorSignals).gitApplied(project.id);
-    return { applied: true as const };
+    if (result.applied) (yield* MirrorSignals).gitApplied(project.id);
+    return result;
   });

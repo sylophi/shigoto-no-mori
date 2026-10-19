@@ -17,7 +17,7 @@
 //     but the one-time broker frames ever rides the device hub),
 //   - a server-side close ends the channel's direction after its tail
 //     bytes, and ending this side too completes the channel,
-//   - dialing a dead port fails with the coded "connect-failed", a
+//   - dialing a dead port fails with ForwardConnectFailedError, a
 //     reused channel id with "channel-taken", and the per-connection
 //     channel cap with "too-many-conns",
 //   - the surface still serves a fresh channel after full teardown.
@@ -32,6 +32,8 @@
 //     duplicate startForward returns the existing forward (taking on
 //     the worktree it names), while one naming a different local port
 //     moves the listener and keeps that worktree,
+//   - a start on a local port already bound refuses with node's
+//     EADDRINUSE code across the wire,
 //   - a ~1.5 MB local transfer lands byte-identical,
 //   - the fixture server closing its socket ends the local client
 //     socket (end propagation),
@@ -55,10 +57,15 @@ import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, it } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import {
   CommandRefusedError,
+  CallFailureSchema,
+  callFailureOf,
   isChannelRefusedError,
+  isForwardConnectFailedError,
+  isRemoteCallError,
 } from "@shigomori/contracts/errors";
 import { CHANNEL_MAX_WRITE_BYTES } from "@shigomori/contracts/modules/link";
 import * as PeerReach from "@host/ipc/PeerReach";
@@ -376,16 +383,16 @@ it("a large response followed by a server close arrives complete", async () => {
   await dumper.close();
 });
 
-it('a dead port refuses with "connect-failed", a reused id with "channel-taken"', async () => {
+it('a dead port refuses as a failed connect, a reused id with "channel-taken"', async () => {
   // (6) A dead port: nothing listens once the fixture closed, so the
-  // dial refuses with the coded "connect-failed". A channel id that
+  // dial refuses with ForwardConnectFailedError. A channel id that
   // is already attached on the connection refuses "channel-taken".
   const dead = await startLoopbackServer(() => {});
   const deadPort = dead.port;
   await dead.close();
   await assert.rejects(
     () => openChannel(toListener, forward, deadPort),
-    /connect-failed/,
+    (error) => isForwardConnectFailedError(error) && error.port === deadPort,
   );
   const taken = await openChannel(toListener, forward, echo.port);
   await assert.rejects(
@@ -467,6 +474,22 @@ it("engine: a local dial round-trips through the whole chain, a duplicate start 
   assert.equal(dup.localPort, started.localPort);
   assert.equal(engine.listForwards().length, 1);
   assert.deepEqual(engine.listForwards()[0]?.worktree, fromWorktree);
+  // A local port already bound refuses with node's code, which the
+  // window's row words (usePortForwards' describeForwardError).
+  await assert.rejects(
+    engine.startForward({
+      deviceId: LISTENER,
+      remotePort: 1,
+      localPort: started.localPort,
+    }),
+    (error) => {
+      // As it reaches the window: encoded and decoded as a call failure.
+      const crossed = Schema.decodeUnknownSync(CallFailureSchema)(
+        Schema.encodeUnknownSync(CallFailureSchema)(callFailureOf(error)),
+      );
+      return isRemoteCallError(crossed) && crossed.code === "EADDRINUSE";
+    },
+  );
   // The start and the claim are one burst: one signal, 150 ms after
   // the start. One after it is a burst of its own.
   await clock.settle();

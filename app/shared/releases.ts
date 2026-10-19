@@ -3,6 +3,7 @@
 // copy to keep in step. Pure, over an injected fetch, so the desktop
 // binding (main, node's fetch) and the web one (the page's) serve the
 // same answer, and a check can drive it with a stub.
+import { GitHubRateLimitedError } from "@shigomori/contracts/errors";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { APP_REPO } from "@shigomori/engine/flavor";
@@ -17,11 +18,6 @@ import type { Release } from "@shigomori/contracts/schemas";
 export const RELEASES_PAGE_URL = `https://github.com/${APP_REPO}/releases`;
 
 const decodeReleaseList = Schema.decodeUnknownResult(ReleaseList);
-
-// The refusal for the hourly limit. It reaches the renderer as a
-// message (an untyped error crosses as its text), where a retry waits on it.
-export const RATE_LIMITED =
-  "GitHub is rate-limiting requests from this network. Try again later.";
 
 export async function fetchReleases(
   fetchImpl: typeof fetch = fetch,
@@ -43,7 +39,7 @@ export async function fetchReleases(
       response.headers.get("x-ratelimit-remaining") ?? undefined,
     )
   ) {
-    throw new Error(RATE_LIMITED);
+    throw new GitHubRateLimitedError();
   }
   if (!response.ok) {
     throw new Error(`GitHub answered HTTP ${response.status}.`);

@@ -5,11 +5,18 @@
 //     draft's own edit,
 //   - its carry-over list keeps the draft's add, removal and mode
 //     change and the entries added or removed elsewhere, a removal
-//     elsewhere winning over the draft's mode change.
+//     elsewhere winning over the draft's mode change,
+//   - after a Save, only what it carried advances, so a form over a
+//     config stored in another shape than its own (a padded branch) reads
+//     saved, and a change made elsewhere meanwhile stays.
 //
 // Run: pnpm test configure-draft.
 import assert from "node:assert/strict";
-import { rebaseConfigureDraft } from "@shigomori/ui/lib/configureDraft.ts";
+import {
+  fromConfig,
+  rebaseConfigureDraft,
+  snapshotAfterSave,
+} from "@shigomori/ui/lib/configureDraft.ts";
 import type { ConfigureFormState } from "@shigomori/ui/views/configure/ConfigureFormView.tsx";
 import { it } from "vitest";
 
@@ -60,4 +67,21 @@ it("merges carry-over per path, the draft's changes over the new list", () => {
     { path: "fixtures", mode: "copy" },
     { path: "notes", mode: "copy" },
   ]);
+});
+
+it("advances only what a Save carried", () => {
+  // Stored padded, which the form's save trims.
+  const stored = { defaultBranch: " main " };
+  const before = fromConfig(stored, "main");
+  const form = { ...before, setup: "pnpm install" };
+  assert.deepEqual(
+    snapshotAfterSave(stored, "main", form, before, before),
+    form,
+  );
+  // The terminal set the teardown while the Save was out.
+  const moved = { ...before, teardown: "make clean" };
+  assert.deepEqual(snapshotAfterSave(stored, "main", form, before, moved), {
+    ...form,
+    teardown: "make clean",
+  });
 });

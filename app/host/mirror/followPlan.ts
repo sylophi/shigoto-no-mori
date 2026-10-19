@@ -37,6 +37,10 @@
 // divergence, the apply) works on one name per side.
 import { incomingRef } from "@shigomori/engine/Bundle";
 import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
+import type {
+  GitApplyRefusal,
+  MirrorApplyGitStateResult,
+} from "@shigomori/contracts/modules/mirror";
 import {
   mirrorBranchFor,
   originalBranchOf,
@@ -45,7 +49,6 @@ import {
   type GitHead,
   type GitState,
   type GitStateCore,
-  operationInRefusal,
   sameHead,
 } from "./gitState";
 
@@ -91,36 +94,42 @@ export const MIRROR_NAMES: BranchNames = {
   toPeer: rename(mirrorBranchFor),
 };
 
-// The apply's refusal when the side being written moved since it was
-// read. Never shown: the follower looks again at once.
-export const CHANGED_LOCALLY = "changed-locally";
-
 export type Side = "here" | "there";
 
 function whereIs(side: Side): string {
   return side === "here" ? "here" : "on the other device";
 }
 
+// The device named from where the status shows: "this device" is the
+// side that refused when it is here, the other one when it is there.
+function refuser(side: Side): string {
+  return side === "here" ? "this device" : "the other device";
+}
+
+function other(side: Side): string {
+  return side === "here" ? "the other device" : "this device";
+}
+
 export function operationDetail(operation: string, side: Side): string {
   return `a ${operation} is in progress ${whereIs(side)}. Git follows again once it finishes`;
 }
 
-// An apply's refusal as the runner's status shows it. A refusal made by
-// the peer's apply speaks from the peer ("on this device"), so its
-// devices trade places here. The bare tokens become sentences.
-export function describeRefusal(reason: string, side: Side): string {
-  const operation = operationInRefusal(reason);
-  if (operation !== null) return operationDetail(operation, side);
-  if (reason === "missing-objects") {
-    return side === "here"
-      ? "this device is missing commits the other device's state needs"
-      : "the other device is missing commits this device's state needs";
+// An apply's refusal as the runner's status shows it, `side` being the
+// device whose apply refused.
+function describeRefusal(
+  refusal: Exclude<GitApplyRefusal, { kind: "changed-locally" }>,
+  side: Side,
+): string {
+  switch (refusal.kind) {
+    case "operation-in-progress":
+      return operationDetail(refusal.operation, side);
+    case "missing-objects":
+      return `${refuser(side)} is missing commits ${other(side)}'s state needs`;
+    case "branch-checked-out":
+      return `branch ${refusal.branch} is checked out at ${refusal.path} on ${refuser(side)}`;
+    case "branch-ahead":
+      return `branch ${refusal.branch} on ${refuser(side)} has commits ${other(side)} does not`;
   }
-  if (side === "here") return reason;
-  if (reason === "refused") return "the other device refused the change";
-  return reason.replace(/this device|the other device/g, (match) =>
-    match === "this device" ? "the other device" : "this device",
-  );
 }
 
 export function sameState(a: GitStateCore, b: GitStateCore): boolean {
@@ -133,7 +142,24 @@ export function core(state: GitState): GitStateCore {
   return { head: state.head, tip: state.tip, indexTree: state.indexTree };
 }
 
-export type Outcome = { applied: true } | { applied: false; reason: string };
+// What a transfer did: applied, met a side that moved since it was read
+// (the follower looks again at once), or refused for a reason the
+// status shows.
+export type Outcome =
+  | { kind: "applied" }
+  | { kind: "moved" }
+  | { kind: "refused"; reason: string };
+
+// An apply's result as the transfer's outcome, `side` being the device
+// that applied.
+export function outcomeOf(
+  result: MirrorApplyGitStateResult,
+  side: Side,
+): Outcome {
+  if (result.applied) return { kind: "applied" };
+  if (result.refusal.kind === "changed-locally") return { kind: "moved" };
+  return { kind: "refused", reason: describeRefusal(result.refusal, side) };
+}
 
 // The refs a bundle carries so the receiving side can land a state, and
 // the landing refs to sweep after the apply: the branch when the tip is
@@ -150,7 +176,7 @@ export function refsToCarry(
   const sweep: string[] = [];
   if (tipMissing) {
     if (head.kind !== "branch") {
-      return { applied: false, reason: detachedReason };
+      return { kind: "refused", reason: detachedReason };
     }
     wantRefs.push(`refs/heads/${head.branch}`);
     sweep.push(incomingRef(head.branch));

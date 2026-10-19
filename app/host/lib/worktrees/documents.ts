@@ -32,15 +32,14 @@ export class RunningWorkError extends Schema.TaggedError<RunningWorkError>()(
   }
 }
 
-// The transplant's teardown refused: scripts run in the worktree.
-// "scripts-running" is a marker the transplant and the renderer match
-// on, not prose.
+// The transplant's teardown refused: scripts run in the worktree. Said
+// as the reason a kept source gives, mid-sentence.
 export class ScriptsRunningError extends Schema.TaggedError<ScriptsRunningError>()(
   "ScriptsRunningError",
   { scripts: Schema.Natural },
 ) {
   override get message(): string {
-    return `scripts-running: ${this.scripts} script(s) are running in this worktree`;
+    return `${pluralize(this.scripts, "script")} ${plural(this.scripts, "is", "are")} still running there.`;
   }
 }
 

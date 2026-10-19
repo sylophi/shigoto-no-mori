@@ -421,11 +421,7 @@ function buildEntry(
     // A live direct session is the whole data plane, and it outlives a
     // hub blip on purpose, so it reads connected first, before the
     // socket phase is even consulted.
-    status = {
-      phase: "connected",
-      remoteDeviceId: info.deviceId,
-      remoteAppVersion: version,
-    };
+    status = { phase: "connected" };
     api = apiFor(info.deviceId);
   } else if (current.socket.phase === "blocked") {
     // A blocked socket is a verdict on THIS device, not on the peers,

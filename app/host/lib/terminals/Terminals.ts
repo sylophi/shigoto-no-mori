@@ -51,6 +51,15 @@ import { type History, makeHistory } from "./history";
 
 type Size = { readonly cols: number; readonly rows: number };
 
+// `words` random 32-bit words as hex.
+const mintHex = (words: number) =>
+  Effect.map(
+    Effect.all(
+      Array.from({ length: words }, () => Random.nextIntBetween(0, 0xffffffff)),
+    ),
+    (parts) => parts.map((part) => part.toString(16).padStart(8, "0")).join(""),
+  );
+
 // Where a terminal's shell starts and what it is given.
 export type Start = {
   // The worktree's folder. A device's terminal has none of its own.
@@ -178,6 +187,9 @@ interface Session {
   readonly history: History;
   readonly events: PubSub.PubSub<TerminalEvent>;
   readonly scope: Scope.Closeable;
+  // This shell's, minted as it starts: a client's seq means something
+  // only in the incarnation it read.
+  readonly incarnation: string;
   // Opened by output the store doesn't have yet, the last at
   // `changedAt` (elapsedMillis).
   readonly changed: Latch.Latch;
@@ -221,7 +233,7 @@ export class Terminals extends Context.Service<
     // exit.
     readonly attach: (
       terminalId: string,
-      after?: number,
+      after?: { readonly incarnation: string; readonly seq: number },
     ) => Stream.Stream<TerminalEvent, UnknownTerminalError>;
     readonly write: (
       terminalId: string,
@@ -501,17 +513,13 @@ const make = <R, E>(options: {
           Effect.provideService(FileSystem.FileSystem, fs),
           Effect.provideService(Lifecycle.Lifecycle, lifecycle),
         );
-        // A restored history is a chunk of its own, numbered past any
-        // chunk the terminal sent before the restart (more may have gone
-        // out after its last save), so a client that saw it then starts
-        // over. Chunks count far slower than milliseconds.
-        const first =
-          restored === undefined
-            ? 0
-            : Math.max(restored.seq + 1, yield* Clock.currentTimeMillis);
+        // A restored history is a chunk of its own in a new incarnation,
+        // so a client that saw the shell before the restart starts over.
+        const first = restored === undefined ? 0 : restored.seq + 1;
         const session: Session = {
           terminal,
           pty,
+          incarnation: yield* mintHex(4),
           history: makeHistory(
             first,
             // A row an earlier build saved holds the history as it was.
@@ -575,13 +583,7 @@ const make = <R, E>(options: {
       }).pipe(Effect.onError(() => Scope.close(scope, Exit.void)));
     });
 
-    const mintId = Effect.gen(function* () {
-      const parts = yield* Effect.all([
-        Random.nextIntBetween(0, 0xffffffff),
-        Random.nextIntBetween(0, 0xffffffff),
-      ]);
-      return parts.map((part) => part.toString(16).padStart(8, "0")).join("");
-    });
+    const mintId = mintHex(2);
 
     const open = Effect.fn("Terminals.open")(function* (input: {
       readonly owner: TerminalOwner;
@@ -661,9 +663,13 @@ const make = <R, E>(options: {
             const live = yield* PubSub.subscribe(session.events);
             // A chunk sent between the subscription and this read is in
             // both, and the seq tells which.
-            const past = session.history.since(after);
+            const past = session.history.since(
+              after?.incarnation === session.incarnation
+                ? after.seq
+                : undefined,
+            );
             const head: TerminalEvent[] = [
-              { kind: "history", ...past },
+              { kind: "history", incarnation: session.incarnation, ...past },
               { kind: "size", ...session.size },
             ];
             if (Option.isSome(session.exited)) {

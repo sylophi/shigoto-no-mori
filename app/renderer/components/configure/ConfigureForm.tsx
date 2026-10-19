@@ -10,8 +10,6 @@ import { useShigomoriPatch } from "@/hooks/config/useShigomoriPatch";
 import { notifyError } from "@/lib/toast";
 import {
   type CarryOverEntry,
-  PROJECT_CONFIG_DEFAULTS,
-  type ProjectSettingsPatch,
   type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
 import { CarryOverSection } from "./CarryOverSection";
@@ -23,80 +21,13 @@ import {
   ConfigureFormView,
 } from "@shigomori/ui/views/configure/ConfigureFormView.tsx";
 import { useApi } from "@/lib/runtime/pageApi";
-import { rebaseConfigureDraft } from "@shigomori/ui/lib/configureDraft.ts";
-
-function fromConfig(
-  config: ShigomoriConfig | null,
-  resolvedDefaultBranch: string,
-): FormState {
-  return {
-    defaultBranch: config?.defaultBranch ?? resolvedDefaultBranch,
-    setup: config?.scripts?.setup ?? "",
-    teardown: config?.scripts?.teardown ?? "",
-    launchers: config?.launchers ?? PROJECT_CONFIG_DEFAULTS.launchers,
-    carryOver: config?.carryOver ?? PROJECT_CONFIG_DEFAULTS.carryOver,
-    useWorktreeInclude:
-      config?.useWorktreeInclude ?? PROJECT_CONFIG_DEFAULTS.useWorktreeInclude,
-    showPrimaryInInbox:
-      config?.showPrimaryInInbox ?? PROJECT_CONFIG_DEFAULTS.showPrimaryInInbox,
-  };
-}
-
-const unlessDefault = <T,>(value: T, fallback: T): T | undefined =>
-  value === fallback ? undefined : value;
-
-function toConfig(
-  original: ShigomoriConfig | null,
-  state: FormState,
-): ShigomoriConfig {
-  const scripts: { setup?: string; teardown?: string } = {};
-  if (state.setup.trim()) scripts.setup = state.setup;
-  if (state.teardown.trim()) scripts.teardown = state.teardown;
-
-  const validLaunchers = state.launchers.filter(
-    (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
-  );
-
-  return {
-    ...original,
-    defaultBranch: state.defaultBranch.trim(),
-    scripts: Object.keys(scripts).length > 0 ? scripts : undefined,
-    launchers: validLaunchers.length > 0 ? validLaunchers : undefined,
-    carryOver: state.carryOver.length > 0 ? state.carryOver : undefined,
-    // Defaults are stored by omission.
-    useWorktreeInclude: unlessDefault(
-      state.useWorktreeInclude,
-      PROJECT_CONFIG_DEFAULTS.useWorktreeInclude,
-    ),
-    showPrimaryInInbox: unlessDefault(
-      state.showPrimaryInInbox,
-      PROJECT_CONFIG_DEFAULTS.showPrimaryInInbox,
-    ),
-  };
-}
-
-// The settings this form edits that differ between two of its documents,
-// each as `after` has it, or null for one it left out: what a save
-// changes, and nothing it didn't touch.
-function patchOf(
-  before: ShigomoriConfig,
-  after: ShigomoriConfig,
-): ProjectSettingsPatch {
-  const fields = {
-    defaultBranch: [before.defaultBranch, after.defaultBranch],
-    "scripts.setup": [before.scripts?.setup, after.scripts?.setup],
-    "scripts.teardown": [before.scripts?.teardown, after.scripts?.teardown],
-    launchers: [before.launchers, after.launchers],
-    carryOver: [before.carryOver, after.carryOver],
-    useWorktreeInclude: [before.useWorktreeInclude, after.useWorktreeInclude],
-    showPrimaryInInbox: [before.showPrimaryInInbox, after.showPrimaryInInbox],
-  } as const;
-  return Object.fromEntries(
-    Object.entries(fields)
-      .filter(([, [was, now]]) => JSON.stringify(was) !== JSON.stringify(now))
-      .map(([key, [, now]]) => [key, now ?? null]),
-  ) as ProjectSettingsPatch;
-}
+import {
+  fromConfig,
+  patchOf,
+  rebaseConfigureDraft,
+  snapshotAfterSave,
+  toConfig,
+} from "@shigomori/ui/lib/configureDraft.ts";
 
 interface ConfigureFormProps {
   projectId: string;
@@ -142,14 +73,11 @@ export function ConfigureForm({
       projectId,
       patch: patchOf(toConfig(initialConfig, saved), next),
     });
-    // Only the fields this Save carried advance, as persisted, not the
-    // raw form: toConfig drops half-filled launcher rows and normalizes
-    // fields, and snapshotting the raw form would mark those leftovers
-    // clean, so the post-save refetch would reseed them away. A change
-    // made elsewhere while the Save was out stays in the snapshot.
     setSavedSnapshot((prev) =>
-      rebaseConfigureDraft(
-        fromConfig(next, resolvedDefaultBranch),
+      snapshotAfterSave(
+        initialConfig,
+        resolvedDefaultBranch,
+        form,
         saved,
         prev,
       ),

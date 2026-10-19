@@ -7,7 +7,6 @@ import type {
   SyncTeardownSourceResult,
 } from "@shigomori/contracts/modules/sync";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
-import { keptSourceReason } from "@/hooks/remote/useMoveWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -99,8 +98,7 @@ export function TransplantFinish({
   // pick another fate.
   const kept =
     teardown.data !== undefined && !teardown.data.sourceRemoved
-      ? (keptSourceReason(teardown.data.sourceError) ??
-        "its teardown was refused.")
+      ? (teardown.data.sourceError ?? "its teardown was refused.")
       : null;
   const branch = result.worktree.branch;
   // The landed worktree's villager, when it has one, says the news.
