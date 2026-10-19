@@ -41,7 +41,7 @@ export const makeStash = ({
   readonly operation: OperationArea;
 }) =>
   Effect.sync(() => {
-    const { run, runLenient, onIndex } = running;
+    const { run, succeeds, onIndex } = running;
     const { conflictedPaths } = operation;
 
     const readStashes = (worktree: string) =>
@@ -95,40 +95,56 @@ export const makeStash = ({
     });
 
     // Untracked files go too, so the worktree comes back clean, which is
-    // what a stash is for here. Git saves the stash before it cleans the
-    // worktree (`clean`, then `reset --hard`), so another program's git
-    // holding index.lock for a moment (an editor's or a prompt's `git
-    // status`) can refuse the reset with the stash saved. Refused before
-    // saving, it changed nothing and is asked again. Refused after, its
-    // cleanup is finished here, the reset waiting the lock out as every
-    // one-step write does; never asked again, which would save it twice.
+    // what a stash is for here. Git saves the stash, cleans the untracked
+    // files out and then resets, so another program's git holding
+    // index.lock for a moment (an editor's or a prompt's `git status`)
+    // can refuse the reset with the stash saved. Refused with refs/stash
+    // where it was, nothing was saved and it is asked again. Refused with
+    // a new stash that is this worktree's as it stands (made on its HEAD,
+    // its tracked files as the stash holds them), its reset is finished
+    // here, that check made again before each ask, so the reset discards
+    // only what the stash has. Never asked again after that, which would
+    // save it twice.
     const stashChanges = Effect.fn("Git.stashChanges")(function* (
       worktree: string,
       message: string | undefined,
     ) {
-      const tip = runLenient(worktree, [
-        "rev-parse",
-        "-q",
-        "--verify",
-        "refs/stash",
-      ]).pipe(Effect.map((out) => out.trim()));
-      const cleanup = Effect.gen(function* () {
-        yield* run(worktree, ["clean", "--force", "--quiet", "-d", ":/"]);
-        yield* run(worktree, [
-          "reset",
-          "--hard",
-          "-q",
-          "--no-recurse-submodules",
-        ]);
-      }).pipe(
-        Effect.mapError(
-          () =>
-            new GitRefusedError({
-              reason:
-                "It was saved to the stash list, but another program's git held the worktree's index, so the changes are also still here. Discard all changes, in the changes list's ⋯ menu, finishes it.",
-            }),
-        ),
-      );
+      const tip = run(worktree, ["rev-parse", "-q", "--verify", "refs/stash"], {
+        okExitCodes: [1],
+      }).pipe(Effect.map((out) => out.trim()));
+      const madeOnHead = (stash: string) =>
+        Effect.all([
+          run(worktree, ["rev-parse", `${stash}^1`]),
+          run(worktree, ["rev-parse", "HEAD"]),
+        ]).pipe(Effect.map(([parent, head]) => parent.trim() === head.trim()));
+      const unsure = new GitRefusedError({
+        reason:
+          "Another program's git held the worktree's index mid-stash, so the changes are still here, and the newest stash may hold a copy of them.",
+      });
+      const finish = (stash: string) =>
+        waitingForIndex(
+          Effect.gen(function* () {
+            if (
+              !(yield* succeeds(worktree, ["diff", "--quiet", stash, "--"]))
+            ) {
+              return yield* unsure;
+            }
+            yield* run(
+              worktree,
+              ["reset", "--hard", "-q", "--no-recurse-submodules"],
+              { once: true },
+            );
+          }),
+        ).pipe(
+          Effect.catchIf(indexHeld, () =>
+            Effect.fail(
+              new GitRefusedError({
+                reason:
+                  "It was saved to the stash list, but another program's git held the worktree's index, so the changes are also still here. Discard all changes, in the changes list's ⋯ menu, finishes it.",
+              }),
+            ),
+          ),
+        );
       const attempt = Effect.gen(function* () {
         const before = yield* tip;
         yield* run(worktree, [
@@ -139,10 +155,12 @@ export const makeStash = ({
         ]).pipe(
           Effect.catch((error) =>
             Effect.gen(function* () {
-              if (!indexHeld(error) || (yield* tip) === before) {
+              if (!indexHeld(error)) return yield* Effect.fail(error);
+              const after = yield* tip;
+              if (after === before || !(yield* madeOnHead(after))) {
                 return yield* Effect.fail(error);
               }
-              yield* cleanup;
+              yield* finish(after);
             }),
           ),
         );

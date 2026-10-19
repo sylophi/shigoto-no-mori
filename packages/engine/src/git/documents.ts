@@ -163,6 +163,9 @@ export type RunOptions = {
   // The output cap, over DEFAULT_MAX_OUTPUT. Only the patch reads
   // raise it.
   readonly maxOutputBytes?: number | undefined;
+  // A write asked once, not again on a held index.lock, for a caller
+  // that checks before each ask (a stash's finish).
+  readonly once?: boolean | undefined;
 };
 
 // A commit from the changes page: the picks, and the message. Two `-m`

@@ -222,17 +222,51 @@ it("a stash refused before it saves is asked again, and saved once", async () =>
   write(repo, "a.txt", "changed\n");
   const lock = join(repo, ".git", "index.lock");
   writeFileSync(lock, "");
-  let ticks = 0;
-  const outcome = await stashOnTheClock(repo, () => {
-    ticks += 1;
-    if (ticks === 2 && existsSync(lock)) rmSync(lock);
-  });
+  const outcome = await withGit((g) =>
+    Effect.gen(function* () {
+      const stashing = yield* Effect.forkChild(
+        Effect.exit(g.stashChanges(repo, "raced")),
+      );
+      // The clock stands still while the first push is refused (well
+      // inside half a second); then the other git lets go.
+      yield* Effect.promise(() => new Promise((done) => setTimeout(done, 500)));
+      assert.equal(stashing.pollUnsafe(), undefined, "waiting to ask again");
+      rmSync(lock);
+      while (stashing.pollUnsafe() === undefined) {
+        yield* TestClock.adjust("50 millis");
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      return yield* Fiber.join(stashing);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
   assert.ok(Exit.isSuccess(outcome));
   assert.equal(
     git(repo, "stash", "list", "--format=%gs").trim(),
     "On main: raced",
   );
   assert.equal(git(repo, "status", "--porcelain").trim(), "");
+});
+
+it("a stash whose worktree changes before its reset is finished is left alone, and says so", async () => {
+  const { repo, lock, stashes } = withStashRace();
+  // A write between the save and the reset, which the stash doesn't hold.
+  const hook = join(repo, ".git", "hooks", "reference-transaction");
+  writeFileSync(
+    hook,
+    `#!/bin/sh\n[ "$1" = committed ] || exit 0\ngrep -q ' refs/stash$' || exit 0\ntouch '${lock}'\necho later > '${join(repo, "b.txt")}'\n`,
+  );
+  // Held throughout: the check comes before any ask of the reset.
+  const outcome = await stashOnTheClock(repo, () => {});
+  rmSync(lock);
+  assert.ok(Exit.isFailure(outcome));
+  const error = Option.getOrThrow(Exit.findErrorOption(outcome));
+  assert.ok(error instanceof GitRefusedError);
+  assert.match(error.reason, /the newest stash may hold a copy/);
+  assert.deepEqual(stashes(), ["On main: raced"], "never saved twice");
+  assert.equal(readFileSync(join(repo, "b.txt"), "utf8"), "later\n");
+  assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "changed\n");
 });
 
 it("a write held by the user's hook leaves the probes their slots", async () => {

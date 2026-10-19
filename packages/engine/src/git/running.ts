@@ -196,7 +196,7 @@ export const makeRunning = Effect.gen(function* () {
           : identity,
         SLOTTED_SUBCOMMANDS.has(slotKey) ? slots.withPermit : identity,
       );
-      return yield* WAITS_FOR_INDEX.has(subcommand)
+      return yield* WAITS_FOR_INDEX.has(subcommand) && options.once !== true
         ? waitingForIndex(once)
         : once;
     });
