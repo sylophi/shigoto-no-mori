@@ -10,10 +10,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { shellQuote as quoted } from "@shigomori/contracts/lifecycleScripts";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -65,23 +64,29 @@ process.env.SHIGOMORI_DATA_DIR = engineDataDir;
 // at its own.
 process.env.GH_CONFIG_DIR = join(engineDataDir, "..", "gh-config");
 // The shells the host opens keep their history in the run, not in the
-// developer's ~/.zsh_history, which a terminal a proof types into would
-// add to: macOS's /etc/zshrc sets HISTFILE from ZDOTDIR, so this ZDOTDIR
-// has startup files that read the developer's own, then name the run's.
-const userZdotdir = process.env.ZDOTDIR ?? homedir();
+// developer's, which a terminal a proof types into would add to. zsh's
+// is named from ZDOTDIR (macOS's /etc/zshrc), so the shells start in a
+// ZDOTDIR of the run's whose startup files read the developer's own under
+// the developer's ZDOTDIR, wherever their .zshenv moves it, and then name
+// the run's history; bash's is HISTFILE, which it takes from here.
 const zdotdir = join(engineDataDir, "..", "zdotdir");
 mkdirSync(zdotdir, { recursive: true });
-for (const file of [".zshenv", ".zprofile", ".zshrc", ".zlogin"]) {
-  const own = join(userZdotdir, file);
-  writeFileSync(
-    join(zdotdir, file),
-    `[ -f ${quoted(own)} ] && . ${quoted(own)}\n` +
-      (file === ".zshrc"
-        ? `HISTFILE=${quoted(join(zdotdir, ".zsh_history"))}\n`
-        : ""),
-  );
+const ownFile = (file: string) =>
+  `ZDOTDIR=$SM_USER_ZDOTDIR\n[ -f "$ZDOTDIR/${file}" ] && . "$ZDOTDIR/${file}"\nZDOTDIR=$SM_RUN_ZDOTDIR\n`;
+writeFileSync(
+  join(zdotdir, ".zshenv"),
+  'SM_RUN_ZDOTDIR=$ZDOTDIR\nZDOTDIR=${SM_USER_ZDOTDIR:-$HOME}\n[ -f "$ZDOTDIR/.zshenv" ] && . "$ZDOTDIR/.zshenv"\nSM_USER_ZDOTDIR=$ZDOTDIR\nZDOTDIR=$SM_RUN_ZDOTDIR\n',
+);
+for (const file of [".zprofile", ".zlogin", ".zlogout"]) {
+  writeFileSync(join(zdotdir, file), ownFile(file));
 }
+writeFileSync(
+  join(zdotdir, ".zshrc"),
+  `${ownFile(".zshrc")}HISTFILE=$SM_RUN_ZDOTDIR/.zsh_history\n`,
+);
+process.env.SM_USER_ZDOTDIR = process.env.ZDOTDIR ?? "";
 process.env.ZDOTDIR = zdotdir;
+process.env.HISTFILE = join(zdotdir, ".bash_history");
 const engine = Engine.layer({
   flavor: "dev",
   macfs: macfs(),

@@ -30,7 +30,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -448,14 +448,23 @@ it("a peer's data-folder move is refused over a busy terminal", async () => {
     await terminals((service) => service.close(terminalId));
   }
   // What was typed is in the run's history, not the developer's
-  // (hostRuntime.mts's ZDOTDIR).
-  const history = join(process.env["ZDOTDIR"] ?? "", ".zsh_history");
-  await waitFor(
-    () =>
-      existsSync(history) &&
-      readFileSync(history, "utf8").includes("job.running"),
-    "the shell's history in the run",
-  );
+  // (hostRuntime.mts), for the shells that keep one: zsh's, bash's.
+  const histories = [
+    join(process.env["ZDOTDIR"] ?? "", ".zsh_history"),
+    process.env["HISTFILE"] ?? "",
+  ];
+  const shell = basename(process.env["SHELL"] ?? "");
+  if (shell === "zsh" || shell === "bash") {
+    await waitFor(
+      () =>
+        histories.some(
+          (history) =>
+            existsSync(history) &&
+            readFileSync(history, "utf8").includes("job.running"),
+        ),
+      "the shell's history in the run",
+    );
+  }
 });
 
 it("a tombstone interrupted or dead leaves no mark behind", async () => {
