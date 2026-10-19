@@ -17,9 +17,15 @@ import { nukeShell } from "./nuke";
 
 export const headless = app.commandLine.hasSwitch(NUKE_SWITCH);
 
-// The start that found the marker: what is left once its files are gone.
-export function finishHeadlessNuke(): void {
-  let left = false;
+// The start that found the marker: what is left once its files are
+// gone, and what of them it couldn't delete. The command deletes the
+// app's own folder after it, the marker with it.
+export function finishHeadlessNuke(
+  files: readonly { readonly path: string; readonly why: string }[],
+): void {
+  for (const { path, why } of files)
+    console.log(`[nuke] left: ${path}: ${why}`);
+  let left = files.length > 0;
   if (__SM_SIGNED_MAC_BUILD__) {
     const { service, account } = safeStorageItemNames(app.getName());
     try {

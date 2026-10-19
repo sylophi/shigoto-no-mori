@@ -11,6 +11,7 @@
 // Run: pnpm test nuke.
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -276,7 +277,7 @@ it("deletes at the next start what the marker names and all of userData, the loc
 
   // A start that died after the data dir went: the next one finishes.
   rmSync(data, { recursive: true, force: true });
-  assert.ok(finishPendingNuke(userData));
+  assert.deepEqual(finishPendingNuke(userData), { left: [] });
   for (const path of [data, logs, pointer]) assert.ok(!existsSync(path), path);
   assert.deepEqual(readdirSync(userData).toSorted(), [
     "SingletonLock",
@@ -288,7 +289,7 @@ it("deletes at the next start what the marker names and all of userData, the loc
 
   // And a start with no marker deletes nothing.
   writeFileSync(join(userData, "clientConfig.json"), "{}");
-  assert.equal(finishPendingNuke(userData), false);
+  assert.equal(finishPendingNuke(userData), null);
   assert.ok(existsSync(join(userData, "clientConfig.json")));
 
   // Nor one whose marker can't be read, which stays: half a nuke would
@@ -296,9 +297,37 @@ it("deletes at the next start what the marker names and all of userData, the loc
   mkdirSync(data, { recursive: true });
   writeFileSync(join(data, "store.db"), "x");
   writeFileSync(join(userData, NUKE_MARKER), '{"paths": ["');
-  assert.equal(finishPendingNuke(userData), false);
+  assert.equal(finishPendingNuke(userData), null);
   assert.ok(existsSync(join(data, "store.db")));
   assert.ok(existsSync(join(userData, "clientConfig.json")));
   assert.ok(existsSync(join(userData, NUKE_MARKER)));
   assert.ok(!existsSync(join(userData, `${NUKE_MARKER}.tmp`)));
+});
+
+it("deletes all it can past a path it can't, says which, and keeps the marker for the next start", () => {
+  const root = join(sandbox, "stuck");
+  const userData = join(root, "userData");
+  const data = join(root, "data");
+  const held = join(root, "held");
+  for (const dir of [userData, data, held]) mkdirSync(dir, { recursive: true });
+  writeFileSync(join(userData, "account.json"), "x");
+  writeFileSync(join(data, "store.db"), "x");
+  writeFileSync(join(held, "file"), "x");
+  writeNukeMarker(userData, [join(held, "file"), data]);
+  // A folder its file can't leave (a worktree's read-only directory).
+  chmodSync(held, 0o500);
+  try {
+    const finished = finishPendingNuke(userData);
+    assert.equal(finished?.left.length, 1);
+    assert.equal(finished?.left[0]?.path, join(held, "file"));
+    assert.match(finished?.left[0]?.why ?? "", /permission denied|EACCES/i);
+    assert.ok(!existsSync(data), "stopped at the path it couldn't delete");
+    assert.ok(!existsSync(join(userData, "account.json")));
+    assert.ok(existsSync(join(userData, NUKE_MARKER)));
+  } finally {
+    chmodSync(held, 0o700);
+  }
+  assert.deepEqual(finishPendingNuke(userData), { left: [] });
+  assert.ok(!existsSync(join(held, "file")));
+  assert.ok(!existsSync(join(userData, NUKE_MARKER)));
 });

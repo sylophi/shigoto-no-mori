@@ -17,6 +17,7 @@ import {
 import { join } from "node:path";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DEV_PROFILES_DIR } from "@shared/packaging/appName.mts";
 
 export const NUKE_MARKER = "nuke.pending";
@@ -47,21 +48,33 @@ export function writeNukeMarker(
   renameSync(staged, marker);
 }
 
-// Whether a marker was found. The lock's own files stay, since this
-// process holds the lock through them, and so do the plain dev
-// instance's profiles, other devices whose userData nests in its own.
-// A marker that can't be read deletes nothing and stays: half a nuke
-// (userData gone, the data dir kept) would be no install at all.
-export function finishPendingNuke(userData: string): boolean {
+// What a start that found a marker couldn't delete, and why; null for
+// no marker. The lock's own files stay, since
+// this process holds the lock through them, and so do the plain dev
+// instance's profiles, other devices whose userData nests in its own. A
+// marker that can't be read deletes nothing and stays: half a nuke
+// (userData gone, the data dir kept) would be no install at all. So does
+// one with something left, for the next start to finish, after
+// deleting all it could.
+export function finishPendingNuke(userData: string): {
+  readonly left: readonly { readonly path: string; readonly why: string }[];
+} | null {
   const marker = join(userData, NUKE_MARKER);
-  if (!existsSync(marker)) return false;
+  if (!existsSync(marker)) return null;
   const decoded = decodeMarker(readFileSync(marker, "utf8"));
   if (Option.isNone(decoded)) {
     console.warn(`[nuke] ${marker} can't be read; nothing deleted`);
-    return false;
+    return null;
   }
-  for (const path of decoded.value.paths)
-    rmSync(path, { recursive: true, force: true });
+  const left: { path: string; why: string }[] = [];
+  const remove = (path: string) => {
+    try {
+      rmSync(path, { recursive: true, force: true });
+    } catch (error) {
+      left.push({ path, why: errorMessageOf(error) });
+    }
+  };
+  for (const path of decoded.value.paths) remove(path);
   for (const entry of readdirSync(userData)) {
     if (
       entry === NUKE_MARKER ||
@@ -70,8 +83,8 @@ export function finishPendingNuke(userData: string): boolean {
     ) {
       continue;
     }
-    rmSync(join(userData, entry), { recursive: true, force: true });
+    remove(join(userData, entry));
   }
-  rmSync(marker, { force: true });
-  return true;
+  if (left.length === 0) rmSync(marker, { force: true });
+  return { left };
 }

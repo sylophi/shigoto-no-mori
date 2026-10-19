@@ -133,8 +133,29 @@ function labRunning(): string[] {
   }
 }
 
-// The process listening on a loopback port: a relaunched app's main one,
-// by its debugging port.
+// A Quit from the menu, to every lab app running. Bounded: a modal the
+// app shows holds the Apple event's answer.
+function quitByBundleId(): void {
+  execFileSync(
+    "osascript",
+    ["-e", `tell application id "${BUNDLE_ID}" to quit`],
+    {
+      timeout: 10_000,
+    },
+  );
+}
+
+// The lab app listening on a loopback port, by its debugging port: a
+// relaunched app's main process, and never a stranger's that took the
+// port.
+function labListenerOn(port: number): number | undefined {
+  const pid = listenerOn(port);
+  return pid !== undefined && labRunning().includes(String(pid))
+    ? pid
+    : undefined;
+}
+
+// The process listening on a loopback port.
 function listenerOn(port: number): number | undefined {
   try {
     const pid = Number(
@@ -472,10 +493,7 @@ async function launch(
     await current.run.browser?.close().catch(() => {});
     // As the menu's Quit does, so the app saves what it keeps across a
     // start.
-    execFileSync("osascript", [
-      "-e",
-      `tell application id "${BUNDLE_ID}" to quit`,
-    ]);
+    quitByBundleId();
     await waitFor(() => current.run.exited, "the lab app to quit", 20_000);
     current = await start();
   };
@@ -513,22 +531,34 @@ async function launch(
       let browser: Browser | null = null;
       const stop = async () => {
         await browser?.close().catch(() => {});
-        relaunched ??= listenerOn(port);
+        // One that comes up after the walk gave up on it is the walk's
+        // too: no lab app ran before the walks (refuseRunningLab).
+        if (relaunched === undefined) {
+          await waitFor(
+            () => (relaunched = labListenerOn(port)) !== undefined,
+            "a late relaunch",
+            30_000,
+          ).catch(() => {});
+        }
         const pid = relaunched;
         if (pid === undefined || !pidAlive(pid)) return;
-        if (labRunning().length === 1) {
-          execFileSync("osascript", [
-            "-e",
-            `tell application id "${BUNDLE_ID}" to quit`,
-          ]);
-        } else {
-          process.kill(pid, "SIGTERM");
+        try {
+          if (labRunning().length === 1) quitByBundleId();
+          else process.kill(pid, "SIGTERM");
+        } catch {
+          // A quit that hung or failed: the kill below.
         }
         await waitFor(
           () => !pidAlive(pid),
           "the relaunched lab app to quit",
           20_000,
-        ).catch(() => process.kill(pid, "SIGKILL"));
+        ).catch(() => {
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch {
+            // Gone meanwhile.
+          }
+        });
       };
       current = { ...current, stop };
       await waitFor(() => current.run.exited, "the lab app to quit", 60_000);
@@ -542,7 +572,7 @@ async function launch(
         "the relaunched app's window",
         90_000,
       );
-      relaunched = listenerOn(port);
+      relaunched = labListenerOn(port);
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
       const page = browser.contexts()[0]?.pages()[0];
       if (page === undefined)

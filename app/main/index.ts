@@ -137,13 +137,21 @@ takeUpdateEndpointOverrides();
 // the running window is what launching the app asked for.
 if (!app.requestSingleInstanceLock()) {
   app.exit(headlessNuke ? NUKE_EXIT.running : 0);
-} else if (
+} else {
   // A nuke's files (main/electron/nuke.ts), before anything opens one:
   // with the lock held, so no other instance is using them.
-  finishPendingNuke(app.getPath("userData")) &&
-  headlessNuke
-) {
-  finishHeadlessNuke();
+  const nuked = finishPendingNuke(app.getPath("userData"));
+  if (nuked !== null && headlessNuke) {
+    finishHeadlessNuke(nuked.left);
+  } else if (nuked !== null && nuked.left.length > 0) {
+    // Run on, it would delete what it makes at the next start, which
+    // finishes the nuke.
+    dialog.showErrorBox(
+      `${names.appName} couldn't finish erasing itself`,
+      `${nuked.left.map((stayed) => `${stayed.path}: ${stayed.why}`).join("\n")}\n\nDelete what's named here, then open the app again.`,
+    );
+    app.exit(1);
+  }
 }
 
 // After the rename above, which names the log folder, and the nuke's

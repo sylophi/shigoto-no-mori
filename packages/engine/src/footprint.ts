@@ -22,7 +22,15 @@ export type Footprint = {
   // the config folder, which goes once empty: it may hold the owner's
   // own files beside the pointer.
   readonly paths: ReadonlyArray<{
-    readonly what: string;
+    readonly id:
+      | "data"
+      | "userData"
+      | "logs"
+      | "config"
+      | "preferences"
+      | "command"
+      | "alias"
+      | "fishHook";
     readonly path: string;
   }>;
   // Kept in a place other flavors share, under this flavor's names.
@@ -42,24 +50,24 @@ export const footprint = (flavor: Flavor, place: FootprintPlace): Footprint => {
     paths: [
       // A pointer can move it: the one the pointer names is the
       // flavor's then, and the nuke reads it from the running build.
-      { what: "the data folder", path: join(place.home, names.dataDir) },
+      { id: "data", path: join(place.home, names.dataDir) },
       {
-        what: "the app's own folder",
+        id: "userData",
         path: join(library, "Application Support", names.userDataDir),
       },
-      { what: "the logs", path: join(library, "Logs", names.appName) },
-      { what: "the config folder", path: config },
+      { id: "logs", path: join(library, "Logs", names.appName) },
+      { id: "config", path: config },
       {
-        what: "the preferences",
+        id: "preferences",
         path: join(library, "Preferences", `${names.bundleId}.plist`),
       },
       {
-        what: "the terminal command",
+        id: "command",
         path: join(place.binHome, names.binaryName),
       },
-      { what: "its alias", path: join(place.binHome, names.alias) },
+      { id: "alias", path: join(place.binHome, names.alias) },
       {
-        what: "the fish hook",
+        id: "fishHook",
         path: join(place.configHome, "fish", "conf.d", `${names.alias}.fish`),
       },
     ],

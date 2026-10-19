@@ -24,6 +24,9 @@ import { note, out } from "../output.ts";
 
 const QUIT_WITHIN_MS = 30_000;
 const GONE_WITHIN_MS = 60_000;
+// A start's live half asks the hub to remove the device, and the
+// account's hub calls carry no deadline of their own.
+const START_WITHIN_MS = 120_000;
 
 // The bundle this command runs from, <bundle>/Contents/Resources/<name>.
 const bundleOf = (executable: string): string | null => {
@@ -113,10 +116,21 @@ export const nuke = Command.make(
             problem: `${names.appName} didn't finish its nuke.`,
           });
         }
-        const code = spawnSync(executable, [`--${NUKE_SWITCH}`], {
+        const started = spawnSync(executable, [`--${NUKE_SWITCH}`], {
           stdio: "inherit",
           env: withoutCdFile(),
-        }).status;
+          timeout: START_WITHIN_MS,
+        });
+        if (
+          started.error !== undefined &&
+          "code" in started.error &&
+          started.error.code === "ETIMEDOUT"
+        ) {
+          return yield* new UsageError({
+            problem: `${names.appName} didn't finish its nuke within ${START_WITHIN_MS / 60_000} minutes. Its log says why; run nuke again.`,
+          });
+        }
+        const code = started.status;
         if (code === NUKE_EXIT.finished) break;
         if (code === NUKE_EXIT.finishedWithLeft) {
           left = true;
@@ -140,18 +154,14 @@ export const nuke = Command.make(
         configHome: paths.configHome,
         binHome: "",
       });
-      for (const { what, path } of place.paths) {
-        if (what === "the config folder") {
+      for (const { id, path } of place.paths) {
+        if (id === "config") {
           // Its pointer went with the app's nuke. Anything else in it is
           // the owner's.
           yield* Effect.try(() => {
             if (readdirSync(path).length === 0) rmdirSync(path);
           }).pipe(Effect.ignore);
-        } else if (
-          what === "the app's own folder" ||
-          what === "the logs" ||
-          what === "the preferences"
-        ) {
+        } else if (id === "userData" || id === "logs" || id === "preferences") {
           rmSync(path, { recursive: true, force: true });
         }
       }

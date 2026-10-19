@@ -2,11 +2,10 @@
 // out of our environment at startup. Everything the app spawns
 // inherits process.env, and a script run passes it on to package
 // scripts, so an override left there would reach every script tree.
-// Only the update check gets them.
-const OVERRIDES = [
-  "SHIGOMORI_UPDATE_FEED_URL",
-  "SHIGOMORI_UPDATE_RELEASES_URL",
-] as const;
+// Only the update check and the relaunch get them.
+import { RELAUNCH_ENV } from "@shigomori/engine/relaunchEnv";
+
+const OVERRIDES = [RELAUNCH_ENV.feedUrl, RELAUNCH_ENV.releasesUrl] as const;
 
 const taken = new Map<string, string>();
 
@@ -24,14 +23,7 @@ export function updateEndpoints(): {
   readonly releasesUrl?: string;
 } {
   return {
-    feedUrl: taken.get("SHIGOMORI_UPDATE_FEED_URL"),
-    releasesUrl: taken.get("SHIGOMORI_UPDATE_RELEASES_URL"),
+    feedUrl: taken.get(RELAUNCH_ENV.feedUrl),
+    releasesUrl: taken.get(RELAUNCH_ENV.releasesUrl),
   };
-}
-
-// The overrides as `open --env` takes them, for the relaunch
-// (electron/relaunch.ts), or a relaunched test build would check the
-// real feeds.
-export function updateEndpointOverrideEnv(): string[] {
-  return [...taken].flatMap(([name, value]) => ["--env", `${name}=${value}`]);
 }
