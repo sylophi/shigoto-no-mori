@@ -327,6 +327,10 @@ export class HandoffFailed extends Schema.TaggedError<HandoffFailed>()(
     reason: Schema.Literals([
       "unpublished",
       "request",
+      "withdraw",
+      "not-taken",
+      "declined",
+      "nothing-staged",
       "install",
       "same-version",
       "timeout",
@@ -346,6 +350,14 @@ export class HandoffFailed extends Schema.TaggedError<HandoffFailed>()(
         return `The app is running but hasn't published its updater state. Wait for it to finish starting (or quit it) and rerun \`${this.binary} update\`.`;
       case "request":
         return `Couldn't write the update request: ${causeText(this.cause)}`;
+      case "withdraw":
+        return `Couldn't take the update request back: ${causeText(this.cause)}`;
+      case "not-taken":
+        return "The app didn't pick up the update request. Quit the app and run the update again.";
+      case "declined":
+        return "The restart was declined in the app, so the update wasn't installed. It stays staged for the next restart.";
+      case "nothing-staged":
+        return "The app found no update newer than itself to install.";
       case "install":
         return `Install failed: ${this.detail}`;
       case "same-version":
@@ -463,6 +475,9 @@ export const RESTART_TIMEOUT = Duration.minutes(2);
 // so. The swap never runs under a live instance.
 export const APP_PUBLISH_TIMEOUT = Duration.seconds(20);
 export const RESTART_HINT_AFTER = 15_000;
+// How long a running app gets to take an install request (it looks every
+// second) before the request is withdrawn.
+export const CLAIM_WITHIN = 10_000;
 
 // A wait of `limit` in polls, so it counts the time the machine is
 // awake and running them: a sleep or a clock step spends none of it, as

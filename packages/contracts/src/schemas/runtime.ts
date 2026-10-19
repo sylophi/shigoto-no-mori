@@ -72,16 +72,32 @@ const UpdaterStatusSchema = Schema.Struct({
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
   appVersion: Schema.String,
   state: UpdaterStateSchema,
+  // What became of the last install request the app took.
+  handoff: Schema.optional(
+    Schema.Struct({
+      id: Schema.String,
+      outcome: Schema.Literals([
+        "claimed",
+        "declined",
+        "nothing-staged",
+        "failed",
+      ]),
+      message: Schema.optional(Schema.String),
+    }),
+  ),
 });
 export type UpdaterStatus = typeof UpdaterStatusSchema.Type;
+export type UpdateHandoff = NonNullable<UpdaterStatus["handoff"]>;
 
 export const UpdateRequestSchema = Schema.Struct({
   // The one thing the CLI asks of a running app: quit (confirming if
   // scripts run) and restart into the update the CLI staged.
   action: Schema.Literal("install"),
-  // Older than a couple of minutes is dropped: acting on a leftover would
-  // restart the app out of nowhere.
-  requestedAt: Schema.Finite,
+  id: Schema.String,
+  // Taken only by the app it names, while the CLI that wrote it still
+  // waits: acting on a leftover would restart the app out of nowhere.
+  appPid: Schema.Int.check(Schema.isGreaterThan(0)),
+  requesterPid: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 export type UpdateRequest = typeof UpdateRequestSchema.Type;
 

@@ -353,12 +353,16 @@ async function update(identity: string) {
     // As `sm update` asks a running app (written whole, then renamed in),
     // into a folder the swap can't write: the installer's reason must
     // reach the app it brings back.
-    const requestedAt = Date.now();
     const request = join(dataDir, "updater-request.json");
     chmodSync(installedDir, 0o555);
     writeFileSync(
       `${request}.tmp`,
-      JSON.stringify({ action: "install", requestedAt }),
+      JSON.stringify({
+        action: "install",
+        id: "smoke",
+        appPid: staged.pid,
+        requesterPid: process.pid,
+      }),
     );
     renameSync(`${request}.tmp`, request);
     if (!(await until(() => exited, RESTART_WITHIN_MS))) {

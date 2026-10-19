@@ -63,6 +63,16 @@ export const makeFeeds = ({
     const http = yield* HttpClient.HttpClient;
     // Which releases this build is offered, none for dev.
     const offered = flavorNames(flavor).updates;
+    // Whether a run may ask for updates at all: a build with a line, or a
+    // test flavor given a stand-in list (the lab's), never a dev build or
+    // a test flavor on the real endpoints.
+    const updates = (endpoints: {
+      readonly feedUrl?: string;
+      readonly releasesUrl?: string;
+    }) =>
+      offered !== null ||
+      (flavorNames(flavor).debuggable &&
+        Boolean(endpoints.feedUrl || endpoints.releasesUrl));
 
     const releaseListPath = files.at.releaseList;
     const { readShared, writeShared } = files;
@@ -300,7 +310,7 @@ export const makeFeeds = ({
       );
     });
 
-    return { offered, send, queryFeed };
+    return { updates, send, queryFeed };
   });
 
 export type FeedsArea = Effect.Success<ReturnType<typeof makeFeeds>>;
