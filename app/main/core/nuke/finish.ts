@@ -8,9 +8,11 @@ import {
   existsSync,
   fsyncSync,
   openSync,
+  lstatSync,
   readdirSync,
   readFileSync,
   renameSync,
+  rmdirSync,
   rmSync,
   writeSync,
 } from "node:fs";
@@ -22,6 +24,39 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DEV_PROFILES_DIR } from "@shared/packaging/appName.mts";
 
 export const NUKE_MARKER = "nuke.pending";
+
+// Deletes `path` whole, or as much of it as goes: a folder that won't
+// go says only that it isn't empty, so what stayed in it is found by
+// deleting its entries one by one, each named with why.
+function remove(path: string, left: { path: string; why: string }[]): void {
+  try {
+    rmSync(path, { recursive: true, force: true });
+    return;
+  } catch (error) {
+    let entries: string[] | null = null;
+    try {
+      if (lstatSync(path).isDirectory()) entries = readdirSync(path);
+    } catch {
+      // Unreadable: named as it is.
+    }
+    if (entries === null) {
+      left.push({ path, why: reasonOf(error) });
+      return;
+    }
+    const before = left.length;
+    for (const entry of entries) remove(join(path, entry), left);
+    if (left.length > before) return;
+    try {
+      rmdirSync(path);
+    } catch (folderError) {
+      left.push({ path, why: reasonOf(folderError) });
+    }
+  }
+}
+
+const reasonOf = (error: unknown): string =>
+  REASONS[Predicate.hasProperty(error, "code") ? String(error.code) : ""] ??
+  errorMessageOf(error);
 
 // Why a file stayed, for the person who deletes it.
 const REASONS: Record<string, string> = {
@@ -75,21 +110,7 @@ export function finishPendingNuke(userData: string): {
     return null;
   }
   const left: { path: string; why: string }[] = [];
-  const remove = (path: string) => {
-    try {
-      rmSync(path, { recursive: true, force: true });
-    } catch (error) {
-      // The file that stayed, which may be inside the folder named.
-      const at = Predicate.hasProperty(error, "path")
-        ? String(error.path)
-        : path;
-      const code = Predicate.hasProperty(error, "code")
-        ? String(error.code)
-        : "";
-      left.push({ path: at, why: REASONS[code] ?? errorMessageOf(error) });
-    }
-  };
-  for (const path of decoded.value.paths) remove(path);
+  for (const path of decoded.value.paths) remove(path, left);
   for (const entry of readdirSync(userData)) {
     if (
       entry === NUKE_MARKER ||
@@ -98,7 +119,7 @@ export function finishPendingNuke(userData: string): {
     ) {
       continue;
     }
-    remove(join(userData, entry));
+    remove(join(userData, entry), left);
   }
   if (left.length === 0) rmSync(marker, { force: true });
   return { left };

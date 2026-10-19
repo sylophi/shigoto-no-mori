@@ -192,7 +192,7 @@ export const nuke = Command.make(
       if (left) {
         yield* note(
           marked && input.keepApp
-            ? `Some of it stayed, as said above. Once nothing holds it, ${names.appName}'s next start finishes the nuke.`
+            ? `Some of it stayed, as said above. Once it's deleted, ${names.appName}'s next start finishes the nuke.`
             : "Some of it stayed, as said above.",
         );
         return yield* new ExitCode({ code: 1 });

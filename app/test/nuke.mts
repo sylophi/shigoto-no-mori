@@ -331,3 +331,25 @@ it("deletes all it can past a path it can't, says which, and keeps the marker fo
   assert.ok(!existsSync(join(held, "file")));
   assert.ok(!existsSync(join(userData, NUKE_MARKER)));
 });
+
+it("names the file that stayed deep in a folder the marker names, the rest of the folder gone", () => {
+  const root = join(sandbox, "deep");
+  const userData = join(root, "userData");
+  const top = join(root, "top");
+  const held = join(top, "a", "held");
+  for (const dir of [userData, held, join(top, "z")]) {
+    mkdirSync(dir, { recursive: true });
+  }
+  writeFileSync(join(held, "file"), "x");
+  writeFileSync(join(top, "z", "other"), "x");
+  writeNukeMarker(userData, [top]);
+  chmodSync(held, 0o500);
+  try {
+    assert.deepEqual(finishPendingNuke(userData), {
+      left: [{ path: join(held, "file"), why: "permission denied" }],
+    });
+    assert.ok(!existsSync(join(top, "z")), "stopped at the first that stayed");
+  } finally {
+    chmodSync(held, 0o700);
+  }
+});

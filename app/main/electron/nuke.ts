@@ -82,8 +82,17 @@ export async function openPastStuckNuke(
     cancelId: 2,
   });
   if (response === 1) {
-    rmSync(join(app.getPath("userData"), NUKE_MARKER), { force: true });
-    return true;
+    const marker = join(app.getPath("userData"), NUKE_MARKER);
+    try {
+      rmSync(marker, { force: true });
+      return true;
+    } catch (error) {
+      dialog.showErrorBox(
+        `${names.appName} couldn't open`,
+        `${marker}: ${errorMessageOf(error)}`,
+      );
+      return false;
+    }
   }
   const first = left[0];
   if (response === 0 && first !== undefined) shell.showItemInFolder(first.path);

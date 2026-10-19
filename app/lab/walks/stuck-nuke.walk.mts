@@ -33,16 +33,22 @@ ${act}`,
     ],
     { encoding: "utf8", timeout: 10_000 },
   ).trim();
-const shown = (pid: number) =>
-  JSON.parse(
-    alert(
-      pid,
-      `JSON.stringify(alerts.length === 0 ? null : {
+// None yet, also while System Events doesn't list the new app.
+const shown = (pid: number): { texts: string[]; buttons: string[] } | null => {
+  try {
+    return JSON.parse(
+      alert(
+        pid,
+        `JSON.stringify(alerts.length === 0 ? null : {
   texts: alerts[0].staticTexts().map((text) => text.value()),
   buttons: alerts[0].buttons().map((button) => button.name()),
 })`,
-    ),
-  ) as { texts: string[]; buttons: string[] } | null;
+      ),
+    ) as { texts: string[]; buttons: string[] } | null;
+  } catch {
+    return null;
+  }
+};
 const answer =
   (
     button: string,

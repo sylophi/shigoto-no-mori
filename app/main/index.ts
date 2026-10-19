@@ -128,6 +128,9 @@ delete process.env.CLAUDE_CODE_SESSION_ID;
 delete process.env.CODEX_THREAD_ID;
 takeUpdateEndpointOverrides();
 
+// What a nuke's start couldn't delete, asked about before the app opens.
+let stuckNuke: readonly { readonly path: string; readonly why: string }[] = [];
+
 // One live instance per data dir. A second copy (typically a fresh
 // download in ~/Downloads beside the installed app) would run its own
 // host, background fetcher, updater and script registry over
@@ -136,8 +139,6 @@ takeUpdateEndpointOverrides();
 // prompt about busy work, and it can't reap scripts that belong to the
 // instance owning the data dir. It tells the user nothing, because raising
 // the running window is what launching the app asked for.
-// What a nuke's start couldn't delete, asked about before the app opens.
-let stuckNuke: readonly { readonly path: string; readonly why: string }[] = [];
 if (!app.requestSingleInstanceLock()) {
   app.exit(headlessNuke ? NUKE_EXIT.running : 0);
 } else {
@@ -342,6 +343,7 @@ app.on("ready", async () => {
         `${errorMessageOf(err)}`,
       buttons: pointer !== null ? ["Show in Finder", "Quit"] : ["Quit"],
       defaultId: 0,
+      cancelId: pointer !== null ? 1 : 0,
     });
     if (pointer !== null && response === 0) shell.showItemInFolder(pointer);
     app.exit(1);
