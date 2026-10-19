@@ -338,12 +338,22 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
               Effect.andThen(Deferred.succeed(welcomed, dialed), Effect.never),
             ),
             Effect.scoped,
-            Effect.catch((failed) =>
-              Effect.andThen(
+            // Settled however it ends short of an interrupt, a defect of
+            // an injected socket's included, so the race never waits out
+            // its deadline on a candidate that is gone.
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause))
+                return Effect.failCause(cause);
+              const error = Cause.squash(cause);
+              const failed =
+                error instanceof RemoteConnectError
+                  ? error
+                  : new RemoteConnectError(errorMessageOf(error), null, false);
+              return Effect.andThen(
                 Deferred.fail(opened, failed),
                 Deferred.fail(welcomed, failed),
-              ),
-            ),
+              );
+            }),
             Effect.forkIn(scope),
           );
           return { candidate, index, opened, helloAsked, welcomed, fiber };

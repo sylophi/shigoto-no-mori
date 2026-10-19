@@ -331,9 +331,13 @@ function hubHandlers(
           // A failed dial, or one that died, must not poison the cache,
           // or the peer would stay unreachable until restart even after
           // its listener came back.
+          // A session that ends so after it was up dropped on its own,
+          // which the keeper hears.
           return Effect.andThen(
             Deferred.fail(entry.connection, Cause.squash(exit.cause)),
-            Effect.sync(() => dropPeer(deviceId, entry)),
+            Effect.sync(() =>
+              dropPeer(deviceId, entry, entry.version !== null),
+            ),
           );
         }),
         Effect.ignore,

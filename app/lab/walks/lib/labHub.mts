@@ -138,6 +138,16 @@ export async function startLabHub(): Promise<LabHub> {
         await waitFor(() => exited, "the lab hub to be killed", 5_000);
       },
     );
+    // workerd goes after wrangler: the port is free only once it has.
+    await waitFor(
+      () =>
+        fetch(url).then(
+          () => false,
+          () => true,
+        ),
+      "the lab hub's port to be free",
+      10_000,
+    );
   };
   // Detached, it hears no Ctrl-C of the run's: the run's end takes it,
   // an exit or a signal that would end the run without one.
