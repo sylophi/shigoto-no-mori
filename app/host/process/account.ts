@@ -1,6 +1,7 @@
 // The account as the root's callbacks read it (HostAccount, in the
 // graph), synchronously: signed out until the graph is up and the
 // shell's first report lands.
+import type { HubAccount } from "@shared/account/hubConnect";
 import type { AccountFacts } from "@shigomori/contracts/modules/session";
 import type {
   DeviceInfo,
@@ -52,33 +53,10 @@ function signedIn(): {
   return { facts, service };
 }
 
-// What the hub socket needs. mintTicket reads the credential on every
-// call, so one the shell rotated meanwhile is the one used.
-export function hubConnectInputs(): {
-  hubUrl: string;
-  accountId: string;
-  deviceKey: string;
-  mintTicket: (connectionId: string, signal: AbortSignal) => Promise<string>;
-} | null {
-  const { facts } = account();
-  if (facts === null) return null;
-  return {
-    hubUrl: facts.hubUrl,
-    // A different account forces the hub socket onto the new account's
-    // object instead of leaving the old socket live.
-    accountId: facts.accountId,
-    deviceKey: facts.deviceKey,
-    mintTicket: async (connectionId, signal) => {
-      const current = signedIn();
-      return (
-        await current.service.mintTicket(
-          current.facts.credential,
-          connectionId,
-          signal,
-        )
-      ).ticket;
-    },
-  };
+// The account as the hub socket dials with it (shared/account/hubConnect.ts).
+export function hubAccount(): HubAccount | null {
+  const { facts, service } = account();
+  return facts === null || service === null ? null : { ...facts, service };
 }
 
 // Points this device's named tunnel at the listener's current port.

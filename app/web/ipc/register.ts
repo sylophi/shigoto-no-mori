@@ -13,9 +13,9 @@
 // browser global read at module scope, so the headless bridge check
 // drives the whole factory under node with in-memory storage and a
 // recording fetch.
+import { hubConnectInputs } from "@shared/account/hubConnect";
 import { createAccountService } from "@shared/account/service";
-import { joinInFlight } from "@shared/inFlight";
-import * as Context from "effect/Context";
+import { makeAccountHandlers } from "@shared/account/handlers";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -23,12 +23,12 @@ import * as Scope from "effect/Scope";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { startClientNow } from "@/lib/runtime/client";
 import type { RendererApi } from "@/lib/runtime/pageApi";
-import {
-  accountContract,
-  type AccountStatus,
-} from "@shigomori/contracts/modules/account";
+import { accountContract } from "@shigomori/contracts/modules/account";
 import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
-import { withoutPeerState } from "@shigomori/contracts/schemas/config";
+import {
+  departed,
+  withoutPeerState,
+} from "@shigomori/contracts/schemas/config";
 import { rotationOwner } from "@shigomori/ui/lib/themes.ts";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
@@ -49,15 +49,7 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shigomori/contracts/sharedSettings";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
-import {
-  effectiveDeviceIcon,
-  enrollDevice,
-  retryParkedRevoke,
-  signOutDevice,
-  syncHubDevice,
-  updateDevice,
-  type DeviceFields,
-} from "@shared/account/enroll";
+import { retryParkedRevoke } from "@shared/account/enroll";
 import * as WebHub from "../hub/connection";
 import { createHubTrace } from "../hub/trace";
 import {
@@ -70,11 +62,6 @@ import { defaultWebDeviceShape } from "../account/deviceIcon";
 import { createWebAccountStore } from "../account/store";
 import { readJsonKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 import { createLocalRegistrar } from "./localRegistrar";
-
-// The session token an enroll was asked with, which the run reads.
-class EnrollToken extends Context.Service<EnrollToken, string>()(
-  "sm/web/EnrollToken",
-) {}
 
 export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
@@ -189,30 +176,14 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     return Effect.runPromise(
       connection
         .refresh(
-          Effect.sync(() => {
-            if (!isConfigured(config)) return null;
-            const record = store.read();
-            if (record === null) return null;
-            return {
-              hubUrl: config.hubUrl,
-              accountId: record.accountId,
-              deviceId,
-              deviceKey: record.deviceKey,
-              mintTicket: async (connectionId, signal) => {
-                const fresh = store.read();
-                if (fresh === null) {
-                  throw new Error("signed out, no hub credential");
-                }
-                return (
-                  await service.mintTicket(
-                    fresh.credential,
-                    connectionId,
-                    signal,
-                  )
-                ).ticket;
-              },
-            };
-          }),
+          Effect.sync(() =>
+            hubConnectInputs(() => {
+              const record = isConfigured(config) ? store.read() : null;
+              return record === null
+                ? null
+                : { ...record, hubUrl: config.hubUrl, service };
+            }, deviceId),
+          ),
         )
         .pipe(
           Effect.ignoreCause({
@@ -225,62 +196,28 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // ---- account module ----
 
-  // A device's name or icon change, made on the hub (updateDevice),
-  // then the fan-out so every tab re-reads the registry.
-  async function updateAccountDevice(
-    target: string,
-    patch: DeviceFields,
-  ): Promise<AccountStatus> {
-    const record = store.read();
-    if (record === null || !isConfigured(config)) {
-      throw new Error("cannot change a device while signed out");
-    }
-    await updateDevice(
-      { service, store, deviceId, detectedIcon },
-      record,
-      target,
-      patch,
-    );
-    accountChanged();
-    return readStatus();
-  }
-
-  function defaultDeviceName(): string {
-    return defaultWebDeviceName(deps.userAgent, deps.browserHints);
-  }
-
   // Read off the same user agent as the name, once: it cannot change
   // while the page lives.
   const detectedIcon = defaultWebDeviceShape(deps.userAgent);
 
-  function readStatus(): AccountStatus {
-    const record = store.read();
-    return {
-      configured: isConfigured(config),
-      signedIn: record !== null,
-      accountId: record?.accountId ?? "",
-      deviceName: record?.deviceName ?? defaultDeviceName(),
-      deviceIcon: effectiveDeviceIcon(record, store, detectedIcon),
-      detectedDeviceIcon: detectedIcon,
-      sharedSignIn: false,
-      needsDeviceKey: store.readWithoutKey() !== null,
-    };
-  }
-
   // Any account transition re-reconciles the hub socket and fans the
-  // change out so every account query re-reads, matching the desktop's
-  // emitChanged wiring in main/ipc/modules/account.ts. Like there, the account
-  // the copy of the shared settings was built under is tracked so a
-  // sign-out or an account switch drops it (a rename keeps it).
-  let settingsAccountId: string | null = store.read()?.accountId ?? null;
-  function accountChanged(): void {
-    const accountId = store.read()?.accountId ?? null;
-    if (accountId !== settingsAccountId) {
-      settingsAccountId = accountId;
+  // change out so every account query re-reads. The account last seen
+  // is kept here, since another tab's change arrives with no call of
+  // this tab's (notifyAccountChanged).
+  let knownAccountId: string | null = store.read()?.accountId ?? null;
+  async function accountChanged(): Promise<void> {
+    const before = knownAccountId;
+    const after = store.read()?.accountId ?? null;
+    knownAccountId = after;
+    // The old account's sessions close first: a peer's push landing
+    // between the clear and their close would refill the copy, as the
+    // host orders it too (host/process/handlers.ts).
+    await refreshHub();
+    if (departed({ before, after })) {
+      // The shared settings' copy and the client config's peer-keyed
+      // picks (withoutPeerState): in localStorage they would outlive
+      // even the person, on a shared browser profile.
       sharedSettingsCopy.clear();
-      // And the client config's peer-keyed picks (withoutPeerState): in
-      // localStorage they would outlive even the person, on a shared
-      // browser profile.
       writeKey(
         deps.localStorage,
         CLIENT_CONFIG_KEY,
@@ -297,109 +234,33 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       );
       clientConfigChanged();
     }
-    tab.push(accountContract, "changed", { accountId });
-    void refreshHub();
+    tab.push(accountContract, "changed", { accountId: after });
   }
 
-  // Re-entrancy guards mirroring the desktop handler's: a re-fired
-  // reconciler effect or a second tab must not race two enrolls (the
-  // hub rotates the credential per enroll, so racers can strand the
-  // stored one) or two revokes. Same-tab only: the storage key is
-  // still shared across tabs, but a cross-tab race is closed by the
-  // reconciler's re-read after the storage event. A caller arriving
-  // while one runs rides it (an enroll's own token unused), and the
-  // first after it settles starts afresh.
-  const enrollOnce = joinInFlight(
-    Effect.flatMap(EnrollToken, (token) =>
-      Effect.promise(async () => {
-        await enrollDevice(
-          {
-            config,
-            service,
-            store,
-            deviceId,
-            fallbackDeviceName: defaultDeviceName(),
-            platform: WEB_PLATFORM,
-            detectedIcon,
-          },
-          token,
-        );
-        accountChanged();
-        return readStatus();
-      }),
-    ),
-  );
-  // The shared best-effort revoke-then-clear (the desktop handler adds
-  // a warn-once and its grant clear on top of the same core).
-  const signOutOnce = joinInFlight(
-    Effect.promise(async () => {
-      await signOutDevice({ config, service, store, deviceId });
-      accountChanged();
+  const accountHandlers = makeAccountHandlers({
+    config: () => config,
+    store: () => store,
+    service: () => service,
+    deviceId: async () => deviceId,
+    defaultName: async () => ({
+      name: defaultWebDeviceName(deps.userAgent, deps.browserHints),
+      provisional: false,
     }),
-  );
-
-  // Removing a device from the account, served over the
-  // account:revokeDevice client channel (what the account page calls).
-  async function revokeDeviceOnAccount(targetDeviceId: string): Promise<void> {
-    const record = store.read();
-    if (record === null) {
-      throw new Error("cannot revoke a device while signed out");
-    }
-    await service.revoke(record.credential, targetDeviceId);
-    // Revoking THIS browser invalidates its own credential, so the
-    // local sign-out follows immediately rather than waiting for the
-    // hub to refuse the next call. Callers revoking self end the
-    // Clerk session first (DevicesPage's SelfRevokeButton does), so no
-    // session is left live with no device under it.
-    if (targetDeviceId === deviceId) store.clear();
-    accountChanged();
-  }
-
-  const accountHandlers: Handlers<typeof accountContract> = {
-    status: () => readStatus(),
-
-    // Exchanges the Clerk session token ClerkAccountSync minted for the
-    // hub device credential, enrolling this browser under platform
-    // "web" (a legal opaque label beside the desktop's os.platform()
-    // values in EnrollRequestSchema's 1..64 bound).
-    enroll: (token) =>
-      Effect.runPromise(Effect.provideService(enrollOnce, EnrollToken, token)),
-
-    signOut: () => Effect.runPromise(signOutOnce),
-
-    revokeDevice: (targetDeviceId) => revokeDeviceOnAccount(targetDeviceId),
-
-    listDevices: async () => {
-      const record = store.read();
-      if (record === null || !isConfigured(config)) return [];
-      const devices = await service.listDevices(record.credential);
-      if (
-        syncHubDevice(
-          { service, store, deviceId, detectedIcon },
-          record,
-          devices,
-        )
-      ) {
-        accountChanged();
-      }
-      return devices;
-    },
-
-    setDeviceName: ({ deviceId: target, name }) =>
-      updateAccountDevice(target, { name }),
-
-    setDeviceIcon: ({ deviceId: target, icon }) =>
-      updateAccountDevice(target, { icon }),
-
+    detectedIcon: async () => detectedIcon,
+    // A legal opaque label beside the desktop's os.platform() values in
+    // EnrollRequestSchema's 1..64 bound.
+    platform: WEB_PLATFORM,
+    sharedSignIn: () => false,
+    changed: accountChanged,
+    devicesListed: () => {},
     // A web client is a refuse-all host (web/hub/connection.ts): it
     // serves no peer calls, so switching command access on would
-    // promise something the transport can never honor. Failing loudly
-    // beats a switch that silently does nothing.
+    // promise something the transport can never honor.
     acceptsCommands: () => false,
     setAcceptsCommands: () => {
       throw new Error("a web client cannot change command access");
     },
-  };
+  });
 
   // ---- clientConfig module ----
 
@@ -565,7 +426,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     api,
     links: client.links,
 
-    notifyAccountChanged: accountChanged,
+    notifyAccountChanged: () => void accountChanged(),
     notifyClientConfigChanged: clientConfigChanged,
 
     refreshHub,

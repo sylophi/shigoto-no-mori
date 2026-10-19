@@ -5,8 +5,9 @@
 // process.env supplies the service config. Sign-in itself lives in the
 // renderer (Clerk's embedded components over the @clerk/electron
 // bridge). This module only exchanges the resulting session token for
-// the hub device credential. The handlers stay thin, delegating to
-// the pure orchestration.
+// the hub device credential. The calls themselves are the web's too
+// (shared/account/handlers.ts): this gives them the desktop's store,
+// device and switch.
 import { existsSync, readFileSync } from "node:fs";
 import { devProfileSuffix } from "../../electron/devProfile";
 import { platform } from "node:os";
@@ -16,7 +17,6 @@ import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import type { Handlers } from "@shigomori/contracts/types";
 import { hostDeviceId } from "../../hostProcess";
 import type { AccountFacts } from "@shigomori/contracts/modules/session";
@@ -31,15 +31,8 @@ import {
   type DefaultDeviceName,
 } from "../../core/account/defaultDeviceName";
 import { detectDesktopDeviceShape } from "../../core/account/defaultDeviceIcon";
-import {
-  effectiveDeviceIcon,
-  enrollDevice,
-  retryParkedRevoke,
-  signOutDevice,
-  syncHubDevice,
-  updateDevice,
-  type DeviceFields,
-} from "@shared/account/enroll";
+import { retryParkedRevoke, signOutDevice } from "@shared/account/enroll";
+import { makeAccountHandlers as makeSharedAccountHandlers } from "@shared/account/handlers";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import {
   createAccountService,
@@ -51,11 +44,8 @@ import {
   resolveServiceConfig,
   type AccountServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
-import { joinInFlight } from "@shared/inFlight";
 import { log } from "@shared/log";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 
 // Built lazily on first handler use, never at import time. This module is
 // imported before app "ready" (registerShellHandlers runs before
@@ -69,11 +59,6 @@ let cachedStore: AccountStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 let cipherWarned = false;
 let revokeWarned = false;
-
-// The session token an enroll was asked with, which the run reads.
-class EnrollToken extends Context.Service<EnrollToken, string>()(
-  "sm/main/EnrollToken",
-) {}
 
 // The safeStorage-backed cipher. `available` is the OS keychain's
 // verdict: when true the credential is encrypted at rest, when false the
@@ -107,16 +92,6 @@ function store(): AccountStore {
   }));
 }
 
-// In-memory mirror of the command-access switch, which lives on the
-// signed-in account's record (StoredAccount.acceptsCommands), so
-// acceptsPeerCommands, read for every report of the account's facts,
-// never hits the disk or the OS keychain. Null means
-// not yet built (false is a real built answer). Dropped on every event
-// that can change the answer: any account change (sign-in, sign-out,
-// rename), while the switch flipping writes it through, so a flip
-// takes effect immediately without a reconnect.
-let acceptsCache: boolean | null = null;
-
 // The switch as the host is told it (the account's facts), which the
 // device link's CommandGate holds a peer's gated calls to, and the
 // verdict every connectInfo answer reports. Every peer that reaches
@@ -125,16 +100,7 @@ let acceptsCache: boolean | null = null;
 // per-peer lookup. Signed out, there is no record and nothing is
 // accepted.
 export function acceptsPeerCommands(): boolean {
-  if (acceptsCache === null) {
-    acceptsCache = store().read()?.acceptsCommands === true;
-  }
-  return acceptsCache;
-}
-
-// Writes the switch onto the record and the mirror in one step.
-function writeAcceptsCommands(record: StoredAccount, enabled: boolean): void {
-  store().write({ ...record, acceptsCommands: enabled });
-  acceptsCache = enabled;
+  return store().read()?.acceptsCommands === true;
 }
 
 // The resolved service config, resolved once and cached. Three layers,
@@ -240,42 +206,6 @@ export function clerkPublishableKey(): string {
   return serviceConfig().publishableKey;
 }
 
-// Assembles the status from the stored credential metadata and the
-// resolved config. accountId and the stored deviceName come from the
-// record when signed in, else empty and the machine's default name.
-function statusOf(
-  record: StoredAccount | null,
-  defaultName: string,
-  detectedIcon: DeviceIcon,
-): AccountStatus {
-  return {
-    configured: isConfigured(serviceConfig()),
-    signedIn: record !== null,
-    accountId: record?.accountId ?? "",
-    // Signed out, the name the device last enrolled under, which is
-    // what the next enrollment uses (enroll.ts).
-    deviceName:
-      record?.deviceName ?? store().rememberedDeviceName() ?? defaultName,
-    // The icon by the same rule (a pick outlives a sign-out too).
-    deviceIcon: effectiveDeviceIcon(record, store(), detectedIcon),
-    detectedDeviceIcon: detectedIcon,
-    // --clone-login leaves this beside the token store it copied
-    // (scripts/lib/devProfile.mts cloneDevLogin).
-    sharedSignIn: existsSync(
-      join(app.getPath("userData"), CLONED_LOGIN_MARKER),
-    ),
-    needsDeviceKey: store().readWithoutKey() !== null,
-  };
-}
-
-async function readStatus(): Promise<AccountStatus> {
-  return statusOf(
-    store().read(),
-    (await defaultDeviceName()).name,
-    await detectedDeviceIcon(),
-  );
-}
-
 // The signed-in preamble most account-backed calls share: the resolved
 // service against the configured hub plus the stored credential
 // record. Null when the build is unconfigured or no credential is
@@ -326,209 +256,95 @@ export async function retryParkedSignOut(): Promise<void> {
 }
 
 // A nuke's sign-out: this device revoked on the hub and its credential
-// dropped. Answers why the revoke didn't land when it was parked for
+// dropped. Answers why the revoke didn't land when it stays parked for
 // later (offline, the hub down), since the parking goes with userData
 // at the next start; null when it landed, the hub had already let the
-// device go, or there was nothing to revoke.
+// device go, or there was nothing to revoke. A device signed out
+// before, whose revoke is parked still, tries that one once more.
 export async function signOutForNuke(): Promise<string | null> {
   const config = serviceConfig();
+  const service = createAccountService({ baseUrl: config.hubUrl });
+  const deviceId = await hostDeviceId();
+  const signedIn = store().read() !== null;
   let failure = "";
   await signOutDevice({
     config,
-    service: createAccountService({ baseUrl: config.hubUrl }),
+    service,
     store: store(),
-    deviceId: await hostDeviceId(),
+    deviceId,
     onRevokeFailure: (error) => {
       failure = errorMessageOf(error);
     },
   });
+  if (!signedIn) {
+    const parked = await retryParkedRevoke({
+      config,
+      service,
+      store: store(),
+      deviceId,
+    });
+    if (parked.kind === "failed") failure = errorMessageOf(parked.error);
+  }
   return store().readParked() === null ? null : failure;
 }
 
-export function makeAccountHandlers(
-  emitChanged: (accountId: string | null) => Promise<void> | void,
-  emitCommandAccessChanged: () => void,
-  // Hears every registry list the hub serves, for state that follows
-  // the account's membership (a mirror with a removed peer).
-  onDeviceList: (devices: DeviceInfo[]) => void = () => {},
-): Handlers<typeof accountContract> {
-  // Fires the account-changed fan-out and drops the switch's mirror
-  // together, since any account transition (sign-in, sign-out, rename)
-  // may change the answer (a new account's record has its own switch,
-  // a sign-out takes the record away).
-  const accountChanged = (): Promise<void> => {
-    acceptsCache = null;
-    return Promise.resolve(emitChanged(store().read()?.accountId ?? null));
-  };
-  // A device's name or icon change, made on the hub (updateDevice).
-  // Every window re-reads the registry after, a peer's change with it.
-  const update = async (
-    deviceId: string,
-    patch: DeviceFields,
-  ): Promise<AccountStatus> => {
-    const signedIn = signedInService();
-    if (signedIn === null) {
-      throw new Error("cannot change a device while signed out");
-    }
-    await updateDevice(
-      {
-        service: signedIn.service,
-        store: store(),
-        deviceId: await hostDeviceId(),
-        detectedIcon: await detectedDeviceIcon(),
-      },
-      signedIn.record,
-      deviceId,
-      patch,
-    );
-    accountChanged();
-    return readStatus();
-  };
-  const enroll = async (token: string): Promise<AccountStatus> => {
-    const config = serviceConfig();
-    await enrollDevice(
-      {
-        config,
-        service: createAccountService({ baseUrl: config.hubUrl }),
-        store: store(),
-        // The hub device identity is tied to the data dir's store: the
-        // host reads the UUID minted with it, so a fresh store
-        // re-enrolls this app as a brand new hub device.
-        deviceId: await hostDeviceId(),
-        fallbackDeviceName: (await defaultDeviceName()).name,
-        // The device hub stores it as an opaque label.
-        platform: platform(),
-        detectedIcon: await detectedDeviceIcon(),
-      },
-      token,
-    );
-    accountChanged();
-    return readStatus();
-  };
-  const signOut = async (): Promise<void> => {
-    // The command-access switch is off from the first moment of the
-    // sign-out, ahead of the revoke's round trip: a peer's gated call
-    // landing during the revoke must not find it on. Written through,
-    // so nothing that re-reads the record meanwhile turns it back on.
-    // The sign-out's clear drops the record with it, so signing back
-    // into the same account starts with the switch off.
-    const record = store().read();
-    if (record?.acceptsCommands === true) {
-      writeAcceptsCommands(record, false);
-    }
-    acceptsCache = false;
-    const config = serviceConfig();
-    await signOutDevice({
-      config,
-      service: createAccountService({ baseUrl: config.hubUrl }),
-      store: store(),
-      deviceId: await hostDeviceId(),
-      // The failure is swallowed (local sign-out must always land) and
-      // logged at most once per session.
-      onRevokeFailure: (error) => {
-        if (revokeWarned) return;
-        revokeWarned = true;
-        log.warn(
-          "[account] best-effort device revoke on sign-out failed, " +
-            "clearing the local credential anyway.",
-          error,
-        );
-      },
-    });
-    await accountChanged();
-  };
-  // Re-entrancy guards. A concurrent enroll (a re-fired renderer
-  // effect, two windows) must not enroll twice and rotate the
-  // credential mid-write, and concurrent sign-outs (the UI button plus
-  // ClerkAccountSync reacting to the same session end) must not race
-  // two revokes, where the second would 401 against the credential the
-  // first already deleted. A caller arriving while one runs rides it
-  // (an enroll's own token unused), and the first after it settles
-  // starts afresh.
-  const enrollOnce = joinInFlight(
-    Effect.flatMap(EnrollToken, (token) => Effect.promise(() => enroll(token))),
-  );
-  const signOutOnce = joinInFlight(Effect.promise(signOut));
-  return {
-    status: async () => {
-      const defaultName = await defaultDeviceName();
-      return statusOf(
-        store().read(),
-        defaultName.name,
-        await detectedDeviceIcon(),
-      );
-    },
-
-    // This is the authoritative dedupe for the whole app: renderer
-    // effects may re-fire, but the credential is a one-per-machine fact.
-    enroll: (token) =>
-      Effect.runPromise(Effect.provideService(enrollOnce, EnrollToken, token)),
-
-    signOut: () => Effect.runPromise(signOutOnce),
-
-    revokeDevice: async (deviceId) => {
-      const signedIn = signedInService();
-      // Nothing to revoke against: no credential means no registry.
-      // Loud, not silent -- the caller asked to remove a device.
-      if (signedIn === null) {
-        throw new Error("cannot revoke a device while signed out");
-      }
-      const { service, record } = signedIn;
-      // Not swallowed the way sign-out's best-effort revoke is: a failed
-      // call here leaves the device enrolled, and no local state stands
-      // in for that, so the renderer must be able to say so.
-      await service.revoke(record.credential, deviceId);
-      if (deviceId === (await hostDeviceId())) {
-        // Self-revoke invalidated our own credential, so drop it now
-        // rather than waiting for the device hub to refuse the next
-        // call. The desktop UI routes this device through Sign out
-        // instead (which ends the Clerk session first). This arm exists
-        // so the handler is still correct for any other caller.
-        store().clear();
-      }
-      // accountChanged also drops the switch's mirror, so a
-      // self-revoke's cleared record is what the host is told next,
-      // without a reconnect.
-      accountChanged();
-    },
-
-    listDevices: async () => {
-      const signedIn = signedInService();
-      // Signed out or unconfigured has no registry to show.
-      if (signedIn === null) return [];
-      const devices = await signedIn.service.listDevices(
-        signedIn.record.credential,
-      );
-      const adopted = syncHubDevice(
-        {
-          service: signedIn.service,
-          store: store(),
-          deviceId: await hostDeviceId(),
-          detectedIcon: await detectedDeviceIcon(),
-        },
-        signedIn.record,
-        devices,
-      );
-      if (adopted) accountChanged();
-      onDeviceList(devices);
-      return devices;
-    },
-
-    setDeviceName: ({ deviceId, name }) => update(deviceId, { name }),
-
-    setDeviceIcon: ({ deviceId, icon }) => update(deviceId, { icon }),
-
+export function makeAccountHandlers(fanOut: {
+  // An account change, under the ids before and after it.
+  readonly changed: (change: {
+    readonly before: string | null;
+    readonly after: string | null;
+  }) => Promise<void>;
+  readonly commandAccessChanged: () => void;
+  // The registry as the hub lists it, for state that follows the
+  // account's membership (a mirror with a removed peer).
+  readonly devicesListed: (devices: DeviceInfo[]) => void;
+}): Handlers<typeof accountContract> {
+  return makeSharedAccountHandlers({
+    config: serviceConfig,
+    store,
+    service: (config) => createAccountService({ baseUrl: config.hubUrl }),
+    deviceId: hostDeviceId,
+    defaultName: defaultDeviceName,
+    detectedIcon: detectedDeviceIcon,
+    platform: platform(),
+    // --clone-login leaves this beside the token store it copied
+    // (scripts/lib/devProfile.mts cloneDevLogin).
+    sharedSignIn: () =>
+      existsSync(join(app.getPath("userData"), CLONED_LOGIN_MARKER)),
+    changed: fanOut.changed,
+    devicesListed: fanOut.devicesListed,
     acceptsCommands: acceptsPeerCommands,
-
     setAcceptsCommands: (enabled) => {
       const record = store().read();
       // The switch lives on the account's record, and with no record
-      // there is nothing to keep it on. Fail loudly instead.
+      // there is nothing to keep it on.
       if (record === null) {
         throw new Error("cannot change command access while signed out");
       }
-      writeAcceptsCommands(record, enabled);
-      emitCommandAccessChanged();
+      store().write({ ...record, acceptsCommands: enabled });
+      fanOut.commandAccessChanged();
     },
-  };
+    // Off from the first moment of the sign-out, ahead of the revoke's
+    // round trip: a peer's gated call landing during the revoke must not
+    // find it on. The sign-out's clear drops the record with it, so
+    // signing back into the same account starts with the switch off.
+    beforeSignOut: (record) => {
+      if (record.acceptsCommands === true) {
+        store().write({ ...record, acceptsCommands: false });
+        // The host's gate reads the facts it was told.
+        fanOut.commandAccessChanged();
+      }
+    },
+    // The failure is swallowed (local sign-out must always land) and
+    // logged at most once per session.
+    onRevokeFailure: (error) => {
+      if (revokeWarned) return;
+      revokeWarned = true;
+      log.warn(
+        "[account] best-effort device revoke on sign-out failed, " +
+          "clearing the local credential anyway.",
+        error,
+      );
+    },
+  });
 }
