@@ -43,7 +43,8 @@ export type AccountShell = {
   // Whether this device signed in by copying another's sign-in.
   readonly sharedSignIn: () => boolean;
   // The account changed, under the ids before and after it (a rename
-  // keeps the id). Awaited before the call answers.
+  // keeps the id). Awaited before the call answers. A shell that hears
+  // changes from elsewhere too (the web's other tabs) keeps its own.
   readonly changed: (change: {
     readonly before: string | null;
     readonly after: string | null;

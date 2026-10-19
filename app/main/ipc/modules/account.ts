@@ -331,6 +331,8 @@ export function makeAccountHandlers(fanOut: {
     beforeSignOut: (record) => {
       if (record.acceptsCommands === true) {
         store().write({ ...record, acceptsCommands: false });
+        // The host's gate reads the facts it was told.
+        fanOut.commandAccessChanged();
       }
     },
     // The failure is swallowed (local sign-out must always land) and

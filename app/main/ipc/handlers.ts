@@ -66,10 +66,15 @@ export function registerShellHandlers(): void {
         "commandAccessChanged",
         acceptsPeerCommands(),
       );
-      await warnOnFailure(
+      const told = warnOnFailure(
         "[account] the host's account change failed",
         () => applied,
       );
+      // A departure answers once the host has let the account go; any
+      // other change once the windows are told, since a host that isn't
+      // up hears the account as it starts.
+      if (departed({ before, after })) await told;
+      else void told;
       // The login item keeps a machine reachable to its account: signed
       // out it comes off, and the next sign-in puts it back.
       if (before !== after) reconcileLaunchAtLogin();
