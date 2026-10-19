@@ -55,10 +55,7 @@ import {
 import { type PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import { findProject } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
-import {
-  MIRROR_LABEL_LOCAL_PROJECT,
-  onMirrorBranch,
-} from "./registry";
+import { MIRROR_LABEL_LOCAL_PROJECT, onMirrorBranch } from "./registry";
 import {
   core,
   type FollowableSession,
