@@ -28,12 +28,13 @@ export const makeRewriting = ({
   Effect.sync(() => {
     const { run, runLenient, onIndex } = running;
     const { headAt, isAncestor } = refs;
-    const { conflictedPaths, refuseMidOperation } = operation;
+    const { conflictedPaths, refuseMidOperation, undoStopped } = operation;
 
     // Both make a new commit and refuse to leave anything half done: a
     // conflict aborts, so the worktree is exactly as it was and the error
-    // says so. Git's own refusal over local edits it would overwrite
-    // rides along as it is.
+    // says so, or, the abort refused, the pick is left for the banner
+    // and the error says that. Git's own refusal over local edits it
+    // would overwrite rides along as it is.
     const applyCommit = (
       worktree: string,
       verb: "revert" | "cherry-pick",
@@ -72,7 +73,7 @@ export const makeRewriting = ({
                 if (inProgress.trim() === "") return yield* Effect.fail(error);
                 const conflicted =
                   (yield* conflictedPaths(worktree)).length > 0;
-                yield* runLenient(worktree, [verb, "--abort"]);
+                yield* undoStopped(worktree, verb);
                 const words =
                   error instanceof GitCommandError
                     ? stderrOf(error)
