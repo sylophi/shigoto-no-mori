@@ -59,7 +59,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import type { EventEmitter } from "node:events";
 import { connect, type Socket } from "node:net";
-import { afterAll, beforeAll, it } from "vitest";
+import { afterAll, beforeAll, it, onTestFinished } from "vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -163,6 +163,11 @@ async function openChannel(
     handle.reset();
     throw error;
   }
+  // Gone with the case that opened it, however that case ends, so a
+  // failed one leaves the next a connection with no channel of its.
+  onTestFinished(() => {
+    if (handle.open) handle.reset();
+  });
   const until = (predicate: () => boolean, what: string, timeoutMs = 15_000) =>
     new Promise<void>((resolve, reject) => {
       if (predicate()) {
@@ -269,11 +274,26 @@ let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
 let toListener: DirectWire["toListener"];
 let forward: PeerReach.PeerCalls<typeof forwardContract>;
-let big: Buffer;
+const big = randomBytes(1_500_000);
+// The client engine over the same wire, its forward api the SAME peer
+// client the direct scenarios drive, so nothing on the forward path is
+// a double. deviceId is ignored on purpose: this check has one peer.
+// Its changed signal runs in a scope of the proof's, on a test clock.
 let engine: PortForwardEngine;
-let started: Started;
-let fresh: Started;
-let fromWorktree: { projectId: string; worktreeId: string };
+const engineClock = testClock();
+let engineChanges = 0;
+const fromWorktree = { projectId: "p1", worktreeId: "w1" };
+// The engine's forward to the echo server, started by the first case
+// that needs it: a duplicate start returns the one already up, so each
+// case stands on its own.
+const echoForward = (): Promise<Started> =>
+  startOn(engine, { deviceId: LISTENER, remotePort: echo.port });
+// A forward a case starts for itself, stopped when the case ends.
+const ownForward = async (input: StartInput): Promise<Started> => {
+  const own = await startOn(engine, input);
+  onTestFinished(() => stopOn(engine, own.forwardId));
+  return own;
+};
 
 // The direct wire: the listener serves the forward surface, the dialer
 // drives it through the real dialer and bridge cache,
@@ -291,6 +311,18 @@ beforeAll(async () => {
     transportFor: () => toListener.transport,
     channelsFor: () => toListener.channels,
   }).calls(forwardContract, LISTENER);
+  listener.setAccepts(true);
+  const scope = Scope.makeUnsafe();
+  track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  engine = await Effect.runPromise(
+    makePortForwardEngine({
+      forwardApiFor: () => forward,
+      channelsFor: () => toListener.channels,
+      onChange: () => {
+        engineChanges += 1;
+      },
+    }).pipe(Scope.provide(scope), Effect.provide(engineClock.context)),
+  );
 });
 
 // Reverse creation order via the shared tracker: the direct
@@ -303,6 +335,9 @@ it("ungranted peer: forward:open is refused with the typed CommandRefusedError a
   // (the grant gate lives on the direct wire), before the handler
   // runs. The echo server never sees a dial, and the channel this
   // side attached is reset by the failed open.
+  listener.setAccepts(false);
+  onTestFinished(() => listener.setAccepts(true));
+  const dialsBefore = echo.connections();
   await assert.rejects(
     () => openChannel(toListener, forward, echo.port),
     (error) =>
@@ -311,18 +346,21 @@ it("ungranted peer: forward:open is refused with the typed CommandRefusedError a
   );
   assert.equal(
     echo.connections(),
-    0,
+    dialsBefore,
     "an ungranted open still dialed the fixture server",
   );
 });
 
 it("granted echo round trip: attach, open, write, read, reset", async () => {
-  listener.setAccepts(true);
-
   // (2) The basic round trip on a channel: attach, open, write, read
-  // the echo, reset.
+  // the echo, reset. The open answers once the host's dial connected,
+  // which can come before the echo server's own accept runs.
+  const dialsBefore = echo.connections();
   const hello = await openChannel(toListener, forward, echo.port);
-  assert.equal(echo.connections(), 1);
+  await waitFor(
+    () => echo.connections() === dialsBefore + 1,
+    "the echo server to accept the forward's one dial",
+  );
   hello.write(Buffer.from("hello"));
   assert.equal((await hello.readBytes(5)).toString("utf8"), "hello");
   hello.reset();
@@ -346,7 +384,6 @@ it("large transfer: ~1.5 MB crosses in data frames with the device hub flat, byt
   // frames (bounded by CHANNEL_MAX_WRITE_BYTES), byte-identical, and
   // the stub device hub stays COMPLETELY flat (it only ever saw the
   // one-time broker exchange).
-  big = randomBytes(1_500_000);
   const hubBaseline = stub.forwardedCount();
   const bulk = await openChannel(toListener, forward, echo.port);
   bulk.write(big);
@@ -455,36 +492,15 @@ it("end state: a fresh channel opens and round-trips after full teardown", async
 });
 
 it("engine: a local dial round-trips through the whole chain, a duplicate start returns the existing forward, and the changed signal goes out once per burst", async () => {
-  // ---- The client engine over the same wire ----
-
-  // The engine on the dialer, its forward api the SAME peer client the
-  // direct scenarios drove, so nothing on the forward path is a
-  // double. deviceId is ignored on purpose: this check has one peer.
-  // Its changed signal runs in a scope of the proof's, on a test clock.
-  const clock = testClock();
-  const scope = Scope.makeUnsafe();
-  track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  let changes = 0;
-  engine = await Effect.runPromise(
-    makePortForwardEngine({
-      forwardApiFor: () => forward,
-      channelsFor: () => toListener.channels,
-      onChange: () => {
-        changes += 1;
-      },
-    }).pipe(Scope.provide(scope), Effect.provide(clock.context)),
-  );
-
   // (9) Local round trip through the whole chain, and duplicate
   // startForward semantics (one forward per device+port pair).
-  started = await startOn(engine, {
-    deviceId: LISTENER,
-    remotePort: echo.port,
-  });
+  const clock = engineClock;
+  const changesBefore = engineChanges;
+  const changes = () => engineChanges - changesBefore;
+  const started = await echoForward();
   assert.match(started.forwardId, /^[0-9a-f]{32}$/);
   // The duplicate comes from a worktree's port list, which claims
   // the untagged forward for that worktree.
-  fromWorktree = { projectId: "p1", worktreeId: "w1" };
   assert.equal(engine.listForwards()[0]?.worktree, undefined);
   const dup = await startOn(engine, {
     deviceId: LISTENER,
@@ -514,20 +530,20 @@ it("engine: a local dial round-trips through the whole chain, a duplicate start 
   // The start and the claim are one burst: one signal, 150 ms after
   // the start. One after it is a burst of its own.
   await clock.settle();
-  assert.equal(changes, 0, "the signal waits out its window");
+  assert.equal(changes(), 0, "the signal waits out its window");
   await clock.advance(149);
-  assert.equal(changes, 0, "the signal waits out its window");
+  assert.equal(changes(), 0, "the signal waits out its window");
   await clock.advance(1);
-  assert.equal(changes, 1, "the burst goes out as one signal");
+  assert.equal(changes(), 1, "the burst goes out as one signal");
   await startOn(engine, {
     deviceId: LISTENER,
     remotePort: echo.port,
     worktree: fromWorktree,
   });
   await clock.advance(149);
-  assert.equal(changes, 1, "a later change opens a window of its own");
+  assert.equal(changes(), 1, "a later change opens a window of its own");
   await clock.advance(1);
-  assert.equal(changes, 2, "a later change opens a window of its own");
+  assert.equal(changes(), 2, "a later change opens a window of its own");
   const enginePing = await dialAndCollect(
     started.localPort,
     Buffer.from("engine ping"),
@@ -540,7 +556,13 @@ it("engine: a start naming another local port moves the listener", async () => {
   // (9b) A start naming a DIFFERENT local port moves the listener:
   // the old number refuses, the new one round-trips, still one
   // forward. Moving back onto the number just released proves the
-  // old listener was closed once the new one was bound.
+  // old listener was closed once the new one was bound. Tagged with a
+  // worktree, which a move naming none keeps.
+  const started = await startOn(engine, {
+    deviceId: LISTENER,
+    remotePort: echo.port,
+    worktree: fromWorktree,
+  });
   const before = started.localPort;
   const freePort = await freeLoopbackPort();
   const moved = await startOn(engine, {
@@ -557,12 +579,12 @@ it("engine: a start naming another local port moves the listener", async () => {
   );
   const movedPing = await dialAndCollect(freePort, Buffer.from("moved"), 5);
   assert.equal(movedPing.toString("utf8"), "moved");
-  started = await startOn(engine, {
+  const back = await startOn(engine, {
     deviceId: LISTENER,
     remotePort: echo.port,
     localPort: before,
   });
-  assert.equal(started.localPort, before);
+  assert.equal(back.localPort, before);
   assert.equal(engine.listForwards().length, 1);
   // Moves that name no worktree keep the one the forward was tagged
   // with.
@@ -574,7 +596,7 @@ it("engine: a ~1.5 MB transfer lands byte-identical", async () => {
   // the engine's uplink pump and reassembled off its poll loop.
   const bigLocal = randomBytes(1_500_000);
   const echoedLocal = await dialAndCollect(
-    started.localPort,
+    (await echoForward()).localPort,
     bigLocal,
     bigLocal.length,
     30_000,
@@ -591,7 +613,8 @@ it("engine: the fixture closing its socket ends the local client socket", async 
   const byeServer = await startLoopbackServer((socket) => {
     socket.end("bye");
   });
-  const byeForward = await startOn(engine, {
+  onTestFinished(() => byeServer.close());
+  const byeForward = await ownForward({
     deviceId: LISTENER,
     remotePort: byeServer.port,
   });
@@ -614,8 +637,6 @@ it("engine: the fixture closing its socket ends the local client socket", async 
     });
   });
   assert.equal(bye.toString("utf8"), "bye");
-  await stopOn(engine, byeForward.forwardId);
-  await byeServer.close();
 });
 
 it("engine: a forward to a dead port starts anyway and reaches a server that comes up later", async () => {
@@ -629,7 +650,7 @@ it("engine: a forward to a dead port starts anyway and reaches a server that com
   while (earlyLocalPort === latePort) {
     earlyLocalPort = await freeLoopbackPort();
   }
-  const early = await startOn(engine, {
+  const early = await ownForward({
     deviceId: LISTENER,
     remotePort: latePort,
     localPort: earlyLocalPort,
@@ -651,19 +672,19 @@ it("engine: a forward to a dead port starts anyway and reaches a server that com
     (socket) => socket.pipe(socket),
     { port: latePort },
   );
+  onTestFinished(() => lateServer.close());
   const lateEcho = await dialAndCollect(
     early.localPort,
     Buffer.from("late"),
     4,
   );
   assert.equal(lateEcho.toString("utf8"), "late");
-  await stopOn(engine, early.forwardId);
-  await lateServer.close();
 });
 
 it("engine: stopForward closes the listener and live conns, and a fresh forward still works", async () => {
   // (12) stopForward closes the listener and live conns, and the host
   // registry does not leak: a fresh forward still round-trips.
+  const started = await echoForward();
   const lingering = connect({ host: "127.0.0.1", port: started.localPort });
   lingering.on("error", () => {});
   const lingeringClosed = onceWithin(
@@ -692,10 +713,7 @@ it("engine: stopForward closes the listener and live conns, and a fresh forward 
       }),
     "the stopped forward's listener still accepts",
   );
-  fresh = await startOn(engine, {
-    deviceId: LISTENER,
-    remotePort: echo.port,
-  });
+  const fresh = await echoForward();
   const freshEcho = await dialAndCollect(
     fresh.localPort,
     Buffer.from("fresh"),
@@ -710,8 +728,12 @@ it(`engine: local socket ${MAX_CONNS_PER_DEVICE + 1} is destroyed at the cap of 
   // constant: the first local socket OVER the cap is destroyed
   // immediately while the capped set stands. Mirrors the host's
   // MAX_CONNS without spending a hub round trip on the doomed dial.
+  const fresh = await echoForward();
   const capOpensBefore = toListener.invokeCount("forward:open");
   const capSockets: Socket[] = [];
+  onTestFinished(() => {
+    for (const socket of capSockets) socket.destroy();
+  });
   for (let i = 0; i < MAX_CONNS_PER_DEVICE; i += 1) {
     const socket = connect({ host: "127.0.0.1", port: fresh.localPort });
     socket.on("error", () => {});
