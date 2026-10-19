@@ -15,7 +15,6 @@ import * as Layer from "effect/Layer";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostAccount from "@host/lib/HostAccount";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
-import * as Shell from "@host/lib/Shell";
 import * as Loopback from "@host/socket/Loopback";
 import { refresh } from "@host/lib/projects";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
@@ -191,18 +190,15 @@ const scriptGate = onQuit(
 );
 
 // What lets go of the data folder before a move takes it away: the
-// store, the updater's bridge and the loopback's address file.
+// store and the loopback's address file. The updater lets go earlier,
+// as the move's last check (holdUpdater).
 const dataDirHolders = Layer.effect(
   DataDirHolders,
   Effect.gen(function* () {
     const store = yield* EngineStoreChanges.StoreChanges;
-    const shell = yield* Shell.Shell;
     const loopback = yield* Loopback.Loopback;
     return DataDirHolders.of({
-      release: store.release.pipe(
-        Effect.andThen(shell.stopUpdaterBridge),
-        Effect.andThen(loopback.unpublish),
-      ),
+      release: store.release.pipe(Effect.andThen(loopback.unpublish)),
     });
   }),
 );

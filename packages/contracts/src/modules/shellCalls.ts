@@ -50,7 +50,13 @@ export const shellCallsContract = defineContract(
   // prompting a screen nobody watches.
   invoke("updaterInstall", UnattendedSchema, VoidSchema),
   invoke("updaterUpdate", UnattendedSchema, VoidSchema),
-  // Before a wipe of the data folder it lives in.
-  invoke("stopUpdaterBridge", VoidSchema, VoidSchema),
+  // Before a move or a reset of the data folder it works in: the updater
+  // let go of it (null), or the version an install under way restarts
+  // into ("" when it is not known).
+  invoke(
+    "holdUpdater",
+    strict(Schema.Struct({ for: Schema.Literals(["move", "reset"]) })),
+    Schema.NullOr(Schema.String),
+  ),
   invoke("guide", GuideDrivePayloadSchema, GuideReplySchema),
 );

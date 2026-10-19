@@ -32,7 +32,10 @@ export const layer = (calls: EffectClient<typeof shellCallsContract>) =>
           state: Ref.get(state),
           noteState: (next) => Ref.set(state, next),
         },
-        stopUpdaterBridge: Effect.ignore(calls.stopUpdaterBridge()),
+        holdUpdater: (forWhat) =>
+          calls
+            .holdUpdater({ for: forWhat })
+            .pipe(Effect.orElseSucceed(() => null)),
         migration: (progress) => ask(calls.migration(progress)),
         guide: (payload) => ask(calls.guide(payload)),
       });

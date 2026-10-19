@@ -136,6 +136,7 @@ export const runtimeHandlers = {
       yield* moveDataDir(parentDir, {
         place: yield* sessionPlace,
         killAllScripts: scripts.stopAll(),
+        holdUpdater: shell.holdUpdater("move"),
         movesUnderWay: underWayByName(
           yield* Moves.Moves,
           yield* AccountPeers.AccountPeers,
@@ -184,6 +185,7 @@ export const runtimeHandlers = {
           HostPushes.push(runtimeContract, "nukeProgress", progress),
         killAllScripts: (yield* Scripts.Scripts).stopAll(),
         closeTerminals: terminals.closeEvery,
+        holdUpdater: (yield* Shell.Shell).holdUpdater("reset"),
         uninstall: Effect.map(
           Effect.all([
             leftIf(

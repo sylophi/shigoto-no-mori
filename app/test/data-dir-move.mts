@@ -166,6 +166,7 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
           dataDirName: "moved",
         },
         beforeMove: Effect.void,
+        holdUpdater: Effect.succeed(null),
         killAllScripts: Effect.void,
         movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
         // Half the tree, then nothing more: the app was killed.
@@ -232,6 +233,7 @@ it("a move whose copy landed but whose pointer was never written is undone, its 
           dataDirName: "moved",
         },
         beforeMove: Effect.void,
+        holdUpdater: Effect.succeed(null),
         killAllScripts: Effect.void,
         movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(
@@ -584,6 +586,7 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
           dataDirName: "moved",
         },
         beforeMove: Effect.void,
+        holdUpdater: Effect.succeed(null),
         killAllScripts: Effect.void,
         movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
@@ -651,6 +654,7 @@ it("a cancel during the folder's rename keeps the landed folder and its staged p
           dataDirName: "moved",
         },
         beforeMove: Effect.void,
+        holdUpdater: Effect.succeed(null),
         killAllScripts: Effect.void,
         movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
@@ -736,6 +740,7 @@ it.each([
           );
           return yield* Effect.fail("stop before the folder moves");
         }),
+        holdUpdater: Effect.succeed(null),
         killAllScripts: Effect.void,
         movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.flip),
@@ -790,6 +795,7 @@ it.each([
         assert.equal(tip, head);
         return yield* Effect.fail("stop before the folder moves");
       }),
+      holdUpdater: Effect.succeed(null),
       killAllScripts: Effect.void,
       movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
     }).pipe(Effect.flip),
@@ -828,6 +834,7 @@ it("a capture made while a move kills the scripts comes back with its undo", asy
         defaultDataDir: join(elsewhere, "home", ".sm"),
         dataDirName: "moved",
       },
+      holdUpdater: Effect.succeed(null),
       killAllScripts: Effect.sync(() => {
         git(repo, "update-ref", ref(identity.id), head);
       }),
@@ -861,6 +868,7 @@ it("a move settles an earlier move's journal first, and waits while it can't", a
     return runHost(
       moveDataDir(parent, {
         place: place(name),
+        holdUpdater: Effect.succeed(null),
         killAllScripts: Effect.void,
         movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
         beforeMove: Effect.fail("stop before the folder moves"),
@@ -900,6 +908,7 @@ it("refuses another process's writes while a move's journal is out, and takes th
         defaultDataDir: join(elsewhere, "home", ".sm"),
         dataDirName: "moved",
       },
+      holdUpdater: Effect.succeed(null),
       killAllScripts: Effect.void,
       movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       beforeMove: Effect.gen(function* () {
@@ -932,6 +941,7 @@ it.each([
           dataDirName: "moved",
         },
         beforeMove: Effect.void,
+        holdUpdater: Effect.succeed(null),
         killAllScripts: Effect.void,
         movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.flip),
@@ -987,6 +997,7 @@ it("refuses a move while a worktree is being sent or brought", async () => {
         dataDirName: "moved",
       },
       beforeMove: Effect.void,
+      holdUpdater: Effect.succeed(null),
       killAllScripts: Effect.void,
       movesUnderWay: Effect.succeed({ moving: true, bringing: [] }),
     }).pipe(Effect.flip),
@@ -1010,6 +1021,7 @@ it("refuses a move while a peer is bringing a worktree from here, naming it", as
         dataDirName: "moved",
       },
       beforeMove: Effect.void,
+      holdUpdater: Effect.succeed(null),
       killAllScripts: Effect.void,
       movesUnderWay: Effect.succeed({ moving: false, bringing: ["Thinkpad"] }),
     }).pipe(Effect.flip),
@@ -1018,6 +1030,38 @@ it("refuses a move while a peer is bringing a worktree from here, naming it", as
     String(refused),
     /Thinkpad is bringing a worktree from here\. Try again when it finishes\./,
   );
+  assert.equal(existsSync(join(parent, "moved")), false);
+  assert.equal(journalLeft(), false);
+});
+
+// An update installing restarts the app out of the folder the move
+// renames: refused in the updater's words, before a script is stopped
+// or anything moves.
+it("refuses a move while an update installs, in the updater's words, with no script stopped", async () => {
+  const parent = join(elsewhere, "while-installing");
+  let scriptsStopped = false;
+  const refused = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-8", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      beforeMove: Effect.void,
+      holdUpdater: Effect.succeed("3.1.0"),
+      killAllScripts: Effect.sync(() => {
+        scriptsStopped = true;
+      }),
+      movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
+    }).pipe(Effect.flip),
+  );
+  assert.match(
+    String(refused),
+    /The update to 3\.1\.0 is installing, and the app restarts into it\. Move the data folder after the restart\./,
+  );
+  assert.equal(scriptsStopped, false, "a script was stopped first");
   assert.equal(existsSync(join(parent, "moved")), false);
   assert.equal(journalLeft(), false);
 });
