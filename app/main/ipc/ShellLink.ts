@@ -24,7 +24,7 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import { portSocket } from "@shared/remote/portSocket";
 import {
-  decodeFrame,
+  decodeMessage,
   frameWords,
   makeServerProtocol,
 } from "@shared/remote/rpcServer";
@@ -57,8 +57,7 @@ export class ShellLink extends Context.Service<
 
 type Connection = {
   readonly socket: Socket.WebSocketLike;
-  // Replaced after a frame it couldn't read.
-  parser: RpcSerialization.Parser;
+  readonly parser: RpcSerialization.Parser;
   readonly webContents: WebContents | null;
   // Its id, kept: a window's calls still settle as it is destroyed.
   readonly windowId: number | null;
@@ -199,16 +198,13 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
         const { pull } = yield* socket.reader;
         while (true) {
           for (const frame of yield* pull) {
-            const messages = decodeFrame(connection.parser, frame);
+            const messages = decodeMessage(frame);
             if (Result.isFailure(messages)) {
-              // A port keeps its messages whole, so a fresh parser reads
-              // the next one exactly; the call in this frame, whose id
-              // can't be read, goes unanswered. Said, so a bug that
-              // sends such frames is seen.
+              // A port keeps its messages whole, so the next one reads
+              // alone; the calls in this one go unanswered.
               log.warn(
                 `[shell] dropped an unreadable frame on a ${connection.webContents === null ? "host" : "window"} port (${frameWords(frame, messages.failure)})`,
               );
-              connection.parser = server.parser();
               continue;
             }
             for (const message of messages.success) {

@@ -518,8 +518,6 @@ export const make = (options: {
         let nextClientId = 0;
         let preAuth = 0;
         let originRejectLoggedAt = -Infinity;
-        // Effect's binary layout (shared/remote/link.ts), so a channel's
-        // bytes cross as bytes.
         const server = yield* makeServerProtocol({
           client: (clientId) => {
             const connection = connections.get(clientId);

@@ -5,9 +5,10 @@
 // keeps its connections and reads them itself.
 import { LINK_MAX_FRAME_BYTES } from "@shigomori/contracts/link";
 import * as Effect from "effect/Effect";
+import * as SchemaBinary from "effect/encoding/SchemaBinary";
 import * as Queue from "effect/Queue";
 import * as Result from "effect/Result";
-import type * as RpcMessage from "effect/rpc/RpcMessage";
+import * as RpcMessage from "effect/rpc/RpcMessage";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 
@@ -59,7 +60,6 @@ export const makeServerProtocol = (options: {
     });
     return {
       protocol,
-      // A parser for a new connection.
       parser: () => serialization.makeUnsafe(),
       request: (clientId: number, message: RpcMessage.FromClientEncoded) =>
         writeRequest(clientId, message),
@@ -82,9 +82,34 @@ export function decodeFrame(
   }
 }
 
+// A whole message's requests, for a wire that keeps messages whole: read
+// alone, with layerSchemaBinary's envelope, so a frame cut short or a bad
+// frame after a good one fails here and not in the next message.
+export function decodeMessage(
+  message: Uint8Array | string,
+): Result.Result<ReadonlyArray<RpcMessage.FromClientEncoded>, unknown> {
+  const parser = SchemaBinary.parser(RpcMessage.EncodedSchema, {
+    fingerprint: true,
+    maxFrameSize: LINK_MAX_FRAME_BYTES,
+  });
+  try {
+    const messages = parser.feedSync(
+      typeof message === "string" ? new TextEncoder().encode(message) : message,
+    );
+    parser.endSync();
+    return Result.succeed(
+      messages as ReadonlyArray<RpcMessage.FromClientEncoded>,
+    );
+  } catch (error) {
+    return Result.fail(error);
+  }
+}
+
 // What a dropped frame says in a log: its size and the parse error,
 // never its bytes, which can carry a token.
 export const frameWords = (frame: Uint8Array | string, error: unknown) =>
-  `${typeof frame === "string" ? frame.length : frame.byteLength} bytes: ${
-    error instanceof Error ? error.message : String(error)
-  }`;
+  `${typeof frame === "string" ? frame.length : frame.byteLength} bytes: ${(error instanceof
+  Error
+    ? error.message
+    : String(error)
+  ).replaceAll(/\s*\n\s*/g, " ")}`;
