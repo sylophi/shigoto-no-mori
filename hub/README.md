@@ -222,9 +222,9 @@ authenticates), it only bounds what that traffic can cost.
   `GET /connect` cannot be used to instantiate a Durable Object under
   a name of the caller's choosing. A forged ticket is a `403` from the
   Worker. A ticket is bound to the credential it was minted with:
-  enrolling a device again rotates its credential, drops its unspent
-  tickets and closes its sockets (`4104`), and each dials again with
-  the new credential.
+  enrolling a device again rotates its credential and closes its
+  sockets (`4104`), and each dials again with the new credential; its
+  unspent tickets carry the old one, which admission refuses.
 - A device holds at most `MAX_DEVICE_CONNECTIONS` (32) sockets,
   whatever its kind. A desktop holds one and a browser profile one per
   tab; past the cap the device's oldest socket gives way.

@@ -730,7 +730,8 @@ describe("revocation", () => {
     await env.DB.prepare("DELETE FROM devices WHERE device_id = ?")
       .bind("dev-rr-victim")
       .run();
-    await revoke(keeper.credential, "dev-rr-victim");
+    // Unknown, as for any device the account has no row of.
+    expect((await revoke(keeper.credential, "dev-rr-victim")).status).toBe(404);
     expect((await victim.socket.closed).code).toBe(CLOSE_DEVICE_REVOKED);
     await keeper.socket.untilPresence(["dev-rr-keeper"]);
   });
