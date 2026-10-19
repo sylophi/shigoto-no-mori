@@ -60,8 +60,12 @@ import type { KeyPair } from "@shared/crypto/noise";
 import {
   type DeviceConnection,
   type DeviceLinkOptions,
-  openDevice,
+  dialDevice,
+  RemoteConnectError,
 } from "@shared/remote/deviceLink";
+import * as Clock from "effect/Clock";
+import * as Deferred from "effect/Deferred";
+import * as Fiber from "effect/Fiber";
 import { startStubHub, type StubHub, testDeviceKey } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";
 import { type Track, waitFor } from "./checkKit.mts";
@@ -632,8 +636,84 @@ export type DialOpts = {
   onClose?: () => void;
   protocolVersion?: number;
   deviceKind?: "desktop" | "web";
-  clock?: DeviceLinkOptions["clock"];
+  // The clock the link's timings read: the live one unless a check
+  // steps it.
+  clock?: Clock.Clock;
 };
+
+// A dial in its two steps, as the direct race takes it (dialDevice's
+// gate), for checks that hold a link between its socket's open and its
+// hello: `whenOpen`, then `authenticate()` for the link, or `abandon()`.
+// The link is up until its `close`, and `onClose` hears it end on its
+// own.
+export type PendingDial = {
+  whenOpen: Promise<void>;
+  authenticate(): Promise<DeviceConnection>;
+  abandon(): void;
+};
+
+function pendingDial(
+  options: DeviceLinkOptions,
+  onClose: () => void,
+  clock: Clock.Clock | undefined,
+): PendingDial {
+  const opened = Deferred.makeUnsafe<void, RemoteConnectError>();
+  const helloAsked = Deferred.makeUnsafe<void>();
+  const welcomed = Deferred.makeUnsafe<DeviceConnection, RemoteConnectError>();
+  let established = false;
+  let ownerClosed = false;
+  const close = () => {
+    ownerClosed = true;
+    Effect.runFork(Fiber.interrupt(fiber));
+  };
+  const fiber = Effect.runFork(
+    Effect.gen(function* () {
+      const {
+        dropped,
+        link: _,
+        ...dialed
+      } = yield* dialDevice(options, {
+        opened,
+        helloAsked,
+      });
+      established = true;
+      yield* Deferred.succeed(welcomed, { ...dialed, close });
+      yield* dropped;
+    }).pipe(
+      Effect.scoped,
+      clock === undefined
+        ? (dial) => dial
+        : Effect.provideService(Clock.Clock, clock),
+      Effect.catch((failed) =>
+        Effect.andThen(
+          Deferred.fail(opened, failed),
+          Deferred.fail(welcomed, failed),
+        ),
+      ),
+    ),
+  );
+  fiber.addObserver(() => {
+    if (established && !ownerClosed) onClose();
+    const closed = new RemoteConnectError("connection closed", null, false);
+    Effect.runSync(
+      Deferred.fail(opened, closed).pipe(
+        Effect.andThen(Deferred.fail(welcomed, closed)),
+      ),
+    );
+  });
+  const whenOpen = Effect.runPromise(Deferred.await(opened));
+  whenOpen.catch(() => {});
+  const connected = Effect.runPromise(Deferred.await(welcomed));
+  connected.catch(() => {});
+  return {
+    whenOpen,
+    authenticate() {
+      Effect.runSync(Deferred.succeed(helloAsked, undefined));
+      return connected;
+    },
+    abandon: close,
+  };
+}
 
 // A dial straight at a listener, sealed with the test keys, before its
 // handshake: `.authenticate()` links it or fails.
@@ -643,25 +723,27 @@ export function dialing(
 ) {
   const dialer = opts.dialer ?? DIALER;
   const expects = opts.expects ?? listener.deviceId;
-  return openDevice({
-    url: opts.url ?? `ws://127.0.0.1:${listener.port}`,
-    ticket: opts.ticket ?? mintTicket(listener.tickets, dialer),
-    seal: {
-      localKey: opts.localKey ?? testDeviceKey(dialer).pair,
-      remoteKey: testDeviceKey(expects).pair.publicKey,
+  return pendingDial(
+    {
+      url: opts.url ?? `ws://127.0.0.1:${listener.port}`,
+      ticket: opts.ticket ?? mintTicket(listener.tickets, dialer),
+      seal: {
+        localKey: opts.localKey ?? testDeviceKey(dialer).pair,
+        remoteKey: testDeviceKey(expects).pair.publicKey,
+      },
+      appVersion: "1.0.0",
+      localDeviceId: dialer,
+      expectedDeviceId: expects,
+      openSocket: opts.openSocket ?? ((url) => new WsClient(url)),
+      deadlineMs: opts.deadlineMs ?? DIAL_DEADLINE_MS,
+      ...(opts.deviceKind === undefined ? {} : { deviceKind: opts.deviceKind }),
+      ...(opts.protocolVersion === undefined
+        ? {}
+        : { protocolVersion: opts.protocolVersion }),
     },
-    appVersion: "1.0.0",
-    localDeviceId: dialer,
-    expectedDeviceId: expects,
-    onClose: opts.onClose ?? (() => {}),
-    openSocket: opts.openSocket ?? ((url) => new WsClient(url)),
-    deadlineMs: opts.deadlineMs ?? DIAL_DEADLINE_MS,
-    ...(opts.deviceKind === undefined ? {} : { deviceKind: opts.deviceKind }),
-    ...(opts.protocolVersion === undefined
-      ? {}
-      : { protocolVersion: opts.protocolVersion }),
-    ...(opts.clock === undefined ? {} : { clock: opts.clock }),
-  });
+    opts.onClose ?? (() => {}),
+    opts.clock,
+  );
 }
 
 // One link to a listener, closed with the test.

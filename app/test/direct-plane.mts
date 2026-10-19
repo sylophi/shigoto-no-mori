@@ -151,11 +151,12 @@ import * as PlatformError from "effect/PlatformError";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
-import type * as Context from "effect/Context";
+import * as Context from "effect/Context";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import { it } from "vitest";
 import {
   CommandRefusedError,
+  errorMessageOf,
   LinkRefusedError,
   NoDirectConnectionError,
   NotSharingError,
@@ -175,6 +176,7 @@ import {
 } from "@shared/hub/bridgeHandlers";
 import {
   createDirectDialer,
+  type DirectDialer,
   type DirectDialerDeps,
   isTerminalDialError,
   NoDialableCandidateError,
@@ -327,7 +329,10 @@ const CLOSE_AUTH_LOCKED_OUT = 4003;
 // a function, which may throw to play a rejected ask.
 function fakeAskDialer(
   answer: DirectConnectInfo | (() => DirectConnectInfo),
-  opts: Pick<DirectDialerDeps, "dialableKinds" | "deadlineMs"> & {
+  opts: Pick<
+    DirectDialerDeps,
+    "dialableKinds" | "deadlineMs" | "openSocket"
+  > & {
     // How long the peer takes to answer the ask.
     askDelayMs?: number;
   } = {},
@@ -344,10 +349,29 @@ function fakeAskDialer(
     dialableKinds: opts.dialableKinds,
     // The production socket (the host injects ws), so the errno path the
     // seam exists for is what the proof runs.
-    openSocket: (url) => new WsClient(url),
+    openSocket: opts.openSocket ?? ((url) => new WsClient(url)),
     deadlineMs: opts.deadlineMs ?? 4000,
   });
   return { dialer };
+}
+
+// The keeper's one dial on a bridge, as a Promise.
+const dialOn = (bridge: HubHandlers, deviceId: string) =>
+  Effect.runPromise(bridge.dialPeer(deviceId));
+
+// One direct dial in a scope of its own, its link up until `close`.
+async function connectOnce(dialer: DirectDialer, deviceId: string) {
+  const scope = Scope.makeUnsafe();
+  const closed = () => Effect.runPromise(Scope.close(scope, Exit.void));
+  try {
+    const connection = await Effect.runPromise(
+      Scope.provide(scope)(dialer.connectDirect(deviceId)),
+    );
+    return { ...connection, close: () => void closed() };
+  } catch (error) {
+    await closed();
+    throw error;
+  }
 }
 
 // The keeper on a TestClock over a stub dial, the scaffolding the two
@@ -376,7 +400,7 @@ function stubKeeper(rejectWith: unknown) {
     makeDirectKeeper({
       dial: (deviceId) => {
         dials.push({ deviceId, at: clock.now() });
-        return dialSucceeds ? Promise.resolve() : Promise.reject(rejectWith);
+        return dialSucceeds ? Effect.void : Effect.fail(rejectWith);
       },
     }),
   );
@@ -453,44 +477,53 @@ async function rawHeaderDial(
 }
 
 // The bridge cache (shared/hub/bridgeHandlers.ts) driven directly
-// with a controllable dialer whose one dial resolves only on release,
-// so the mid-dial sweep scenarios can provably land a sweep between
-// dial start and completion.
+// with a controllable dialer whose one dial lands only on release, so
+// the mid-dial sweep scenarios can provably land a sweep between dial
+// start and completion. `closed` counts the dials whose scope closed,
+// landed or not.
 function heldDial() {
   let release: () => void = notYetSet;
   let closed = 0;
   let changes = 0;
-  const handlers = makeHubHandlers({
-    status: () => ({
-      socket: { phase: "connected" },
-      onlineDeviceIds: [],
-      peerAppVersions: {},
-      peerAcceptsCommands: {},
-      peerSharesData: {},
-    }),
-    connectDirect: () =>
-      new Promise((resolve) => {
-        release = () =>
-          resolve({
+  const handlers = madeOn(
+    Context.empty(),
+    makeHubHandlers({
+      status: () => ({
+        socket: { phase: "connected" },
+        onlineDeviceIds: [],
+        peerAppVersions: {},
+        peerAcceptsCommands: {},
+        peerSharesData: {},
+      }),
+      connectDirect: () =>
+        Effect.gen(function* () {
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              closed += 1;
+            }),
+          );
+          yield* Effect.callback<void>((resume) => {
+            release = () => resume(Effect.void);
+          });
+          return {
             transport: {
               invoke: async () => null,
               subscribe: () => () => {},
             },
             channels: { attach: notYetSet, has: () => false, size: () => 0 },
-            close: () => {
-              closed += 1;
-            },
             probe: () => {},
             remoteDeviceId: LISTENER,
             remoteAppVersion: "9",
             acceptsCommands: false,
             sharesData: true,
-          });
-      }),
-    onDirectChange: () => {
-      changes += 1;
-    },
-  });
+            dropped: Effect.never,
+          };
+        }),
+      onDirectChange: () => {
+        changes += 1;
+      },
+    }),
+  );
   return {
     handlers,
     release: () => release(),
@@ -600,7 +633,7 @@ it("brokering serves the roster only: an ask forged from outside the host's live
 it("direct dial: the handshake completes with the pinned identity and invokes flow while the device hub's forwardedCount stays flat", async () => {
   const listener = await startDirectListener(trackTest);
   const { stub, bridge } = await bridgeTo(trackTest, listener);
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   // The welcome pinned the dialed identity and confirmed the
   // host's version, surfaced through the one per-peer data fact.
   assert.deepEqual(bridge.directPeerVersions(), { [LISTENER]: "2.0.0" });
@@ -622,7 +655,7 @@ it("direct dial: the handshake completes with the pinned identity and invokes fl
 it("interrupted over the hop: a call a window or a tab drops cancels the listener's handler", async () => {
   const listener = await startDirectListener(trackTest);
   const { bridge } = await bridgeTo(trackTest, listener);
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   const fiber = Effect.runFork(
     servedInvokePeer(() => bridge)({
       deviceId: LISTENER,
@@ -649,7 +682,7 @@ it("concurrent race: a junk candidate enumerating first no longer defeats a reac
     deadlineMs: 4000,
   });
   const startedAt = Date.now();
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   const elapsed = Date.now() - startedAt;
   assert.ok(
     elapsed < 2000,
@@ -675,7 +708,7 @@ it("blocked verdict is terminal but does not end the race: an auth-refused candi
     deadlineMs: 1500,
   });
   await assert.rejects(
-    () => bridge.dialPeer(LISTENER),
+    () => dialOn(bridge, LISTENER),
     (error) => refusedTicket(error),
     "an auth-refused candidate did not reject the attempt as blocked",
   );
@@ -703,7 +736,7 @@ it("a refusing candidate cannot deny the dial: a far end that refuses has proved
       { kind: "lan", url: `ws://127.0.0.1:${slowPort}`, ticket },
     ],
   });
-  const connection = await dialer.connectDirect(LISTENER);
+  const connection = await connectOnce(dialer, LISTENER);
   trackTest(() => connection.close());
   assert.equal(connection.remoteDeviceId, LISTENER);
 });
@@ -723,7 +756,7 @@ it("a late answer leaves the race its own budget: a peer just woken answers most
     },
     { deadlineMs: 1000, askDelayMs: 700 },
   );
-  const connection = await dialer.connectDirect(LISTENER);
+  const connection = await connectOnce(dialer, LISTENER);
   trackTest(() => connection.close());
   assert.equal(connection.remoteDeviceId, LISTENER);
 });
@@ -758,7 +791,7 @@ it("serialized hellos: with two reachable candidates the slow one never hellos, 
       },
     ],
   });
-  const connection = await dialer.connectDirect(LISTENER);
+  const connection = await connectOnce(dialer, LISTENER);
   trackTest(() => connection.close());
   assert.equal(connection.remoteDeviceId, LISTENER);
   // Let the slow candidate's socket open, be abandoned, and any
@@ -808,7 +841,7 @@ it("the host names its lockout on the wire: a client inside the failed-auth wind
   });
   let verdict: unknown;
   await assert.rejects(
-    () => dialer.connectDirect(LISTENER),
+    () => connectOnce(dialer, LISTENER),
     (error) => {
       verdict = error;
       return error instanceof RemoteConnectError;
@@ -861,7 +894,7 @@ it("a genuine ticket refusal is blocked and terminal, and the keeper asks again 
   });
   let verdict: unknown;
   await assert.rejects(
-    () => dialer.connectDirect(LISTENER),
+    () => connectOnce(dialer, LISTENER),
     (error) => {
       verdict = error;
       return error instanceof RemoteConnectError;
@@ -960,7 +993,7 @@ it("candidate boundary: a tunnel-kind ws:// candidate is refused by the schema a
     { deadlineMs: 1500 },
   );
   await assert.rejects(
-    () => dialer.connectDirect(LISTENER),
+    () => connectOnce(dialer, LISTENER),
     "a tunnel-kind ws:// candidate was dialed",
   );
   assert.equal(
@@ -1105,7 +1138,7 @@ it("deadline: a peer that never answers the ask cannot hang the bridge cache, wh
   // unreachable for data. An invoke arriving while the dial is in
   // flight joins it (the seamless boot race) and shares its typed
   // deadline rejection instead of hanging every consumer.
-  const inFlight = bridge.dialPeer(LISTENER);
+  const inFlight = dialOn(bridge, LISTENER);
   await assert.rejects(
     async () => invokeListener(bridge, ECHO, echoOf("hung peer")),
     /did not answer within/,
@@ -1403,7 +1436,7 @@ it("one round trip: a winning dial costs the device hub exactly one ask and one 
   const listener = await startDirectListener(trackTest);
   const { stub, bridge } = await bridgeTo(trackTest, listener);
   const before = stub.receivedCount();
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   const exchange = stub.received.slice(before);
   assert.deepEqual(
     exchange.map((entry) => `${entry.from}>${entry.to}`),
@@ -1437,7 +1470,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
     dropClientPeersNotIn: (online) => bridge.dropDirectPeersNotIn(online),
     reconcilePeers: (online) => reconcileCalls.push([...online]),
   };
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   assert.deepEqual(await invokeListener(bridge, ECHO, echoOf("up")), "up");
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
   // Our own hub link down (no live roster): the working direct
@@ -1490,7 +1523,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
   // this device has no account, so every session closes on both
   // sides even though the stale link may still report a roster,
   // and the keeper's desired set empties.
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
   let inboundClosed = false;
   const inbound2 = await dial(listener, {
@@ -1508,7 +1541,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
     "a stopped socket to close the host-side sockets",
   );
   // A revoked block is the same verdict from the hub's side.
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
   applyDirectPresence(
     { phase: "blocked", reason: "revoked", message: "removed" },
@@ -1517,7 +1550,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
   );
   assert.deepEqual(bridge.directPeerVersions(), {});
   // Any other block is an outage: the sessions ride it out.
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   applyDirectPresence(
     { phase: "blocked", reason: "refused", message: "401" },
     [],
@@ -1526,35 +1559,185 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
 });
 
-it("mid-dial sweeps: a peer leaving the roster while its dial is in flight has the completed session closed on arrival and never reported, and the quit sweep closes an in-flight dial's socket too", async () => {
-  // Roster sweep: the peer leaves (revocation included) while its
-  // dial is still in flight. The completing session must not be
-  // installed for a device the control plane stopped vouching for.
-  const sweep = heldDial();
-  const ensure = sweep.handlers.dialPeer(LISTENER);
-  sweep.handlers.dropDirectPeersNotIn([]);
-  sweep.release();
-  await ensure;
-  assert.equal(
-    sweep.closed(),
-    1,
-    "the session completing after the roster sweep was not closed",
+it("mid-dial sweeps: a peer leaving the roster while its dial is in flight ends the dial at once, closing what it opened and reporting nothing, and the quit sweep does the same", async () => {
+  // Roster sweep: the peer leaves (revocation included) while its dial
+  // is still in flight. Nothing is installed for a device the control
+  // plane stopped vouching for, and the dial does not run on.
+  for (const close of [
+    (handlers: HubHandlers) => handlers.dropDirectPeersNotIn([]),
+    (handlers: HubHandlers) => handlers.closeDirectPeers(),
+  ]) {
+    const held = heldDial();
+    const ended = dialOn(held.handlers, LISTENER).then(
+      () => "landed",
+      () => "ended",
+    );
+    close(held.handlers);
+    assert.equal(await ended, "ended");
+    await waitFor(() => held.closed() === 1, "the in-flight dial to close");
+    held.release();
+    assert.deepEqual(held.handlers.directPeerVersions(), {});
+    assert.equal(held.changes(), 0, "an ended dial fired onDirectChange");
+  }
+});
+
+// A far end that takes a candidate's socket and never answers, so a
+// dial sits mid-open until it is ended or out of budget, counting the
+// sockets the far end took and the dial's sockets that closed.
+async function silentCandidates(count: number) {
+  const seen = { accepted: 0, closed: 0 };
+  const server = await startLoopbackServer(() => {
+    seen.accepted += 1;
+  });
+  trackTest(server.close);
+  const { dialer } = fakeAskDialer(
+    {
+      available: true,
+      acceptsCommands: false,
+      sharesData: true,
+      candidates: Array.from({ length: count }, (_, index) => ({
+        kind: "lan" as const,
+        url: `ws://127.0.0.1:${server.port}`,
+        ticket: `smpt_silent_${index}`,
+      })),
+    },
+    {
+      deadlineMs: 1500,
+      openSocket: (url) => {
+        const socket = new WsClient(url);
+        socket.on("close", () => {
+          seen.closed += 1;
+        });
+        return socket;
+      },
+    },
   );
-  assert.deepEqual(sweep.handlers.directPeerVersions(), {});
-  assert.equal(sweep.changes(), 0, "an orphan session fired onDirectChange");
-  // Quit sweep: closeDirectPeers with a dial still in flight must
-  // close the resulting socket instead of leaking it past quit.
-  const quit = heldDial();
-  const quitEnsure = quit.handlers.dialPeer(LISTENER);
-  quit.handlers.closeDirectPeers();
-  quit.release();
-  await quitEnsure;
-  assert.equal(
-    quit.closed(),
-    1,
-    "the quit sweep left the in-flight dial's socket open",
+  return { seen, dialer };
+}
+
+const QUIET_STATUS = {
+  socket: { phase: "connected" },
+  onlineDeviceIds: [],
+  peerAppVersions: {},
+  peerAcceptsCommands: {},
+  peerSharesData: {},
+} as const;
+
+it("a dial ended mid-open, by the roster sweep or the bridge's close, closes its candidates' sockets at once, and nothing more comes of it past its deadline", async () => {
+  for (const end of ["the roster sweep", "the bridge's close"] as const) {
+    const { seen, dialer } = await silentCandidates(2);
+    let changes = 0;
+    const scope = Scope.makeUnsafe();
+    trackTest(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+    const bridge = Effect.runSync(
+      Scope.provide(scope)(
+        makeHubHandlers({
+          status: () => QUIET_STATUS,
+          connectDirect: (deviceId) => dialer.connectDirect(deviceId),
+          onDirectChange: () => {
+            changes += 1;
+          },
+        }),
+      ),
+    );
+    const ended = dialOn(bridge, LISTENER).then(
+      () => "landed",
+      () => "ended",
+    );
+    await waitFor(() => seen.accepted === 2, "both candidates to be taken");
+    const endedAt = Date.now();
+    if (end === "the roster sweep") bridge.dropDirectPeersNotIn([]);
+    else await Effect.runPromise(Scope.close(scope, Exit.void));
+    assert.equal(await ended, "ended", end);
+    await waitFor(() => seen.closed === 2, `${end} to close both sockets`);
+    assert.ok(
+      Date.now() - endedAt < 1000,
+      `${end} left the sockets to the dial's deadline`,
+    );
+    await delay(1800);
+    assert.equal(seen.accepted, 2, `the dial ran on after ${end}`);
+    assert.equal(changes, 0, `an ended dial fired onDirectChange (${end})`);
+  }
+});
+
+it("a dial that dies settles its waiters and leaves the slot empty, so the next dial starts afresh", async () => {
+  let dials = 0;
+  const bridge = madeOn(
+    Context.empty(),
+    makeHubHandlers({
+      status: () => QUIET_STATUS,
+      connectDirect: () =>
+        Effect.suspend(() => {
+          dials += 1;
+          return Effect.die(new Error("the dialer threw"));
+        }),
+    }),
   );
-  assert.deepEqual(quit.handlers.directPeerVersions(), {});
+  await assert.rejects(() => dialOn(bridge, LISTENER), /the dialer threw/);
+  await assert.rejects(() => dialOn(bridge, LISTENER), /the dialer threw/);
+  assert.equal(dials, 2, "the dead dial stayed in the cache");
+});
+
+it("a dial ended mid-ask drops its hub ask at once", async () => {
+  let aborted = false;
+  const dialer = createDirectDialer({
+    askConnectInfo: (_deviceId, _input, _timeoutMs, signal) =>
+      new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(signal.reason);
+        });
+      }),
+    localDeviceId: DIALER,
+    localAppVersion: "1.0.0",
+    localKey: () => testDeviceKey(DIALER).pair,
+    peerKey: (deviceId) => testDeviceKey(deviceId).pair.publicKey,
+    deadlineMs: 1500,
+  });
+  const bridge = madeOn(
+    Context.empty(),
+    makeHubHandlers({
+      status: () => QUIET_STATUS,
+      connectDirect: (deviceId) => dialer.connectDirect(deviceId),
+    }),
+  );
+  const ended = dialOn(bridge, LISTENER).then(
+    () => "landed",
+    () => "ended",
+  );
+  await delay(50);
+  bridge.dropDirectPeersNotIn([]);
+  assert.equal(await ended, "ended");
+  await waitFor(() => aborted, "the hub ask to be dropped");
+});
+
+it("a dial's deadline runs on the bridge's clock, as everything else its fibers do", async () => {
+  const { seen, dialer } = await silentCandidates(1);
+  const clock = testClock();
+  const bridge = madeOn(
+    clock.context,
+    makeHubHandlers({
+      status: () => QUIET_STATUS,
+      connectDirect: (deviceId) => dialer.connectDirect(deviceId),
+    }),
+  );
+  let outcome: string | null = null;
+  void dialOn(bridge, LISTENER).then(
+    () => {
+      outcome = "landed";
+    },
+    (error: unknown) => {
+      outcome = errorMessageOf(error);
+    },
+  );
+  await waitFor(() => seen.accepted === 1, "the candidate to be taken");
+  // Past the deadline on the wall clock, and not on the bridge's.
+  await delay(1800);
+  assert.equal(outcome, null, "the deadline read the wall clock");
+  await clock.advance(1500);
+  await waitFor(() => outcome !== null, "the deadline on the bridge's clock");
+  assert.match(outcome ?? "", /did not open|exceeded its 1500ms deadline/);
+  await waitFor(() => seen.closed === 1, "the candidate's socket to close");
 });
 
 it("supervised and eager: presence alone establishes the session (no invoke anywhere), a host-side drop is redialed by the keeper on the shared ladder, and the plane's close latches the schedule", async () => {
@@ -1616,7 +1799,7 @@ it("command access on the answer and live: the connectInfo answer's switch lands
   const { plane, bridge } = await bridgeTo(trackTest, listener, {
     onStatusChange: (status) => snapshots.push(status),
   });
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   // Off at dial time: the answer said so, before any call.
   assert.deepEqual(bridge.directPeerAccess(), { [LISTENER]: false });
   assert.deepEqual(plane.status().peerAcceptsCommands, { [LISTENER]: false });
@@ -1649,14 +1832,14 @@ it("command access on the answer and live: the connectInfo answer's switch lands
   listener.setAccepts(true);
   bridge.closeDirectPeers();
   assert.deepEqual(bridge.directPeerAccess(), {});
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   assert.deepEqual(bridge.directPeerAccess(), { [LISTENER]: true });
 });
 
 it("sharing on the answer and live: the answer's switch lands in the snapshot, the host's flips reach it as pushes over the same session, and with it off the gate refuses even a read", async () => {
   const listener = await startDirectListener(trackTest);
   const { plane, bridge } = await bridgeTo(trackTest, listener);
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   assert.deepEqual(plane.status().peerSharesData, { [LISTENER]: true });
   listener.setSharing(false);
   await waitFor(
@@ -1669,7 +1852,7 @@ it("sharing on the answer and live: the answer's switch lands in the snapshot, t
   );
   // A fresh dial reads it off the answer.
   bridge.closeDirectPeers();
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   assert.deepEqual(plane.status().peerSharesData, { [LISTENER]: false });
   listener.setSharing(true);
   await waitFor(
@@ -1692,7 +1875,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
   });
   // Direct available: the keeper-shaped dial establishes the
   // session, and invokes ride it leaving the device hub flat.
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   assert.deepEqual(await invokeListener(bridge, ECHO, echoOf("1")), "1");
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
   // The welcome-confirmed version surfaces for the direct session,
@@ -1733,7 +1916,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
   // attempt rejects with the typed unreachable outcome and the
   // cache stays empty.
   await assert.rejects(
-    () => bridge.dialPeer(LISTENER),
+    () => dialOn(bridge, LISTENER),
     /offers no direct listener/,
   );
   assert.deepEqual(bridge.directPeerVersions(), {});
@@ -1742,7 +1925,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
 it("a link that drops under a call is no session, in words: the call a woken window made on a link that died meanwhile fails as no direct connection, which a query waits out quietly and an action reports", async () => {
   const listener = await startDirectListener(trackTest);
   const { bridge } = await bridgeTo(trackTest, listener);
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   const held = invokeListener(bridge, HOLD, echoOf("p"));
   await waitFor(() => listener.hold.started, "the held call to start");
   await listener.binding.reconcile(null);
@@ -1769,7 +1952,7 @@ it("unreachable is typed: a failed direct dial rejects the invoke with the dial 
   const before = stub.receivedCount();
   // An invoke racing the in-flight dial shares its fate as no session,
   // in the dial's words.
-  const inFlight = bridge.dialPeer(LISTENER);
+  const inFlight = dialOn(bridge, LISTENER);
   await assert.rejects(
     async () => invokeListener(bridge, ECHO, echoOf("unreachable")),
     (error) =>
@@ -1843,7 +2026,7 @@ it("the no-route hint names the LAN addresses it tried and, beside it, why the t
       openSocket: failingSocket,
       deadlineMs: 4000,
     });
-    const error = await dialer.connectDirect(LISTENER).then(
+    const error = await connectOnce(dialer, LISTENER).then(
       () => assert.fail("the dial landed"),
       (failure: unknown) => failure,
     );
@@ -1874,7 +2057,7 @@ it("pushes: a host broadcast reaches a direct-connected client through the share
   // A keeper-shaped dial and nothing else: the session comes up
   // with no invoke, then the host's fan-out reaches it over the
   // direct socket.
-  await bridge.dialPeer(LISTENER);
+  await dialOn(bridge, LISTENER);
   assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
   const baseline = stub.forwardedCount();
   listener.binding.broadcastAll("git:projectChanged", { projectId: "seven" });
@@ -2126,7 +2309,7 @@ it("dialableKinds (the web path): the declared capability reaches the host over 
   // rejects as unreachable: direct or nothing. Typed pin: the
   // failed candidate socket surfaces as the connect error.
   await assert.rejects(
-    () => bridge.dialPeer(LISTENER),
+    () => dialOn(bridge, LISTENER),
     (error) => error instanceof RemoteConnectError,
   );
   assert.deepEqual(bridge.directPeerVersions(), {});
@@ -2152,7 +2335,7 @@ it("dialableKinds (the web path): the declared capability reaches the host over 
     deadlineMs: 2000,
   });
   await assert.rejects(
-    () => bareBridge.dialPeer(LISTENER),
+    () => dialOn(bareBridge, LISTENER),
     /offers no direct listener/,
     "a kind-filtered empty answer was not the plain unavailable outcome",
   );
@@ -2228,7 +2411,7 @@ it("a listener-less peer is a TERMINAL verdict: the browser binding's no-listene
   const { bridge } = makeDirectBridge(dialer);
   let verdict: unknown;
   await assert.rejects(
-    () => bridge.dialPeer(LISTENER),
+    () => dialOn(bridge, LISTENER),
     (error) => {
       verdict = error;
       return error instanceof NoDialableCandidateError;
@@ -2244,7 +2427,7 @@ it("a listener-less peer is a TERMINAL verdict: the browser binding's no-listene
   // refused": a server that threw is one bad call, so it keeps its
   // place on the ladder.
   await assert.rejects(
-    () => bridge.dialPeer("C"),
+    () => dialOn(bridge, "C"),
     (error) => {
       assert.equal(
         isTerminalDialError(error),

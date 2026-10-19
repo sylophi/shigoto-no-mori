@@ -103,6 +103,10 @@ export const openPeerWorktree = (page: Page, device: string, name: string) =>
     name,
   );
 
+// This device's own worktree, opened from its sidebar.
+export const openOwnWorktree = (page: Page, name: string) =>
+  openWorktree(page, /This device/, new RegExp(`^${name} ${name}`), name);
+
 // A mirrored pair's one row, under every device: the filter for one
 // device doesn't show a pair that another device runs.
 export const openMirroredPair = (page: Page, name: string) =>
@@ -111,7 +115,7 @@ export const openMirroredPair = (page: Page, name: string) =>
 // A destructive button's two clicks, as quick as a person's: once armed
 // the button moves, and Playwright's wait for it to settle outlasts the
 // arm.
-const confirmTwice = (button: Locator) =>
+export const confirmTwice = (button: Locator) =>
   button.evaluate((element: HTMLElement) => {
     element.click();
     element.click();

@@ -198,11 +198,13 @@ export type HubLink = {
   handleMessage(text: string): void;
   // Ask one peer for its connect info. Resolves the peer's raw result
   // (the dialer parses it against the contract schema) or rejects with
-  // one of the typed errors above, within timeoutMs at the latest.
+  // one of the typed errors above, within timeoutMs at the latest. An
+  // abort drops the ask at once.
   askConnectInfo(
     deviceId: string,
     input: unknown,
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<unknown>;
   onlineDeviceIds(): readonly string[];
   // The key the latest roster names for an online device.
@@ -409,6 +411,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     deviceId: string,
     input: unknown,
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<unknown> {
     if (closed) return Promise.reject(new HubLinkDownError());
     // Sealing needs the key the roster names, so a device off the
@@ -434,6 +437,11 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
           takePending(id)?.reject(new HubAskTimeoutError(deviceId, timeoutMs));
         }, timeoutMs),
       });
+      signal?.addEventListener(
+        "abort",
+        () => takePending(id)?.reject(signal.reason),
+        { once: true },
+      );
       try {
         const ask: AskPayload = { ask: CONNECT_INFO_ASK, input };
         const payload = utf8Encoder.encode(JSON.stringify(ask));

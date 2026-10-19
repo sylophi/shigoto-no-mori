@@ -10,7 +10,7 @@ import {
   launchLab,
   refuseRunningLab,
 } from "./labApp.mts";
-import { startLabHub } from "./labHub.mts";
+import { type LabHub, startLabHub } from "./labHub.mts";
 
 export interface Devices {
   // Another device on the account, enrolled and online with the rest,
@@ -18,6 +18,8 @@ export interface Devices {
   add(name: string, seed: LabOptions["seed"]): Promise<Lab>;
   // Ends one device's app before the walk does.
   remove(lab: Lab): Promise<void>;
+  // The account's hub, which a walk can take away and bring back.
+  readonly hub: Pick<LabHub, "pause" | "resume">;
   close(): Promise<void>;
 }
 
@@ -104,5 +106,5 @@ export async function startDevices(): Promise<Devices> {
     const failed = results.find((error) => error !== null);
     if (failed !== undefined) throw failed;
   };
-  return { add, remove, close };
+  return { add, remove, hub, close };
 }

@@ -16,13 +16,11 @@ import {
 } from "@shigomori/contracts/errors";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
-import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as RpcClient from "effect/rpc/RpcClient";
@@ -90,9 +88,6 @@ export type DeviceLinkOptions = {
   // fails the handshake, so a dial that landed on the wrong machine is
   // never cached under the intended peer.
   expectedDeviceId: string;
-  // Once, when an established link drops on its own. Never for an
-  // owner close, never for a failed dial.
-  onClose?: () => void;
   // Every push the peer sends, by channel, decoded.
   onPush?: (channel: string, payload: unknown) => void;
   openSocket: OpenClientSocket;
@@ -100,8 +95,6 @@ export type DeviceLinkOptions = {
   deadlineMs: number;
   // Test seam: the protocol version the hello claims. This build's.
   protocolVersion?: number;
-  // Test seam: the clock the link's timings read. The live one.
-  clock?: Clock.Clock;
   // What this device is (contracts' link.ts, DeviceKindSchema), which
   // decides whether a second link of its supersedes the first. A
   // desktop app unless said otherwise.
@@ -127,25 +120,14 @@ export type DeviceConnection = {
   remoteAppVersion: string;
 };
 
-// A dial in two steps. Opening spends the candidate's own ticket and
-// supersedes nothing, so a dialer opens every candidate at once. The
-// hello supersedes the device's older link on the host, so the dialer
-// says it on one candidate at a time.
-export type PendingDeviceConnection = {
-  // Settles once the socket opened, its handshake done, or failed to.
-  whenOpen: Promise<void>;
-  // Says hello and settles with the link. Idempotent.
-  authenticate(): Promise<DeviceConnection>;
-  // Closes without a hello, harmless to the host. After a successful
-  // authenticate, this is an owner close.
-  abandon(): void;
-};
-
 // A link dialed in the caller's scope: open, said hello on, and up
-// until the scope closes or the link drops (`dropped`). `gate`, for
-// openDevice's two steps, hears the socket open and holds the hello
-// until it is let through.
-type DialedDevice = Omit<DeviceConnection, "close"> & {
+// until the scope closes or the link drops (`dropped`). `gate`, for a
+// direct dial's race (shared/hub/directDial.ts), hears the socket open
+// and holds the hello until it is let through: opening spends the
+// candidate's own ticket and supersedes nothing, so the race opens
+// every candidate at once, and the hello supersedes the device's older
+// link on the host, so it says one at a time.
+export type DialedDevice = Omit<DeviceConnection, "close"> & {
   // The link's Effect face, which `transport` is the Promise face of.
   readonly link: Link;
   // Settles when the link drops on its own.
@@ -403,73 +385,6 @@ export const dialDevice = (
     }),
   );
 };
-
-export function openDevice(
-  options: DeviceLinkOptions,
-): PendingDeviceConnection {
-  const opened = Deferred.makeUnsafe<void, RemoteConnectError>();
-  const helloAsked = Deferred.makeUnsafe<void>();
-  const welcomed = Deferred.makeUnsafe<DeviceConnection, RemoteConnectError>();
-  let established = false;
-  let ownerClosed = false;
-
-  const fiber = Effect.runFork(
-    Effect.gen(function* () {
-      const {
-        dropped,
-        link: _,
-        ...dialed
-      } = yield* dialDevice(options, {
-        opened,
-        helloAsked,
-      });
-      established = true;
-      yield* Deferred.succeed(welcomed, { ...dialed, close });
-      yield* dropped;
-    }).pipe(
-      Effect.scoped,
-      options.clock === undefined
-        ? (dial) => dial
-        : Effect.provideService(Clock.Clock, options.clock),
-      Effect.catch((failed) =>
-        Effect.andThen(
-          Deferred.fail(opened, failed),
-          Deferred.fail(welcomed, failed),
-        ),
-      ),
-    ),
-  );
-  fiber.addObserver(() => {
-    // The established link ended on its own: the keeper's redial signal.
-    if (established && !ownerClosed) options.onClose?.();
-    // A dial still waiting is answered.
-    const closed = new RemoteConnectError("connection closed", null, false);
-    Effect.runSync(
-      Deferred.fail(opened, closed).pipe(
-        Effect.andThen(Deferred.fail(welcomed, closed)),
-      ),
-    );
-  });
-
-  function close(): void {
-    ownerClosed = true;
-    Effect.runFork(Fiber.interrupt(fiber));
-  }
-
-  const whenOpen = Effect.runPromise(Deferred.await(opened)).then(() => {});
-  whenOpen.catch(() => {});
-  const connected = Effect.runPromise(Deferred.await(welcomed));
-  connected.catch(() => {});
-
-  return {
-    whenOpen,
-    authenticate() {
-      Effect.runSync(Deferred.succeed(helloAsked, undefined));
-      return connected;
-    },
-    abandon: close,
-  };
-}
 
 // A socket as Effect reads it, with a cut that closes it for Effect at
 // once, as its pinger's verdict did: the link's calls fail as a drop,
