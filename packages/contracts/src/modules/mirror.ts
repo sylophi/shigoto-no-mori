@@ -197,8 +197,8 @@ const MirrorApplyGitStatePayloadSchema = strict(
 export type MirrorApplyGitStatePayload =
   typeof MirrorApplyGitStatePayloadSchema.Type;
 
-// Why an apply left the worktree as it was. Each side says it in its own
-// words, naming the devices from where it shows. changed-locally: the
+// Why an apply left the worktree as it was. The follower words it,
+// naming the devices from where its status shows. changed-locally: the
 // worktree moved since the caller read it, and the caller reads again.
 const GitApplyRefusalSchema = Schema.Union([
   strict(

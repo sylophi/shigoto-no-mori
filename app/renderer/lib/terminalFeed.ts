@@ -1,9 +1,10 @@
 // A terminal's feed (TerminalView): terminals.attach on its device,
-// written into the screen. A link that drops, or a host that restarts,
-// is attached again with the seq of the last chunk the screen has, so
-// it picks up after it with nothing repeated or missed, or, once the
-// host's history no longer reaches back that far, starts over from all
-// of it.
+// written into the screen. A link that drops is attached again with the
+// mark of the last chunk the screen has, so it picks up after it with
+// nothing repeated or missed, or, once the host's history no longer
+// reaches back that far, starts over from all of it. A host that
+// restarted runs another incarnation of the shell, so the screen starts
+// over then too.
 import { isUnknownTerminalError } from "@shigomori/contracts/errors";
 import { backoffDelayMs } from "@shared/remote/supervisor";
 import type { TerminalScreen } from "@shigomori/ui/views/terminal/TerminalView.tsx";

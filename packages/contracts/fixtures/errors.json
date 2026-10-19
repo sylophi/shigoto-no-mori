@@ -66,6 +66,9 @@
       {
         "_tag": "GitOperationInProgressError",
         "operation": "rebase"
+      },
+      {
+        "_tag": "GitHubRateLimitedError"
       }
     ],
     "rejects": [

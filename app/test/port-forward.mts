@@ -57,9 +57,11 @@ import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, it } from "vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import {
   CommandRefusedError,
+  CallFailureSchema,
   callFailureOf,
   isChannelRefusedError,
   isForwardConnectFailedError,
@@ -481,8 +483,11 @@ it("engine: a local dial round-trips through the whole chain, a duplicate start 
       localPort: started.localPort,
     }),
     (error) => {
-      const failure = callFailureOf(error);
-      return isRemoteCallError(failure) && failure.code === "EADDRINUSE";
+      // As it reaches the window: encoded and decoded as a call failure.
+      const crossed = Schema.decodeUnknownSync(CallFailureSchema)(
+        Schema.encodeUnknownSync(CallFailureSchema)(callFailureOf(error)),
+      );
+      return isRemoteCallError(crossed) && crossed.code === "EADDRINUSE";
     },
   );
   // The start and the claim are one burst: one signal, 150 ms after

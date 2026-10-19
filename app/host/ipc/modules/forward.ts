@@ -39,7 +39,7 @@ async function open(port: number, channelId: string, ctx: HandlerContext) {
   // The schema already pinned the range. Re-check so this handler
   // stays fail-closed even if it is ever reached off-contract.
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new ForwardConnectFailedError({ port, reason: "out of range" });
+    throw new Error(`port ${String(port)} is out of range`);
   }
   requireChannels(ctx, channelId);
   // Loopback only, always: the feature is reaching the host's OWN

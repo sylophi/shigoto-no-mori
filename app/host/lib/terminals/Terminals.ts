@@ -51,7 +51,6 @@ import { type History, makeHistory } from "./history";
 
 type Size = { readonly cols: number; readonly rows: number };
 
-// Where a terminal's shell starts and what it is given.
 // `words` random 32-bit words as hex.
 const mintHex = (words: number) =>
   Effect.map(
@@ -61,6 +60,7 @@ const mintHex = (words: number) =>
     (parts) => parts.map((part) => part.toString(16).padStart(8, "0")).join(""),
   );
 
+// Where a terminal's shell starts and what it is given.
 export type Start = {
   // The worktree's folder. A device's terminal has none of its own.
   readonly cwd?: string;
