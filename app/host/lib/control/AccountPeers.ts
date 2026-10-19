@@ -6,9 +6,14 @@
 import { ControlError } from "@shigomori/contracts/modules/control";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { isHubRefusal } from "@shigomori/contracts/hubApi";
+import {
+  type HubRateLimitedError,
+  isHubRateLimitedError,
+} from "@shigomori/contracts/errors";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 export type DirectPeer = {
@@ -33,7 +38,7 @@ export class AccountPeers extends Context.Service<
     // The account's device registry. Empty when signed out.
     readonly listDevices: Effect.Effect<
       DeviceInfo[],
-      ControlError | AccountUnreachableError
+      ControlError | AccountUnreachableError | HubRateLimitedError
     >;
     // The devices a direct session is established to (the only ones a
     // call can reach), each with whether it shares with this device and
@@ -43,13 +48,33 @@ export class AccountPeers extends Context.Service<
   }
 >()("sm/host/AccountPeers") {}
 
+// The device list as the terminal's verbs wait on it: a hub that takes
+// the read and never answers ends as the account out of reach.
+export const withinAccountRead = <A, E, R>(
+  read: Effect.Effect<A, E, R>,
+  seconds = 15,
+) =>
+  read.pipe(
+    Effect.timeoutOrElse({
+      duration: Duration.seconds(seconds),
+      orElse: () =>
+        Effect.fail(
+          new AccountUnreachableError({
+            reason: `it didn't answer in ${seconds} s`,
+          }),
+        ),
+    }),
+  );
+
 // Why the device list failed, in the words the terminal prints: a
 // credential the hub no longer honors (the device was removed from the
-// account while the app held it) is the signed-out case, and anything
-// else the hub out of reach, with its cause.
+// account while the app held it) is the signed-out case, the hub's rate
+// limit crosses as itself (the terminal says when to try again), and
+// anything else is the hub out of reach, with its cause.
 export function listDevicesFailure(
   error: unknown,
-): ControlError | AccountUnreachableError {
+): ControlError | AccountUnreachableError | HubRateLimitedError {
+  if (isHubRateLimitedError(error)) return error;
   return isHubRefusal(error)
     ? new ControlError(
         "signed-out",

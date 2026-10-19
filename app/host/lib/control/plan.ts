@@ -37,7 +37,17 @@ export const BLOCK_REASON: Record<
   "no-project": "has no checkout of this repo",
   "no-grant":
     "doesn't accept commands (turn it on from its account page, in Settings)",
+  refused: "turned the ask away",
 };
+
+// A device's block as a sentence's end, with the peer's own words for
+// a refusal.
+export const blockWords = (
+  device: Pick<ControlDevice, "block" | "refusal">,
+): string =>
+  device.block === "refused" && device.refusal !== undefined
+    ? `${BLOCK_REASON.refused} (${device.refusal})`
+    : BLOCK_REASON[device.block ?? "offline"];
 
 export function matchDevices(peers: DeviceInfo[], query: string): DeviceInfo[] {
   const wanted = query.trim().toLowerCase();
@@ -169,9 +179,7 @@ export function chooseTarget(
     );
   }
   const why = standings
-    .map(
-      (device) => `"${device.name}" ${BLOCK_REASON[device.block ?? "offline"]}`,
-    )
+    .map((device) => `"${device.name}" ${blockWords(device)}`)
     .join(", ");
   throw new ControlError(
     "device-blocked",

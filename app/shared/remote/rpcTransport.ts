@@ -288,7 +288,14 @@ export function linkTransport(
         fiber.addObserver((exit) => {
           signal?.removeEventListener("abort", abort);
           if (Exit.isSuccess(exit)) resolve(exit.value);
-          else reject(rejectionOf(exit.cause));
+          // Interrupted with no abort, the call went with its link's
+          // scope, as a view does.
+          else if (
+            Cause.hasInterruptsOnly(exit.cause) &&
+            signal?.aborted !== true
+          ) {
+            reject(new RemoteDisconnectedError(link.local === true));
+          } else reject(rejectionOf(exit.cause));
         });
       }),
     watch(channel, input, observer) {

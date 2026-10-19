@@ -635,6 +635,25 @@ describe("unmirror, mirrors, devices and a peer's worktrees", () => {
     );
   });
 
+  it("lists a peer's worktrees of a project named by its id, from outside it", async () => {
+    seed();
+    const served = await serve((request) => [
+      success(request, { worktrees: [], unreachable: [] }),
+    ]);
+    const listed = await outcome((transfer, here) =>
+      transfer.peerWorktrees(here, { projectId: "P1" }),
+    );
+    assert.deepEqual((listed as { project?: unknown }).project, {
+      id: "P1",
+      name: "repo",
+      path: join(box.home, "repo"),
+    });
+    assert.deepEqual(
+      served.received().map(({ request }) => request),
+      [{ channel: "control:peerWorktrees", input: { projectId: "P1" } }],
+    );
+  });
+
   it("lists a peer's worktrees flat, each saying whose, and who wasn't asked", async () => {
     seed();
     const served = await serve((request) => [

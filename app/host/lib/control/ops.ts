@@ -67,6 +67,7 @@ import * as Worktrees from "@host/lib/Worktrees";
 import * as Ops from "@host/lib/engineOps";
 import {
   BLOCK_REASON,
+  blockWords,
   chooseTarget,
   matchDevices,
   mirrorView,
@@ -85,6 +86,7 @@ import {
   peerMirrorOf,
   peerMirrors,
   registryOrEmpty,
+  registryUnlessRateLimited,
   repoIdentityOf,
   roster,
   standingsOf,
@@ -369,7 +371,7 @@ export const peerWorktrees: Handler["peerWorktrees"] = ({
       return yield* Effect.fail(
         new ControlError(
           "device-blocked",
-          `"${blocked.name}" ${BLOCK_REASON[blocked.block]}.`,
+          `"${blocked.name}" ${blockWords(blocked)}.`,
         ),
       );
     }
@@ -395,7 +397,7 @@ export const send = settled<"send">((input, ctx) =>
       const own = yield* mirrorOf(input);
       const running =
         own === undefined
-          ? yield* peerMirrorOf(input, registryOrEmpty)
+          ? yield* peerMirrorOf(input, registryUnlessRateLimited)
           : { deviceId: yield* DeviceId.current, session: own };
       if (running !== undefined) {
         return { done: yield* alreadyMirrored(running, input.device) };
@@ -489,7 +491,7 @@ export const bring = settled<"bring">((input, ctx) =>
       return yield* Effect.fail(
         new ControlError(
           "device-blocked",
-          `"${found.device.name}" ${BLOCK_REASON[standing.block]}.`,
+          `"${found.device.name}" ${blockWords(standing)}.`,
         ),
       );
     }
@@ -534,7 +536,10 @@ export const bring = settled<"bring">((input, ctx) =>
       );
       const running =
         own === undefined
-          ? (yield* Effect.flatMap(registryOrEmpty, peerMirrors)).find(
+          ? (yield* Effect.flatMap(
+              registryUnlessRateLimited,
+              peerMirrors,
+            )).find(
               ({ deviceId, session }) =>
                 deviceId === found.device.deviceId &&
                 session.localProjectId === found.projectId &&
@@ -624,15 +629,18 @@ export const mirrors: Handler["mirrors"] = () =>
 // after it, once for the peer scan too.
 export const mirrorStop = (({ force, ...target }, ctx) =>
   Effect.gen(function* () {
-    const registry = yield* Effect.forkChild(registryOrEmpty);
+    const registry = yield* Effect.forkChild(registryUnlessRateLimited);
     const answer = (
       mirror: (names: Named[]) => ControlMirror,
       copyStayed: string | undefined,
     ) =>
-      Effect.map(Fiber.join(registry), (registered) => ({
-        mirror: mirror(namesOf(registered)),
-        ...(copyStayed === undefined ? {} : { copyStayed }),
-      }));
+      Effect.map(
+        Fiber.join(registry).pipe(Effect.orElseSucceed(() => [])),
+        (registered) => ({
+          mirror: mirror(namesOf(registered)),
+          ...(copyStayed === undefined ? {} : { copyStayed }),
+        }),
+      );
     const own = yield* mirrorOf(target);
     if (own !== undefined) {
       const copyStayed = yield* stopMirror(

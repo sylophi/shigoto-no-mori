@@ -348,7 +348,7 @@ export class Transfer extends Context.Service<
     // devices, or on the one `from` names.
     readonly peerWorktrees: (
       here: Worktrees.Here,
-      ref: Pick<Worktrees.Target, "project"> & {
+      ref: Pick<Worktrees.Target, "project" | "projectId"> & {
         readonly from?: string | undefined;
       },
     ) => Effect.Effect<
@@ -731,12 +731,12 @@ const make = Effect.gen(function* () {
 
   const peerWorktrees = Effect.fn("Transfer.peerWorktrees")(function* (
     here: Worktrees.Here,
-    ref: Pick<Worktrees.Target, "project"> & {
+    ref: Pick<Worktrees.Target, "project" | "projectId"> & {
       readonly from?: string | undefined;
     },
   ) {
     yield* checkDeviceFlags({ from: ref.from });
-    const project = yield* worktrees.resolveProject(here, ref.project);
+    const project = yield* worktrees.resolveProjectRef(here, ref);
     const from = ref.from ?? "";
     const { decoded } = yield* invoke(
       PeerWorktreesSchema,
