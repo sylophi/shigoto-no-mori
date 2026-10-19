@@ -616,6 +616,10 @@ describe(
         if (after !== undefined) {
           await showing(after[0], shown.length);
           child.stdin.write(after[1]);
+          // Ended only once the binary has read it, or past the step's
+          // deadline: script hands the end of input to the terminal apart
+          // from the text before it, and under load it can come first.
+          await Promise.race([ended, sleep(STEP_DEADLINE)]);
         }
         child.stdin.end();
         await ended;
@@ -653,6 +657,24 @@ describe(
       );
       assert.match(shown, /NAME +BRANCH +SYNC +CHANGES/);
       assert.ok(shown.trimEnd().endsWith(`${box.home}/fox`), shown);
+    });
+
+    it("takes a yes typed to a question asked after git ran, as a menu takes its key", async () => {
+      const root = join(box.home, "found");
+      mkdirSync(root);
+      for (const name of ["one", "two"]) {
+        const repo = box.repo(name);
+        renameSync(repo, join(root, name));
+      }
+      await box.migrate("cli");
+      const shown = await inTerminal(
+        ["projects", "add", root, "--all"],
+        [],
+        {},
+        ["[y/N]", "y\n"],
+      );
+      assert.match(shown, /added one /);
+      assert.match(shown, /added two /);
     });
 
     it("draws the menu with CI set in the environment", async () => {
@@ -2578,4 +2600,99 @@ describe("projects config", () => {
       );
     }
   });
+});
+
+describe("a setup that leaves a child in the background", () => {
+  // The project, its setup `(sleep 60; echo late) &`, which writes the
+  // child's pid and its sleep's where the proof ends them.
+  const backgrounded = async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await box.migrate("cli");
+    const pidFile = join(box.home, "late.pid");
+    const set = await runAt(
+      alpha,
+      "projects",
+      "config",
+      "--setup",
+      `(sleep 60 & echo $! > "${pidFile}.sleep"; wait; echo late) & echo $! > "${pidFile}"`,
+    );
+    assert.equal(set.code, 0, set.stderr);
+    const endChild = () => {
+      for (const file of [pidFile, `${pidFile}.sleep`]) {
+        try {
+          process.kill(Number(readFileSync(file, "utf8")), "SIGKILL");
+        } catch {
+          // Not started, or gone.
+        }
+      }
+    };
+    return { alpha, pidFile, endChild };
+  };
+
+  it("ends the create at the setup's exit, the child still running", async () => {
+    const { alpha, pidFile, endChild } = await backgrounded();
+    try {
+      const began = performance.now();
+      const made = await runAt(alpha, "--json", "worktrees", "create", "fox");
+      assert.equal(made.code, 0, made.stderr);
+      assert.ok(performance.now() - began < 30_000, "held by the child");
+      const pid = Number(readFileSync(pidFile, "utf8"));
+      process.kill(pid, 0);
+    } finally {
+      endChild();
+    }
+  }, 60_000);
+
+  it("returns a terminal's prompt with the shell in the new worktree", async () => {
+    const { alpha, endChild } = await backgrounded();
+    // An interactive zsh with the shell integration, in a terminal of
+    // its own, typed into as a person types.
+    const zdot = join(box.home, "zdot");
+    mkdirSync(zdot, { recursive: true });
+    writeFileSync(
+      join(zdot, ".zshrc"),
+      `PS1='ready> '\neval "$(smd shell init zsh)"\n`,
+    );
+    const child = spawn("sh", ["-c", "cat | script -q /dev/null zsh -i"], {
+      cwd: alpha,
+      env: {
+        ...box.env("cli"),
+        PATH: `${dirname(built)}:${process.env["PATH"] ?? ""}`,
+        ZDOTDIR: zdot,
+        HISTFILE: join(zdot, "history"),
+        TERM: "xterm-256color",
+      },
+      stdio: ["pipe", "pipe", "ignore"],
+      detached: true,
+    });
+    let screen = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      screen += chunk.toString();
+    });
+    try {
+      child.stdin.write("smd worktrees create fox\n");
+      child.stdin.write('echo "now-in=$PWD"\n');
+      const deadline = performance.now() + 30_000;
+      while (!/now-in=\S+fox\r?\n/.test(screen)) {
+        assert.ok(
+          performance.now() < deadline,
+          `the prompt never came back:\n${screen}`,
+        );
+        await sleep(100);
+      }
+      assert.match(screen, /now-in=\S*\/fox\r?\n/);
+    } finally {
+      endChild();
+      if (child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          // Gone.
+        }
+      }
+    }
+  }, 60_000);
 });

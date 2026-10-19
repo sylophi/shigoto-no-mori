@@ -33,8 +33,8 @@ const withStore =
       Layer.provideMerge(SavedTerminals.layer),
       Layer.provide(Store.layer((filename) => SqliteClient.make({ filename }))),
       Layer.provide(Migration.layer),
-      Layer.provide(Paths.layer("prod")),
       Layer.provide(Lifecycle.layer),
+      Layer.provide(Paths.layer("prod")),
       Layer.provideMerge(NodeServices.layer),
       Layer.provide(
         ConfigProvider.layer(
