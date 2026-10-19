@@ -33,6 +33,8 @@ import { it } from "vitest";
 import { allContractModules } from "@shigomori/contracts/allModules";
 import { nameOf } from "@shigomori/contracts/contract";
 import { gitContract } from "@shigomori/contracts/modules/git";
+import { hubContract } from "@shigomori/contracts/modules/hub";
+import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
 import { createWebBridge, type WebBridgeDeps } from "../web/ipc/register.ts";
 import * as Effect from "effect/Effect";
@@ -537,7 +539,7 @@ it('enroll: exchanges the Clerk session token for a credential with platform "we
   assert.equal(after.accountId, "acct_1");
 });
 
-it("account change: a sign-in from signed out keeps the picks made signed out, and a sign-out drops them", async () => {
+it("account change: a sign-in from signed out keeps the picks made signed out, and a sign-out drops them once the old account's hub socket stopped", async () => {
   const localStorage = memoryStorage();
   const fetchImpl: typeof fetch = async (input, init = {}) => {
     const url = String(input);
@@ -582,8 +584,30 @@ it("account change: a sign-in from signed out keeps the picks made signed out, a
     { collapsed: ["p1"], shared: "1" },
     "a sign-in from signed out dropped the picks made signed out",
   );
+  // A peer's push landing between the clear and the old sessions'
+  // close would refill the copy: the socket stops first.
+  const order: string[] = [];
+  const stops = [
+    bridge.api.listen(
+      bridge.api.pushes(hubContract, "statusChanged"),
+      (status) => void order.push(`hub ${status.socket.phase}`),
+    ),
+    bridge.api.listen(
+      bridge.api.pushes(sharedSettingsContract, "changed"),
+      () => void order.push("cleared"),
+    ),
+  ];
+  trackTest(() => {
+    for (const stop of stops) stop();
+  });
   await bridge.api.run(bridge.api.account.signOut());
   assert.deepEqual(await picks(), { collapsed: undefined, shared: undefined });
+  await waitFor(() => order.includes("cleared"), "the copy's clear");
+  assert.ok(
+    order.indexOf("hub stopped") !== -1 &&
+      order.indexOf("hub stopped") < order.indexOf("cleared"),
+    `cleared before the hub socket stopped: ${order.join(", ")}`,
+  );
 });
 
 it("sign-out: revokes THIS device on the device hub, clears the envelope, and still signs out when the revoke fails", async () => {

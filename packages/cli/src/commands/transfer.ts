@@ -2,6 +2,7 @@
 // app carries out: send and bring move a worktree, mirror keeps a copy
 // in step, unmirror stops one, mirrors and devices list. The remote
 // listing (`list --remote`, `--from`) is here too.
+import type { ControlDevice } from "@shigomori/contracts/modules/control";
 import * as Transfer from "@shigomori/engine/Transfer";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -240,11 +241,15 @@ export const mirrors = Command.make("mirrors", { rest }, (input) =>
   }),
 ).pipe(Command.withDescription("The mirrors this device is part of"));
 
-const BLOCKS: Readonly<Record<string, string>> = {
+// What a device's block says in the devices table, beside the host's
+// words for the verb it refuses (host/lib/control/plan.ts BLOCK_REASON):
+// one per reason the contract names.
+const BLOCKS: Readonly<Record<NonNullable<ControlDevice["block"]>, string>> = {
   offline: "not connected",
   "not-sharing": "doesn't share with other devices",
   "no-project": "no checkout yet; a send clones the repo there",
   "no-grant": "doesn't accept commands",
+  refused: "turned the ask away",
 };
 
 export const devices = Command.make(
@@ -280,7 +285,9 @@ export const devices = Command.make(
               device.platform,
               block === ""
                 ? green(scoped ? "ready" : "connected")
-                : yellow(BLOCKS[block] ?? block),
+                : yellow(
+                    `${BLOCKS[block as keyof typeof BLOCKS] ?? block}${device.refusal === undefined ? "" : ` (${device.refusal})`}`,
+                  ),
             ];
           }),
           stdoutColor,
@@ -293,6 +300,7 @@ export const devices = Command.make(
 // devices, the names bring and mirror --from take.
 export const listRemote = (input: {
   readonly project: Option.Option<string>;
+  readonly projectId: Option.Option<string>;
   readonly from: Option.Option<string>;
 }) =>
   Effect.gen(function* () {
@@ -300,6 +308,7 @@ export const listRemote = (input: {
       yield* here,
       {
         project: Option.getOrUndefined(given(input.project)),
+        projectId: Option.getOrUndefined(given(input.projectId)),
         from: raw(input.from),
       },
     );

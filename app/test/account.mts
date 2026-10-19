@@ -273,6 +273,22 @@ it("service: update PATCHes the per-device route with the name and/or icon and t
   );
 });
 
+// A hub that holds every request open until the caller gives up.
+const stalled: typeof fetch = (_url, init) =>
+  new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+  });
+
+it("service: a device list the hub takes and never answers ends at its signal", async () => {
+  const service = createAccountService({
+    baseUrl: CONFIG.hubUrl,
+    fetchImpl: stalled,
+  });
+  const gaveUp = new AbortController();
+  gaveUp.abort();
+  await assert.rejects(() => service.listDevices("cred-1", gaveUp.signal));
+});
+
 it("service: revoke DELETEs the per-device route and tolerates a 204", async () => {
   const { service, calls } = stubService(
     () => new Response(null, { status: 204 }),

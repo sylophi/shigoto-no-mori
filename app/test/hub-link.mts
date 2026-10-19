@@ -25,6 +25,7 @@
 // without killing the process.
 //
 // Run: pnpm test hub-link.
+import { BACKOFF_LADDER_MS } from "@shared/remote/supervisor";
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
 import * as Clock from "effect/Clock";
@@ -684,6 +685,28 @@ it("blocked: 4102 revoked blocks with no redial, 4103 superseded blocks with its
   const superseded = c.connection.status().socket;
   assert.equal(superseded.phase, "blocked");
   assert.match(superseded.message, /another instance/);
+});
+
+it("a hub that rate-limits the socket's upgrade is waited out for its Retry-After, not redialed on the ladder", async () => {
+  const stub = await startStubHub(trackTest);
+  const a = await bootDevice(stub, "A", {}, trackTest);
+  stub.rateLimitConnects(60);
+  stub.dropSocket("A");
+  // The drop's own rung first, then the redial the hub turns away.
+  const delays: number[] = [];
+  await waitFor(
+    () => {
+      const socket = a.connection.status().socket;
+      if (socket.phase === "backoff" && delays.at(-1) !== socket.delayMs) {
+        delays.push(socket.delayMs);
+      }
+      return delays.includes(60_000);
+    },
+    "A to wait out the hub's Retry-After",
+    8_000,
+  );
+  assert.deepEqual(delays, [BACKOFF_LADDER_MS[0], 60_000]);
+  stub.rateLimitConnects(null);
 });
 
 it("liveness: a device pings the device hub, and a hub that stops answering (or never answered) is declared dead and redialed with a fresh ticket", async () => {

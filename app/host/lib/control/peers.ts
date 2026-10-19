@@ -2,6 +2,12 @@
 // the roster, where each peer stands for a repo, their worktrees and
 // the mirrors they run against this device, and where a send would
 // clone.
+import { errorWordsOf } from "@host/lib/errorWords";
+import {
+  isHubRateLimitedError,
+  isNoDirectConnectionError,
+  isNotSharingError,
+} from "@shigomori/contracts/errors";
 import { homedir } from "node:os";
 import {
   type ControlDevice,
@@ -137,8 +143,18 @@ const standingOf = (
         ? { ...base, block: "no-project" }
         : { ...base, ...holding };
     }),
-    // The session dropped between the roster read and the ask.
-    Effect.orElseSucceed(() => offline),
+    // The session dropped between the roster read and the ask (the
+    // bridge reads a drop as no direct connection), the peer stopped
+    // sharing meanwhile, or it answered with a refusal, in its words.
+    Effect.catch((error) =>
+      Effect.succeed<ControlDevice>(
+        isNoDirectConnectionError(error)
+          ? offline
+          : isNotSharingError(error)
+            ? { ...base, block: "not-sharing" }
+            : { ...base, block: "refused", refusal: errorWordsOf(error) },
+      ),
+    ),
   );
 };
 
@@ -196,6 +212,20 @@ export const registryOrEmpty = probe(
   () => [],
 ).pipe(Effect.orElseSucceed((): DeviceInfo[] => []));
 
+// The same, for a verb that decides on what it finds (a mirror a peer
+// runs, or none): the hub's rate limit fails it, so the verb says that
+// rather than that nothing is there.
+export const registryUnlessRateLimited = probe(
+  Effect.flatMap(AccountPeers.AccountPeers, (account) => account.listDevices),
+  () => [],
+).pipe(
+  Effect.catch((error) =>
+    isHubRateLimitedError(error)
+      ? Effect.fail(error)
+      : Effect.succeed<DeviceInfo[]>([]),
+  ),
+);
+
 // A session a peer runs against one of this device's worktrees, with
 // the peer and the client to drive it through.
 export type PeerMirror = Running & {
@@ -239,9 +269,9 @@ export const peerMirrors = (registry: DeviceInfo[]) =>
     return found.flat();
   });
 
-export const peerMirrorOf = <R>(
+export const peerMirrorOf = <E, R>(
   target: { projectId: string; worktreeId: string },
-  registry: Effect.Effect<DeviceInfo[], never, R>,
+  registry: Effect.Effect<DeviceInfo[], E, R>,
 ) =>
   Effect.map(Effect.flatMap(registry, peerMirrors), (mirrors) =>
     mirrors.find(

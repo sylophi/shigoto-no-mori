@@ -32,6 +32,7 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import { HubUpdateRequiredError } from "@shigomori/contracts/hubApi";
+import { isHubRateLimitedError } from "@shigomori/contracts/errors";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
   type DeviceConnection,
@@ -201,6 +202,9 @@ export const supervise = (
     const clock = yield* Clock.Clock;
     // Since when the live connection's uptime counts, null while none is.
     let upSince: number | null = null;
+    // The least wait before the next dial: the Retry-After of a dial the
+    // hub rate-limited, which a dial sooner only draws again.
+    let waitAtLeastMs = 0;
     const setStatus = (next: SupervisorStatus) =>
       Effect.sync(() => options.onStatus?.(next));
 
@@ -237,6 +241,12 @@ export const supervise = (
         // The transport tags a blocking close as blocked. Anything
         // else (hello timeout, host restart, network blip) is
         // retryable.
+        if (
+          error instanceof RemoteConnectError &&
+          isHubRateLimitedError(error.refusal)
+        ) {
+          waitAtLeastMs = (error.refusal.retryAfterSeconds ?? 60) * 1000;
+        }
         if (error instanceof RemoteConnectError && error.blocked) {
           // A blocking close names itself through the classifier. A
           // blocking failure with no close code (a refused ticket
@@ -276,6 +286,15 @@ export const supervise = (
     yield* attempt.pipe(
       Effect.repeat(
         restartSchedule(BACKOFF_LADDER_MS).pipe(
+          Schedule.modifyDelay(({ duration }) =>
+            Effect.sync(() => {
+              const floor = waitAtLeastMs;
+              waitAtLeastMs = 0;
+              return Duration.millis(
+                Math.max(Duration.toMillis(duration), floor),
+              );
+            }),
+          ),
           Schedule.tap(({ output, duration }) =>
             setStatus({
               phase: "backoff",

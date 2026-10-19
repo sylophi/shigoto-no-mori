@@ -215,7 +215,8 @@ export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthentic
 // which the device list waits out before asking again; nothing retries
 // it sooner, and a write is not replayed.
 // Raised by the account service, which no peer-served call reaches, so
-// it never crosses a device link to an older build.
+// it never crosses a device link to an older build: only the loopback,
+// to the terminal's `sm` of the app's own bundle.
 export class HubRateLimitedError extends Schema.TaggedError<HubRateLimitedError>()(
   "HubRateLimitedError",
   { retryAfterSeconds: Schema.optional(Schema.Number) },

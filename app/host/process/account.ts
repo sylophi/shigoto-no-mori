@@ -75,8 +75,10 @@ export function provisionDeviceTunnel(
 }
 
 // The account's device registry, for the terminal's cross-device verbs.
-export async function listAccountDevices(): Promise<DeviceInfo[]> {
+export async function listAccountDevices(
+  signal: AbortSignal,
+): Promise<DeviceInfo[]> {
   if (account().facts === null) return [];
   const current = signedIn();
-  return current.service.listDevices(current.facts.credential);
+  return current.service.listDevices(current.facts.credential, signal);
 }

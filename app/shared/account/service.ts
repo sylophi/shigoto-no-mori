@@ -113,7 +113,7 @@ type EnrollFields = {
 
 export type AccountService = {
   enroll(sessionToken: string, fields: EnrollFields): Promise<EnrollResponse>;
-  listDevices(credential: string): Promise<DeviceInfo[]>;
+  listDevices(credential: string, signal?: AbortSignal): Promise<DeviceInfo[]>;
   revoke(
     credential: string,
     deviceId: string,
@@ -199,8 +199,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       );
     },
 
-    async listDevices(credential) {
-      const listed = await call(credential, (client) => client.listDevices());
+    async listDevices(credential, signal) {
+      const listed = await call(
+        credential,
+        (client) => client.listDevices(),
+        signal,
+      );
       const { devices } = Schema.decodeSync(DeviceListResponseSchema)(listed);
       return [...devices];
     },

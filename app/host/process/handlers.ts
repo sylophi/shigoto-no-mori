@@ -97,6 +97,7 @@ import { guideDriveHandlers } from "@host/ipc/modules/guideDrive";
 import {
   AccountPeers,
   listDevicesFailure,
+  withinAccountRead,
 } from "@host/lib/control/AccountPeers";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
 import { agentsHandlers } from "@host/ipc/modules/agents";
@@ -412,10 +413,12 @@ export const rootServices = Layer.mergeAll(
   Layer.succeed(
     AccountPeers,
     AccountPeers.of({
-      listDevices: Effect.tryPromise({
-        try: listAccountDevices,
-        catch: listDevicesFailure,
-      }),
+      listDevices: withinAccountRead(
+        Effect.tryPromise({
+          try: (signal) => listAccountDevices(signal),
+          catch: listDevicesFailure,
+        }),
+      ),
       directPeers: Effect.map(
         Effect.promise(async () => hubHandlers().status(undefined, undefined)),
         (status) =>
