@@ -1,6 +1,7 @@
 // A push is a streaming Rpc with no payload, whose chunks are its
 // payloads. A view is a streaming Rpc with a payload (VoidSchema when it
 // takes nothing): what a query answers, then again each time it changes.
+import type { ChangeKind } from "./modules/session.ts";
 import * as Context from "effect/Context";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
@@ -59,12 +60,23 @@ export const Grant = Context.Service<"sm/contracts/Grant", GrantId>(
   "sm/contracts/Grant",
 );
 
+// What a quit waits on the call for while it runs (the host's
+// `changing`): the git work a person starts. One that ends in moments,
+// or that nobody pressed, has none: a page's refresh as it opens
+// (git:refreshProject) is not the refresh its button asks for
+// (git:fetchProject), and a mirror's push into this repo
+// (sync:receiveBundle) is its follower's.
+export const Busy = Context.Service<"sm/contracts/Busy", ChangeKind>(
+  "sm/contracts/Busy",
+);
+
 type InvokeOptions = {
   readonly tracksProjectUsage?: boolean;
   readonly remote?: boolean;
   readonly gated?: boolean;
   readonly invitable?: InvitableScope;
   readonly grant?: GrantId;
+  readonly busy?: ChangeKind;
 };
 
 // Only when given, so the registrar can fail closed on an absent one.
@@ -78,6 +90,7 @@ function annotationsOf(options: InvokeOptions): Context.Context<never> {
   add(Gated, options.gated);
   add(Invitable, options.invitable);
   add(Grant, options.grant);
+  add(Busy, options.busy);
   return annotations as Context.Context<never>;
 }
 

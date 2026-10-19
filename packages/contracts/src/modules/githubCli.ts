@@ -53,6 +53,7 @@ export const githubCliContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "push",
   }),
   // As the background sweep and the pages' reads of a branch's PR leave
   // it.
@@ -80,7 +81,7 @@ export const githubCliContract = defineContract(
     "resolvePullRequestCheckout",
     ResolvePullRequestCheckoutPayloadSchema,
     PullRequestCheckoutRefSchema,
-    { remote: true, gated: true, grant: "changeCode" },
+    { remote: true, gated: true, grant: "changeCode", busy: "fetch" },
   ),
   // Null when gh is not ready or the repo is not on GitHub; a failed
   // read rejects.
@@ -107,6 +108,7 @@ export const githubCliContract = defineContract(
       remote: true,
       gated: true,
       grant: "changeCode",
+      busy: "merge",
     },
   ),
   invoke(
@@ -168,6 +170,7 @@ export const githubCliContract = defineContract(
       remote: true,
       gated: true,
       grant: "changeCode",
+      busy: "pullRequest",
     },
   ),
   invoke(
