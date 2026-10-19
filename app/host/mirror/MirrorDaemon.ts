@@ -533,9 +533,8 @@ const make = (options: Options) =>
         );
       });
 
-    // The daemon answers every op it reads, one it doesn't know with a
-    // refusal, so a ping needs no verb of its own: any answer is the
-    // daemon answering. Silence replaces it.
+    // `ping` is the protocol's liveness verb, which the daemon answers
+    // at once: silence replaces it.
     const pingOrReplace = Effect.gen(function* () {
       checking = true;
       const answered = Option.isSome(

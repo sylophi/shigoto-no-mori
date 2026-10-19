@@ -372,8 +372,9 @@ type mirrorChange struct {
 	Kind string `json:"kind"`
 }
 
-// Runs the daemon until `in` hits EOF or ctx is cancelled (the host
-// closed the pipe, or sent SIGTERM), whichever comes first. Every
+// Runs the daemon until `in` hits EOF, ctx is cancelled (the host
+// closed the pipe, or sent SIGTERM) or its state stream ends, whichever
+// comes first. Every
 // request is served on its own goroutine (a create blocks on two
 // endpoint connects), responses and state docs interleave on `out` one
 // JSON line at a time. On the way out the context is cancelled BEFORE
@@ -450,11 +451,14 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	select {
 	case ended = <-readerDone:
 	case ended = <-stateDone:
-		// The state stream ends only at shutdown, or when Mutagen's own
-		// tracker fails: a daemon whose state no longer moves is ended,
-		// so the host's restart ladder brings up one that does.
+		// Ending on its own, the stream would leave a daemon whose state
+		// no longer moves (Mutagen's tracker terminated, which it does
+		// only at shutdown today): the daemon ends instead, and the
+		// host's restart ladder brings up one that moves.
 		stateEnded = true
-		ended = fmt.Errorf("mirror state: %w", ended)
+		if ended != nil {
+			ended = fmt.Errorf("mirror state: %w", ended)
+		}
 	case <-ctx.Done():
 	}
 	cancel()
@@ -638,7 +642,7 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	case "replica":
 		mode = core.SynchronizationMode_SynchronizationModeOneWayReplica
 	default:
-		return "", fmt.Errorf("create's direction %q is none of pull, push and replica", req.Direction)
+		return "", fmt.Errorf("unknown direction %q (pull, push or replica, or none for a mirror)", req.Direction)
 	}
 	configuration := &synchronization.Configuration{
 		SynchronizationMode: mode,
