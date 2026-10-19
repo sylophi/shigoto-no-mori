@@ -197,6 +197,21 @@ func TestServeRefusesARealRepositorysGitByName(t *testing.T) {
 				t.Fatalf("%s: staging %s was taken", served.root, path)
 			}
 		}
+		// And a stream of its own stages a worktree file.
+		session, err = identifier.New(identifier.PrefixSynchronization)
+		if err != nil {
+			t.Fatal(err)
+		}
+		staging, err := dialServed(t, served.root, session, &synchronization.Configuration{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err, _ := staging.Scan(context.Background(), nil, true); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, _, err := staging.Stage([]string{"new.txt"}, [][]byte{{1}}); err != nil {
+			t.Fatalf("%s: staging new.txt was refused: %v", served.root, err)
+		}
 	}
 	// Each refusal ends the stream, so each read is asked on its own.
 	for _, path := range []string{".git/config", ".GIT/config", ".g\u200cit/config", ".git\ufeff/config", ".Git/hooks/pre-commit", "vendor/lib/.git"} {
