@@ -238,7 +238,8 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "changeCode"
+    "grant": "changeCode",
+    "busy": "fetch"
   },
   "git:projectChanged": {
     "kind": "push",
@@ -271,7 +272,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "pullRequest"
   },
   "githubCli:disablePullRequestAutoMerge": {
     "kind": "invoke",
@@ -294,7 +296,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "merge"
   },
   "githubCli:owners": {
     "kind": "invoke",
@@ -314,7 +317,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "push"
   },
   "githubCli:pullRequestCandidates": {
     "kind": "invoke",
@@ -375,7 +379,8 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "changeCode"
+    "grant": "changeCode",
+    "busy": "fetch"
   },
   "githubCli:setPullRequestDraft": {
     "kind": "invoke",
@@ -1228,7 +1233,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "invitable": "landing"
+    "invitable": "landing",
+    "busy": "land"
   },
   "sync:sendWorktree": {
     "kind": "invoke",
@@ -1443,7 +1449,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "unstash"
   },
   "worktrees:branchDiff": {
     "kind": "invoke",
@@ -1469,7 +1476,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "checkout"
   },
   "worktrees:cherryPick": {
     "kind": "invoke",
@@ -1477,7 +1485,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "commit"
   },
   "worktrees:commit": {
     "kind": "invoke",
@@ -1485,7 +1494,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "commit"
   },
   "worktrees:commitDiff": {
     "kind": "invoke",
@@ -1505,7 +1515,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "commit"
   },
   "worktrees:convertExternal": {
     "kind": "invoke",
@@ -1513,7 +1524,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "create"
   },
   "worktrees:create": {
     "kind": "invoke",
@@ -1521,7 +1533,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "create"
   },
   "worktrees:delete": {
     "kind": "invoke",
@@ -1530,7 +1543,8 @@
     "gated": true,
     "grant": "changeCode",
     "invitable": "copy",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "remove"
   },
   "worktrees:deleteStack": {
     "kind": "invoke",
@@ -1538,7 +1552,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "remove"
   },
   "worktrees:describe": {
     "kind": "invoke",
@@ -1609,7 +1624,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "merge"
   },
   "worktrees:mergePreview": {
     "kind": "invoke",
@@ -1623,7 +1639,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "merge"
   },
   "worktrees:mergeUpstream": {
     "kind": "invoke",
@@ -1631,7 +1648,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "pull"
   },
   "worktrees:overwrite": {
     "kind": "invoke",
@@ -1639,7 +1657,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "pull"
   },
   "worktrees:publish": {
     "kind": "invoke",
@@ -1647,7 +1666,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "push"
   },
   "worktrees:pull": {
     "kind": "invoke",
@@ -1655,7 +1675,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "pull"
   },
   "worktrees:pullAndPush": {
     "kind": "invoke",
@@ -1663,7 +1684,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "pullAndPush"
   },
   "worktrees:push": {
     "kind": "invoke",
@@ -1671,7 +1693,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "push"
   },
   "worktrees:pushForce": {
     "kind": "invoke",
@@ -1679,7 +1702,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "push"
   },
   "worktrees:readBlob": {
     "kind": "invoke",
@@ -1706,7 +1730,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "move"
   },
   "worktrees:relocationPlan": {
     "kind": "invoke",
@@ -1726,7 +1751,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "move"
   },
   "worktrees:renameBranch": {
     "kind": "invoke",
@@ -1772,7 +1798,8 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "changeCode"
+    "grant": "changeCode",
+    "busy": "unstash"
   },
   "worktrees:resumeAgent": {
     "kind": "invoke",
@@ -1786,7 +1813,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "commit"
   },
   "worktrees:rewordCommit": {
     "kind": "invoke",
@@ -1794,7 +1822,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "commit"
   },
   "worktrees:setAutoPull": {
     "kind": "invoke",
@@ -1818,7 +1847,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "commit"
   },
   "worktrees:stashChanges": {
     "kind": "invoke",
@@ -1826,7 +1856,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "stash"
   },
   "worktrees:stashDiff": {
     "kind": "invoke",
@@ -1840,7 +1871,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "finish"
   },
   "worktrees:syncWithPrimary": {
     "kind": "invoke",
@@ -1848,7 +1880,8 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "tracksProjectUsage": true
+    "tracksProjectUsage": true,
+    "busy": "pull"
   },
   "worktrees:unbindAgent": {
     "kind": "invoke",

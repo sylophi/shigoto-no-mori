@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { it } from "vitest";
 import {
   annotation,
+  Busy,
   callsOf,
   channelOf,
   type ContractModule,
@@ -40,6 +41,7 @@ const classify = (module: ContractModule) =>
         grant: annotation(call, Grant),
         invitable: annotation(call, Invitable),
         tracksProjectUsage: annotation(call, TracksProjectUsage),
+        busy: annotation(call, Busy),
       }).filter(([, value]) => value !== undefined),
     ),
   ]);

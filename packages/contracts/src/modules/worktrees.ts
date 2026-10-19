@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import type { ContractSchema } from "../codec.ts";
+import type { ChangeKind } from "./session.ts";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import {
   AgentSessionPayloadSchema,
@@ -67,15 +68,19 @@ import {
 const worktreeMutationOf = <const Key extends string, P extends ContractSchema>(
   key: Key,
   payload: P,
+  busy?: ChangeKind,
 ) =>
   invoke(key, payload, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,
     grant: "changeCode",
+    ...(busy === undefined ? {} : { busy }),
   });
-const worktreeMutation = <const Key extends string>(key: Key) =>
-  worktreeMutationOf(key, WorktreeScopedPayloadSchema);
+const worktreeMutation = <const Key extends string>(
+  key: Key,
+  busy?: ChangeKind,
+) => worktreeMutationOf(key, WorktreeScopedPayloadSchema, busy);
 
 export const worktreesContract = defineContract(
   "worktrees",
@@ -95,6 +100,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "create",
   }),
   invoke(
     "convertExternal",
@@ -105,6 +111,7 @@ export const worktreesContract = defineContract(
       remote: true,
       gated: true,
       grant: "changeCode",
+      busy: "create",
     },
   ),
   invoke("relocate", RelocateWorktreePayloadSchema, WorktreeSchema, {
@@ -112,6 +119,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "move",
   }),
   invoke("relocationPlan", RelocationPlanPayloadSchema, RelocationPlanSchema, {
     remote: true,
@@ -122,6 +130,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "move",
   }),
   // A mirror's stop removes the copy on the copy's device.
   invoke("delete", DeleteWorktreePayloadSchema, DeleteWorktreeResultSchema, {
@@ -129,6 +138,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "remove",
     invitable: "copy",
   }),
   invoke("deleteStack", DeleteStackPayloadSchema, DeleteStackResultSchema, {
@@ -136,6 +146,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "remove",
   }),
   invoke("renameBranch", RenameBranchPayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
@@ -175,6 +186,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "checkout",
   }),
   // A read, but it discloses any file (an ignored .env included).
   invoke("readFile", ReadWorktreeFilePayloadSchema, WorktreeFileSchema, {
@@ -232,6 +244,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "commit",
   }),
   invoke(
     "discardChanges",
@@ -285,10 +298,10 @@ export const worktreesContract = defineContract(
     gated: false,
   }),
   // A cherry-pick's worktree is the one the commit lands on.
-  worktreeMutationOf("revertCommit", CommitDiffPayloadSchema),
-  worktreeMutationOf("cherryPick", CommitDiffPayloadSchema),
-  worktreeMutationOf("rewordCommit", RewordCommitPayloadSchema),
-  worktreeMutationOf("squashCommit", SquashCommitPayloadSchema),
+  worktreeMutationOf("revertCommit", CommitDiffPayloadSchema, "commit"),
+  worktreeMutationOf("cherryPick", CommitDiffPayloadSchema, "commit"),
+  worktreeMutationOf("rewordCommit", RewordCommitPayloadSchema, "commit"),
+  worktreeMutationOf("squashCommit", SquashCommitPayloadSchema, "commit"),
   view(
     "watchStashes",
     WorktreeScopedPayloadSchema,
@@ -299,8 +312,8 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: false,
   }),
-  worktreeMutationOf("stashChanges", StashChangesPayloadSchema),
-  worktreeMutationOf("applyStash", ApplyStashPayloadSchema),
+  worktreeMutationOf("stashChanges", StashChangesPayloadSchema, "stash"),
+  worktreeMutationOf("applyStash", ApplyStashPayloadSchema, "unstash"),
   invoke("dropStash", DropStashPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
@@ -310,6 +323,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "unstash",
   }),
   worktreeMutationOf("resolveConflict", ResolveConflictPayloadSchema),
   invoke("mergePreview", MergePreviewPayloadSchema, MergePreviewSchema, {
@@ -321,8 +335,9 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "merge",
   }),
-  worktreeMutation("continueOperation"),
+  worktreeMutation("continueOperation", "commit"),
   worktreeMutation("abortOperation"),
   // After a sync from primary conflicts: merge anyway and stop on them.
   invoke("mergePrimary", WorktreeScopedPayloadSchema, MergeBranchResultSchema, {
@@ -330,6 +345,7 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "merge",
   }),
   // After a split with the upstream conflicts.
   invoke(
@@ -341,16 +357,17 @@ export const worktreesContract = defineContract(
       remote: true,
       gated: true,
       grant: "changeCode",
+      busy: "pull",
     },
   ),
-  worktreeMutation("push"),
-  worktreeMutation("pull"),
-  worktreeMutation("pushForce"),
-  worktreeMutation("overwrite"),
-  worktreeMutation("publish"),
-  worktreeMutation("pullAndPush"),
-  worktreeMutation("syncWithPrimary"),
-  worktreeMutation("switchToPrimaryAndDeleteBranch"),
+  worktreeMutation("push", "push"),
+  worktreeMutation("pull", "pull"),
+  worktreeMutation("pushForce", "push"),
+  worktreeMutation("overwrite", "pull"),
+  worktreeMutation("publish", "push"),
+  worktreeMutation("pullAndPush", "pullAndPush"),
+  worktreeMutation("syncWithPrimary", "pull"),
+  worktreeMutation("switchToPrimaryAndDeleteBranch", "finish"),
   push("lifecyclePhase", WorktreeLifecyclePhaseSchema, { remote: true }),
   push("carryOverComplete", WorktreeCarryOverCompleteSchema, {
     remote: true,

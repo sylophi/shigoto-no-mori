@@ -289,8 +289,9 @@ export const layer = Layer.effect(Registry, make);
   definition, read by middleware: `remote` (reaches a peer), `gated`
   (served to a peer only with the command switch on), `invitable` (the
   mirror invitation's exception, with its scope),
-  `tracksProjectUsage`, and `grant` (the consent text that covers the
-  call). A host-scoped call classifies itself; middleware fails closed
+  `tracksProjectUsage`, `grant` (the consent text that covers the
+  call), and `busy` (what a quit waits on the call for). A host-scoped
+  call classifies itself; middleware fails closed
   on a missing annotation, and a proof checks every group.
 - Subscriptions are streaming RPCs; there are no broadcast channels. A
   client that needs a view subscribes and stops asking what changed.
