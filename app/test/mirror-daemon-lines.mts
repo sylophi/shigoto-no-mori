@@ -60,7 +60,8 @@ const session = (id: string) =>
   rawMirrorSession({
     session: id,
     name: "mirror-w",
-    labels: { localProjectId: "p", localWorktreeId: "w" },
+    labels: { localProjectId: "p" },
+    localWorktreeId: "w",
     localRoot: "/a",
     deviceId: "B",
     projectId: "p",
@@ -182,7 +183,7 @@ async function harness() {
             remoteRoot: "/b",
             name: "mirror-w",
             localWorktreeId: "w",
-            labels: { localWorktreeId: "w" },
+            labels: {},
             ignores: [],
           }),
         ),

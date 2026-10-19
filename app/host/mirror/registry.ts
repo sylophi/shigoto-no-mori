@@ -37,7 +37,9 @@ import * as Ops from "@host/lib/engineOps";
 // daemon restart without any bookkeeping of our own. Ids only: the
 // engine refuses label values outside its alphabet, and the branch is
 // the local worktree's to report.
-export const MIRROR_LABEL_LOCAL_PROJECT = "localProjectId";// The ignore rule the session was opened with (a MirrorIgnoreMode),
+export const MIRROR_LABEL_LOCAL_PROJECT = "localProjectId";
+
+// The ignore rule the session was opened with (a MirrorIgnoreMode),
 // so the page can say which rule its patterns came from. Absent on a
 // session that predates it, which read as "everything".
 export const MIRROR_LABEL_IGNORE_MODE = "ignoreMode";
@@ -95,8 +97,7 @@ export function carriedLabels(
 // (contracts' modules/mirror.ts), re-exported for the host's own callers.
 export type { MirrorSessionRaw };
 
-// The local worktree a session runs on, "" on a session that predates
-// the label.
+// The local worktree a session runs on, "" when its create named none.
 export function localWorktreeIdOf(raw: MirrorSessionRaw | undefined): string {
   return raw?.localWorktreeId ?? "";
 }
@@ -223,9 +224,7 @@ const endSessionsOnWorktree = (
 ) =>
   Effect.flatMap(daemon.sessions, (sessions) =>
     Effect.forEach(
-      sessions.filter(
-        (raw) => raw.localWorktreeId === localWorktreeId,
-      ),
+      sessions.filter((raw) => raw.localWorktreeId === localWorktreeId),
       (raw) =>
         daemon.terminate(raw.session).pipe(
           Effect.andThen(
