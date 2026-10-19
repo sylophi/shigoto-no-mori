@@ -289,6 +289,9 @@ it("sends a worktree while the hub goes away: it completes over the direct link 
         interval: 100,
       })
       .toBe(true);
+    expect(await ended.isVisible(), "the send ended before the cut").toBe(
+      false,
+    );
     await devices.hub.pause();
     await ended.waitFor({ timeout: 180_000 });
     outcome = await ended.textContent();

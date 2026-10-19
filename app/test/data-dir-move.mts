@@ -70,6 +70,9 @@ import {
 import { trackTest } from "./lib/vitestKit.mts";
 
 scrubProcessGitEnv();
+
+// No move here and no peer bringing from here.
+const NOTHING_UNDER_WAY = { moving: false, bringing: [] } as const;
 const { track, teardown } = makeTracker();
 const git = sandboxGit();
 let elsewhere: string;
@@ -164,7 +167,7 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
-        movesUnderWay: Effect.succeed(false),
+        movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
         // Half the tree, then nothing more: the app was killed.
         copy: (_from, to) =>
           Effect.gen(function* () {
@@ -230,7 +233,7 @@ it("a move whose copy landed but whose pointer was never written is undone, its 
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
-        movesUnderWay: Effect.succeed(false),
+        movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(
         Effect.provideService(
           FileSystem.FileSystem,
@@ -582,7 +585,7 @@ it("a rename interrupted before its pointer moved keeps the staged pointer the n
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
-        movesUnderWay: Effect.succeed(false),
+        movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
     }).pipe(Effect.forkDetach),
   );
@@ -649,7 +652,7 @@ it("a cancel during the folder's rename keeps the landed folder and its staged p
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
-        movesUnderWay: Effect.succeed(false),
+        movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
     }).pipe(Effect.forkDetach),
   );
@@ -734,7 +737,7 @@ it.each([
           return yield* Effect.fail("stop before the folder moves");
         }),
         killAllScripts: Effect.void,
-        movesUnderWay: Effect.succeed(false),
+        movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.flip),
     );
     assert.equal(moved, "stop before the folder moves");
@@ -788,7 +791,7 @@ it.each([
         return yield* Effect.fail("stop before the folder moves");
       }),
       killAllScripts: Effect.void,
-      movesUnderWay: Effect.succeed(false),
+      movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
     }).pipe(Effect.flip),
   );
   if (own) assert.equal(failed, "stop before the folder moves");
@@ -829,7 +832,7 @@ it("a capture made while a move kills the scripts comes back with its undo", asy
         git(repo, "update-ref", ref(identity.id), head);
       }),
       beforeMove: Effect.fail("stop before the folder moves"),
-      movesUnderWay: Effect.succeed(false),
+      movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
     }).pipe(Effect.flip),
   );
   assert.equal(failed, "stop before the folder moves");
@@ -859,7 +862,7 @@ it("a move settles an earlier move's journal first, and waits while it can't", a
       moveDataDir(parent, {
         place: place(name),
         killAllScripts: Effect.void,
-        movesUnderWay: Effect.succeed(false),
+        movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
         beforeMove: Effect.fail("stop before the folder moves"),
       }).pipe(Effect.flip),
     );
@@ -898,7 +901,7 @@ it("refuses another process's writes while a move's journal is out, and takes th
         dataDirName: "moved",
       },
       killAllScripts: Effect.void,
-      movesUnderWay: Effect.succeed(false),
+      movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       beforeMove: Effect.gen(function* () {
         during = writeTheStore();
         return yield* Effect.fail("stop before the folder moves");
@@ -930,7 +933,7 @@ it.each([
         },
         beforeMove: Effect.void,
         killAllScripts: Effect.void,
-        movesUnderWay: Effect.succeed(false),
+        movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.flip),
     );
     assert.match(String(refused), /is a link to/);
@@ -985,10 +988,36 @@ it("refuses a move while a worktree is being sent or brought", async () => {
       },
       beforeMove: Effect.void,
       killAllScripts: Effect.void,
-      movesUnderWay: Effect.succeed(true),
+      movesUnderWay: Effect.succeed({ moving: true, bringing: [] }),
     }).pipe(Effect.flip),
   );
   assert.match(String(refused), /being sent or brought/);
+  assert.equal(existsSync(join(parent, "moved")), false);
+  assert.equal(journalLeft(), false);
+});
+
+// A peer bringing a worktree from here reads its files as the move would
+// rename them: refused the same way, naming the peer, to try again.
+it("refuses a move while a peer is bringing a worktree from here, naming it", async () => {
+  const parent = join(elsewhere, "while-serving");
+  const refused = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-7", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      beforeMove: Effect.void,
+      killAllScripts: Effect.void,
+      movesUnderWay: Effect.succeed({ moving: false, bringing: ["Thinkpad"] }),
+    }).pipe(Effect.flip),
+  );
+  assert.match(
+    String(refused),
+    /Thinkpad is bringing a worktree from here\. Try again when it finishes\./,
+  );
   assert.equal(existsSync(join(parent, "moved")), false);
   assert.equal(journalLeft(), false);
 });

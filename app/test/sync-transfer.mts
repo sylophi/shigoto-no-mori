@@ -178,9 +178,13 @@ const changesUnderWay = async () =>
     await runHost(Effect.map(EngineChanges, (changes) => changes.underWay()))
   ).map(({ kind }) => kind);
 
-// Whether the host's moves read anything under way (Moves.underWay).
+// Whether the host's moves read a move under way (Moves.underWay).
 const movesUnderWay = () =>
-  runHost(Effect.flatMap(Moves.Moves, (moves) => moves.underWay));
+  runHost(
+    Effect.flatMap(Moves.Moves, (moves) =>
+      Effect.map(moves.underWay, ({ moving }) => moving),
+    ),
+  );
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
 // wrappers, and the engine on the sandbox's data dir
@@ -851,6 +855,14 @@ describe("serving past the call", () => {
         () => syncTempDirs(tmp).length === 1,
         "the source to hold its bundle while it sends",
       );
+      // The serve reads as the peer bringing from here, not as a move.
+      const underWay = await Effect.runPromise(
+        Effect.flatMap(Moves.Moves, (held) => held.underWay).pipe(
+          Effect.provideContext(moves),
+        ),
+      );
+      assert.equal(underWay.moving, false);
+      assert.equal(underWay.bringing.length, 1);
       await Effect.runPromise(Scope.close(scope, Exit.void));
       await waitFor(
         () => syncTempDirs(tmp).length === 0 && !mux.has(channelId),

@@ -84,10 +84,16 @@ export class Moves extends Context.Service<
     readonly fork: <A, E, R>(
       work: Effect.Effect<A, E, R>,
     ) => Effect.Effect<Fiber.Fiber<A, E>, never, R>;
-    // Whether a move is in flight, from before its landing to its last
-    // file, or forked work still runs: what a data-folder move's copy
-    // would miss.
-    readonly underWay: Effect.Effect<boolean>;
+    // A peer's bringing from here, served until it ends or the graph
+    // closes, counted under that peer.
+    readonly serve: <A, E, R>(
+      peerDeviceId: string,
+      work: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<Fiber.Fiber<A, E>, never, R>;
+    // What a data-folder move's copy would miss: a move in flight here
+    // (from before its landing to its last file, or its forked work),
+    // and the peers bringing from here.
+    readonly underWay: Effect.Effect<MovesUnderWay>;
     readonly remember: (
       move: SyncMoveRef,
       receipt: SyncReceipt,
@@ -98,6 +104,12 @@ export class Moves extends Context.Service<
     readonly forget: (move: SyncMoveRef) => Effect.Effect<void>;
   }
 >()("sm/host/Moves") {}
+
+export type MovesUnderWay = {
+  readonly moving: boolean;
+  // The ids of the peers bringing a worktree from here.
+  readonly bringing: ReadonlyArray<string>;
+};
 
 const keyOf = (caller: Caller, sourceWorktreeId: string) =>
   `${caller.callerDeviceId ?? ""}:${sourceWorktreeId}`;
@@ -122,6 +134,16 @@ const make = Effect.gen(function* () {
   const forked = yield* FiberSet.make();
   const moves = yield* FiberMap.make<string>();
   const receipts = yield* Ref.make(new Map<string, SyncReceipt>());
+  // Each peer's serves under way, by its device id.
+  const serving = yield* Ref.make(new Map<string, number>());
+  const count = (peerDeviceId: string, by: number) =>
+    Ref.update(serving, (counts) => {
+      const next = new Map(counts);
+      const now = (next.get(peerDeviceId) ?? 0) + by;
+      if (now > 0) next.set(peerDeviceId, now);
+      else next.delete(peerDeviceId);
+      return next;
+    });
   const scope = yield* Effect.scope;
   const admission = yield* Semaphore.make(1);
 
@@ -206,9 +228,28 @@ const make = Effect.gen(function* () {
     cancel,
     // oxlint-disable-next-line shigomori/effect-fn-service-methods -- generic over the work it forks, which Effect.fn's signature would erase
     fork: (work) => FiberSet.run(forked, work),
+    // oxlint-disable-next-line shigomori/effect-fn-service-methods -- generic over the work it serves, which Effect.fn's signature would erase
+    serve: (peerDeviceId, work) =>
+      Effect.andThen(
+        count(peerDeviceId, 1),
+        FiberSet.run(
+          forked,
+          work.pipe(Effect.ensuring(count(peerDeviceId, -1))),
+        ),
+      ),
     underWay: Effect.map(
-      Effect.all([FiberMap.size(moves), FiberSet.size(forked)]),
-      ([running, rest]) => running + rest > 0,
+      Effect.all([
+        FiberMap.size(moves),
+        FiberSet.size(forked),
+        Ref.get(serving),
+      ]),
+      ([running, rest, counts]) => {
+        const served = [...counts.values()].reduce((sum, n) => sum + n, 0);
+        return {
+          moving: running > 0 || rest > served,
+          bringing: [...counts.keys()],
+        };
+      },
     ),
     remember,
     receiptOf,

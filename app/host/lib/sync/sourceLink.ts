@@ -647,12 +647,16 @@ export const serveOpened = Effect.fn("SourceLink.serveOpened")(function* (
     input.projectId,
     input.worktreeId,
   ).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
-  yield* (yield* Moves.Moves).fork(
-    serveSource(link, project, worktree.id).pipe(
-      Effect.onInterrupt(() => Effect.sync(() => link.reset())),
-      Effect.ignore,
-    ),
+  const serving = serveSource(link, project, worktree.id).pipe(
+    Effect.onInterrupt(() => Effect.sync(() => link.reset())),
+    Effect.ignore,
   );
+  const moves = yield* Moves.Moves;
+  // A peer's bringing from here, counted under it; this machine's own
+  // caller has none.
+  yield* ctx.callerDeviceId === undefined
+    ? moves.fork(serving)
+    : moves.serve(ctx.callerDeviceId, serving);
 });
 
 // The clone's questions: the default branch, as the local branch the
