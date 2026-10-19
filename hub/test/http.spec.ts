@@ -2,7 +2,7 @@
 // and CORS. Runs inside workerd against real D1 and DO bindings, with
 // the stub Clerk verifier from helpers.ts.
 import * as Schema from "effect/Schema";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:test";
 import {
   HUB_PROTOCOL_FLOOR,
@@ -16,9 +16,16 @@ import {
 import {
   DEVICE_CREDENTIAL_PREFIX,
   TICKET_PREFIX,
+  buildTicket,
   TICKET_TTL_MS,
 } from "../src/ticket.ts";
 import type { Env } from "../src/env.ts";
+import { createWorker } from "../src/worker.ts";
+import { tokenRefused } from "../src/clerk.ts";
+import {
+  TokenVerificationError,
+  TokenVerificationErrorReason,
+} from "@clerk/backend/errors";
 import {
   BASE,
   TEST_TOKEN_PREFIX,
@@ -702,7 +709,7 @@ describe("logging", () => {
 });
 
 describe("rate limiting", () => {
-  // A missing binding would fail open in rateLimited, so the cases below,
+  // A missing binding would fail open in rateLimit, so the cases below,
   // which stand in their own limiters, would never notice it.
   it("binds both budgets from wrangler.jsonc", async () => {
     const limits = await Promise.all(
@@ -761,6 +768,188 @@ describe("rate limiting", () => {
       testEnv,
     );
     expect(response.status).toBe(429);
+  });
+});
+
+describe("the tight budget, by route", () => {
+  // The router reads a path case-insensitively, with a trailing or a
+  // doubled slash and percent-escapes, so each spelling reaches the
+  // route, and each draws on the route's budget.
+  it("holds every spelling of an open route to the tighter budget", async () => {
+    const testEnv = limitedEnv();
+    const spellings = ["/CONNECT", "/connect/", "//connect", "/%63onnect"];
+    for (const [i, spelling] of spellings.entries()) {
+      const ip = `203.0.113.${40 + i}`;
+      const statuses = await statusesFrom(
+        testEnv,
+        ip,
+        OPEN_BUDGET + 1,
+        spelling,
+      );
+      expect(statuses.slice(0, OPEN_BUDGET)).toEqual(
+        Array(OPEN_BUDGET).fill(403),
+      );
+      expect(statuses.at(-1)).toBe(429);
+    }
+    // Enroll too, on the budget the spellings above did not touch.
+    const enrollSpelled = () =>
+      call(
+        new Request(`${BASE}/DEVICES//enroll/`, {
+          method: "POST",
+          headers: { "CF-Connecting-IP": "203.0.113.49" },
+        }),
+        testEnv,
+      );
+    for (let i = 0; i < OPEN_BUDGET; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- one request at a time, each counted
+      expect((await enrollSpelled()).status).toBe(401);
+    }
+    expect((await enrollSpelled()).status).toBe(429);
+  });
+
+  it("fails open when the limiter itself fails", async () => {
+    const testEnv: Env = {
+      ...env,
+      RATE_LIMIT: {
+        limit: () => Promise.reject(new Error("limiter down")),
+      },
+    };
+    expect(
+      await statusesFrom(testEnv, "203.0.113.50", BUDGET + 1, "/devices"),
+    ).toEqual(Array(BUDGET + 1).fill(401));
+  });
+});
+
+describe("a step that could not run", () => {
+  it("answers a credential check whose registry read failed as unavailable", async () => {
+    const { credential } = await enroll("acct-d1-down", "dev-d1-down");
+    const down: Env = {
+      ...env,
+      DB: new Proxy(
+        {},
+        {
+          get: () => () => {
+            throw new Error("D1 unreachable");
+          },
+        },
+      ) as D1Database,
+    };
+    const logged = vi.spyOn(console, "error");
+    const response = await call(listRequest(credential), down);
+    const said = String(logged.mock.calls.flat());
+    logged.mockRestore();
+    expect(response.status).toBe(502);
+    // Its cause is on the record, filed as an error.
+    expect(said).toContain("credential failed");
+    expect(said).toContain("D1 unreachable");
+    expect(await response.json()).toEqual({
+      _tag: "HubUnavailableError",
+      operation: "credential",
+    });
+  });
+
+  it("answers a sign-in Clerk could not check as unavailable, not refused", async () => {
+    const clerkDown = createWorker({
+      verifyLogin: () => Promise.reject(new Error("JWKS unreachable")),
+    });
+    const response = await call(
+      enrollRequest(`${TEST_TOKEN_PREFIX}acct-clerk-down`, {
+        deviceId: "dev-clerk-down",
+        name: "Laptop",
+        platform: "darwin",
+        icon: "laptop",
+      }),
+      env,
+      clerkDown,
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      _tag: "HubUnavailableError",
+      operation: "enroll",
+    });
+  });
+});
+
+describe("what the hub logs", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // A route that dies (here its account's object, failing under it)
+  // files its cause as an error, by the route, and nothing of the
+  // ticket in its query.
+  it("logs a route's defect as an error, by the route", async () => {
+    const errors = vi.spyOn(console, "error");
+    const ticket = await buildTicket(
+      env.TICKET_SIGNING_KEY ?? "",
+      "acct-object-down",
+      "A".repeat(22),
+    );
+    const objectDown: Env = {
+      ...env,
+      DEVICE_HUB: new Proxy(env.DEVICE_HUB, {
+        get: (target, key) =>
+          key === "get"
+            ? () => ({ fetch: () => Promise.reject(new Error("object gone")) })
+            : Reflect.get(target, key).bind(target),
+      }),
+    };
+    const response = await call(
+      new Request(`${BASE}/connect?ticket=${encodeURIComponent(ticket)}`, {
+        headers: { Upgrade: "websocket" },
+      }),
+      objectDown,
+    );
+    expect(response.status).toBe(500);
+    const said = String(errors.mock.calls.flat());
+    expect(said).toContain("GET /connect failed");
+    expect(said).toContain("object gone");
+    expect(said).not.toContain(ticket);
+  });
+
+  // The query can hold a ticket: a request that matched no route is
+  // not logged, and neither is a malformed one's 400.
+  it("logs no unmatched or malformed request, so no query", async () => {
+    const logs = (["log", "info", "warn", "error"] as const).map((level) =>
+      vi.spyOn(console, level),
+    );
+    expect(
+      (await call(new Request(`${BASE}/nope?ticket=SECRET-TICKET`))).status,
+    ).toBe(404);
+    expect(
+      (
+        await call(
+          new Request(`${BASE}/connect?ticket=SECRET-ONE&ticket=SECRET-TWO`),
+        )
+      ).status,
+    ).toBe(400);
+    const said = logs.flatMap((spy) => spy.mock.calls.flat().map(String));
+    expect(said.filter((line) => line.includes("SECRET"))).toEqual([]);
+  });
+});
+
+const clerkFailure = (reason: string) =>
+  new TokenVerificationError({ reason, message: reason });
+
+describe("Clerk's verdict on a sign-in", () => {
+  // The deployed verifier (index.ts): a token Clerk refused is no
+  // login, a check that could not run is the hub unavailable.
+  it("refuses the token's own failures and not a check that could not run", () => {
+    expect(
+      tokenRefused(clerkFailure(TokenVerificationErrorReason.TokenExpired)),
+    ).toBe(true);
+    expect(
+      tokenRefused(
+        clerkFailure(TokenVerificationErrorReason.TokenInvalidSignature),
+      ),
+    ).toBe(true);
+    expect(
+      tokenRefused(
+        clerkFailure(TokenVerificationErrorReason.RemoteJWKFailedToLoad),
+      ),
+    ).toBe(false);
+    expect(
+      tokenRefused(clerkFailure(TokenVerificationErrorReason.InvalidSecretKey)),
+    ).toBe(false);
+    expect(tokenRefused(new TypeError("fetch failed"))).toBe(false);
   });
 });
 

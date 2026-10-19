@@ -286,8 +286,9 @@ export async function teardownTunnel(
     try {
       const found = await find;
       if (found !== null) await api.call("DELETE", path(found.id));
-    } catch {
-      // Best-effort, see above.
+    } catch (error) {
+      // Best-effort, see above, and said so an orphan can be found.
+      console.warn(`[tunnel] ${name}: cleanup failed`, error);
     }
   };
   await Promise.all([

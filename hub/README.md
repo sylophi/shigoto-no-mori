@@ -213,7 +213,9 @@ authenticates), it only bounds what that traffic can cost.
   bindings in `wrangler.jsonc`: 60 requests a minute on enroll and
   connect, the two routes that do real work for a caller with no
   credential (Clerk verification, a Durable Object), and 300 a minute
-  on everything else. Over budget answers `429` with `Retry-After`.
+  on every other route, each by the route the request matched however
+  it spelled its path (a path no route matches does no work and is not
+  counted). Over budget answers `429` with `Retry-After`.
   The counters are per Cloudflare location and approximate, which is
   fine for a cost guard.
 - Connection tickets are signed (`TICKET_SIGNING_KEY`), so
@@ -455,7 +457,10 @@ handler goes in that group's `HttpApiBuilder.group(...)` in
   ids.
 - A failure of the registry is `HubUnavailableError` with the route's
   `operation`, a literal the error's schema lists, so a new route adds
-  its own (`unavailable("<operation>")`).
+  its own (`unavailable("<operation>")`, which logs the cause). The
+  auth tiers answer it too: `credential` when the device's credential
+  could not be read, `enroll` when Clerk could not check a sign-in
+  (`src/clerk.ts` tells that from a token Clerk refused).
 - A device goes out through `toDeviceInfo`, with presence from
   `presenceOrNone`, so a hub object's hiccup reads as offline rather
   than failing the read.

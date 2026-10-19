@@ -8,12 +8,17 @@
 import * as Schema from "effect/Schema";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { TunnelProvisionResponseSchema } from "@shigomori/contracts/hubProtocol";
+import {
+  MAX_ACCOUNT_DEVICES,
+  TunnelProvisionResponseSchema,
+} from "@shigomori/contracts/hubProtocol";
 import { sha256Hex } from "../src/crypto.ts";
 import type { Env } from "../src/env.ts";
 import {
+  TEST_TOKEN_PREFIX,
   call,
   enroll,
+  enrollRequest,
   makeTestWorker,
   provisionRequest,
   revokeRequest,
@@ -350,6 +355,35 @@ describe("tunnel teardown on revoke", () => {
       worker,
     );
     expect(revoked.status).toBe(204);
+    expect(stub.liveTunnels()).toHaveLength(0);
+    expect(stub.dnsRecords).toHaveLength(0);
+  });
+
+  it("an enroll that evicts the account's stalest device deletes that device's tunnel", async () => {
+    const stub = createCfStub();
+    const worker = makeTestWorker({ cfFetch: stub.cfFetch });
+    // Sorts first, so it is the stalest when every stamp ties.
+    const { credential } = await enroll("acct-tunnel-evict", "dev-te-00");
+    expect(
+      (await call(provisionRequest(credential, 4321), tunnelEnv(), worker))
+        .status,
+    ).toBe(200);
+    for (let i = 1; i < MAX_ACCOUNT_DEVICES; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- one enroll at a time, as devices join
+      await enroll("acct-tunnel-evict", `dev-te-${String(i).padStart(2, "0")}`);
+    }
+    expect(stub.liveTunnels()).toHaveLength(1);
+    const joined = await call(
+      enrollRequest(`${TEST_TOKEN_PREFIX}acct-tunnel-evict`, {
+        deviceId: "dev-te-new",
+        name: "One more",
+        platform: "darwin",
+        icon: "laptop",
+      }),
+      tunnelEnv(),
+      worker,
+    );
+    expect(joined.status).toBe(200);
     expect(stub.liveTunnels()).toHaveLength(0);
     expect(stub.dnsRecords).toHaveLength(0);
   });
