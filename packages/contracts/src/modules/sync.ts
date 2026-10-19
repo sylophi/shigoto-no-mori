@@ -429,7 +429,13 @@ export const syncContract = defineContract(
     "receiveWorktree",
     SyncReceiveWorktreePayloadSchema,
     SyncReceiveWorktreeResultSchema,
-    { remote: true, gated: true, grant: "changeCode", invitable: "landing" },
+    {
+      remote: true,
+      gated: true,
+      grant: "changeCode",
+      invitable: "landing",
+      busy: "land",
+    },
   ),
   invoke("receiveBundle", SyncReceiveBundlePayloadSchema, SyncFetchedSchema, {
     remote: true,

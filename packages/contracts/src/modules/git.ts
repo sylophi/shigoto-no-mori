@@ -18,6 +18,7 @@ export const gitContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
+    busy: "fetch",
   }),
   // A peer looking at this host: runs the background sweep if stale and
   // keeps it ticking for the returned lease. Read-class: a request only
