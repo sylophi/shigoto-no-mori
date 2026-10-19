@@ -11,16 +11,11 @@ import { disposeWithPage } from "@/lib/runtime/client";
 import {
   CLIENT_CONFIG_KEY,
   createWebBridge,
+  SHARED_SETTINGS_KEY,
   type WebBridge,
 } from "./ipc/register";
 
 let installed: WebBridge | null = null;
-
-// The vite define is only substituted in web builds; under any other
-// context the typeof guard keeps this module importable.
-function buildVersion(): string {
-  return typeof __APP_VERSION__ === "undefined" ? "dev" : __APP_VERSION__;
-}
 
 export function installWebBridge(): WebBridge {
   if (installed !== null) return installed;
@@ -33,23 +28,27 @@ export function installWebBridge(): WebBridge {
       window.open(url, "_blank", "noopener,noreferrer");
     },
     isDev: import.meta.env.DEV,
-    appVersion: buildVersion(),
+    appVersion: __APP_VERSION__,
   });
   installed = bridge;
   disposeWithPage({ dispose: bridge.stop });
   // Boot reconcile: connect the hub socket when a credential is
   // already stored, mirroring the desktop's ready-handler refresh.
   void bridge.refreshHub();
-  // Cross-tab correction: sign-in/out in another tab rewrites the
-  // shared localStorage key, and the storage event fires only in the
-  // OTHER tabs. Fan it out like a local transition so every tab's
-  // shell follows without a reload (key === null is a full clear).
+  // Cross-tab correction: another tab's sign-in or sign-out, client
+  // config or shared settings rewrite a shared localStorage key, and the
+  // storage event fires only in the OTHER tabs. Fan it out like a local
+  // change so every tab follows without a reload (key === null is a
+  // full clear).
   window.addEventListener("storage", (event) => {
     if (event.key === ACCOUNT_KEY || event.key === null) {
       bridge.notifyAccountChanged();
     }
     if (event.key === CLIENT_CONFIG_KEY || event.key === null) {
       bridge.notifyClientConfigChanged();
+    }
+    if (event.key === SHARED_SETTINGS_KEY || event.key === null) {
+      bridge.notifySharedSettingsChanged();
     }
   });
   // A tab coming back to the foreground, or the browser reporting the

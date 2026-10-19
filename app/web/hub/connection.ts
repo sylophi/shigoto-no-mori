@@ -5,9 +5,7 @@
 //
 // A web client runs no direct listener, so it supplies no connectInfo
 // server and its link refuses every peer's ask as serving no listener
-// (a verdict the asking dialer parks on). It only ASKS, for the direct
-// dialer, which is why this exposes just askConnectInfo plus the
-// lifecycle (refresh, status).
+// (a verdict the asking dialer parks on).
 //
 // This file must stay electron-free and node-builtin-free (pnpm test
 // host-boundary): everything platform specific arrives through browser
@@ -21,12 +19,9 @@ import * as Shared from "@shared/hub/connection";
 // so the adapter exposes only the advisory close and the shared core
 // falls back to it wherever the node adapter would hard-terminate.
 function openBrowserSocket(url: string): Shared.HubSocketAdapter {
+  // An error event carries nothing and a close always follows it, so
+  // the close handler owns the outcome, with its code.
   const socket = new WebSocket(url);
-  socket.addEventListener("error", () => {
-    // The browser fires error with no useful detail and always follows
-    // it with close. The close handler owns the outcome so the reject
-    // reason carries the close code.
-  });
   return {
     send(text) {
       if (socket.readyState !== WebSocket.OPEN) {
@@ -35,11 +30,7 @@ function openBrowserSocket(url: string): Shared.HubSocketAdapter {
       socket.send(text);
     },
     close() {
-      try {
-        socket.close();
-      } catch {
-        // Already closing.
-      }
+      socket.close();
     },
     onMessage(handler) {
       socket.addEventListener("message", (event: MessageEvent) => {

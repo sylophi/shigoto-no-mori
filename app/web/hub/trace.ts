@@ -1,8 +1,7 @@
 // The tab's trace of its remote plane: a console line each time the hub
 // socket changes phase or a peer's direct session goes, so the devtools
-// console (the web client's only log) shows what happened to the
-// connection, in order, beside the keeper's lines for a session's dial
-// failing and landing.
+// console shows what happened to the connection, in order, beside the
+// keeper's lines for a session's dial failing and landing.
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import { log } from "@shared/log";
 

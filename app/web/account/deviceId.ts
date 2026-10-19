@@ -1,29 +1,21 @@
 // The stable per-browser hub device identity.
 // The desktop's deviceId is a UUID naming a shigomori root, minted once
-// and persisted in its store (host/lib/config/DeviceId.ts). The web
+// and persisted in its store (the engine's Registry). The web
 // client has no root, so its analogue is a UUID naming this browser
 // profile, minted on first use and persisted in localStorage: the same
 // browser is the same hub device across sessions, and clearing site
 // data re-enrolls it as a brand new device, exactly like a registry
 // reset does on desktop.
-import * as Schema from "effect/Schema";
-import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
+import { isMintedDeviceId } from "@shigomori/contracts/hubProtocol";
 import { readKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 
 const DEVICE_ID_KEY = "sm.web.deviceId";
 
-// The same well-formed-UUID acceptance rule the desktop applies: the
-// stored value is user-visible storage and the id flows into query keys
-// and hub routing, so anything mangled is replaced rather than
-// trusted. crypto.randomUUID output always passes both this shape and
-// the wire's DeviceIdSchema bound.
-const UUID_SHAPE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
+// The stored value is user-visible storage and the id flows into query
+// keys and hub routing, so anything mangled is replaced rather than
+// trusted, as the desktop does.
 function isValidDeviceId(value: string | null): value is string {
-  return (
-    value !== null && UUID_SHAPE.test(value) && Schema.is(DeviceIdSchema)(value)
-  );
+  return value !== null && isMintedDeviceId(value);
 }
 
 // Reads the persisted id, minting and persisting one when it is missing
