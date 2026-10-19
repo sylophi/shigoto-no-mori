@@ -25,20 +25,24 @@ export const hostRestarted = createExternalStore<{
 
 // The shell's word that it started the host again
 // (window:hostRestarted, as the new host is up), said once this
-// window's link lands there: at once when it already has, else at
-// `landed`.
+// window's link lands there, or at once when it reads answering (the
+// band waits on the drop it hasn't seen yet). A window whose link never
+// landed lived through no restart: it opened in the gap.
 export function followHostRestarts(
   restarted: Stream.Stream<HostRestartReason>,
 ): { readonly heard: Effect.Effect<void>; readonly landed: () => void } {
+  let landedOnce = false;
   let pending: HostRestartReason | null = null;
   return {
     heard: Stream.runForEach(restarted, (reason) =>
       Effect.sync(() => {
+        if (!landedOnce) return;
         if (hostAnswering.get()) hostRestarted.publish({ reason });
         else pending = reason;
       }),
     ),
     landed: () => {
+      landedOnce = true;
       if (pending === null) return;
       hostRestarted.publish({ reason: pending });
       pending = null;

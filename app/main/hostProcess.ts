@@ -424,6 +424,8 @@ export function restartParkedHost(): Promise<void> {
       nextPark = deferred<void>();
       restarting = null;
       restarts.retried();
+      // Started again by hand, which no window needs told.
+      restartedFor = null;
       if (!quitting) fork();
     });
   return restarting;
@@ -444,12 +446,17 @@ export const letHostGo = (): Promise<void> => Effect.runPromise(stop(true));
 // a host rather than wait on it to close (stop).
 let unanswered: { readonly host: UtilityProcess; readonly at: number } | null =
   null;
+// Asks overlap (a quit during an unattended install): the latest
+// started is the one that says.
+let asks = 0;
 export const hostBusy = () =>
   Effect.suspend(() => {
     const asked = child;
+    const ask = ++asks;
     return busyWithin(host().busy(), BUSY_DEADLINE).pipe(
       Effect.tap((busy) =>
         Effect.sync(() => {
+          if (ask !== asks) return;
           unanswered =
             Option.isNone(busy) && asked !== null
               ? { host: asked, at: performance.now() }

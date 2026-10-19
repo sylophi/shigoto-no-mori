@@ -2,7 +2,8 @@
 // whatever the window's own asks went through
 // (renderer/lib/runtime/hostAnswering.ts):
 //   - the band says each restart the shell tells once the window's
-//     link lands on the new host, and once (followHostRestarts),
+//     link lands on the new host, and once, and none in a window that
+//     opened while the host was away (followHostRestarts),
 //   - the reads the host's going cut are asked again as it answers once
 //     more, one that gave up and one still in its retries alike
 //     (askAgainOnHostReturn).
@@ -29,11 +30,20 @@ const SILENT: HostRestartReason = { kind: "silent", seconds: 30 };
 const EXITED: HostRestartReason = { kind: "exited", code: 1 };
 const drop = () => new RemoteDisconnectedError(true);
 
-it("a restart is said once the window's link lands on the new host, or at once when it already has", async () => {
+it("a restart is said once the window's link lands on the new host, and not in a window that opened in the gap", async () => {
   const pushes = await Effect.runPromise(Queue.unbounded<HostRestartReason>());
   const restarts = followHostRestarts(Stream.fromQueue(pushes));
   const heard = Effect.runFork(restarts.heard);
   hostRestarted.publish(null);
+  // Opened while the host was away: its link has not landed yet.
+  Queue.offerUnsafe(pushes, EXITED);
+  await waitFor(() => Queue.sizeUnsafe(pushes) === 0, "the word heard");
+  restarts.landed();
+  assert.equal(
+    hostRestarted.get(),
+    null,
+    "said in a window that opened in the gap",
+  );
   hostAnswering.publish(false);
   Queue.offerUnsafe(pushes, SILENT);
   await waitFor(() => Queue.sizeUnsafe(pushes) === 0, "the word heard");
@@ -43,7 +53,7 @@ it("a restart is said once the window's link lands on the new host, or at once w
   hostRestarted.publish(null);
   restarts.landed();
   assert.equal(hostRestarted.get(), null, "said twice");
-  // The window's link landed on the new host before the word came.
+  // The word came before the window saw its link drop.
   hostAnswering.publish(true);
   Queue.offerUnsafe(pushes, EXITED);
   await waitFor(() => hostRestarted.get() !== null, "the word said");

@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { StoreOpenError } from "@shigomori/engine/Store";
 import { StoreError } from "@shigomori/engine/storeErrors";
 import { it } from "vitest";
+import { madeByNewer } from "../host/lib/storeFailure.ts";
 import { hostFailureWords } from "../main/hostFailureWords.ts";
 
 const failing = (category: "newer" | "damaged") => {
@@ -19,7 +20,7 @@ const failing = (category: "newer" | "damaged") => {
     message: error.message,
     store: {
       report: `${error.message}\nstore: /data/store.db can't be opened, so no command can run`,
-      newer: category === "newer",
+      newer: madeByNewer(error),
     },
   };
 };

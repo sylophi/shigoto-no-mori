@@ -62,8 +62,12 @@ export async function storeFailureReport(
       .map((check) => `${check.title}: ${check.detail}`) ?? [];
   return {
     report: [error.message, ...findings].join("\n"),
-    newer:
-      error instanceof StoreOpenError &&
-      storeErrorOf(error.cause)?.category === "newer",
+    newer: madeByNewer(error),
   };
 }
+
+// Whether a newer version of the app made the store that would not
+// open.
+export const madeByNewer = (error: unknown): boolean =>
+  error instanceof StoreOpenError &&
+  storeErrorOf(error.cause)?.category === "newer";

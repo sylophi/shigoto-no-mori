@@ -23,6 +23,14 @@ it("three exits a minute start the host again, the fourth gives up, and an old o
     crashes: 4,
   });
 
+  const edge = restartLedger();
+  for (const at of [0, 10, 20]) edge.exited(host(at), at);
+  assert.deepEqual(
+    edge.exited(host(1), CRASH_WINDOW_MS),
+    { kind: "give-up", crashes: 4 },
+    "a crash a minute old to the millisecond no longer counts",
+  );
+
   const later = restartLedger();
   for (const at of [0, 10, 20]) later.exited(host(at), at);
   assert.deepEqual(later.exited(host(1), CRASH_WINDOW_MS + 1), {
