@@ -567,7 +567,9 @@ export function createWorker(deps: HubDeps): HubWorker {
       Layer.provide(rateLimit.layer),
       Layer.provide(logFailures.layer),
       Layer.provide(cors),
-      Layer.provide(leveledLogs),
+      // Merged, not provided: the router's own middleware runs on what
+      // the built layer outputs, outside the API's handlers.
+      Layer.provideMerge(leveledLogs),
       Layer.provide(services),
       Layer.provide(HttpServer.layerServices),
     );

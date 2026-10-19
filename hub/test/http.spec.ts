@@ -16,6 +16,7 @@ import {
 import {
   DEVICE_CREDENTIAL_PREFIX,
   TICKET_PREFIX,
+  buildTicket,
   TICKET_TTL_MS,
 } from "../src/ticket.ts";
 import type { Env } from "../src/env.ts";
@@ -835,10 +836,12 @@ describe("a step that could not run", () => {
     };
     const logged = vi.spyOn(console, "error");
     const response = await call(listRequest(credential), down);
+    const said = String(logged.mock.calls.flat());
+    logged.mockRestore();
     expect(response.status).toBe(502);
     // Its cause is on the record, filed as an error.
-    expect(String(logged.mock.calls.flat())).toContain("credential failed");
-    logged.mockRestore();
+    expect(said).toContain("credential failed");
+    expect(said).toContain("D1 unreachable");
     expect(await response.json()).toEqual({
       _tag: "HubUnavailableError",
       operation: "credential",
@@ -868,20 +871,57 @@ describe("a step that could not run", () => {
 });
 
 describe("what the hub logs", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // A route that dies (here its account's object, failing under it)
+  // files its cause as an error, by the route, and nothing of the
+  // ticket in its query.
+  it("logs a route's defect as an error, by the route", async () => {
+    const errors = vi.spyOn(console, "error");
+    const ticket = await buildTicket(
+      env.TICKET_SIGNING_KEY ?? "",
+      "acct-object-down",
+      "A".repeat(22),
+    );
+    const objectDown: Env = {
+      ...env,
+      DEVICE_HUB: new Proxy(env.DEVICE_HUB, {
+        get: (target, key) =>
+          key === "get"
+            ? () => ({ fetch: () => Promise.reject(new Error("object gone")) })
+            : Reflect.get(target, key).bind(target),
+      }),
+    };
+    const response = await call(
+      new Request(`${BASE}/connect?ticket=${encodeURIComponent(ticket)}`, {
+        headers: { Upgrade: "websocket" },
+      }),
+      objectDown,
+    );
+    expect(response.status).toBe(500);
+    const said = String(errors.mock.calls.flat());
+    expect(said).toContain("GET /connect failed");
+    expect(said).toContain("object gone");
+    expect(said).not.toContain(ticket);
+  });
+
   // The query can hold a ticket: a request that matched no route is
   // not logged, and neither is a malformed one's 400.
   it("logs no unmatched or malformed request, so no query", async () => {
     const logs = (["log", "info", "warn", "error"] as const).map((level) =>
       vi.spyOn(console, level),
     );
-    await call(new Request(`${BASE}/nope?ticket=SECRET-TICKET`));
-    await call(
-      new Request(`${BASE}/connect?ticket=SECRET-TICKET&ticket=SECRET-TWO`, {
-        method: "POST",
-      }),
-    );
+    expect(
+      (await call(new Request(`${BASE}/nope?ticket=SECRET-TICKET`))).status,
+    ).toBe(404);
+    expect(
+      (
+        await call(
+          new Request(`${BASE}/connect?ticket=SECRET-ONE&ticket=SECRET-TWO`),
+        )
+      ).status,
+    ).toBe(400);
     const said = logs.flatMap((spy) => spy.mock.calls.flat().map(String));
-    for (const spy of logs) spy.mockRestore();
     expect(said.filter((line) => line.includes("SECRET"))).toEqual([]);
   });
 });
