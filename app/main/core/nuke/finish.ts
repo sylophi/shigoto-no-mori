@@ -16,11 +16,20 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DEV_PROFILES_DIR } from "@shared/packaging/appName.mts";
 
 export const NUKE_MARKER = "nuke.pending";
+
+// Why a file stayed, for the person who deletes it.
+const REASONS: Record<string, string> = {
+  EACCES: "permission denied",
+  EPERM: "not permitted (a locked file?)",
+  EBUSY: "in use",
+  EROFS: "on a read-only volume",
+};
 
 const NukeMarkerSchema = Schema.Struct({
   // Each a file or a folder, deleted whole.
@@ -70,7 +79,14 @@ export function finishPendingNuke(userData: string): {
     try {
       rmSync(path, { recursive: true, force: true });
     } catch (error) {
-      left.push({ path, why: errorMessageOf(error) });
+      // The file that stayed, which may be inside the folder named.
+      const at = Predicate.hasProperty(error, "path")
+        ? String(error.path)
+        : path;
+      const code = Predicate.hasProperty(error, "code")
+        ? String(error.code)
+        : "";
+      left.push({ path: at, why: REASONS[code] ?? errorMessageOf(error) });
     }
   };
   for (const path of decoded.value.paths) remove(path);
