@@ -117,6 +117,11 @@ export class Git extends Context.Service<
       args: readonly string[],
       options?: RunOptions,
     ) => Effect.Effect<string, GitOutputTooLargeError>;
+    // The index's stat cache brought up to date with the files, for the
+    // writes that check files by it alone (git/running.ts).
+    readonly refreshIndex: (
+      worktree: string,
+    ) => Effect.Effect<string, GitOutputTooLargeError>;
     readonly isRepo: (path: string) => Effect.Effect<boolean>;
     // Runs `task` while no other write to `worktree`'s index runs: git
     // takes index.lock for each, so two would otherwise fail on the lock
@@ -841,7 +846,7 @@ const make = Effect.gen(function* () {
   const { checkDestination, clone, createRepository } = yield* makeRepositories(
     { running },
   );
-  const { run, runLenient, succeeds, onIndex } = running;
+  const { run, runLenient, refreshIndex, succeeds, onIndex } = running;
   const {
     listWorktrees,
     addWorktree,
@@ -901,6 +906,7 @@ const make = Effect.gen(function* () {
     run,
     gitPath: running.gitPath,
     runLenient,
+    refreshIndex,
     withIndexLock: onIndex,
     ...operation,
     readHunks: hunks.readHunks,

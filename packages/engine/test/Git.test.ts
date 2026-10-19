@@ -9,6 +9,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { once } from "node:events";
@@ -270,6 +271,156 @@ it("a stash whose worktree changes before its reset is finished is left alone, a
   assert.deepEqual(stashes(), ["On main: raced"], "never saved twice");
   assert.equal(readFileSync(join(repo, "b.txt"), "utf8"), "later\n");
   assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "changed\n");
+});
+
+it("a person's commits in a terminal are never refused by the app's reads beside them", async () => {
+  const repo = seedRepo();
+  // git's own automatic maintenance, racing a hundred quick commits, can
+  // repack away the commit HEAD names (2 of 15 runs with no app at all,
+  // git 2.54): off, as in every fixture of the CLI's.
+  git(repo, "config", "gc.auto", "0");
+  git(repo, "config", "maintenance.auto", "false");
+  // Enough files that a status's refresh writes back an index worth the
+  // name, as on a real project.
+  for (let file = 0; file < 2000; file += 1) {
+    write(repo, `many/${file}.txt`, `${file}\n`);
+  }
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "many");
+  // An edit the person never commits, so every read has an answer, and
+  // a file they save unchanged each round, so every read finds the
+  // index's stat cache stale and has something to write back.
+  const SAVED = "many/0.txt";
+  write(repo, "b.txt", "bee, edited\n");
+  const refused: string[] = [];
+  const answered = new Map<string, number>();
+  await withGit((g) =>
+    Effect.gen(function* () {
+      let finished = false;
+      // The app reading, as fast as it can: a listing's status, a page's
+      // changes, an open diff and its hunks, each with what it answered.
+      const reads = {
+        status: g
+          .status(repo)
+          .pipe(Effect.map((files) => files.some((f) => f.path === "b.txt"))),
+        changes: g
+          .changes(repo)
+          .pipe(
+            Effect.map((files) =>
+              files.some((f) => f.path === "b.txt" && f.counts),
+            ),
+          ),
+        // A diff git writes back for is one of a file saved unchanged, so
+        // these read that file too.
+        diff: g
+          .fileDiff({
+            worktree: repo,
+            paths: [SAVED, "b.txt"],
+            untracked: false,
+          })
+          .pipe(Effect.map((patch) => patch.includes("+bee, edited"))),
+        hunks: g.readHunks(repo, SAVED).pipe(
+          Effect.andThen(g.readHunks(repo, "b.txt")),
+          Effect.map((hunks) => hunks.changes.length === 1),
+        ),
+      };
+      const reading = yield* Effect.forkChild(
+        Effect.forEach(
+          Object.entries(reads),
+          ([name, read]) =>
+            Effect.whileLoop({
+              while: () => !finished,
+              body: () =>
+                read.pipe(
+                  Effect.map((answer) => {
+                    if (answer)
+                      answered.set(name, (answered.get(name) ?? 0) + 1);
+                  }),
+                  Effect.ignore,
+                ),
+              step: () => {},
+            }),
+          { concurrency: "unbounded", discard: true },
+        ),
+      );
+      // The person: an edit, an add and a commit, two hundred times.
+      for (let round = 0; round < 200; round += 1) {
+        write(repo, "a.txt", `round ${round}\n`);
+        write(repo, SAVED, "0\n");
+        for (const args of [
+          ["add", "a.txt"],
+          [
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "-q",
+            "-m",
+            `round ${round}`,
+          ],
+        ]) {
+          try {
+            git(repo, ...args);
+          } catch (error) {
+            refused.push(
+              `${args.join(" ")}: ${String((error as { stderr?: unknown }).stderr ?? error)}`,
+            );
+          }
+        }
+        yield* Effect.promise(() => new Promise((done) => setTimeout(done, 5)));
+      }
+      finished = true;
+      yield* Fiber.join(reading);
+    }),
+  );
+  assert.deepEqual(
+    refused,
+    [],
+    `${refused.length} of 400 writes refused, the first: ${refused[0] ?? ""}`,
+  );
+  assert.deepEqual(
+    [...answered.keys()].toSorted(),
+    ["changes", "diff", "hunks", "status"],
+    "every read answered with what was there",
+  );
+});
+
+it("a file saved unchanged doesn't stop an undo of a merge or an abort", async () => {
+  const repo = seedRepo();
+  // The same content, a newer mtime: the index's stat cache no longer
+  // matches, and the app's status, beside it, leaves it so.
+  const savedUnchanged = (file: string) => {
+    write(repo, file, readFileSync(join(repo, file), "utf8"));
+    const later = new Date(Date.now() + 10_000);
+    utimesSync(join(repo, file), later, later);
+  };
+  const first = rev(repo, "HEAD");
+  git(repo, "checkout", "-q", "-b", "side");
+  write(repo, "b.txt", "bee, from side\n");
+  write(repo, "a.txt", "one\ntwo\nside\n");
+  git(repo, "commit", "-q", "-am", "side");
+  git(repo, "checkout", "-q", "main");
+  git(repo, "merge", "-q", "--no-ff", "-m", "merge side", "side");
+  savedUnchanged("b.txt");
+  await withGit((g) =>
+    Effect.gen(function* () {
+      assert.deepEqual(yield* g.status(repo), []);
+      yield* g.resetSoft({ worktree: repo, target: first });
+    }),
+  );
+  assert.equal(rev(repo, "HEAD"), first, "the merge came off whole");
+
+  write(repo, "a.txt", "one\ntwo\nmain\n");
+  git(repo, "commit", "-q", "-am", "main");
+  // a.txt conflicts; b.txt merges cleanly, and is saved again.
+  assert.throws(() => git(repo, "merge", "-q", "side"));
+  savedUnchanged("b.txt");
+  await withGit((g) =>
+    Effect.gen(function* () {
+      yield* g.status(repo);
+      yield* g.abortOperation(repo);
+    }),
+  );
+  assert.ok(!existsSync(join(repo, ".git", "MERGE_HEAD")), "the merge is gone");
 });
 
 it("a write held by the user's hook leaves the probes their slots", async () => {

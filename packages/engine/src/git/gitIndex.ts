@@ -37,7 +37,7 @@ export const makeGitIndex = ({
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { run, runChunked, onIndex } = running;
+    const { run, runChunked, onIndex, refreshIndex } = running;
     const { verifyRev, refTip, isAncestor, headAt, resolveCommit } = refs;
     const { status } = workingTree;
     // `reset --soft`: HEAD moves and nothing else does, so the commits
@@ -85,6 +85,7 @@ export const makeGitIndex = ({
               Effect.orElseSucceed(() => false),
             ));
           if (wholeMerge) {
+            yield* refreshIndex(worktree);
             yield* run(worktree, [
               "reset",
               "--keep",

@@ -522,11 +522,7 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
     worktree.path,
     git
       .run(worktree.path, ["read-tree", state.indexTree])
-      .pipe(
-        Effect.andThen(
-          git.runLenient(worktree.path, ["update-index", "-q", "--refresh"]),
-        ),
-      ),
+      .pipe(Effect.andThen(git.refreshIndex(worktree.path))),
   );
   return { applied: true } satisfies MirrorApplyGitStateResult;
 });

@@ -78,13 +78,16 @@ export const makeWorkingTree = ({
       const [files, tracked] = yield* Effect.all(
         [
           status(worktree, "all"),
+          // diff-index, which never writes the index back (see the runner),
+          // `-M` for the renames porcelain diff finds.
           run(worktree, [
             "-c",
             "core.quotePath=false",
-            "diff",
-            "HEAD",
+            "diff-index",
+            "-M",
             "--numstat",
             "-z",
+            "HEAD",
           ]).pipe(
             Effect.orElseSucceed(() => ""),
             Effect.map(parseNumstat),
