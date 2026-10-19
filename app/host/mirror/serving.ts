@@ -70,12 +70,11 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   const worktreePath = worktree.path;
   // The child ends when its channel does.
   const closed = yield* Deferred.make<void>();
-  // Its own data directory under this host's: unset, the engine's
-  // caches and staging land in ~/.mutagen, shared with any real
-  // Mutagen install and with every other build and profile here.
+  // Its own data directory under this host's, not ~/.mutagen, shared
+  // with any real Mutagen install and every other build and profile.
   const child = yield* (yield* FileSync).serve(
     worktreePath,
-    { MUTAGEN_DATA_DIRECTORY: join(dataDir(), "file-sync", "serve") },
+    join(dataDir(), "file-sync", "serve"),
     Deferred.await(closed),
   );
   child.stderr?.on("data", (chunk: Buffer) => {

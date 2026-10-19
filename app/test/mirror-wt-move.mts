@@ -102,7 +102,7 @@ const fileSync = Layer.succeed(
   FileSync.FileSync,
   FileSync.FileSync.of({
     spawn: () => Effect.die(new Error("not in this check")),
-    serve: (root, _env, until) =>
+    serve: (root, _dataDir, until) =>
       Effect.gen(function* () {
         served.push(root);
         const scope = yield* Scope.make();

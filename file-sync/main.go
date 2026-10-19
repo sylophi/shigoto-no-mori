@@ -41,7 +41,7 @@ func watchParent(interval time.Duration) {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "Usage: file-sync serve --root <dir> | file-sync daemon --gateway <host:port> --data-dir <dir>")
+	fmt.Fprintln(os.Stderr, "Usage: file-sync serve --root <dir> --data-dir <dir> | file-sync daemon --gateway <host:port> --data-dir <dir>")
 }
 
 func run(args []string) int {
@@ -58,12 +58,17 @@ func run(args []string) int {
 		flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 		flags.SetOutput(os.Stderr)
 		root := flags.String("root", "", "absolute directory the stream may reach")
+		dataDir := flags.String("data-dir", "", "absolute directory the engine caches and stages in")
 		if err := flags.Parse(args[1:]); err != nil {
 			return 2
 		}
-		if !filepath.IsAbs(*root) {
+		if !filepath.IsAbs(*root) || !filepath.IsAbs(*dataDir) {
 			usage()
 			return 2
+		}
+		if err := os.Setenv("MUTAGEN_DATA_DIRECTORY", *dataDir); err != nil {
+			fmt.Fprintln(os.Stderr, "file-sync serve:", err)
+			return 1
 		}
 		// stdout IS the protocol stream here, so nothing else may print
 		// to it. Diagnostics go to stderr.

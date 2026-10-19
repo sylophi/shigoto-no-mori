@@ -29,6 +29,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { isolateGit } from "./gitIsolation.ts";
 
 const RUN = "SM_TEST_RUN";
 const ROOT = "SM_TEST_ROOT";
@@ -217,6 +218,7 @@ if (import.meta.main) {
     process.exit(2);
   }
   ownTestTemp(family);
+  isolateGit();
   const { status } = spawnSync(command, args, { stdio: "inherit" });
   process.exitCode = status ?? 1;
 }

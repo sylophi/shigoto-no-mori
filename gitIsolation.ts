@@ -1,12 +1,13 @@
 // What every test runner here applies to its own process before a test
-// starts (the app's, the engine's and the terminal's vitest configs,
-// and the app's proof runner), so no test's git can reach this
-// repository however it runs git.
+// starts (the vitest configs, the app's proof runner, and the Go suites
+// through testTemp.mts), so no test's git can reach this repository
+// however it runs git.
 //
 // The pre-commit hook exports GIT_DIR and GIT_INDEX_FILE for the
 // repository being committed. A test that inherited them ran its
 // sandbox's git against the real repository (its config, its branch),
-// twice. So every GIT_* variable goes, and GIT_CEILING_DIRECTORIES
+// three times: the third, a Go test's `git init`, set the shared
+// config's core.bare under every worktree. So every GIT_* variable goes, and GIT_CEILING_DIRECTORIES
 // stops git from finding the repository by walking up from a folder
 // inside it. A git started at the repository's root still finds it,
 // which the proof reading the tracked files (proof-selection) does on
