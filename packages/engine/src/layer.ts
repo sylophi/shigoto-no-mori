@@ -119,12 +119,14 @@ const services = (options: EngineOptions) =>
   );
 
 // A data-folder move's journal settled as the graph comes up, before
-// anything reads a worktree by its id (DataDirMove.settleLayer).
+// anything reads a worktree by its id (DataDirMove.settleLayer). Paths
+// is the caller's, as the terminal reads the data dir with it before it
+// picks the store.
+export const engineServices = (options: EngineOptions) =>
+  DataDirMove.settleLayer.pipe(Layer.provideMerge(services(options)));
+
 export const engineLayer = (options: EngineOptions) =>
-  DataDirMove.settleLayer.pipe(
-    Layer.provideMerge(services(options)),
-    Layer.provideMerge(Paths.layer(options.flavor)),
-  );
+  engineServices(options).pipe(Layer.provideMerge(Paths.layer(options.flavor)));
 
 // The engine of the process that migrates a 2.x data dir, the app's:
 // its moves into `wt/` made before anything else runs. Every other

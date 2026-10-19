@@ -119,6 +119,15 @@ const split = (arg: string) => {
     : { name: name.slice(0, eq), inline: name.slice(eq + 1) };
 };
 
+// A command line's words before its `--`, and the ones past it, which
+// are the command's whatever they look like (undefined without one).
+export const splitAtDashes = (args: ReadonlyArray<string>) => {
+  const end = args.indexOf("--");
+  return end === -1
+    ? { own: args, past: undefined }
+    : { own: args.slice(0, end), past: args.slice(end + 1) };
+};
+
 const refuse = (problem: string) => Effect.fail(new UsageError({ problem }));
 
 // Go's parseCmdArgs: the flags `tokens` give, by name, and the
@@ -173,9 +182,8 @@ export const goArgs = (
 ) =>
   Effect.gen(function* () {
     const { binaryName } = yield* Effect.service(Output);
-    const end = args.indexOf("--");
-    const tokens = end === -1 ? [...args] : args.slice(0, end);
-    const after = end === -1 ? [] : args.slice(end + 1);
+    const line = splitAtDashes(args);
+    const tokens = [...line.own];
 
     // The command, a level at a time. A flags-first namespace's flags
     // stay valid down to its verb, which reads those it knows.
@@ -204,7 +212,7 @@ export const goArgs = (
 
     const own = flagsOf(chain);
     const { values, positionals } = yield* parse(tokens, spec ?? own);
-    positionals.push(...after);
+    positionals.push(...(line.past ?? []));
     const flagArgs = [...values]
       .filter(([name]) => own.has(name))
       .flatMap(([name, value]) =>

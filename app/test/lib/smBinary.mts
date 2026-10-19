@@ -2,26 +2,14 @@
 // A proof that drives a host module drives the engine in-process, on
 // its sandbox's data dir, and reaches the same store from the terminal
 // binary where it sets things up or reads them back, as an agent in a
-// terminal beside the app would. The binary is built once per state of
-// its sources into the run's temp dir (../../../testTemp.mts), keyed by
-// a hash of them, so the proofs after the first in a run skip the
-// build. The darwin helper goes beside it, where the binary looks.
+// terminal beside the app would. The binary is the prod flavor's, built
+// once per state of its sources (packages/cli/test/lib/binary.ts), so
+// the proofs after the first in a run skip the build.
 //
 // covers: packages/cli/** packages/engine/src/** macfs/**
 import * as Schema from "effect/Schema";
-import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Migration from "@shigomori/engine/Migration";
 import * as Layer from "effect/Layer";
@@ -31,64 +19,15 @@ import {
   ProjectSchema,
   type Project,
 } from "@shigomori/contracts/schemas/project";
-import { createCliRunner, repoRoot, type CliRunner } from "./checkKit.mts";
-import { isOutsideGitVariable } from "../../../gitIsolation.ts";
-import { macfs as macfsBuild } from "../../../packages/engine/test/lib/macfs.ts";
+import { createCliRunner, type CliRunner } from "./checkKit.mts";
+import {
+  binaryPath,
+  builtBinary,
+} from "../../../packages/cli/test/lib/binary.ts";
 
-// What goes into the binary: the sources of the terminal, the engine
-// and the contracts, and the darwin helper's.
-const SOURCES = [
-  "packages/cli/src",
-  "packages/cli/build.mts",
-  "packages/engine/src",
-  "packages/contracts/src",
-  "macfs",
-];
+export const smBinaryPath = () => binaryPath("prod");
 
-function hashInto(hash: ReturnType<typeof createHash>, rel: string): void {
-  const path = join(repoRoot, rel);
-  const files = rel.includes(".")
-    ? [""]
-    : readdirSync(path, { recursive: true })
-        .map(String)
-        .filter((file) => /\.(ts|mts|go|json|mod|sum)$/.test(file))
-        .toSorted();
-  for (const file of files) {
-    hash.update(`${rel}/${file}\0`);
-    hash.update(readFileSync(file === "" ? path : join(path, file)));
-  }
-}
-
-export function smBinaryPath(): string {
-  const hash = createHash("sha256");
-  for (const rel of SOURCES) hashInto(hash, rel);
-  return join(tmpdir(), `sm-proof-${hash.digest("hex").slice(0, 16)}`, "sm");
-}
-
-// The path of a binary built from the sources as they are now, building
-// it when no earlier proof has. Built under a temp name and renamed
-// into place, so two proofs building at once both end with a whole
-// binary.
-export function builtSm(): string {
-  const binary = smBinaryPath();
-  if (existsSync(binary)) return binary;
-  const dir = join(binary, "..");
-  mkdirSync(dir, { recursive: true });
-  const env = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
-  );
-  const macfs = join(dir, `macfs.${process.pid}`);
-  copyFileSync(macfsBuild(), macfs);
-  renameSync(macfs, join(dir, "macfs"));
-  const partial = `${binary}.${process.pid}`;
-  execFileSync("node", ["build.mts", partial, "--flavor=prod"], {
-    cwd: join(repoRoot, "packages", "cli"),
-    env,
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-  renameSync(partial, binary);
-  return binary;
-}
+export const builtSm = () => builtBinary("prod");
 
 // The darwin helper beside the built binary.
 function builtMacfs(): string {

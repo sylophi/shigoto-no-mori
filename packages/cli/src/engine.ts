@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import type { Flavor } from "@shigomori/engine/flavor";
-import { doctorLayer, engineLayer } from "@shigomori/engine/layer";
+import { doctorLayer, engineServices } from "@shigomori/engine/layer";
 import * as Migration from "@shigomori/engine/Migration";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Store from "@shigomori/engine/Store";
@@ -35,7 +35,7 @@ export class Unmigrated extends Context.Service<
 export const engine = (flavor: Flavor) =>
   Layer.unwrap(
     Effect.map(Store.importOwed(open), (owed) =>
-      engineLayer({
+      engineServices({
         flavor,
         store: owed ? Store.fromFiles(open, true) : Store.layer(open),
         open,
@@ -46,7 +46,7 @@ export const engine = (flavor: Flavor) =>
         Layer.merge(Layer.succeed(Unmigrated, { owed })),
       ),
     ),
-  ).pipe(Layer.provide(Paths.layer(flavor)));
+  ).pipe(Layer.provideMerge(Paths.layer(flavor)));
 
 // Before a command that changes a worktree on disk, which a data dir
 // still v2's would not record.

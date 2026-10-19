@@ -13,7 +13,7 @@ import { readdirSync, realpathSync, rmdirSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { footprint, NUKE_EXIT, NUKE_SWITCH } from "@shigomori/engine/footprint";
 import { flavorNames } from "@shigomori/engine/flavor";
-import { withoutCdFile } from "../handOver.ts";
+import { childEnv } from "@shigomori/engine/processes";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -119,7 +119,7 @@ export const nuke = Command.make(
         }
         const code = spawnSync(executable, [`--${NUKE_SWITCH}`], {
           stdio: "inherit",
-          env: withoutCdFile(),
+          env: childEnv(process.env),
         }).status;
         if (code === NUKE_EXIT.finished) break;
         if (code === NUKE_EXIT.finishedWithLeft) {
