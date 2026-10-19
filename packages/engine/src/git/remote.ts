@@ -70,6 +70,7 @@ export const makeRemote = ({
     // would read as a second revision.
     const rebaseOrMerge = (worktree: string, ref: string) =>
       Effect.gen(function* () {
+        yield* operation.refuseMidOperation(worktree);
         if (yield* rebaseIsSafe(worktree, ref)) {
           const rebased = yield* run(worktree, [
             "rebase",

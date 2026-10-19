@@ -94,10 +94,9 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
     // A command of the app's that git stopped part-way (a conflict, or
     // another program's git holding index.lock) is undone, the abort
     // waiting a held lock out as a one-step write does. One refused
-    // before it began has nothing to undo. One that can't be undone
-    // stops there, in git's own state for the banner to continue or
-    // abort: nothing more runs on that HEAD, and nothing says it was
-    // undone.
+    // before it began has nothing to undo; one that can't be undone is
+    // left for the banner. Callers refuse an operation already under way
+    // first (refuseMidOperation), so the stop is theirs.
     const undoStopped = Effect.fn("Git.undoStopped")(function* (
       worktree: string,
       verb: "rebase" | "merge" | "revert" | "cherry-pick",
@@ -106,12 +105,11 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
         return;
       }
       yield* waitingForIndex(run(worktree, [verb, "--abort"])).pipe(
-        Effect.catch(() =>
-          Effect.gen(function* () {
-            return yield* new GitRefusedError({
+        Effect.mapError(
+          () =>
+            new GitRefusedError({
               reason: `The ${verb} stopped part-way and couldn't be undone, so the worktree is still in it. Continue or abort it from the banner.`,
-            });
-          }),
+            }),
         ),
       );
     });

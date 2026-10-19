@@ -1011,6 +1011,26 @@ it("a sync whose stopped rebase is undone once the lock goes merges instead", as
   );
 });
 
+it("a sync refuses a merge already under way, and leaves it", async () => {
+  const repo = seedRepo();
+  git(repo, "checkout", "-q", "-b", "feat");
+  write(repo, "a.txt", "feat's\n");
+  git(repo, "commit", "-q", "-am", "feat's");
+  git(repo, "checkout", "-q", "main");
+  write(repo, "a.txt", "main's\n");
+  git(repo, "commit", "-q", "-am", "main's");
+  git(repo, "checkout", "-q", "feat");
+  // The person's own merge, stopped on its conflict.
+  assert.throws(() => git(repo, "merge", "-q", "--no-edit", "main"));
+  write(repo, "a.txt", "resolved\n");
+  const error = await failureAs(GitRefusedError, (g) =>
+    g.syncWithPrimary({ worktree: repo, repo, primaryRef: "main" }),
+  );
+  assert.equal(error.reason, "Finish or abort the merge first.");
+  assert.ok(existsSync(join(repo, ".git", "MERGE_HEAD")));
+  assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "resolved\n");
+});
+
 it("a cherry-pick that conflicts and can't be undone says so, not that nothing changed", async () => {
   const repo = seedRepo();
   git(repo, "checkout", "-q", "-b", "other");
