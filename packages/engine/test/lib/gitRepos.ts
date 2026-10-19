@@ -11,7 +11,8 @@ import * as Layer from "effect/Layer";
 import { afterAll } from "vitest";
 import * as Git from "../../src/Git.ts";
 import {
-  isOutsideGitVariable,
+  GIT_IDENTITY,
+  isolateGit,
   repositoryRoot,
 } from "../../../../gitIsolation.ts";
 
@@ -19,17 +20,8 @@ import {
 // hook's GIT_* variables would point it at the commit in progress, and
 // the user's own config would leak in, so both go before any test
 // runs. Commits need an identity.
-for (const key of Object.keys(process.env)) {
-  if (isOutsideGitVariable(key)) delete process.env[key];
-}
-Object.assign(process.env, {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-  GIT_AUTHOR_NAME: "sm",
-  GIT_AUTHOR_EMAIL: "sm@example.test",
-  GIT_COMMITTER_NAME: "sm",
-  GIT_COMMITTER_EMAIL: "sm@example.test",
-});
+isolateGit();
+Object.assign(process.env, GIT_IDENTITY);
 
 const scratch = mkdtempSync(join(tmpdir(), "engine-git-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));

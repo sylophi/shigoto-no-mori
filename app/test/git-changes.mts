@@ -28,6 +28,7 @@ import {
   scrubProcessGitEnv,
   tempDir,
 } from "./lib/checkKit.mts";
+import { GIT_IDENTITY } from "../../gitIsolation.ts";
 import { it } from "vitest";
 import type { CommitRequest } from "@shigomori/engine/Git";
 import { errorWordsOf } from "@host/lib/errorWords";
@@ -39,12 +40,7 @@ import { trackTest } from "./lib/vitestKit.mts";
 // progress, so they go before anything is imported. Commits need an
 // identity, and the global config is cut off, so pin one here.
 const gitEnv = scrubbedGitEnv();
-scrubProcessGitEnv({
-  GIT_AUTHOR_NAME: "sm",
-  GIT_AUTHOR_EMAIL: "sm@example.test",
-  GIT_COMMITTER_NAME: "sm",
-  GIT_COMMITTER_EMAIL: "sm@example.test",
-});
+scrubProcessGitEnv(GIT_IDENTITY);
 
 // The engine's Git, in the shapes these cases call it by.
 const discardChanges = (worktree: string, paths: readonly string[]) =>

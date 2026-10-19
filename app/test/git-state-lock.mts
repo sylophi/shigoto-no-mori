@@ -32,15 +32,11 @@ import {
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
+import { GIT_IDENTITY } from "../../gitIsolation.ts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 // The apply runs git in this process.
-scrubProcessGitEnv({
-  GIT_AUTHOR_NAME: "sm",
-  GIT_AUTHOR_EMAIL: "sm@example.test",
-  GIT_COMMITTER_NAME: "sm",
-  GIT_COMMITTER_EMAIL: "sm@example.test",
-});
+scrubProcessGitEnv(GIT_IDENTITY);
 const git = sandboxGit();
 const runtime = ManagedRuntime.make(
   Git.layer.pipe(Layer.provideMerge(NodeServices.layer)),

@@ -8,22 +8,14 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { GIT_IDENTITY, isolatedGitEnv } from "../../../../gitIsolation.ts";
 
 type Git = (...args: string[]) => string;
 
-// git under the suite's isolation (vitest.config.ts) with no global or
-// system config, and a pinned identity and locale.
+// git isolated (../../../../gitIsolation.ts), with a fixture's identity
+// and a pinned locale.
 function gitIn(repo: string): Git {
-  const env = {
-    ...process.env,
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_AUTHOR_NAME: "sm",
-    GIT_AUTHOR_EMAIL: "sm@example.test",
-    GIT_COMMITTER_NAME: "sm",
-    GIT_COMMITTER_EMAIL: "sm@example.test",
-    LC_ALL: "C",
-  };
+  const env = { ...isolatedGitEnv(), ...GIT_IDENTITY, LC_ALL: "C" };
   // A diff exits 1 when it finds changes, which --no-index always does.
   return (...args) => {
     try {

@@ -21,6 +21,7 @@ import { engineGit } from "./lib/gitPromises.mts";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 import { afterAll, beforeAll, it } from "vitest";
 import { appRoot, scrubProcessGitEnv } from "./lib/checkKit.mts";
+import { GIT_IDENTITY } from "../../gitIsolation.ts";
 
 const fixture: {
   format: string;
@@ -31,12 +32,7 @@ const fixture: {
 
 // listCommits runs git in this process, so the fixture repo's identity
 // and the cut-off user config go on process.env.
-scrubProcessGitEnv({
-  GIT_AUTHOR_NAME: "t",
-  GIT_AUTHOR_EMAIL: "t@t",
-  GIT_COMMITTER_NAME: "t",
-  GIT_COMMITTER_EMAIL: "t@t",
-});
+scrubProcessGitEnv(GIT_IDENTITY);
 
 let repo: string;
 beforeAll(() => {

@@ -26,14 +26,12 @@ import * as Git from "../../src/Git.ts";
 import * as Paths from "../../src/Paths.ts";
 import { nodeStore } from "./nodeStore.ts";
 import { macfs } from "./sandbox.ts";
+import { GIT_IDENTITY } from "../../../../gitIsolation.ts";
 
 // Commits need an identity and fixed dates. The sandbox module this
 // imports has already kept git's variables and the user's config out.
 Object.assign(process.env, {
-  GIT_AUTHOR_NAME: "t",
-  GIT_AUTHOR_EMAIL: "t@t",
-  GIT_COMMITTER_NAME: "t",
-  GIT_COMMITTER_EMAIL: "t@t",
+  ...GIT_IDENTITY,
   GIT_AUTHOR_DATE: "2005-04-07T22:13:13+0000",
   GIT_COMMITTER_DATE: "2005-04-07T22:13:13+0000",
 });

@@ -30,7 +30,11 @@ import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
 import type { KeyValueStorage } from "../../web/lib/kvStorage.ts";
-import { isOutsideGitVariable } from "../../../gitIsolation.ts";
+import {
+  GIT_IDENTITY,
+  isolatedGitEnv,
+  isolateGit,
+} from "../../../gitIsolation.ts";
 
 // The app root (app/ in the repo), resolved from this file's location
 // under test/lib/.
@@ -222,38 +226,19 @@ export async function waitFor(
   }
 }
 
-// The global and system git config, cut off.
-const GIT_CONFIG_CUT = {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-};
-
-// process.env with every GIT_* variable removed, for a check that runs
-// git against a sandbox repository. The runner already keeps the
-// pre-commit hook's GIT_DIR and GIT_INDEX_FILE out of every proof
-// (../../../gitIsolation.ts); this also cuts off the global and system
-// git config, so the host's identity and hooks never leak into the
-// sandbox.
+// process.env isolated (../../../gitIsolation.ts) with the locale pinned,
+// for a check that runs git against a sandbox repository.
 export function scrubbedGitEnv(): NodeJS.ProcessEnv {
-  return {
-    ...Object.fromEntries(
-      Object.entries(process.env).filter(([key]) => !isOutsideGitVariable(key)),
-    ),
-    ...GIT_CONFIG_CUT,
-    LC_ALL: "C",
-  };
+  return { ...isolatedGitEnv(), LC_ALL: "C" };
 }
 
-// The same scrub applied to process.env itself, for a check whose code
-// under test runs git in THIS process with process.env: every GIT_*
-// deleted and the global and system config cut off, then `extra` on
-// top (a locale pin, a fixture identity). Unlike scrubbedGitEnv it
-// leaves the locale alone unless `extra` pins it.
+// The same isolation applied to process.env itself, for a check whose
+// code under test runs git in THIS process with process.env, then
+// `extra` on top (a locale pin, a fixture identity). Unlike
+// scrubbedGitEnv it leaves the locale alone unless `extra` pins it.
 export function scrubProcessGitEnv(extra: NodeJS.ProcessEnv = {}): void {
-  for (const key of Object.keys(process.env)) {
-    if (isOutsideGitVariable(key)) delete process.env[key];
-  }
-  Object.assign(process.env, GIT_CONFIG_CUT, extra);
+  isolateGit();
+  Object.assign(process.env, extra);
 }
 
 export type SandboxGit = (cwd: string, ...args: string[]) => string;
@@ -264,12 +249,9 @@ export type SandboxGit = (cwd: string, ...args: string[]) => string;
 export function sandboxGit(
   gitEnv: NodeJS.ProcessEnv = scrubbedGitEnv(),
 ): SandboxGit {
+  const env = { ...GIT_IDENTITY, ...gitEnv };
   return (cwd, ...args) =>
-    execFileSync(
-      "git",
-      ["-c", "user.name=sm", "-c", "user.email=sm@example.test", ...args],
-      { cwd, env: gitEnv, encoding: "utf8" },
-    );
+    execFileSync("git", args, { cwd, env, encoding: "utf8" });
 }
 
 // A few turns of the event loop, for a reader to take a line and a
