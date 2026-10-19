@@ -334,7 +334,7 @@ export const carryOverVerb = <E, R>(
             let held = false;
             yield* rewrite(settings, "carryOver", (all) => {
               held = all.some(same(path));
-              return all.filter((entry) => !same(path)(entry));
+              return held ? all.filter((entry) => !same(path)(entry)) : all;
             });
             if (!held) {
               return yield* new NoSuchEntry({

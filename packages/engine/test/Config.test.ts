@@ -263,7 +263,7 @@ it("reads a device setting as it applies, its default when unset or unreadable",
   });
 });
 
-it("writes nothing for a change that answers none: no default branch filled in, nothing excluded", async () => {
+it("writes nothing for a change that answers none: no default branch filled in", async () => {
   const repo = box.repo("untouched");
   const stored = await box.engine(
     Effect.gen(function* () {

@@ -22,9 +22,6 @@ import { interactive } from "../prompt.ts";
 import { launcherVerb } from "./configLists.ts";
 import { emit, out, Output, renderTable, styles } from "../output.ts";
 
-// A document as JSON with its keys in order at every level, so two reads
-// of the same settings compare equal whatever order the store gave.
-
 // Where a verb reads and writes, and how its output names that.
 export type Settings = {
   readonly scope: Config.ConfigScope;
@@ -258,14 +255,19 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
         return;
       }
       yield* config.write(settings.scope, payload, stored).pipe(
-        Effect.mapError(
-          (error) =>
+        Effect.catchTag("ConfigChangedMeanwhile", () =>
+          Effect.fail(
             new EditFailed({
-              problem:
-                error instanceof Config.ConfigChangedMeanwhile
-                  ? `The settings changed while you edited them, so nothing changed.${kept}`
-                  : `${error.message} Nothing changed.${kept}`,
+              problem: `The settings changed while you edited them, so nothing changed.${kept}`,
             }),
+          ),
+        ),
+        Effect.mapError((error) =>
+          error instanceof EditFailed
+            ? error
+            : new EditFailed({
+                problem: `${error.message} Nothing changed.${kept}`,
+              }),
         ),
       );
       rmSync(dir, { recursive: true, force: true });

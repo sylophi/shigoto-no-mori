@@ -130,9 +130,6 @@ const legacyFlags = {
   ),
 };
 
-// The project settings' parent. -p and --project-id go before or after
-// the verb. With no verb it prints the settings as stored, or with the
-// flags sets them.
 // A script flag as the patch takes it: none untouched, an empty one
 // cleared.
 const script = (flag: Option.Option<string>) =>
@@ -141,6 +138,9 @@ const script = (flag: Option.Option<string>) =>
     onSome: (value) => ({ value: value === "" ? null : value }),
   });
 
+// The project settings' parent. -p and --project-id go before or after
+// the verb. With no verb it prints the settings as stored, or with the
+// flags sets them.
 const settingsOf = Command.make("config", legacyFlags, (input) =>
   Effect.gen(function* () {
     // The shared flags reach the parent's handler too, untyped there.
