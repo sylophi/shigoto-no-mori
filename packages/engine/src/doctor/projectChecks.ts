@@ -280,7 +280,18 @@ export const makeProjectChecks = ({
             ),
           ];
         }
-        const drift = yield* findDrift(project, identities.success, bases);
+        const found = yield* Effect.result(
+          findDrift(project, identities.success, bases),
+        );
+        if (Result.isFailure(found)) {
+          return [
+            check("Projects", "project-worktrees", project.name).fail(
+              `can't read this project's worktree folders (${errorText(found.failure)}), so a moved or stray worktree goes unseen`,
+              "Run the doctor again. If it keeps failing, reinstall Shigoto no Mori.",
+            ),
+          ];
+        }
+        const drift = found.success;
         const entries: Entry<StoreServices>[] = [];
         if (drift.moved.size > 0) {
           const n = drift.moved.size;
@@ -547,9 +558,18 @@ export const makeProjectChecks = ({
       Effect.gen(function* () {
         const line = check("Projects", "project-include", project.name);
         const file = path.join(project.path, WORKTREE_INCLUDE);
-        const entry = (yield* lstatIn(project.path, [WORKTREE_INCLUDE])).get(
-          WORKTREE_INCLUDE,
+        const read = yield* Effect.result(
+          lstatIn(project.path, [WORKTREE_INCLUDE]),
         );
+        if (Result.isFailure(read)) {
+          return [
+            line.warn(
+              `can't read ${WORKTREE_INCLUDE} (${errorText(read.failure)})`,
+              "Run the doctor again. If it keeps failing, reinstall Shigoto no Mori.",
+            ),
+          ];
+        }
+        const entry = read.success.get(WORKTREE_INCLUDE);
         if (entry === undefined) return [];
         if (isDirMode(entry.mode)) {
           return [

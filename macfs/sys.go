@@ -5,7 +5,6 @@ package main
 import (
 	"encoding/binary"
 	"errors"
-	"os"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -128,12 +127,12 @@ func stripXattrs(p string, names []string) error {
 const attrCmnextPrivateSize = 0x8
 
 // A file's private size on APFS, via getattrlist(2), which x/sys
-// doesn't wrap. ok is false where the volume can't say (HFS+, a network
-// mount), and the caller falls back to the allocated size.
-func privateSize(path string) (int64, bool, error) {
+// doesn't wrap. ok is false where it can't be read (HFS+ and network
+// mounts don't know it), and the caller falls back to the allocated size.
+func privateSize(path string) (int64, bool) {
 	p, err := syscall.BytePtrFromString(path)
 	if err != nil {
-		return 0, false, err
+		return 0, false
 	}
 	attrs := unix.Attrlist{
 		Bitmapcount: unix.ATTR_BIT_MAP_COUNT,
@@ -151,15 +150,12 @@ func privateSize(path string) (int64, bool, error) {
 		uintptr(unix.FSOPT_NOFOLLOW|unix.FSOPT_ATTR_CMN_EXTENDED),
 		0)
 	// A volume that doesn't know the attribute may refuse the whole call.
-	if errno == unix.EINVAL || errno == unix.ENOTSUP {
-		return 0, false, nil
-	}
 	if errno != 0 {
-		return 0, false, &os.PathError{Op: "getattrlist", Path: path, Err: errno}
+		return 0, false
 	}
 	returnedForkAttrs := binary.NativeEndian.Uint32(buf[20:24])
 	if returnedForkAttrs&attrCmnextPrivateSize == 0 {
-		return 0, false, nil
+		return 0, false
 	}
-	return int64(binary.NativeEndian.Uint64(buf[24:32])), true, nil
+	return int64(binary.NativeEndian.Uint64(buf[24:32])), true
 }

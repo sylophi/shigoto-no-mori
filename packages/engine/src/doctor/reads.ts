@@ -27,11 +27,11 @@ export const makeReads = Effect.gen(function* () {
     );
 
   // lstat(2) of names in a folder, by name: a symlink's own, as Go's
-  // directory entries tell them. What it can't answer is absent.
+  // directory entries tell them. A name it can't answer is absent; the
+  // helper failing fails the read, so a check says it couldn't look
+  // rather than that nothing was there.
   const lstatIn = (dir: string, entries: ReadonlyArray<string>) =>
-    Darwin.lstatByPath(darwin, dir, entries).pipe(
-      Effect.orElseSucceed(() => new Map<string, Darwin.LstatEntry>()),
-    );
+    Darwin.lstatByPath(darwin, dir, entries);
 
   const statOf = (target: string) => fs.stat(target).pipe(Effect.option);
 

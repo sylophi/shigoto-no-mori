@@ -167,7 +167,7 @@ var verbs = map[string]verb{
 				Flags: st.Flags, Blocks: st.Blocks, Nlink: uint32(st.Nlink),
 			}
 			if *withPrivate && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Blocks > 0 {
-				if n, ok, _ := privateSize(p); ok {
+				if n, ok := privateSize(p); ok {
 					out.PrivateBytes = &n
 				}
 			}

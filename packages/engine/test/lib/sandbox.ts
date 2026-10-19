@@ -170,8 +170,13 @@ export type Sandbox = {
 // `env` is more of the environment the engine reads (a harness's
 // config dir, the session a shell runs in).
 export function sandbox(
-  options: { readonly env?: Readonly<Record<string, string>> } = {},
+  options: {
+    readonly env?: Readonly<Record<string, string>>;
+    // The darwin helper in macfs/'s place, for a case where it fails.
+    readonly macfs?: string;
+  } = {},
 ): Sandbox {
+  const helper = options.macfs ?? macfs();
   const originalPath = process.env.PATH;
   const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-sandbox-")));
   const seed = join(root, "seed");
@@ -208,7 +213,7 @@ export function sandbox(
       flavor: "dev",
       store: Store.layer(openNode),
       open: openNode,
-      macfs: macfs(),
+      macfs: helper,
       sm: HOOK_BINARY,
     });
   let runtime: ManagedRuntime.ManagedRuntime<Engine, unknown> | undefined;
@@ -380,7 +385,7 @@ export function sandbox(
           doctor.run(input),
         ).pipe(
           Effect.provide(
-            doctorLayer({ flavor: "dev", open: openNode, macfs: macfs() }).pipe(
+            doctorLayer({ flavor: "dev", open: openNode, macfs: helper }).pipe(
               Layer.provide(platform()),
             ),
           ),
