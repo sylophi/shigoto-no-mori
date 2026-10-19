@@ -1,7 +1,8 @@
 // Whether a link to another machine still answers, judged only from a
 // probe the far end had its whole window to answer while this end ran
 // (V3.md, "Time"). One observation for the device links and the hub
-// socket. Effect's pinger judged the age of the last frame before it
+// socket, and one rule for a question asked once (the terminal's
+// handshake with the app, a helper process, a host at a quit). Effect's pinger judged the age of the last frame before it
 // sent a ping, on the wall clock: a hidden page whose timers run once a
 // minute cut a quiet, healthy peer on its next turn, and a wake cut
 // whatever was asked before the sleep.
@@ -10,16 +11,15 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import { elapsedMillis } from "./elapsed.ts";
 
 // How late a turn may come before it means this end was not running
 // (a hidden page's throttled timers, a sleep, a stopped process).
 const LATE_MS = 5_000;
 
-const nanosToMs = (nanos: bigint) => Number(nanos / 1_000_000n);
-
 const readClocks = Effect.all({
   wall: Clock.currentTimeMillis,
-  mono: Effect.map(Clock.monotonicTimeNanos, nanosToMs),
+  mono: elapsedMillis,
 });
 
 // The same rule for one question asked at a moment that matters (a
@@ -27,8 +27,8 @@ const readClocks = Effect.all({
 // with, a failure or a defect included, or none once it stayed silent
 // for `timeoutMs` that this end ran through. A wait whose limit came
 // late by either clock asks again rather than say none.
-export const answerWithin = Effect.fnUntraced(function* <A, E>(
-  ask: Effect.Effect<A, E>,
+export const answerWithin = Effect.fnUntraced(function* <A, E, R>(
+  ask: Effect.Effect<A, E, R>,
   timeoutMs: number,
 ) {
   while (true) {

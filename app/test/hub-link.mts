@@ -64,7 +64,12 @@ import {
   type Track,
   waitFor,
 } from "./lib/checkKit.mts";
-import { bootDevice, type BootDeviceOpts } from "./lib/hubBoot.mts";
+import {
+  bootDevice,
+  type BootDeviceOpts,
+  type BootedDevice,
+} from "./lib/hubBoot.mts";
+import { directPresenceRule } from "@shared/hub/directPresence";
 import { delay } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 import {
@@ -656,6 +661,50 @@ it("reconnect: a dropped socket redials with a fresh ticket and answers again", 
     "A to see B again",
   );
   assert.equal(await a.connection.askConnectInfo("B", "back", ASK_MS), "back");
+});
+
+it("presence: a dropped socket reads as connected only while its link holds a roster, at every change it reports, so a drop never reads as every peer gone", async () => {
+  const stub = await startStubHub(trackTest);
+  const looks: Array<{ phase: string; rule: string; roster: boolean }> = [];
+  let a: BootedDevice | undefined;
+  const look = () => {
+    if (a === undefined) return;
+    const { socket } = a.connection.status();
+    looks.push({
+      phase: socket.phase,
+      rule: directPresenceRule(socket),
+      roster: a.connection.rosterKnown(),
+    });
+  };
+  a = await bootDevice(stub, "A", { onChange: look }, trackTest);
+  const booted = a;
+  await bootDevice(stub, "B", { serveConnectInfo: testServer }, trackTest);
+  await waitFor(
+    () => booted.connection.status().onlineDeviceIds.includes("B"),
+    "A to see B",
+  );
+  looks.length = 0;
+  stub.dropSocket("A", 1001, "going away");
+  await waitFor(
+    () => booted.connection.status().socket.phase === "backoff",
+    "the backoff phase",
+  );
+  await waitFor(
+    () =>
+      booted.connection.status().socket.phase === "connected" &&
+      booted.connection.status().onlineDeviceIds.includes("B"),
+    "the redial to see B again",
+  );
+  assert.ok(
+    looks.some((seen) => seen.rule === "outage"),
+    "the drop never read as an outage",
+  );
+  for (const seen of looks) {
+    assert.ok(
+      seen.phase !== "connected" || seen.roster,
+      `a change read connected with no link: ${JSON.stringify(looks)}`,
+    );
+  }
 });
 
 it("blocked: 4102 revoked blocks with no redial, 4103 superseded blocks with its own message", async () => {

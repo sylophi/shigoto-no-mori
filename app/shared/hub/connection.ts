@@ -23,8 +23,9 @@ import {
   PING_TIMEOUT_MS,
   PROBE_TIMEOUT_MS,
 } from "@shared/remote/link";
-import { watchLiveness } from "@shared/remote/liveness";
-import { newConnectionId, RemoteConnectError } from "@shared/remote/deviceLink";
+import { watchLiveness } from "@shigomori/engine/liveness";
+import { RemoteConnectError } from "@shared/remote/deviceLink";
+import { newConnectionId } from "@shigomori/engine/rpcClient";
 import {
   createHubLink,
   type HubLink,
@@ -78,7 +79,7 @@ const TERMINATE_GRACE_MS = 1_500;
 
 // A websocket over a NAT, a tunnel edge or a laptop that just slept can
 // die without either end seeing a close, so the socket is watched as a
-// device link is (shared/remote/liveness.ts, on link.ts's timings): the
+// device link is (engine/liveness.ts, on link.ts's timings): the
 // hub's ping (HUB_PING, which the Durable Object answers without
 // waking) as the probe, and ANY inbound frame as its answer, a relay or
 // presence proving the hub alive as well as a pong does. A probe (a
@@ -606,7 +607,14 @@ export const make = (
           (id) => id !== localDeviceId,
         );
         return {
-          socket: socketStatus,
+          // Connected only while the link is up: a socket's end tears
+          // the link down before the supervisor hears of it, and a
+          // connected socket with no roster would read as every peer
+          // gone (directPresence.ts) on a hub blip.
+          socket:
+            socketStatus.phase === "connected" && link === null
+              ? { phase: "connecting" }
+              : socketStatus,
           onlineDeviceIds: online,
         };
       },

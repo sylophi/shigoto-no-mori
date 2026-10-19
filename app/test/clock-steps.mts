@@ -4,7 +4,7 @@
 // on, monotonic time and every timer stand still, then a wake), and a
 // stopped process (both clocks run on, no timer runs), on a TestClock
 // (lib/checkKit.mts, `sleepingClock`). Covers the links' liveness
-// (shared/remote/liveness.ts), its one-shot question (the mirror
+// (engine/liveness.ts), its one-shot question (the mirror
 // daemon's ping, the watchdog's rounds, a quit's busy ask) and the hub
 // socket's pings and wake probe on it (shared/hub/connection.ts), the
 // supervisor's and the direct keeper's uptime (shared/remote/
@@ -36,7 +36,11 @@ import {
   supervise,
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
-import { answerWithin, watchLiveness } from "@shared/remote/liveness";
+import { answerWithin, watchLiveness } from "@shigomori/engine/liveness";
+import {
+  AccountUnreachableError,
+  withinAccountRead,
+} from "@host/lib/control/AccountPeers";
 import { log } from "@shared/log";
 import { makeSweepRenewals } from "@/lib/remote/remoteSweep";
 import { entryAt, sleepingClock, testClock } from "./lib/checkKit.mts";
@@ -280,6 +284,26 @@ it("liveness: one question whose limit came late, by a stop or a sleep, is asked
   );
   await clock.advance(10_000);
   assert.ok(Option.isNone(await silent));
+});
+
+it("liveness: the terminal's account read, stopped through its limit, asks again rather than say the account is out of reach, and one silent through a limit the host ran says so", async () => {
+  const clock = clocks();
+  let asked = 0;
+  const read = Effect.suspend(() =>
+    ++asked === 1
+      ? Effect.sync(() => clock.stop(60_000)).pipe(Effect.andThen(Effect.never))
+      : Effect.succeed(["B"]),
+  );
+  const stopped = Effect.runPromiseWith(clock.context)(
+    withinAccountRead(read, 15),
+  );
+  await clock.advance(15_000);
+  assert.deepEqual(await stopped, ["B"]);
+  const silent = Effect.runPromiseWith(clock.context)(
+    Effect.flip(withinAccountRead(Effect.never, 15)),
+  );
+  await clock.advance(15_000);
+  assert.ok((await silent) instanceof AccountUnreachableError);
 });
 
 it("hub socket: a wake's probe whose answer a stopped process had no turn to read asks again rather than judge (O07)", async () => {

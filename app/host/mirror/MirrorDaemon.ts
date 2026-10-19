@@ -39,7 +39,7 @@ import {
   type MirrorSessionRaw,
   MirrorSessionRawSchema,
 } from "@shigomori/contracts/modules/mirror";
-import { answerWithin } from "@shared/remote/liveness";
+import { answerWithin } from "@shigomori/engine/liveness";
 import { BACKOFF_LADDER_MS, restartSchedule } from "@shared/remote/supervisor";
 import { MIRROR_GATEWAY_TOKEN_ENV, MirrorGateway } from "./MirrorGateway";
 

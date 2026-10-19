@@ -778,6 +778,64 @@ it("a stepped wall clock neither holds a copy-gone report back nor lets one thro
   assert.equal(reports, 2, "a wall clock stepped forward let one through");
 });
 
+it("a stop's fresh git check that doesn't finish in its limit answers no status, never the verdict from before it", async () => {
+  const held = mkdtempSync(join(root, "held-"));
+  // The peer answers the first look, then holds every later one.
+  let holding = false;
+  standInPeers({
+    transportFor: () => ({
+      invoke: (channel) =>
+        holding && channel === "mirror:gitState"
+          ? new Promise(() => {})
+          : Promise.reject(new Error("the peer can't say")),
+      subscribe: () => () => {},
+    }),
+    channelsFor: () => () => Promise.reject(new Error("not in this check")),
+  });
+  const project = await Effect.runPromiseWith(await hostContext())(
+    Effect.flatMap(Registry.Registry, (registry) =>
+      registry.register({ name: "held", path: held }),
+    ),
+  );
+  const copy = rawMirrorSession({
+    session: "s1",
+    localRoot: held,
+    deviceId: "B",
+    projectId: "p",
+    worktreeId: "copy",
+    labels: {
+      [MIRROR_LABEL_MODE]: "mirror",
+      [MIRROR_LABEL_LOCAL_PROJECT]: project.id,
+      [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
+    },
+  });
+  const clock = testClock();
+  const scope = Effect.runSync(Scope.make());
+  trackTest(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const follower = await Effect.runPromiseWith(await hostContext())(
+    makeGitFollower({
+      sessions: Effect.succeed([copy]),
+      sweepMs: 3_600_000,
+      onCopyGone: () => {},
+      log: () => {},
+    }).pipe(Scope.provide(scope), Effect.provide(clock.context)),
+  );
+  await waitFor(
+    () => follower.statusOf("s1") !== undefined,
+    "the first look's verdict",
+  );
+  holding = true;
+  const checked = Effect.runPromiseWith(clock.context)(
+    follower.reconcileNow("s1"),
+  );
+  await clock.advance(10_000);
+  assert.equal(
+    await checked,
+    undefined,
+    "the stop read the verdict from before",
+  );
+});
+
 it("an orphaned transfer whose end failed is asked again on the next snapshot", async () => {
   let terminates = 0;
   const { state, requests } = await harness((request) => {

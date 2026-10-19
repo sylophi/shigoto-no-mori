@@ -16,11 +16,7 @@ import {
   LinkRefusedError,
   RemoteCallError,
 } from "@shigomori/contracts/errors";
-import {
-  CLOSE_TRY_AGAIN,
-  LINK_MAX_FRAME_BYTES,
-  LoopbackGroup,
-} from "@shigomori/contracts/link";
+import { CLOSE_TRY_AGAIN, LoopbackGroup } from "@shigomori/contracts/link";
 import { isInvoke } from "@shigomori/contracts/contract";
 import {
   CONTROL_ERROR_CODES,
@@ -30,22 +26,22 @@ import {
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as RpcClient from "effect/rpc/RpcClient";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Socket from "effect/socket/Socket";
 import { type Flavor, flavorNames, isFlavor } from "./flavor.ts";
+import { answerWithin } from "./liveness.ts";
 import * as Paths from "./Paths.ts";
 import { pidAlive } from "./processes.ts";
+import { flatClient, newConnectionId, quietProtocol } from "./rpcClient.ts";
 import * as Registry from "./Registry.ts";
 
 // Nothing answers at the address loopback.json names, or what answers
@@ -163,29 +159,13 @@ export const loopbackPartialOf = (file: string, pid: number) =>
   `${file}.${pid}`;
 
 // The app answers a hello at once, so a dial or a welcome that takes
-// this long is not the app.
-const HANDSHAKE_TIMEOUT = "5 seconds";
-
-// No verdict from pings: the app is a process on this machine, whose
-// socket closes as it goes, and the app's own watchdog is what judges a
-// host that stops answering, closing this call's socket as it starts
-// another. Effect's pinger reads the wall clock, so a sleep or a clock
-// step mid-call (a long land or send) failed a call both ends were
-// still serving (V3.md, "Local links and liveness").
-const PING = {
-  pingInterval: "1 hour",
-  pingTimeout: Duration.infinity,
-} as const;
+// this long, of turns this process ran through, is not the app. One
+// this process was stopped for (a Ctrl-Z, a sleep) is asked again
+// (answerWithin).
+const HANDSHAKE_TIMEOUT_MS = 5_000;
 
 // What a transfer's progress is, to the verbs that show it.
 const PROGRESS = "sync:pullProgress";
-
-// The group's calls, each known only as some call: a tag and a payload,
-// and an Effect or a Stream back.
-type Flat = (
-  tag: string,
-  payload: unknown,
-) => Effect.Effect<unknown, unknown> | Stream.Stream<unknown, unknown>;
 
 const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
   const fs = yield* FileSystem.FileSystem;
@@ -227,26 +207,16 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         }),
         (ws) => Effect.sync(() => ws.close(1000)),
       ),
-      { openTimeout: HANDSHAKE_TIMEOUT },
     );
-    // One connection per call: a drop fails the call, as the answer.
-    const protocol = yield* RpcClient.makeProtocolSocket({
-      ...PING,
-      retryPolicy: Schedule.recurs(0),
-    }).pipe(
-      Effect.provideService(Socket.Socket, socket),
-      Effect.provide(
-        RpcSerialization.layerSchemaBinary({
-          maxFrameSize: LINK_MAX_FRAME_BYTES,
-        }),
-      ),
+    // One connection per call: a drop fails the call, as the answer. No
+    // verdict from pings: the app is a process on this machine, whose
+    // socket closes as it goes, and the app's own watchdog is what
+    // judges a host that stops answering, closing this call's socket as
+    // it starts another.
+    const client = yield* flatClient(
+      LoopbackGroup,
+      yield* quietProtocol(socket),
     );
-    // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
-    const client = (yield* RpcClient.make(LoopbackGroup, {
-      flatten: true,
-    }).pipe(
-      Effect.provideService(RpcClient.Protocol, protocol),
-    )) as unknown as Flat;
     const call = (tag: string, payload: unknown) =>
       client(tag, payload) as Effect.Effect<unknown, unknown>;
     // A refusal before the welcome: a listener at its cap says so, and
@@ -261,10 +231,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
       deviceId,
       // The loopback holds every caller apart, whatever it says.
       deviceKind: "desktop",
-      connectionId: Array.from(
-        crypto.getRandomValues(new Uint8Array(16)),
-        (byte) => byte.toString(16).padStart(2, "0"),
-      ).join(""),
+      connectionId: newConnectionId(),
       appVersion: paths.binaryName,
       protocolVersion: PROTOCOL_VERSION,
       token: file.token,
@@ -329,12 +296,22 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     const file = found.value;
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const link = yield* connect(file).pipe(
-          Effect.timeoutOrElse({
-            duration: HANDSHAKE_TIMEOUT,
-            orElse: () => Effect.fail(notRunning),
-          }),
-        );
+        // Each try in a scope of its own, closed with its socket when
+        // it is set aside, and the one that answered kept for the call.
+        const attempt = Effect.gen(function* () {
+          const scope = yield* Scope.make();
+          return yield* connect(file).pipe(
+            Scope.provide(scope),
+            Effect.onExit((exit) =>
+              Exit.isSuccess(exit) ? Effect.void : Scope.close(scope, exit),
+            ),
+            Effect.map((connected) => ({ ...connected, scope })),
+          );
+        });
+        const answered = yield* answerWithin(attempt, HANDSHAKE_TIMEOUT_MS);
+        if (Option.isNone(answered)) return yield* notRunning;
+        const link = yield* answered.value;
+        yield* Effect.addFinalizer((exit) => Scope.close(link.scope, exit));
         yield* Effect.logDebug(
           `control: connected to the app (v${file.appVersion}, pid ${file.pid})`,
         );

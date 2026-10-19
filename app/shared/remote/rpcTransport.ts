@@ -32,15 +32,8 @@ import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type { ClientTransport, Link } from "@shared/ipc/transport";
 import { log } from "@shared/log";
+import type { FlatClient } from "@shigomori/engine/rpcClient";
 import { MAX_IN_FLIGHT_PER_PEER } from "./link";
-
-// An RpcClient made with `flatten`, which the group's calls (built from
-// the contracts as listed) type only as some call.
-export type FlatClient = (
-  tag: string,
-  payload: unknown,
-  options?: object,
-) => Effect.Effect<unknown, unknown> | Stream.Stream<unknown, unknown>;
 
 // The link dropped while calls were in flight, or a call came after it
 // did: a disconnect, distinct from the handler's own failure. `local`

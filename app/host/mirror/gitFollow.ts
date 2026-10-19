@@ -36,8 +36,10 @@ import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as Result from "effect/Result";
+import { answerWithin } from "@shigomori/engine/liveness";
 import * as Fiber from "effect/Fiber";
 import * as FiberMap from "effect/FiberMap";
+import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import type * as Context from "effect/Context";
@@ -106,9 +108,9 @@ const DEFAULT_SWEEP_MS = 60_000;
 // onCopyGone: every signal fails the same way until the owner acts.
 const COPY_GONE_EVERY_MS = 60_000;
 
-// How long reconcileNow waits on a reconcile before answering with the
-// status as it stands. A stalled peer can hold a round for as long as
-// its transport's timeout, and the caller is a user waiting on a stop.
+// How long reconcileNow waits on a reconcile before answering none. A
+// stalled peer can hold a round for as long as its transport's timeout,
+// and the caller is a user waiting on a stop.
 const RECONCILE_NOW_LIMIT_MS = 10_000;
 
 export type GitFollower = ReturnType<typeof makeFollower>;
@@ -672,9 +674,13 @@ function makeFollower(
     },
     // A reconcile of one session right away, for a caller about to act
     // on its verdict (a stop's safety check): queued behind one in
-    // flight, and answered once both have run. Bounded, so a stalled
-    // peer answers with the status as it stands. Undefined when the
-    // session is not followed.
+    // flight, and answered once both have run. Bounded, and one that
+    // does not finish in time (a stalled peer) answers no status, which
+    // the stop reads as not confirmed: the status as it stood is the
+    // verdict before a commit made a moment ago, the one thing the
+    // check is for. A limit that came late (this process stopped) is
+    // waited again (answerWithin). Undefined too when the session is not
+    // followed.
     reconcileNow: (session: string) =>
       Effect.gen(function* () {
         yield* syncSessions;
@@ -682,13 +688,13 @@ function makeFollower(
         if (record === undefined) return undefined;
         yield* trigger(record);
         const running = record.running;
-        if (running !== null) {
-          yield* Fiber.await(running).pipe(
-            Effect.timeoutOrElse({
-              duration: RECONCILE_NOW_LIMIT_MS,
-              orElse: () => Effect.void,
-            }),
-          );
+        if (
+          running !== null &&
+          Option.isNone(
+            yield* answerWithin(Fiber.await(running), RECONCILE_NOW_LIMIT_MS),
+          )
+        ) {
+          return undefined;
         }
         return records.get(session)?.status;
       }).pipe(Effect.orElseSucceed(() => undefined)),

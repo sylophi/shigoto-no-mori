@@ -11,15 +11,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { LINK_MAX_FRAME_BYTES, LoopbackGroup } from "@shigomori/contracts/link";
+import { LoopbackGroup } from "@shigomori/contracts/link";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { LOOPBACK_FILE, LoopbackFile } from "@shigomori/engine/Control";
+import {
+  flatClient,
+  newConnectionId,
+  quietProtocol,
+} from "@shigomori/engine/rpcClient";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import * as RpcClient from "effect/rpc/RpcClient";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Socket from "effect/socket/Socket";
 
 const dataDir = process.argv[2];
@@ -31,31 +33,15 @@ const { port, token } = Schema.decodeUnknownSync(LoopbackFile)(
   readFileSync(join(dataDir, LOOPBACK_FILE), "utf8"),
 );
 
-const hex = () =>
-  Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
-
 const press = Effect.gen(function* () {
   const socket = yield* Socket.makeWebSocket(`ws://127.0.0.1:${port}`);
-  const protocol = yield* RpcClient.makeProtocolSocket({
-    retryPolicy: Schedule.recurs(0),
-  }).pipe(
-    Effect.provideService(Socket.Socket, socket),
-    Effect.provide(
-      RpcSerialization.layerSchemaBinary({
-        maxFrameSize: LINK_MAX_FRAME_BYTES,
-      }),
-    ),
-  );
-  // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
-  const call = (yield* RpcClient.make(LoopbackGroup, { flatten: true }).pipe(
-    Effect.provideService(RpcClient.Protocol, protocol),
-  )) as unknown as (tag: string, payload: unknown) => Effect.Effect<unknown>;
+  const client = yield* flatClient(LoopbackGroup, yield* quietProtocol(socket));
+  const call = (tag: string, payload: unknown) =>
+    client(tag, payload) as Effect.Effect<unknown, unknown>;
   yield* call("link:hello", {
-    deviceId: hex(),
+    deviceId: newConnectionId(),
     deviceKind: "desktop",
-    connectionId: hex(),
+    connectionId: newConnectionId(),
     appVersion: "press-restart-to-update",
     protocolVersion: PROTOCOL_VERSION,
     token,

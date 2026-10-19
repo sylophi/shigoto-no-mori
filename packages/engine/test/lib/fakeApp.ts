@@ -38,6 +38,8 @@ export type FakeApp = {
   readonly file: (token?: string) => Frame;
   // The control calls since the last look, in order.
   readonly received: () => ReadonlyArray<Received>;
+  // The hellos it was sent.
+  readonly hellos: () => number;
   readonly close: () => Promise<void>;
 };
 
@@ -68,12 +70,17 @@ export const progress = (payload: unknown): Frame => ({
 
 const PROGRESS = "sync:pullProgress";
 
-// `busy` turns every connection away as an app at its cap does.
+// `busy` turns every connection away as an app at its cap does, and
+// each hello waits for `hello` before it is answered.
 export const fakeApp = async (
   reply: (request: Frame) => ReadonlyArray<Frame>,
-  options: { readonly busy?: boolean } = {},
+  options: {
+    readonly busy?: boolean;
+    readonly hello?: Effect.Effect<void>;
+  } = {},
 ): Promise<FakeApp> => {
   let seen: Received[] = [];
+  let hellos = 0;
   const scope = Effect.runSync(Scope.make());
   // Ends the listener and every connection, as an app that went away.
   const dropAll = Effect.suspend(() =>
@@ -89,9 +96,16 @@ export const fakeApp = async (
       : () => Stream.fail(unserved);
   }
   handlers["link:hello"] = (hello: { readonly token?: string }) =>
-    hello.token === TOKEN
-      ? Effect.succeed({ deviceId: "app-device", appVersion: "1.2.3" })
-      : Effect.fail(new LinkRefusedError());
+    Effect.sync(() => {
+      hellos += 1;
+    }).pipe(
+      Effect.andThen(options.hello ?? Effect.void),
+      Effect.andThen(
+        hello.token === TOKEN
+          ? Effect.succeed({ deviceId: "app-device", appVersion: "1.2.3" })
+          : Effect.fail(new LinkRefusedError()),
+      ),
+    );
   handlers["link:ping"] = () => Effect.void;
 
   // The scripted answer, as the frames `reply` returns for the call.
@@ -240,6 +254,7 @@ export const fakeApp = async (
       seen = [];
       return taken;
     },
+    hellos: () => hellos,
     close: () => Effect.runPromise(Scope.close(scope, Exit.void)),
   };
 };
