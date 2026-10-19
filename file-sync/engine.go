@@ -16,7 +16,7 @@ package main
 // only the app's host process spawns them, so they live here where the
 // server's concerns stay the server's. Two roles, one binary:
 //
-//   - `file-sync serve --root <dir>` is the PEER side of one mirror
+//   - `file-sync serve --root <dir> --data-dir <dir>` is the PEER side of one mirror
 //     stream. It serves a Mutagen endpoint at the worktree the host
 //     names over its own stdin/stdout until the other end hangs up. The host spawns one per incoming stream and
 //     shuttles the bytes over the device wire, so this process never
@@ -397,6 +397,7 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	// Registered before the manager loads persisted sessions, which
 	// start connecting immediately.
 	synchronization.ProtocolHandlers[urlpkg.Protocol_SSH] = mirrorGatewayHandler{gateway: gateway}
+	holdGitOnLocalEndpoints()
 
 	relabelV2Sessions(dataDir, logOut)
 	logger := logging.NewLogger(logging.LevelWarn, logOut)
@@ -475,18 +476,38 @@ func relabelV2Sessions(dataDir string, logOut io.Writer) {
 			fmt.Fprintf(logOut, "file-sync: relabel: %s: %v\n", entry.Name(), err)
 			continue
 		}
-		mode, ok := v2Mode(session.Labels)
-		if !ok {
+		mode, relabel := v2Mode(session.Labels)
+		if relabel {
+			delete(session.Labels, "copySide")
+			delete(session.Labels, "mirrorBranch")
+			delete(session.Labels, "transfer")
+			session.Labels["mode"] = mode
+		}
+		unanchored := unanchorGitPointer(session.Configuration)
+		if !relabel && !unanchored {
 			continue
 		}
-		delete(session.Labels, "copySide")
-		delete(session.Labels, "mirrorBranch")
-		delete(session.Labels, "transfer")
-		session.Labels["mode"] = mode
 		if err := encoding.MarshalAndSaveProtobuf(path, session); err != nil {
 			fmt.Fprintf(logOut, "file-sync: relabel: %s: %v\n", entry.Name(), err)
 		}
 	}
+}
+
+// A session made before the unanchored .git pointer rule ignores the
+// root's pointer alone, so a nested one (a submodule's) was tracked:
+// served sessions hide the peer's now, and the guard refuses the
+// deletion that would follow, every cycle. True when it rewrote one.
+func unanchorGitPointer(configuration *synchronization.Configuration) bool {
+	if configuration == nil {
+		return false
+	}
+	for i, pattern := range configuration.Ignores {
+		if pattern == mirrorLegacyGitPointerIgnore {
+			configuration.Ignores[i] = mirrorGitPointerIgnore
+			return true
+		}
+	}
+	return false
 }
 
 // The mode a v2 session's labels mean, false for one that has a mode

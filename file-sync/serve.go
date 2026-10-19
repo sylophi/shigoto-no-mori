@@ -9,17 +9,19 @@ package main
 //   - the root is that worktree, whatever the client names;
 //   - the session id, which Mutagen joins into the cache and staging
 //     paths it writes and removes, must be an id Mutagen itself mints;
-//   - staging happens in this serve's own data directory, never beside
-//     the worktree or inside it;
-//   - .git is never read or written, at any depth: the app's sessions
-//     ignore it on both sides already, and git there would run what a
-//     peer put in it (hooks, core.fsmonitor);
+//   - staging happens in this serve's own data directory (--data-dir),
+//     never beside the worktree or inside it;
+//   - .git is never read or written, at any depth: its config can hold
+//     credentials in a remote's URL, and git there would run what a peer
+//     put in it (hooks, core.fsmonitor). The app's sessions ignore it on
+//     both sides already, under the ignore syntax this side picks;
 //   - links stay portable, and files and folders keep the modes this
 //     side gives them.
 //
-// Mutagen's endpoint applies whatever transitions the client computed,
-// so the .git rule is held at the endpoint itself (guardedEndpoint), not
-// left to the configuration.
+// Mutagen's endpoint reads whatever paths the client names and applies
+// whatever transitions it computed, so the .git rule is held at the
+// endpoint itself (guardedEndpoint), on every call that names a path,
+// not left to the configuration.
 
 import (
 	"bufio"
@@ -44,6 +46,7 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/synchronization/endpoint/local"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/endpoint/remote"
 	"github.com/mutagen-io/mutagen/pkg/synchronization/rsync"
+	urlpkg "github.com/mutagen-io/mutagen/pkg/url"
 )
 
 // The buffering on each side of the stream, Mutagen's own for it.
@@ -137,6 +140,7 @@ func servedConfiguration(asked *synchronization.Configuration) *synchronization.
 		served = proto.Clone(asked).(*synchronization.Configuration)
 	}
 	served.StageMode = synchronization.StageMode_StageModeMutagen
+	served.IgnoreSyntax = ignore.Syntax_SyntaxMutagen
 	served.IgnoreVCSMode = ignore.IgnoreVCSMode_IgnoreVCSModeIgnore
 	served.Ignores = append(served.Ignores, mirrorGitPointerIgnore)
 	served.SymbolicLinkMode = core.SymbolicLinkMode_SymbolicLinkModeDefault
@@ -148,16 +152,71 @@ func servedConfiguration(asked *synchronization.Configuration) *synchronization.
 	return served
 }
 
-// A local endpoint that refuses any transition touching .git, at any
-// depth: a path through one, or a folder whose old or new contents hold
-// one.
+// A local endpoint that refuses any call touching .git, at any depth: a
+// path read, staged or changed through one, or a folder whose old or new
+// contents hold one.
 type guardedEndpoint struct {
 	synchronization.Endpoint
 }
 
+func (e guardedEndpoint) Supply(paths []string, signatures []*rsync.Signature, receiver rsync.Receiver) error {
+	if err := refuseGitPaths("read", paths); err != nil {
+		return err
+	}
+	return e.Endpoint.Supply(paths, signatures, receiver)
+}
+
+func (e guardedEndpoint) Stage(paths []string, digests [][]byte) ([]string, []*rsync.Signature, rsync.Receiver, error) {
+	if err := refuseGitPaths("stage", paths); err != nil {
+		return nil, nil, nil, err
+	}
+	return e.Endpoint.Stage(paths, digests)
+}
+
+// The daemon's own side of each session, which applies what the peer's
+// scan reports, holds .git as serve does: a peer's serve can be changed
+// to report it.
+type guardedLocalHandler struct {
+	synchronization.ProtocolHandler
+}
+
+func (h guardedLocalHandler) Connect(
+	ctx context.Context,
+	logger *logging.Logger,
+	url *urlpkg.URL,
+	prompter string,
+	session string,
+	version synchronization.Version,
+	configuration *synchronization.Configuration,
+	alpha bool,
+) (synchronization.Endpoint, error) {
+	endpoint, err := h.ProtocolHandler.Connect(ctx, logger, url, prompter, session, version, configuration, alpha)
+	if err != nil {
+		return nil, err
+	}
+	return guardedEndpoint{endpoint}, nil
+}
+
+// Once, before a session connects.
+func holdGitOnLocalEndpoints() {
+	local := synchronization.ProtocolHandlers[urlpkg.Protocol_Local]
+	if _, held := local.(guardedLocalHandler); !held {
+		synchronization.ProtocolHandlers[urlpkg.Protocol_Local] = guardedLocalHandler{local}
+	}
+}
+
+func refuseGitPaths(verb string, paths []string) error {
+	for _, p := range paths {
+		if touchesGit(p) {
+			return fmt.Errorf("refused to %s %q: .git is not synchronized", verb, p)
+		}
+	}
+	return nil
+}
+
 func (e guardedEndpoint) Transition(ctx context.Context, transitions []*core.Change) ([]*core.Entry, []*core.Problem, bool, error) {
 	for _, change := range transitions {
-		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) {
+		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) || linksIntoGit(change.Path, change.New) {
 			return nil, nil, false, fmt.Errorf("refused a change to %q: .git is not synchronized", change.Path)
 		}
 	}
@@ -168,9 +227,43 @@ func touchesGit(p string) bool {
 	return p != "" && slicesContainsGit(strings.Split(path.Clean(p), "/"))
 }
 
+// A name the volume reads as .git: APFS and HFS+ fold case by default,
+// so .GIT opens the same folder, and HFS+ also skips the code points it
+// ignores in a name, so .g\u200cit does too (git's is_hfs_dotgit).
+func isGitName(name string) bool {
+	return strings.EqualFold(strings.Map(hfsVisible, name), ".git")
+}
+
+func hfsVisible(r rune) rune {
+	switch {
+	case r >= 0x200c && r <= 0x200f, r >= 0x202a && r <= 0x202e,
+		r >= 0x206a && r <= 0x206f, r == 0xfeff:
+		return -1
+	}
+	return r
+}
+
 func slicesContainsGit(components []string) bool {
 	for _, component := range components {
-		if component == ".git" {
+		if isGitName(component) {
+			return true
+		}
+	}
+	return false
+}
+
+// A link this side would make that points into .git: Mutagen never
+// follows one, but whatever here opens the worktree does (an editor,
+// the files page, an agent writing through it).
+func linksIntoGit(at string, entry *core.Entry) bool {
+	if entry == nil {
+		return false
+	}
+	if entry.Kind == core.EntryKind_SymbolicLink {
+		return touchesGit(path.Join(path.Dir(at), entry.Target))
+	}
+	for name, child := range entry.Contents {
+		if linksIntoGit(path.Join(at, name), child) {
 			return true
 		}
 	}
@@ -182,7 +275,7 @@ func holdsGit(entry *core.Entry) bool {
 		return false
 	}
 	for name, child := range entry.Contents {
-		if name == ".git" || holdsGit(child) {
+		if isGitName(name) || holdsGit(child) {
 			return true
 		}
 	}
