@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import { lifetime } from "@shared/lifetimes";
 import * as HostProcess from "./hostProcess";
 import * as Guide from "./electron/guide";
+import { loginItemLayer } from "./electron/liveness";
 import * as Updater from "./electron/updater";
 import { shellLinkLayer } from "./ipc/register";
 
@@ -40,6 +41,7 @@ export const layer = (host: Parameters<typeof HostProcess.layer>[0]) =>
         // The windows' links to the shell (ipc/ShellLink.ts).
         shellLinkLayer,
         Guide.layer,
+        loginItemLayer,
       ),
     ),
   );

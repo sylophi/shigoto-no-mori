@@ -11,7 +11,7 @@ node_modules/
 !.env.example
 
 # Local, non-secret account service config (ACCOUNT_ENV_KEYS) read
-# as a dev convenience by main/ipc/modules/account.ts and loaded by Vite
+# as a dev convenience by main/electron/account.ts and loaded by Vite
 # for the web build. Never committed.
 .env*.local
 

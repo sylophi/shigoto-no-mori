@@ -1,5 +1,5 @@
 // The v3 migration as it goes, told to the shell, which serves it to
-// its windows (main/ipc/modules/migration.ts). Watched from before the
+// its windows (main/electron/migration.ts). Watched from before the
 // engine's store opens, so the import and every move are told.
 import * as Migration from "@shigomori/engine/Migration";
 import * as Deferred from "effect/Deferred";

@@ -1,5 +1,3 @@
-// Thin wrappers around Electron's shell API so the renderer can open links
-// in the user's browser and reveal items in Finder.
 import { shell } from "electron";
 import { shellContract } from "@shigomori/contracts/modules/shell";
 import type { Handlers } from "@shigomori/contracts/types";

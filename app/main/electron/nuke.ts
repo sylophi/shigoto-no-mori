@@ -24,7 +24,7 @@ import {
 } from "@shared/paths";
 import { NUKE_MARKER, writeNukeMarker } from "../core/nuke/finish";
 import { names } from "../flavor";
-import { signOutForNuke } from "../ipc/modules/account";
+import { signOutForNuke } from "./account";
 import { setsLoginItem } from "./liveness";
 
 // What goes at the next start besides userData: the data dir, the logs,

@@ -12,7 +12,7 @@ import {
   serveRendererOverScheme,
 } from "./electron/clerk";
 import { deepLinkRoute, deepLinkRouteInArgv } from "./electron/deepLink";
-import { clerkPublishableKey } from "./ipc/modules/account";
+import { clerkPublishableKey } from "./electron/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { unmountedVolume } from "@shared/unmountedVolume";
@@ -29,7 +29,7 @@ import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import { registerShellHandlers } from "./ipc/handlers";
-import { buildAppMenu, installMenuImpl } from "./electron/menu";
+import { buildAppMenu } from "./electron/menu";
 import { type HostFailure, hostBusy } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
 import {
@@ -41,7 +41,9 @@ import {
 import { applyUserShellEnv } from "@shared/shellEnv";
 import { hostFailureWords } from "./hostFailureWords";
 import * as Observability from "@shared/observability";
-import * as UpdaterEngine from "./electron/updaterEngine";
+import * as Paths from "@shigomori/engine/Paths";
+import * as Updater from "@shigomori/engine/Updater";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { writeTraceLine } from "./electron/logFile";
 import * as ClerkTokenStorage from "./electron/clerkTokenStorage";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -68,7 +70,6 @@ import {
 import {
   installChildProcessLogging,
   installFatalRecovery,
-  reconcileLaunchAtLogin,
   tryFatalRelaunch,
 } from "./electron/liveness";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -197,7 +198,6 @@ createDesktopClerkBridge();
 
 // Every handler is registered before the window can call one: the
 // host's as it starts, the shell's after.
-installMenuImpl();
 registerShellHandlers();
 installShellPorts();
 
@@ -207,7 +207,14 @@ const runtime = ManagedRuntime.make(
   ShellLayer.layer({ failed: showHostFailure, hurried: isHurriedQuit }).pipe(
     // The renderer asks for its Clerk session as soon as it loads.
     Layer.provideMerge(ClerkTokenStorage.layer(app.getPath("userData"))),
-    Layer.provideMerge(UpdaterEngine.layer(flavor)),
+    // The engine's updater runs in this process, over its paths and
+    // fetch.
+    Layer.provideMerge(
+      Updater.layer(flavor).pipe(
+        Layer.provide(FetchHttpClient.layer),
+        Layer.provideMerge(Paths.layer(flavor)),
+      ),
+    ),
     Layer.provideMerge(
       Observability.layer({ packaged: app.isPackaged, writeTraceLine }),
     ),
@@ -244,7 +251,6 @@ function isShuttingDown(): boolean {
   return quitting || isHurriedQuit();
 }
 
-// A notification's click opens its page the way a deep link does.
 setNotificationOpener(openDeepLink);
 
 // Windows and Linux pass a deep link in a launch's argv: this
@@ -303,7 +309,6 @@ app.on("ready", async () => {
         },
     clerkPublishableKey(),
   );
-  // The rebuilt environment (module top), before the first spawn.
   await shellEnvReady;
   // The data folder, which the updater reads and the host is forked
   // onto. The host comes up while the window loads.
@@ -351,12 +356,8 @@ app.on("ready", async () => {
   }
   graph = runtime.context();
   buildAppMenu();
-  // Host liveness. Install the crash guards before
-  // the window exists so an early fatal error is still caught, then
-  // reconcile the login item to the saved keepReachable opt-in. The same
-  // reconcile reruns after every clientConfig patch (the patch handler)
-  // and every sign-in or sign-out (the account fan-out in
-  // ipc/handlers.ts), making this the boot-time pass only.
+  // The crash guards, before the window exists so an early fatal error
+  // is still caught.
   installChildProcessLogging();
   installFatalRecovery({ isShuttingDown, rememberWindows });
   // The saved theme before the first window. A graph that
@@ -375,7 +376,6 @@ app.on("ready", async () => {
     return;
   }
   openWindowsAtStart({ restart: takeRestartVisibility(), isShuttingDown });
-  reconcileLaunchAtLogin();
   rememberVisibilityAtShutdown();
   // The window is already up, so the graph delays only the background
   // machinery. A quit that came first has disposed it.
@@ -437,7 +437,8 @@ app.on("before-quit", (event) => {
   void Effect.runPromise(hostBusy(true))
     .then((busy) => confirmBusyAction("quit", busy))
     .catch((error: unknown) => {
-      // A host that cannot answer has nothing to lose to the quit.
+      // The ask reads an unanswering host as idle, so only a prompt
+      // that couldn't be shown lands here: it doesn't keep the app.
       log.warn(`[quit] the host's busy check failed: ${errorMessageOf(error)}`);
       return true;
     })

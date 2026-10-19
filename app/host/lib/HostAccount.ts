@@ -1,5 +1,5 @@
 // The account as the host knows it: the facts its shell hands over at
-// start and after every change (main/ipc/modules/account.ts keeps the
+// start and after every change (main/electron/account.ts keeps the
 // credential in the keychain and the Clerk session; the host never
 // opens either), with the hub's account service for them. Null is
 // signed out, or a build with no account service, which the hub

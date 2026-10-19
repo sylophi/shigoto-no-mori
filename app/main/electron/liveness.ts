@@ -1,17 +1,13 @@
 // Host liveness. One switch, `keepReachable` in client config (on
-// unless switched off), drives two capabilities so a machine the user hosts
-// stays online for the device hub:
-//   1. Launch-at-login, via setLoginItemSettings, so the app starts when
-//      the user logs in.
+// unless switched off), keeps a machine the user hosts online for the
+// device hub:
+//   1. Launch-at-login, so the app starts when the user logs in.
 //   2. Best-effort recovery from a recoverable crash: a renderer that
 //      dies is recreated in-process, and a fatal main-process error does
-//      a rate-limited relaunch.
-// A true native hard-crash of the main process (a segfault) cannot be
-// caught in-process and would need an OS supervisor (macOS launchd
-// KeepAlive). That is out of scope here. The pruning and counting for
-// both crash guards is the pure module
-// main/core/liveness/rateLimit.ts, which test/liveness.mts drives
-// headlessly.
+//      a rate-limited relaunch (core/liveness/rateLimit.ts).
+// A native hard crash of the main process (a segfault) cannot be caught
+// in-process and would need an OS supervisor (launchd KeepAlive), which
+// is out of scope.
 import { clientSetting } from "@shigomori/contracts/schemas/config";
 import { app, type BrowserWindow } from "electron";
 import { platform } from "node:os";
@@ -23,11 +19,15 @@ import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
 } from "../core/files/exitFiles";
-import { readClientConfigSync } from "./clientConfig";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import { clientConfigChanges, readClientConfigSync } from "./clientConfig";
 import {
+  accountIdChanges,
   accountServiceConfigured,
   accountSignedIn,
-} from "../ipc/modules/account";
+} from "./account";
 import { scheduleRelaunch } from "./relaunch";
 import { rememberVisibilityForRestart } from "./restartVisibility";
 import {
@@ -38,26 +38,12 @@ import {
 import { log } from "@shared/log";
 import { names } from "../flavor";
 
-function keepReachableEnabled(): boolean {
-  // Inert on a build with no account service: the setting exists so a
-  // machine stays available TO the account, its UI is unreachable when
-  // the account service env is absent, and boot's reconcile clears a
-  // login item left behind by a previously configured build.
-  if (!accountServiceConfigured()) return false;
-  try {
-    return clientSetting(readClientConfigSync(), "keepReachable");
-  } catch (error) {
-    // The store's own read swallows corruption (an unparseable file
-    // reads as empty, so as the default), and a liveness decision must
-    // never be what crashes the app, so anything that still throws
-    // reads as off: a login item is the wrong thing to install on a
-    // guess.
-    log.warn(
-      `[liveness] could not read keepReachable, treating as off: ${errorMessageOf(error)}`,
-    );
-    return false;
-  }
-}
+// Inert on a build with no account service: the setting exists so a
+// machine stays available to the account, and its UI is unreachable
+// without one.
+const keepReachableEnabled = (): boolean =>
+  accountServiceConfigured() &&
+  clientSetting(readClientConfigSync(), "keepReachable");
 
 // A dev build must not install a login item: it would point at the
 // Electron binary under node_modules and relaunch a throwaway dev
@@ -67,16 +53,13 @@ function keepReachableEnabled(): boolean {
 // behind either.
 export const setsLoginItem = (): boolean => app.isPackaged && !names.debuggable;
 
-// (1) Launch-at-login. Reads the single opt-in and registers or clears
-// the OS login item to match. Idempotent (setLoginItemSettings with the
-// same value is a no-op) and never throws: it is called at boot and on
-// every client-config write, and a liveness reconcile must not be able
-// to take the app down. Called from boot in main/index.ts, from the
-// clientConfig patch handler, and from the account fan-out: the login
-// item is for staying reachable to an account, so a signed-out device
-// has none (the crash relaunch below keeps the plain setting: a
-// relaunch is this machine's business whatever the account).
-export function reconcileLaunchAtLogin(): void {
+// (1) Launch-at-login, registered or cleared to match keepReachable and
+// the account: the login item is for staying reachable to an account,
+// so a signed-out device has none (the crash relaunch below keeps the
+// plain setting: a relaunch is this machine's business whatever the
+// account). Never throws, since a liveness reconcile must not be able
+// to take the app down.
+function reconcileLaunchAtLogin(): void {
   const keepReachable = keepReachableEnabled() && accountSignedIn();
   // setLoginItemSettings is a no-op on Linux in Electron, so registering
   // there would silently do nothing. Say so rather than pretend it took.
@@ -102,17 +85,29 @@ export function reconcileLaunchAtLogin(): void {
   }
 }
 
-// (2a) Renderer crash recovery. Timestamps of the recreations this
-// process has performed, kept in memory across recreations so the loop
-// guard sees the whole burst. A fresh app process starts with an empty
-// list, which is correct: a crash right after launch is not a loop.
+// The login item, reconciled as the shell's graph comes up (clearing
+// one a previously configured build left), and again as keepReachable
+// or the account changes.
+export const loginItemLayer = Layer.effectDiscard(
+  Effect.forkScoped(
+    Effect.suspend(() =>
+      Stream.merge(
+        clientConfigChanges.pipe(
+          Stream.map((config) => clientSetting(config, "keepReachable")),
+          Stream.changes,
+        ),
+        accountIdChanges,
+      ).pipe(Stream.runForEach(() => Effect.sync(reconcileLaunchAtLogin))),
+    ),
+  ),
+);
+
+// (2a) Renderer crash recovery: when this process recreated a window,
+// kept across recreations so the loop guard sees the whole burst.
 let recentRendererCrashes: number[] = [];
 let lastGiveUp: number | undefined;
 
-// Attach the renderer-crash and unresponsive handlers to a window. Called
-// from createWindow for every window, including the ones recreated after
-// a crash, so a second crash lands on a live handler too. The recreate
-// budget is shared module state, so re-attaching does not reset it.
+// For every window, including the ones recreated after a crash.
 export function attachRenderProcessRecovery(
   window: BrowserWindow,
   deps: {
@@ -154,8 +149,7 @@ export function attachRenderProcessRecovery(
       lastGiveUp = performance.now();
     }
   });
-  // Not a crash: the renderer is alive but wedged. Log it so a hang is
-  // visible in the console rather than a silent frozen window.
+  // Not a crash: the renderer is alive but wedged.
   webContents.on("unresponsive", () => {
     log.warn("[liveness] renderer is unresponsive");
   });
@@ -166,7 +160,6 @@ export function attachRenderProcessRecovery(
 
 // GPU and utility (child) processes. The app usually survives these and
 // Electron respawns the GPU process on its own, so this only logs.
-// Registered once at boot, since it is an app-level event.
 export function installChildProcessLogging(): void {
   app.on("child-process-gone", (_event, details) => {
     log.warn(
@@ -183,14 +176,11 @@ function relaunchMarkerPath(): string {
   return join(app.getPath("userData"), "livenessRelaunch.json");
 }
 
-// Read the relaunches since the last stable run, and if one more is
-// allowed persist the count before returning true. Read and write go
-// through the exit-path file helpers so the write is temp-plus-rename
-// atomic: this runs right before app.exit, so a raw write could be
-// truncated by the exit mid-flush. A marker that
-// cannot be READ is treated as no recent relaunches (fine: a marker that
-// cannot be WRITTEN vetoes the relaunch just below, so an unwritable
-// userData can never loop).
+// Whether one more relaunch is allowed since the last stable run, the
+// count kept before it says so. The write is the exit path's (this runs
+// right before app.exit). A marker that can't be read counts none; one
+// that can't be written vetoes the relaunch, so an unwritable userData
+// can never loop.
 const RelaunchMarkerSchema = Schema.Struct({ relaunches: Schema.Int });
 
 function consumeRelaunchBudget(): boolean {
@@ -200,13 +190,10 @@ function consumeRelaunchBudget(): boolean {
       readJsonOrNullSync(relaunchMarkerPath(), RelaunchMarkerSchema)
         ?.relaunches ?? 0;
   } catch {
-    // Missing, unreadable, or corrupt marker: no known recent relaunches.
-    // The next successful write re-accumulates from empty.
+    // None known.
   }
   if (!relaunchAllowed(relaunches)) return false;
   try {
-    // 0o600: the marker lives in userData beside other per-user state and
-    // holds nothing secret, but there is no reason to widen it.
     atomicWriteJsonSync(
       relaunchMarkerPath(),
       { relaunches: relaunches + 1 },
@@ -221,16 +208,11 @@ function consumeRelaunchBudget(): boolean {
   return true;
 }
 
-// Best-effort, opt-in, rate-limited relaunch. Returns true when it has
-// scheduled a relaunch (the caller then exits so the fresh instance
-// takes over), false when no relaunch is warranted (not opted in, or
-// the budget is exhausted) so the caller still exits as before. A wrong
-// relaunch is worse than none, so it happens only when the user opted
-// into keepReachable, and only within the persisted rate limit.
+// Whether a relaunch is scheduled, for the caller to exit into. A wrong
+// relaunch is worse than none: on a machine the user didn't ask to keep
+// reachable a stray uncaught error must not become a restart, and the
+// relaunches are rate-limited.
 export function tryFatalRelaunch(rememberWindows: () => void): boolean {
-  // The opt-in gate. On a normal user's machine a stray uncaught error
-  // must not become a restart, so respawn only a machine the user
-  // asked to keep reachable.
   if (!keepReachableEnabled()) return false;
   if (!consumeRelaunchBudget()) {
     log.error(
@@ -242,8 +224,7 @@ export function tryFatalRelaunch(rememberWindows: () => void): boolean {
     "[liveness] keepReachable is on, attempting a best-effort relaunch",
   );
   try {
-    // Mark relaunching first so a quit that somehow starts is a
-    // hurried one, with no busy-action prompt.
+    // First, so a quit that somehow starts is a hurried one.
     scheduleRelaunch();
     rememberWindows();
     rememberVisibilityForRestart();
@@ -255,20 +236,12 @@ export function tryFatalRelaunch(rememberWindows: () => void): boolean {
   return true;
 }
 
-// Install the last-resort handlers for an otherwise-fatal main-process
-// error. Conservative by design: a wrong relaunch is worse than none, so
-// a relaunch happens only when the user opted into keepReachable, only
-// when the app is not already shutting down, and only within the
-// persisted rate limit. When those do not hold the process still exits
-// (see below): installing a listener suppresses the default crash, so it
-// must terminate explicitly rather than swallow the error. Registered
-// once at boot.
+// The last-resort handlers for an otherwise-fatal main-process error.
 export function installFatalRecovery(deps: {
   isShuttingDown: () => boolean;
   // The windows to bring back, as a quit remembers them.
   rememberWindows: () => void;
 }): void {
-  const tryRelaunch = () => tryFatalRelaunch(deps.rememberWindows);
   // A run this long was no crash loop: the relaunches before it are
   // forgotten.
   setTimeout(() => {
@@ -280,29 +253,16 @@ export function installFatalRecovery(deps: {
   }, FATAL_RELAUNCH.stableMs).unref();
   process.on("uncaughtException", (error) => {
     log.error("[liveness] uncaughtException:", error);
-    // A process uncaughtException listener suppresses Node and Electron's
-    // default crash-and-exit, so this branch must exit explicitly to
-    // preserve prior behavior: an uncaught main-process error still
-    // terminates the app rather than leaving it limping on in an
-    // undefined state (and hiding real crashes in dev). The one exception
-    // is a teardown already in progress, where the process is on its way
-    // out and a return is correct.
+    // The listener suppresses the default crash, so the app exits itself
+    // rather than limp on in an undefined state, unless a teardown is
+    // already taking it out. exit(1), not quit(): the graceful quit
+    // could itself be what threw.
     if (deps.isShuttingDown()) return;
-    // Schedule the relaunch when opted in and within budget; either way
-    // the process must exit, since it is in an undefined state after an
-    // uncaught error. exit(1) rather than quit(): skip the graceful quit
-    // chain (which could itself be what threw). With a relaunch scheduled
-    // the fresh instance takes over; with none this is exactly the
-    // terminate the default handler would have done.
-    tryRelaunch();
+    tryFatalRelaunch(deps.rememberWindows);
     app.exit(1);
   });
-  // Unhandled rejections are treated as recoverable: a stray hub
-  // reconnect, fetch, or updater promise without a .catch is frequently
-  // non-fatal, so only a genuinely fatal uncaughtException relaunches.
-  // Logging here intentionally suppresses a rejection-triggered process
-  // crash in favor of a console line, which is the right posture for a
-  // desktop app the user is hosting.
+  // A stray rejection is usually non-fatal, so it is logged in place of
+  // the crash it would cause.
   process.on("unhandledRejection", (reason) => {
     log.error("[liveness] unhandledRejection:", reason);
   });

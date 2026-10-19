@@ -1,5 +1,5 @@
 // A window whose host can't start because the import of a 2.x data dir
-// is stuck (the shell parks the host, main/ipc/modules/migration.ts):
+// is stuck (the shell parks the host, main/electron/migration.ts):
 // the app mounts only once its host is up, so the window shows the
 // migration's page alone, over its link to its shell. Once a Retry gets
 // the import past stuck, the window boots again, its host up.
