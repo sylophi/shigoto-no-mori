@@ -1860,6 +1860,20 @@ describe("the Go sm's command line", () => {
       assert.deepEqual(lastDoc(unbound.stdout), { ok: true, unbound: true });
     }
   });
+
+  it("says terrier's trouble once when an agent session lists the projects", async () => {
+    const { alpha } = await fixture();
+    box.fakeBin("terrier", "exit 1");
+    assert.equal(
+      (await runAt(box.home, "config", "set", "terrier", "true")).code,
+      0,
+    );
+    const listed = await start(alpha, ["projects", "list"], {
+      CLAUDE_CODE_SESSION_ID: "session",
+    }).ended;
+    assert.equal(listed.code, 0, listed.stderr);
+    assert.equal(listed.stderr.match(/warning:/g)?.length, 1, listed.stderr);
+  });
 });
 
 describe("describe with an open pull request", () => {

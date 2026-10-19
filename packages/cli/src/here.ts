@@ -18,8 +18,7 @@ import { note, Output, styles } from "./output.ts";
 import { noteUnregistered, pickProject, pickWorktree } from "./pickers.ts";
 import { interactive } from "./prompt.ts";
 
-// Terrier's trouble, before a command that lists projects.
-export const warnTerrier = Effect.gen(function* () {
+const warning = Effect.gen(function* () {
   const { trouble } = yield* (yield* Terrier.Terrier).listing;
   if (Option.isNone(trouble)) return;
   const { stderrColor } = yield* Effect.service(Output);
@@ -33,23 +32,36 @@ export const cwd = Effect.try(() => process.cwd()).pipe(
   Effect.orElseSucceed(() => "."),
 );
 
-const where = Effect.gen(function* () {
-  yield* warnTerrier;
-  return yield* (yield* Worktrees.Worktrees).here(yield* cwd);
-});
+const where = Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+  Effect.flatMap(cwd, worktrees.here),
+);
 
-// Where this run of sm is, read once however many ask (layer).
+// Where this run of sm is, and terrier's trouble said, each once
+// however many ask (layer).
 export class Here extends Context.Service<
   Here,
-  { readonly at: typeof where }
+  { readonly at: typeof where; readonly warned: typeof warning }
 >()("sm/cli/Here") {}
 
 export const layer = Layer.effect(
   Here,
-  Effect.map(Effect.cached(where), (at) => Here.of({ at })),
+  Effect.gen(function* () {
+    return Here.of({
+      at: yield* Effect.cached(where),
+      warned: yield* Effect.cached(warning),
+    });
+  }),
 );
 
-export const here = Effect.flatMap(Effect.service(Here), ({ at }) => at);
+// Terrier's trouble, before a command that lists projects.
+export const warnTerrier = Effect.flatMap(
+  Effect.service(Here),
+  ({ warned }) => warned,
+);
+
+export const here = Effect.flatMap(Effect.service(Here), ({ at, warned }) =>
+  Effect.andThen(warned, at),
+);
 
 // An agent session's shell running sm inside a managed worktree binds
 // the session there (Agents.autoBind), before any command that reads
