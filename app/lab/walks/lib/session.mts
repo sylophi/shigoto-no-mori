@@ -1,10 +1,13 @@
 // Whether this Mac's session is locked. A locked session shows the app's
 // native dialogs to no one, System Events included, so a walk of them
-// can't run there and skips, saying why, rather than failing.
+// can't run there and skips, saying why, rather than failing. On CI it
+// never skips: a runner that reads as locked fails the walk, so the
+// gate can't pass on a skip.
 import { execFileSync } from "node:child_process";
 import { beforeEach } from "vitest";
 
 export const locked = (() => {
+  if (process.env["CI"] !== undefined) return false;
   try {
     return (
       execFileSync(
@@ -17,7 +20,7 @@ export const locked = (() => {
 const session = ObjC.castRefToObject($.CGSessionCopyCurrentDictionary());
 String(ObjC.unwrap(session.objectForKey("CGSSessionScreenIsLocked")))`,
         ],
-        { encoding: "utf8" },
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
       ).trim() === "true"
     );
   } catch {
