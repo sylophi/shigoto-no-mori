@@ -44,7 +44,12 @@
 //   - the first concurrent local socket OVER the client-side
 //     per-device cap (MAX_CONNS_PER_DEVICE, derived from the engine's
 //     exported constant) is destroyed while the capped set stands,
-//     with no wire traffic spent on the doomed dial.
+//     with no wire traffic spent on the doomed dial,
+//   - a start interrupted mid-probe, or under way as the engine closes,
+//     leaves no forward and no listener,
+//   - a stop interrupts a conn's open under way,
+//   - a link dropped mid-forward closes its conns and keeps the
+//     listener.
 //
 // Both "devices" share one node process. What separates them is the
 // direct wire between them, which is exactly the surface this proof
@@ -55,8 +60,10 @@ import { randomBytes } from "node:crypto";
 import type { EventEmitter } from "node:events";
 import { connect, type Socket } from "node:net";
 import { afterAll, beforeAll, it } from "vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import {
@@ -239,6 +246,24 @@ function dialAndCollect(
   });
 }
 
+type StartInput = Parameters<PortForwardEngine["startForward"]>[0];
+type Started = Effect.Success<ReturnType<PortForwardEngine["startForward"]>>;
+const startOn = (on: PortForwardEngine, input: StartInput) =>
+  Effect.runPromise(on.startForward(input));
+const stopOn = (on: PortForwardEngine, forwardId: string) =>
+  Effect.runPromise(on.stopForward(forwardId));
+
+// Whether a local dial to `port` is accepted.
+const accepts = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", () => resolve(false));
+  });
+
 let echo: LoopbackServer;
 let stub: DirectWire["stub"];
 let listener: DirectWire["listener"];
@@ -246,8 +271,8 @@ let toListener: DirectWire["toListener"];
 let forward: PeerReach.PeerCalls<typeof forwardContract>;
 let big: Buffer;
 let engine: PortForwardEngine;
-let started: Awaited<ReturnType<PortForwardEngine["startForward"]>>;
-let fresh: Awaited<ReturnType<PortForwardEngine["startForward"]>>;
+let started: Started;
+let fresh: Started;
 let fromWorktree: { projectId: string; worktreeId: string };
 
 // The direct wire: the listener serves the forward surface, the dialer
@@ -449,14 +474,10 @@ it("engine: a local dial round-trips through the whole chain, a duplicate start 
       },
     }).pipe(Scope.provide(scope), Effect.provide(clock.context)),
   );
-  // Tracked last, so the finally's teardown stops it first: an
-  // assertion failure mid-scenario must not leave its listeners
-  // holding the process open.
-  track(() => engine.stopAll());
 
   // (9) Local round trip through the whole chain, and duplicate
   // startForward semantics (one forward per device+port pair).
-  started = await engine.startForward({
+  started = await startOn(engine, {
     deviceId: LISTENER,
     remotePort: echo.port,
   });
@@ -465,7 +486,7 @@ it("engine: a local dial round-trips through the whole chain, a duplicate start 
   // the untagged forward for that worktree.
   fromWorktree = { projectId: "p1", worktreeId: "w1" };
   assert.equal(engine.listForwards()[0]?.worktree, undefined);
-  const dup = await engine.startForward({
+  const dup = await startOn(engine, {
     deviceId: LISTENER,
     remotePort: echo.port,
     worktree: fromWorktree,
@@ -477,7 +498,7 @@ it("engine: a local dial round-trips through the whole chain, a duplicate start 
   // A local port already bound refuses with node's code, which the
   // window's row words (usePortForwards' describeForwardError).
   await assert.rejects(
-    engine.startForward({
+    startOn(engine, {
       deviceId: LISTENER,
       remotePort: 1,
       localPort: started.localPort,
@@ -498,7 +519,7 @@ it("engine: a local dial round-trips through the whole chain, a duplicate start 
   assert.equal(changes, 0, "the signal waits out its window");
   await clock.advance(1);
   assert.equal(changes, 1, "the burst goes out as one signal");
-  await engine.startForward({
+  await startOn(engine, {
     deviceId: LISTENER,
     remotePort: echo.port,
     worktree: fromWorktree,
@@ -522,7 +543,7 @@ it("engine: a start naming another local port moves the listener", async () => {
   // old listener was closed once the new one was bound.
   const before = started.localPort;
   const freePort = await freeLoopbackPort();
-  const moved = await engine.startForward({
+  const moved = await startOn(engine, {
     deviceId: LISTENER,
     remotePort: echo.port,
     localPort: freePort,
@@ -536,7 +557,7 @@ it("engine: a start naming another local port moves the listener", async () => {
   );
   const movedPing = await dialAndCollect(freePort, Buffer.from("moved"), 5);
   assert.equal(movedPing.toString("utf8"), "moved");
-  started = await engine.startForward({
+  started = await startOn(engine, {
     deviceId: LISTENER,
     remotePort: echo.port,
     localPort: before,
@@ -570,7 +591,7 @@ it("engine: the fixture closing its socket ends the local client socket", async 
   const byeServer = await startLoopbackServer((socket) => {
     socket.end("bye");
   });
-  const byeForward = await engine.startForward({
+  const byeForward = await startOn(engine, {
     deviceId: LISTENER,
     remotePort: byeServer.port,
   });
@@ -593,7 +614,7 @@ it("engine: the fixture closing its socket ends the local client socket", async 
     });
   });
   assert.equal(bye.toString("utf8"), "bye");
-  engine.stopForward(byeForward.forwardId);
+  await stopOn(engine, byeForward.forwardId);
   await byeServer.close();
 });
 
@@ -608,7 +629,7 @@ it("engine: a forward to a dead port starts anyway and reaches a server that com
   while (earlyLocalPort === latePort) {
     earlyLocalPort = await freeLoopbackPort();
   }
-  const early = await engine.startForward({
+  const early = await startOn(engine, {
     deviceId: LISTENER,
     remotePort: latePort,
     localPort: earlyLocalPort,
@@ -636,7 +657,7 @@ it("engine: a forward to a dead port starts anyway and reaches a server that com
     4,
   );
   assert.equal(lateEcho.toString("utf8"), "late");
-  engine.stopForward(early.forwardId);
+  await stopOn(engine, early.forwardId);
   await lateServer.close();
 });
 
@@ -656,7 +677,7 @@ it("engine: stopForward closes the listener and live conns, and a fresh forward 
         ?.connCount === 1,
     "the lingering conn to register",
   );
-  engine.stopForward(started.forwardId);
+  await stopOn(engine, started.forwardId);
   assert.equal(engine.listForwards().length, 0);
   await lingeringClosed;
   await assert.rejects(
@@ -671,7 +692,7 @@ it("engine: stopForward closes the listener and live conns, and a fresh forward 
       }),
     "the stopped forward's listener still accepts",
   );
-  fresh = await engine.startForward({
+  fresh = await startOn(engine, {
     deviceId: LISTENER,
     remotePort: echo.port,
   });
@@ -730,6 +751,155 @@ it(`engine: local socket ${MAX_CONNS_PER_DEVICE + 1} is destroyed at the cap of 
     "the cap tore down an established conn instead of the over-cap dial",
   );
   for (const socket of capSockets) socket.destroy();
-  engine.stopAll();
+  await Effect.runPromise(engine.stopForwardsTo(() => false));
   assert.equal(engine.listForwards().length, 0);
+});
+
+// An engine of its own over the same wire, in a scope the proof can
+// close, whose peer channels are held until `release`, and whose opens
+// after `holdOpens` never answer.
+async function heldEngine() {
+  const clock = testClock();
+  const scope = Scope.makeUnsafe();
+  track(() => Effect.runPromise(Scope.close(scope, Exit.void)));
+  const gate = Deferred.makeUnsafe<void>();
+  let asked = 0;
+  let changes = 0;
+  let holding = false;
+  let opensHeld = 0;
+  let opensInterrupted = 0;
+  const own = await Effect.runPromise(
+    makePortForwardEngine({
+      forwardApiFor: () => ({
+        ...forward,
+        open: (input) =>
+          holding
+            ? Effect.suspend(() => {
+                opensHeld += 1;
+                return Effect.never;
+              }).pipe(
+                Effect.onInterrupt(() =>
+                  Effect.sync(() => {
+                    opensInterrupted += 1;
+                  }),
+                ),
+              )
+            : forward.open(input),
+      }),
+      channelsFor: () => async () => {
+        asked += 1;
+        await Effect.runPromise(Deferred.await(gate));
+        return toListener.channels();
+      },
+      onChange: () => {
+        changes += 1;
+      },
+    }).pipe(Scope.provide(scope), Effect.provide(clock.context)),
+  );
+  return {
+    engine: own,
+    clock,
+    close: () => Effect.runPromise(Scope.close(scope, Exit.void)),
+    asked: () => asked,
+    changes: () => changes,
+    release: () => Deferred.doneUnsafe(gate, Exit.void),
+    holdOpens: () => {
+      holding = true;
+    },
+    opensHeld: () => opensHeld,
+    opensInterrupted: () => opensInterrupted,
+  };
+}
+
+it("engine: a start interrupted mid-probe binds nothing", async () => {
+  const held = await heldEngine();
+  const localPort = await freeLoopbackPort();
+  const opensBefore = toListener.invokeCount("forward:open");
+  const start = Effect.runFork(
+    held.engine.startForward({
+      deviceId: LISTENER,
+      remotePort: echo.port,
+      localPort,
+    }),
+  );
+  await waitFor(() => held.asked() === 1, "the start to reach the probe");
+  await Effect.runPromise(Fiber.interrupt(start));
+  held.release();
+  // An open of the proof's own, after the gate: a start still under
+  // way opens its probe first.
+  const after = await openChannel(toListener, forward, echo.port);
+  after.reset();
+  assert.equal(
+    toListener.invokeCount("forward:open") - opensBefore,
+    1,
+    "the interrupted start went on to probe the peer",
+  );
+  assert.deepEqual(held.engine.listForwards(), []);
+  assert.equal(await accepts(localPort), false, "the interrupted start bound");
+});
+
+it("engine: a start under way as the engine closes binds nothing", async () => {
+  const held = await heldEngine();
+  const localPort = await freeLoopbackPort();
+  const start = Effect.runPromiseExit(
+    held.engine.startForward({
+      deviceId: LISTENER,
+      remotePort: echo.port,
+      localPort,
+    }),
+  );
+  await waitFor(() => held.asked() === 1, "the start to reach the probe");
+  await held.close();
+  held.release();
+  const exit = await start;
+  assert.ok(Exit.hasInterrupts(exit), "a start past the close succeeded");
+  assert.deepEqual(held.engine.listForwards(), []);
+  assert.equal(await accepts(localPort), false, "the start bound after close");
+  await held.clock.advance(150);
+  assert.equal(held.changes(), 0, "a change was signalled after the close");
+});
+
+it("engine: a stop interrupts a conn's open under way", async () => {
+  const held = await heldEngine();
+  held.release();
+  const up = await startOn(held.engine, {
+    deviceId: LISTENER,
+    remotePort: echo.port,
+  });
+  held.holdOpens();
+  const local = connect({ host: "127.0.0.1", port: up.localPort });
+  local.on("error", () => {});
+  const localClosed = onceWithin(local, "close", "the stop to close the conn");
+  await waitFor(() => held.opensHeld() === 1, "the conn's open to start");
+  await stopOn(held.engine, up.forwardId);
+  await localClosed;
+  assert.equal(held.opensInterrupted(), 1, "the open outlived the stop");
+});
+
+it("engine: a link dropped mid-forward closes its conns and keeps the listener", async () => {
+  const held = await heldEngine();
+  held.release();
+  const up = await startOn(held.engine, {
+    deviceId: LISTENER,
+    remotePort: echo.port,
+  });
+  const local = connect({ host: "127.0.0.1", port: up.localPort });
+  local.on("error", () => {});
+  const localClosed = onceWithin(
+    local,
+    "close",
+    "the dropped link to close the local socket",
+  );
+  await waitFor(
+    () => held.engine.listForwards()[0]?.connCount === 1,
+    "the conn to open",
+  );
+  const mux = await toListener.channels();
+  assert.equal(mux.size(), 1);
+  await listener.binding.closePeersNotIn([]);
+  await localClosed;
+  assert.equal(held.engine.listForwards()[0]?.connCount, 0);
+  assert.equal(mux.size(), 0);
+  assert.equal(held.engine.listForwards().length, 1, "the forward went");
+  assert.equal(await accepts(up.localPort), true, "the listener went");
 });
