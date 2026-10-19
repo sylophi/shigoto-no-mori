@@ -347,6 +347,16 @@ export const ConvertExternalPayloadSchema = Schema.Struct({
   force: Schema.optional(Schema.Boolean),
 });
 
+// What a transfer moved of its source, which the source's teardown
+// must still hold at the delete: its branch at the tip it moved with,
+// and its uncommitted work the tree the move captured (none: clean).
+const MovedSourceSchema = Schema.Struct({
+  branch: GitRefNameSchema,
+  branchTip: CommitHashSchema,
+  captureTree: Schema.optional(CommitHashSchema),
+});
+export type MovedSource = typeof MovedSourceSchema.Type;
+
 export const DeleteWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   force: Schema.optional(Schema.Boolean),
@@ -354,6 +364,9 @@ export const DeleteWorktreePayloadSchema = Schema.Struct({
   // Refuse ("scripts-running") rather than kill live app scripts, for a
   // transplant's teardown.
   refuseRunningScripts: Schema.optional(Schema.Boolean),
+  // A transplant's teardown: refused, after its cleanup and right
+  // before the delete, unless the source is still what moved.
+  expect: Schema.optional(MovedSourceSchema),
 });
 
 export const RenameBranchPayloadSchema = Schema.Struct({

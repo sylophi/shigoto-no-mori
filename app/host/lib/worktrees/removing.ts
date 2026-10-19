@@ -3,6 +3,7 @@
 // under the tombstone, each announced to every viewer while it goes and
 // with its outcome after, and the mirrors of what went stopped.
 import { isEntityGoneError } from "@shigomori/contracts/errors";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -54,6 +55,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         // still running on the source device, refuses where a delete
         // would stop it.
         readonly refuseRunningScripts?: boolean | undefined;
+        readonly expect?: MovedSource | undefined;
       },
       notifyScript: Scripts.NotifyScriptEvent,
     ) {
@@ -84,6 +86,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                 worktreeId,
                 force: input.force,
                 skipCleanup: input.skipCleanup,
+                expect: input.expect,
               },
               reporter,
             ),

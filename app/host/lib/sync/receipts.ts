@@ -8,7 +8,11 @@ import {
   type SyncTeardownSourceResult,
 } from "@shigomori/contracts/modules/sync";
 import { errorWordsOf } from "@host/lib/errorWords";
-import { DeleteWorktreeResultSchema } from "@shigomori/contracts/schemas";
+import { movedSourceChange } from "@shigomori/contracts/movedSource";
+import {
+  DeleteWorktreeResultSchema,
+  type MovedSource,
+} from "@shigomori/contracts/schemas";
 import { type PeerReach, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { findProject } from "@host/lib/projects";
 import {
@@ -67,6 +71,7 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
     worktreeId: string;
     force: boolean;
     refuseRunningScripts: boolean;
+    expect: MovedSource;
   }) => Effect.Effect<unknown, E, R>,
 ) {
   const key = receiptKey(move);
@@ -77,14 +82,17 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
     projectId: move.projectId,
     worktreeId: move.worktreeId,
   };
+  const moved = movedOf(receipt);
+  // Asked first, so a source that changed keeps its cleanup unrun; the
+  // removal asks again right before its delete, after the cleanup.
   const changed = yield* pulled
     ? Effect.scoped(
         Effect.flatMap(peerSource(move.deviceId, target), (source) =>
-          sourceChangedSince(source, receipt, PULLED),
+          sourceChangedSince(source, moved, PULLED),
         ),
       )
     : Effect.flatMap(findProject(move.projectId), (here) =>
-        sourceChangedSince(localSource(here, move.worktreeId), receipt, SENT),
+        sourceChangedSince(localSource(here, move.worktreeId), moved, SENT),
       );
   if (changed !== undefined) {
     return { sourceRemoved: false, sourceError: changed } as const;
@@ -93,7 +101,12 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
     receipt,
     pulled ? "here" : "on the other device",
     (force) => {
-      const removal = { ...target, force, refuseRunningScripts: true };
+      const removal = {
+        ...target,
+        force,
+        refuseRunningScripts: true,
+        expect: moved,
+      };
       return pulled
         ? peerWorktreesFor(move.deviceId).delete(removal)
         : removeHere(removal);
@@ -120,26 +133,40 @@ const SENT: ChangedWords = {
   neverMoved: "the worktree has uncommitted changes that were never sent.",
 };
 
+// What the move took of its source, by its receipt.
+const movedOf = (receipt: SyncReceipt): MovedSource => ({
+  branch: receipt.branch,
+  branchTip: receipt.branchTip,
+  ...(receipt.captured && receipt.captureTree !== undefined
+    ? { captureTree: receipt.captureTree }
+    : {}),
+});
+
 // The teardown may run any time after the move, so the source is
-// re-checked against the receipt first: the branch tip must not have
-// moved, and the uncommitted state must still be exactly the tree the
-// move captured (a fresh capture, compared by tree hash, since capture
-// commits are not deterministic). Anything else is work that never
-// crossed, and the reason comes back as the kept-source explanation.
+// checked against what moved (movedSourceChange): a fresh capture,
+// compared by tree hash, since capture commits are not deterministic.
+// Anything else is work that never crossed, and the reason comes back as
+// the kept-source explanation.
 const sourceChangedSince = Effect.fnUntraced(function* (
   source: SourceFacts,
-  receipt: SyncReceipt,
+  moved: MovedSource,
   words: ChangedWords,
 ) {
-  if ((yield* source.tip(receipt.branch)) !== receipt.branchTip) {
-    return words.moved;
-  }
+  const tip = yield* source.tip(moved.branch);
   const fresh = yield* source.capture;
-  if (!fresh.captured) return receipt.captured ? words.changed : undefined;
-  if (!receipt.captured || receipt.captureTree === undefined) {
-    return words.neverMoved;
-  }
-  return fresh.tree === receipt.captureTree ? undefined : words.changed;
+  const change = movedSourceChange(moved, {
+    tip,
+    ...(fresh.captured && fresh.tree !== undefined
+      ? { captureTree: fresh.tree }
+      : {}),
+  });
+  return change === undefined
+    ? undefined
+    : change === "moved"
+      ? words.moved
+      : change === "changed"
+        ? words.changed
+        : words.neverMoved;
 });
 
 // The source teardown. It runs ONLY when nothing the capture describes
