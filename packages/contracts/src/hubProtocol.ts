@@ -193,9 +193,11 @@ const HubDeliverEnvelopeSchema = Schema.Struct({
 export const deliveredRelay = (from: string, frame: string): string =>
   encodeEnvelope({ t: "relay", from, frame });
 
-// How many bytes the delivered relay is longer than the one sent.
+// How many bytes the delivered relay is longer than the one sent, each
+// id as JSON writes it.
 export const deliveredRelayGrowth = (from: string, to: string): number =>
-  utf8ByteLength(`"from":"${from}"`) - utf8ByteLength(`"to":"${to}"`);
+  utf8ByteLength(`"from":${JSON.stringify(from)}`) -
+  utf8ByteLength(`"to":${JSON.stringify(to)}`);
 
 const OnlineDeviceSchema = Schema.Struct({
   deviceId: DeviceIdSchema,

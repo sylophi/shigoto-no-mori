@@ -239,7 +239,7 @@ export class DeviceHub extends DurableObject<Env> {
   // dropped by a revoke.
   override async fetch(request: Request): Promise<Response> {
     const random = new URL(request.url).searchParams.get(CONNECT_RANDOM_PARAM);
-    const now = this.clock();
+    const clock = this.clock;
     const admitted =
       random === null
         ? null
@@ -247,6 +247,9 @@ export class DeviceHub extends DurableObject<Env> {
             Effect.gen(function* () {
               const tickets = yield* Tickets.Tickets;
               const registry = yield* Registry.Registry;
+              // Read once the permit is held, so a wait behind another
+              // admission counts against the ticket's life.
+              const now = clock();
               const holder = yield* tickets.take(random, now);
               if (holder === null) return null;
               // The device must still be enrolled, under the credential
@@ -263,6 +266,7 @@ export class DeviceHub extends DurableObject<Env> {
                 device.public_key !== null
                 ? {
                     ...holder,
+                    now,
                     publicKey: device.public_key,
                     // Every browser profile enrolls as the web platform.
                     web: device.platform === WEB_PLATFORM,
@@ -285,7 +289,7 @@ export class DeviceHub extends DurableObject<Env> {
     // means two app instances on one root. A web device's tabs stand
     // side by side, up to MAX_DEVICE_CONNECTIONS, past which the oldest
     // gives way.
-    const { deviceId, web, connectionId, publicKey } = admitted;
+    const { deviceId, web, connectionId, publicKey, now } = admitted;
     const tag = connectionTag(deviceId, connectionId);
     const superseded = web
       ? this.overCap(deviceId, tag)
