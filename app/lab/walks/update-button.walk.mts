@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { seedDemo } from "./lib/demoRepo.mts";
 import { bootLab, type Lab } from "./lib/labApp.mts";
+import { locked, skipWhenLocked } from "./lib/session.mts";
 import { main, openPrimary, sidebar } from "./lib/page.mts";
 
 const APP = "Shigoto no Mori (lab)";
@@ -107,7 +108,10 @@ const pressRestart = async () => {
   await restartButton().click();
 };
 
+skipWhenLocked();
+
 beforeAll(async () => {
+  if (locked) return;
   const releases = await serveReleases();
   lab = await bootLab({
     seed: (dir, git) => void seedDemo(dir, git),

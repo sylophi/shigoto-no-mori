@@ -1,9 +1,9 @@
 // The shell's end of each window's link (shared/ipc/shell.ts): Effect
 // RPC over a MessagePort, serving the client modules this process owns
-// (dialogs, the window, the menu, the account, the client config) to the
-// window the port was handed to. Every window that loads asks the
-// preload for a port, the preload asks here (attach), and a page that
-// goes takes its port with it.
+// (ipc/handlers.ts) to the window the port was handed to. Every window
+// that loads asks the preload for a port, the preload asks main
+// (register.ts installShellPorts), which attaches it here, and a page
+// that goes takes its port with it.
 import { channelOf, isInvoke, isPush } from "@shigomori/contracts/contract";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
@@ -32,8 +32,6 @@ import * as Result from "effect/Result";
 
 export type Push = { readonly channel: string; readonly payload: unknown };
 
-// What the shell registers to serve (shellRegistrar.ts), and the
-// pushes it fans out to every window.
 export type ShellRegistrar = Served<HandlerContext> & {
   readonly pushes: PubSub.PubSub<Push>;
 };
@@ -47,7 +45,6 @@ export class ShellLink extends Context.Service<
       port: MessagePortMain,
       webContents: WebContents,
     ) => Effect.Effect<void>;
-    // A push for one window alone (its menu's events, its focus).
     readonly pushTo: (
       webContents: WebContents,
       push: Push,

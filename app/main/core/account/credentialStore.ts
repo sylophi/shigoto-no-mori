@@ -4,7 +4,7 @@
 // document-shape and cipher decision to the shared, storage-agnostic core
 // in shared/account/credentialStore.ts. The web client reuses that same
 // core over a different backing, so the on-storage envelope stays
-// identical across platforms and the desktop file format is unchanged.
+// identical across platforms.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isENOENT } from "@shared/paths";
 import {

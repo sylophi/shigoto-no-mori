@@ -1,15 +1,10 @@
-// Pure, Electron-free rate limiters for the two liveness recovery paths:
+// The rate limits of the two liveness recovery paths (electron/liveness.ts):
 // the renderer's sliding window over recent recreations, and the fatal
-// relaunches' count.
-// Keeping this logic here (importing nothing) is what lets
-// test/liveness.mts drive it under plain Node, since the
-// Electron wiring around it can only be exercised in a real app.
+// relaunches' count. They import nothing, so test/liveness.mts drives
+// them under plain Node.
 
-// Renderer crash-loop guard. A renderer that dies and gets recreated
-// only to die again is a loop, so allow a small burst of recreations
-// inside a short window and then stop thrashing and surface an error
-// instead. Three recreations inside thirty seconds is the ceiling: a
-// fourth crash in that window gives up.
+// A renderer that dies and gets recreated only to die again is a loop:
+// a fourth crash within the window gives up.
 export const CRASH_LOOP = { windowMs: 30_000, max: 3 };
 
 // Main-process fatal-relaunch guard. A deterministic startup crash would
@@ -22,12 +17,8 @@ export const FATAL_RELAUNCH = { max: 2, stableMs: 3 * 60_000 };
 export const relaunchAllowed = (relaunches: number): boolean =>
   relaunches < FATAL_RELAUNCH.max;
 
-// The renderer's sliding-window decision. `recent` is the
-// timestamps of prior actions we took, `now` is the current time. Prune
-// anything older than the window, and if the surviving count has
-// already reached `max`, refuse (returning the pruned list unchanged).
-// Otherwise allow and return the pruned list with `now` appended, which
-// is what the caller persists so the next call sees this action.
+// `recent` holds when the actions before this one were taken, and comes
+// back pruned to the window, with `now` when this one is allowed.
 export function decide(
   recent: readonly number[],
   now: number,

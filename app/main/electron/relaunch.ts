@@ -28,15 +28,6 @@ let requested = false;
 // restarts forge when the app quits with the marker present.
 const devRelaunchMarker = envSetting(DEV_RELAUNCH_FILE_ENV);
 
-// Record that a relaunch is in flight WITHOUT initiating the quit. The
-// data-folder move (relaunchApp) quits through Electron so its reply is
-// delivered first. The fatal-recovery path in liveness.ts instead exits
-// hard, but it still sets this flag so a quit that does start is a
-// hurried one, with no busy-action prompt.
-function markRelaunching(): void {
-  requested = true;
-}
-
 // The packaged app starts again through LaunchServices, as `sm update`
 // brings it back after an install: a detached waiter opens the bundle
 // once this process has exited. Not app.relaunch(): its relauncher
@@ -81,7 +72,7 @@ function relaunchThroughLaunchServices(): void {
 export function scheduleRelaunch(): void {
   // One waiter: a second would open a second instance.
   if (requested) return;
-  markRelaunching();
+  requested = true;
   if (devRelaunchMarker !== undefined) {
     try {
       writeFileSync(devRelaunchMarker, "");

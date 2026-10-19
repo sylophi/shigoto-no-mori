@@ -10,6 +10,7 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { bootLab, type Lab } from "./lib/labApp.mts";
+import { locked, skipWhenLocked } from "./lib/session.mts";
 import { waitFor } from "../../test/lib/checkKit.mts";
 
 // The marker a nuke writes in userData (main/core/nuke/finish.ts).
@@ -77,7 +78,10 @@ const stuck = () => {
   );
 };
 
+skipWhenLocked();
+
 beforeAll(async () => {
+  if (locked) return;
   lab = await bootLab({ seed: () => {}, profile: "stuck-nuke" });
   held = join(lab.root, "held");
 });

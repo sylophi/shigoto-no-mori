@@ -1,5 +1,5 @@
 // The preload's one message with main: asking for the page's shell port
-// (main/ipc/ShellLink.ts, installShellPorts) and handing it on to the
+// (main/ipc/register.ts, installShellPorts) and handing it on to the
 // page, which a context bridge cannot carry a port across.
 import { ipcRenderer } from "electron";
 import { SHELL_PORT_CHANNEL } from "@shared/ipc/shell";

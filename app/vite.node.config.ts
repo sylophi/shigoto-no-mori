@@ -2,7 +2,7 @@
 // @shared alias, the account define, and the runtime imports Vite must
 // not bundle. One file means a future node-side option can't be added
 // to just one of them. The account define is only referenced by main
-// (main/ipc/modules/account.ts). In preload nothing names the constant,
+// (main/electron/account.ts). In preload nothing names the constant,
 // so nothing is inlined there.
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
