@@ -35,6 +35,7 @@ import {
   success,
 } from "../../engine/test/lib/fakeApp.ts";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { said as updateSaid } from "../src/commands/update.ts";
 import { NAMESPACE_USAGE } from "../src/errors.ts";
 import { documentedCommands } from "../src/help.ts";
 
@@ -1353,6 +1354,45 @@ describe("app", () => {
       "smd: This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.\n",
     );
   });
+
+  it("names the app an update restarts, each flavor's own", () => {
+    const restarting = { phase: "restarting", version: "9.9.9" } as const;
+    assert.equal(
+      updateSaid(restarting, flavorNames("prod").appName, String),
+      "restarting Shigoto no Mori to install 9.9.9",
+    );
+    assert.equal(
+      updateSaid(restarting, flavorNames("v3").appName, String),
+      "restarting Shigoto no Mori (v3) to install 9.9.9",
+    );
+  });
+
+  it("names the app it opened or couldn't, each flavor's own", async () => {
+    for (const [flavor, line] of [
+      ["prod", "opened Shigoto no Mori"],
+      ["v3", "opened Shigoto no Mori (v3)"],
+      ["lab", "opened Shigoto no Mori (lab)"],
+    ] as const) {
+      const binary = builtBinary(flavor);
+      box.fakeBin("open", "exit 1");
+      const refused = await box.runAt(binary, "cli", box.home, ["app"]);
+      assert.equal(refused.code, 1);
+      assert.ok(
+        refused.stderr.endsWith(
+          `Couldn't open ${flavorNames(flavor).appName}. Is the app installed?\n`,
+        ),
+        refused.stderr,
+      );
+      box.fakeBin("open", `printf '%s\\n' "$@" > '${box.home}/open.args'`);
+      const opened = await box.runAt(binary, "cli", box.home, ["app"]);
+      assert.equal(opened.code, 0);
+      assert.equal(opened.stdout, `${line}\n`);
+      assert.match(
+        readFileSync(join(box.home, "open.args"), "utf8"),
+        new RegExp(`-b\\n${flavorNames(flavor).bundleId}\\n$`),
+      );
+    }
+  }, 300_000);
 });
 
 describe("worktrees edit", () => {

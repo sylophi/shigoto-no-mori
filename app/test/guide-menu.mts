@@ -48,11 +48,9 @@ vi.mock("../main/ipc/register", () => ({
 }));
 vi.mock("../main/electron/windows", () => ({ openWindow: () => {} }));
 
-const { installMenuImpl, noteMenuWindowFocused } =
-  await import("../main/electron/menu");
+const { noteMenuWindowFocused } = await import("../main/electron/menu");
 const { menuHandlers } = await import("../main/ipc/modules/menu");
 
-installMenuImpl();
 noteMenuWindowFocused(7);
 const contents = { id: 7 };
 

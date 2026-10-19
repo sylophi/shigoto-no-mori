@@ -73,10 +73,10 @@ export class NotAFile extends Schema.TaggedError<NotAFile>()("NotAFile", {
 // The app wouldn't open: not installed, or `open` refused.
 export class AppNotOpened extends Schema.TaggedError<AppNotOpened>()(
   "AppNotOpened",
-  { cause: Schema.Defect() },
+  { appName: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return "Couldn't open Shigoto no Mori. Is the app installed?";
+    return `Couldn't open ${this.appName}. Is the app installed?`;
   }
 }
 
@@ -484,9 +484,17 @@ const make = Effect.gen(function* () {
         ),
         (handle) => handle.exitCode,
       ),
-    ).pipe(Effect.mapError((cause) => new AppNotOpened({ cause })));
+    ).pipe(
+      Effect.mapError(
+        (cause) =>
+          new AppNotOpened({ appName: flavorNames(flavor).appName, cause }),
+      ),
+    );
     if (code !== 0) {
-      return yield* new AppNotOpened({ cause: `exit status ${code}` });
+      return yield* new AppNotOpened({
+        appName: flavorNames(flavor).appName,
+        cause: `exit status ${code}`,
+      });
     }
   }).pipe(Effect.withSpan("Open.app"));
 

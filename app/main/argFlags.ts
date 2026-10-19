@@ -1,8 +1,8 @@
 // The argv flags main uses to hand facts to the sandboxed preload
 // (webPreferences.additionalArguments), and the preload's readers for
-// them. One module imported by both sides (main/index.ts appends,
-// main/preload.ts reads) so they can't disagree on a spelling. The
-// preload bundle imports this, so it stays free of imports.
+// them. One module imported by both sides (electron/windows.ts appends,
+// preload.ts reads) so they can't disagree on a spelling. The preload
+// bundle imports this, so it stays free of imports.
 
 // This build's app version. The renderer needs its own version
 // synchronously: it rides in the link's hello and is compared
@@ -31,15 +31,13 @@ export const DEV_BUILD_FLAG = "--sm-dev-build";
 // and the app relaunches on SIGUSR2 (lab/relaunch.mts, main/index.ts).
 export const LAB_FLAG = "--sm-lab";
 
-// Reads a required value flag off process.argv in the preload. The
-// app version must be present: a missing or empty value means main and
-// preload disagree on the flag, so fail loudly rather than run with an
-// empty version on the wire. `flag` is the constant with its trailing
-// "=", `name` is the human-facing flag name for the error.
-export function requireArgFlag(flag: string, name: string): string {
+// Reads a required value flag off process.argv in the preload. A
+// missing or empty value means main and preload disagree on the flag,
+// so fail loudly rather than run on an empty value.
+export function requireArgFlag(flag: string): string {
   const value = optionalArgFlag(flag);
   if (!value) {
-    throw new Error(`preload started without ${name}`);
+    throw new Error(`preload started without ${flag.slice(0, -1)}`);
   }
   return value;
 }

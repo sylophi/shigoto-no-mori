@@ -79,12 +79,11 @@ const platform =
 // (clientConfigRead) before its first window.
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
-    yield* SubscriptionRef.set(
-      memo,
-      (yield* Effect.provideContext(readStoredDoc, context)) as ClientConfig,
+    yield* SubscriptionRef.set(memo, (yield* readStoredDoc) as ClientConfig);
+    yield* Deferred.succeed(
+      platform,
+      yield* Effect.context<FileSystem.FileSystem | Path.Path>(),
     );
-    yield* Deferred.succeed(platform, context);
   }),
 );
 
@@ -100,26 +99,46 @@ export function readClientConfigSync(): ClientConfig {
 export const clientConfigChanges: Stream.Stream<ClientConfig> =
   SubscriptionRef.changes(memo);
 
+// Merge-on-write, matching the downgrade-safety rule the device store
+// documents: read the on-disk doc loosely, drop only the keys this
+// build models, overlay the incoming ones, write atomically.
+// A full replace would erase keys a newer build wrote. Omission of a
+// modeled key still clears it (the omit-on-default serialization).
+// Corruption merges over {} instead (warned once above), the same
+// default reset the read side applies.
+const write = Effect.fnUntraced(function* (config: ClientConfig) {
+  const onDisk = yield* readStoredDoc;
+  const merged: Record<string, unknown> = { ...onDisk };
+  for (const key of Object.keys(ClientConfigSchema.fields)) {
+    delete merged[key];
+  }
+  for (const [key, value] of Object.entries(config)) {
+    if (value !== undefined) merged[key] = value;
+  }
+  yield* writeJson(clientConfigPath(), merged);
+  yield* SubscriptionRef.set(memo, config);
+});
+
 // One change at a time, each over the config the last one left, so two
 // windows' patches (or two in flight from one) keep each other's keys.
 const changes = Semaphore.makeUnsafe(1);
 
-// The config as `update` makes it from the one standing, written.
-export function updateClientConfig(
-  update: (config: ClientConfig) => ClientConfig,
-): Promise<{ readonly before: ClientConfig; readonly after: ClientConfig }> {
-  return Effect.runPromise(
-    Effect.promise(async () => {
-      // Over the stored config, never the empty one standing in for it
-      // before the boot has read it.
-      await clientConfigRead();
-      const before = SubscriptionRef.getUnsafe(memo);
-      const after = update(before);
-      if (after !== before) await writeClientConfig(after);
-      return { before, after };
-    }).pipe(changes.withPermits(1)),
-  );
-}
+// The config as `change` makes it from the one standing, written: over
+// the stored config, never the empty one standing in for it before the
+// boot has read it.
+const update = (change: (config: ClientConfig) => ClientConfig) =>
+  Effect.gen(function* () {
+    const context = yield* Deferred.await(platform);
+    const before = yield* SubscriptionRef.get(memo);
+    const after = change(before);
+    if (after !== before) yield* Effect.provideContext(write(after), context);
+    return { before, after };
+  }).pipe(changes.withPermits(1));
+
+export const updateClientConfig = (
+  change: (config: ClientConfig) => ClientConfig,
+): Promise<{ readonly before: ClientConfig; readonly after: ClientConfig }> =>
+  Effect.runPromise(update(change));
 
 // A window's patch (clientConfig:patch): its keys set or cleared over
 // the config as it stands.
@@ -141,48 +160,17 @@ export function patchClientConfig(
 // windows' checks turn it once, and the launch's turn once per run of
 // the app.
 const rotationTurnOf = rotationOwner();
-export function rotatePalette(launching: boolean): Promise<number | null> {
-  return Effect.runPromise(
+export const rotatePalette = (launching: boolean): Promise<number | null> =>
+  Effect.runPromise(
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const { before, after } = yield* Effect.promise(() =>
-        updateClientConfig((config) => {
-          const turn = rotationTurnOf(config, now, launching);
-          return turn ? { ...config, ...turn } : config;
-        }),
-      );
+      const { before, after } = yield* update((config) => {
+        const turn = rotationTurnOf(config, now, launching);
+        return turn ? { ...config, ...turn } : config;
+      });
       return after === before ? null : now;
     }),
   );
-}
-
-// Merge-on-write, matching the downgrade-safety rule the device store
-// documents: read the on-disk doc loosely, drop only the keys this
-// build models, overlay the incoming ones, write atomically.
-// A full replace would erase keys a newer build wrote. Omission of a
-// modeled key still clears it (the omit-on-default serialization).
-// Corruption merges over {} instead (warned once above), the same
-// default reset the read side applies.
-function writeClientConfig(config: ClientConfig): Promise<void> {
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const context = yield* Deferred.await(platform);
-      const onDisk = yield* Effect.provideContext(readStoredDoc, context);
-      const merged: Record<string, unknown> = { ...onDisk };
-      for (const key of Object.keys(ClientConfigSchema.fields)) {
-        delete merged[key];
-      }
-      for (const [key, value] of Object.entries(config)) {
-        if (value !== undefined) merged[key] = value;
-      }
-      yield* Effect.provideContext(
-        writeJson(clientConfigPath(), merged),
-        context,
-      );
-      yield* SubscriptionRef.set(memo, config);
-    }),
-  );
-}
 
 // The one place nativeTheme.themeSource is set. Boot and the window module's
 // previewTheme both land here. A clientConfig patch deliberately does

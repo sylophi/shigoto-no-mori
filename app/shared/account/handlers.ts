@@ -1,5 +1,5 @@
 // The account calls both shells serve (accountContract): the desktop's
-// (main/ipc/modules/account.ts) and the web bridge's
+// (main/electron/account.ts) and the web bridge's
 // (web/ipc/register.ts) give only what differs, their store, the
 // device's id and defaults, their platform, and what follows a change.
 import type { AccountServiceConfig } from "@shigomori/contracts/accountServiceConfig";

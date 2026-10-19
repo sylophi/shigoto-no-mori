@@ -1,8 +1,7 @@
 // What main.log says as the shell starts its host again (main/
 // hostProcess.ts): why, the spans the host had open at its last beat,
 // and the last it finished, from the tail of host-trace.log
-// (host/process/host.ts). A hang names its call there, which the
-// watchdog's line alone never did.
+// (host/process/host.ts). A hang names its call there.
 import { open } from "node:fs/promises";
 import { join } from "node:path";
 import type { HostBeat } from "@shared/hostBeat";

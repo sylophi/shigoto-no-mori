@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import { lifetime } from "@shared/lifetimes";
 import * as HostProcess from "./hostProcess";
 import * as Guide from "./electron/guide";
+import { loginItemLayer } from "./electron/liveness";
 import * as Updater from "./electron/updater";
 import { shellLinkLayer } from "./ipc/register";
 
@@ -31,7 +32,12 @@ const resumeProbe = lifetime(
   },
 );
 
-export const layer = (host: Parameters<typeof HostProcess.layer>[0]) =>
+// A headless nuke's run leaves the login item to the nuke
+// (electron/nuke.ts), and reconciles none.
+export const layer = (
+  host: Parameters<typeof HostProcess.layer>[0],
+  { loginItem }: { readonly loginItem: boolean },
+) =>
   HostProcess.layer(host).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -40,6 +46,7 @@ export const layer = (host: Parameters<typeof HostProcess.layer>[0]) =>
         // The windows' links to the shell (ipc/ShellLink.ts).
         shellLinkLayer,
         Guide.layer,
+        loginItem ? loginItemLayer : Layer.empty,
       ),
     ),
   );

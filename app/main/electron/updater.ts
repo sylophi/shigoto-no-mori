@@ -1,7 +1,7 @@
 // In-app updates, on the engine's updater (packages/engine/src/Updater.ts),
 // which the terminal `sm update` shares. The app embeds no updater of
-// its own (Squirrel is gone): checking stages in-process, which queries
-// the feed, downloads, signature-verifies, and parks the new bundle in
+// its own: checking stages in-process, which queries the feed,
+// downloads, signature-verifies, and parks the new bundle in
 // <dataDir>/updates/staged. Installing spawns a detached
 // `sm update --finish-install --pid <ours>` and quits. The installer
 // waits for this process to exit, swaps the bundle, and relaunches.
@@ -77,7 +77,6 @@ let started = false;
 let installing = false;
 let checkInFlight = false;
 let failedChecks = 0;
-// Ticks until the next automatic check.
 let ticksToCheck = 1;
 // Armed by updateNow (whether the install is unattended), null when
 // not: the next check to finish installs what it staged.
@@ -301,13 +300,10 @@ const check: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
   ),
 );
 
-// True when the staged update is actually installable: manifest
-// present, bundle on disk, and a different version than this build (a
-// same-version manifest is debris from an install that crashed between
-// swap and cleanup, and restarting into it would deliver nothing).
-// When it's gone while the UI still says ready, resets to idle rather
-// than leave a dead "Restart to update" button up until the next
-// check.
+// True when the staged update is installable (the engine's
+// Updater.staged). When it's gone while the UI still says ready, resets
+// to idle rather than leave a dead "Restart to update" button up until
+// the next check.
 async function hasInstallableStaged(): Promise<boolean> {
   if ((await readInstallableStaged()) !== null) return true;
   if (state.kind === "ready") setState({ kind: "idle" });

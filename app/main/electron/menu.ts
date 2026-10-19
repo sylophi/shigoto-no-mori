@@ -20,7 +20,6 @@ import {
 } from "@shigomori/contracts/modules/guide";
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
-import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
 import { openWindow } from "./windows";
 
@@ -111,7 +110,7 @@ function showing(change: () => void): void {
   }
 }
 
-function setLaunchToolsEnabled(
+export function setLaunchToolsEnabled(
   windowId: number,
   enabled: boolean,
   entries?: readonly LaunchToolMenuEntry[],
@@ -130,19 +129,15 @@ function setLaunchToolsEnabled(
   );
 }
 
-function setChords(windowId: number, chords: Chords): void {
+export function setChords(windowId: number, chords: Chords): void {
   showing(() => chordsByWindow.set(windowId, chords));
 }
 
-function setGuideHarnesses(
+export function setGuideHarnesses(
   windowId: number,
   harnesses: readonly GuideHarness[],
 ): void {
   showing(() => guideHarnessesByWindow.set(windowId, harnesses));
-}
-
-export function installMenuImpl(): void {
-  setMenuImpl({ setLaunchToolsEnabled, setChords, setGuideHarnesses });
 }
 
 // The menu follows the focused window's tools.

@@ -46,7 +46,6 @@ export function rendererContentPolicy(options: {
     "img-src": [
       "'self'",
       "data:",
-      "blob:",
       "https://img.clerk.com",
       ...GITHUB_IMAGE_HOSTS.flatMap((host) => [
         `https://${host}`,

@@ -41,13 +41,13 @@ import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { connectHost } from "@shared/remote/hostLink";
 import { HOST_FACTS_FLAG, type HostFacts } from "@shared/hostFacts";
 import { appPlace } from "./electron/appPlace";
-import { migrationFailed, noteMigration } from "./ipc/modules/migration";
+import { migrationFailed, noteMigration } from "./electron/migration";
 import { showMoveFailed } from "./electron/moveFailed";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { onGuide } from "./electron/guide";
 import { currentUpdaterState, updaterCalls } from "./electron/updater";
 import { releaseUpdaterBridge } from "./electron/updaterBridge";
-import { accountFactsForHost, retryParkedSignOut } from "./ipc/modules/account";
+import { accountFactsForHost, retryParkedSignOut } from "./electron/account";
 import { makePortServer } from "./ipc/ShellLink";
 import { broadcastAll } from "./ipc/register";
 import { createShellRegistrar } from "./ipc/shellRegistrar";
@@ -224,8 +224,6 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
     restarts.up();
     upHost = child;
     startStalls = 0;
-    // The device the host is rides along, which the shell's account
-    // calls name.
     reportedDeviceId = reported.deviceId;
     address.resolve(reported);
     if (restartedFor !== null) {

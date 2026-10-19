@@ -21,10 +21,12 @@ decisions 6 and 9).
 - `ipc/`: the shell's link to its windows (`ShellLink.ts`), and
   `modules/`, one handler table per client-scoped contract module (the
   window, menu, dialogs, shell, nav, migration, account, client config,
-  releases).
+  releases, guide), each mapping its calls onto the module that owns
+  them.
 - `electron/`: the modules that need Electron: windows, the menu, deep
-  links, Clerk's bridge and its tokens, the updater, liveness, nuke's
-  live half, the log file.
+  links, the account, the migration's progress, Clerk's bridge and its
+  tokens, the updater, liveness (the login item and crash recovery),
+  nuke's live half, the log file.
 - Adding a menu item (`electron/menu.ts`): one a window handles is a
   push to the focused window, `clickBroadcast(<contract>, "<push>",
   <payload>)`,
@@ -34,7 +36,7 @@ decisions 6 and 9).
   "New Window"), with an ellipsis when the item asks for more first.
 - `core/`: the shell's logic that runs without Electron, so a proof
   drives it under plain node: the account's credential store and default
-  device name, the keychain reset, liveness's rate limits, the hold on
+  device name and icon, the guide, the keychain reset, liveness's rate limits, the hold on
   its host (`host/`: the watchdog, the restart ledger, the busy asks),
   the start after a nuke, and the shell's own JSON files (`files/`: the ones it
   writes on the way out, synchronously, and the rest on `FileSystem`).

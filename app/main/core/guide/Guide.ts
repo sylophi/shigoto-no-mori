@@ -126,7 +126,6 @@ export class GuideWindows extends Context.Service<
       GuideSessionEnded | GuidePageFailed,
       Scope.Scope
     >;
-    // Tells the window its guide changed.
     readonly tell: (
       windowId: number,
       state: GuideState | null,
@@ -600,7 +599,6 @@ const make = Effect.gen(function* () {
     );
   });
 
-  // A window that closes ends its session.
   yield* Effect.forkScoped(Stream.runForEach(windows.closed, end));
 
   // A quit ends every session, detaching from its page.

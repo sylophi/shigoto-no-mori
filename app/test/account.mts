@@ -1609,8 +1609,5 @@ it("account calls wait for the host's device id, but not past its restart budget
     "the-host",
   );
   assert.ok(failure instanceof HostUnreportedError);
-  assert.equal(
-    failure.message,
-    "The device id was asked before launch read it.",
-  );
+  assert.equal(failure.message, "No host came up to say which device this is.");
 });

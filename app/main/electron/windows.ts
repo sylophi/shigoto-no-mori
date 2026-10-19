@@ -36,7 +36,7 @@ import {
   ROUTE_FLAG,
 } from "../argFlags";
 import { noteWindowFocused, noteWindowGainedFocus } from "../hostProcess";
-import { clerkPublishableKey } from "../ipc/modules/account";
+import { clerkPublishableKey } from "./account";
 import { broadcast } from "../ipc/register";
 import { rendererSchemeUrl } from "./clerk";
 import { applyThemeSource, readClientConfigSync } from "./clientConfig";
@@ -91,7 +91,6 @@ type Held = {
 // Least recently focused first.
 const held: Held[] = [];
 
-// Who hears a window close (onWindowClosed).
 const closedListeners = new Set<(windowId: number) => void>();
 
 // The last window as it closed, which a quit that closing it started
@@ -149,20 +148,14 @@ function placement(bounds: Rectangle | undefined): Partial<Rectangle> {
     : { width: bounds.width, height: bounds.height };
 }
 
+const hasPage = (entry: Held): boolean =>
+  !entry.dead &&
+  !entry.window.isDestroyed() &&
+  !entry.window.webContents.isCrashed();
+
 // The window focused last that still has a page, if any.
 function frontmost(): Held | undefined {
-  for (let i = held.length - 1; i >= 0; i--) {
-    const entry = held[i];
-    if (
-      entry !== undefined &&
-      !entry.dead &&
-      !entry.window.isDestroyed() &&
-      !entry.window.webContents.isCrashed()
-    ) {
-      return entry;
-    }
-  }
-  return undefined;
+  return held.findLast(hasPage);
 }
 
 function create(
@@ -473,14 +466,7 @@ export function liveWindow(
   windowId: number,
 ): { readonly webContents: WebContents; readonly route: string } | undefined {
   const entry = find(windowId);
-  if (
-    entry === undefined ||
-    entry.dead ||
-    entry.window.isDestroyed() ||
-    entry.window.webContents.isCrashed()
-  ) {
-    return undefined;
-  }
+  if (entry === undefined || !hasPage(entry)) return undefined;
   return { webContents: entry.window.webContents, route: entry.route };
 }
 
