@@ -17,9 +17,7 @@
 // keychain" dialog, with the login password, once per read: "Allow"
 // grants one read, and a signed build reads the key twice at boot
 // (the sync safeStorage path and the async one the Clerk token store
-// prefers), each read two dialogs on current macOS. That is the four
-// prompts a signed 2.0 beta produced on a machine where an earlier
-// dev run had created the item.
+// prefers), each read two dialogs on current macOS.
 //
 // The cure is for the signed app to create the item itself, which
 // means deleting the one it found. Deletion needs no ACL grant (it
@@ -55,8 +53,7 @@ export type ResetIo = {
   hasMarker(): boolean;
   writeMarker(): void;
   // Removes one matching item. "missing" when there is none left. Any
-  // other failure throws, and the throw propagates: the marker is only
-  // ever written once a deletion has reported the item missing.
+  // other failure throws, and the throw propagates, leaving no marker.
   deleteItem(): "deleted" | "missing";
 };
 
@@ -64,7 +61,7 @@ export type ResetIo = {
 // a stray second keychain on that list could hold another copy that
 // safeStorage would go on finding. Deletion repeats until nothing
 // matches, bounded so a deleter that never says "missing" cannot
-// spin the launch.
+// spin the launch: past the bound the marker is written all the same.
 const MAX_DELETIONS = 8;
 
 // "owned": the marker is there, nothing was touched. "deleted": at

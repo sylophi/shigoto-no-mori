@@ -1,9 +1,8 @@
 // The dev profile this instance runs as (shared/packaging/appName.mts),
 // for the two consumers: main/index.ts (userData and app name) and the
-// account module (the default device name). Derived lazily from the
-// environment, which is there from process start, so no reader depends
-// on boot order. initDevProfile is the boot-time validation that turns
-// a bad value into an error box instead of a silent plain dev instance.
+// account (the default device name). Set by initDevProfile, at boot,
+// which turns a bad value into an error box instead of a silent plain
+// dev instance.
 import { app } from "electron";
 import {
   DEV_PROFILE_ENV,
@@ -13,25 +12,7 @@ import {
 import { envSetting } from "@shared/config";
 import { names } from "../flavor";
 
-const build = () => ({
-  packaged: app.isPackaged,
-  debuggable: names.debuggable,
-});
-const profileEnv = () => ({ [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV) });
-
-let profile: string | null | undefined;
-
-function current(): string | null {
-  if (profile === undefined) {
-    try {
-      profile = profileFromEnv(build(), profileEnv());
-    } catch {
-      // Malformed: initDevProfile reports it, readers see no profile.
-      profile = null;
-    }
-  }
-  return profile;
-}
+let profile: string | null = null;
 
 // Null for a release build and for the plain dev instance. Throws on
 // a malformed name, and on a profile without SHIGOMORI_DATA_DIR: that
@@ -39,8 +20,10 @@ function current(): string | null {
 // at boot rather than discovered on the account page. A refused
 // profile leaves the readers seeing no profile at all.
 export function initDevProfile(): string | null {
-  profile = null;
-  const name = profileFromEnv(build(), profileEnv());
+  const name = profileFromEnv(
+    { packaged: app.isPackaged, debuggable: names.debuggable },
+    { [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV) },
+  );
   if (name !== null && envSetting("SHIGOMORI_DATA_DIR") === undefined) {
     throw new Error(
       `${DEV_PROFILE_ENV} needs SHIGOMORI_DATA_DIR set to the profile's own ` +
@@ -54,6 +37,5 @@ export function initDevProfile(): string | null {
 
 // What this instance appends to names, "" when it is no profile.
 export function devProfileSuffix(): string {
-  const name = current();
-  return name === null ? "" : devProfileNameSuffix(name);
+  return profile === null ? "" : devProfileNameSuffix(profile);
 }

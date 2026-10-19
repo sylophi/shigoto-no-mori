@@ -20,28 +20,12 @@ import { requestShellPort } from "./preloadPort";
 // the system-browser OAuth transport, published beside the bridge.
 exposeClerkBridge();
 
-// This build's version, on argv (main passes it via
-// webPreferences.additionalArguments, which reaches sandboxed
-// preloads). The renderer sends it in the link's hello and compares it
-// against a remote host's welcome to flag a version skew. The device id
-// is the host's, and comes with its address (renderer/index.tsx).
-const appVersion = requireArgFlag(APP_VERSION_FLAG, "--sm-app-version");
-
+// The window's facts, on argv (argFlags.ts).
 const bridge = {
-  appVersion,
-  // The Clerk publishable key main resolved from the account config
-  // (baked, .env.local or process env). Empty on an unconfigured
-  // build, which the renderer reads as "mount no ClerkProvider".
+  appVersion: requireArgFlag(APP_VERSION_FLAG),
   clerkPublishableKey: optionalArgFlag(CLERK_PK_FLAG),
-  // The page this window opens on: home, a remembered one, or the one
-  // it was opened for.
-  route: requireArgFlag(ROUTE_FLAG, "--sm-route"),
-  // Client fact delivered the same way as the version: dev-only
-  // affordances key off the build showing the window, never the host
-  // (a packaged client on a dev host must not grow dev hotkeys).
+  route: requireArgFlag(ROUTE_FLAG),
   isDev: process.argv.includes(DEV_BUILD_FLAG),
-  // Started for the lab (argFlags.ts LAB_FLAG): the entry hands the
-  // lab's tools the page's api.
   isLab: process.argv.includes(LAB_FLAG),
   // Client fact, constant per bridge: true here, false on the web
   // bridge. App-only UI (the port-forward controls, which need a real
