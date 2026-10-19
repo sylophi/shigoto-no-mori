@@ -132,8 +132,11 @@ export async function startLabHub(): Promise<LabHub> {
   };
   const halt = async () => {
     signal("SIGTERM");
-    await waitFor(() => exited, "the lab hub to stop", 10_000).catch(() =>
-      signal("SIGKILL"),
+    await waitFor(() => exited, "the lab hub to stop", 10_000).catch(
+      async () => {
+        signal("SIGKILL");
+        await waitFor(() => exited, "the lab hub to be killed", 5_000);
+      },
     );
   };
   // Detached, it hears no Ctrl-C of the run's: the run's end takes it,

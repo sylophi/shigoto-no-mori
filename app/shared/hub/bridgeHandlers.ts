@@ -36,6 +36,7 @@ import type { InvokeOptions } from "@shared/ipc/transport";
 import type { Handlers, ViewObserver } from "@shigomori/contracts/types";
 import type { PeerConnection } from "@shared/hub/directDial";
 import * as Deferred from "effect/Deferred";
+import * as Exit from "effect/Exit";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
@@ -214,7 +215,7 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // Close and drop every cached direct session, for the quit path:
   // without it the remote host keeps a dead socket in its per-device
   // slot and relaunch lands on the supersede path instead of a clean
-  // reconnect. Owners do NOT call this -- directPlane.stop() owns
+  // reconnect. Owners do NOT call this -- the plane's scope owns
   // teardown, keeper latch first -- but it stays exported because the
   // direct-plane check tears its bare bridges down with it.
   closeDirectPeers(): void;
@@ -319,21 +320,23 @@ function hubHandlers(
         dropPeer(deviceId, entry, true);
       }).pipe(
         Effect.scoped,
-        Effect.catch((error) =>
-          Effect.andThen(
-            Deferred.fail(entry.connection, error),
-            // A failed dial must not poison the cache, or the peer would
-            // stay unreachable until restart even after its listener
-            // came back.
+        Effect.onExit((exit) => {
+          if (Exit.isSuccess(exit)) return Effect.void;
+          if (Cause.hasInterruptsOnly(exit.cause)) {
+            return Deferred.fail(
+              entry.connection,
+              new NoDirectConnectionError({ deviceId, reason: "closed" }),
+            );
+          }
+          // A failed dial, or one that died, must not poison the cache,
+          // or the peer would stay unreachable until restart even after
+          // its listener came back.
+          return Effect.andThen(
+            Deferred.fail(entry.connection, Cause.squash(exit.cause)),
             Effect.sync(() => dropPeer(deviceId, entry)),
-          ),
-        ),
-        Effect.onInterrupt(() =>
-          Deferred.fail(
-            entry.connection,
-            new NoDirectConnectionError({ deviceId, reason: "closed" }),
-          ),
-        ),
+          );
+        }),
+        Effect.ignore,
       ),
     );
     return entry;

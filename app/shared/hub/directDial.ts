@@ -9,7 +9,7 @@
 //
 // DIAL STRATEGY: a deadline for each of the attempt's two legs, the
 // ask and then the candidate race, so a wedged peer that never answers
-// cannot hang the bridge's cached promise forever, and an answer that
+// cannot hold the bridge's dial forever, and an answer that
 // came late (a peer just woken) leaves the race its whole budget: a
 // handshake across the tunnel after a slow answer used to run out and
 // win on the next rung instead. All candidate SOCKETS open concurrently, each sealed with its own ticket

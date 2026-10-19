@@ -253,14 +253,15 @@ it("sends a worktree while the hub goes away: it completes over the direct link 
   const ended = a.page.getByRole("heading", {
     name: /^(Transplant complete|Transplant stopped)$/,
   });
+  const ids = [(await hubView(a))[1], (await hubView(b))[1]] as const;
   await send();
   let outcome: string | null = null;
   try {
-    await devices.hub.pause();
     expect(
       await ended.isVisible(),
-      "the send ended before the hub went away",
+      "the send ended before the hub was cut",
     ).toBe(false);
+    await devices.hub.pause();
     await ended.waitFor({ timeout: 180_000 });
     outcome = await ended.textContent();
     if (outcome === "Transplant stopped") {
@@ -271,12 +272,13 @@ it("sends a worktree while the hub goes away: it completes over the direct link 
   } finally {
     await devices.hub.resume();
   }
-  // Back on the hub, each sees the other with nothing enrolled again.
-  for (const [lab, other] of [
-    [a, b],
-    [b, a],
+  // Back on the hub, each sees the other, as the device it was.
+  for (const [lab, other, otherBefore] of [
+    [a, b, ids[1]],
+    [b, a, ids[0]],
   ] as const) {
     const otherId = (await hubView(other))[1];
+    expect(otherId).toBe(otherBefore);
     await expect
       .poll(async () => (await hubView(lab))[0].onlineDeviceIds, {
         timeout: 60_000,

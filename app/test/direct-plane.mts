@@ -1660,6 +1660,24 @@ it("a dial ended mid-open, by the roster sweep or the bridge's close, closes its
   }
 });
 
+it("a dial that dies settles its waiters and leaves the slot empty, so the next dial starts afresh", async () => {
+  let dials = 0;
+  const bridge = madeOn(
+    Context.empty(),
+    makeHubHandlers({
+      status: () => QUIET_STATUS,
+      connectDirect: () =>
+        Effect.suspend(() => {
+          dials += 1;
+          return Effect.die(new Error("the dialer threw"));
+        }),
+    }),
+  );
+  await assert.rejects(() => dialOn(bridge, LISTENER), /the dialer threw/);
+  await assert.rejects(() => dialOn(bridge, LISTENER), /the dialer threw/);
+  assert.equal(dials, 2, "the dead dial stayed in the cache");
+});
+
 it("a dial ended mid-ask drops its hub ask at once", async () => {
   let aborted = false;
   const dialer = createDirectDialer({
