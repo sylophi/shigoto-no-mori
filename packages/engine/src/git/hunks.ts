@@ -123,15 +123,17 @@ export const makeHunks = ({
     const { snapshotPaths } = gitIndex;
 
     const diffHead = (worktree: string, file: string, cached: boolean) =>
+      // diff-index, which never writes the index back (see the runner).
       run(worktree, [
         ...PATH_OPTS,
-        "diff",
+        "diff-index",
+        "-p",
         "--no-color",
         "--no-ext-diff",
         "--no-textconv",
-        "--no-renames",
         "-U0",
-        ...(cached ? ["--cached"] : ["HEAD"]),
+        ...(cached ? ["--cached"] : []),
+        "HEAD",
         "--",
         file,
       ]);

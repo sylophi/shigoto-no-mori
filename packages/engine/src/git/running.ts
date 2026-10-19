@@ -46,11 +46,11 @@ const STALL_LIMIT = [
 
 // The writes that take index.lock before they change anything, so one
 // refused because another git holds it changed nothing and is asked
-// again: the lock is held for moments, by a `git status` or a `git diff`
-// that writes back the index it refreshed (the app's own views read
-// with both) or another program's git. A command of several steps (a
-// stash, a merge, a rebase, a pull) can be refused after its first, and
-// isn't: a stash finishes its own (git/stash.ts).
+// again: the lock is held for moments, by another program's git (a
+// person's `git status` writing back the index it refreshed). A
+// command of several steps (a stash, a merge, a rebase, a pull) can be
+// refused after its first, and isn't: a stash finishes its own
+// (git/stash.ts).
 const WAITS_FOR_INDEX = new Set([
   "add",
   "apply",
@@ -64,6 +64,17 @@ const WAITS_FOR_INDEX = new Set([
   "switch",
   "update-index",
 ]);
+
+// What a read leaves the index as: a `git status` refreshes the index's
+// stat cache and writes it back under index.lock when it can, which
+// refuses the person's own `git commit` or `rebase` in a terminal at
+// that moment (a probe on this repository: 68 of 400 writes refused
+// beside a listing every 0.3 s, none with this). A status is always a
+// read. Porcelain `git diff` writes it back too and ignores this, so
+// the reads of the working tree are plumbing (`diff-index`,
+// `diff-files`), which never write it.
+const OPTIONAL_LOCKS_OFF = { GIT_OPTIONAL_LOCKS: "0" };
+
 // git's own refusal, its first line, "fatal:" or (a stash's first
 // step) "error:". A post-checkout hook that prints the same comes after
 // the switch's "Switched to branch"; a pre-commit hook's run again with
@@ -128,7 +139,11 @@ export const makeRunning = Effect.gen(function* () {
                   cwd,
                   // LC_ALL=C pins git's messages to English, so what the
                   // engine matches on and relays reads the same everywhere.
-                  env: { ...options.env, LC_ALL: "C" },
+                  env: {
+                    ...options.env,
+                    LC_ALL: "C",
+                    ...(subcommand === "status" ? OPTIONAL_LOCKS_OFF : {}),
+                  },
                   extendEnv: true,
                   // In a process group of its own (the spawner's default), so
                   // closing the scope ends git with its hooks and its ssh.
@@ -220,6 +235,14 @@ export const makeRunning = Effect.gen(function* () {
       Effect.catchTags({ GitCommandError: () => Effect.succeed("") }),
     );
 
+  // A status leaves the index's stat cache as it found it (see
+  // OPTIONAL_LOCKS_OFF), and a few writes check files by that cache
+  // alone: `read-tree -m -u`, `reset --keep` and `--merge`, and the
+  // aborts built on them. Refreshed before them, so a file saved with
+  // its content unchanged isn't read as in the way.
+  const refreshIndex = (worktree: string) =>
+    runLenient(worktree, ["update-index", "-q", "--refresh"]);
+
   // Exit 0 or not, for the checks git answers with its exit code.
   const succeeds = (cwd: string, args: readonly string[]) =>
     run(cwd, args).pipe(
@@ -267,6 +290,7 @@ export const makeRunning = Effect.gen(function* () {
     run,
     runBytes,
     runLenient,
+    refreshIndex,
     succeeds,
     runChunked,
     onIndex,

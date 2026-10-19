@@ -43,7 +43,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const { run, onIndex } = running;
+    const { run, onIndex, refreshIndex } = running;
 
     const there = (file: string) =>
       fs.exists(file).pipe(Effect.orElseSucceed(() => false));
@@ -56,7 +56,13 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
       worktree: string,
     ) {
       return splitZ(
-        yield* run(worktree, ["diff", "--name-only", "--diff-filter=U", "-z"]),
+        // diff-files, which never writes the index back (see the runner).
+        yield* run(worktree, [
+          "diff-files",
+          "--name-only",
+          "--diff-filter=U",
+          "-z",
+        ]),
       );
     });
 
@@ -104,6 +110,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
       if ((yield* operationInProgress(yield* gitDir(worktree))) !== verb) {
         return;
       }
+      yield* refreshIndex(worktree);
       yield* waitingForIndex(run(worktree, [verb, "--abort"])).pipe(
         Effect.mapError(
           () =>
@@ -244,6 +251,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
         worktree,
         Effect.gen(function* () {
           const { operation } = yield* readOperation(worktree);
+          yield* refreshIndex(worktree);
           switch (operation) {
             case "merge":
             case "rebase":
