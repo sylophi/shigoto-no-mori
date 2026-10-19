@@ -21,6 +21,13 @@ export type Document = Readonly<Record<string, unknown>> & {
   readonly worktree?: Worktrees.WorktreeRow;
   readonly deletedBranch?: string | null;
   readonly outcome?: Outcome;
+  // A pull request's: the one opened, or merged.
+  readonly url?: string;
+  readonly number?: number;
+  readonly state?: string;
+  readonly title?: string;
+  readonly method?: MergeMethod;
+  readonly catchUpSkipped?: string;
   readonly merged?: Readonly<Record<string, unknown>>;
   // A stack's land or removal: the layers it removed, before its own.
   readonly stack?: { readonly removed: ReadonlyArray<Worktrees.Removed> };
@@ -323,7 +330,7 @@ export const mergeResultFields = (
   pr: PullRequestSummary,
   branch: string,
   method: MergeMethod | undefined,
-): Record<string, unknown> => ({
+): Document => ({
   number: pr.number,
   title: pr.title,
   branch,

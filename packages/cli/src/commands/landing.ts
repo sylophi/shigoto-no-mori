@@ -3,6 +3,11 @@
 // it, and waiting for GitHub to merge it), land merges and cleans up, done puts a checkout back on the primary branch,
 // and rm --stack cleans up a landed stack. The engine answers each with
 // the --json document the Go sm printed, which a person's lines are read from.
+import { cdHintFor, cdNote, removeFlags } from "../removal.ts";
+import {
+  type MergeMethod,
+  MergeMethodSchema,
+} from "@shigomori/contracts/schemas/pullRequest";
 import { execFile } from "node:child_process";
 import * as Landing from "@shigomori/engine/Landing";
 import * as Worktrees from "@shigomori/engine/Worktrees";
@@ -16,7 +21,6 @@ import { withoutCdFile } from "../handOver.ts";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import {
-  cwdInside,
   given,
   resolveProject,
   resolveWorktree,
@@ -26,7 +30,7 @@ import {
 import { emit, note, out, Output, styles } from "../output.ts";
 import { reporter } from "../reporter.ts";
 
-type Doc = Readonly<Record<string, unknown>>;
+type Doc = Landing.Document;
 
 // A cleanup that failed after the merge, whose document said why.
 class CleanupDidNotFinish extends Schema.TaggedError<CleanupDidNotFinish>()(
@@ -47,8 +51,7 @@ class OpenFailed extends Schema.TaggedError<OpenFailed>()("OpenFailed", {
   }
 }
 
-const METHODS = ["merge", "squash", "rebase"] as const;
-type Method = (typeof METHODS)[number];
+const isMethod = Schema.is(MergeMethodSchema);
 
 const methodFlag = Flag.String("method").pipe(
   Flag.withAlias("m"),
@@ -58,12 +61,7 @@ const methodFlag = Flag.String("method").pipe(
 
 const methodOf = (flag: Option.Option<string>) => {
   const method = Option.getOrUndefined(given(flag));
-  if (
-    method === undefined ||
-    (METHODS as ReadonlyArray<string>).includes(method)
-  ) {
-    return Effect.succeed(method as Method | undefined);
-  }
+  if (method === undefined || isMethod(method)) return Effect.succeed(method);
   return Effect.fail(
     new UsageError({
       problem: `Invalid --method ${JSON.stringify(method)} (merge, squash, or rebase).`,
@@ -76,22 +74,6 @@ const stackFlag = Flag.Boolean("stack").pipe(
   Flag.withDefault(false),
 );
 
-const removeFlags = {
-  force: Flag.Boolean("force").pipe(
-    Flag.withAlias("f"),
-    Flag.withDescription("Remove with uncommitted changes"),
-    Flag.withDefault(false),
-  ),
-  keepBranch: Flag.Boolean("keep-branch").pipe(
-    Flag.withDescription("Keep the branch"),
-    Flag.withDefault(false),
-  ),
-  skipCleanup: Flag.Boolean("skip-cleanup").pipe(
-    Flag.withDescription("Skip the teardown and port release"),
-    Flag.withDefault(false),
-  ),
-};
-
 // The positionals it needs are read and the rest let be, as the Go sm did.
 const target = {
   ...worktreeFlags,
@@ -99,14 +81,12 @@ const target = {
   rest,
 };
 
-const text = (value: unknown) => (typeof value === "string" ? value : "");
-
 // A merge as a person reads it: merged, queued, or auto-merge armed.
 const mergeLine = (
   outcome: {
-    readonly number: unknown;
-    readonly method: unknown;
-    readonly outcome: unknown;
+    readonly number: number | undefined;
+    readonly method: MergeMethod | undefined;
+    readonly outcome: Doc["outcome"];
     readonly alreadyArmed?: boolean | undefined;
   },
   title: string,
@@ -122,15 +102,15 @@ const mergeLine = (
           : "merged";
     return out(
       styles(stdoutColor).green(
-        `${verb} PR #${String(outcome.number)} (${text(outcome.method)}): ${title}`,
+        `${verb} PR #${String(outcome.number)} (${outcome.method ?? ""}): ${title}`,
       ),
     );
   });
 
 const docOutcome = (doc: Doc) => ({
-  number: doc["number"],
-  method: doc["method"],
-  outcome: doc["outcome"],
+  number: doc.number,
+  method: doc.method,
+  outcome: doc.outcome,
 });
 
 // The landing reporter: the worktree events as the other verbs report
@@ -158,7 +138,7 @@ const landingReporter = Effect.gen(function* () {
         ? emit(event)
         : out(
             green(
-              `merged PR #${String(event["number"])} (${text(event["method"])}): ${pr.title}`,
+              `merged PR #${String(event.number)} (${event.method ?? ""}): ${pr.title}`,
             ),
           ),
     landing: (pr, method) =>
@@ -194,13 +174,13 @@ const failureOf = (doc: Landing.Document) =>
 // said as they happened (landingReporter).
 const reportCleanup = (doc: Landing.Document, located: Worktrees.Located) =>
   Effect.gen(function* () {
-    const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
+    const { json, stdoutColor } = yield* Effect.service(Output);
     const { removed, worktree } = doc;
     // A shell standing in the removed folder is told where to go.
     const hint =
-      removed !== undefined && cwdInside(removed.path)
-        ? located.project.path
-        : "";
+      removed === undefined
+        ? ""
+        : cdHintFor(removed.path, located.project.path);
     if (doc.ok === false) {
       if (json) {
         yield* emit(doc);
@@ -212,7 +192,6 @@ const reportCleanup = (doc: Landing.Document, located: Worktrees.Located) =>
       return yield* emit(hint === "" ? doc : { ...doc, cdHint: hint });
     }
     const { dim, green } = styles(stdoutColor);
-    const quiet = styles(stderrColor).dim;
     if (worktree !== undefined) {
       const deleted = doc.deletedBranch ?? "";
       return yield* out(
@@ -222,13 +201,7 @@ const reportCleanup = (doc: Landing.Document, located: Worktrees.Located) =>
     }
     if (removed !== undefined) {
       yield* out(green(`removed ${removed.name}`));
-      if (hint !== "") {
-        yield* note(
-          quiet(
-            `note: your shell is inside the removed worktree. Run \`cd ${hint}\``,
-          ),
-        );
-      }
+      if (hint !== "") yield* cdNote("the removed worktree", hint);
     }
   });
 
@@ -238,7 +211,7 @@ export const pr = Command.make("pr", target, (input) =>
     const doc = yield* (yield* Landing.Landing).pullRequest(located);
     const { json, stderrColor } = yield* Effect.service(Output);
     if (json) return yield* emit(doc);
-    const url = text(doc["url"]);
+    const url = doc.url ?? "";
     yield* Effect.callback<void, OpenFailed>((resume) => {
       execFile("open", [url], { env: withoutCdFile() }, (error) => {
         resume(
@@ -249,7 +222,7 @@ export const pr = Command.make("pr", target, (input) =>
       });
     });
     yield* out(
-      `opened PR #${String(doc["number"])} (${text(doc["state"]).toLowerCase()}): ${text(doc["title"])}`,
+      `opened PR #${String(doc.number)} (${(doc.state ?? "").toLowerCase()}): ${doc.title ?? ""}`,
     );
     yield* note(styles(stderrColor).dim(url));
   }),
@@ -292,7 +265,7 @@ export const merge = Command.make(
       if (json) return yield* emit(doc);
       // A stack's layers were said as they merged.
       if (input.stack) return;
-      yield* mergeLine(docOutcome(doc), text(doc["title"]));
+      yield* mergeLine(docOutcome(doc), doc.title ?? "");
       yield* note(
         styles(stderrColor).dim(
           `next: \`${binaryName} done\` (primary checkout) or \`${binaryName} rm ${located.worktree.name}\` (managed worktree)`,
@@ -327,7 +300,7 @@ export const land = Command.make(
       // A stack a merge queue took: nothing to clean up yet.
       if (doc.merged === undefined && doc.outcome !== undefined) {
         if (json) return yield* emit(doc);
-        yield* mergeLine(docOutcome(doc), text(doc["title"]));
+        yield* mergeLine(docOutcome(doc), doc.title ?? "");
         return yield* note(
           styles(stderrColor).dim(
             `nothing removed yet. Run \`${binaryName} land\` again once GitHub has merged it`,
@@ -359,9 +332,9 @@ export const done = Command.make(
         force: input.force,
       });
       yield* reportCleanup(doc, located);
-      const skipped = doc["catchUpSkipped"];
+      const skipped = doc.catchUpSkipped;
       const { json, stderrColor } = yield* Effect.service(Output);
-      if (!json && typeof skipped === "string") {
+      if (!json && skipped !== undefined) {
         yield* note(styles(stderrColor).dim(`skipped catch-up: ${skipped}`));
       }
     }),

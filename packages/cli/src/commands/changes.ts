@@ -1,13 +1,16 @@
 // The worktree verbs that change things: create, adopt and setup (each
 // waits for the lifecycle scripts), rm, move, and rekey for the app.
+import { cdHintFor, cdNote, removeFlags } from "../removal.ts";
 import { isAbsolute } from "node:path";
 import { envVar } from "@shigomori/engine/environment";
 import type * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
 import * as Agents from "@shigomori/engine/Agents";
-import * as Control from "@shigomori/engine/Control";
-import type * as Git from "@shigomori/engine/Git";
 import * as Worktrees from "@shigomori/engine/Worktrees";
+import {
+  moveWorktree,
+  renameWorktree,
+} from "@shigomori/engine/worktrees/throughApp";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -54,17 +57,6 @@ const force = (description: string) =>
     Flag.withAlias("f"),
     Flag.withDescription(description),
     Flag.withDefault(false),
-  );
-
-// Where to go when the shell stands in a folder that is gone: "the
-// removed worktree" or "the old location".
-const cdNote = (what: string, path: string) =>
-  Effect.flatMap(Effect.service(Output), ({ stderrColor }) =>
-    note(
-      styles(stderrColor).dim(
-        `note: your shell is inside ${what}. Run \`cd ${path}\``,
-      ),
-    ),
   );
 
 // A new worktree's last word: the failed scripts as warnings and the
@@ -255,9 +247,7 @@ export const rm = Command.make(
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
     rest,
-    force: force("Remove it with uncommitted changes"),
-    keepBranch: flag("keep-branch", "Keep its branch"),
-    skipCleanup: flag("skip-cleanup", "Skip its teardown and port release"),
+    ...removeFlags,
     stack: flag("stack", "The worktrees of the landed stack under it too"),
   },
   (input) =>
@@ -300,7 +290,7 @@ export const rm = Command.make(
           ),
         );
       // A shell left standing in the removed folder is told where to go.
-      const hint = cwdInside(removed.path) ? located.project.path : "";
+      const hint = cdHintFor(removed.path, located.project.path);
       if (json) {
         return yield* emit({
           ok: true,
@@ -319,48 +309,15 @@ export const rm = Command.make(
   changing,
 );
 
-type Moved = {
-  readonly worktree: { readonly path: string };
-  readonly previousId: string;
-};
-
-// A move or a rename goes through the running app, which refuses it
-// while scripts or terminals it runs are open in the worktree, and
-// re-opens the mirrors rooted there. With no app running, nothing runs
-// there, and the engine makes it here.
-const throughApp = (
-  located: Worktrees.Located,
-  channel: string,
-  input: Record<string, string>,
-  inEngine: Effect.Effect<
-    Moved,
-    Worktrees.WorktreeRefused | Worktrees.UnknownWorktree | Git.GitError
-  >,
-) =>
-  Effect.gen(function* () {
-    const control = yield* Control.Control;
-    return yield* control
-      .call(channel, {
-        projectId: located.project.id,
-        worktreeId: located.worktree.id,
-        ...input,
-      })
-      .pipe(
-        Effect.map(
-          (worktree): Moved => ({
-            worktree: worktree as Moved["worktree"],
-            previousId: located.worktree.id,
-          }),
-        ),
-        Effect.catchTag("AppNotRunning", () => inEngine),
-      );
-  });
-
 // A move or a rename made, printed, with a note for a shell that stood
 // in the old folder (looked at before the move).
 const reportMoved = <E, R>(
   located: Worktrees.Located,
-  move: Effect.Effect<Moved, E, R>,
+  move: Effect.Effect<
+    { readonly worktree: Worktrees.WorktreeRow; readonly previousId: string },
+    E,
+    R
+  >,
 ) =>
   Effect.gen(function* () {
     const { json } = yield* Effect.service(Output);
@@ -388,23 +345,14 @@ export const move = Command.make(
         });
       }
       const destination = yield* absolute(input.args[count - 1] ?? "");
-      const { located } = yield* resolveWorktree(
+      const { at, located } = yield* resolveWorktree(
         {
           ...input,
           ref: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
         },
         false,
       );
-      const worktrees = yield* Worktrees.Worktrees;
-      yield* reportMoved(
-        located,
-        throughApp(
-          located,
-          "worktrees:relocate",
-          { destinationPath: destination },
-          worktrees.move(located, destination),
-        ),
-      );
+      yield* reportMoved(located, moveWorktree(at, located, destination));
     }),
 ).pipe(
   Command.withDescription("Move a worktree's folder"),
@@ -427,23 +375,14 @@ export const rename = Command.make(
         });
       }
       const name = input.args[count - 1] ?? "";
-      const { located } = yield* resolveWorktree(
+      const { at, located } = yield* resolveWorktree(
         {
           ...input,
           ref: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
         },
         false,
       );
-      const worktrees = yield* Worktrees.Worktrees;
-      yield* reportMoved(
-        located,
-        throughApp(
-          located,
-          "worktrees:rename",
-          { name },
-          worktrees.rename(located.project, located.worktree.id, name),
-        ),
-      );
+      yield* reportMoved(located, renameWorktree(at, located, name));
     }),
 ).pipe(
   Command.withDescription("Rename a worktree's folder"),
