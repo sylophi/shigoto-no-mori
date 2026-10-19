@@ -39,9 +39,17 @@ export class Shell extends Context.Service<
       readonly state: Effect.Effect<UpdaterState>;
       readonly noteState: (state: UpdaterState) => Effect.Effect<void>;
     };
+    // Before a move or a reset of the data folder: the updater starts
+    // nothing there from now on (null: no check or install, one under
+    // way ended), or the version an install under way restarts into (""
+    // when not known). A shell that can't be asked holds nothing.
+    readonly holdUpdater: (
+      forWhat: "move" | "reset",
+    ) => Effect.Effect<string | null>;
+    // A move that failed before the folder moved: the updater as it was.
+    readonly resumeUpdater: Effect.Effect<void>;
     // The bridge the terminal's `sm update` asks the updater through,
-    // stopped before a wipe of the data folder it lives in. Asked
-    // without waiting.
+    // stopped just before the folder moves. Asked without waiting.
     readonly stopUpdaterBridge: Effect.Effect<void>;
     // The v3 migration as it goes, which the shell serves its windows.
     readonly migration: (
@@ -54,3 +62,10 @@ export class Shell extends Context.Service<
     ) => Effect.Effect<GuideReply, CallFailure>;
   }
 >()("sm/host/Shell") {}
+
+// An install under way, in the words a move or a reset refuses with,
+// from the version holdUpdater answered.
+export const installingWords = (version: string) =>
+  version === ""
+    ? "An update is installing, and the app restarts into it."
+    : `The update to ${version} is installing, and the app restarts into it.`;

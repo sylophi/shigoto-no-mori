@@ -23,6 +23,7 @@
 // before its re-key to its end, and a copy to another volume goes into a
 // sibling of the destination, flushed to disk and renamed in only once
 // whole.
+import { installingWords } from "@host/lib/Shell";
 import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
@@ -161,6 +162,9 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // The caller closes its fs watchers on the data dir here, before the
     // rename -- they're moot anyway, the app relaunches after the move.
     readonly beforeMove: Effect.Effect<void, E, R>;
+    // The updater let go of the data folder, or the version an install
+    // under way restarts into (Shell.holdUpdater).
+    readonly holdUpdater: Effect.Effect<string | null, never, R>;
     // Every script's kill chain, waited for (Scripts.stopAll).
     readonly killAllScripts: Effect.Effect<void, never, R>;
     // Whether a worktree is being sent or brought here, and the devices
@@ -374,6 +378,14 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
           `Refusing to move: project "${trapped.name}" lives inside ` +
           `${oldDir} and would be moved with it. Move the repository ` +
           "out first.",
+      });
+    }
+    // The last check: an install under way restarts the app out of this
+    // folder, and refuses. Past it, no check or install starts.
+    const updating = yield* opts.holdUpdater;
+    if (updating !== null) {
+      return yield* new DataDirMoveError({
+        reason: `${installingWords(updating)} Move the data folder after the restart.`,
       });
     }
     // Scripts running inside the worktrees we're about to move would

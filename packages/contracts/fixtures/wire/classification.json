@@ -1132,6 +1132,10 @@
     "kind": "invoke",
     "scope": "client"
   },
+  "shellCalls:holdUpdater": {
+    "kind": "invoke",
+    "scope": "client"
+  },
   "shellCalls:migration": {
     "kind": "invoke",
     "scope": "client"
@@ -1145,6 +1149,10 @@
     "scope": "client"
   },
   "shellCalls:relaunch": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:resumeUpdater": {
     "kind": "invoke",
     "scope": "client"
   },

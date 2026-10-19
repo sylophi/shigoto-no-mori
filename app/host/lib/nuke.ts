@@ -12,6 +12,7 @@
 // could not, with why. Every step reads what is there now, so a second
 // run after an interrupted one finishes the job. The projects' repos,
 // external worktrees and terrier's registry are never touched.
+import { installingWords } from "@host/lib/Shell";
 import { homedir } from "node:os";
 import type {
   NukeProgress,
@@ -88,6 +89,9 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   // terminal command and its shell hooks, the agent hooks), answering
   // what it couldn't (leftIf).
   readonly uninstall: Effect.Effect<ReadonlyArray<Left>, never, U>;
+  // The updater let go of the data folder, or the version an install
+  // under way restarts into (Shell.holdUpdater).
+  readonly holdUpdater: Effect.Effect<string | null>;
   readonly home?: string;
   // How long one worktree's teardown may run (Worktrees.forceRemove's
   // minute by default).
@@ -98,6 +102,14 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   // Refuse up front, before any script is stopped or worktree removed.
   const trap = nukeTrap(projects, dataDir(), options.home ?? homedir());
   if (trap !== null) return yield* new NukeRefusedError({ reason: trap });
+  // An install restarts the app out of the folder the reset wipes, and
+  // a check stages into it. Past this, neither starts.
+  const updating = yield* options.holdUpdater;
+  if (updating !== null) {
+    return yield* new NukeRefusedError({
+      reason: `${installingWords(updating)} Reset after the restart.`,
+    });
+  }
   const left: Left[] = [];
 
   // Dev servers and watchers may have their cwd inside the worktrees

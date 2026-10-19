@@ -47,6 +47,8 @@ import { updateEndpoints } from "./updateEndpoints";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Updater from "@shigomori/engine/Updater";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FiberHandle from "effect/FiberHandle";
 import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
@@ -75,6 +77,10 @@ const STAGE_TIMEOUT_MS = 30 * 60 * 1000;
 let state: UpdaterState = { kind: "idle" };
 let started = false;
 let installing = false;
+// Set before a move or a reset of the data folder (hold): no check or
+// install starts after it, until the restart that follows, or a move
+// that failed before the folder moved resumes it.
+let held = false;
 let checkInFlight = false;
 let failedChecks = 0;
 let ticksToCheck = 1;
@@ -197,8 +203,11 @@ let run:
   | (<A>(effect: Effect.Effect<A, never, UpdaterServices>) => Promise<A>)
   | null = null;
 function checkForUpdates(): void {
-  fork?.(runCheck);
+  fork?.(checkInTurn);
 }
+// Ends the check under way, on the layer's handle (hold).
+let endCheck: Effect.Effect<void> | null = null;
+let checkInTurn: Effect.Effect<void, never, UpdaterServices> = Effect.void;
 
 // One check at a time. The engine holds a cross-process staging lock,
 // so a terminal `sm update` racing this check is also safe. The
@@ -240,7 +249,7 @@ const stage = (shown: UpdaterState | null) =>
 // a check that ran clears it.
 const runCheck: Effect.Effect<void, never, UpdaterServices> = Effect.suspend(
   () =>
-    !started || checkInFlight || state.kind === "downloading"
+    !started || held || checkInFlight || state.kind === "downloading"
       ? Effect.void
       : check,
 );
@@ -319,6 +328,7 @@ async function hasInstallableStaged(): Promise<boolean> {
 // the refusal instead and the caller's toast carries it.
 async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
   if (installing) return "installing";
+  if (held) throw new Error(heldWords);
   if (!(await hasInstallableStaged())) return "nothing-staged";
   if (unattended) {
     const refusal = busyRemoteRefusal(
@@ -342,6 +352,9 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
     if (installing) return "installing";
     if (!(await hasInstallableStaged())) return "nothing-staged";
   }
+  // A move or a reset of the data folder that began while the dialog
+  // was up.
+  if (held) throw new Error(heldWords);
   installing = true;
   try {
     // Resolves only once the installer actually spawned: quitting on a
@@ -382,6 +395,7 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
 // waits on the answer, and the install checks again when it comes.
 async function updateNow(unattended: boolean): Promise<void> {
   if (installing) return;
+  if (held) throw new Error(heldWords);
   if ((await readInstallableStaged()) !== null) {
     await installUpdate(unattended);
     return;
@@ -399,6 +413,43 @@ async function updateNow(unattended: boolean): Promise<void> {
   else checkForUpdates();
 }
 
+// What an install asked for during a hold answers.
+let heldWords = "";
+
+// Before a move or a reset of the data folder, which staging writes
+// under and an install restarts out of: the version an install under
+// way restarts into ("" when not known), which the caller refuses on;
+// otherwise no check or install starts from here on, and a check under
+// way is ended (its staging lock goes with it, and the next run prunes
+// what it left). The bridge keeps answering `sm update` (with these
+// words): a move stops it once nothing can fail before the folder moves
+// (stopUpdaterBridge), and a reset's folder goes at the next start.
+async function hold(input: {
+  readonly for: "move" | "reset";
+}): Promise<string | null> {
+  if (installing) return state.kind === "ready" ? state.version : "";
+  held = true;
+  // An Update now armed for the check this ends goes with it, rather
+  // than come back with a later check after a resume.
+  installWhenStaged = null;
+  armedMidCheck = false;
+  heldWords =
+    input.for === "move"
+      ? "The data folder is being moved. The update can install once the app has restarted."
+      : "The app is being reset. The update can install once it has restarted.";
+  if (endCheck !== null) await Effect.runPromise(endCheck);
+  if (state.kind === "checking" || state.kind === "downloading") {
+    setState({ kind: "idle" });
+  }
+  return null;
+}
+
+// A move that failed before the folder moved: the app carries on, and
+// its updater with it.
+function resume(): void {
+  held = false;
+}
+
 // The state as it stands, for a host that starts after it moved.
 export function currentUpdaterState(): UpdaterState {
   return state;
@@ -412,6 +463,8 @@ export const updaterCalls = {
   install: async (unattended: boolean) =>
     void (await installUpdate(unattended)),
   update: updateNow,
+  hold,
+  resume: async () => resume(),
 };
 
 // The updater, for the length of the shell's graph: the staged update
@@ -425,10 +478,22 @@ export const layer = Layer.effectDiscard(
     const runPromise = yield* FiberSet.makeRuntimePromise<UpdaterServices>();
     fork = (effect) => void runFork(effect);
     run = runPromise;
+    // Every check on one handle: one at a time, and a hold ends the one
+    // under way.
+    const checks = yield* FiberHandle.make<void>();
+    // Awaited, not joined: a check asked while one runs is skipped, the
+    // handle answering it with a fiber already interrupted, which a join
+    // would pass on to the asker (the periodic loop, ended for good).
+    checkInTurn = FiberHandle.run(checks, runCheck, {
+      onlyIfMissing: true,
+    }).pipe(Effect.flatMap(Fiber.await), Effect.asVoid);
+    endCheck = FiberHandle.clear(checks);
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         fork = null;
         run = null;
+        endCheck = null;
+        checkInTurn = Effect.void;
       }),
     );
     // A dev run, or a test flavor, has no releases to move to, but a
@@ -469,13 +534,13 @@ export const layer = Layer.effectDiscard(
           setState({ kind: "error", message: failure.message, install: true });
         }
         yield* Effect.sleep(FIRST_CHECK_DELAY_MS);
-        yield* runCheck;
+        yield* checkInTurn;
         return yield* Effect.forever(
           Effect.sleep(CHECK_INTERVAL_MS).pipe(
             Effect.andThen(
               Effect.suspend(() => {
                 ticksToCheck -= 1;
-                return ticksToCheck <= 0 ? runCheck : Effect.void;
+                return ticksToCheck <= 0 ? checkInTurn : Effect.void;
               }),
             ),
           ),
