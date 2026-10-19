@@ -467,6 +467,14 @@ export function withoutPeerState(config: ClientConfig): ClientConfig {
   return rest;
 }
 
+// Whether an account change leaves the account the peer-keyed state was
+// built under (withoutPeerState): a sign-out or a switch, not a rename
+// or a sign-in from signed out.
+export const departed = (change: {
+  readonly before: string | null;
+  readonly after: string | null;
+}): boolean => change.before !== null && change.after !== change.before;
+
 // The value of an absent client key that has a default. A key saved
 // equal to its default is stored as absent (`storedClientSetting`).
 const CLIENT_CONFIG_DEFAULTS = {

@@ -59,6 +59,8 @@ import { createAppQueryClient } from "@/lib/queryClientOptions";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { deriveAccountId } from "../shared/account/token.ts";
+import { makeAccountHandlers } from "../shared/account/handlers.ts";
+import { departed } from "@shigomori/contracts/schemas/config";
 import { deviceKeyPair, toBase64Url } from "../shared/crypto/deviceKey.ts";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
@@ -76,6 +78,7 @@ import {
   deviceShapeFromDmi,
 } from "../main/core/account/defaultDeviceIcon.ts";
 import {
+  type AccountStatus,
   AccountStatusSchema,
   accountContract,
 } from "@shigomori/contracts/modules/account";
@@ -641,6 +644,98 @@ it("enroll flow: enrollDevice stores the credential with the derived accountId u
     /not configured/,
   );
   assert.equal(calls.length, before, "an unconfigured enroll fetched");
+});
+
+it("enroll flow: a parked revoke the hub rate-limits is what an enrolled-elsewhere enroll says, not the refusal it stood behind", async () => {
+  const store = memoryStore();
+  store.park({
+    credential: "cred-1",
+    deviceKey: "device-key",
+    accountId: "user_abc",
+    deviceName: "Renamed",
+  });
+  const { fetchImpl } = recordingFetch((_url, init) =>
+    init.method === "DELETE"
+      ? new Response(JSON.stringify({ _tag: "HubRateLimitedError" }), {
+          status: 429,
+          headers: { "retry-after": "60" },
+        })
+      : json({ _tag: "HubDeviceEnrolledElsewhereError" }, 409),
+  );
+  await assert.rejects(
+    () =>
+      enrollDevice(
+        {
+          config: CONFIG,
+          service: createAccountService({ baseUrl: CONFIG.hubUrl, fetchImpl }),
+          store,
+          deviceId: "device-uuid",
+          fallbackDeviceName: "Fallback Mac",
+          platform: "darwin",
+          detectedIcon: "laptop",
+        },
+        fakeSessionJwt("user_other"),
+      ),
+    (error) => isHubRateLimitedError(error),
+  );
+  assert.equal(store.readParked()?.credential, "cred-1");
+});
+
+it("handlers: both shells' calls show a signed-out device's remembered name, ask a provisional default once more before an enroll keeps it, and tell each change under the account before and after", async () => {
+  const store = memoryStore();
+  const { service } = stubService(
+    (_url, init) =>
+      init.method === "DELETE"
+        ? new Response(null, { status: 204 })
+        : json({ credential: "cred-1", device: DEVICE }),
+    CONFIG.hubUrl,
+  );
+  const names = [
+    { name: "Rins-MacBook-Pro", provisional: true },
+    { name: "Rin's MacBook Pro", provisional: false },
+  ];
+  const changes: { before: string | null; after: string | null }[] = [];
+  const handlers = makeAccountHandlers({
+    config: () => CONFIG,
+    store: () => store,
+    service: () => service,
+    deviceId: async () => "device-uuid",
+    defaultName: async () =>
+      names.shift() ?? { name: "Rin's MacBook Pro", provisional: false },
+    detectedIcon: async () => "laptop",
+    platform: "darwin",
+    sharedSignIn: () => false,
+    changed: (change) => void changes.push(change),
+    devicesListed: () => {},
+    acceptsCommands: () => false,
+    setAcceptsCommands: () => {},
+  });
+  const call = <K extends keyof typeof handlers>(key: K) =>
+    handlers[key] as (...args: unknown[]) => Promise<AccountStatus | void>;
+  const enrolled = (await call("enroll")(
+    fakeSessionJwt("user_abc"),
+  )) as AccountStatus;
+  assert.equal(
+    enrolled.deviceName,
+    "Rin's MacBook Pro",
+    "kept a provisional name",
+  );
+  await call("signOut")();
+  const signedOut = (await call("status")()) as AccountStatus;
+  assert.equal(signedOut.signedIn, false);
+  assert.equal(signedOut.deviceName, "Rin's MacBook Pro");
+  assert.deepEqual(changes, [
+    { before: null, after: "user_abc" },
+    { before: "user_abc", after: null },
+  ]);
+  assert.equal(departed(changes[0] ?? { before: null, after: null }), false);
+  assert.equal(departed(changes[1] ?? { before: null, after: null }), true);
+  assert.equal(departed({ before: "a", after: "b" }), true, "a switch kept");
+  assert.equal(
+    departed({ before: "a", after: "a" }),
+    false,
+    "a rename dropped",
+  );
 });
 
 it("device sync: syncHubDevice adopts a name or icon changed on another device, the detected icon as no pick, and never over a change or sign-out that landed during the read", async () => {

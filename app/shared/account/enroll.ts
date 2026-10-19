@@ -93,13 +93,13 @@ export async function enrollDevice(
     // try once more. Only here, so a parked revoke that cannot be
     // delivered (offline) never stalls a sign-in that would have
     // worked. A re-enroll under the SAME account rotates the row, and
-    // the parked credential is dead either way (write() drops it).
-    if (
-      !(error instanceof HubDeviceEnrolledElsewhereError) ||
-      !(await retryParkedRevoke(deps))
-    ) {
-      throw error;
-    }
+    // the parked credential is dead either way (write() drops it). A
+    // revoke that couldn't land (the hub rate-limiting, unreachable) is
+    // what the person is told, not the refusal it stands behind.
+    if (!(error instanceof HubDeviceEnrolledElsewhereError)) throw error;
+    const parked = await retryParkedRevoke(deps);
+    if (parked.kind === "failed") throw parked.error;
+    if (parked.kind === "none") throw error;
     enrollment = await deps.service.enroll(token, fields);
   }
   const accountId = deriveAccountId(token);
@@ -165,15 +165,19 @@ export async function signOutDevice(deps: {
 // Delivers the revoke a sign-out parked, if any: at boot (both
 // shells) and on an enrollment the hub refused for it. A delivered or
 // refused revoke clears the parking, anything else keeps it for the
-// next try. Never throws. Resolves to whether the parking was cleared.
+// next try. Never throws: resolves to whether there was one, and
+// whether it was cleared or why not.
 export async function retryParkedRevoke(deps: {
   config: AccountServiceConfig;
   service: AccountService;
   store: AccountStore;
   deviceId: string;
-}): Promise<boolean> {
+}): Promise<
+  | { readonly kind: "none" | "cleared" }
+  | { readonly kind: "failed"; readonly error: unknown }
+> {
   const parked = deps.store.readParked();
-  if (parked === null || !isConfigured(deps.config)) return false;
+  if (parked === null || !isConfigured(deps.config)) return { kind: "none" };
   try {
     await deps.service.revoke(
       parked.credential,
@@ -181,10 +185,10 @@ export async function retryParkedRevoke(deps: {
       AbortSignal.timeout(SIGN_OUT_REVOKE_TIMEOUT_MS),
     );
   } catch (error) {
-    if (!isHubRefusal(error)) return false;
+    if (!isHubRefusal(error)) return { kind: "failed", error };
   }
   deps.store.clearParked();
-  return true;
+  return { kind: "cleared" };
 }
 
 // A change to a device's name, its icon, or both.

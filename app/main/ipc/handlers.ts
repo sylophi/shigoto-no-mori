@@ -15,7 +15,10 @@ import { navContract } from "@shigomori/contracts/modules/nav";
 import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
 import { windowContract } from "@shigomori/contracts/modules/window";
-import { withoutPeerState } from "@shigomori/contracts/schemas/config";
+import {
+  departed,
+  withoutPeerState,
+} from "@shigomori/contracts/schemas/config";
 import { warnOnFailure } from "@shared/log";
 import { updateClientConfig } from "../electron/clientConfig";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
@@ -42,23 +45,11 @@ import { broadcastAll, registerContract, registerViews } from "./register";
 export function registerShellHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
   registerViews(clientConfigContract, clientConfigViews);
-  // The account the client config's peer-keyed state was built under,
-  // so a change can tell a rename from a departure. Unknown until the
-  // first change: reading it here would open the credential store
-  // before app.ready. An unknown previous account leaves one thing
-  // certain: a change to signed out is a departure.
-  let peerAccountId: string | null | undefined;
-  const accountHandlers = makeAccountHandlers(
-    async (accountId) => {
-      const previous = peerAccountId;
-      peerAccountId = accountId;
-      const leaving =
-        previous === undefined
-          ? accountId === null
-          : previous !== null && accountId !== previous;
+  const accountHandlers = makeAccountHandlers({
+    changed: async ({ before, after }) => {
       // Before the windows are told, since they re-read their config
       // off the push.
-      if (leaving) {
+      if (departed({ before, after })) {
         await warnOnFailure(
           "[account] dropping the peer-keyed client config failed",
           () => updateClientConfig(withoutPeerState),
@@ -67,7 +58,7 @@ export function registerShellHandlers(): void {
       // The host tears down what was the account's and follows it with
       // the hub socket, while the windows re-read the status.
       const applied = Effect.runPromise(host().account(accountFactsForHost()));
-      broadcastAll(accountContract, "changed", { accountId });
+      broadcastAll(accountContract, "changed", { accountId: after });
       // An account switch that stays signed in changes the switch's
       // answer too, which `changed` does not refresh.
       broadcastAll(
@@ -75,20 +66,23 @@ export function registerShellHandlers(): void {
         "commandAccessChanged",
         acceptsPeerCommands(),
       );
-      await warnOnFailure(
+      const told = warnOnFailure(
         "[account] the host's account change failed",
         () => applied,
       );
+      // A departure answers once the host has let the account go; any
+      // other change once the windows are told, since a host that isn't
+      // up hears the account as it starts.
+      if (departed({ before, after })) await told;
+      else void told;
       // The login item keeps a machine reachable to its account: signed
       // out it comes off, and the next sign-in puts it back.
-      if (leaving || previous === null || previous === undefined) {
-        reconcileLaunchAtLogin();
-      }
+      if (before !== after) reconcileLaunchAtLogin();
     },
     // The switch flipping goes out on its own push, so the toggle does
     // not thrash the account's status and device queries. The host
     // hears it in the facts and tells the peers.
-    () => {
+    commandAccessChanged: () => {
       broadcastAll(
         accountContract,
         "commandAccessChanged",
@@ -98,13 +92,13 @@ export function registerShellHandlers(): void {
     },
     // The registry as the hub last listed it, which the host's mirrors
     // and forwards follow.
-    (devices) =>
+    devicesListed: (devices) =>
       void Effect.runFork(
         Effect.ignore(
           host().accountDevices(devices.map((device) => device.deviceId)),
         ),
       ),
-  );
+  });
   registerContract(accountContract, accountHandlers);
   registerContract(windowContract, windowHandlers);
   registerContract(navContract, navHandlers);

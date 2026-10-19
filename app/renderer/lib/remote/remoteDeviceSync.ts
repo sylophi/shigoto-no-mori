@@ -37,6 +37,7 @@
 //     would render as "Connecting" (a lie, nothing is trying) and
 //     "blocked" as a rose error (alarming for a machine that is simply
 //     switched off), so the slate "Off" is the least-lying option.
+import { departed } from "@shigomori/contracts/schemas/config";
 import { fetchAgain, refreshQueries } from "@/lib/askAgain";
 import { throughCancel } from "@/lib/queryClientOptions";
 import { hashKey, type QueryClient } from "@tanstack/react-query";
@@ -614,7 +615,7 @@ export function startRemoteDeviceSync(
     const leaving =
       syncedAccountId === undefined
         ? accountId === null
-        : syncedAccountId !== null && accountId !== syncedAccountId;
+        : departed({ before: syncedAccountId, after: accountId });
     syncedAccountId = accountId;
     if (leaving) leaveAccount(queryClient);
     askListAgain();
