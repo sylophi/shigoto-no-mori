@@ -29,6 +29,7 @@ import {
   type SharedSettingsDoc,
   type ShigomoriWorktreeData,
   type Worktree,
+  patchedPorts,
 } from "@shigomori/contracts/schemas";
 import { cloneFolderName } from "@shared/cloneUrl";
 import {
@@ -795,15 +796,11 @@ function hostHandlersFor(
     }),
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,
-    "worktreeData:patchPorts": ({ worktreeId, remove = [], put = [] }) => {
+    "worktreeData:patchPorts": ({ worktreeId, ...patch }) => {
       const stored = worktreeData.get(worktreeId);
-      const gone = new Set([...remove, ...put.map(({ port }) => port)]);
       worktreeData.set(worktreeId, {
         ...stored,
-        ports: [
-          ...(stored?.ports ?? []).filter(({ port }) => !gone.has(port)),
-          ...put,
-        ],
+        ports: patchedPorts(stored?.ports ?? [], patch),
       });
     },
     // The host's own merge, with the posed liveness mapped on.

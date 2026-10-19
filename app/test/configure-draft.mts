@@ -4,7 +4,8 @@
 //     (a patch of what differs from the new config) sends only the
 //     draft's own edit,
 //   - its carry-over list keeps the draft's add, removal and mode
-//     change and the entries added or removed elsewhere.
+//     change and the entries added or removed elsewhere, a removal
+//     elsewhere winning over the draft's mode change.
 //
 // Run: pnpm test configure-draft.
 import assert from "node:assert/strict";
@@ -35,12 +36,14 @@ it("keeps the draft's edits and takes every other field from the new config", ()
   assert.deepEqual(rebased, { ...next, setup: "pnpm install" });
 });
 
+// The draft gave .env and cache another mode, removed data and added
+// notes; elsewhere cache was removed and fixtures added.
 it("merges carry-over per path, the draft's changes over the new list", () => {
   const form: ConfigureFormState = {
     ...saved,
     carryOver: [
       { path: ".env", mode: "symlink" },
-      { path: "cache", mode: "copy" },
+      { path: "cache", mode: "symlink" },
       { path: "notes", mode: "copy" },
     ],
   };

@@ -137,15 +137,23 @@ export function ConfigureForm({
 
   const handleSave = async () => {
     const next = toConfig(initialConfig, form);
+    const saved = savedSnapshot;
     await write.mutateAsync({
       projectId,
-      patch: patchOf(toConfig(initialConfig, savedSnapshot), next),
+      patch: patchOf(toConfig(initialConfig, saved), next),
     });
-    // Snapshot what was actually persisted, not the raw form: toConfig
-    // drops half-filled launcher rows and normalizes fields. Snapshotting
-    // the raw form would mark those leftovers clean, and the post-save
-    // refetch would reseed the form from disk and silently wipe them.
-    setSavedSnapshot(fromConfig(next, resolvedDefaultBranch));
+    // Only the fields this Save carried advance, as persisted, not the
+    // raw form: toConfig drops half-filled launcher rows and normalizes
+    // fields, and snapshotting the raw form would mark those leftovers
+    // clean, so the post-save refetch would reseed them away. A change
+    // made elsewhere while the Save was out stays in the snapshot.
+    setSavedSnapshot((prev) =>
+      rebaseConfigureDraft(
+        fromConfig(next, resolvedDefaultBranch),
+        saved,
+        prev,
+      ),
+    );
   };
 
   const handleDiscard = () => {

@@ -24,6 +24,35 @@ export const CustomPortSchema = Schema.Struct({
 });
 export type CustomPort = typeof CustomPortSchema.Type;
 
+// A worktree's custom ports with a patch applied: one entry a number,
+// the last one given, each taking the place of the entry on its number,
+// or else of one removed (an edit that changed the number), or else
+// going at the end.
+export function patchedPorts(
+  stored: ReadonlyArray<CustomPort>,
+  patch: {
+    readonly remove?: ReadonlyArray<number> | undefined;
+    readonly put?: ReadonlyArray<CustomPort> | undefined;
+  },
+): CustomPort[] {
+  const put = new Map((patch.put ?? []).map((entry) => [entry.port, entry]));
+  const removed = new Set(patch.remove ?? []);
+  const numbers = new Set(stored.map(({ port }) => port));
+  const strays = [...put.values()].filter(({ port }) => !numbers.has(port));
+  const next: CustomPort[] = [];
+  for (const entry of stored) {
+    const replacing = put.get(entry.port);
+    if (replacing !== undefined) next.push(replacing);
+    else if (!removed.has(entry.port)) next.push(entry);
+    else {
+      const stray = strays.shift();
+      if (stray !== undefined) next.push(stray);
+    }
+  }
+  next.push(...strays);
+  return next;
+}
+
 // Where a listed port came from: port-pool's allocation for the
 // worktree directory (named after the entry in the project's
 // port-pool.config.json), or the worktree's data.

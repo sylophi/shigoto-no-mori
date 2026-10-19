@@ -12,7 +12,8 @@ const same = (a: unknown, b: unknown) =>
 // a peer, a worktree create dropping what .worktreeinclude covers): the
 // fields it left alone take the new config, and its carry-over list
 // takes the draft's own adds, removals and mode changes per path over
-// the new list, so neither side's entries are lost.
+// the new list. An entry removed elsewhere stays removed, a mode the
+// draft gave it with it.
 export function rebaseConfigureDraft(
   form: ConfigureFormState,
   saved: ConfigureFormState,
