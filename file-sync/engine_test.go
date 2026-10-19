@@ -458,7 +458,7 @@ func TestMirrorReplicaMakesTheRemoteAnExactCopy(t *testing.T) {
 		WorktreeID: "0123456789ab",
 		RemoteRoot: remote,
 		Ignores:    []string{"node_modules/"},
-		Replica:    true,
+		Direction:  "replica",
 	})
 	if created["ok"] != true {
 		t.Fatalf("create failed: %v", created["error"])
@@ -496,7 +496,7 @@ func TestMirrorServeHoldsTheStreamToItsRoot(t *testing.T) {
 		DeviceID:   "peer-1",
 		WorktreeID: "0123456789ab",
 		RemoteRoot: named,
-		Replica:    true,
+		Direction:  "replica",
 	})
 	if created["ok"] != true {
 		t.Fatalf("create failed: %v", created["error"])
@@ -531,6 +531,33 @@ func TestMirrorCreateRefusesInvalidLabel(t *testing.T) {
 	}
 	if msg, _ := created["error"].(string); !strings.Contains(msg, "label") {
 		t.Fatalf("refusal does not name the label: %v", created["error"])
+	}
+	daemon.requests.Close()
+	<-daemon.done
+}
+
+// The host's liveness check is a verb of the protocol, answered as
+// one, beside an unknown op, refused, and a create's direction outside
+// the four.
+func TestMirrorDaemonAnswersPingAndRefusesTheUnknown(t *testing.T) {
+	gateway, _ := startTestGateway(t, t.TempDir())
+	daemon := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "data"))
+	if pinged := daemon.call(mirrorRequest{ID: "1", Op: "ping"}); pinged["ok"] != true {
+		t.Fatalf("ping was not answered ok: %v", pinged)
+	}
+	if unknown := daemon.call(mirrorRequest{ID: "2", Op: "nope"}); unknown["ok"] != false {
+		t.Fatalf("an unknown op was answered ok: %v", unknown)
+	}
+	sideways := daemon.call(mirrorRequest{
+		ID: "3", Op: "create",
+		LocalRoot:  t.TempDir(),
+		DeviceID:   "peer-1",
+		RemoteRoot: t.TempDir(),
+		Name:       "sideways",
+		Direction:  "sideways",
+	})
+	if msg, _ := sideways["error"].(string); sideways["ok"] != false || !strings.Contains(msg, "direction") {
+		t.Fatalf("a create's unknown direction was not refused: %v", sideways)
 	}
 	daemon.requests.Close()
 	<-daemon.done
