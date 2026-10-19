@@ -2,7 +2,7 @@
 // here, and a send lands one of this device's on a peer. Both are the
 // landing (landing.ts) against a source link, then the ignored files,
 // the title and description, and the receipt the teardown reads
-// (receipts.ts).
+// (Moves.remember, receipts.ts).
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
@@ -42,7 +42,6 @@ import {
 } from "@host/lib/sync/sourceLink";
 import { log } from "@shared/log";
 import { landWorktree, moveAttributes } from "./landing";
-import { remember } from "./receipts";
 
 // A worktree the send cannot move, refused before anything crosses.
 class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
@@ -183,7 +182,7 @@ export const pullWorktree = (
       },
       { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
     ).pipe(describeFailureLogged, Effect.withSpan("Sync.description"));
-    remember(
+    yield* (yield* Moves.Moves).remember(
       {
         direction: "pull",
         deviceId: sourceDeviceId,
@@ -434,7 +433,7 @@ const sendWorktreeEffect = (
         worktreeId: landed.worktree.id,
       },
     ).pipe(describeFailureLogged, Effect.withSpan("Sync.description"));
-    remember(
+    yield* (yield* Moves.Moves).remember(
       { direction: "send", deviceId: targetDeviceId, projectId, worktreeId },
       receipt,
     );

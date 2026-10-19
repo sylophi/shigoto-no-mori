@@ -15,17 +15,28 @@
 // MOVE_CANCELLED. Per key rather than per call because a cancel can
 // come from outside the call: the terminal's verb or a peer's mirror
 // asks for it by key (sync:cancelMove).
+//
+// What runs past the call that started it is held here too (`fork`):
+// a source's serving of a peer's link, a send's wait on the peer's
+// answer, and the undo of an answer that came after a cancel. So is
+// what each finished move recorded for its teardown (receipts.ts).
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberMap from "effect/FiberMap";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import { MOVE_CANCELLED } from "@shigomori/contracts/modules/sync";
+import {
+  MOVE_CANCELLED,
+  type SyncMoveRef,
+  type SyncReceipt,
+} from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 
 export class MoveCancelledError extends Schema.TaggedError<MoveCancelledError>()(
@@ -68,18 +79,49 @@ export class Moves extends Context.Service<
       caller: Caller,
       sourceWorktreeId: string,
     ) => Effect.Effect<boolean>;
+    // Runs work that outlives the call that started it, until it ends
+    // or the graph closes.
+    readonly fork: <A, E, R>(
+      work: Effect.Effect<A, E, R>,
+    ) => Effect.Effect<Fiber.Fiber<A, E>, never, R>;
     // Whether a move is in flight, from before its landing to its last
-    // file: what a data-folder move's copy would miss.
+    // file, or forked work still runs: what a data-folder move's copy
+    // would miss.
     readonly underWay: Effect.Effect<boolean>;
+    readonly remember: (
+      move: SyncMoveRef,
+      receipt: SyncReceipt,
+    ) => Effect.Effect<void>;
+    readonly receiptOf: (
+      move: SyncMoveRef,
+    ) => Effect.Effect<SyncReceipt | undefined>;
+    readonly forget: (move: SyncMoveRef) => Effect.Effect<void>;
   }
 >()("sm/host/Moves") {}
 
 const keyOf = (caller: Caller, sourceWorktreeId: string) =>
   `${caller.callerDeviceId ?? ""}:${sourceWorktreeId}`;
 
+// What each move captured and applied, by source worktree, for the
+// teardown that may follow, kept by the device that ran the move (the
+// destination after a pull, the source after a send, which the
+// destination's landing hands its receipt). Read by the teardown, so
+// the data-loss rule runs on the hosts' own facts: a caller cannot
+// claim a capture landed when it did not. The branch tip and the
+// capture's tree let the teardown prove the source is still exactly
+// what moved, however long the user took to decide. Ephemeral by
+// design (a restart forgets, and the teardown then refuses), bounded
+// so a host that moves worktrees for weeks never grows it.
+const RECEIPT_LIMIT = 64;
+const receiptKey = (move: SyncMoveRef) =>
+  `${move.direction}:${move.deviceId}/${move.projectId}/${move.worktreeId}`;
+
 const make = Effect.gen(function* () {
-  // Closed with the graph, which interrupts whatever is still moving.
+  // Closed with the graph, which interrupts whatever is still moving,
+  // the moves before what they forked.
+  const forked = yield* FiberSet.make();
   const moves = yield* FiberMap.make<string>();
+  const receipts = yield* Ref.make(new Map<string, SyncReceipt>());
   const scope = yield* Effect.scope;
   const admission = yield* Semaphore.make(1);
 
@@ -129,11 +171,48 @@ const make = Effect.gen(function* () {
     return true;
   });
 
+  const remember = Effect.fn("Moves.remember")(function* (
+    move: SyncMoveRef,
+    receipt: SyncReceipt,
+  ) {
+    const key = receiptKey(move);
+    yield* Ref.update(receipts, (kept) => {
+      const next = new Map(kept);
+      next.delete(key);
+      next.set(key, receipt);
+      for (const oldest of next.keys()) {
+        if (next.size <= RECEIPT_LIMIT) break;
+        next.delete(oldest);
+      }
+      return next;
+    });
+  });
+
+  const receiptOf = Effect.fn("Moves.receiptOf")(function* (move: SyncMoveRef) {
+    return (yield* Ref.get(receipts)).get(receiptKey(move));
+  });
+
+  const forget = Effect.fn("Moves.forget")(function* (move: SyncMoveRef) {
+    yield* Ref.update(receipts, (kept) => {
+      const next = new Map(kept);
+      next.delete(receiptKey(move));
+      return next;
+    });
+  });
+
   return Moves.of({
     // oxlint-disable-next-line shigomori/effect-fn-service-methods -- generic over the move it runs, which Effect.fn's signature would erase
     run,
     cancel,
-    underWay: Effect.map(FiberMap.size(moves), (n) => n > 0),
+    // oxlint-disable-next-line shigomori/effect-fn-service-methods -- generic over the work it forks, which Effect.fn's signature would erase
+    fork: (work) => FiberSet.run(forked, work),
+    underWay: Effect.map(
+      Effect.all([FiberMap.size(moves), FiberSet.size(forked)]),
+      ([running, rest]) => running + rest > 0,
+    ),
+    remember,
+    receiptOf,
+    forget,
   });
 });
 
