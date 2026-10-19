@@ -27,6 +27,12 @@
 // is written to be hostile-safe: an inbound frame cap, an Origin gate,
 // connection and in-flight caps, a failed-auth lockout, and hard
 // termination on every rejection and shutdown.
+import {
+  decodeFrame,
+  frameWords,
+  makeServerProtocol,
+} from "@shared/remote/rpcServer";
+import * as Result from "effect/Result";
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import type { IncomingMessage } from "node:http";
@@ -69,10 +75,8 @@ import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
-import * as Queue from "effect/Queue";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
-import type * as RpcMessage from "effect/rpc/RpcMessage";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -89,7 +93,6 @@ import { log } from "@shared/log";
 import {
   CLOSE_TRY_AGAIN,
   CommandGate,
-  LINK_MAX_FRAME_BYTES,
   LinkGroup,
   LinkPeer,
   type LoopbackGroup,
@@ -390,22 +393,6 @@ const serve =
       ).pipe(Effect.provideContext(context));
     }).pipe(Effect.annotateSpans({ channel }));
 
-// A frame's messages, or null for one this end can't read. The parser
-// reads a stream, and one that failed can't find the next frame, so
-// every later one would fail too while the link stayed up answering
-// nothing: the connection goes instead, and the far end dials again.
-function decodeFrame(
-  parser: RpcSerialization.Parser,
-  frame: Uint8Array | string,
-): ReadonlyArray<RpcMessage.FromClientEncoded> | null {
-  try {
-    return parser.decode(frame) as ReadonlyArray<RpcMessage.FromClientEncoded>;
-  } catch {
-    log.warn("[link] an unparseable frame, closing the connection");
-    return null;
-  }
-}
-
 // The answer for a call the link carries and nothing here serves.
 const unserved = (tag: string) =>
   new RemoteCallError({ text: `No handler registered for channel "${tag}"` });
@@ -531,47 +518,23 @@ export const make = (options: {
         let nextClientId = 0;
         let preAuth = 0;
         let originRejectLoggedAt = -Infinity;
-        // Effect's binary layout (shared/remote/link.ts), so a channel's
-        // bytes cross as bytes.
-        const serialization = yield* RpcSerialization.RpcSerialization.pipe(
-          Effect.provide(
-            RpcSerialization.layerSchemaBinary({
-              maxFrameSize: LINK_MAX_FRAME_BYTES,
-            }),
-          ),
-        );
-        const disconnects = yield* Queue.unbounded<number>();
-        let writeRequest!: (
-          clientId: number,
-          message: RpcMessage.FromClientEncoded,
-        ) => Effect.Effect<void>;
-
-        const protocol = yield* RpcServer.Protocol.make((write) => {
-          writeRequest = write;
-          return Effect.succeed({
-            disconnects,
-            send: (clientId, response) =>
-              Effect.sync(() => {
-                const connection = connections.get(clientId);
-                if (connection === undefined || connection.dead) return;
-                const encoded = connection.parser.encode(response);
-                if (
-                  encoded !== undefined &&
-                  connection.wire.readyState === WebSocket.OPEN
-                ) {
-                  connection.wire.send(encoded as Uint8Array<ArrayBuffer>);
-                }
-              }),
-            end: () => Effect.void,
-            clientIds: Effect.sync(() => new Set(connections.keys())),
-            initialMessage: Effect.succeedNone,
-            supportsAck: true,
-            supportsTransferables: false,
-            supportsSpanPropagation: true,
-            supportsNotifications: true,
-            codecFor: serialization.codecFor,
-          } satisfies Omit<RpcServer.Protocol["Service"], "run">);
+        const server = yield* makeServerProtocol({
+          client: (clientId) => {
+            const connection = connections.get(clientId);
+            return connection === undefined || connection.dead
+              ? undefined
+              : {
+                  parser: connection.parser,
+                  send: (encoded) => {
+                    if (connection.wire.readyState === WebSocket.OPEN) {
+                      connection.wire.send(encoded);
+                    }
+                  },
+                };
+          },
+          clientIds: () => new Set(connections.keys()),
         });
+        const { protocol } = server;
 
         // The connection a call came on, which is there for as long as
         // its calls run: they are interrupted as it closes.
@@ -1059,12 +1022,19 @@ export const make = (options: {
               for (const frame of frames) {
                 if (connection.dead) return;
                 const messages = decodeFrame(connection.parser, frame);
-                if (messages === null) {
+                // A socket is a stream: a parser that failed can't find
+                // the next frame, so every later one would fail while the
+                // link stayed up answering nothing. The connection goes,
+                // and the far end dials again.
+                if (Result.isFailure(messages)) {
+                  log.warn(
+                    `[link] an unreadable frame, closing the connection (${frameWords(frame, messages.failure)})`,
+                  );
                   connection.kill(CLOSE_UNREADABLE, "an unreadable frame");
                   return;
                 }
-                for (const message of messages) {
-                  yield* writeRequest(clientId, message);
+                for (const message of messages.success) {
+                  yield* server.request(clientId, message);
                 }
               }
             }
@@ -1075,7 +1045,7 @@ export const make = (options: {
               Effect.sync(() => {
                 connection.kill(CLOSE_GOING_AWAY, "closed");
                 connections.delete(clientId);
-                Queue.offerUnsafe(disconnects, clientId);
+                server.disconnected(clientId);
               }),
             ),
           );
@@ -1204,7 +1174,7 @@ export const make = (options: {
                 channels: makeHostChannels(),
                 pushes,
                 closed,
-                parser: serialization.makeUnsafe(),
+                parser: server.parser(),
                 opened: null,
                 helloSeen: false,
                 shell: false,
