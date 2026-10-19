@@ -152,13 +152,13 @@ export const make = (
               payload,
             );
             if (accepts.success) {
-              handlers.setPeerAcceptsCommands(deviceId, accepts.data);
+              handlers.setPeerFact(deviceId, "acceptsCommands", accepts.data);
             }
           }
           if (channel === channelOf(SHARING_CHANGED)) {
             const shares = safeDecode(payloadOf(SHARING_CHANGED), payload);
             if (shares.success) {
-              handlers.setPeerSharesData(deviceId, shares.data);
+              handlers.setPeerFact(deviceId, "sharesData", shares.data);
             }
           }
           deps.broadcastPeerPush({ deviceId, channel, payload });
@@ -181,9 +181,7 @@ export const make = (
         // welcome-confirmed versions are the whole surface, and
         // membership here IS the direct-session set (the renderer
         // derives connectedness from the keys).
-        peerAppVersions: handlers.directPeerVersions(),
-        peerAcceptsCommands: handlers.directPeerAccess(),
-        peerSharesData: handlers.directPeerSharing(),
+        ...handlers.directPeers(),
         // THIS device's tunnel endpoint state. The
         // state only, never the hostname or token. Absent without a host
         // half (the web bridge runs no cloudflared). HubStatus is the

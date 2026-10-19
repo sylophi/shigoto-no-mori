@@ -46,9 +46,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
-import * as RpcClient from "effect/rpc/RpcClient";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
-import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import { afterAll, beforeAll, it } from "vitest";
@@ -65,11 +62,8 @@ import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { effectClient } from "@shared/ipc/effectClient";
 import { createServed } from "@shared/ipc/served";
 import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
-import {
-  type FlatClient,
-  LINK_CALLS_IN_FLIGHT,
-  rpcLink,
-} from "@shared/remote/rpcTransport";
+import { LINK_CALLS_IN_FLIGHT, rpcLink } from "@shared/remote/rpcTransport";
+import { flatClient, quietProtocol } from "@shigomori/engine/rpcClient";
 import { EngineChanges } from "@host/lib/Engine";
 import { busyDetail } from "@shared/busy";
 import { processAlive, waitFor } from "./lib/checkKit.mts";
@@ -227,18 +221,10 @@ async function openLink() {
   return Effect.runPromise(
     Effect.gen(function* () {
       const socket = yield* Socket.makeWebSocket(`ws://127.0.0.1:${port}`);
-      const protocol = yield* RpcClient.makeProtocolSocket({
-        retryPolicy: Schedule.recurs(0),
-      }).pipe(
-        Effect.provideService(Socket.Socket, socket),
-        Effect.provide(RpcSerialization.layerSchemaBinary()),
+      const client = yield* flatClient(
+        LoopbackGroup,
+        yield* quietProtocol(socket),
       );
-      // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
-      const client = (yield* RpcClient.make(LoopbackGroup, {
-        flatten: true,
-      }).pipe(
-        Effect.provideService(RpcClient.Protocol, protocol),
-      )) as unknown as FlatClient;
       const raw = (tag: string, payload?: unknown) =>
         client(tag, payload) as Effect.Effect<unknown, unknown>;
       yield* raw("link:hello", {

@@ -17,6 +17,8 @@ import {
 } from "electron";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { answerWithin } from "@shigomori/engine/liveness";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import { WebSocket as WsWebSocket } from "ws";
@@ -516,24 +518,27 @@ const stop = (hurried: boolean) =>
       running.kill();
       return Effect.promise(() => exited);
     }
-    return host()
-      .quit({ hurried })
-      .pipe(
-        Effect.catch((error) =>
-          Effect.sync(() =>
-            log.warn("[quit] the host did not take the quit:", error),
+    return Effect.gen(function* () {
+      // Beside the wait, not in the hold's scope, which is closing.
+      yield* host()
+        .quit({ hurried })
+        .pipe(
+          Effect.catch((error) =>
+            Effect.sync(() =>
+              log.warn("[quit] the host did not take the quit:", error),
+            ),
           ),
-        ),
-        // Beside the wait, not in the hold's scope, which is closing.
-        Effect.forkChild,
-        Effect.andThen(Effect.promise(() => exited)),
-      )
-      .pipe(
-        Effect.timeoutOrElse({
-          duration: QUIT_DEADLINE_MS,
-          orElse: () => Effect.sync(() => void running.kill()),
-        }),
+          Effect.forkChild,
+        );
+      // Asked once; the wait for its exit again if its deadline came
+      // late (the shell stopped), so a host part-way through its quit
+      // isn't killed for time it didn't have.
+      const exitedInTime = yield* answerWithin(
+        Effect.promise(() => exited),
+        QUIT_DEADLINE_MS,
       );
+      if (Option.isNone(exitedInTime)) running.kill();
+    });
   });
 
 // The hold, for the length of the shell's graph: the port the host

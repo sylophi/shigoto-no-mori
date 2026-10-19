@@ -515,7 +515,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     },
   });
   await waitFor(
-    () => bridged.bridge.directPeerVersions()[LISTENER] !== undefined,
+    () => bridged.bridge.directPeers().peerAppVersions[LISTENER] !== undefined,
     "the keeper to establish the direct session to the listener",
   );
   const toListener = bridgePeerTransport(

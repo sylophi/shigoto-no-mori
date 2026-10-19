@@ -89,10 +89,10 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
   type DialedDevice,
   dialDevice,
-  newConnectionId,
   type OpenClientSocket,
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
+import { newConnectionId } from "@shigomori/engine/rpcClient";
 import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 

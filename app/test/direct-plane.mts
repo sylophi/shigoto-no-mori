@@ -48,7 +48,7 @@
 //     own hub link going down leaves them alone.
 //   - the session cache is direct or nothing: a working
 //     listener yields a direct session reported via
-//     directPeerVersions, a dead socket drops the cache, and a FAILED
+//     directPeers, a dead socket drops the cache, and a FAILED
 //     dial rejects with the typed unreachable outcome with no hub
 //     session created for data.
 //     (The hub wire answering nothing but connectInfo is pinned in
@@ -636,7 +636,9 @@ it("direct dial: the handshake completes with the pinned identity and invokes fl
   await dialOn(bridge, LISTENER);
   // The welcome pinned the dialed identity and confirmed the
   // host's version, surfaced through the one per-peer data fact.
-  assert.deepEqual(bridge.directPeerVersions(), { [LISTENER]: "2.0.0" });
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {
+    [LISTENER]: "2.0.0",
+  });
   // The direct wire carries the authed caller identity to
   // handlers.
   assert.equal(await invokeListener(bridge, WHOAMI, echoOf("p")), DIALER);
@@ -1149,7 +1151,7 @@ it("deadline: a peer that never answers the ask cannot hang the bridge cache, wh
     elapsed < 3000,
     `the unanswered ask was not bounded by the deadline (${elapsed}ms)`,
   );
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
   // The failed dial dropped its cache entry (no poisoning), and a
   // bare invoke against the empty slot refuses at once WITHOUT
   // dialing: the keeper is the only dial trigger, so no user
@@ -1472,7 +1474,9 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
   };
   await dialOn(bridge, LISTENER);
   assert.deepEqual(await invokeListener(bridge, ECHO, echoOf("up")), "up");
-  assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
+  assert.deepEqual(Object.keys(bridge.directPeers().peerAppVersions), [
+    LISTENER,
+  ]);
   // Our own hub link down (no live roster): the working direct
   // session must survive an device-hub outage, but the keeper
   // reconciles to EMPTY (its schedule is useless without the
@@ -1489,7 +1493,9 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
     [],
     "a hub-down reconcile did not empty the keeper's desired set",
   );
-  assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
+  assert.deepEqual(Object.keys(bridge.directPeers().peerAppVersions), [
+    LISTENER,
+  ]);
   assert.deepEqual(
     await invokeListener(bridge, ECHO, echoOf("outage")),
     "outage",
@@ -1497,12 +1503,14 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
   // A live roster still naming the peer: nothing closes, and the
   // keeper receives the roster as its desired set.
   applyDirectPresence(CONNECTED, [DIALER, LISTENER], presenceDeps);
-  assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
+  assert.deepEqual(Object.keys(bridge.directPeers().peerAppVersions), [
+    LISTENER,
+  ]);
   assert.deepEqual(reconcileCalls.at(-1), [DIALER, LISTENER]);
   // The peer leaves the live roster: the cached client session
   // drops at once.
   applyDirectPresence(CONNECTED, [DIALER], presenceDeps);
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
   // Host side: an inbound authed direct socket dies when ITS
   // deviceId leaves the roster, and survives while present.
   let hostSideClosed = false;
@@ -1524,7 +1532,9 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
   // sides even though the stale link may still report a roster,
   // and the keeper's desired set empties.
   await dialOn(bridge, LISTENER);
-  assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
+  assert.deepEqual(Object.keys(bridge.directPeers().peerAppVersions), [
+    LISTENER,
+  ]);
   let inboundClosed = false;
   const inbound2 = await dial(listener, {
     onClose: () => (inboundClosed = true),
@@ -1534,7 +1544,7 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
     "before stop",
   );
   applyDirectPresence({ phase: "stopped" }, [DIALER, LISTENER], presenceDeps);
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
   assert.deepEqual(reconcileCalls.at(-1), []);
   await waitFor(
     () => inboundClosed,
@@ -1542,13 +1552,15 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
   );
   // A revoked block is the same verdict from the hub's side.
   await dialOn(bridge, LISTENER);
-  assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
+  assert.deepEqual(Object.keys(bridge.directPeers().peerAppVersions), [
+    LISTENER,
+  ]);
   applyDirectPresence(
     { phase: "blocked", reason: "revoked", message: "removed" },
     [LISTENER],
     presenceDeps,
   );
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
   // Any other block is an outage: the sessions ride it out.
   await dialOn(bridge, LISTENER);
   applyDirectPresence(
@@ -1556,7 +1568,9 @@ it("presence scopes the data plane: a peer leaving a LIVE roster loses its direc
     [],
     presenceDeps,
   );
-  assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
+  assert.deepEqual(Object.keys(bridge.directPeers().peerAppVersions), [
+    LISTENER,
+  ]);
 });
 
 it("mid-dial sweeps: a peer leaving the roster while its dial is in flight ends the dial at once, closing what it opened and reporting nothing, and the quit sweep does the same", async () => {
@@ -1576,7 +1590,7 @@ it("mid-dial sweeps: a peer leaving the roster while its dial is in flight ends 
     assert.equal(await ended, "ended");
     await waitFor(() => held.closed() === 1, "the in-flight dial to close");
     held.release();
-    assert.deepEqual(held.handlers.directPeerVersions(), {});
+    assert.deepEqual(held.handlers.directPeers().peerAppVersions, {});
     assert.equal(held.changes(), 0, "an ended dial fired onDirectChange");
   }
 });
@@ -1752,25 +1766,27 @@ it("supervised and eager: presence alone establishes the session (no invoke anyw
   // Presence alone: the roster names the listener, so the keeper dials it
   // with no invoke and no ensure in sight.
   await waitFor(
-    () => bridge.directPeerVersions()[LISTENER] !== undefined,
+    () => bridge.directPeers().peerAppVersions[LISTENER] !== undefined,
     "the keeper to establish the session off presence alone",
   );
-  assert.deepEqual(bridge.directPeerVersions(), { [LISTENER]: "2.0.0" });
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {
+    [LISTENER]: "2.0.0",
+  });
   // The established direct socket dies out from under the client
   // (the host closes it), and the cache drops the session.
   listener.binding.closePeersNotIn([]);
   await waitFor(
-    () => Object.keys(bridge.directPeerVersions()).length === 0,
+    () => Object.keys(bridge.directPeers().peerAppVersions).length === 0,
     "the dropped session to leave the cache",
   );
   // Nothing redials before the ladder's first rung...
   await clock.settle();
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
   // ...and the keeper redials at it, with no ensure/invoke: the
   // drop was a self-close, so supervision owns the recovery.
   await clock.advance(BACKOFF_LADDER_MS[0]);
   await waitFor(
-    () => bridge.directPeerVersions()[LISTENER] !== undefined,
+    () => bridge.directPeers().peerAppVersions[LISTENER] !== undefined,
     "the keeper to redial the dropped session",
   );
   assert.deepEqual(
@@ -1782,12 +1798,12 @@ it("supervised and eager: presence alone establishes the session (no invoke anyw
   // once it is done and nothing a drop or a pending timer does
   // afterwards can dial a fresh session into the teardown.
   await stop();
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
   listener.binding.closePeersNotIn([]);
   await clock.advance(lastOf(BACKOFF_LADDER_MS) * 4);
   await delay(50);
   assert.deepEqual(
-    bridge.directPeerVersions(),
+    bridge.directPeers().peerAppVersions,
     {},
     "a latched keeper still redialed after the close",
   );
@@ -1801,13 +1817,15 @@ it("command access on the answer and live: the connectInfo answer's switch lands
   });
   await dialOn(bridge, LISTENER);
   // Off at dial time: the answer said so, before any call.
-  assert.deepEqual(bridge.directPeerAccess(), { [LISTENER]: false });
+  assert.deepEqual(bridge.directPeers().peerAcceptsCommands, {
+    [LISTENER]: false,
+  });
   assert.deepEqual(plane.status().peerAcceptsCommands, { [LISTENER]: false });
   // On: the host's push moves the snapshot, and fans it out.
   const fannedBefore = snapshots.length;
   listener.setAccepts(true);
   await waitFor(
-    () => bridge.directPeerAccess()[LISTENER] === true,
+    () => bridge.directPeers().peerAcceptsCommands[LISTENER] === true,
     "the switch-on push to reach the bridge",
   );
   assert.ok(
@@ -1821,7 +1839,7 @@ it("command access on the answer and live: the connectInfo answer's switch lands
   // Off again, live on the same socket, and the gate refuses.
   listener.setAccepts(false);
   await waitFor(
-    () => bridge.directPeerAccess()[LISTENER] === false,
+    () => bridge.directPeers().peerAcceptsCommands[LISTENER] === false,
     "the switch-off push to reach the bridge",
   );
   await assert.rejects(
@@ -1831,9 +1849,11 @@ it("command access on the answer and live: the connectInfo answer's switch lands
   // A fresh dial reads the switch off its answer again.
   listener.setAccepts(true);
   bridge.closeDirectPeers();
-  assert.deepEqual(bridge.directPeerAccess(), {});
+  assert.deepEqual(bridge.directPeers().peerAcceptsCommands, {});
   await dialOn(bridge, LISTENER);
-  assert.deepEqual(bridge.directPeerAccess(), { [LISTENER]: true });
+  assert.deepEqual(bridge.directPeers().peerAcceptsCommands, {
+    [LISTENER]: true,
+  });
 });
 
 it("sharing on the answer and live: the answer's switch lands in the snapshot, the host's flips reach it as pushes over the same session, and with it off the gate refuses even a read", async () => {
@@ -1862,7 +1882,7 @@ it("sharing on the answer and live: the answer's switch lands in the snapshot, t
   assert.equal(await invokeListener(bridge, ECHO, echoOf("p")), "p");
 });
 
-it("routing: the cache is direct or nothing, directPeerVersions reports the direct session, and a closed direct socket drops the cache, refuses sessionless invokes and rejects typed on the next dial", async () => {
+it("routing: the cache is direct or nothing, directPeers reports the direct session, and a closed direct socket drops the cache, refuses sessionless invokes and rejects typed on the next dial", async () => {
   const listener = await startDirectListener(trackTest);
   // The plane fans a status snapshot out on every direct open and
   // close (the same statusChanged fan-out a device hub transition
@@ -1877,10 +1897,14 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
   // session, and invokes ride it leaving the device hub flat.
   await dialOn(bridge, LISTENER);
   assert.deepEqual(await invokeListener(bridge, ECHO, echoOf("1")), "1");
-  assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
+  assert.deepEqual(Object.keys(bridge.directPeers().peerAppVersions), [
+    LISTENER,
+  ]);
   // The welcome-confirmed version surfaces for the direct session,
   // so the owner's status snapshot can feed the skew check.
-  assert.deepEqual(bridge.directPeerVersions(), { [LISTENER]: "2.0.0" });
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {
+    [LISTENER]: "2.0.0",
+  });
   assert.equal(
     directChanges,
     1,
@@ -1897,7 +1921,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
   // and the direct marker.
   await listener.binding.reconcile(null);
   await waitFor(
-    () => Object.keys(bridge.directPeerVersions()).length === 0,
+    () => Object.keys(bridge.directPeers().peerAppVersions).length === 0,
     "the direct session to drop from the cache",
   );
   assert.equal(
@@ -1919,7 +1943,7 @@ it("routing: the cache is direct or nothing, directPeerVersions reports the dire
     () => dialOn(bridge, LISTENER),
     /offers no direct listener/,
   );
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
 });
 
 it("a link that drops under a call is no session, in words: the call a woken window made on a link that died meanwhile fails as no direct connection, which a query waits out quietly and an action reports", async () => {
@@ -1968,7 +1992,7 @@ it("unreachable is typed: a failed direct dial rejects the invoke with the dial 
       // what makes a failed dial diagnosable on the account page.
       /lan ws:\/\/.*ECONNREFUSED/.test(error.message),
   );
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
   // Nothing rode the device hub for the data: the one ask and its
   // answer, and after them nothing from the dialer reaches the listener through it.
   assert.equal(stub.receivedCount() - before, 2);
@@ -2058,7 +2082,9 @@ it("pushes: a host broadcast reaches a direct-connected client through the share
   // with no invoke, then the host's fan-out reaches it over the
   // direct socket.
   await dialOn(bridge, LISTENER);
-  assert.deepEqual(Object.keys(bridge.directPeerVersions()), [LISTENER]);
+  assert.deepEqual(Object.keys(bridge.directPeers().peerAppVersions), [
+    LISTENER,
+  ]);
   const baseline = stub.forwardedCount();
   listener.binding.broadcastAll("git:projectChanged", { projectId: "seven" });
   await waitFor(() => pushes.length > 0, "the direct push");
@@ -2312,7 +2338,7 @@ it("dialableKinds (the web path): the declared capability reaches the host over 
     () => dialOn(bridge, LISTENER),
     (error) => error instanceof RemoteConnectError,
   );
-  assert.deepEqual(bridge.directPeerVersions(), {});
+  assert.deepEqual(bridge.directPeers().peerAppVersions, {});
   // The host saw the caller's capability and minted ONE ticket
   // (the tunnel's), never a lan ticket to burn and abandon.
   assert.equal(minted.length, 1, "expected exactly one mint");

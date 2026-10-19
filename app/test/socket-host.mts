@@ -53,6 +53,7 @@ import * as Paths from "@shigomori/engine/Paths";
 import { reconcileOnLastPort, rememberedPort } from "@host/direct/listenerPort";
 import { mintHexId } from "@host/lib/hexId";
 import { MAX_MESSAGE_BYTES } from "@host/socket/boundedMessages";
+import { flatClient, quietProtocol } from "@shigomori/engine/rpcClient";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
@@ -60,9 +61,6 @@ import * as Fiber from "effect/Fiber";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Layer from "effect/Layer";
-import * as RpcClient from "effect/rpc/RpcClient";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
-import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
@@ -379,27 +377,18 @@ async function rawLink(
   const client = await Effect.runPromise(
     Effect.gen(function* () {
       const socket = yield* Socket.fromWebSocket(Effect.succeed(sealed));
-      const protocol = yield* RpcClient.makeProtocolSocket({
-        pingInterval: opts.pingInterval ?? 5_000,
-        retryPolicy: Schedule.recurs(0),
-      }).pipe(
-        Effect.provideService(Socket.Socket, socket),
-        Effect.provide(RpcSerialization.layerSchemaBinary()),
-      );
-      return yield* RpcClient.make(LinkGroup, { flatten: true }).pipe(
-        Effect.provideService(RpcClient.Protocol, protocol),
+      return yield* flatClient(
+        LinkGroup,
+        yield* quietProtocol(socket, {
+          pingInterval: opts.pingInterval ?? 5_000,
+        }),
       );
     }).pipe(Scope.provide(scope)),
   );
-  // oxlint-disable-next-line shigomori/no-double-cast -- the link's group types its calls only as Rpc.AnyWithProps
-  const flat = client as unknown as (
-    tag: string,
-    payload: unknown,
-  ) => Effect.Effect<unknown, unknown>;
-  const call = (tag: string, payload?: unknown) => flat(tag, payload);
+  const call = (tag: string, payload?: unknown) =>
+    client(tag, payload) as Effect.Effect<unknown, unknown>;
   const watch = (tag: string, payload?: unknown) =>
-    // oxlint-disable-next-line shigomori/no-double-cast -- a streaming call answers a Stream, which the flat type above does not say
-    flat(tag, payload) as unknown as Stream.Stream<unknown, unknown>;
+    client(tag, payload) as Stream.Stream<unknown, unknown>;
   const hello = async (
     protocolVersion = PROTOCOL_VERSION,
     as: { deviceKind: "desktop" | "web"; connectionId: string } = {

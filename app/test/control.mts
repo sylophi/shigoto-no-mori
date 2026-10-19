@@ -152,8 +152,7 @@ import * as Cause from "effect/Cause";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as RpcClient from "effect/rpc/RpcClient";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
+import { flatClient, quietProtocol } from "@shigomori/engine/rpcClient";
 import * as Socket from "effect/socket/Socket";
 import {
   cliFailureMessage,
@@ -258,25 +257,22 @@ async function startLoopback(options: {
   };
 }
 
+// A client of the loopback at `port`, as the terminal makes one.
+const loopbackClient = Effect.fnUntraced(function* (port: number) {
+  const flat = yield* flatClient(
+    LoopbackGroup,
+    yield* quietProtocol(yield* Socket.makeWebSocket(`ws://127.0.0.1:${port}`)),
+  );
+  return (tag: string, payload: unknown) =>
+    flat(tag, payload) as Effect.Effect<unknown, unknown>;
+});
+
 // A call on the loopback with no handshake before it, as a stranger to
 // the token would make: its failure.
 const callWithoutHello = (port: number) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const socket = yield* Socket.makeWebSocket(`ws://127.0.0.1:${port}`);
-      const protocol = yield* RpcClient.makeProtocolSocket().pipe(
-        Effect.provideService(Socket.Socket, socket),
-        Effect.provide(RpcSerialization.layerSchemaBinary()),
-      );
-      // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
-      const client = (yield* RpcClient.make(LoopbackGroup, {
-        flatten: true,
-      }).pipe(
-        Effect.provideService(RpcClient.Protocol, protocol),
-      )) as unknown as (
-        tag: string,
-        payload: unknown,
-      ) => Effect.Effect<unknown, unknown>;
+      const client = yield* loopbackClient(port);
       return yield* Effect.flip(client("control:devices", {}));
     }).pipe(
       Effect.scoped,
@@ -288,20 +284,7 @@ const callWithoutHello = (port: number) =>
 const callAfterHello = (port: number, token: string, tag: string) =>
   Effect.runPromise(
     Effect.gen(function* () {
-      const socket = yield* Socket.makeWebSocket(`ws://127.0.0.1:${port}`);
-      const protocol = yield* RpcClient.makeProtocolSocket().pipe(
-        Effect.provideService(Socket.Socket, socket),
-        Effect.provide(RpcSerialization.layerSchemaBinary()),
-      );
-      // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
-      const client = (yield* RpcClient.make(LoopbackGroup, {
-        flatten: true,
-      }).pipe(
-        Effect.provideService(RpcClient.Protocol, protocol),
-      )) as unknown as (
-        tag: string,
-        payload: unknown,
-      ) => Effect.Effect<unknown, unknown>;
+      const client = yield* loopbackClient(port);
       yield* client("link:hello", {
         deviceId: DIALER,
         deviceKind: "desktop",

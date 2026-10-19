@@ -25,8 +25,10 @@ import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { PROBE_TIMEOUT_MS } from "@shared/remote/link";
+import { answerWithin } from "@shigomori/engine/liveness";
 import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import {
   type PeerReach,
   peerEffects,
@@ -50,12 +52,13 @@ import {
 
 // An ask that only informs an answer gets a probe's patience, the
 // registry included: it is a hub round trip with no clock of its own.
+// One whose limit came late (the host stopped) asks again before it
+// says `late` (answerWithin): a peer that answered isn't offline.
 const probe = <A, E, R>(asked: Effect.Effect<A, E, R>, late: () => A) =>
-  asked.pipe(
-    Effect.timeoutOrElse({
-      duration: PROBE_TIMEOUT_MS,
-      orElse: () => Effect.sync(late),
-    }),
+  answerWithin(asked, PROBE_TIMEOUT_MS).pipe(
+    Effect.flatMap(
+      Option.match({ onNone: () => Effect.sync(late), onSome: (exit) => exit }),
+    ),
   );
 
 export const roster = Effect.gen(function* () {
