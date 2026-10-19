@@ -374,7 +374,7 @@ const reconcileOf = (
       const outcome =
         direction === "pull"
           ? yield* pull(round, peerAsIs.head, record.agreed?.tip ?? null)
-          : yield* push(round, headThere);
+          : yield* push(round, headThere, peerAsIs.head);
       if (outcome.applied) {
         setAgreed(record, direction === "pull" ? core(peer) : core(local));
         setStatus(record, { status: "synced", detail: "" });

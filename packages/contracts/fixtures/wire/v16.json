@@ -897,6 +897,10 @@
       "projectId": "\ud800",
       "worktreeId": "62ed9d8a2ecd",
       "expect": {
+        "head": {
+          "kind": "branch",
+          "branch": "main"
+        },
         "tip": "0cd5",
         "indexTree": "aef47653458e083dddf5ea49259d0d42d31f2713"
       },

@@ -131,6 +131,8 @@ export const pull = Effect.fnUntraced(function* (
 export const push = Effect.fnUntraced(function* (
   { project, localWorktree, session, local, peer }: Round,
   headThere: GitHead,
+  // The peer's HEAD as it read, in its own names.
+  peerHeadThere: GitHead,
 ) {
   const probe = [
     local.tip,
@@ -168,7 +170,7 @@ export const push = Effect.fnUntraced(function* (
   const result = yield* peerMirrorFor(session.deviceId).applyGitState({
     projectId: session.projectId,
     worktreeId: session.worktreeId,
-    expect: { tip: peer.tip, indexTree: peer.indexTree },
+    expect: { tip: peer.tip, indexTree: peer.indexTree, head: peerHeadThere },
     state: { ...core(local), head: headThere },
     sweep,
   });
