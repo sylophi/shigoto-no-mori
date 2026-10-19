@@ -160,15 +160,18 @@ export const makeBranches = ({
       readonly base?: string | undefined;
     }) {
       // Tracking set explicitly, so it doesn't hang on the user's
-      // branch.autoSetupMerge. A local base (even feature/foo) must not
-      // track, which would pin the upstream to a local ref.
-      const track = input.base
-        ? !(yield* localBranchExists(input.repo, input.base)) &&
-          (yield* remoteRefExists(input.repo, input.base))
-        : false;
+      // branch.autoSetupMerge: a branch tracks the remote branch of its
+      // own name (origin/foo for foo), and is otherwise unpublished. A
+      // local base (even feature/foo) must not track, which would pin
+      // the upstream to a local ref.
+      const track =
+        input.base !== undefined &&
+        input.base.endsWith(`/${input.name}`) &&
+        !(yield* localBranchExists(input.repo, input.base)) &&
+        (yield* remoteRefExists(input.repo, input.base));
       yield* run(input.repo, [
         "branch",
-        ...(track ? ["--track"] : []),
+        track ? "--track" : "--no-track",
         "--",
         input.name,
         ...(input.base ? [input.base] : []),

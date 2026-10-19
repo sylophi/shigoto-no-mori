@@ -1463,6 +1463,72 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
   assert.equal(existsSync(wt7Path), false);
 });
 
+it("a send whose rule brings the ignored files leaves the peer project's carry-over to them, and one that brings none seeds it", async () => {
+  // The worktree's own ignored files follow it (the files step after
+  // the create), so the destination's carry-over must not seed them
+  // first: the files step keeps what is already there.
+  writeFileSync(
+    join(targetRepo, ".git", "info", "exclude"),
+    "CLAUDE.local.md\n",
+  );
+  writeFileSync(join(targetRepo, "CLAUDE.local.md"), "target's\n");
+  await writeProjectConfig(targetProjectId, {
+    ...(await readShigomoriConfig(targetProjectId)),
+    defaultBranch: "main",
+    carryOver: [{ path: "CLAUDE.local.md", mode: "copy" }],
+  });
+  const landedWith = async (
+    name: string,
+    rule: { ignoreMode: "everything" | "gitignored"; ignores: string[] },
+  ) => {
+    const path = await addWorktree(
+      sourceRepo,
+      name,
+      name,
+      `${name}.txt`,
+      `${name}\n`,
+      name,
+    );
+    const sent = await sendWorktreeHere(
+      {
+        targetDeviceId: LISTENER,
+        projectId: sourceProjectId,
+        worktreeId: worktreeIdFromPath(path),
+        ...rule,
+      },
+      handlerCtx(),
+    );
+    return sent.worktree.path;
+  };
+  // A files step that settles at once, carrying nothing.
+  standInMirror(
+    inertMirrorImpl({
+      create: () => Effect.succeed("carry-files"),
+      sessions: Effect.succeed([
+        rawMirrorSession({ session: "carry-files", successfulCycles: 1 }),
+      ]),
+      terminate: () => Effect.void,
+    }),
+  );
+  try {
+    const brought = await landedWith("carry-brought", {
+      ignoreMode: "everything",
+      ignores: [],
+    });
+    assert.equal(existsSync(join(brought, "CLAUDE.local.md")), false);
+  } finally {
+    standInMirror(inertMirrorImpl());
+  }
+  const seeded = await landedWith("carry-seeded", {
+    ignoreMode: "gitignored",
+    ignores: [],
+  });
+  assert.equal(
+    readFileSync(join(seeded, "CLAUDE.local.md"), "utf8"),
+    "target's\n",
+  );
+});
+
 it("sendWorktree from a primary: refuses a branch named mirror in the way, then lands on the peer as a worktree on mirror/<branch> with the tip and the uncommitted work, its primary untouched", async () => {
   // ---- A primary checkout, sent the way the mirror start sends it:
   // the copy is an ordinary worktree on mirror/<branch> carrying the

@@ -1018,7 +1018,11 @@ const make = Effect.gen(function* () {
     }),
     listRemotes,
     listRemoteEntries: Effect.fn("Git.listRemoteEntries")(function* (repo) {
-      return yield* run(repo, ["remote", "-v"]).pipe(
+      return yield* run(repo, [
+        "config",
+        "--get-regexp",
+        "^remote\\..*\\.(url|pushurl)$",
+      ]).pipe(
         Effect.map(parseRemoteEntries),
         Effect.orElseSucceed(() => []),
       );

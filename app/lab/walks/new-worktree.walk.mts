@@ -48,6 +48,8 @@ it("branches off a source under the name typed", async () => {
     lab.git(repo, "rev-parse", "walk-branch").trim(),
     lab.git(repo, "rev-parse", "origin/main").trim(),
   );
+  // Unpublished, under git's own defaults: no upstream on origin/main.
+  assert.throws(() => lab.git(repo, "config", "branch.walk-branch.merge"));
 });
 
 it("checks out the source branch itself", async () => {

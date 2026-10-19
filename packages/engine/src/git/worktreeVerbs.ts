@@ -26,9 +26,13 @@ export const makeWorktreeVerbs = ({
       readonly base?: string | undefined;
       readonly noCheckout?: boolean | undefined;
     }) {
+      // A new branch is unpublished: off origin/main, git's default
+      // (branch.autoSetupMerge) would track main, where a push of it
+      // is refused or lands.
       yield* run(input.repo, [
         "worktree",
         "add",
+        "--no-track",
         "-b",
         input.branch,
         ...(input.noCheckout ? ["--no-checkout"] : []),

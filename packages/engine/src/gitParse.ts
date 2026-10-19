@@ -380,15 +380,17 @@ export function splitRemoteRef(
   return best;
 }
 
-// Every row of `git remote -v` as a name and URL, fetch and push both
-// (a remote can push somewhere other than it fetches), deduped.
+// Every remote's URLs as configured (`git config --get-regexp` over
+// remote.<name>.url and .pushurl), fetch and push both, deduped. Not
+// `git remote -v`, which prints them after the user's url.insteadOf
+// rewrites: another machine has rules of its own.
 export function parseRemoteEntries(
   stdout: string,
 ): { name: string; url: string }[] {
   const entries: { name: string; url: string }[] = [];
   const seen = new Set<string>();
   for (const line of stdout.split("\n")) {
-    const match = /^(\S+)\s+(\S+)\s+\(/.exec(line);
+    const match = /^remote\.(.+)\.(?:url|pushurl) (\S+)$/.exec(line);
     const name = match?.[1];
     const url = match?.[2];
     if (!name || !url || seen.has(`${name}\t${url}`)) continue;

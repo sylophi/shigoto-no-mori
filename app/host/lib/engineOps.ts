@@ -118,6 +118,9 @@ export const createWorktree = (
     // provision still run): a mirror or transplant told not to set
     // the copy up.
     skipSetup?: boolean | undefined;
+    // A move's files step follows, with the source's ignored files
+    // these patterns don't leave out; carry-over leaves those to it.
+    ignoredFilesFollow?: readonly string[] | undefined;
   },
   reporter: Worktrees.Reporter,
 ) =>
@@ -133,6 +136,7 @@ export const createWorktree = (
           checkout: input.checkout,
           skipSetup: input.skipSetup,
           clone: input.cloneFiles !== false,
+          ignoredFilesFollow: input.ignoredFilesFollow,
         },
         reporter,
       );

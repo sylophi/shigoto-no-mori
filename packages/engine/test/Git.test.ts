@@ -602,9 +602,14 @@ it("a safe delete of an unmerged branch says so, and the forced one goes through
   assert.equal(await withGit((g) => g.localBranchExists(repo, "feat")), false);
 });
 
-it("creates a branch tracking a remote base, never a local one", async () => {
+it("creates a branch tracking the remote branch of its own name, and otherwise unpublished", async () => {
   const { clone } = withRemote();
+  git(clone, "push", "-q", "origin", "main:feat");
+  git(clone, "fetch", "-q", "origin");
   git(clone, "branch", "feature/base");
+  await withGit((g) =>
+    g.createBranch({ repo: clone, name: "feat", base: "origin/feat" }),
+  );
   await withGit((g) =>
     g.createBranch({ repo: clone, name: "from-remote", base: "origin/main" }),
   );
@@ -612,14 +617,31 @@ it("creates a branch tracking a remote base, never a local one", async () => {
     g.createBranch({ repo: clone, name: "from-local", base: "feature/base" }),
   );
   assert.equal(
-    git(clone, "config", "branch.from-remote.merge").trim(),
-    "refs/heads/main",
+    git(clone, "config", "branch.feat.merge").trim(),
+    "refs/heads/feat",
   );
+  assert.throws(() => git(clone, "config", "branch.from-remote.merge"));
   assert.throws(() => git(clone, "config", "branch.from-local.merge"));
-  assert.deepEqual(await withGit((g) => g.listBranches(clone)), {
-    local: ["feature/base", "from-local", "from-remote", "main"],
-    remote: ["origin/main"],
-  });
+});
+
+it("lists a remote's URL as configured, not as the user's url.insteadOf rewrites it", async () => {
+  const { remote, clone } = withRemote();
+  const configured = "https://github.com/example/proj.git";
+  git(clone, "remote", "set-url", "origin", configured);
+  git(clone, "config", `url.${remote}.insteadOf`, configured);
+  assert.deepEqual(await withGit((g) => g.listRemoteEntries(clone)), [
+    { name: "origin", url: configured },
+  ]);
+});
+
+it("adds a worktree on a new branch off a remote branch unpublished, whatever git's default", async () => {
+  const { clone } = withRemote();
+  git(clone, "config", "branch.autoSetupMerge", "always");
+  const path = join(tempDir("wt-"), "fresh");
+  await withGit((g) =>
+    g.addWorktree({ repo: clone, path, branch: "fresh", base: "origin/main" }),
+  );
+  assert.throws(() => git(clone, "config", "branch.fresh.merge"));
 });
 
 it("the default ref prefers the candidates, and falls back to a remote's HEAD", async () => {

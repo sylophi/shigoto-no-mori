@@ -13,7 +13,7 @@
 // deletes images beside a text file, an SVG and a binary that is not an
 // image. Drives the real host code against a fake gh on PATH and a repo
 // whose remote is on github.com over ssh, which core.sshCommand serves
-// from a bare repo beside it (the URL `git remote -v` prints, which the
+// from a bare repo beside it (the remote's configured URL, which the
 // fetch's remote is matched by, stays github.com's). Run:
 // pnpm test pull-request-diff.
 import assert from "node:assert/strict";

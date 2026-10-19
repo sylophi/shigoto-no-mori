@@ -65,6 +65,10 @@ export class CarryOver extends Context.Service<
       // The local branch the new worktree's base lands on, "" for none,
       // read only when carry-over has a source to rank.
       readonly baseBranch: Effect.Effect<string>;
+      // A move's files step follows, bringing the source's ignored files
+      // these patterns don't leave out: the worktree's own, which the
+      // entries it brings are not seeded over.
+      readonly ignoredFilesFollow?: ReadonlyArray<string> | undefined;
     }) => Effect.Effect<Option.Option<CarryOverReport>>;
   }
 >()("sm/engine/CarryOver") {}
@@ -310,12 +314,50 @@ const make = Effect.gen(function* () {
         : { failure: outcome.failure, exclude: undefined, source };
     });
 
+  // The paths a files step will bring: those its ignore patterns, read
+  // by git's own rules, don't match. Its patterns alone: the user's own
+  // excludes file is cut off, which the step doesn't read.
+  const broughtBy = (
+    ignores: ReadonlyArray<string>,
+    paths: ReadonlyArray<string>,
+  ) =>
+    Effect.gen(function* () {
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "sm-carry-" });
+      yield* git.run(dir, ["init", "-q"]);
+      yield* fs.writeFileString(
+        yield* git.gitPath(dir, "info/exclude"),
+        ignores.map((pattern) => `${pattern}\n`).join(""),
+      );
+      // Exits 1 when nothing matches.
+      const leftOut = new Set(
+        (yield* git
+          .run(
+            dir,
+            [
+              "-c",
+              "core.excludesFile=/dev/null",
+              "check-ignore",
+              "--no-index",
+              "--stdin",
+            ],
+            {
+              stdin: paths.map((each) => `${each}\n`).join(""),
+            },
+          )
+          .pipe(Effect.orElseSucceed(() => "")))
+          .split("\n")
+          .filter(Boolean),
+      );
+      return new Set(paths.filter((each) => !leftOut.has(each)));
+    });
+
   const apply = Effect.fn("CarryOver.apply")(function* (input: {
     readonly repo: string;
     readonly settings: Readonly<Record<string, unknown>> | null;
     readonly checkouts: ReadonlyArray<Source>;
     readonly destination: string;
     readonly baseBranch: Effect.Effect<string>;
+    readonly ignoredFilesFollow?: ReadonlyArray<string> | undefined;
   }) {
     const manual = manualEntries(input.settings);
     let sources: ReadonlyArray<Source> = [];
@@ -333,7 +375,16 @@ const make = Effect.gen(function* () {
         includeFailures = resolved.failures;
       }
     }
-    const entries = mergeCarryOver(manual, include);
+    const merged = mergeCarryOver(manual, include);
+    const brought =
+      input.ignoredFilesFollow === undefined || merged.length === 0
+        ? new Set<string>()
+        : // Unread, every entry is seeded, as with no files step.
+          yield* broughtBy(
+            input.ignoredFilesFollow,
+            merged.map((entry) => entry.path),
+          ).pipe(Effect.orElseSucceed(() => new Set<string>()));
+    const entries = merged.filter((entry) => !brought.has(entry.path));
     if (entries.length === 0 && includeFailures.length === 0) {
       return Option.none();
     }
