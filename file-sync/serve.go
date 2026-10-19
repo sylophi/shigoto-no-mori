@@ -216,7 +216,7 @@ func refuseGitPaths(verb string, paths []string) error {
 
 func (e guardedEndpoint) Transition(ctx context.Context, transitions []*core.Change) ([]*core.Entry, []*core.Problem, bool, error) {
 	for _, change := range transitions {
-		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) {
+		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) || linksIntoGit(change.Path, change.New) {
 			return nil, nil, false, fmt.Errorf("refused a change to %q: .git is not synchronized", change.Path)
 		}
 	}
@@ -228,14 +228,42 @@ func touchesGit(p string) bool {
 }
 
 // A name the volume reads as .git: APFS and HFS+ fold case by default,
-// so .GIT opens the same folder.
+// so .GIT opens the same folder, and HFS+ also skips the code points it
+// ignores in a name, so .g\u200cit does too (git's is_hfs_dotgit).
 func isGitName(name string) bool {
-	return strings.EqualFold(name, ".git")
+	return strings.EqualFold(strings.Map(hfsVisible, name), ".git")
+}
+
+func hfsVisible(r rune) rune {
+	switch {
+	case r >= 0x200c && r <= 0x200f, r >= 0x202a && r <= 0x202e,
+		r >= 0x206a && r <= 0x206f, r == 0xfeff:
+		return -1
+	}
+	return r
 }
 
 func slicesContainsGit(components []string) bool {
 	for _, component := range components {
 		if isGitName(component) {
+			return true
+		}
+	}
+	return false
+}
+
+// A link this side would make that points into .git: Mutagen never
+// follows one, but whatever here opens the worktree does (an editor,
+// the files page, an agent writing through it).
+func linksIntoGit(at string, entry *core.Entry) bool {
+	if entry == nil {
+		return false
+	}
+	if entry.Kind == core.EntryKind_SymbolicLink {
+		return touchesGit(path.Join(path.Dir(at), entry.Target))
+	}
+	for name, child := range entry.Contents {
+		if linksIntoGit(path.Join(at, name), child) {
 			return true
 		}
 	}

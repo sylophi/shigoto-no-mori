@@ -9,8 +9,8 @@
     "deploy": "wrangler deploy --env dev",
     "deploy:prod": "wrangler deploy --env \"\"",
     "typecheck": "$(effect-tsgo get-exe-path)",
-    "test": "node ../testTemp.mts hub vitest run",
-    "check": "pnpm run typecheck && node ../testTemp.mts hub vitest run"
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON ../testTemp.mts hub vitest run",
+    "check": "pnpm run typecheck && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON ../testTemp.mts hub vitest run"
   },
   "dependencies": {
     "@clerk/backend": "^3.16.0",

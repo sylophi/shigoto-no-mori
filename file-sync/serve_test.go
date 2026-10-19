@@ -107,6 +107,11 @@ func TestServeKeepsGitOutOfReach(t *testing.T) {
 	for _, change := range []*core.Change{
 		{Path: ".git/hooks", New: directory},
 		{Path: ".GIT/hooks", New: directory},
+		{Path: ".g\u200cit/hooks", New: directory},
+		{Path: "link", New: &core.Entry{Kind: core.EntryKind_SymbolicLink, Target: ".git/config"}},
+		{Path: "sub/d", New: &core.Entry{Kind: core.EntryKind_Directory, Contents: map[string]*core.Entry{
+			"hooks": {Kind: core.EntryKind_SymbolicLink, Target: "../../.git/hooks"},
+		}}},
 		{Path: "sub/.git", New: directory},
 		{Path: "sub/b", New: &core.Entry{Kind: core.EntryKind_Directory, Contents: map[string]*core.Entry{".git": directory}}},
 	} {
@@ -114,7 +119,7 @@ func TestServeKeepsGitOutOfReach(t *testing.T) {
 			t.Fatalf("a change to %s was applied", change.Path)
 		}
 	}
-	for _, path := range []string{".git/hooks", "sub/.git", "sub/b"} {
+	for _, path := range []string{".git/hooks", "sub/.git", "sub/b", "link", "sub/d"} {
 		if _, err := os.Lstat(filepath.Join(root, path)); err == nil {
 			t.Fatalf("%s was written", path)
 		}
@@ -150,7 +155,7 @@ func TestServeRefusesARealRepositorysGitByName(t *testing.T) {
 		asked  []string
 		reader string
 	}{
-		{primary, []string{".git/config", ".git/hooks/pre-commit", "vendor/lib/.git"}, "README.md"},
+		{primary, []string{".git/config", ".git/hooks/pre-commit", ".g\u200cit/hooks/pre-commit", "vendor/lib/.git"}, "README.md"},
 		{linked, []string{".git"}, "README.md"},
 	} {
 		session, err := identifier.New(identifier.PrefixSynchronization)
@@ -175,14 +180,26 @@ func TestServeRefusesARealRepositorysGitByName(t *testing.T) {
 		if got := supplied(t, endpoint, served.reader); got != "hello\n" {
 			t.Fatalf("%s: %s came as %q", served.root, served.reader, got)
 		}
+		// Each refusal ends the stream, so each is asked on one of its own.
 		for _, path := range served.asked {
-			if _, _, _, err := endpoint.Stage([]string{path}, [][]byte{{1}}); err == nil {
+			session, err := identifier.New(identifier.PrefixSynchronization)
+			if err != nil {
+				t.Fatal(err)
+			}
+			staging, err := dialServed(t, served.root, session, &synchronization.Configuration{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err, _ := staging.Scan(context.Background(), nil, true); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, _, err := staging.Stage([]string{path}, [][]byte{{1}}); err == nil {
 				t.Fatalf("%s: staging %s was taken", served.root, path)
 			}
 		}
 	}
 	// Each refusal ends the stream, so each read is asked on its own.
-	for _, path := range []string{".git/config", ".GIT/config", ".Git/hooks/pre-commit", "vendor/lib/.git"} {
+	for _, path := range []string{".git/config", ".GIT/config", ".g\u200cit/config", ".git\ufeff/config", ".Git/hooks/pre-commit", "vendor/lib/.git"} {
 		session, err := identifier.New(identifier.PrefixSynchronization)
 		if err != nil {
 			t.Fatal(err)
@@ -208,7 +225,12 @@ func git(t *testing.T, dir string, args ...string) {
 			command.Env = append(command.Env, entry)
 		}
 	}
-	command.Env = append(command.Env, "GIT_CEILING_DIRECTORIES="+filepath.Dir(dir))
+	// Nor the machine's own config: a signing key, hooks, templates.
+	command.Env = append(command.Env,
+		"GIT_CEILING_DIRECTORIES="+filepath.Dir(dir),
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_NOSYSTEM=1",
+	)
 	if out, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
