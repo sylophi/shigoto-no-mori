@@ -29,6 +29,7 @@ import type { SignaturesArea } from "./signatures.ts";
 import type { StagingArea } from "./staging.ts";
 import type { SwapArea } from "./swap.ts";
 import type { RestartArea } from "./restart.ts";
+import { openEnvArgs, type Relaunched } from "../relaunchEnv.ts";
 
 export const makeMethods = ({
   files,
@@ -56,31 +57,14 @@ export const makeMethods = ({
     const { stageUpdate } = staging;
     const { installStaged } = swap;
     const { waitForRestart, appendInstallLog, noteInstallFailure } = restart;
-    // open hands the app launchd's environment, not ours, so a data dir
-    // the environment chose (a test run's) is passed on, or the app
-    // would come back on the default one; and a test build's update
-    // stand-ins, as the app's own relaunch passes them, or it would come
-    // back checking the real feeds.
     const relaunchArgs = (
       bundle: string,
-      endpoints: {
-        readonly feedUrl?: string;
-        readonly releasesUrl?: string;
-        readonly debugPort?: string;
-      },
+      endpoints: Omit<Relaunched, "dataDir">,
     ) => [
-      ...(paths.dataDirSource === "env"
-        ? ["--env", `SHIGOMORI_DATA_DIR=${paths.dataDir}`]
-        : []),
-      ...(endpoints.feedUrl
-        ? ["--env", `SHIGOMORI_UPDATE_FEED_URL=${endpoints.feedUrl}`]
-        : []),
-      ...(endpoints.releasesUrl
-        ? ["--env", `SHIGOMORI_UPDATE_RELEASES_URL=${endpoints.releasesUrl}`]
-        : []),
-      ...(endpoints.debugPort
-        ? ["--env", `SHIGOMORI_DEBUG_PORT=${endpoints.debugPort}`]
-        : []),
+      ...openEnvArgs({
+        ...endpoints,
+        dataDir: paths.dataDirSource === "env" ? paths.dataDir : undefined,
+      }),
       bundle,
     ];
 

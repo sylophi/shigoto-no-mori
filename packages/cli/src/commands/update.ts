@@ -9,6 +9,7 @@ import * as Command from "effect/cli/Command";
 import { rest } from "../here.ts";
 import * as Flag from "effect/cli/Flag";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { RELAUNCH_ENV } from "@shigomori/engine/relaunchEnv";
 import { flavor, version } from "../build.ts";
 import { UsageError } from "../errors.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
@@ -17,8 +18,8 @@ import { spinner } from "../spinner.ts";
 // The variables the stand-in flags replaced, refused so one still
 // exported can't send a test build to the real feeds.
 const REPLACED: ReadonlyArray<readonly [string, string]> = [
-  ["SHIGOMORI_UPDATE_FEED_URL", "--feed-url"],
-  ["SHIGOMORI_UPDATE_RELEASES_URL", "--releases-url"],
+  [RELAUNCH_ENV.feedUrl, "--feed-url"],
+  [RELAUNCH_ENV.releasesUrl, "--releases-url"],
 ];
 
 const running: Updater.Running = {
@@ -96,7 +97,7 @@ export const update = Command.make(
           // Only a build that takes a debugger (a test flavor) passes its
           // port to the app it brings back.
           ...(flavorNames(flavor).debuggable
-            ? { debugPort: process.env["SHIGOMORI_DEBUG_PORT"] ?? "" }
+            ? { debugPort: process.env[RELAUNCH_ENV.debugPort] ?? "" }
             : {}),
         });
       }

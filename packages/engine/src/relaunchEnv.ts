@@ -1,0 +1,25 @@
+// What a relaunch through `open` passes on, the app's own (a data-folder
+// move, a nuke, the fatal recovery) and the installer's: open hands the
+// app launchd's environment, not ours, so a data dir the environment
+// chose (a test run's), a test build's update stand-ins and its debug
+// port are passed on, or the app would come back on the default data
+// dir, checking the real feeds, with no port to drive it on.
+export const RELAUNCH_ENV = {
+  dataDir: "SHIGOMORI_DATA_DIR",
+  feedUrl: "SHIGOMORI_UPDATE_FEED_URL",
+  releasesUrl: "SHIGOMORI_UPDATE_RELEASES_URL",
+  debugPort: "SHIGOMORI_DEBUG_PORT",
+} as const;
+
+export type Relaunched = {
+  readonly [K in keyof typeof RELAUNCH_ENV]?: string | undefined;
+};
+
+// As `open --env` takes them.
+export const openEnvArgs = (carried: Relaunched): string[] =>
+  (Object.keys(RELAUNCH_ENV) as (keyof typeof RELAUNCH_ENV)[]).flatMap(
+    (key) => {
+      const value = carried[key];
+      return value ? ["--env", `${RELAUNCH_ENV[key]}=${value}`] : [];
+    },
+  );

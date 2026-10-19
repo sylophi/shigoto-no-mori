@@ -12,7 +12,10 @@ import { writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { app } from "electron";
 import { DEV_RELAUNCH_FILE_ENV } from "@shared/packaging/appName.mts";
-import { updateEndpointOverrideEnv } from "./updateEndpoints";
+import { openEnvArgs } from "@shigomori/engine/relaunchEnv";
+import { dataDir, dataDirSource } from "@shared/paths";
+import { debugPortOpened } from "./devCdp";
+import { updateEndpoints } from "./updateEndpoints";
 import { log } from "@shared/log";
 import { envSetting } from "@shared/config";
 
@@ -50,7 +53,11 @@ function relaunchThroughLaunchServices(): void {
   const args = process.argv.slice(1);
   const open = [
     "-n",
-    ...updateEndpointOverrideEnv(),
+    ...openEnvArgs({
+      ...updateEndpoints(),
+      dataDir: dataDirSource() === "env" ? dataDir() : undefined,
+      debugPort: debugPortOpened(),
+    }),
     "-a",
     bundle,
     ...(args.length > 0 ? ["--args", ...args] : []),
