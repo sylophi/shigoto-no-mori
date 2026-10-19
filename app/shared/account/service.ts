@@ -112,7 +112,11 @@ type EnrollFields = {
 };
 
 export type AccountService = {
-  enroll(sessionToken: string, fields: EnrollFields): Promise<EnrollResponse>;
+  enroll(
+    sessionToken: string,
+    fields: EnrollFields,
+    signal?: AbortSignal,
+  ): Promise<EnrollResponse>;
   listDevices(credential: string, signal?: AbortSignal): Promise<DeviceInfo[]>;
   revoke(
     credential: string,
@@ -126,6 +130,7 @@ export type AccountService = {
     credential: string,
     deviceId: string,
     patch: DevicePatch,
+    signal?: AbortSignal,
   ): Promise<void>;
   // signal aborts the mint on stop or on the caller's mint timeout, so
   // a black-holed route cannot hang the connect.
@@ -189,12 +194,14 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     });
 
   return {
-    async enroll(sessionToken, fields) {
+    async enroll(sessionToken, fields, signal) {
       // The device as the hub stored it, mapped to this build's icon
       // catalog.
       return Schema.decodeSync(EnrollResponseSchema)(
-        await call(sessionToken, (client) =>
-          client.enroll({ payload: fields }),
+        await call(
+          sessionToken,
+          (client) => client.enroll({ payload: fields }),
+          signal,
         ),
       );
     },
@@ -217,9 +224,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       );
     },
 
-    async update(credential, deviceId, patch) {
-      await call(credential, (client) =>
-        client.updateDevice({ params: { deviceId }, payload: patch }),
+    async update(credential, deviceId, patch, signal) {
+      await call(
+        credential,
+        (client) =>
+          client.updateDevice({ params: { deviceId }, payload: patch }),
+        signal,
       );
     },
 

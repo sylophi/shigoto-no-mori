@@ -20,6 +20,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { startClientNow } from "@/lib/runtime/client";
@@ -121,6 +122,8 @@ export type WebBridge = {
 export const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
 // How long a tab waits for another tab's enroll.
 const ENROLL_WAIT_MS = 30_000;
+// The profile's tabs' account changes, one tab at a time.
+const ACCOUNT_LOCK = "sm.web.accountChange";
 
 const isDomError = (error: unknown, name: string): boolean =>
   error instanceof DOMException && error.name === name;
@@ -264,6 +267,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     platform: WEB_PLATFORM,
     sharedSignIn: () => false,
     changed: accountChanged,
+    transitions: Semaphore.makeUnsafe(1),
     devicesListed: () => {},
     // A web client is a refuse-all host (web/hub/connection.ts): it
     // serves no peer calls, so switching command access on would
@@ -296,7 +300,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
           // others for a while, not for good: theirs then fail, and retry.
           locks
             .request(
-              "sm.web.enroll",
+              ACCOUNT_LOCK,
               { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
               enrollHere,
             )
@@ -315,6 +319,26 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     enrolling = run;
     return run;
   };
+
+  // A sign-out takes its turn behind another tab's enrollment too, as
+  // this tab's does behind its own (AccountShell.transitions), or the
+  // enrollment's late write signs the profile back in. A local sign-out
+  // must land, so one that waited out ENROLL_WAIT_MS goes ahead.
+  const signOutOneTab: typeof accountHandlers.signOut = (input, ctx) =>
+    locks === undefined
+      ? accountHandlers.signOut(input, ctx)
+      : locks
+          .request(
+            ACCOUNT_LOCK,
+            { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
+            () => accountHandlers.signOut(input, ctx),
+          )
+          .catch((error: unknown) => {
+            if (isDomError(error, "TimeoutError")) {
+              return accountHandlers.signOut(input, ctx);
+            }
+            throw error;
+          });
 
   // ---- clientConfig module ----
 
@@ -429,6 +453,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   tab.served.serve(accountContract, {
     ...accountHandlers,
     enroll: enrollOneTab,
+    signOut: signOutOneTab,
   });
   tab.served.serve(clientConfigContract, clientConfigHandlers);
   tab.served.view(clientConfigContract, {

@@ -1024,6 +1024,58 @@ it("two tabs enrolling at once: one enrolls, and the profile keeps the credentia
   );
 });
 
+type WebBridgeOf = ReturnType<typeof createWebBridge>;
+
+it("a sign-out in one tab while another tab's enrollment waits on the hub takes its turn after it, so the profile ends signed out", async () => {
+  const localStorage = memoryStorage();
+  const locks = sharedLocks();
+  const held: { release?: () => void } = {};
+  const answered = new Promise<void>((resolve) => {
+    held.release = resolve;
+  });
+  const release = () => held.release?.();
+  let enrolls = 0;
+  const fetchImpl: typeof fetch = async (input, init = {}) => {
+    if (String(input) === `${HUB_URL}/devices/enroll`) {
+      enrolls += 1;
+      assert(init.body instanceof Uint8Array);
+      const body = JSON.parse(new TextDecoder().decode(init.body));
+      await answered;
+      return jsonResponse(200, {
+        credential: "cred-1",
+        device: {
+          ...body,
+          createdAt: Date.now(),
+          lastSeenAt: null,
+          online: false,
+        },
+      });
+    }
+    if (init.method === "DELETE") return new Response(null, { status: 204 });
+    return jsonResponse(500, { error: "no device hub in this check" });
+  };
+  const [enrolling, leaving] = [0, 1].map(() => {
+    const bridge = createWebBridge(
+      makeDeps({ localStorage, fetchImpl, locks }),
+    );
+    trackTest(() => bridge.stop());
+    return bridge;
+  }) as [WebBridgeOf, WebBridgeOf];
+  const enrolled = enrolling.api.run(
+    enrolling.api.account.enroll(fakeSessionJwt("acct_1")),
+  );
+  await waitFor(() => enrolls === 1, "the enrollment to reach the hub");
+  const signedOut = leaving.api.run(leaving.api.account.signOut());
+  release();
+  await enrolled;
+  await signedOut;
+  assert.equal(
+    storedJson(localStorage, "sm.web.account").credential,
+    undefined,
+    "the other tab's enrollment signed the profile back in",
+  );
+});
+
 it("shared settings another tab wrote reach this tab's watch", async () => {
   const localStorage = memoryStorage();
   const tab = () => {
