@@ -302,9 +302,7 @@ it("service: revoke DELETEs the per-device route and tolerates a 204", async () 
 });
 
 it("service: mintTicket POSTs the tickets route under the credential bearer", async () => {
-  const { service, calls } = stubService(() =>
-    json({ ticket: "the-ticket", expiresInMs: 30_000 }),
-  );
+  const { service, calls } = stubService(() => json({ ticket: "the-ticket" }));
   const ticket = await service.mintTicket(
     "device-credential",
     "0123456789abcdef0123456789abcdef",

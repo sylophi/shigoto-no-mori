@@ -48,7 +48,7 @@ import {
   type OnlineDevice,
   type RelayFrame,
   ServerEnvelopeSchema,
-  utf8ByteLength,
+  deliveredRelayGrowth,
 } from "@shigomori/contracts/hubProtocol";
 import { fromBase64Url, sameKey, toBase64Url } from "@shared/crypto/deviceKey";
 import { HandshakeState, type KeyPair } from "@shared/crypto/noise";
@@ -254,16 +254,6 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     }
   }
 
-  // Deliver carries `"from":"<localId>"`, send carries `"to":"<to>"`.
-  // The DO measures the deliver shape against the limit, so a send-shape
-  // encode plus this delta measures exactly what the DO will.
-  function routingDelta(to: string): number {
-    return (
-      utf8ByteLength(`"from":"${deps.localDeviceId}"`) -
-      utf8ByteLength(`"to":"${to}"`)
-    );
-  }
-
   // Encode the send envelope once and report whether the DELIVER shape
   // fits the limit, so nothing stringifies twice.
   function encodeFor(
@@ -275,7 +265,14 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       to,
       frame: encodeRelayFrame(frame),
     });
-    return { text, fits: hubTextWithinLimit(text, routingDelta(to)) };
+    // Measured as the hub will deliver it.
+    return {
+      text,
+      fits: hubTextWithinLimit(
+        text,
+        deliveredRelayGrowth(deps.localDeviceId, to),
+      ),
+    };
   }
 
   // Whether an answer of this many payload bytes, once sealed, fits the
