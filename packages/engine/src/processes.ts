@@ -206,10 +206,10 @@ const TAIL_EVERY = "50 millis";
 const TAIL_CHUNK = 64 * 1024;
 
 // A script's output file read as it grows, each chunk to `onChunk`,
-// until `exit` answers, then to its end: what the script wrote before
-// it exited is in the file by then, so nothing it said is lost and no
-// timer decides. A child it left in the background holds the file, not
-// a pipe of this process, and writes on into it after.
+// until `exit` answers, then to the size it had then: what the script
+// wrote before it exited is all there, so nothing it said is lost and
+// no timer decides, and a child it left in the background, which holds
+// the file and not a pipe of this process, writes on into it unread.
 export const fileUntilExit = <A, E, R>(
   path: string,
   exit: Effect.Effect<A, E, R>,
@@ -219,26 +219,34 @@ export const fileUntilExit = <A, E, R>(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const file = yield* fs.open(path, { flag: "r" });
+      let read = 0;
       // One read and its report together, so stopping the tail between
       // two never loses a chunk read.
-      const step = Effect.uninterruptible(
-        Effect.flatMap(file.readAlloc(TAIL_CHUNK), (chunk) =>
-          Option.isSome(chunk) && chunk.value.length > 0
-            ? Effect.as(onChunk(chunk.value), true)
-            : Effect.succeed(false),
-        ),
-      );
-      const toEnd = step.pipe(
-        Effect.repeat({ while: (more) => more }),
-        Effect.orElseSucceed(() => false),
-      );
-      const tail = yield* toEnd.pipe(
+      const step = (upTo: number) =>
+        Effect.uninterruptible(
+          Effect.flatMap(
+            file.readAlloc(Math.min(TAIL_CHUNK, upTo - read)),
+            (chunk) => {
+              if (Option.isNone(chunk) || chunk.value.length === 0) {
+                return Effect.succeed(false);
+              }
+              read += chunk.value.length;
+              return Effect.as(onChunk(chunk.value), read < upTo);
+            },
+          ),
+        );
+      const readTo = (upTo: number) =>
+        read < upTo
+          ? step(upTo).pipe(Effect.repeat({ while: (more) => more }))
+          : Effect.void;
+      const tail = yield* readTo(Infinity).pipe(
+        Effect.ignore,
         Effect.repeat(Schedule.spaced(TAIL_EVERY)),
         Effect.forkScoped,
       );
       const exited = yield* Effect.exit(exit);
       yield* Fiber.interrupt(tail);
-      yield* toEnd;
+      yield* readTo(Number((yield* file.stat).size));
       return yield* exited;
     }),
   );

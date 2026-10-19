@@ -2604,7 +2604,7 @@ describe("projects config", () => {
 
 describe("a setup that leaves a child in the background", () => {
   // The project, its setup `(sleep 60; echo late) &`, which writes the
-  // child's pid where the proof ends it.
+  // child's pid and its sleep's where the proof ends them.
   const backgrounded = async () => {
     const alpha = box.repo("alpha");
     box.write("registry.json", {
@@ -2617,14 +2617,16 @@ describe("a setup that leaves a child in the background", () => {
       "projects",
       "config",
       "--setup",
-      `(sleep 60; echo late) & echo $! > "${pidFile}"`,
+      `(sleep 60 & echo $! > "${pidFile}.sleep"; wait; echo late) & echo $! > "${pidFile}"`,
     );
     assert.equal(set.code, 0, set.stderr);
     const endChild = () => {
-      try {
-        process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
-      } catch {
-        // Not started, or gone.
+      for (const file of [pidFile, `${pidFile}.sleep`]) {
+        try {
+          process.kill(Number(readFileSync(file, "utf8")), "SIGKILL");
+        } catch {
+          // Not started, or gone.
+        }
       }
     };
     return { alpha, pidFile, endChild };
@@ -2642,7 +2644,7 @@ describe("a setup that leaves a child in the background", () => {
     } finally {
       endChild();
     }
-  });
+  }, 60_000);
 
   it("returns a terminal's prompt with the shell in the new worktree", async () => {
     const { alpha, endChild } = await backgrounded();
@@ -2692,5 +2694,5 @@ describe("a setup that leaves a child in the background", () => {
         }
       }
     }
-  });
+  }, 60_000);
 });

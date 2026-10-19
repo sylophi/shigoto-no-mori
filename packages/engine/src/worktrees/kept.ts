@@ -1,7 +1,6 @@
 // What the store keeps under a worktree's id (marks, the shelf, agent
 // sessions, its data), its pending dirty capture and its scripts' last
-// output (scriptOutput.ts): carried to another
-// id, or forgotten. What clones proved about the old id goes either way.
+// output (scriptOutput.ts): carried to another id, or forgotten. What clones proved about the old id goes either way.
 // The rows go in one transaction, which a caller may widen to commit
 // them with its own; the capture's ref follows, since git isn't in the
 // transaction, and a later call finishes it. A re-key whose checkout

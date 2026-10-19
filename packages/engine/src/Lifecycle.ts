@@ -166,6 +166,9 @@ const make = Effect.gen(function* () {
         scriptOutputDir(paths.dataDir, context.worktree.id),
         { recursive: true },
       );
+      // A new file, not the last one emptied: a child an earlier run
+      // left writes on into its own.
+      yield* fs.remove(output, { force: true });
       yield* fs.writeFileString(output, "");
       return yield* spawner.spawn(
         // A POSIX shell opens the file and becomes the login shell with
@@ -218,23 +221,25 @@ const make = Effect.gen(function* () {
         // One decoder for the run, so a character split across two reads
         // comes out whole.
         const decoder = new TextDecoder();
+        // A signal death is no exit code, like a run that never started.
+        const exitCode = handle.success.exitCode.pipe(
+          Effect.map(Number),
+          Effect.orElseSucceed(() => null),
+        );
         // The shell's exit ends the run.
-        const code = yield* fileUntilExit(
-          output,
-          // A signal death is no exit code, like a run that never started.
-          handle.success.exitCode.pipe(
-            Effect.map(Number),
-            Effect.orElseSucceed(() => null),
-          ),
-          (chunk) =>
-            script({
-              runId,
-              kind: "data",
-              data: decoder.decode(chunk, { stream: true }),
-            }),
+        const code = yield* fileUntilExit(output, exitCode, (chunk) =>
+          script({
+            runId,
+            kind: "data",
+            data: decoder.decode(chunk, { stream: true }),
+          }),
         ).pipe(
           Effect.provideService(FileSystem.FileSystem, fs),
-          Effect.orElseSucceed(() => null),
+          Effect.catch((error) =>
+            script({ runId, kind: "error", data: errorMessageOf(error) }).pipe(
+              Effect.andThen(exitCode),
+            ),
+          ),
         );
         const rest = decoder.decode();
         if (rest !== "") yield* script({ runId, kind: "data", data: rest });
