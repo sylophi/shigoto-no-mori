@@ -395,8 +395,8 @@ export const readGitState = Effect.fnUntraced(function* (
 export type ApplyGitStateInput = {
   // The state the caller last observed here. Anything else means the
   // worktree moved under the caller, and the apply refuses so the
-  // caller can look again. A peer's push names no HEAD until the
-  // contract carries it (the wire PR); a local pull always does.
+  // caller can look again. A local pull names the HEAD it read; a peer's
+  // push names none, its contract carrying the tip and the index alone.
   expect: Pick<GitStateCore, "tip" | "indexTree"> & {
     readonly head?: GitHead;
   };

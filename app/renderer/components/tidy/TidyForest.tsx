@@ -26,6 +26,7 @@ import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
+  type Acknowledged,
   buildTidyEntries,
   forcedRemoval,
   groupByProject,
@@ -175,7 +176,7 @@ function TidyBody() {
     setPicked((prev) => withToggled(worktreeId)(prev ?? safeIds));
   };
 
-  const runRemovals = async (acknowledged: ReadonlySet<string>) => {
+  const runRemovals = async (acknowledged: Acknowledged) => {
     setConfirming(false);
     // Snapshot the selection so toggles during the run can't drift it.
     const queue = summary.selected;

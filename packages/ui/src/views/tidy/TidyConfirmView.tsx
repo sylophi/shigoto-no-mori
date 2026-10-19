@@ -3,7 +3,12 @@ import { Button } from "../../primitives/button.tsx";
 import { Checkbox } from "../../primitives/checkbox.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
-import { acknowledges, type TidySummary } from "./tidyModel.ts";
+import {
+  type Acknowledged,
+  acknowledgementOf,
+  acknowledges,
+  type TidySummary,
+} from "./tidyModel.ts";
 import { TidyEntryTitleView } from "./TidyEntryTitleView.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { plural, pluralize } from "@shigomori/contracts/words";
@@ -15,7 +20,7 @@ interface TidyConfirmProps {
   icons: ReadonlyMap<string, ReactNode>;
   onCancel: () => void;
   // With the risky worktrees the user acknowledged losing.
-  onConfirm: (acknowledged: ReadonlySet<string>) => void;
+  onConfirm: (acknowledged: Acknowledged) => void;
 }
 
 // The last thing between a click and an irreversible removal. Everything
@@ -32,8 +37,8 @@ export function TidyConfirmView({
   onCancel,
   onConfirm,
 }: TidyConfirmProps) {
-  const [acknowledged, setAcknowledged] = useState<ReadonlySet<string>>(
-    () => new Set(),
+  const [acknowledged, setAcknowledged] = useState<Acknowledged>(
+    () => new Map(),
   );
   const { selected, risky, projectCount, reclaimBytes, reclaimPartial } =
     summary;
@@ -109,11 +114,7 @@ export function TidyConfirmView({
               variant="destructive"
               checked={covered}
               onCheckedChange={() =>
-                setAcknowledged(
-                  covered
-                    ? new Set()
-                    : new Set(risky.map((entry) => entry.worktree.id)),
-                )
+                setAcknowledged(covered ? new Map() : acknowledgementOf(risky))
               }
             />
             I understand this work will be lost
