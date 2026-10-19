@@ -37,6 +37,7 @@ import {
   LOCK_STALE_MS,
   StagedManifest,
   check,
+  errorText,
   isDirMode,
   launcherCommands,
   lstatMtime,
@@ -390,7 +391,14 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
 
     const checkStaleLocks = Effect.gen(function* () {
       const line = check("Data dir", "locks", "locks");
-      const locks = yield* findStaleLocks;
+      const found = yield* Effect.result(findStaleLocks);
+      if (Result.isFailure(found)) {
+        return line.warn(
+          `can't read the data dir's lock files: ${errorText(found.failure)}`,
+          "Run the doctor again. If it keeps failing, reinstall Shigoto no Mori.",
+        );
+      }
+      const locks = found.success;
       const [first] = locks;
       if (first === undefined) return line.ok("no stale lock files");
       const label = pluralize(locks.length, "stale lock file");
@@ -527,17 +535,20 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       });
 
     // The bytes of the files under a path, the path itself when a file.
-    // A symlink counts as itself, never what it points at.
+    // A symlink counts as itself, never what it points at. Undefined when
+    // any of it can't be read, so no size is shown rather than a short one.
     const treeSize = (root: string) =>
       darwin.lstat({ root }).pipe(
         Stream.runFold(
-          () => 0,
+          (): number | undefined => 0,
           (size, entry) =>
-            Darwin.isFailed(entry) || isDirMode(entry.mode)
-              ? size
-              : size + entry.size,
+            size === undefined || Darwin.isFailed(entry)
+              ? undefined
+              : isDirMode(entry.mode)
+                ? size
+                : size + entry.size,
         ),
-        Effect.orElseSucceed(() => 0),
+        Effect.orElseSucceed(() => undefined),
       );
 
     // A crashed or superseded update leaves its scratch until the next
@@ -548,18 +559,22 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         if (Option.isSome(holder) && holder.value.alive) return [];
         const found = yield* updateLeftovers(version);
         if (found.length === 0) return [];
-        let size = 0;
-        for (const item of found) size += yield* treeSize(item);
-        const shown = formatSize(size);
+        let size: number | undefined = 0;
+        for (const item of found) {
+          const one = yield* treeSize(item);
+          size =
+            size === undefined || one === undefined ? undefined : size + one;
+        }
+        const shown = size === undefined ? "" : `${formatSize(size)} of `;
         return [
           repairable(
             check("Data dir", "update-leftovers", "update files").warn(
-              `${shown} of downloads left by an earlier update that nothing will install`,
+              `${shown}downloads left by an earlier update that nothing will install`,
               "Delete them, or let the next update sweep them.",
             ),
             {
-              prompt: `Delete ${shown} of leftover update files in ${tildify(updater.updates, home)}?`,
-              label: `deleted ${shown} of leftover update files`,
+              prompt: `Delete ${shown}leftover update files in ${tildify(updater.updates, home)}?`,
+              label: `deleted ${shown}leftover update files`,
               destructive: true,
               // Under the stager's own lock, and listed again once it is
               // held: a run that staged something newer since keeps it.

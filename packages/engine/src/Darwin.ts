@@ -127,7 +127,9 @@ export class Darwin extends Context.Service<
     ) => Stream.Stream<Entry<typeof Xattrs.Type>, DarwinHelperError>;
     // lstat(2) of each entry, a symlink's own. `private` adds each
     // regular file's private size, where the volume can tell. A walk
-    // steps over the `skip` folders (relative to the root) whole.
+    // steps over the `skip` folders (relative to the root) whole, and a
+    // folder it can't list answers twice, in either order: its own entry
+    // and a failure for the same path.
     readonly lstat: (
       input: Target & {
         readonly private?: boolean | undefined;

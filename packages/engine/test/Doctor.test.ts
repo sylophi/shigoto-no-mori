@@ -569,6 +569,84 @@ describe("a project", () => {
     box.git(moved, "status");
   });
 
+  it("prunes nothing while a managed folder can't be listed", async () => {
+    const { repo, base, tree } = alpha();
+    const outside = join(box.home, "elsewhere", "feat");
+    box.git(repo, "worktree", "add", "-q", "-b", "feat", outside);
+    const gone = tree("gone");
+    const moved = join(base, "feat");
+    renameSync(outside, moved);
+    rmSync(gone, { recursive: true });
+    chmodSync(base, 0o311);
+    try {
+      const doc = await run();
+      assert.match(
+        only(doc, "project-worktrees", "fail").detail,
+        /^can't read this project's worktree folders, so a moved or stray worktree goes unseen: /,
+      );
+      const fixed = await run({ fix: true });
+      assert.ok(
+        !fixed.repaired.some((line) => line.startsWith("pruned")),
+        `pruned with the moved worktree unseen: ${fixed.repaired.join("; ")}`,
+      );
+    } finally {
+      chmodSync(base, 0o755);
+    }
+    box.git(moved, "status");
+  });
+
+  it("says what it couldn't read when the darwin helper fails, and prunes nothing it couldn't see", async () => {
+    // A helper that can't lstat, as one that can't run would be.
+    const bin = realpathSync(mkdtempSync(join(tmpdir(), "engine-macfs-")));
+    const broken = join(bin, "macfs");
+    writeFileSync(
+      broken,
+      `#!/bin/sh\nif [ "$1" = lstat ]; then echo "lstat refused" >&2; exit 3; fi\nexec '${macfs()}' "$@"\n`,
+      { mode: 0o755 },
+    );
+    box.remove();
+    box = sandbox({ macfs: broken });
+    try {
+      const { repo, base, tree } = alpha();
+      // A worktree moved by hand, which only the helper's read would see.
+      const outside = join(box.home, "elsewhere", "feat");
+      box.git(repo, "worktree", "add", "-q", "-b", "feat", outside);
+      const gone = tree("gone");
+      const moved = join(base, "feat");
+      renameSync(outside, moved);
+      rmSync(gone, { recursive: true });
+      // The data dir is seeded on the first run.
+      await run();
+      const updates = join(dataDir(), "updates");
+      mkdirSync(updates, { recursive: true });
+      writeFileSync(join(updates, "download.zip"), "x");
+      writeFileSync(join(dataDir(), "registry.json.lock"), "");
+
+      const doc = await run();
+      assert.match(
+        only(doc, "project-worktrees", "fail").detail,
+        /^can't read this project's worktree folders, so a moved or stray worktree goes unseen: The darwin helper failed \(lstat, exit\)\.$/,
+      );
+      assert.match(
+        only(doc, "locks", "warn").detail,
+        /^can't read the data dir's lock files: The darwin helper failed \(lstat, exit\)\.$/,
+      );
+      assert.equal(
+        only(doc, "update-leftovers", "warn").detail,
+        "downloads left by an earlier update that nothing will install",
+      );
+
+      const fixed = await run({ fix: true });
+      assert.ok(
+        !fixed.repaired.some((line) => line.startsWith("pruned")),
+        `pruned with the moved worktree unseen: ${fixed.repaired.join("; ")}`,
+      );
+      box.git(moved, "status");
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
+  });
+
   it("leaves a locked worktree whose directory is away", async () => {
     const { repo, tree } = alpha();
     const external = tree("external");

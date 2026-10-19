@@ -18,7 +18,7 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 | `lint/` | The repo's own oxlint rules, with their tests |
 | `packages/` | The workspace packages: `contracts` (what crosses a wire), `engine` (the data model, the store and git), `ui` (the views and the fixture world), and `cli` (the terminal `sm`) |
 | `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
-| `macfs/` | The macOS filesystem calls Node lacks (clone, flags, xattrs, private size, filesystem type), a Go module bundled into the app |
+| `macfs/` | The macOS filesystem calls Node lacks (clone, exchange, flags, xattrs, lstat with private size, filesystem type), a Go module bundled into the app |
 | `skills/` | Agent skills for the `sm` workflow (below) |
 
 The JavaScript packages are one pnpm workspace (`pnpm-workspace.yaml`)
