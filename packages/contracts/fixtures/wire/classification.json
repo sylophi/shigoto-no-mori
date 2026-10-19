@@ -1380,9 +1380,10 @@
     "kind": "invoke",
     "scope": "client"
   },
-  "window:hostRestarts": {
-    "kind": "invoke",
-    "scope": "client"
+  "window:hostRestarted": {
+    "kind": "push",
+    "scope": "client",
+    "gated": false
   },
   "window:networkChanged": {
     "kind": "invoke",

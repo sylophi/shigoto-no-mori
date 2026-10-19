@@ -2,12 +2,10 @@
 // dropping (the host stopped, or the shell's watchdog stopped a host
 // that went silent) until a dial lands on the host that replaces it.
 // Desktop only; a hostless client has no host of its own.
-import type { HostRestartsSchema } from "@shigomori/contracts/modules/window";
 import type { HostRestartReason } from "@shigomori/ui/views/hostBand/HostBandView.tsx";
 import type { QueryClient } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";
-import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import { isOwnAppDrop } from "@shared/remote/rpcTransport";
 import {
   createExternalStore,
@@ -20,51 +18,33 @@ import {
 
 export const hostAnswering = createExternalStore(true);
 
-// Why the shell last started the host again, published as the link
-// lands on the new one (desktop.ts), for the band to say.
+// Why the shell last started the host again, for the band to say.
 export const hostRestarted = createExternalStore<{
   readonly reason: HostRestartReason;
 } | null>(null);
 
-type HostRestarts = typeof HostRestartsSchema.Type;
-
-// The shell's count of host restarts, against which each landing tells
-// whether this window lived through one. The count as the window opens
-// is the baseline, asked until the shell answers and before any
-// landing's.
-export const followHostRestarts = (ask: Effect.Effect<HostRestarts, unknown>) =>
-  Effect.gen(function* () {
-    const turn = yield* Semaphore.make(1);
-    let seen = 0;
-    const baseline = turn.withPermits(1)(
-      ask.pipe(
-        Effect.tapError((error) =>
-          Effect.logWarning("the shell's host restart count", error),
-        ),
-        Effect.retry(Schedule.spaced("1 second")),
-        Effect.tap(({ count }) =>
-          Effect.sync(() => {
-            seen = count;
-          }),
-        ),
-        Effect.asVoid,
-      ),
-    );
-    const landed = turn.withPermits(1)(
-      ask.pipe(
-        Effect.tap(({ count, reason }) =>
-          Effect.sync(() => {
-            if (count > seen && reason !== null) {
-              hostRestarted.publish({ reason });
-            }
-            seen = count;
-          }),
-        ),
-        Effect.ignore,
-      ),
-    );
-    return { baseline, landed };
-  });
+// The shell's word that it started the host again
+// (window:hostRestarted, as the new host is up), said once this
+// window's link lands there: at once when it already has, else at
+// `landed`.
+export function followHostRestarts(
+  restarted: Stream.Stream<HostRestartReason>,
+): { readonly heard: Effect.Effect<void>; readonly landed: () => void } {
+  let pending: HostRestartReason | null = null;
+  return {
+    heard: Stream.runForEach(restarted, (reason) =>
+      Effect.sync(() => {
+        if (hostAnswering.get()) hostRestarted.publish({ reason });
+        else pending = reason;
+      }),
+    ),
+    landed: () => {
+      if (pending === null) return;
+      hostRestarted.publish({ reason: pending });
+      pending = null;
+    },
+  };
+}
 
 // The reads the host's going cut, asked again as it answers once more:
 // a read in its retries waits out React Query's backoff otherwise, and

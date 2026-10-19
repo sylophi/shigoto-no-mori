@@ -39,7 +39,10 @@ export function migrationFailed(failure: HostFailure): boolean {
   }
   tell({
     ...latest,
-    import: { state: "stuck", reason: failure.storeReport ?? failure.message },
+    import: {
+      state: "stuck",
+      reason: failure.store?.report ?? failure.message,
+    },
   });
   return true;
 }

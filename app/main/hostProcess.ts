@@ -17,15 +17,23 @@ import {
 } from "electron";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { WebSocket as WsWebSocket } from "ws";
 import { ShellCallsGroup } from "@shigomori/contracts/link";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { sessionContract } from "@shigomori/contracts/modules/session";
-import { shellCallsContract } from "@shigomori/contracts/modules/shellCalls";
+import {
+  type HostFailureSchema,
+  shellCallsContract,
+} from "@shigomori/contracts/modules/shellCalls";
 import type { UpdaterState } from "@shigomori/contracts/schemas";
-import type { HostRestartReasonSchema } from "@shigomori/contracts/modules/window";
+import {
+  type HostAddressSchema,
+  type HostRestartReasonSchema,
+  windowContract,
+} from "@shigomori/contracts/modules/window";
 import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { effectClient } from "@shared/ipc/effectClient";
@@ -42,19 +50,17 @@ import { currentUpdaterState, updaterCalls } from "./electron/updater";
 import { releaseUpdaterBridge } from "./electron/updaterBridge";
 import { accountFactsForHost, retryParkedSignOut } from "./ipc/modules/account";
 import { makePortServer } from "./ipc/ShellLink";
+import { broadcastAll } from "./ipc/register";
 import { createShellRegistrar } from "./ipc/shellRegistrar";
 import { deviceIdWithin } from "./core/host/deviceId";
 import { beats, busyWithin, watchHost } from "./core/host/watchdog";
 import { clearLoopbackOf } from "./core/host/leftovers";
 import { lastEndedSpans, restartDetail } from "./core/host/restartLog";
+import { CRASH_WINDOW_MS, restartLedger } from "./core/host/restarts";
 import { type HostBeat, isHostBeat } from "@shared/hostBeat";
 import { dataDir } from "@shared/paths";
 
-type Address = {
-  readonly port: number;
-  readonly token: string;
-  readonly deviceId: string;
-};
+type Address = typeof HostAddressSchema.Type;
 
 // The host's address as the host reports it: the windows' token, and
 // the shell's own, which no window is handed.
@@ -77,10 +83,7 @@ function deferred<A>(): {
   return { promise, resolve, settled: () => settled };
 }
 
-export type HostFailure = {
-  readonly message: string;
-  readonly storeReport: string | null;
-};
+export type HostFailure = typeof HostFailureSchema.Type;
 
 function hostFacts(): HostFacts {
   return {
@@ -93,9 +96,6 @@ function hostFacts(): HostFacts {
   };
 }
 
-// A host that keeps dying is given up on, rather than forked in a loop.
-const CRASH_WINDOW_MS = 60_000;
-const CRASHES_ALLOWED = 3;
 // How long a quit waits for the host to close its graph and exit.
 const QUIT_DEADLINE_MS = 15_000;
 // A host that is up is asked something cheap this often, and one that
@@ -131,14 +131,10 @@ let windowFocused = false;
 type PortServer = Effect.Success<ReturnType<typeof makePortServer>>;
 let server: PortServer | null = null;
 let started = false;
-const crashes: number[] = [];
+const restarts = restartLedger();
 // The current host's address, once it is up. Replaced as a host forks,
 // so a window redialing meanwhile waits for the next one.
 let address = deferred<Reported>();
-// The hosts that exited unasked since one was last up, for the next to
-// stop what their scripts left (HostFacts.replacesHosts): each start an
-// instant, each exit on performance.now().
-let replaced: { pid: number; startedAt: number; exitedAt: number }[] = [];
 let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
 // A host that couldn't start as the migration's page showed: left down,
@@ -161,10 +157,12 @@ type Held = {
 };
 type HostRestartReason = typeof HostRestartReasonSchema.Type;
 const held = new WeakMap<UtilityProcess, Held>();
-// The restarts since the app started, and the last one's reason, which
-// a window whose link came back asks for (window:hostRestarts).
-let restarts = 0;
-let restartReason: HostRestartReason | null = null;
+// Why the host was last started again, told to the windows once the
+// new one is up.
+let restartedFor: HostRestartReason | null = null;
+// The hold's fibers (the watchdogs, the words to the host), which end
+// with it.
+let runFork: (effect: Effect.Effect<unknown>) => void = () => {};
 
 // A host's end in main.log: why, then what it was in at its last beat
 // and the spans it last finished. Whether another starts is the exit's
@@ -187,8 +185,6 @@ function stopSilent(running: UtilityProcess, seconds: number): void {
   killHard(running);
 }
 
-export const hostRestarts = () => ({ count: restarts, reason: restartReason });
-
 // The shell's link to the current host, made on first use: a window
 // may ask before the hold is up, and waits for the host's address.
 let dialed: ReturnType<typeof connectHost> | undefined;
@@ -205,12 +201,13 @@ const link = () =>
     // Origin, which the loopback admits.
     openSocket: (url) => new WsWebSocket(url),
   }));
-const session = () => effectClient(sessionContract, link());
+// The session with the current host, waiting for one to be up.
+export const host = () => effectClient(sessionContract, link());
 
 // A word to the host that nothing waits on. A host that went away
 // meanwhile hears it again as its successor starts.
 function tell(said: Effect.Effect<unknown, unknown>): void {
-  Effect.runFork(
+  runFork(
     said.pipe(
       Effect.catch((error) =>
         Effect.sync(() => log.warn("[host] could not tell the host:", error)),
@@ -223,14 +220,17 @@ function tell(said: Effect.Effect<unknown, unknown>): void {
 const registrar = createShellRegistrar();
 const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   ready: (reported) => {
-    // Up, its sweep has claimed what the hosts before it left.
-    replaced = [];
+    restarts.up();
     upHost = child;
     startStalls = 0;
     // The device the host is rides along, which the shell's account
     // calls name.
     reportedDeviceId = reported.deviceId;
     address.resolve(reported);
+    if (restartedFor !== null) {
+      broadcastAll(windowContract, "hostRestarted", restartedFor);
+      restartedFor = null;
+    }
     if (started) {
       link().reconnect();
     } else {
@@ -242,14 +242,14 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
     // A new host knows nothing yet: the account, which brings its hub
     // socket up, the focus and the updater's state. Through the link,
     // whose calls wait for it to reach this host.
-    tell(session().account(accountFactsForHost()));
-    tell(session().windowFocused(windowFocused));
-    tell(session().updaterState(currentUpdaterState()));
+    tell(host().account(accountFactsForHost()));
+    tell(host().windowFocused(windowFocused));
+    tell(host().updaterState(currentUpdaterState()));
     const watched = child;
     if (watched !== null) {
-      Effect.runFork(
+      runFork(
         watchHost({
-          probe: session().busy(),
+          probe: host().busy(),
           every: WATCH_EVERY,
           limit: `${SILENT_LIMIT_S} seconds`,
           watching: () => child === watched && !quitting,
@@ -305,16 +305,11 @@ function killHard(running: UtilityProcess): void {
 
 function fork(): void {
   const { port1, port2 } = new MessageChannelMain();
+  const replacesHosts = restarts.replacesHosts();
   const facts: HostFacts =
-    replaced.length === 0
+    replacesHosts.length === 0
       ? hostFacts()
-      : {
-          ...hostFacts(),
-          replacesHosts: replaced.map(({ pid, startedAt }) => ({
-            pid,
-            startedAt,
-          })),
-        };
+      : { ...hostFacts(), replacesHosts };
   const forked = utilityProcess.fork(
     join(__dirname, "host.js"),
     [`${HOST_FACTS_FLAG}${JSON.stringify(facts)}`],
@@ -353,7 +348,7 @@ function fork(): void {
     }
     beat.beat();
   });
-  Effect.runFork(
+  runFork(
     watchHost({
       probe: beat.next,
       every: WATCH_EVERY,
@@ -373,7 +368,7 @@ function fork(): void {
           const message = `The host stopped responding while it started, ${startStalls} times in a row.`;
           log.error(`[host] ${message}`);
           killHard(forked);
-          onFailed({ message, storeReport: null });
+          onFailed({ message, store: null });
           return;
         }
         stopSilent(forked, START_SILENT_LIMIT_S);
@@ -403,28 +398,15 @@ function fork(): void {
     }
     // One that died before it was up leaves its waiters to the next.
     if (address.settled()) address = deferred<Reported>();
-    // Elapsed, awake: a clock step neither spends the budget nor gives
-    // one back.
-    const now = performance.now();
-    crashes.push(now);
-    while (crashes[0] !== undefined && crashes[0] < now - CRASH_WINDOW_MS) {
-      crashes.shift();
-    }
-    if (crashes.length > CRASHES_ALLOWED) {
+    const verdict = restarts.exited(spawned, performance.now());
+    if (verdict.kind === "give-up") {
       onFailed({
-        message: `The host stopped ${crashes.length} times in a minute.`,
-        storeReport: null,
+        message: `The host stopped ${verdict.crashes} times in a minute.`,
+        store: null,
       });
       return;
     }
-    // Only hosts that died within the crash window are vouched for: one
-    // older may have left a group whose id is a stranger's by now.
-    replaced = replaced.filter(
-      (gone) => gone.exitedAt >= now - CRASH_WINDOW_MS,
-    );
-    if (spawned !== undefined) replaced.push({ ...spawned, exitedAt: now });
-    restarts += 1;
-    restartReason = state.stoppedFor ?? { kind: "exited", code };
+    restartedFor = state.stoppedFor ?? { kind: "exited", code };
     log.warn("[host] starting it again");
     void cleared.then(() => {
       if (!quitting) fork();
@@ -441,15 +423,10 @@ export function restartParkedHost(): Promise<void> {
       parkedExit = null;
       nextPark = deferred<void>();
       restarting = null;
-      crashes.length = 0;
+      restarts.retried();
       if (!quitting) fork();
     });
   return restarting;
-}
-
-// The session with the current host, waiting for one to be up.
-export function host(): ReturnType<typeof session> {
-  return session();
 }
 
 // The host's runtime calls a window makes, for the nuke the shell runs
@@ -463,22 +440,20 @@ export const letHostGo = (): Promise<void> => Effect.runPromise(stop(true));
 
 // What the host is busy with, as a quit or an update asks: idle when
 // it cannot say within a few seconds, since a host that does not
-// answer has nothing to lose to them.
+// answer has nothing to lose to them. The quit that follows kills such
+// a host rather than wait on it to close (stop).
+let unanswered: { readonly host: UtilityProcess; readonly at: number } | null =
+  null;
 export const hostBusy = () =>
-  busyWithin(session().busy(), BUSY_DEADLINE).pipe(
-    Effect.map(Option.getOrElse(() => IDLE)),
-  );
-
-// The quit's own ask: a host that did not answer it is killed, not
-// waited on to close.
-let unanswered: UtilityProcess | null = null;
-export const hostBusyForQuit = () =>
   Effect.suspend(() => {
     const asked = child;
-    return busyWithin(session().busy(), BUSY_DEADLINE).pipe(
+    return busyWithin(host().busy(), BUSY_DEADLINE).pipe(
       Effect.tap((busy) =>
         Effect.sync(() => {
-          unanswered = Option.isNone(busy) ? asked : null;
+          unanswered =
+            Option.isNone(busy) && asked !== null
+              ? { host: asked, at: performance.now() }
+              : null;
         }),
       ),
       Effect.map(Option.getOrElse(() => IDLE)),
@@ -516,7 +491,7 @@ export const hostDeviceId = (): Promise<string> =>
 
 // The updater moved. A host that is not up yet hears it as it starts.
 export function noteUpdaterState(state: UpdaterState): void {
-  if (child !== null) tell(session().updaterState(state));
+  if (child !== null) tell(host().updaterState(state));
 }
 
 // Whether a window here is focused, kept to tell a host that forks
@@ -524,7 +499,7 @@ export function noteUpdaterState(state: UpdaterState): void {
 export function noteWindowFocused(focused: boolean): void {
   if (focused === windowFocused) return;
   windowFocused = focused;
-  if (child !== null) tell(session().windowFocused(focused));
+  if (child !== null) tell(host().windowFocused(focused));
 }
 
 // A window here gained focus, told every time, also when focus moves
@@ -532,7 +507,7 @@ export function noteWindowFocused(focused: boolean): void {
 // window that comes back to them.
 export function noteWindowGainedFocus(): void {
   windowFocused = true;
-  if (child !== null) tell(session().windowFocused(true));
+  if (child !== null) tell(host().windowFocused(true));
 }
 
 // Quit: the host closes its graph (its quit sequence) and exits. One
@@ -545,11 +520,16 @@ const stop = (hurried: boolean) =>
     const exited = new Promise<void>((resolve) =>
       running.once("exit", () => resolve()),
     );
-    if (unanswered === running) {
+    // An ask older than the watchdog's limit says nothing of the host
+    // now.
+    if (
+      unanswered?.host === running &&
+      performance.now() - unanswered.at < SILENT_LIMIT_S * 1000
+    ) {
       running.kill();
       return Effect.promise(() => exited);
     }
-    return session()
+    return host()
       .quit({ hurried })
       .pipe(
         Effect.catch((error) =>
@@ -581,6 +561,7 @@ export const layer = (options: {
   Layer.effectDiscard(
     Effect.gen(function* () {
       onFailed = options.failed;
+      runFork = yield* FiberSet.makeRuntime<never>();
       registrar.serve(shellCallsContract, shellCalls);
       server = yield* makePortServer(registrar, ShellCallsGroup);
       yield* Effect.acquireRelease(Effect.sync(fork), () =>

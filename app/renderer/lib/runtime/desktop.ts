@@ -6,10 +6,11 @@
 // through the hub bridge (shared/hub/bridgeHandlers.ts), never by
 // swapping these.
 import { isHostSide } from "@shigomori/contracts/link";
-import type { HostRestartsSchema } from "@shigomori/contracts/modules/window";
+import type { HostRestartReason } from "@shigomori/ui/views/hostBand/HostBandView.tsx";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
+import type * as Stream from "effect/Stream";
 import { SHELL_PORT_CHANNEL, shellLink } from "@shared/ipc/shell";
 import { type HostAddress, hostLink } from "@shared/remote/hostLink";
 import type { ElectronBridge } from "../../../main/preload";
@@ -35,15 +36,14 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
       });
       const shell = yield* shellLink(port);
       const runFork = yield* FiberSet.makeRuntime<never>();
-      // Each landing asks the shell how many times it has started the
-      // host again, and the band says why when the count moved.
-      const restarts = yield* followHostRestarts(
-        shell.call("window:hostRestarts", undefined) as Effect.Effect<
-          typeof HostRestartsSchema.Type,
-          unknown
-        >,
+      // Heard before the first dial, so no restart is told while this
+      // window can't hear it.
+      const restarts = followHostRestarts(
+        shell.pushes(
+          "window:hostRestarted",
+        ) as Stream.Stream<HostRestartReason>,
       );
-      runFork(restarts.baseline);
+      runFork(restarts.heard);
       const host = yield* hostLink({
         address: shell.call("window:hostAddress", undefined) as Effect.Effect<
           HostAddress,
@@ -53,7 +53,7 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
         openSocket: (url) => new WebSocket(url),
         onAnswering: (answering) => {
           hostAnswering.publish(answering);
-          if (answering) runFork(restarts.landed);
+          if (answering) restarts.landed();
         },
       });
       // The shell is this window's own build.

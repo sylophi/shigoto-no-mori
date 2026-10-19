@@ -212,7 +212,7 @@ async function main(): Promise<void> {
     Graph.failed(errorWordsOf(error));
     // A store the 2.x files couldn't be imported into, or that can't
     // be read: the doctor's findings say which file and what to do.
-    const storeReport = await storeFailureReport(error, {
+    const store = await storeFailureReport(error, {
       ...engine,
       version: facts.appVersion,
     });
@@ -222,9 +222,7 @@ async function main(): Promise<void> {
     await Effect.runPromise(
       migration.current.pipe(
         Effect.flatMap(shell.migration),
-        Effect.andThen(
-          shell.failed({ message: errorWordsOf(error), storeReport }),
-        ),
+        Effect.andThen(shell.failed({ message: errorWordsOf(error), store })),
       ),
     );
     process.exit(1);

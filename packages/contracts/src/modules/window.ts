@@ -20,9 +20,8 @@ export const HostAddressSchema = strict(
   }),
 );
 
-// Why the shell last started this machine's host again, and how many
-// times it has: a window whose link to its host came back asks, and
-// says why when the count moved since it last asked.
+// Why the shell started this machine's host again, pushed to every
+// window as the new host is up: each says it once its link lands there.
 export const HostRestartReasonSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("silent"), seconds: Schema.Int }),
   Schema.Struct({
@@ -30,10 +29,6 @@ export const HostRestartReasonSchema = Schema.Union([
     code: Schema.NullOr(Schema.Int),
   }),
 ]);
-export const HostRestartsSchema = Schema.Struct({
-  count: Schema.Int,
-  reason: Schema.NullOr(HostRestartReasonSchema),
-});
 
 // So a quit can bring a window back to it.
 const RouteSchema = Schema.String.check(Schema.isPattern(/^\//));
@@ -44,6 +39,7 @@ export const windowContract = defineContract(
   "client",
   push("focused", VoidSchema),
   push("blurred", VoidSchema),
+  push("hostRestarted", HostRestartReasonSchema),
   // Drives nativeTheme only, so a reload snaps back to the saved value.
   invoke("previewTheme", PreviewThemePayloadSchema, VoidSchema),
   // Fired only after moveDataDir's reply resolves, so the reply was
@@ -51,7 +47,6 @@ export const windowContract = defineContract(
   invoke("relaunch", VoidSchema, VoidSchema),
   invoke("notify", NotifyPayloadSchema, VoidSchema),
   invoke("hostAddress", VoidSchema, HostAddressSchema),
-  invoke("hostRestarts", VoidSchema, HostRestartsSchema),
   invoke("open", RoutePayloadSchema, VoidSchema),
   // Reopened on at the next start.
   invoke("showing", RoutePayloadSchema, VoidSchema),

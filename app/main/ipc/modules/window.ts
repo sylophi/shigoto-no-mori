@@ -7,7 +7,7 @@ import { showNotification } from "../../electron/notifications";
 import { nukeShell } from "../../electron/nuke";
 import { relaunchApp } from "../../electron/relaunch";
 import { noteShowing, openWindow } from "../../electron/windows";
-import { host, hostAddress, hostRestarts } from "../../hostProcess";
+import { host, hostAddress } from "../../hostProcess";
 
 export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
   // Track the renderer's applied theme (including unsaved previews) so
@@ -29,8 +29,6 @@ export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
   // Where the window reaches its host, asked again on every redial
   // (shared/remote/hostLink.ts), so a host that came back elsewhere is found.
   hostAddress: () => hostAddress(),
-
-  hostRestarts: () => hostRestarts(),
 
   open: ({ route }) => {
     openWindow(route);

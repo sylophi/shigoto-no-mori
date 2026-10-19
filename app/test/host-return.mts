@@ -1,11 +1,8 @@
 // Proof that this machine's host coming back is told and read once,
 // whatever the window's own asks went through
 // (renderer/lib/runtime/hostAnswering.ts):
-//   - the band says a restart the window lived through, its baseline
-//     the shell's count as the window opened, asked until the shell
-//     answers and before any landing's, so a first ask that failed no
-//     longer makes the next landing's count the baseline and the
-//     restart unsaid (followHostRestarts),
+//   - the band says each restart the shell tells once the window's
+//     link lands on the new host, and once (followHostRestarts),
 //   - the reads the host's going cut are asked again as it answers once
 //     more, one that gave up and one still in its retries alike
 //     (askAgainOnHostReturn).
@@ -15,6 +12,9 @@ import assert from "node:assert/strict";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import type { HostRestartReason } from "@shigomori/ui/views/hostBand/HostBandView.tsx";
 import { it } from "vitest";
 import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
 import {
@@ -23,41 +23,32 @@ import {
   hostAnswering,
   hostRestarted,
 } from "@/lib/runtime/hostAnswering";
-import { testClock, waitFor } from "./lib/checkKit.mts";
+import { waitFor } from "./lib/checkKit.mts";
 
-const SILENT = { kind: "silent" as const, seconds: 30 };
+const SILENT: HostRestartReason = { kind: "silent", seconds: 30 };
+const EXITED: HostRestartReason = { kind: "exited", code: 1 };
 const drop = () => new RemoteDisconnectedError(true);
 
-it("a restart is said though the window's first ask of the count failed", async () => {
-  const clock = testClock();
-  // The shell's count: the first ask fails (the port not yet up), the
-  // next is the count as the window opened, the first landing's the
-  // same, and a later one's after a restart.
-  const answers: (number | Error)[] = [new Error("not yet"), 2, 2, 3];
-  const ask = Effect.suspend(() => {
-    const next = answers.shift() ?? 3;
-    return typeof next === "number"
-      ? Effect.succeed({ count: next, reason: SILENT })
-      : Effect.fail(next);
-  });
-  const run = (effect: Effect.Effect<void, unknown>) =>
-    Effect.runFork(effect.pipe(Effect.provide(clock.context)));
+it("a restart is said once the window's link lands on the new host, or at once when it already has", async () => {
+  const pushes = await Effect.runPromise(Queue.unbounded<HostRestartReason>());
+  const restarts = followHostRestarts(Stream.fromQueue(pushes));
+  const heard = Effect.runFork(restarts.heard);
   hostRestarted.publish(null);
-  const restarts = await Effect.runPromise(
-    followHostRestarts(ask).pipe(Effect.provide(clock.context)),
-  );
-  const baseline = run(restarts.baseline);
-  // A landing asked while the baseline waits on its retry waits its
-  // turn, and its count is the window's own: no restart.
-  const first = run(restarts.landed);
-  await clock.settle();
-  assert.equal(hostRestarted.get(), null);
-  await clock.advance(1_000);
-  await Effect.runPromise(Fiber.join(baseline));
-  await Effect.runPromise(Fiber.join(first));
-  assert.equal(hostRestarted.get(), null);
-  await Effect.runPromise(Fiber.join(run(restarts.landed)));
+  hostAnswering.publish(false);
+  Queue.offerUnsafe(pushes, SILENT);
+  await waitFor(() => Queue.sizeUnsafe(pushes) === 0, "the word heard");
+  assert.equal(hostRestarted.get(), null, "said while the host is away");
+  restarts.landed();
   assert.deepEqual(hostRestarted.get(), { reason: SILENT });
+  hostRestarted.publish(null);
+  restarts.landed();
+  assert.equal(hostRestarted.get(), null, "said twice");
+  // The window's link landed on the new host before the word came.
+  hostAnswering.publish(true);
+  Queue.offerUnsafe(pushes, EXITED);
+  await waitFor(() => hostRestarted.get() !== null, "the word said");
+  assert.deepEqual(hostRestarted.get(), { reason: EXITED });
+  await Effect.runPromise(Fiber.interrupt(heard));
 });
 
 it("the reads the host's going cut are asked again as it answers", async () => {

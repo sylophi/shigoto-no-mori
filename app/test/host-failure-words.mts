@@ -17,7 +17,10 @@ const failing = (category: "newer" | "damaged") => {
   });
   return {
     message: error.message,
-    storeReport: `${error.message}\nstore: /data/store.db can't be opened, so no command can run`,
+    store: {
+      report: `${error.message}\nstore: /data/store.db can't be opened, so no command can run`,
+      newer: category === "newer",
+    },
   };
 };
 
