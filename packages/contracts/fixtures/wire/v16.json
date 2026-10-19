@@ -2066,10 +2066,10 @@
     }
   },
   "shellCalls:holdUpdater": {
-    "success": "",
     "payload": {
       "for": "reset"
-    }
+    },
+    "success": ""
   },
   "shellCalls:migration": {
     "payload": {
@@ -2100,6 +2100,8 @@
     }
   },
   "shellCalls:relaunch": {},
+  "shellCalls:resumeUpdater": {},
+  "shellCalls:stopUpdaterBridge": {},
   "shellCalls:updaterCheck": {},
   "shellCalls:updaterInstall": {
     "payload": {

@@ -1152,6 +1152,14 @@
     "kind": "invoke",
     "scope": "client"
   },
+  "shellCalls:resumeUpdater": {
+    "kind": "invoke",
+    "scope": "client"
+  },
+  "shellCalls:stopUpdaterBridge": {
+    "kind": "invoke",
+    "scope": "client"
+  },
   "shellCalls:updaterCheck": {
     "kind": "invoke",
     "scope": "client"

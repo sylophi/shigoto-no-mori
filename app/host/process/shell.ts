@@ -36,6 +36,8 @@ export const layer = (calls: EffectClient<typeof shellCallsContract>) =>
           calls
             .holdUpdater({ for: forWhat })
             .pipe(Effect.orElseSucceed(() => null)),
+        resumeUpdater: Effect.ignore(calls.resumeUpdater()),
+        stopUpdaterBridge: Effect.ignore(calls.stopUpdaterBridge()),
         migration: (progress) => ask(calls.migration(progress)),
         guide: (payload) => ask(calls.guide(payload)),
       });

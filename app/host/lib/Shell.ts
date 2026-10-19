@@ -39,14 +39,19 @@ export class Shell extends Context.Service<
       readonly state: Effect.Effect<UpdaterState>;
       readonly noteState: (state: UpdaterState) => Effect.Effect<void>;
     };
-    // Before a move or a reset of the data folder: the updater let go of
-    // it (null: no check or install from here on, one under way ended,
-    // the bridge `sm update` asks it through stopped), or the version an
-    // install under way restarts into ("" when not known). A shell that
-    // can't be asked holds nothing.
+    // Before a move or a reset of the data folder: the updater starts
+    // nothing there from now on (null: no check or install, one under
+    // way ended; a reset's bridge stopped too), or the version an install
+    // under way restarts into ("" when not known). A shell that can't be
+    // asked holds nothing.
     readonly holdUpdater: (
       forWhat: "move" | "reset",
     ) => Effect.Effect<string | null>;
+    // A move that failed before the folder moved: the updater as it was.
+    readonly resumeUpdater: Effect.Effect<void>;
+    // The bridge the terminal's `sm update` asks the updater through,
+    // stopped just before the folder moves. Asked without waiting.
+    readonly stopUpdaterBridge: Effect.Effect<void>;
     // The v3 migration as it goes, which the shell serves its windows.
     readonly migration: (
       progress: MigrationProgress,

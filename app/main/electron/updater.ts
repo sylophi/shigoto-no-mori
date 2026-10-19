@@ -79,7 +79,8 @@ let state: UpdaterState = { kind: "idle" };
 let started = false;
 let installing = false;
 // Set before a move or a reset of the data folder (hold): no check or
-// install starts after it, until the restart that follows.
+// install starts after it, until the restart that follows, or a move
+// that failed before the folder moved resumes it.
 let held = false;
 let checkInFlight = false;
 let failedChecks = 0;
@@ -419,9 +420,10 @@ let heldWords = "";
 // Before a move or a reset of the data folder, which staging writes
 // under and an install restarts out of: the version an install under
 // way restarts into ("" when not known), which the caller refuses on;
-// otherwise no check or install starts from here on, a check under way
-// is ended (its staging lock goes with it, and the next run prunes what
-// it left), and the bridge lets go of its folder.
+// otherwise no check or install starts from here on, and a check under
+// way is ended (its staging lock goes with it, and the next run prunes
+// what it left). A reset lets the bridge go too; a move stops it once
+// nothing can fail before the folder moves (stopUpdaterBridge).
 async function hold(input: {
   readonly for: "move" | "reset";
 }): Promise<string | null> {
@@ -435,8 +437,14 @@ async function hold(input: {
   if (state.kind === "checking" || state.kind === "downloading") {
     setState({ kind: "idle" });
   }
-  await releaseUpdaterBridge();
+  if (input.for === "reset") await releaseUpdaterBridge();
   return null;
+}
+
+// A move that failed before the folder moved: the app carries on, and
+// its updater with it.
+function resume(): void {
+  held = false;
 }
 
 // The state as it stands, for a host that starts after it moved.
@@ -453,6 +461,7 @@ export const updaterCalls = {
     void (await installUpdate(unattended)),
   update: updateNow,
   hold,
+  resume: async () => resume(),
 };
 
 // The updater, for the length of the shell's graph: the staged update
@@ -469,9 +478,12 @@ export const layer = Layer.effectDiscard(
     // Every check on one handle: one at a time, and a hold ends the one
     // under way.
     const checks = yield* FiberHandle.make<void>();
+    // Awaited, not joined: a check asked while one runs gets that one's
+    // fiber, which onlyIfMissing hands back interrupted, and a join would
+    // end the asker (the periodic loop) with it.
     checkInTurn = FiberHandle.run(checks, runCheck, {
       onlyIfMissing: true,
-    }).pipe(Effect.flatMap(Fiber.join));
+    }).pipe(Effect.flatMap(Fiber.await), Effect.asVoid);
     endCheck = FiberHandle.clear(checks);
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {

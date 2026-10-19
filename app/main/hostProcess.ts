@@ -48,6 +48,7 @@ import { showMoveFailed } from "./electron/moveFailed";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { onGuide } from "./electron/guide";
 import { currentUpdaterState, updaterCalls } from "./electron/updater";
+import { releaseUpdaterBridge } from "./electron/updaterBridge";
 import { accountFactsForHost, retryParkedSignOut } from "./electron/account";
 import { makePortServer } from "./ipc/ShellLink";
 import { broadcastAll } from "./ipc/register";
@@ -279,6 +280,8 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   updaterInstall: ({ unattended }) => updaterCalls.install(unattended),
   updaterUpdate: ({ unattended }) => updaterCalls.update(unattended),
   holdUpdater: (input) => updaterCalls.hold(input),
+  resumeUpdater: () => updaterCalls.resume(),
+  stopUpdaterBridge: () => releaseUpdaterBridge(),
   guide: ({ session: token, action }) =>
     onGuide((guide) => guide.drive(token, action)),
 };

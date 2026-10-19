@@ -51,12 +51,16 @@ export const shellCallsContract = defineContract(
   invoke("updaterInstall", UnattendedSchema, VoidSchema),
   invoke("updaterUpdate", UnattendedSchema, VoidSchema),
   // Before a move or a reset of the data folder it works in: the updater
-  // let go of it (null), or the version an install under way restarts
-  // into ("" when it is not known).
+  // starts nothing there from now on (null), or the version an install
+  // under way restarts into ("" when it is not known).
   invoke(
     "holdUpdater",
     strict(Schema.Struct({ for: Schema.Literals(["move", "reset"]) })),
     Schema.NullOr(Schema.String),
   ),
+  // A move that failed before the folder moved, the app carrying on.
+  invoke("resumeUpdater", VoidSchema, VoidSchema),
+  // Before the folder moves: the bridge `sm update` asks through stopped.
+  invoke("stopUpdaterBridge", VoidSchema, VoidSchema),
   invoke("guide", GuideDrivePayloadSchema, GuideReplySchema),
 );

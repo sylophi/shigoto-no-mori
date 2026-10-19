@@ -23,6 +23,7 @@ import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
+import * as Shell from "@host/lib/Shell";
 import * as CliShell from "@host/lib/cli/shell";
 import * as GithubCli from "@host/lib/githubCli/GithubCli";
 import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
@@ -190,15 +191,20 @@ const scriptGate = onQuit(
 );
 
 // What lets go of the data folder before a move takes it away: the
-// store and the loopback's address file. The updater lets go earlier,
-// as the move's last check (holdUpdater).
+// store, the updater's bridge and the loopback's address file. The
+// updater stops starting anything earlier, as the move's last check
+// (holdUpdater).
 const dataDirHolders = Layer.effect(
   DataDirHolders,
   Effect.gen(function* () {
     const store = yield* EngineStoreChanges.StoreChanges;
+    const shell = yield* Shell.Shell;
     const loopback = yield* Loopback.Loopback;
     return DataDirHolders.of({
-      release: store.release.pipe(Effect.andThen(loopback.unpublish)),
+      release: store.release.pipe(
+        Effect.andThen(shell.stopUpdaterBridge),
+        Effect.andThen(loopback.unpublish),
+      ),
     });
   }),
 );

@@ -161,7 +161,7 @@ export const runtimeHandlers = {
                 return shell.moveFailed(errorWordsOf(Cause.squash(cause)));
               case "carry-on":
                 moveInFlight = false;
-                return Effect.void;
+                return shell.resumeUpdater;
             }
           }),
         ),
