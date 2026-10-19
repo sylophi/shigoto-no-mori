@@ -28,7 +28,7 @@ interface ThemeState {
 }
 
 const ThemeContext = createContext<ThemeState | null>(null);
-const THEME_STORAGE_KEY = "shigomori.theme";
+export const THEME_STORAGE_KEY = "shigomori.theme";
 
 function getSystemTheme(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches

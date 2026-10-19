@@ -8,6 +8,8 @@
 // covers: app/web/public/boot-theme.js
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { THEME_STORAGE_KEY } from "@/hooks/ui/useTheme";
+import { PHONE_BELOW_PX } from "@/hooks/ui/useViewport";
 import { join } from "node:path";
 import {
   DARK_THEME_IDS,
@@ -156,8 +158,8 @@ it("the hidden hotkey cycles a swatch's variants", () => {
 it("the boot script paints the catalog's defaults and reads its mirrors", () => {
   // The pre-paint script can't import the catalog (it must stay a
   // classic script for the windows' and the web deploy's CSP), so it
-  // repeats the two default ids and the three storage keys. This
-  // holds the copies to the source.
+  // repeats the two default ids, the four storage keys and the phone
+  // width. This holds the copies to the source.
   const src = readFileSync(
     join(import.meta.dirname, "..", "web/public/boot-theme.js"),
     "utf8",
@@ -168,6 +170,8 @@ it("the boot script paints the catalog's defaults and reads its mirrors", () => 
     '"shigomori.doubutsu"',
     '"shigomori.lightTheme"',
     '"shigomori.darkTheme"',
+    `"${THEME_STORAGE_KEY}"`,
+    `< ${PHONE_BELOW_PX}`,
   ]) {
     assert.ok(src.includes(needle), `boot-theme.js lost ${needle}`);
   }

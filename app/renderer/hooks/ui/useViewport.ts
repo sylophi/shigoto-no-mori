@@ -13,7 +13,7 @@ import {
 import { useHasLocalHost } from "@/lib/localHost";
 import { useWindowRoot } from "@/lib/themeRoot";
 
-const PHONE_BELOW_PX = 768;
+export const PHONE_BELOW_PX = 768;
 
 // One observer per window's root, as a root lives as long as its
 // window, made on first use so importing this module needs no window.

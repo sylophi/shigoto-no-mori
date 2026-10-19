@@ -7,14 +7,13 @@
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
-import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import type * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
@@ -207,46 +206,55 @@ export const capture = (
     }),
   );
 
-// How long output may still arrive after its process's exit and count:
-// Node can report the exit before the last of what was written.
-const EXIT_DRAIN = "200 millis";
+// How often a running script's output file is read for what it added.
+const TAIL_EVERY = "50 millis";
+const TAIL_CHUNK = 64 * 1024;
 
-// A process's output until it exits, each chunk to `onChunk`, then its
-// `exit`, for a script whose background children outlive it (a
-// lifecycle script, in this process's group): one inherits its pipes and
-// can hold them open for good, so the exit ends the read, not the pipes'
-// end. The reader runs in `scope` and drops what comes after, so a child
-// that outlives the read keeps a reader until it closes the pipe or
-// `scope` ends.
-export const outputUntilExit = <A, E, R>(
-  output: Stream.Stream<Uint8Array, unknown>,
+// A script's output file read as it grows, each chunk to `onChunk`,
+// until `exit` answers, then to the size it had then: what the script
+// wrote before it exited is all there, so nothing it said is lost and
+// no timer decides, and a child it left in the background, which holds
+// the file and not a pipe of this process, writes on into it unread.
+export const fileUntilExit = <A, E, R>(
+  path: string,
   exit: Effect.Effect<A, E, R>,
   onChunk: (chunk: Uint8Array) => Effect.Effect<void>,
-  scope: Scope.Scope,
-): Effect.Effect<A, E, R> =>
-  Effect.gen(function* () {
-    const reading = yield* Ref.make(true);
-    // A chunk is handed on whole or not at all once the read ends.
-    const turn = yield* Semaphore.make(1);
-    const reader = yield* output.pipe(
-      Stream.runForEach((chunk) =>
-        turn.withPermits(1)(
-          Effect.flatMap(Ref.get(reading), (on) =>
-            on ? onChunk(chunk) : Effect.void,
+) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const file = yield* fs.open(path, { flag: "r" });
+      let read = 0;
+      // One read and its report together, so stopping the tail between
+      // two never loses a chunk read.
+      const step = (upTo: number) =>
+        Effect.uninterruptible(
+          Effect.flatMap(
+            file.readAlloc(Math.min(TAIL_CHUNK, upTo - read)),
+            (chunk) => {
+              if (Option.isNone(chunk) || chunk.value.length === 0) {
+                return Effect.succeed(false);
+              }
+              read += chunk.value.length;
+              return Effect.as(onChunk(chunk.value), read < upTo);
+            },
           ),
-        ),
-      ),
-      Effect.ignore,
-      Effect.forkIn(scope),
-    );
-    return yield* Effect.gen(function* () {
+        );
+      const readTo = (upTo: number) =>
+        read < upTo
+          ? step(upTo).pipe(Effect.repeat({ while: (more) => more }))
+          : Effect.void;
+      const tail = yield* readTo(Infinity).pipe(
+        Effect.ignore,
+        Effect.repeat(Schedule.spaced(TAIL_EVERY)),
+        Effect.forkScoped,
+      );
       const exited = yield* Effect.exit(exit);
-      // On a real clock: a TestClock never ends this wait while a child
-      // holds the pipes.
-      yield* Fiber.await(reader).pipe(Effect.timeoutOption(EXIT_DRAIN));
+      yield* Fiber.interrupt(tail);
+      yield* readTo(Number((yield* file.stat).size));
       return yield* exited;
-    }).pipe(Effect.ensuring(turn.withPermits(1)(Ref.set(reading, false))));
-  });
+    }),
+  );
 
 // A command in a process group of its own (the spawner's default),
 // `read` (its pipes, read to their end) and its exit code. Its exit ends

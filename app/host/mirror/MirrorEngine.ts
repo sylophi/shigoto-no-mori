@@ -27,17 +27,9 @@ export type MirrorCreateInput = {
   localWorktreeId: string;
   labels: Record<string, string>;
   ignores: readonly string[];
-  // A pull (file-sync/engine.go mirrorRequest.pull): files flow one
-  // way, remote to local, and nothing here reaches the peer. The
-  // transplant's one-shot transfer. Absent, a two-way mirror.
-  pull?: boolean;
-  // A push (mirrorRequest.push), the pull turned around: local to
-  // remote, and nothing the peer holds lands here. A sent worktree's
-  // one-shot transfer.
-  push?: boolean;
-  // A replica (mirrorRequest.replica): local to remote, the remote
-  // made an exact copy. A mirror start's first pass.
-  replica?: boolean;
+  // Which way files flow (file-sync/engine.go mirrorRequest.direction).
+  // Absent, a two-way mirror.
+  direction?: "pull" | "push" | "replica";
 };
 
 // What a mirror operation refused, in words for the user.
