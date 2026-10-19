@@ -396,7 +396,9 @@ async function launch(
       await waitFor(() => run.exited, "the lab app to quit", 10_000).catch(
         async () => {
           child.kill("SIGKILL");
-          await waitFor(() => run.exited, "the lab app to die", 10_000);
+          await waitFor(() => run.exited, "the lab app to die", 10_000).catch(
+            () => {},
+          );
         },
       );
     };

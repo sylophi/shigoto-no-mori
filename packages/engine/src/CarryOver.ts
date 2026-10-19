@@ -314,41 +314,49 @@ const make = Effect.gen(function* () {
         : { failure: outcome.failure, exclude: undefined, source };
     });
 
-  // The paths a files step will bring: those its ignore patterns, read
-  // by git's own rules, don't match. Its patterns alone: the user's own
-  // excludes file is cut off, which the step doesn't read.
+  // The copy entries a files step will bring: those its ignore patterns,
+  // read by git's own rules, leave in. Its patterns alone (the user's own
+  // excludes cut off, which the step doesn't read), and each path asked
+  // as a file and as a folder, since a folder-only rule (`deps/`) only
+  // matches the second. A symlink entry is never brought: its target is
+  // this machine's.
   const broughtBy = (
     ignores: ReadonlyArray<string>,
-    paths: ReadonlyArray<string>,
+    entries: ReadonlyArray<CarryOverEntry>,
   ) =>
     Effect.gen(function* () {
+      const paths = entries
+        .filter((entry) => entry.mode === "copy")
+        .map((entry) => entry.path);
+      if (paths.length === 0) return new Set<string>();
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "sm-carry-" });
       yield* git.run(dir, ["init", "-q"]);
       yield* fs.writeFileString(
         yield* git.gitPath(dir, "info/exclude"),
         ignores.map((pattern) => `${pattern}\n`).join(""),
       );
-      // Exits 1 when nothing matches.
-      const leftOut = new Set(
-        (yield* git
-          .run(
-            dir,
-            [
-              "-c",
-              "core.excludesFile=/dev/null",
-              "check-ignore",
-              "--no-index",
-              "--stdin",
-            ],
-            {
-              stdin: paths.map((each) => `${each}\n`).join(""),
-            },
-          )
-          .pipe(Effect.orElseSucceed(() => "")))
-          .split("\n")
+      const matched = new Set(
+        (yield* git.run(
+          dir,
+          [
+            "-c",
+            "core.excludesFile=/dev/null",
+            "check-ignore",
+            "--no-index",
+            "--stdin",
+            "-z",
+          ],
+          {
+            stdin: paths.map((each) => `${each}\0${each}/\0`).join(""),
+            okExitCodes: [1],
+          },
+        ))
+          .split("\0")
           .filter(Boolean),
       );
-      return new Set(paths.filter((each) => !leftOut.has(each)));
+      return new Set(
+        paths.filter((each) => !matched.has(each) && !matched.has(`${each}/`)),
+      );
     });
 
   const apply = Effect.fn("CarryOver.apply")(function* (input: {
@@ -380,10 +388,9 @@ const make = Effect.gen(function* () {
       input.ignoredFilesFollow === undefined || merged.length === 0
         ? new Set<string>()
         : // Unread, every entry is seeded, as with no files step.
-          yield* broughtBy(
-            input.ignoredFilesFollow,
-            merged.map((entry) => entry.path),
-          ).pipe(Effect.orElseSucceed(() => new Set<string>()));
+          yield* broughtBy(input.ignoredFilesFollow, merged).pipe(
+            Effect.orElseSucceed(() => new Set<string>()),
+          );
     const entries = merged.filter((entry) => !brought.has(entry.path));
     if (entries.length === 0 && includeFailures.length === 0) {
       return Option.none();

@@ -624,12 +624,15 @@ it("creates a branch tracking the remote branch of its own name, and otherwise u
   assert.throws(() => git(clone, "config", "branch.from-local.merge"));
 });
 
-it("lists a remote's URL as configured, not as the user's url.insteadOf rewrites it", async () => {
+it("lists a remote's URL as this machine reaches it, and as configured for another machine", async () => {
   const { remote, clone } = withRemote();
   const configured = "https://github.com/example/proj.git";
   git(clone, "remote", "set-url", "origin", configured);
   git(clone, "config", `url.${remote}.insteadOf`, configured);
   assert.deepEqual(await withGit((g) => g.listRemoteEntries(clone)), [
+    { name: "origin", url: remote },
+  ]);
+  assert.deepEqual(await withGit((g) => g.listConfiguredRemoteEntries(clone)), [
     { name: "origin", url: configured },
   ]);
 });

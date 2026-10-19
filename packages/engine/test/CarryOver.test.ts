@@ -65,11 +65,14 @@ it("carries a .worktreeinclude entry over whole, and sweeps a dead create's stag
 
 it("leaves to a move's files step the entries it brings, and seeds the ones its rule leaves out", async () => {
   const repo = box.repo("proj", {
-    ".gitignore": ".env.local\nnotes.md\n",
-    ".worktreeinclude": ".env.local\nnotes.md\n",
+    ".gitignore": ".env.local\nnotes.md\ndeps/\n日本.md\n",
+    ".worktreeinclude": ".env.local\nnotes.md\ndeps/\n日本.md\n",
   });
   writeFileSync(join(repo, ".env.local"), "project's\n");
   writeFileSync(join(repo, "notes.md"), "project's\n");
+  mkdirSync(join(repo, "deps"));
+  writeFileSync(join(repo, "deps", "lib.js"), "project's\n");
+  writeFileSync(join(repo, "日本.md"), "project's\n");
   // The user's own excludes list .env.local, which the files step
   // doesn't read: it still brings it.
   const xdg = join(dirname(repo), "xdg");
@@ -85,7 +88,12 @@ it("leaves to a move's files step the entries it brings, and seeds the ones its 
         const project = yield* registry.register({ name: "proj", path: repo });
         const made = yield* worktrees.create(
           project,
-          { name: "fox", skipSetup: true, ignoredFilesFollow: ["/notes.md"] },
+          {
+            name: "fox",
+            skipSetup: true,
+            // A folder-only rule and a name git quotes unless asked not to.
+            ignoredFilesFollow: ["/notes.md", "deps/", "/日本.md"],
+          },
           { report: () => Effect.void, color: false },
         );
         return made.worktree.path;
@@ -97,6 +105,11 @@ it("leaves to a move's files step the entries it brings, and seeds the ones its 
     })) as string;
   assert.equal(existsSync(join(path, ".env.local")), false);
   assert.equal(readFileSync(join(path, "notes.md"), "utf8"), "project's\n");
+  assert.equal(
+    readFileSync(join(path, "deps", "lib.js"), "utf8"),
+    "project's\n",
+  );
+  assert.equal(readFileSync(join(path, "日本.md"), "utf8"), "project's\n");
 });
 
 it("leaves an entry whose copy fails out whole, and no staging behind", async () => {

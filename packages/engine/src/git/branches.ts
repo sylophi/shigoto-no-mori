@@ -11,6 +11,7 @@ import {
   parseBranchRefs,
   pickDefaultRef,
   shortRefName,
+  splitRemoteRef,
   splitZ,
 } from "../gitParse.ts";
 import { isNotFound } from "../platformErrors.ts";
@@ -166,7 +167,8 @@ export const makeBranches = ({
       // the upstream to a local ref.
       const track =
         input.base !== undefined &&
-        input.base.endsWith(`/${input.name}`) &&
+        splitRemoteRef(input.base, yield* listRemotes(input.repo))?.branch ===
+          input.name &&
         !(yield* localBranchExists(input.repo, input.base)) &&
         (yield* remoteRefExists(input.repo, input.base));
       yield* run(input.repo, [

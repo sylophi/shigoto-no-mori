@@ -18,8 +18,8 @@ export function cloneFolderName(source: string): string | null {
   return repoNameFromUrl(cloneUrlOf(source));
 }
 
-// The URL another device should clone to get this repo, out of `git
-// remote -v`'s fetch rows. `origin` first: it is what this checkout was
+// The URL another device should clone to get this repo, out of its
+// remotes' URLs. `origin` first: it is what this checkout was
 // cloned from and pushes to, where identity prefers `upstream` because
 // it is asking a different question (whose repo is this). Only a URL
 // that normalizes counts, the same rule the clone payload holds its

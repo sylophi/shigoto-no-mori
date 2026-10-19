@@ -28,29 +28,25 @@ export class Identity extends Context.Service<
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
 
-  // The primary fetch remote among those whose URL normalizes, as
-  // configured: not as `git remote -v` prints it after this machine's
-  // url.insteadOf, which another device's copy of the repo lacks.
+  // The primary fetch remote among those whose URL normalizes.
   const primaryRemote = (projectPath: string) =>
-    git
-      .run(projectPath, ["config", "--get-regexp", "^remote\\..*\\.url$"])
-      .pipe(
-        Effect.map((stdout) => {
-          const usable = new Map<string, string>();
-          for (const line of stdout.split("\n")) {
-            const match = /^remote\.(.+)\.url (\S+)$/.exec(line);
-            const [, name, url] = match ?? [];
-            if (name === undefined || url === undefined || usable.has(name)) {
-              continue;
-            }
-            const normalized = normalizeRemoteUrl(url);
-            if (normalized !== null) usable.set(name, normalized);
+    git.run(projectPath, ["remote", "-v"]).pipe(
+      Effect.map((stdout) => {
+        const usable = new Map<string, string>();
+        for (const line of stdout.split("\n")) {
+          const match = /^(\S+)\s+(\S+)\s+\(fetch\)/.exec(line);
+          const [, name, url] = match ?? [];
+          if (name === undefined || url === undefined || usable.has(name)) {
+            continue;
           }
-          const [first] = orderRemotesByPrecedence([...usable.keys()]);
-          return first === undefined ? null : (usable.get(first) ?? null);
-        }),
-        Effect.orElseSucceed(() => null),
-      );
+          const normalized = normalizeRemoteUrl(url);
+          if (normalized !== null) usable.set(name, normalized);
+        }
+        const [first] = orderRemotesByPrecedence([...usable.keys()]);
+        return first === undefined ? null : (usable.get(first) ?? null);
+      }),
+      Effect.orElseSucceed(() => null),
+    );
 
   // `root:<sha>` of the parentless commit the default ref reaches (never
   // HEAD, which would name the checkout, not the repo). None for a

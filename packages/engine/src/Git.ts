@@ -26,6 +26,7 @@ import type * as PlatformError from "effect/PlatformError";
 import {
   type BranchRefs,
   parseBranchList,
+  parseConfiguredRemoteEntries,
   parseRemoteEntries,
   splitLines,
   type WorktreeEntry,
@@ -343,7 +344,13 @@ export class Git extends Context.Service<
 
     // --- branches and remotes ---
     readonly listRemotes: (repo: string) => Effect.Effect<string[]>;
+    // Each remote's URLs as this machine fetches and pushes through them
+    // (its url.insteadOf applied).
     readonly listRemoteEntries: (
+      repo: string,
+    ) => Effect.Effect<{ name: string; url: string }[]>;
+    // The same as configured, for what another machine is handed.
+    readonly listConfiguredRemoteEntries: (
       repo: string,
     ) => Effect.Effect<{ name: string; url: string }[]>;
     readonly branchRefs: (repo: string) => Effect.Effect<BranchRefs, GitError>;
@@ -396,8 +403,8 @@ export class Git extends Context.Service<
       branch: string,
       remotes?: readonly string[],
     ) => Effect.Effect<void, GitError>;
-    // A branch at `base` (HEAD without one), tracking it when it is a
-    // remote-tracking ref and not a local branch.
+    // A branch at `base` (HEAD without one), tracking it when it is the
+    // remote branch of its own name, and otherwise unpublished.
     readonly createBranch: (input: {
       readonly repo: string;
       readonly name: string;
@@ -1018,15 +1025,23 @@ const make = Effect.gen(function* () {
     }),
     listRemotes,
     listRemoteEntries: Effect.fn("Git.listRemoteEntries")(function* (repo) {
-      return yield* run(repo, [
-        "config",
-        "--get-regexp",
-        "^remote\\..*\\.(url|pushurl)$",
-      ]).pipe(
+      return yield* run(repo, ["remote", "-v"]).pipe(
         Effect.map(parseRemoteEntries),
         Effect.orElseSucceed(() => []),
       );
     }),
+    listConfiguredRemoteEntries: Effect.fn("Git.listConfiguredRemoteEntries")(
+      function* (repo) {
+        return yield* run(
+          repo,
+          ["config", "--get-regexp", "^remote\\..*\\.(url|pushurl)$"],
+          { okExitCodes: [1] },
+        ).pipe(
+          Effect.map(parseConfiguredRemoteEntries),
+          Effect.orElseSucceed(() => []),
+        );
+      },
+    ),
     branchRefs,
     listBranches: Effect.fn("Git.listBranches")(function* (repo) {
       return parseBranchList(

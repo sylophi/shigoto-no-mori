@@ -118,8 +118,11 @@ const quickCreate = async (lab: Lab): Promise<string> => {
   const name = (await heading.textContent()) ?? "";
   await main(lab.page).getByText("No uncommitted changes").waitFor();
   await main(lab.page).getByText("No commits yet").waitFor();
+  const sawBaseTip = await lab.page.evaluate(
+    "window.smWalkBaseTipWatch.disconnect(), window.smWalkSawBaseTip",
+  );
   expect(
-    await lab.page.evaluate("window.smWalkSawBaseTip"),
+    sawBaseTip,
     "a new worktree's History showed its base's newest commit",
   ).toBe(false);
   return name;
