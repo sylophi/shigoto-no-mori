@@ -741,7 +741,7 @@ export class Git extends Context.Service<
     readonly stashChanges: (
       worktree: string,
       message: string | undefined,
-    ) => Effect.Effect<void, GitError>;
+    ) => Effect.Effect<void, GitError | GitRefusedError>;
     // With `drop`, a pop: the stash goes only once it applied cleanly.
     readonly applyStash: (input: {
       readonly worktree: string;
