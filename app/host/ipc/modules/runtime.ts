@@ -40,15 +40,9 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
 
 let moveInFlight = false;
 
-// What follows a data-folder move that failed. Before the host let go
-// of the folder, nothing: the app carries on where it was. After, it
-// runs without its loopback and store watch, so it restarts: for a
-// peer's move at once, nobody here to ask; for one asked here, once
-// the user has read why (the shell's dialog, whose one button
-// restarts and whose dismissal quits).
-
 // What the moves have under way, the peers bringing from here by their
-// names on the account.
+// names on the account, read for a moment only: a refusal's words are
+// not worth holding the move's lock on an unreachable hub.
 const underWayByName = (
   moves: Moves.Moves["Service"],
   account: AccountPeers.AccountPeers["Service"],
@@ -57,16 +51,34 @@ const underWayByName = (
     const { moving, bringing } = yield* moves.underWay;
     if (bringing.length === 0) return { moving, bringing };
     const devices = yield* account.listDevices.pipe(
+      Effect.timeoutOrElse({
+        duration: "2 seconds",
+        orElse: () => Effect.succeed([]),
+      }),
       Effect.orElseSucceed(() => []),
     );
+    const named = new Set(
+      bringing.map((deviceId) => {
+        const device = devices.find((each) => each.deviceId === deviceId);
+        return device === undefined ? "another device" : nameOf(device);
+      }),
+    );
+    const names = [...named].toSorted((x, y) =>
+      x === "another device" ? 1 : y === "another device" ? -1 : 0,
+    );
+    const [first = "", ...rest] = names;
     return {
       moving,
-      bringing: bringing.map((deviceId) => {
-        const device = devices.find((each) => each.deviceId === deviceId);
-        return device === undefined ? "Another device" : nameOf(device);
-      }),
+      bringing: [first.charAt(0).toUpperCase() + first.slice(1), ...rest],
     };
   });
+
+// What follows a data-folder move that failed. Before the host let go
+// of the folder, nothing: the app carries on where it was. After, it
+// runs without its loopback and store watch, so it restarts: for a
+// peer's move at once, nobody here to ask; for one asked here, once
+// the user has read why (the shell's dialog, whose one button
+// restarts and whose dismissal quits).
 
 export const afterFailedMove = ({
   watchersStopped,

@@ -228,13 +228,16 @@ const make = Effect.gen(function* () {
     cancel,
     // oxlint-disable-next-line shigomori/effect-fn-service-methods -- generic over the work it forks, which Effect.fn's signature would erase
     fork: (work) => FiberSet.run(forked, work),
+    // Counted inside its fiber, so a serve that never starts (the set
+    // closed, its caller gone) is never counted.
     // oxlint-disable-next-line shigomori/effect-fn-service-methods -- generic over the work it serves, which Effect.fn's signature would erase
     serve: (peerDeviceId, work) =>
-      Effect.andThen(
-        count(peerDeviceId, 1),
-        FiberSet.run(
-          forked,
-          work.pipe(Effect.ensuring(count(peerDeviceId, -1))),
+      FiberSet.run(
+        forked,
+        Effect.acquireUseRelease(
+          count(peerDeviceId, 1),
+          () => work,
+          () => count(peerDeviceId, -1),
         ),
       ),
     underWay: Effect.map(
