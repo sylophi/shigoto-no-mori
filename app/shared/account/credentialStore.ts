@@ -14,6 +14,8 @@
 // and stored as plaintext with enc:false when it does not, so sign-in
 // still works on a machine without a keychain.
 
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { isDeviceIcon, type DeviceIcon } from "@shigomori/contracts/deviceIcon";
 
 // The injected encryption seam. `available` records whether the backing
@@ -81,6 +83,44 @@ type SignedOutShape = {
   parked?: { enc: boolean; credential: string; accountId: string };
 };
 
+// The two documents as read: what signing in needs typed, the icons as
+// they came (iconOf narrows them, and reads the name before the field's
+// rename).
+const decodeDoc = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Union([
+      Schema.Struct({
+        v: Schema.Literal(1),
+        signedOut: Schema.Literal(true),
+        deviceName: Schema.String,
+        deviceIcon: Schema.optional(Schema.Unknown),
+        deviceKind: Schema.optional(Schema.Unknown),
+        parked: Schema.optional(
+          Schema.Struct({
+            enc: Schema.Boolean,
+            credential: Schema.String,
+            accountId: Schema.String,
+          }),
+        ),
+      }),
+      Schema.Struct({
+        v: Schema.Literal(1),
+        enc: Schema.Boolean,
+        credential: Schema.String,
+        deviceKey: Schema.optional(Schema.String),
+        accountId: Schema.String,
+        deviceName: Schema.String,
+        deviceIcon: Schema.optional(Schema.Unknown),
+        deviceKind: Schema.optional(Schema.Unknown),
+        hubName: Schema.optional(Schema.String),
+        hubIcon: Schema.optional(Schema.Unknown),
+        acceptsCommands: Schema.optional(Schema.Boolean),
+      }),
+    ]),
+  ),
+);
+type ReadDoc = Option.Option.Value<ReturnType<typeof decodeDoc>>;
+
 export type AccountStore = {
   // Null for a record with no device key, one enrolled before keys,
   // which reads as signed out so the device enrolls again: on its own
@@ -124,9 +164,7 @@ type AccountStorage = {
 // document written before the field was renamed holds the pick under
 // deviceKind, read here so an upgrade keeps it. Every write rebuilds
 // the document, so the next one stores it as deviceIcon.
-function iconOf(
-  doc: (StoredShape | SignedOutShape) & { deviceKind?: unknown },
-): DeviceIcon | undefined {
+function iconOf(doc: ReadDoc): DeviceIcon | undefined {
   const picked = doc.deviceIcon ?? doc.deviceKind;
   return isDeviceIcon(picked) ? picked : undefined;
 }
@@ -136,16 +174,20 @@ function iconOf(
 // once known and the command-access switch when on (a signed-out
 // document keeps neither: the row they described is gone).
 function withIdentity(
-  doc: StoredShape | SignedOutShape,
+  doc: ReadDoc,
   opened: { credential: string; accountId: string },
 ): Omit<StoredAccount, "deviceKey"> {
   const icon = iconOf(doc);
-  const hub: Partial<StoredShape> = "signedOut" in doc ? {} : doc;
+  const hub: {
+    readonly hubName?: string | undefined;
+    readonly hubIcon?: unknown;
+    readonly acceptsCommands?: boolean | undefined;
+  } = "signedOut" in doc ? {} : doc;
   return {
     ...opened,
     deviceName: doc.deviceName,
     ...(icon === undefined ? {} : { deviceIcon: icon }),
-    ...(typeof hub.hubName === "string" ? { hubName: hub.hubName } : {}),
+    ...(hub.hubName === undefined ? {} : { hubName: hub.hubName }),
     ...(isDeviceIcon(hub.hubIcon) ? { hubIcon: hub.hubIcon } : {}),
     ...(hub.acceptsCommands === true ? { acceptsCommands: true } : {}),
   };
@@ -160,28 +202,16 @@ export function createAccountStore(opts: {
   // The document as stored, or null for nothing, unreadable or
   // corrupt (all of which read as signed out with nothing remembered;
   // the next write overwrites).
-  function readDoc(): StoredShape | SignedOutShape | null {
+  function readDoc(): ReadDoc | null {
     const raw = storage.readRaw();
-    if (raw === null) return null;
-    try {
-      const parsed = JSON.parse(raw) as StoredShape | SignedOutShape;
-      return parsed && parsed.v === 1 ? parsed : null;
-    } catch {
-      return null;
-    }
+    return raw === null ? null : Option.getOrNull(decodeDoc(raw));
   }
 
   function decrypt(stored: {
-    enc: boolean;
-    credential: string;
-    accountId: string;
+    readonly enc: boolean;
+    readonly credential: string;
+    readonly accountId: string;
   }): { credential: string; accountId: string } | null {
-    if (
-      typeof stored.credential !== "string" ||
-      typeof stored.accountId !== "string"
-    ) {
-      return null;
-    }
     const credential = open(stored.enc, stored.credential);
     return credential === null
       ? null
@@ -206,7 +236,7 @@ export function createAccountStore(opts: {
     };
   }
 
-  function signedOutDoc(): SignedOutShape | null {
+  function signedOutDoc() {
     const doc = readDoc();
     return doc !== null && "signedOut" in doc ? doc : null;
   }
@@ -226,15 +256,9 @@ export function createAccountStore(opts: {
   return {
     read() {
       const doc = readDoc();
-      if (
-        doc === null ||
-        "signedOut" in doc ||
-        typeof doc.deviceName !== "string"
-      ) {
-        return null;
-      }
+      if (doc === null || "signedOut" in doc) return null;
       const opened = decrypt(doc);
-      if (opened === null || typeof doc.deviceKey !== "string") return null;
+      if (opened === null || doc.deviceKey === undefined) return null;
       const deviceKey = open(doc.enc, doc.deviceKey);
       return deviceKey === null
         ? null
@@ -265,12 +289,7 @@ export function createAccountStore(opts: {
 
     readWithoutKey() {
       const doc = readDoc();
-      if (
-        doc === null ||
-        "signedOut" in doc ||
-        typeof doc.deviceName !== "string" ||
-        doc.deviceKey !== undefined
-      ) {
+      if (doc === null || "signedOut" in doc || doc.deviceKey !== undefined) {
         return null;
       }
       const opened = decrypt(doc);
@@ -285,7 +304,7 @@ export function createAccountStore(opts: {
       try {
         if (doc !== null) {
           setSignedOut(
-            typeof doc.deviceName === "string" ? doc.deviceName : "",
+            doc.deviceName,
             iconOf(doc),
             "signedOut" in doc ? doc.parked : undefined,
           );
@@ -299,8 +318,7 @@ export function createAccountStore(opts: {
 
     rememberedDeviceName() {
       const doc = readDoc();
-      if (doc === null || typeof doc.deviceName !== "string") return null;
-      return doc.deviceName === "" ? null : doc.deviceName;
+      return doc === null || doc.deviceName === "" ? null : doc.deviceName;
     },
 
     rememberedDeviceIcon() {

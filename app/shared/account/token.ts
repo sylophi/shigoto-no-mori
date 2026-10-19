@@ -8,17 +8,27 @@
 // bad). Anything malformed yields "". atob is a global in both node 22
 // and browsers, so no Buffer is needed and the one implementation
 // serves both runtimes.
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+const decodeClaims = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ sub: Schema.String })),
+);
+
 export function deriveAccountId(token: string): string {
   // header.payload.signature: the payload is the middle of exactly three.
   const parts = token.split(".");
   const encoded = parts.length === 3 ? parts[1] : undefined;
   if (encoded === undefined) return "";
+  // atob throws on what isn't base64.
   try {
     // atob wants plain base64: undo the base64url alphabet and repad.
     const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const payload = JSON.parse(atob(padded)) as { sub?: unknown };
-    return typeof payload.sub === "string" ? payload.sub : "";
+    return Option.match(decodeClaims(atob(padded)), {
+      onNone: () => "",
+      onSome: ({ sub }) => sub,
+    });
   } catch {
     return "";
   }
