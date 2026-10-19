@@ -9,9 +9,12 @@
 // Durable Objects, Clerk). It cannot stop the Worker invocation itself
 // from being billed, only a WAF rule at the zone can, see README.md
 // (Abuse limits).
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as ErrorReporter from "effect/ErrorReporter";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpMiddleware from "effect/http/HttpMiddleware";
@@ -443,7 +446,9 @@ const RATE_LIMIT_PERIOD_SECONDS = 60;
 
 // The routes where a caller with no credential still makes the Worker
 // do real work (a sign-in checked at Clerk, an object woken), by the
-// route the router matched, however the request spelled its path.
+// route the router matched, however the request spelled its path. The
+// router keys a route on its declared path, which these, having no
+// params, are as written.
 const OPEN_ROUTES: ReadonlySet<string> = new Set(
   [
     HubApi.groups.enrollment.endpoints.enroll,
@@ -491,20 +496,33 @@ const rateLimit = HttpRouter.middleware(
   }),
 );
 
-// A request that failed past every typed answer (a defect, an untyped
-// failure the router turns into a 500) logs its cause once. The request
-// logger is off for the query's ticket; this names the route alone.
-const logFailures = HttpRouter.middleware(
-  (httpEffect) =>
-    Effect.tapCause(httpEffect, (cause) =>
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const path = new URL(request.originalUrl, "http://hub").pathname;
-        yield* Effect.logError(`hub: ${request.method} ${path} failed`, cause);
-      }),
-    ),
-  { global: true },
+// A request that failed past every typed answer (a defect, which the
+// router answers as a 500) logs it once, by the route it matched,
+// never the request's URL, whose query can hold a ticket. A malformed
+// request's 400 is a defect marked ignored, and an unmatched path never
+// reaches a route, so neither is logged.
+const logFailures = HttpRouter.middleware((httpEffect) =>
+  Effect.tapCause(httpEffect, (cause) =>
+    Effect.gen(function* () {
+      const defects = cause.reasons.filter(
+        (reason) =>
+          Cause.isDieReason(reason) && !ErrorReporter.isIgnored(reason.defect),
+      );
+      if (defects.length === 0) return;
+      const { route } = yield* HttpRouter.RouteContext;
+      yield* Effect.logError(
+        `hub: ${route.method} ${route.path} failed`,
+        Cause.fromReasons(defects),
+      );
+    }),
+  ),
 );
+
+// Each level to the console's own, so Workers Logs files an error as
+// one.
+const leveledLogs = Logger.layer([
+  Logger.withLeveledConsole(Logger.formatLogFmt),
+]);
 
 // Open CORS, the standard shape for a bearer-token API. Every route
 // authenticates from an explicit Authorization header, so no ambient
@@ -547,8 +565,9 @@ export function createWorker(deps: HubDeps): HubWorker {
       Layer.provide(Layer.unwrap(handlers)),
       Layer.provide([loginAuth, deviceAuth, protocolFloor]),
       Layer.provide(rateLimit.layer),
+      Layer.provide(logFailures.layer),
       Layer.provide(cors),
-      Layer.provide(logFailures),
+      Layer.provide(leveledLogs),
       Layer.provide(services),
       Layer.provide(HttpServer.layerServices),
     );

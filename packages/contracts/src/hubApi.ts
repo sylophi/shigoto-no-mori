@@ -107,7 +107,9 @@ export class HubUnavailableError extends Schema.TaggedError<HubUnavailableError>
   { httpApiStatus: 502 },
 ) {
   override get message(): string {
-    return `The device hub could not complete the ${this.operation} request.`;
+    return this.operation === "credential"
+      ? "The device hub could not check this device's credential."
+      : `The device hub could not complete the ${this.operation} request.`;
   }
 }
 

@@ -2,7 +2,7 @@
 // and CORS. Runs inside workerd against real D1 and DO bindings, with
 // the stub Clerk verifier from helpers.ts.
 import * as Schema from "effect/Schema";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { env } from "cloudflare:test";
 import {
   HUB_PROTOCOL_FLOOR,
@@ -20,7 +20,7 @@ import {
 } from "../src/ticket.ts";
 import type { Env } from "../src/env.ts";
 import { createWorker } from "../src/worker.ts";
-import { tokenRefused } from "../src/index.ts";
+import { tokenRefused } from "../src/clerk.ts";
 import {
   TokenVerificationError,
   TokenVerificationErrorReason,
@@ -790,6 +790,20 @@ describe("the tight budget, by route", () => {
       );
       expect(statuses.at(-1)).toBe(429);
     }
+    // Enroll too, on the budget the spellings above did not touch.
+    const enrollSpelled = () =>
+      call(
+        new Request(`${BASE}/DEVICES//enroll/`, {
+          method: "POST",
+          headers: { "CF-Connecting-IP": "203.0.113.49" },
+        }),
+        testEnv,
+      );
+    for (let i = 0; i < OPEN_BUDGET; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- one request at a time, each counted
+      expect((await enrollSpelled()).status).toBe(401);
+    }
+    expect((await enrollSpelled()).status).toBe(429);
   });
 
   it("fails open when the limiter itself fails", async () => {
@@ -819,8 +833,12 @@ describe("a step that could not run", () => {
         },
       ) as D1Database,
     };
+    const logged = vi.spyOn(console, "error");
     const response = await call(listRequest(credential), down);
     expect(response.status).toBe(502);
+    // Its cause is on the record, filed as an error.
+    expect(String(logged.mock.calls.flat())).toContain("credential failed");
+    logged.mockRestore();
     expect(await response.json()).toEqual({
       _tag: "HubUnavailableError",
       operation: "credential",
@@ -846,6 +864,25 @@ describe("a step that could not run", () => {
       _tag: "HubUnavailableError",
       operation: "enroll",
     });
+  });
+});
+
+describe("what the hub logs", () => {
+  // The query can hold a ticket: a request that matched no route is
+  // not logged, and neither is a malformed one's 400.
+  it("logs no unmatched or malformed request, so no query", async () => {
+    const logs = (["log", "info", "warn", "error"] as const).map((level) =>
+      vi.spyOn(console, level),
+    );
+    await call(new Request(`${BASE}/nope?ticket=SECRET-TICKET`));
+    await call(
+      new Request(`${BASE}/connect?ticket=SECRET-TICKET&ticket=SECRET-TWO`, {
+        method: "POST",
+      }),
+    );
+    const said = logs.flatMap((spy) => spy.mock.calls.flat().map(String));
+    for (const spy of logs) spy.mockRestore();
+    expect(said.filter((line) => line.includes("SECRET"))).toEqual([]);
   });
 });
 
