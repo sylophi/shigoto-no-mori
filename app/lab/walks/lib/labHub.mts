@@ -50,6 +50,10 @@ export interface LabHub {
   readonly url: string;
   // The enroll bearer of the walk's one account.
   readonly login: string;
+  // The hub goes away, as it does for a Mac that moves between
+  // networks, and comes back on the same port with its state.
+  pause(): Promise<void>;
+  resume(): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -75,39 +79,62 @@ export async function startLabHub(): Promise<LabHub> {
     { cwd: root, env, stdio: ["ignore", "ignore", "pipe"] },
   );
   const port = await freeLoopbackPort();
-  // Its own process group, so the stop takes workerd with it.
-  const child = spawn(
-    WRANGLER,
-    [
-      "dev",
-      "-c",
-      config,
-      "--ip",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      "--persist-to",
-      state,
-      "--var",
-      "TICKET_SIGNING_KEY:lab-only-not-a-secret",
-    ],
-    { cwd: root, env, detached: true, stdio: ["ignore", "ignore", "pipe"] },
-  );
-  let exited = false;
+  const url = `http://127.0.0.1:${port}`;
+  let child: ReturnType<typeof spawn> | null = null;
+  let exited = true;
   let stderr = "";
-  child.once("exit", () => {
-    exited = true;
-  });
-  child.stderr.on("data", (chunk: Buffer) => {
-    stderr = (stderr + chunk.toString()).slice(-4000);
-  });
   // The whole group, workerd with wrangler, whether or not wrangler is
   // still there; a group already gone is no error.
   const signal = (name: NodeJS.Signals) => {
-    if (child.pid === undefined) return;
+    if (child?.pid === undefined) return;
     try {
       process.kill(-child.pid, name);
     } catch {}
+  };
+  // Its own process group, so a pause or the stop takes workerd with it.
+  const launch = async () => {
+    const launched = spawn(
+      WRANGLER,
+      [
+        "dev",
+        "-c",
+        config,
+        "--ip",
+        "127.0.0.1",
+        "--port",
+        String(port),
+        "--persist-to",
+        state,
+        "--var",
+        "TICKET_SIGNING_KEY:lab-only-not-a-secret",
+      ],
+      { cwd: root, env, detached: true, stdio: ["ignore", "ignore", "pipe"] },
+    );
+    child = launched;
+    exited = false;
+    launched.once("exit", () => {
+      if (child === launched) exited = true;
+    });
+    launched.stderr?.on("data", (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-4000);
+    });
+    await waitFor(
+      async () => {
+        if (exited) throw new Error(`the lab hub exited: ${stderr}`);
+        return fetch(url).then(
+          () => true,
+          () => false,
+        );
+      },
+      "the lab hub",
+      60_000,
+    );
+  };
+  const halt = async () => {
+    signal("SIGTERM");
+    await waitFor(() => exited, "the lab hub to stop", 10_000).catch(() =>
+      signal("SIGKILL"),
+    );
   };
   // Detached, it hears no Ctrl-C of the run's: the run's end takes it,
   // an exit or a signal that would end the run without one.
@@ -123,28 +150,14 @@ export async function startLabHub(): Promise<LabHub> {
   const stop = async () => {
     process.off("exit", onExit);
     for (const each of ending) process.off(each, onSignal);
-    signal("SIGTERM");
-    await waitFor(() => exited, "the lab hub to stop", 10_000).catch(() =>
-      signal("SIGKILL"),
-    );
+    await halt();
     rmSync(root, { recursive: true, force: true });
   };
-  const url = `http://127.0.0.1:${port}`;
   try {
-    await waitFor(
-      async () => {
-        if (exited) throw new Error(`the lab hub exited: ${stderr}`);
-        return fetch(url).then(
-          () => true,
-          () => false,
-        );
-      },
-      "the lab hub",
-      60_000,
-    );
+    await launch();
   } catch (cause) {
     await stop();
     throw cause;
   }
-  return { url, login: "lab:walk", stop };
+  return { url, login: "lab:walk", pause: halt, resume: launch, stop };
 }

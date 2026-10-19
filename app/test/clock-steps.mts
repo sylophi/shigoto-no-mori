@@ -410,9 +410,10 @@ it("direct keeper: a session's uptime is monotonic, and a wake starts again one 
   const keeper = madeOn(
     clock.context,
     makeDirectKeeper({
-      dial: async () => {
-        dials.push(clock.now());
-      },
+      dial: () =>
+        Effect.sync(() => {
+          dials.push(clock.now());
+        }),
     }),
   );
   keeper.reconcile(["B"]);

@@ -65,10 +65,18 @@
 //
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
-// global WebSocket serves openDevice).
+// global WebSocket serves dialDevice).
 import type { KeyPair } from "@shared/crypto/noise";
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
+import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
   MAX_DIRECT_CANDIDATES,
@@ -79,12 +87,11 @@ import {
 } from "@shigomori/contracts/modules/direct";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import {
+  type DialedDevice,
+  dialDevice,
   newConnectionId,
-  openDevice,
   type OpenClientSocket,
   RemoteConnectError,
-  type DeviceConnection,
-  type PendingDeviceConnection,
 } from "@shared/remote/deviceLink";
 import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
@@ -96,16 +103,9 @@ import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 // whether it shares with this device at all. The bridge keeps them
 // current from the peer's commandAccessChanged and sharing:changed
 // pushes.
-export type PeerConnection = DeviceConnection & {
+export type PeerConnection = Omit<DialedDevice, "link"> & {
   acceptsCommands: boolean;
   sharesData: boolean;
-};
-
-export type ConnectPeerOpts = {
-  // Called once when an ESTABLISHED direct connection dies on its own
-  // (socket teardown, roster drop). Never fires for an owner initiated
-  // close, and never for a failed connect.
-  onClose?: () => void;
 };
 
 // Candidates dialed at once: the shared advertising cap for interface
@@ -119,12 +119,22 @@ const MAX_DIAL_CANDIDATES = MAX_DIRECT_CANDIDATES + 1;
 // a caller can tell "there is nothing here to dial" apart from an
 // ordinary dial failure, and worded for the keeper, which surfaces the
 // message as the peer's unavailable reason.
-export class NoDialableCandidateError extends Error {
+export class NoDialableCandidateError extends Data.TaggedError(
+  "NoDialableCandidateError",
+)<{ readonly message: string }> {
   constructor(deviceId: string) {
-    super(`peer ${deviceId} serves no direct listener`);
-    this.name = "NoDialableCandidateError";
+    super({ message: `peer ${deviceId} serves no direct listener` });
   }
 }
+
+// A dial that failed short of a refusal: the ask went unanswered, its
+// answer offered nothing to dial, or the race ran out of budget.
+// Transient, so the keeper keeps it on the ladder; the message is what
+// it logs and the bridge's no-session rejection says.
+class DirectDialError extends Data.TaggedError("DirectDialError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 // True when redialing at once cannot change the outcome: a blocked
 // verdict (a ticket the host read and refused, or the wrong machine
@@ -150,6 +160,7 @@ export type DirectDialerDeps = {
     deviceId: string,
     input: DirectConnectInfoInput,
     timeoutMs: number,
+    signal?: AbortSignal,
   ): Promise<unknown>;
   // This device's identity, carried in the direct hello.
   localDeviceId: string;
@@ -182,10 +193,11 @@ export type DirectDialerDeps = {
 };
 
 export type DirectDialer = {
+  // The link, up in the caller's scope until it closes or the link
+  // drops (`dropped`). Interrupted, every candidate's socket closes.
   connectDirect(
     deviceId: string,
-    opts?: ConnectPeerOpts,
-  ): Promise<PeerConnection>;
+  ): Effect.Effect<PeerConnection, unknown, Scope.Scope>;
 };
 
 type CandidateFailure = { candidate: DirectCandidate; error: unknown };
@@ -273,232 +285,213 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
 
   // Open every candidate's socket at once, then hello them one at a
   // time in socket-open order (see the file header for why hellos are
-  // serialized). The first successful handshake wins and every other
-  // socket is abandoned pre-auth. The race rejects when its budget
-  // (budgetMs) runs out, and a handshake that
-  // resolves after settlement is closed rather than leaked.
-  function raceCandidates(
+  // serialized). The first successful handshake wins and stays up in
+  // the caller's scope; every other socket is closed pre-auth. Out of
+  // budget, the race fails with the remembered refusal, or the deadline.
+  const raceCandidates = (
     deviceId: string,
-    opts: ConnectPeerOpts | undefined,
     candidates: DirectCandidate[],
     budgetMs: number,
     seal: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array },
     connectionId: string,
-  ): Promise<DeviceConnection> {
-    return new Promise<DeviceConnection>((resolvePromise, rejectPromise) => {
-      let done = false;
-      // Out of budget: the remembered refusal if there is one, else the
-      // deadline itself.
-      const deadlineTimer = setTimeout(() => {
-        if (done) return;
-        done = true;
-        settleAll();
-        reject(
-          refusal ??
-            new Error(
-              `direct dial to ${deviceId} exceeded its ${deadlineMs}ms deadline`,
+  ): Effect.Effect<DialedDevice, unknown, Scope.Scope> =>
+    Effect.gen(function* () {
+      const scope = yield* Effect.scope;
+      let winner: number | null = null;
+      // Each candidate's link, up until its fiber is interrupted: the
+      // losers' at the race's end, the winner's with the caller's scope.
+      const dials = yield* Effect.forEach(candidates, (candidate, index) =>
+        Effect.gen(function* () {
+          const opened = yield* Deferred.make<void, RemoteConnectError>();
+          const helloAsked = yield* Deferred.make<void>();
+          const welcomed = yield* Deferred.make<
+            DialedDevice,
+            RemoteConnectError
+          >();
+          const fiber = yield* dialDevice(
+            {
+              url: candidate.url,
+              openSocket: deps.openSocket ?? openGlobalSocket,
+              // This candidate's own single-use ticket, which opens its
+              // socket, sealed to the key the roster names for the peer:
+              // whoever answers a candidate address, only the peer can
+              // complete the handshake.
+              ticket: candidate.ticket,
+              seal,
+              connectionId,
+              appVersion: deps.localAppVersion,
+              localDeviceId: deps.localDeviceId,
+              deviceKind: deps.deviceKind,
+              // Identity pin: a welcome from any other deviceId fails
+              // the handshake and closes the socket.
+              expectedDeviceId: deviceId,
+              onPush: (channel, payload) => {
+                if (winner === index) {
+                  deps.onAnyPush?.(deviceId, channel, payload);
+                }
+              },
+              deadlineMs: budgetMs,
+            },
+            { opened, helloAsked },
+          ).pipe(
+            Effect.flatMap((dialed) =>
+              Effect.andThen(Deferred.succeed(welcomed, dialed), Effect.never),
             ),
-        );
-      }, budgetMs);
-      // Every settlement clears the deadline timer, so a settled race
-      // leaves nothing armed.
-      const resolve = (connection: DeviceConnection): void => {
-        clearTimeout(deadlineTimer);
-        resolvePromise(connection);
-      };
-      const reject = (error: unknown): void => {
-        clearTimeout(deadlineTimer);
-        rejectPromise(error);
-      };
-      let winnerIndex = -1;
-      let outstanding = candidates.length;
-      // Every retired candidate with its error, in retirement order,
-      // for the exhaustion reject's per-candidate summary.
-      const failures: CandidateFailure[] = [];
-      // Indexes whose socket is open and whose hello is queued behind
-      // the one in flight. Null helloIndex means the pump may send the
-      // next hello.
-      const ready: number[] = [];
-      let helloIndex: number | null = null;
-      // The first refusal, which decides the attempt only if no
-      // candidate wins.
-      let refusal: RemoteConnectError | null = null;
-
-      const handles: PendingDeviceConnection[] = candidates.map(
-        (candidate, index) =>
-          openDevice({
-            url: candidate.url,
-            openSocket: deps.openSocket ?? openGlobalSocket,
-            // This candidate's own single-use ticket, which opens its
-            // socket, sealed to the key the roster names for the peer:
-            // whoever answers a candidate address, only the peer can
-            // complete the handshake.
-            ticket: candidate.ticket,
-            seal,
-            connectionId,
-            appVersion: deps.localAppVersion,
-            localDeviceId: deps.localDeviceId,
-            deviceKind: deps.deviceKind,
-            // Identity pin: a welcome from any other deviceId fails
-            // the handshake and closes the socket.
-            expectedDeviceId: deviceId,
-            // Only the winning candidate's lifecycle belongs to the
-            // caller: a losing or abandoned socket dropping must not
-            // evict the winner from the bridge cache.
-            onClose: () => {
-              if (winnerIndex === index) opts?.onClose?.();
-            },
-            onPush: (channel, payload) => {
-              if (winnerIndex === index) {
-                deps.onAnyPush?.(deviceId, channel, payload);
-              }
-            },
-            // The open is bounded by the race's budget, and the
-            // race's deadline abandons whatever is still waiting.
-            deadlineMs: budgetMs,
-          }),
+            Effect.scoped,
+            Effect.catch((failed) =>
+              Effect.andThen(
+                Deferred.fail(opened, failed),
+                Deferred.fail(welcomed, failed),
+              ),
+            ),
+            Effect.forkIn(scope),
+          );
+          return { candidate, index, opened, helloAsked, welcomed, fiber };
+        }),
+      );
+      const losersClosed = Effect.forEach(
+        dials,
+        ({ index, fiber }) =>
+          index === winner ? Effect.void : Fiber.interrupt(fiber),
+        { discard: true },
       );
 
-      const settleAll = (): void => {
-        for (const handle of handles) handle.abandon();
-      };
-
-      // One settlement per candidate: either its whenOpen rejected
-      // (never queued) or its authenticate rejected (its hello turn
-      // failed, or its socket died while queued).
-      const failCandidate = (index: number, error: unknown): void => {
-        if (done) return;
+      // Every retired candidate with its error, in retirement order,
+      // for the exhaustion failure's per-candidate summary, and the
+      // first refusal, which decides the attempt only if no candidate
+      // wins.
+      const failures: CandidateFailure[] = [];
+      let refusal: RemoteConnectError | null = null;
+      const retire = (candidate: DirectCandidate, error: unknown) => {
         if (error instanceof RemoteConnectError && error.blocked) {
           // The ticket was refused, or the wrong machine answered.
           // Terminal, but only once the race is over: the far end
           // proved nothing, and on a LAN address it may be a squatter,
           // which must not deny a dial another candidate can win.
-          // `blocked` is the host's close code, which tells a refused
-          // credential from its temporary lockout.
           refusal ??= error;
         }
-        const candidate = candidates[index];
-        if (candidate !== undefined) failures.push({ candidate, error });
-        outstanding -= 1;
-        if (outstanding === 0) {
-          done = true;
-          reject(refusal ?? exhaustionError(deviceId, failures));
-        }
+        failures.push({ candidate, error });
       };
 
-      const pump = (): void => {
-        if (done || helloIndex !== null) return;
-        const index = ready.shift();
-        if (index === undefined) return;
-        const handle = handles[index];
-        if (handle === undefined) {
-          // Not reachable (ready holds indexes of handles), but a
-          // silent return here would stall the race to its deadline.
-          failCandidate(index, new Error("a ready candidate has no handle"));
-          pump();
-          return;
-        }
-        helloIndex = index;
-        handle.authenticate().then(
-          (connection) => {
-            if (done) {
-              connection.close();
-              return;
-            }
-            done = true;
-            winnerIndex = index;
-            // The losers never sent a hello (serialization), so the
-            // abandon is a pre-auth close the host never even logs.
-            handles.forEach((other, i) => {
-              if (i !== index) other.abandon();
-            });
-            resolve(connection);
-          },
-          (error: unknown) => {
-            helloIndex = null;
-            failCandidate(index, error);
-            pump();
-          },
+      const hellos = Effect.gen(function* () {
+        // The candidates in the order their sockets open or fail.
+        const opens = yield* Queue.unbounded<{
+          readonly dial: (typeof dials)[number];
+          readonly exit: Exit.Exit<void, RemoteConnectError>;
+        }>();
+        yield* Effect.forEach(
+          dials,
+          (dial) =>
+            Deferred.await(dial.opened).pipe(
+              Effect.exit,
+              Effect.flatMap((exit) => Queue.offer(opens, { dial, exit })),
+              Effect.forkScoped,
+            ),
+          { discard: true },
         );
-      };
-
-      handles.forEach((handle, index) => {
-        handle.whenOpen.then(
-          () => {
-            if (done) return;
-            ready.push(index);
-            pump();
-          },
-          (error: unknown) => {
-            failCandidate(index, error);
-          },
+        for (let retired = 0; retired < dials.length; retired += 1) {
+          const { dial, exit } = yield* Queue.take(opens);
+          if (Exit.isFailure(exit)) {
+            retire(dial.candidate, Cause.squash(exit.cause));
+            continue;
+          }
+          yield* Deferred.succeed(dial.helloAsked, undefined);
+          const welcomed = yield* Effect.exit(Deferred.await(dial.welcomed));
+          if (Exit.isSuccess(welcomed)) {
+            winner = dial.index;
+            return welcomed.value;
+          }
+          retire(dial.candidate, Cause.squash(welcomed.cause));
+        }
+        return yield* Effect.fail(
+          refusal ?? exhaustionError(deviceId, failures),
         );
       });
-    });
-  }
 
-  // One whole attempt, each leg under its deadline, so the bridge's
-  // cached promise always settles.
-  async function connectDirect(
-    deviceId: string,
-    opts?: ConnectPeerOpts,
-  ): Promise<PeerConnection> {
-    // This dial's connection: its tickets are minted for it, and its
-    // hello names it.
-    const connectionId = newConnectionId();
-    let answer: unknown;
-    try {
+      return yield* hellos.pipe(
+        Effect.scoped,
+        Effect.timeoutOrElse({
+          duration: budgetMs,
+          orElse: () =>
+            Effect.fail(
+              refusal ??
+                new DirectDialError({
+                  message: `direct dial to ${deviceId} exceeded its ${deadlineMs}ms deadline`,
+                }),
+            ),
+        }),
+        Effect.ensuring(losersClosed),
+      );
+    });
+
+  // One whole attempt, each leg under its deadline.
+  const connectDirect = (deviceId: string) =>
+    Effect.gen(function* () {
+      // This dial's connection: its tickets are minted for it, and its
+      // hello names it.
+      const connectionId = newConnectionId();
       // The input declares this platform's dialable kinds so the host
       // mints no ticket we cannot spend.
-      answer = await deps.askConnectInfo(
-        deviceId,
-        { dialableKinds, connectionId },
-        deadlineMs,
-      );
-    } catch (error) {
-      // No direct listener to advertise (a web client), not a call
-      // that failed. Terminal, so the keeper parks it until the peer's
-      // roster round trip. Every other rejection stays as thrown:
-      // transient.
-      if (
-        error instanceof HubAskRefusedError &&
-        error.code === NO_LISTENER_CODE
-      ) {
-        throw new NoDialableCandidateError(deviceId);
+      const answer = yield* Effect.tryPromise({
+        try: (signal) =>
+          deps.askConnectInfo(
+            deviceId,
+            { dialableKinds, connectionId },
+            deadlineMs,
+            signal,
+          ),
+        // No direct listener to advertise (a web client), not a call
+        // that failed. Terminal, so the keeper parks it until the
+        // peer's roster round trip. Every other failure is transient.
+        catch: (error) =>
+          error instanceof HubAskRefusedError && error.code === NO_LISTENER_CODE
+            ? new NoDialableCandidateError(deviceId)
+            : new DirectDialError({
+                message: errorMessageOf(error),
+                cause: error,
+              }),
+      });
+      const info = yield* Effect.try({
+        try: () => Schema.decodeUnknownSync(DirectConnectInfoSchema)(answer),
+        catch: (error) =>
+          new DirectDialError({
+            message: `peer ${deviceId} answered no connect info this build reads`,
+            cause: error,
+          }),
+      });
+      if (!info.available) {
+        // The peer's listener is down, or it has nothing THIS caller
+        // can dial. Unreachable for data RIGHT NOW, which is not the
+        // same as structurally undialable: its listener may be
+        // mid-boot, or the directConnections opt-out may be flipped back
+        // on without any roster transition to unpark on. So this stays
+        // a plain, transient error and the keeper keeps it on the ladder.
+        return yield* new DirectDialError({
+          message: `peer ${deviceId} offers no direct listener`,
+        });
       }
-      throw error;
-    }
-    const info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(answer);
-    if (!info.available) {
-      // The peer's listener is down, or it has nothing THIS caller can
-      // dial. Unreachable for data RIGHT NOW, which is not the same as
-      // structurally undialable: its listener may be mid-boot, or the
-      // directConnections opt-out may be flipped back on without any
-      // roster transition to unpark on. So this stays a plain,
-      // transient error and the keeper keeps it on the ladder.
-      throw new Error(`peer ${deviceId} offers no direct listener`);
-    }
-    const localKey = deps.localKey();
-    const remoteKey = deps.peerKey(deviceId);
-    if (localKey === null || remoteKey === undefined) {
-      throw new Error(`peer ${deviceId} has no key on the roster`);
-    }
-    // The fan-out cap keeps a hostile or buggy answer from dialing an
-    // unbounded burst.
-    const connection = await raceCandidates(
-      deviceId,
-      opts,
-      info.candidates.slice(0, MAX_DIAL_CANDIDATES),
-      deadlineMs,
-      { localKey, remoteKey },
-      connectionId,
-    );
-    return {
-      ...connection,
-      acceptsCommands: info.acceptsCommands,
-      sharesData: info.sharesData,
-    };
-  }
+      const localKey = deps.localKey();
+      const remoteKey = deps.peerKey(deviceId);
+      if (localKey === null || remoteKey === undefined) {
+        return yield* new DirectDialError({
+          message: `peer ${deviceId} has no key on the roster`,
+        });
+      }
+      // The fan-out cap keeps a hostile or buggy answer from dialing an
+      // unbounded burst.
+      const { link: _, ...dialed } = yield* raceCandidates(
+        deviceId,
+        info.candidates.slice(0, MAX_DIAL_CANDIDATES),
+        deadlineMs,
+        { localKey, remoteKey },
+        connectionId,
+      );
+      return {
+        ...dialed,
+        acceptsCommands: info.acceptsCommands,
+        sharesData: info.sharesData,
+      } satisfies PeerConnection;
+    });
 
   return { connectDirect };
 }
