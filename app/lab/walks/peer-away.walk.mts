@@ -121,7 +121,7 @@ const revokeAndRegrant = async () => {
   await answers(b.page, "again");
 };
 
-it("the other device's own terminal gives way to the read-only words when its control goes off, and comes back with it", async () => {
+it("the other device's own terminal gives way to words that say terminals stay hidden when its control goes off, and comes back with it", async () => {
   await setControl(a.page, true);
   await b.page.keyboard.press("Meta+K");
   await b.page.keyboard.type("Terminals on");

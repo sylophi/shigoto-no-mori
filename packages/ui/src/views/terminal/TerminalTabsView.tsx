@@ -127,7 +127,7 @@ export function TerminalTabsView({
       </div>
       <div className="min-h-0 flex-1">
         {note !== null ? (
-          <CenteredMessage>{note}</CenteredMessage>
+          <CenteredMessage className="px-6 text-center">{note}</CenteredMessage>
         ) : empty ? (
           <div className="px-6 py-2 phone:px-4">
             <EmptyPanel>

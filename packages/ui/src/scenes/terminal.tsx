@@ -1,7 +1,7 @@
 // The terminal's parts: a worktree page's drawer with its tabs over a
 // script's console, a device's own terminals on their page over a
-// shell fed a fixture prompt with Nerd Font icons, and the sidebar's
-// list of them.
+// shell fed a fixture prompt with Nerd Font icons, the sidebar's list
+// of them, and a peer's terminals page while it takes no commands.
 import { ScriptConsoleView } from "../views/scriptConsole/ScriptConsoleView.tsx";
 import { DeviceTerminalsPageView } from "../views/terminal/DeviceTerminalsPageView.tsx";
 import { TerminalDrawerView } from "../views/terminal/TerminalDrawerView.tsx";
