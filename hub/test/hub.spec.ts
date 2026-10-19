@@ -60,6 +60,17 @@ async function ping(socket: { ws: WebSocket }): Promise<void> {
   await pong;
 }
 
+// The account's ticket store failing from here on, as a storage fault
+// would: its table gone.
+async function breakTickets(accountId: string): Promise<void> {
+  await runInDurableObject(
+    env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName(accountId)),
+    (_hub: DeviceHub, state: DurableObjectState) => {
+      state.storage.sql.exec("DROP TABLE tickets");
+    },
+  );
+}
+
 describe("GET /connect", () => {
   it("accepts a fresh ticket and sends the presence list", async () => {
     const { socket } = await enrollAndConnect("acct-conn", "dev-conn");
@@ -296,7 +307,7 @@ describe("rotation", () => {
 
   it("refuses a ticket stored under a credential the device no longer holds", async () => {
     // A mint that read the old credential and stored its ticket after
-    // the rotation dropped the device's tickets.
+    // the rotation.
     await enroll("acct-rotate-race", "dev-rotate-race");
     const hub = env.DEVICE_HUB.get(
       env.DEVICE_HUB.idFromName("acct-rotate-race"),
@@ -310,6 +321,16 @@ describe("rotation", () => {
       await signedTicket("acct-rotate-race", random),
     );
     expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
+  });
+
+  it("closes the device's sockets when it enrolls again while the ticket store fails", async () => {
+    // Nothing that can fail stands between the credential's rotation and
+    // its sockets closing: the store of tickets is not touched.
+    const { socket } = await enrollAndConnect("acct-rotate-broken", "dev-rb");
+    await socket.untilPresence(["dev-rb"]);
+    await breakTickets("acct-rotate-broken");
+    await enroll("acct-rotate-broken", "dev-rb");
+    expect((await socket.closed).code).toBe(CLOSE_CREDENTIAL_ROTATED);
   });
 });
 
@@ -686,11 +707,40 @@ describe("revocation", () => {
     expect(ticketAttempt.status).toBe(403);
   });
 
-  it("purges the revoked device's unconsumed tickets", async () => {
+  it("closes the revoked device's sockets while the ticket store fails", async () => {
+    // A committed revoke never leaves the device on the roster: nothing
+    // that can fail stands between the row's delete and its sockets
+    // closing.
+    const keeper = await enrollAndConnect("acct-rev-broken", "dev-rb-keeper");
+    const victim = await enrollAndConnect("acct-rev-broken", "dev-rb-victim");
+    await keeper.socket.untilPresence(["dev-rb-keeper", "dev-rb-victim"]);
+    await breakTickets("acct-rev-broken");
+    const response = await revoke(keeper.credential, "dev-rb-victim");
+    expect(response.status).toBe(204);
+    expect((await victim.socket.closed).code).toBe(CLOSE_DEVICE_REVOKED);
+    await keeper.socket.untilPresence(["dev-rb-keeper"]);
+  });
+
+  it("closes the device's sockets on a revoke whose row is already gone", async () => {
+    // A retry of a revoke that committed but whose answer was lost: no
+    // row to remove, and the sockets still close.
+    const keeper = await enrollAndConnect("acct-rev-retry", "dev-rr-keeper");
+    const victim = await enrollAndConnect("acct-rev-retry", "dev-rr-victim");
+    await keeper.socket.untilPresence(["dev-rr-keeper", "dev-rr-victim"]);
+    await env.DB.prepare("DELETE FROM devices WHERE device_id = ?")
+      .bind("dev-rr-victim")
+      .run();
+    // Unknown, as for any device the account has no row of.
+    expect((await revoke(keeper.credential, "dev-rr-victim")).status).toBe(404);
+    expect((await victim.socket.closed).code).toBe(CLOSE_DEVICE_REVOKED);
+    await keeper.socket.untilPresence(["dev-rr-keeper"]);
+  });
+
+  it("refuses the revoked device's unconsumed tickets", async () => {
     const keeper = await enroll("acct-rev-ticket", "dev-rev-ticket-keeper");
     const victim = await enroll("acct-rev-ticket", "dev-rev-ticket-victim");
-    // Minted before the revocation, so it would otherwise stay valid
-    // for the full TTL and let the revoked device reconnect.
+    // Minted before the revocation and unexpired: admission reads the
+    // device's credential, which is gone.
     const { ticket } = await mintTicket(victim.credential);
     const response = await revoke(keeper.credential, "dev-rev-ticket-victim");
     expect(response.status).toBe(204);
@@ -698,14 +748,10 @@ describe("revocation", () => {
     expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
   });
 
-  it("rejects a pre-minted ticket once the device row is gone, even when the ticket record survives", async () => {
-    // This exercises the D1 existence gate at connect, not the ticket
-    // purge. Mint a ticket, then delete the device row directly,
-    // bypassing revoke's ticket purge, so the ticket record is still
-    // present and unexpired at connect time. The object re-reads D1,
-    // finds no device and rejects. This is the mint-concurrent-with-
-    // revoke race: a ticket whose put landed after revoke's purge must
-    // still not open a socket for a device whose D1 row is already gone.
+  it("rejects a pre-minted ticket once the device row is gone", async () => {
+    // The D1 existence gate at connect: the row deleted out of band, the
+    // ticket record still present and unexpired. The object re-reads D1,
+    // finds no device and rejects.
     const { credential } = await enroll("acct-rev-d1", "dev-rev-d1");
     const { ticket } = await mintTicket(credential);
     // Delete the row out of band so the DO's ticket record survives and

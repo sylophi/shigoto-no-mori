@@ -43,9 +43,6 @@ export class Tickets extends Context.Service<
       random: string,
       now: number,
     ) => Effect.Effect<TicketHolder | null, SqlError>;
-    // Drops the device's unconsumed tickets, at its revoke and when it
-    // enrolls again.
-    readonly dropDevice: (deviceId: string) => Effect.Effect<void, SqlError>;
   }
 >()("sm/hub/Tickets") {}
 
@@ -121,13 +118,7 @@ const make = Effect.gen(function* () {
     };
   });
 
-  const dropDevice = Effect.fn("Tickets.dropDevice")(function* (
-    deviceId: string,
-  ) {
-    yield* sql`DELETE FROM tickets WHERE device_id = ${deviceId}`;
-  });
-
-  return Tickets.of({ mint, take, dropDevice });
+  return Tickets.of({ mint, take });
 });
 
 export const layer = Layer.effect(Tickets, make);
