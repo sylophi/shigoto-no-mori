@@ -105,7 +105,6 @@ import {
   createNoAccountSweep,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
-  MIRROR_LABEL_LOCAL_WORKTREE,
   mirrorSessions,
   type MirrorSessionRaw,
   holdRootChecks,
@@ -117,6 +116,7 @@ import {
   transferModeFor,
   stopMirrorsForWorktree,
   whileRecreating,
+  moveMirrorsOfWorktree,
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
@@ -455,10 +455,7 @@ it("ungranted peer: create fails with the grant refusal and the listener spawns 
     remoteRoot: listenerWorktree,
     name: "feature",
     localWorktreeId: dialerWorktreeId,
-    labels: {
-      localWorktreeId: dialerWorktreeId,
-      localProjectId: dialerProjectId,
-    },
+    labels: { localProjectId: dialerProjectId },
     // A build folder held back by the create's own ignores.
     ignores: ["/dist"],
   };
@@ -584,7 +581,7 @@ it("the state stream reports watching, both endpoints connected, cycles counted"
   assert.equal(state.worktreeId, listenerWorktreeId);
   assert.equal(state.localRoot, dialerRoot);
   assert.equal(state.remoteRoot, listenerWorktree);
-  assert.equal(state.labels.localWorktreeId, dialerWorktreeId);
+  assert.equal(state.localWorktreeId, dialerWorktreeId);
   assert.equal(state.local.connected, true);
   assert.equal(state.remote.connected, true);
   assert.ok(state.successfulCycles >= 1);
@@ -960,7 +957,6 @@ it("git: a primary mirrored to a mirror/main worktree carries commits both ways 
     name: "main",
     localWorktreeId: dialerPrimaryId,
     labels: {
-      localWorktreeId: dialerPrimaryId,
       localProjectId: dialerProjectId,
       [MIRROR_LABEL_MODE]: "mirror-branch",
     },
@@ -1178,8 +1174,8 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         rawMirrorSession({
           session: "s-with-a",
           deviceId: LISTENER,
+          localWorktreeId: "listener-wt",
           labels: {
-            [MIRROR_LABEL_LOCAL_WORKTREE]: "listener-wt",
             [MIRROR_LABEL_MODE]: "mirror",
           },
         }),
@@ -1189,8 +1185,8 @@ it("a device leaving the account ends the mirrors with it, copies kept, transfer
         rawMirrorSession({
           session: "s-with-c",
           deviceId: "C",
+          localWorktreeId: "wt-c",
           labels: {
-            [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-c",
             [MIRROR_LABEL_MODE]: "mirror",
           },
         }),
@@ -1241,8 +1237,8 @@ const into = (
     deviceId,
     projectId: "p",
     worktreeId,
+    localWorktreeId: original,
     labels: {
-      [MIRROR_LABEL_LOCAL_WORKTREE]: original,
       [MIRROR_LABEL_MODE]: "mirror",
     },
   });
@@ -1288,6 +1284,39 @@ it("a peer's removed worktree ends only the mirrors into that copy, nothing dele
   }
 });
 
+it("a moved worktree re-opens only its own mirrors, on the new path under the new id", async () => {
+  // A worktree here re-keyed by a move (host/lib/worktrees/moving.ts):
+  // each session on it re-opens at the new path, and the new session
+  // runs on the new id, which the engine echoes back from then on.
+  const live = [
+    into("s-moved", LISTENER, "wt-copy", "wt-old"),
+    into("s-other", LISTENER, "wt-copy-2", "wt-kept"),
+  ];
+  const reopened: [string, MirrorCreateInput][] = [];
+  standInMirror({
+    ...inertImpl(),
+    status: Effect.succeed("running"),
+    sessions: Effect.sync(() => live),
+    recreate: (id, input) =>
+      Effect.sync(() => {
+        reopened.push([id, input]);
+        return `${id}-again`;
+      }),
+  });
+  await runHost(
+    moveMirrorsOfWorktree("wt-old", { id: "wt-new", path: "/moved/here" }),
+  );
+  assert.deepEqual(
+    reopened.map(([id, input]) => [
+      id,
+      input.localRoot,
+      input.localWorktreeId,
+      input.worktreeId,
+    ]),
+    [["s-moved", "/moved/here", "wt-new", "wt-copy"]],
+  );
+});
+
 it("stop: a conflict or git not in step refuses removing the copy unforced, an original gone never takes its copy and says so, a root that went under a seen session ends it the same way whatever the engine calls it, and leftovers and delayed stops are swept, sparing a running re-open, a held root and a root on a volume not mounted, and retrying a failed end", async () => {
   // (6e) The stop's safety and its keep-the-copy, the original gone
   // behind the app's back, a re-open's leftover, and a stop that
@@ -1309,8 +1338,8 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
         projectId: "p",
         worktreeId: `wt-${id}`,
         localRoot: liveRoot,
+        localWorktreeId: `orig-${id}`,
         labels: {
-          [MIRROR_LABEL_LOCAL_WORKTREE]: `orig-${id}`,
           [MIRROR_LABEL_MODE]: "mirror",
         },
         ...settled,
@@ -1427,8 +1456,8 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     put(sessionOf("old"));
     put(
       sessionOf("new", {
+        localWorktreeId: "orig-old",
         labels: {
-          [MIRROR_LABEL_LOCAL_WORKTREE]: "orig-old",
           [MIRROR_LABEL_MODE]: "mirror",
           [MIRROR_LABEL_REPLACES]: "old",
         },

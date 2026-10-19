@@ -977,20 +977,14 @@
           "local": {
             "connected": true,
             "scanned": true,
-            "directories": 3,
             "files": 1,
-            "symbolicLinks": 0,
-            "totalFileSize": 4,
             "problems": [],
             "excludedProblems": 0
           },
           "remote": {
             "connected": true,
             "scanned": false,
-            "directories": 3,
             "files": 2,
-            "symbolicLinks": 4,
-            "totalFileSize": 4,
             "problems": [],
             "excludedProblems": 2
           }
@@ -1074,20 +1068,14 @@
           "local": {
             "connected": true,
             "scanned": false,
-            "directories": 1,
             "files": 3,
-            "symbolicLinks": 3,
-            "totalFileSize": 3,
             "problems": [],
             "excludedProblems": 3
           },
           "remote": {
             "connected": false,
             "scanned": false,
-            "directories": 2,
             "files": 1,
-            "symbolicLinks": 3,
-            "totalFileSize": 0,
             "problems": [
               {
                 "path": "GD",
@@ -1152,20 +1140,14 @@
           "local": {
             "connected": false,
             "scanned": false,
-            "directories": 2,
             "files": 3,
-            "symbolicLinks": 0,
-            "totalFileSize": 0,
             "problems": [],
             "excludedProblems": 0
           },
           "remote": {
             "connected": true,
             "scanned": true,
-            "directories": 3,
             "files": 4,
-            "symbolicLinks": 2,
-            "totalFileSize": 2,
             "problems": [
               {
                 "path": "",
@@ -1365,20 +1347,14 @@
           "local": {
             "connected": false,
             "scanned": true,
-            "directories": 1,
             "files": 4,
-            "symbolicLinks": 3,
-            "totalFileSize": 0,
             "problems": [],
             "excludedProblems": 3
           },
           "remote": {
             "connected": false,
             "scanned": true,
-            "directories": 2,
             "files": 2,
-            "symbolicLinks": 2,
-            "totalFileSize": 1,
             "problems": [
               {
                 "path": "\u0000",
@@ -1453,20 +1429,14 @@
           "local": {
             "connected": true,
             "scanned": true,
-            "directories": 4,
             "files": 1,
-            "symbolicLinks": 1,
-            "totalFileSize": 4,
             "problems": [],
             "excludedProblems": 3
           },
           "remote": {
             "connected": true,
             "scanned": true,
-            "directories": 1,
             "files": 4,
-            "symbolicLinks": 0,
-            "totalFileSize": 4,
             "problems": [
               {
                 "path": "\u0000",

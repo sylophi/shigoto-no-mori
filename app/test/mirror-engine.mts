@@ -95,7 +95,6 @@ import {
 import { makeGitFollower } from "../host/mirror/gitFollow.ts";
 import {
   MIRROR_LABEL_LOCAL_PROJECT,
-  MIRROR_LABEL_LOCAL_WORKTREE,
   stopMirrorsForWorktree,
 } from "../host/mirror/registry.ts";
 import { transferFilesOnce } from "../host/mirror/oneShot.ts";
@@ -130,8 +129,7 @@ const session = (id: string, worktreeId = "") =>
   rawMirrorSession({
     session: id,
     localRoot: root,
-    labels:
-      worktreeId === "" ? {} : { [MIRROR_LABEL_LOCAL_WORKTREE]: worktreeId },
+    localWorktreeId: worktreeId,
   });
 
 const input: MirrorCreateInput = {
@@ -576,9 +574,9 @@ it("an adopt and a project relocate carry a mirror's thread, its copy's invitati
   const live = rawMirrorSession({
     session: "live",
     localRoot: outside,
+    localWorktreeId: original,
     labels: {
       [MIRROR_LABEL_MODE]: "mirror",
-      [MIRROR_LABEL_LOCAL_WORKTREE]: original,
     },
   });
   await state([live]);
@@ -644,9 +642,9 @@ it("a daemon restarting keeps the list and the follower's verdict, and the threa
   const mirror = rawMirrorSession({
     session: "s1",
     localRoot: root,
+    localWorktreeId: "w1",
     labels: {
       [MIRROR_LABEL_MODE]: "mirror",
-      [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
     },
     local: mirrorEndpoint({ connected: true }),
     remote: mirrorEndpoint({ connected: true }),
@@ -707,9 +705,9 @@ it("a copy's release still out when the engine closes ends with it", async () =>
       session: "s1",
       localRoot: root,
       deviceId: "B",
+      localWorktreeId: "w1",
       labels: {
         [MIRROR_LABEL_MODE]: "mirror",
-        [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
       },
     }),
   ]);
@@ -743,10 +741,10 @@ it("a stepped wall clock neither holds a copy-gone report back nor lets one thro
     deviceId: "B",
     projectId: "p",
     worktreeId: "copy",
+    localWorktreeId: "w1",
     labels: {
       [MIRROR_LABEL_MODE]: "mirror",
       [MIRROR_LABEL_LOCAL_PROJECT]: project.id,
-      [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
     },
   });
   const clock = testClock();
@@ -858,9 +856,9 @@ it("the bookkeeping waits for a restarted daemon's own snapshot", async () => {
   const mirror = rawMirrorSession({
     session: "s1",
     localRoot: gone,
+    localWorktreeId: "w1",
     labels: {
       [MIRROR_LABEL_MODE]: "mirror",
-      [MIRROR_LABEL_LOCAL_WORKTREE]: "w1",
     },
   });
   await state([mirror]);
@@ -922,9 +920,9 @@ it("a worktree made where a moved one was ends its mirror when it goes, never re
     rawMirrorSession({
       session: "s1",
       localRoot: reused.path,
+      localWorktreeId: reused.id,
       labels: {
         [MIRROR_LABEL_MODE]: "mirror",
-        [MIRROR_LABEL_LOCAL_WORKTREE]: reused.id,
       },
     }),
   ]);

@@ -55,11 +55,7 @@ import {
 import { type PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import { findProject } from "@host/lib/projects";
 import { followDescription } from "@host/lib/sync/worktreeDescription";
-import {
-  MIRROR_LABEL_LOCAL_PROJECT,
-  MIRROR_LABEL_LOCAL_WORKTREE,
-  onMirrorBranch,
-} from "./registry";
+import { MIRROR_LABEL_LOCAL_PROJECT, onMirrorBranch } from "./registry";
 import {
   core,
   type FollowableSession,
@@ -243,7 +239,7 @@ const reconcileOf = (
     if (record.waitingForFiles && !(yield* filesSettled(record))) return;
     record.waitingForFiles = false;
     const localProjectId = session.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "";
-    const localWorktreeId = session.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "";
+    const localWorktreeId = session.localWorktreeId;
     const found = yield* Effect.result(findProject(localProjectId));
     if (Result.isFailure(found)) {
       setStatus(record, {

@@ -15,7 +15,6 @@ import {
   localWorktreeIdOf,
   MIRROR_LABEL_IGNORE_MODE,
   MIRROR_LABEL_LOCAL_PROJECT,
-  MIRROR_LABEL_LOCAL_WORKTREE,
   type MirrorSessionRaw,
 } from "./registry";
 import type { MirrorCreateInput } from "./MirrorEngine";
@@ -47,7 +46,7 @@ export function mirrorStartRefusal(
   return null;
 }
 
-// The labels a start writes: the original's ids here, the rule, and
+// The labels a start writes: the original's project here, the rule, and
 // the mode (a primary checkout's copy sits on mirror/<branch>).
 export function startLabels(
   source: { projectId: string; id: string; isPrimary: boolean },
@@ -55,7 +54,6 @@ export function startLabels(
 ): Record<string, string> {
   return {
     [MIRROR_LABEL_LOCAL_PROJECT]: source.projectId,
-    [MIRROR_LABEL_LOCAL_WORKTREE]: source.id,
     [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
     [MIRROR_LABEL_MODE]: source.isPrimary ? "mirror-branch" : "mirror",
   };
@@ -81,7 +79,8 @@ export function reopenInput(
   };
 }
 
-// The daemon's document with the two label-borne ids lifted to fields.
+// The daemon's document with the project's label-borne id lifted to a
+// field.
 // The daemon validates each line on arrival (host/mirror/
 // MirrorDaemon.ts). This checks the annotated whole against the contract, a
 // backstop for what the host attaches and for an impl that is not the
@@ -93,7 +92,6 @@ export function annotateMirrorSession(
   return decodeMirrorSession({
     ...raw,
     localProjectId: raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
-    localWorktreeId: raw.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "",
     ignoreMode: ignoreModeOf(raw.labels),
     ...(git === undefined ? {} : { git }),
   });

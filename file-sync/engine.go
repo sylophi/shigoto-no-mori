@@ -318,7 +318,10 @@ type mirrorSessionState struct {
 	ProjectID  string            `json:"projectId"`
 	WorktreeID string            `json:"worktreeId"`
 	RemoteRoot string            `json:"remoteRoot"`
-	Paused     bool              `json:"paused"`
+	// This device's own worktree, as the create named it (the preface
+	// carries it to the peer).
+	LocalWorktreeID string `json:"localWorktreeId"`
+	Paused          bool   `json:"paused"`
 	// The create request's ignores, echoed back (the .git pointer left
 	// out), and the creation time in epoch milliseconds.
 	Ignores   []string `json:"ignores"`
@@ -338,10 +341,7 @@ type mirrorSessionState struct {
 type mirrorEndpointState struct {
 	Connected        bool            `json:"connected"`
 	Scanned          bool            `json:"scanned"`
-	Directories      uint64          `json:"directories"`
 	Files            uint64          `json:"files"`
-	SymbolicLinks    uint64          `json:"symbolicLinks"`
-	TotalFileSize    uint64          `json:"totalFileSize"`
 	Problems         []mirrorProblem `json:"problems"`
 	ExcludedProblems uint64          `json:"excludedProblems"`
 	Staging          *mirrorStaging  `json:"staging,omitempty"`
@@ -353,11 +353,9 @@ type mirrorProblem struct {
 }
 
 type mirrorStaging struct {
-	Path          string `json:"path"`
-	ReceivedFiles uint64 `json:"receivedFiles"`
-	ExpectedFiles uint64 `json:"expectedFiles"`
-	ReceivedSize  uint64 `json:"receivedSize"`
-	ExpectedSize  uint64 `json:"expectedSize"`
+	Path         string `json:"path"`
+	ReceivedSize uint64 `json:"receivedSize"`
+	ExpectedSize uint64 `json:"expectedSize"`
 }
 
 type mirrorConflict struct {
@@ -815,6 +813,7 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 		DeviceID:          remote.Host,
 		ProjectID:         remote.Parameters[mirrorParamProjectID],
 		WorktreeID:        remote.Parameters[mirrorParamWorktreeID],
+		LocalWorktreeID:   remote.Parameters[mirrorParamLocalWorktreeID],
 		RemoteRoot:        remote.Path,
 		Paused:            session.Paused,
 		Ignores:           ignores,
@@ -845,10 +844,7 @@ func mirrorEndpointStateOf(state *synchronization.EndpointState) mirrorEndpointS
 	out := mirrorEndpointState{
 		Connected:        state.Connected,
 		Scanned:          state.Scanned,
-		Directories:      state.Directories,
 		Files:            state.Files,
-		SymbolicLinks:    state.SymbolicLinks,
-		TotalFileSize:    state.TotalFileSize,
 		Problems:         make([]mirrorProblem, 0, len(state.ScanProblems)+len(state.TransitionProblems)),
 		ExcludedProblems: state.ExcludedScanProblems + state.ExcludedTransitionProblems,
 	}
@@ -860,11 +856,9 @@ func mirrorEndpointStateOf(state *synchronization.EndpointState) mirrorEndpointS
 	}
 	if progress := state.StagingProgress; progress != nil {
 		out.Staging = &mirrorStaging{
-			Path:          progress.Path,
-			ReceivedFiles: progress.ReceivedFiles,
-			ExpectedFiles: progress.ExpectedFiles,
-			ReceivedSize:  progress.ReceivedSize,
-			ExpectedSize:  progress.ExpectedSize,
+			Path:         progress.Path,
+			ReceivedSize: progress.ReceivedSize,
+			ExpectedSize: progress.ExpectedSize,
 		}
 	}
 	return out

@@ -63,6 +63,7 @@ export type FollowableSession = {
   projectId: string;
   worktreeId: string;
   localRoot: string;
+  localWorktreeId: string;
   labels: Record<string, string>;
 };
 
