@@ -68,7 +68,6 @@ const services = (options: EngineOptions) =>
         Projects.layer,
         Doctor.layer,
         Transfer.layer,
-        Dirty.layer,
         Bundle.layer,
         Open.layer,
       ),
@@ -100,6 +99,7 @@ const services = (options: EngineOptions) =>
       Layer.mergeAll(
         Config.layer,
         WorktreeData.layer,
+        Dirty.layer,
         Usage.layer,
         Identity.layer,
         Icons.layer,
@@ -151,6 +151,7 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
       Layer.mergeAll(
         Config.layer,
         WorktreeData.layer,
+        Dirty.layer,
         Usage.layer,
         Identity.layer,
         Icons.layer,

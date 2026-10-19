@@ -12,7 +12,10 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { movedSourceChange } from "@shigomori/contracts/movedSource";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Config from "../Config.ts";
+import * as Dirty from "../Dirty.ts";
 import * as Git from "../Git.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
@@ -52,6 +55,7 @@ export const makeRemoving = ({
 }) =>
   Effect.gen(function* () {
     const git = yield* Git.Git;
+    const dirty = yield* Dirty.Dirty;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const config = yield* Config.Config;
     const fs = yield* FileSystem.FileSystem;
@@ -224,6 +228,9 @@ export const makeRemoving = ({
         // A clock on each cleanup script: one that runs past it fails the
         // cleanup, as a script that failed does.
         readonly cleanupWithin?: Duration.Input;
+        // A transplant's teardown: what the move took, which the worktree
+        // must still be at the delete.
+        readonly expect?: MovedSource;
       },
       reporter: Reporter,
     ) {
@@ -300,8 +307,43 @@ export const makeRemoving = ({
           }
         }
       }
+      // Asked after the cleanup, right before the delete: a cleanup
+      // script or an editor can write to the source meanwhile, and a
+      // forced delete has no check of git's to stop it.
+      if (options.expect !== undefined) {
+        const moved = options.expect;
+        const change = yield* Effect.gen(function* () {
+          const tip = yield* git.refTip(
+            project.path,
+            `refs/heads/${moved.branch}`,
+          );
+          const fresh = yield* dirty.capture({
+            projectPath: project.path,
+            worktreePath: worktree.path,
+            worktreeId: worktree.id,
+          });
+          return movedSourceChange(moved, {
+            tip: Option.getOrNull(tip),
+            ...(fresh.captured
+              ? { captureTree: yield* git.treeOf(project.path, fresh.commit) }
+              : {}),
+          });
+        }).pipe(
+          // What can't be read is no proof the source is what moved.
+          Effect.catchTags({
+            NoHead: () => Effect.succeed("unread" as const),
+            CaptureFailed: () => Effect.succeed("unread" as const),
+          }),
+        );
+        if (change !== undefined) {
+          return yield* new WorktreeRefused({
+            reason: "changed-since-move",
+            subject: worktree.path,
+          });
+        }
+      }
       // Unforced, git checks the tree again at the delete, which covers
-      // what a cleanup script wrote since the check above. Once git's
+      // what a cleanup script wrote since `removable`'s check. Once git's
       // side is done (an orphaned checkout's too), what is kept under the
       // id goes before anything can cut in: a worktree made at the same
       // path later would take it over.

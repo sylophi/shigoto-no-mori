@@ -449,6 +449,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "vanished",
       "remove-primary",
       "changed-during-cleanup",
+      "changed-since-move",
       "uncommitted-at-remove",
       "invalid-branch",
       "invalid-base",
@@ -497,6 +498,8 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         return "Cannot delete the project's primary worktree";
       case "changed-during-cleanup":
         return `Changes appeared in ${this.subject} while its cleanup scripts ran, so it was kept. Remove them, or pass --force --skip-cleanup to remove it without running the scripts again.`;
+      case "changed-since-move":
+        return `${this.subject} changed after it was moved to another device (its branch moved, or its uncommitted work isn't what moved), so it was kept.`;
       case "uncommitted-at-remove":
         return `Worktree ${this.subject} has uncommitted changes. Pass --force to remove anyway.`;
       case "invalid-branch":

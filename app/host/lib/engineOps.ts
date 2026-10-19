@@ -52,6 +52,7 @@ import {
   ProjectIconSchema,
   ProjectRowSchema,
   ProjectSchema,
+  type MovedSource,
   type ShigomoriConfig,
   ShigomoriConfigSchema,
   type ShigomoriWorktreeData,
@@ -175,6 +176,7 @@ export const deleteWorktree = Effect.fnUntraced(function* (
     force?: boolean | undefined;
     skipCleanup?: boolean | undefined;
     cleanupWithin?: number | undefined;
+    expect?: MovedSource | undefined;
   },
   reporter: Worktrees.Reporter,
 ) {
@@ -190,6 +192,7 @@ export const deleteWorktree = Effect.fnUntraced(function* (
           ...(input.cleanupWithin === undefined
             ? {}
             : { cleanupWithin: input.cleanupWithin }),
+          ...(input.expect === undefined ? {} : { expect: input.expect }),
         },
         reporter,
       )

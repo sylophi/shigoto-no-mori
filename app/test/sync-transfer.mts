@@ -1291,6 +1291,85 @@ it("teardownSource: refuses without a receipt, refuses a source that changed aft
   assert.equal(existsSync(wt6Path), false);
 });
 
+it("teardownSource: a source edited while its cleanup runs is kept, the check made again right before the delete", async () => {
+  // The receipt matches when the teardown starts. Its teardown script
+  // then waits on a gate, and an editor writes to the source meanwhile.
+  // A managed worktree: only those run their cleanup.
+  const wt8Create = await sm(
+    "create",
+    "--project-id",
+    sourceProjectId,
+    "--branch",
+    "feature8",
+  );
+  const wt8Doc = wt8Create.docs.find((doc) => doc.event === "created");
+  assert.ok(wt8Doc, "sm create emitted no created doc");
+  const wt8 = Schema.decodeUnknownSync(WorktreeSchema)(wt8Doc.worktree);
+  const wt8Path = wt8.path;
+  const wt8Id = wt8.id;
+  await commitFile(wt8Path, "eighth.txt", "eighth\n", "eighth feature");
+  writeFileSync(join(wt8Path, "draft.txt"), "draft\n");
+  const pulled = await pullWorktree(
+    {
+      sourceDeviceId: LISTENER,
+      sourceProjectId,
+      sourceWorktreeId: wt8Id,
+      sourceIdentity: identity,
+      branch: "feature8",
+    },
+    pullCtx,
+  );
+  assert.equal(pulled.dirtyApplied, true);
+  const gate = join(sourceRepo, "..", "teardown-gate");
+  mkdirSync(gate, { recursive: true });
+  const started = join(gate, "started");
+  const release = join(gate, "release");
+  const before: ShigomoriConfig | null =
+    await readShigomoriConfig(sourceProjectId);
+  await writeProjectConfig(sourceProjectId, {
+    ...before,
+    defaultBranch: "main",
+    scripts: {
+      teardown: `touch '${started}'; while [ ! -e '${release}' ]; do sleep 0.05; done`,
+    },
+  });
+  let torn: Promise<unknown> | undefined;
+  try {
+    const tearing = runHost(
+      syncHandlers.teardownSource(
+        {
+          direction: "pull",
+          deviceId: LISTENER,
+          projectId: sourceProjectId,
+          worktreeId: wt8Id,
+        },
+        pullCtx,
+      ),
+    );
+    torn = tearing;
+    await waitFor(() => existsSync(started), "the teardown script to start");
+    writeFileSync(join(wt8Path, "draft.txt"), "draft, edited meanwhile\n");
+    writeFileSync(release, "");
+    const result = await tearing;
+    assert.equal(result.sourceRemoved, false);
+    assert.match(result.sourceError ?? "", /changed after it was moved/);
+    assert.equal(
+      readFileSync(join(wt8Path, "draft.txt"), "utf8"),
+      "draft, edited meanwhile\n",
+      "the edit made during the cleanup must survive",
+    );
+  } finally {
+    // Released whatever failed, so no teardown script waits on.
+    writeFileSync(release, "");
+    await torn?.catch(() => undefined);
+    await writeProjectConfig(
+      sourceProjectId,
+      before ?? { defaultBranch: "main" },
+    );
+    rmSync(gate, { recursive: true, force: true });
+  }
+});
+
 it("sendWorktree: a dirty worktree lands on the peer with its commit and its uncommitted work and the peer's progress relayed, a repeat is refused by the peer, and the teardown removes the local source only while it still matches what was sent", async () => {
   // ---- The send, the pull turned around: the handler runs HERE as
   // the device holding the source, and the peer lands it (its
