@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {
   CRASH_LOOP,
   FATAL_RELAUNCH,
+  relaunchAllowed,
   decide,
   GONE_TOGETHER_MS,
   rendererGone,
@@ -55,45 +56,12 @@ it("crash loop resets once the window elapses", () => {
   assert.deepEqual(decision.recent, [now], "stale timestamps are pruned");
 });
 
-// Fatal-relaunch guard: the same shape with the long window and low cap.
-it("fatal relaunch allows up to the cap", () => {
-  let recent: number[] = [];
-  let now = 5_000;
-  for (let i = 0; i < FATAL_RELAUNCH.max; i++) {
-    const decision = decide(recent, now, FATAL_RELAUNCH);
-    assert.equal(decision.allow, true, `relaunch ${i + 1} should proceed`);
-    recent = decision.recent;
-    now += 10_000;
+// Fatal-relaunch guard: a count since the last stable run, no clock.
+it("fatal relaunch allows up to the cap, then lets the crash stand", () => {
+  for (let relaunches = 0; relaunches < FATAL_RELAUNCH.max; relaunches++) {
+    assert.equal(relaunchAllowed(relaunches), true);
   }
-  assert.equal(recent.length, FATAL_RELAUNCH.max);
-});
-
-it("fatal relaunch stops past the cap", () => {
-  const recent = Array.from(
-    { length: FATAL_RELAUNCH.max },
-    (_, i) => 5_000 + i,
-  );
-  const decision = decide(recent, 6_000, FATAL_RELAUNCH);
-  assert.equal(decision.allow, false, "a deterministic crash must stop");
-  assert.equal(decision.recent.length, FATAL_RELAUNCH.max);
-});
-
-it("fatal relaunch resets once the window elapses", () => {
-  const recent = Array.from(
-    { length: FATAL_RELAUNCH.max },
-    (_, i) => 5_000 + i,
-  );
-  const now = lastOf(recent) + FATAL_RELAUNCH.windowMs + 1;
-  const decision = decide(recent, now, FATAL_RELAUNCH);
-  assert.equal(decision.allow, true, "a relaunch after the window recovers");
-  assert.deepEqual(decision.recent, [now], "stale timestamps are pruned");
-});
-
-// A floor so a rename or a botched import cannot leave the check
-// asserting nothing while still printing OK.
-it("the limiter constants are sane", () => {
-  assert.ok(CRASH_LOOP.max > 0 && CRASH_LOOP.windowMs > 0);
-  assert.ok(FATAL_RELAUNCH.max > 0 && FATAL_RELAUNCH.windowMs > 0);
+  assert.equal(relaunchAllowed(FATAL_RELAUNCH.max), false);
 });
 
 // A renderer gone outside the app's own teardown comes back, whatever
@@ -146,4 +114,32 @@ it("every window gone in one kill spends the budget once", () => {
   });
   assert.equal(later.verdict, "recreate");
   assert.equal(later.recent.length, 2, "a later one counts again");
+});
+
+it("a renderer dying again and again within a second gives up within a few seconds", () => {
+  let recent: number[] = [];
+  let now = 1_000;
+  let verdict = "recreate";
+  while (verdict === "recreate" && now < 60_000) {
+    const next = rendererGone({ ownTeardown: false, recent, now });
+    verdict = next.verdict;
+    recent = next.recent;
+    now += 100;
+  }
+  assert.equal(verdict, "give-up");
+  assert.ok(now - 1_000 < (CRASH_LOOP.max + 1) * GONE_TOGETHER_MS);
+});
+
+it("every window gone in one kill past the budget gives up with one dialog", () => {
+  const spent = [1_000, 2_000, 3_000];
+  const verdicts = [5_000, 5_010, 5_020].map(
+    (now, i) =>
+      rendererGone({
+        ownTeardown: false,
+        recent: spent,
+        now,
+        lastGiveUp: i === 0 ? undefined : 5_000,
+      }).verdict,
+  );
+  assert.deepEqual(verdicts, ["give-up", "give-up-quietly", "give-up-quietly"]);
 });

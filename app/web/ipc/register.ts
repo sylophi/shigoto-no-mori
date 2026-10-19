@@ -14,8 +14,8 @@
 // drives the whole factory under node with in-memory storage and a
 // recording fetch.
 import { createAccountService } from "@shared/account/service";
+import { joinInFlight } from "@shared/inFlight";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -308,41 +308,34 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // still shared across tabs, but a cross-tab race is closed by the
   // reconciler's re-read after the storage event. A caller arriving
   // while one runs rides it (an enroll's own token unused), and the
-  // first after it settles starts afresh: each is cached with no time
-  // to live.
-  const enrollOnce = Effect.runSync(
-    Effect.cachedWithTTL(
-      Effect.flatMap(EnrollToken, (token) =>
-        Effect.promise(async () => {
-          await enrollDevice(
-            {
-              config,
-              service,
-              store,
-              deviceId,
-              fallbackDeviceName: defaultDeviceName(),
-              platform: WEB_PLATFORM,
-              detectedIcon,
-            },
-            token,
-          );
-          accountChanged();
-          return readStatus();
-        }),
-      ),
-      Duration.zero,
+  // first after it settles starts afresh.
+  const enrollOnce = joinInFlight(
+    Effect.flatMap(EnrollToken, (token) =>
+      Effect.promise(async () => {
+        await enrollDevice(
+          {
+            config,
+            service,
+            store,
+            deviceId,
+            fallbackDeviceName: defaultDeviceName(),
+            platform: WEB_PLATFORM,
+            detectedIcon,
+          },
+          token,
+        );
+        accountChanged();
+        return readStatus();
+      }),
     ),
   );
   // The shared best-effort revoke-then-clear (the desktop handler adds
   // a warn-once and its grant clear on top of the same core).
-  const signOutOnce = Effect.runSync(
-    Effect.cachedWithTTL(
-      Effect.promise(async () => {
-        await signOutDevice({ config, service, store, deviceId });
-        accountChanged();
-      }),
-      Duration.zero,
-    ),
+  const signOutOnce = joinInFlight(
+    Effect.promise(async () => {
+      await signOutDevice({ config, service, store, deviceId });
+      accountChanged();
+    }),
   );
 
   // Removing a device from the account, served over the

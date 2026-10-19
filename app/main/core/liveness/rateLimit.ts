@@ -1,7 +1,6 @@
-// Pure, Electron-free rate limiters for the two liveness recovery paths.
-// Both are sliding-window counters: given the timestamps of recent
-// recoveries and the current time, decide whether one more is allowed
-// and return the pruned-and-appended list to persist for next time.
+// Pure, Electron-free rate limiters for the two liveness recovery paths:
+// the renderer's sliding window over recent recreations, and the fatal
+// relaunches' count.
 // Keeping this logic here (importing nothing) is what lets
 // test/liveness.mts drive it under plain Node, since the
 // Electron wiring around it can only be exercised in a real app.
@@ -14,13 +13,16 @@
 export const CRASH_LOOP = { windowMs: 30_000, max: 3 };
 
 // Main-process fatal-relaunch guard. A deterministic startup crash would
-// otherwise relaunch forever, so cap relaunches to a couple inside a few
-// minutes. The window is deliberately long and the count deliberately
-// low: two relaunches inside three minutes, then stop and let the crash
-// stand rather than spin.
-export const FATAL_RELAUNCH = { windowMs: 3 * 60_000, max: 2 };
+// otherwise relaunch forever, so two relaunches with no stable run of a
+// few minutes between them, then the crash stands. Counted, not timed:
+// the count outlives the process, and no clock does that a step can't
+// move.
+export const FATAL_RELAUNCH = { max: 2, stableMs: 3 * 60_000 };
 
-// The sliding-window decision both paths share. `recent` is the
+export const relaunchAllowed = (relaunches: number): boolean =>
+  relaunches < FATAL_RELAUNCH.max;
+
+// The renderer's sliding-window decision. `recent` is the
 // timestamps of prior actions we took, `now` is the current time. Prune
 // anything older than the window, and if the surviving count has
 // already reached `max`, refuse (returning the pruned list unchanged).
@@ -51,7 +53,12 @@ export function rendererGone(input: {
   readonly ownTeardown: boolean;
   readonly recent: readonly number[];
   readonly now: number;
-}): { verdict: "ignore" | "recreate" | "give-up"; recent: number[] } {
+  // When a window last gave up: one kill past the budget says so once.
+  readonly lastGiveUp?: number | undefined;
+}): {
+  verdict: "ignore" | "recreate" | "give-up" | "give-up-quietly";
+  recent: number[];
+} {
   const recent = [...input.recent];
   if (input.ownTeardown) return { verdict: "ignore", recent };
   const last = recent.at(-1);
@@ -59,8 +66,12 @@ export function rendererGone(input: {
     return { verdict: "recreate", recent };
   }
   const decided = decide(recent, input.now, CRASH_LOOP);
+  if (decided.allow) return { verdict: "recreate", recent: decided.recent };
+  const quietly =
+    input.lastGiveUp !== undefined &&
+    input.now - input.lastGiveUp < GONE_TOGETHER_MS;
   return {
-    verdict: decided.allow ? "recreate" : "give-up",
+    verdict: quietly ? "give-up-quietly" : "give-up",
     recent: decided.recent,
   };
 }
