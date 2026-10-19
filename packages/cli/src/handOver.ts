@@ -4,8 +4,7 @@
 // ended, killed by its signal included.
 import { spawn } from "node:child_process";
 import { errnoWords } from "@shigomori/engine/platformErrors";
-import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
-import * as Duration from "effect/Duration";
+import { KILL_GRACE } from "@shigomori/engine/processes";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -55,17 +54,6 @@ const FROM_TERMINAL = new Set<NodeJS.Signals>([
   "SIGHUP",
   "SIGCONT",
 ]);
-
-// How long an interrupted sm gives its program to go after SIGTERM,
-// before SIGKILL.
-const GRACE = Duration.seconds(3);
-
-// This process's environment for a child the terminal starts itself,
-// less the shell hook's directive file, which is this `sm`'s alone.
-export const withoutCdFile = (): NodeJS.ProcessEnv => ({
-  ...process.env,
-  [CD_FILE_ENV]: undefined,
-});
 
 // Runs `program` with the terminal handed to it, and ends as it ended.
 // Until it exits, the runtime's own handlers are set aside, so a signal
@@ -147,7 +135,7 @@ export const handOver = (
       if (!settle()) return;
       child.kill("SIGTERM");
       const waited = yield* Effect.promise(() => gone).pipe(
-        Effect.timeoutOption(GRACE),
+        Effect.timeoutOption(KILL_GRACE),
       );
       if (Option.isSome(waited)) return;
       child.kill("SIGKILL");

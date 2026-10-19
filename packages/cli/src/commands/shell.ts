@@ -24,7 +24,8 @@ import { ExitCode, UsageError } from "../errors.ts";
 import { given, here, projectAt, projectFlags, rest } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 import { interactive } from "../prompt.ts";
-import { handOver, withoutCdFile } from "../handOver.ts";
+import { handOver } from "../handOver.ts";
+import { childEnv } from "@shigomori/engine/processes";
 import { pickProject, pickWorktree } from "../pickers.ts";
 
 // The terminal's shell: its own ZDOTDIR and XDG_CONFIG_HOME, and the
@@ -200,7 +201,7 @@ export const enter = (name: string, target: string, cdFile: string) =>
     yield* note(`Entering ${where}. Exit the shell to return.`);
     yield* handOver("shell", shell, [], {
       cwd: target,
-      env: { ...withoutCdFile(), SHIGOMORI_WORKTREE: name },
+      env: { ...childEnv(process.env), SHIGOMORI_WORKTREE: name },
     });
   });
 

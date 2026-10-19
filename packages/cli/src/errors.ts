@@ -15,6 +15,10 @@ import { emit, note, Output, styles } from "./output.ts";
 export class UsageError extends Schema.TaggedError<UsageError>()("UsageError", {
   problem: Schema.String,
 }) {
+  get usage(): boolean {
+    return true;
+  }
+
   override get message(): string {
     return this.problem;
   }
@@ -122,9 +126,5 @@ export const report = (
         `${styles(stderrColor).red(`${binaryName}:`)} ${document.error}`,
       );
     }
-    return problem !== undefined ||
-      error instanceof UsageError ||
-      isUsage(error)
-      ? 2
-      : 1;
+    return problem !== undefined || isUsage(error) ? 2 : 1;
   });

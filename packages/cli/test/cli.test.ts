@@ -6,23 +6,18 @@ import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import {
   chmodSync,
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   renameSync,
-  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
-  afterAll,
   afterEach,
   beforeAll,
   beforeEach,
@@ -31,7 +26,8 @@ import {
   onTestFinished,
   vi,
 } from "vitest";
-import { macfs, type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
+import { type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
+import { builtBinary } from "./lib/binary.ts";
 import {
   type FakeApp,
   fakeApp,
@@ -42,18 +38,9 @@ import { flavorNames } from "@shigomori/engine/flavor";
 import { documentedCommands } from "../src/help.ts";
 
 let built: string;
-let buildDir: string;
 beforeAll(() => {
-  buildDir = mkdtempSync(join(tmpdir(), "sm-cli-"));
-  built = join(buildDir, "smd");
-  execFileSync(process.execPath, ["build.mts", built], {
-    cwd: join(import.meta.dirname, ".."),
-    stdio: "ignore",
-  });
-  // The darwin helper beside the binary, as the app ships it.
-  copyFileSync(macfs(), join(buildDir, "macfs"));
+  built = builtBinary("dev");
 }, 300_000);
-afterAll(() => rmSync(buildDir, { recursive: true, force: true }));
 
 let box: Sandbox;
 beforeEach(() => {

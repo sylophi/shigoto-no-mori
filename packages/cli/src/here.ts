@@ -49,7 +49,6 @@ export const layer = Layer.effect(
   Effect.map(Effect.cached(where), (at) => Here.of({ at })),
 );
 
-// Where the command runs.
 export const here = Effect.flatMap(Effect.service(Here), ({ at }) => at);
 
 // An agent session's shell running sm inside a managed worktree binds
@@ -77,41 +76,53 @@ export const given = (flag: Option.Option<string>) =>
   Option.filter(flag, (value) => value !== "");
 
 // The project a command names: --project-id as the app addresses it,
-// else -p or a positional, else the one at the cwd. Outside every
-// project, a person at a terminal picks one.
+// else -p or a positional, else the one at the cwd (the engine's
+// `resolveProjectRef`). Outside every project, a person at a terminal
+// picks one.
 export const resolveProject = (ref: {
   readonly projectId: Option.Option<string>;
   readonly project: Option.Option<string>;
 }) =>
   Effect.gen(function* () {
-    const worktrees = yield* Worktrees.Worktrees;
     const at = yield* here;
-    const projectId = given(ref.projectId);
-    if (Option.isSome(projectId)) {
-      return yield* worktrees.resolveProjectById(at, projectId.value);
-    }
-    return yield* projectAt(at, Option.getOrUndefined(given(ref.project)));
+    return yield* (yield* Worktrees.Worktrees)
+      .resolveProjectRef(at, {
+        projectId: Option.getOrUndefined(ref.projectId),
+        project: Option.getOrUndefined(ref.project),
+      })
+      .pipe(orPickedProject(at));
   });
 
 // The project `ref` names, else the one at the cwd, else (for a person
 // at a terminal) the one picked from the menu.
 export const projectAt = (at: Worktrees.Here, ref: string | undefined) =>
-  Effect.gen(function* () {
-    if (ref === undefined && at.current === undefined) {
-      const menu = yield* pickedProject(at);
-      if (Option.isSome(menu)) return menu.value;
-    }
-    return yield* (yield* Worktrees.Worktrees).resolveProject(at, ref);
-  });
+  Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+    worktrees.resolveProject(at, ref),
+  ).pipe(orPickedProject(at));
 
-// The project menu, when a person is there to use it.
-const pickedProject = (at: Worktrees.Here) =>
+// The engine refuses a command that names no project outside every
+// project. A person at a terminal picks one instead.
+const orPickedProject =
+  (at: Worktrees.Here) =>
+  <A, E, R>(resolved: Effect.Effect<A, E | Worktrees.TargetError, R>) =>
+    Effect.catchIf(
+      resolved,
+      (error): error is Worktrees.TargetError =>
+        error instanceof Worktrees.TargetError &&
+        (error.reason === "not-in-project" ||
+          error.reason === "unregistered-project"),
+      (refused) => pickedProject(at, refused),
+    );
+
+// The project menu in place of the engine's refusal, when a person is
+// there to use it.
+const pickedProject = (at: Worktrees.Here, refused: Worktrees.TargetError) =>
   Effect.gen(function* () {
     if (!(yield* interactive) || at.projects.length === 0) {
-      return Option.none();
+      return yield* refused;
     }
     yield* noteUnregistered(at);
-    return Option.some(yield* pickProject(at));
+    return yield* pickProject(at);
   });
 
 // How a command names its worktree: a name, <project>/<name> or a path
@@ -123,9 +134,10 @@ export const worktreeFlags = {
 
 // The worktree a command names, else the one at the cwd, and where the
 // command runs. Named by nothing, a person at a terminal picks from a
-// menu where the Go sm offered one: outside every worktree, in the primary
-// checkout, or with -p naming a project the cwd isn't in. `primaryOk`
-// is off for the commands that refuse the primary checkout.
+// menu where the Go sm offered one: in place of the engine's refusal
+// (outside every worktree, or with -p naming a project the cwd isn't
+// in), and in the primary checkout. `primaryOk` is off for the commands
+// that refuse the primary checkout.
 export const resolveWorktree = (
   ref: {
     readonly ref?: Option.Option<string>;
@@ -144,46 +156,45 @@ export const resolveWorktree = (
       projectId: Option.getOrUndefined(given(ref.projectId)),
       worktreeId: Option.getOrUndefined(given(ref.worktreeId)),
     };
-    const picked =
-      target.ref === undefined && target.worktreeId === undefined
-        ? yield* pickedWorktree(at, target.project, primaryOk)
-        : Option.none();
-    const located = Option.isSome(picked)
-      ? picked.value
-      : yield* worktrees.resolve(at, target);
+    const resolved = worktrees.resolve(at, target);
+    if (
+      target.ref !== undefined ||
+      target.worktreeId !== undefined ||
+      !(yield* interactive)
+    ) {
+      return { at, located: yield* resolved };
+    }
+    const located = yield* resolved.pipe(
+      Effect.matchEffect({
+        // From the primary checkout a menu surprises less than acting on
+        // it, the primary itself last on it.
+        onSuccess: (current) =>
+          current.worktree.isPrimary
+            ? pickWorktree(at, current.project, {
+                primaryOk,
+                primaryLast: true,
+              })
+            : Effect.succeed(current),
+        onFailure: (refused) => {
+          if (!(refused instanceof Worktrees.TargetError)) {
+            return Effect.fail(refused);
+          }
+          if (refused.reason === "name-in-project") {
+            return Effect.flatMap(
+              worktrees.resolveProject(at, target.project),
+              (project) => pickWorktree(at, project, { primaryOk }),
+            );
+          }
+          return refused.reason === "not-in-worktree" ||
+            refused.reason === "unregistered-worktree"
+            ? Effect.flatMap(pickedProject(at, refused), (project) =>
+                pickWorktree(at, project, { primaryOk }),
+              )
+            : Effect.fail(refused);
+        },
+      }),
+    );
     return { at, located };
-  });
-
-const pickedWorktree = (
-  at: Worktrees.Here,
-  project: string | undefined,
-  primaryOk: boolean,
-) =>
-  Effect.gen(function* () {
-    if (!(yield* interactive)) return Option.none();
-    const worktrees = yield* Worktrees.Worktrees;
-    if (project !== undefined) {
-      const named = yield* worktrees.resolveProject(at, project);
-      if (at.current?.project.id !== named.id) {
-        return Option.some(yield* pickWorktree(at, named, { primaryOk }));
-      }
-    }
-    if (at.current !== undefined) {
-      // From the primary checkout a menu surprises less than acting on
-      // it, the primary itself last on it.
-      return at.current.worktree.isPrimary
-        ? Option.some(
-            yield* pickWorktree(at, at.current.project, {
-              primaryOk,
-              primaryLast: true,
-            }),
-          )
-        : Option.none();
-    }
-    const chosen = yield* pickedProject(at);
-    return Option.isSome(chosen)
-      ? Option.some(yield* pickWorktree(at, chosen.value, { primaryOk }))
-      : Option.none();
   });
 
 // A typed path, home-expanded and made absolute against the cwd, as

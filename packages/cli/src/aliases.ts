@@ -1,3 +1,5 @@
+import type * as Command from "effect/cli/Command";
+
 // Go's aliases, folded before parsing, since effect/cli takes one per
 // command: a namespace's, a worktree verb's (at the top level and after
 // `worktrees`), and a project verb's, which differ: `rm` alone removes
@@ -28,49 +30,18 @@ const NAMESPACES: Readonly<Record<string, string>> = {
   agent: "agents",
 };
 
-// The worktrees namespace's verbs. Anything else after it, a flag
-// included, is `switch`'s.
-const WORKTREE_VERBS = new Set([
-  "list",
-  "path",
-  "link",
-  "destination",
-  "status",
-  "describe",
-  "shelve",
-  "unshelve",
-  "autopull",
-  "create",
-  "rm",
-  "move",
-  "rename",
-  "adopt",
-  "setup",
-  "rekey",
-  "cd",
-  "switch",
-  "pr",
-  "merge",
-  "land",
-  "done",
-  "open",
-  "edit",
-  "dirty",
-  "send",
-  "bring",
-  "mirror",
-  "unmirror",
-  "mirrors",
-]);
-
-// A command's own name, whichever alias it was called by.
 export const commandName = (name: string) =>
   NAMESPACES[name] ?? VERBS[name] ?? name;
 
-// A project verb's own name.
 export const projectVerb = (name: string) => PROJECT_VERBS[name] ?? name;
 
-export function canonical(args: ReadonlyArray<string>) {
+// `args` with the aliases folded. After the worktrees namespace
+// (`worktrees`), a word that names none of its verbs, a flag included,
+// is `switch`'s.
+export function canonical(
+  args: ReadonlyArray<string>,
+  worktrees: Command.Command.Any,
+) {
   const [first, ...more] = args;
   if (first === undefined) return args;
   const command = commandName(first);
@@ -78,7 +49,9 @@ export function canonical(args: ReadonlyArray<string>) {
   if (verb === undefined) return [command];
   if (command === "worktrees") {
     const named = VERBS[verb] ?? verb;
-    return WORKTREE_VERBS.has(named)
+    return worktrees.subcommands.some(({ commands }) =>
+      commands.some(({ name }) => name === named),
+    )
       ? [command, named, ...after]
       : [command, "switch", ...more];
   }
