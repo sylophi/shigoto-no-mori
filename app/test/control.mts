@@ -108,7 +108,10 @@ import {
   followTransfer,
 } from "@host/ipc/modules/control";
 import { bring, send } from "@host/lib/control/ops";
-import { listDevicesFailure } from "@host/lib/control/AccountPeers";
+import {
+  listDevicesFailure,
+  withinAccountRead,
+} from "@host/lib/control/AccountPeers";
 import { mirrorHandlers } from "@host/ipc/modules/mirror";
 import {
   isTransferSession,
@@ -136,6 +139,7 @@ import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import {
   HubRateLimitedError,
   LinkUnauthenticatedError,
+  RemoteCallError,
 } from "@shigomori/contracts/errors";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { LoopbackGroup } from "@shigomori/contracts/link";
@@ -482,8 +486,12 @@ let toListener: Awaited<ReturnType<typeof bootDirectWire>>["toListener"];
 let connected: string[];
 // What the hub's device list fails with, null while it answers.
 let registryFails: unknown = null;
-// What the hub's device list waits on before it answers.
+// What the hub's device list waits on before it answers, and how long
+// the terminal's verbs give it (withinAccountRead's own is 15 s).
 let registryWaits: Effect.Effect<void> = Effect.void;
+let registryWithinS = 60;
+// What the peer's project list answers with in place of its rows.
+let peerListRefuses: Error | null = null;
 let peerOwns: string;
 let removalsOf: (
   worktreeId: string,
@@ -623,6 +631,9 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
   const peerTransport: ClientTransport = {
     ...toListener.transport,
     invoke: async (channel, input) => {
+      if (channel === "projects:list" && peerListRefuses !== null) {
+        throw peerListRefuses;
+      }
       const result = await toListener.transport.invoke(channel, input);
       return channel === "projects:list"
         ? // Loose: the host under test gets the peer's rows as sent.
@@ -634,12 +645,15 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
   };
   standInAccount({
     listDevices: Effect.suspend(() =>
-      registryWaits.pipe(
-        Effect.andThen(
-          registryFails === null
-            ? Effect.succeed(registry)
-            : Effect.fail(listDevicesFailure(registryFails)),
+      withinAccountRead(
+        registryWaits.pipe(
+          Effect.andThen(
+            registryFails === null
+              ? Effect.succeed(registry)
+              : Effect.fail(listDevicesFailure(registryFails)),
+          ),
         ),
+        registryWithinS,
       ),
     ),
     directPeers: Effect.sync(() =>
@@ -750,6 +764,33 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
       busyTerminals: 0,
     }),
   );
+});
+
+it("devices: a peer that turned the ask away reads as refused in its words, not as not connected", async () => {
+  listener.setAccepts(true);
+  peerListRefuses = new RemoteCallError({ text: "it runs an older protocol" });
+  try {
+    const listed = devicesDoc(await sm("devices", "-p", "source"));
+    assert.deepEqual(
+      listed.devices.map((device) => [
+        device.name,
+        device.block,
+        device.refusal,
+      ]),
+      [
+        ["Studio Mac", "refused", "it runs an older protocol"],
+        ["Studio Laptop", "offline", undefined],
+      ],
+    );
+    await refused(
+      ["worktrees", "send", "wt-send", "-p", "source"],
+      "device-blocked",
+      /"Studio Mac" turned the ask away \(it runs an older protocol\)/,
+    );
+  } finally {
+    peerListRefuses = null;
+    listener.setAccepts(false);
+  }
 });
 
 it("devices: names the peers, skips the browser, and reports offline, not-sharing, no-grant and ready for the repo", async () => {
@@ -1469,8 +1510,19 @@ it("the hub out of reach says so with its cause, a revoked credential reads as s
       /^Your account's hub is rate-limiting this device\. Try again in 60 s\.$/,
     );
     assert.doesNotMatch(limited.error, /network/);
+    // A hub that takes the read and never answers ends in words.
+    registryFails = null;
+    registryWaits = Effect.never;
+    registryWithinS = 0.2;
+    await refused(
+      ["devices"],
+      undefined,
+      /^Couldn't reach your account to find your devices \(it didn't answer in 0\.2 s\)\./,
+    );
   } finally {
     registryFails = null;
+    registryWaits = Effect.void;
+    registryWithinS = 60;
   }
 });
 

@@ -249,6 +249,7 @@ const BLOCKS: Readonly<Record<NonNullable<ControlDevice["block"]>, string>> = {
   "not-sharing": "doesn't share with other devices",
   "no-project": "no checkout yet; a send clones the repo there",
   "no-grant": "doesn't accept commands",
+  refused: "turned the ask away",
 };
 
 export const devices = Command.make(
@@ -284,7 +285,9 @@ export const devices = Command.make(
               device.platform,
               block === ""
                 ? green(scoped ? "ready" : "connected")
-                : yellow(BLOCKS[block as keyof typeof BLOCKS] ?? block),
+                : yellow(
+                    `${BLOCKS[block as keyof typeof BLOCKS] ?? block}${device.refusal === undefined ? "" : ` (${device.refusal})`}`,
+                  ),
             ];
           }),
           stdoutColor,

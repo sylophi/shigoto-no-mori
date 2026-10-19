@@ -284,9 +284,9 @@ it("service: a device list the hub takes and never answers ends at its signal", 
     baseUrl: CONFIG.hubUrl,
     fetchImpl: stalled,
   });
-  await assert.rejects(() =>
-    service.listDevices("cred-1", AbortSignal.timeout(50)),
-  );
+  const gaveUp = new AbortController();
+  gaveUp.abort();
+  await assert.rejects(() => service.listDevices("cred-1", gaveUp.signal));
 });
 
 it("service: revoke DELETEs the per-device route and tolerates a 204", async () => {

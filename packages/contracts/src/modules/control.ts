@@ -24,6 +24,9 @@ const ControlDeviceBlockSchema = Schema.Literals([
   "not-sharing",
   "no-project",
   "no-grant",
+  // Up, but its answer to the ask was a refusal (a protocol mismatch,
+  // its sharing turned off meanwhile), said in `refusal`.
+  "refused",
 ]);
 
 const ControlDeviceSchema = strict(
@@ -34,6 +37,7 @@ const ControlDeviceSchema = strict(
     // Without a project asked about, only `offline` and `not-sharing`
     // can be told. `no-project` still takes a send (it clones first).
     block: Schema.optional(ControlDeviceBlockSchema),
+    refusal: Schema.optional(Schema.String),
     projectId: Schema.optional(Schema.String),
   }),
 );

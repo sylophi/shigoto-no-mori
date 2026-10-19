@@ -12,7 +12,8 @@ import {
 } from "@shigomori/contracts/errors";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 export type DirectPeer = {
@@ -46,6 +47,24 @@ export class AccountPeers extends Context.Service<
     readonly directPeers: Effect.Effect<Readonly<Record<string, DirectPeer>>>;
   }
 >()("sm/host/AccountPeers") {}
+
+// The device list as the terminal's verbs wait on it: a hub that takes
+// the read and never answers ends as the account out of reach.
+export const withinAccountRead = <A, E, R>(
+  read: Effect.Effect<A, E, R>,
+  seconds = 15,
+) =>
+  read.pipe(
+    Effect.timeoutOrElse({
+      duration: Duration.seconds(seconds),
+      orElse: () =>
+        Effect.fail(
+          new AccountUnreachableError({
+            reason: `it didn't answer in ${seconds} s`,
+          }),
+        ),
+    }),
+  );
 
 // Why the device list failed, in the words the terminal prints: a
 // credential the hub no longer honors (the device was removed from the

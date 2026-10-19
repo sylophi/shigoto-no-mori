@@ -72,7 +72,7 @@ function openWsSocket(url: string): Shared.HubSocketAdapter {
     },
     onRefused(handler) {
       // Heard, ws leaves the handshake to its listener: cut here, which
-      // closes the socket as an unanswered upgrade does.
+      // closes the socket as ws's own refused upgrade does.
       socket.on("unexpected-response", (_request, response) => {
         const seconds = Number(response.headers["retry-after"]);
         handler(

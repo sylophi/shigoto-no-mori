@@ -288,7 +288,9 @@
         {
           "deviceId": "😀",
           "name": "\udc00",
-          "platform": "0"
+          "platform": "0",
+          "block": "refused",
+          "refusal": "it runs an older protocol"
         },
         {
           "deviceId": "\ud800",
