@@ -15,6 +15,10 @@ import { emit, note, Output, styles } from "./output.ts";
 export class UsageError extends Schema.TaggedError<UsageError>()("UsageError", {
   problem: Schema.String,
 }) {
+  get usage(): boolean {
+    return true;
+  }
+
   override get message(): string {
     return this.problem;
   }
@@ -71,14 +75,16 @@ export class Cancelled extends Schema.TaggedError<Cancelled>()(
   }
 }
 
-// The subcommands a namespace takes, which an unknown one is told.
-const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
-  projects: "projects <list|add|remove|relocate|reorder|config|icon> [args]",
+// The subcommands a namespace takes, which an unknown one is told, as
+// the help documents them.
+export const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
+  projects: "projects <list|icon|add|remove|relocate|reorder|config> [args]",
   "projects config":
-    "projects config <list|get|set|unset|edit|launcher|carryover> [args]",
-  config: "config <list|get|set|unset|edit|launcher> [args]",
+    "projects config <list|get|set|unset|edit|read|launcher|carryover> [args]",
+  config: "config <list|read|get|set|unset|launcher|edit> [args]",
   shell: "shell <install|uninstall|status|init>",
-  agents: "agents <bind|unbind|idle|resume|install|uninstall|status> [args]",
+  agents:
+    "agents <install|uninstall|status|bind|unbind|idle|resume|event> [args]",
 };
 
 // A word that names no command where one was due, in the Go sm's
@@ -122,9 +128,5 @@ export const report = (
         `${styles(stderrColor).red(`${binaryName}:`)} ${document.error}`,
       );
     }
-    return problem !== undefined ||
-      error instanceof UsageError ||
-      isUsage(error)
-      ? 2
-      : 1;
+    return problem !== undefined || isUsage(error) ? 2 : 1;
   });

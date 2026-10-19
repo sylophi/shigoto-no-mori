@@ -1,6 +1,5 @@
 // The terminal `sm`: the engine's services under a command line, built
-// with `bun build --compile`. The flavor (prod `sm`, dev `smd`) comes
-// from the build.
+// with `bun build --compile`, its flavor from the build (build.ts).
 import * as BunRuntime from "@effect/platform-bun/BunRuntime";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { flavorNames } from "@shigomori/engine/flavor";
@@ -60,7 +59,7 @@ import { status } from "./commands/status.ts";
 import { changingWithFix, doctor, engine } from "./engine.ts";
 import { canonical } from "./aliases.ts";
 import * as Here from "./here.ts";
-import { goArgs } from "./argv.ts";
+import { goArgs, splitAtDashes } from "./argv.ts";
 import { holdStdinFd } from "./stdinFd.ts";
 import { verboseSpawner } from "./verbose.ts";
 import { helpPages } from "./help.ts";
@@ -70,15 +69,14 @@ import { Output } from "./output.ts";
 // --json, --verbose and --version are global wherever they sit, up to
 // a `--`, past which everything is the command's, as in Go.
 function globalFlags(args: ReadonlyArray<string>) {
-  const end = args.indexOf("--");
-  const before = end === -1 ? args : args.slice(0, end);
+  const { own, past } = splitAtDashes(args);
   return {
-    version: before.includes("--version") || before.includes("-V"),
-    json: before.includes("--json"),
-    verbose: before.includes("--verbose"),
+    version: own.includes("--version") || own.includes("-V"),
+    json: own.includes("--json"),
+    verbose: own.includes("--verbose"),
     rest: [
-      ...before.filter((arg) => arg !== "--json" && arg !== "--verbose"),
-      ...(end === -1 ? [] : args.slice(end)),
+      ...own.filter((arg) => arg !== "--json" && arg !== "--verbose"),
+      ...(past === undefined ? [] : ["--", ...past]),
     ],
   };
 }
@@ -173,7 +171,7 @@ const sm = Command.make("sm").pipe(
   ]),
 );
 
-const program = goArgs(sm, canonical(rest)).pipe(
+const program = goArgs(sm, canonical(rest, worktreesCommand)).pipe(
   Effect.flatMap(Command.runWith(sm, { version, renderErrors: false })),
   // None of effect/cli's built-in flags: the help is the catalog's
   // (help.ts), answered before parsing, and a command line the parser

@@ -12,9 +12,8 @@
 // and gives it back just as the menu attaches: the lowest free number
 // is then one no child's pipe can have had, and the dup takes it.
 // Nothing reads stdin before a menu shows, so typeahead stays the
-// shell's. A
-// workaround for Bun: a Bun bump runs `pnpm -C packages/cli under-load`
-// before it lands (README.md).
+// shell's. A workaround for Bun: a Bun bump runs `pnpm -C packages/cli
+// under-load` before it lands (README.md).
 import { closeSync, openSync } from "node:fs";
 
 let held: number | null = null;

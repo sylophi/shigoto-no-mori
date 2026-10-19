@@ -283,20 +283,24 @@ const make = Effect.gen(function* () {
         count: colliding.length,
       });
     }
-    yield* git
-      .run(worktreePath, [
-        "read-tree",
-        "-m",
-        "-u",
-        "--end-of-options",
-        parent,
-        commit,
-      ])
-      .pipe(
+    yield* git.withIndexLock(
+      worktreePath,
+      git.refreshIndex(worktreePath).pipe(
+        Effect.andThen(
+          git.run(worktreePath, [
+            "read-tree",
+            "-m",
+            "-u",
+            "--end-of-options",
+            parent,
+            commit,
+          ]),
+        ),
         Effect.mapError(
           (cause) => new ApplyRefused({ reason: "overlap", cause }),
         ),
-      );
+      ),
+    );
     // The changes stay in the files, not in the index.
     yield* git.run(worktreePath, ["reset", "-q"]);
     yield* git.deleteRef(projectPath, dirtyRef(worktreeId)).pipe(Effect.ignore);

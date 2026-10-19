@@ -24,18 +24,23 @@ import { CD_FILE_ENV } from "./shellHook.ts";
 // none, the platform's spawner waits a second and then on the exit for
 // good, so a child that ignores SIGTERM (a user's hook, a stuck helper)
 // held its caller's interrupt or timeout forever.
-const KILL_GRACE = "3 seconds";
+export const KILL_GRACE = "3 seconds";
+
+// A child's environment: `env` less the shell hook's directive file,
+// which is the terminal `sm`'s alone (an editor or a hook writing it
+// would move the user's shell).
+export const childEnv = (
+  env: Readonly<Record<string, string | undefined>> | undefined,
+) => ({ ...env, [CD_FILE_ENV]: undefined });
 
 // What every child gets that its command doesn't say otherwise:
-// KILL_GRACE, and not the shell hook's directive file, which is the
-// terminal `sm`'s alone (an editor or a hook writing it would move the
-// user's shell).
+// KILL_GRACE and childEnv.
 const withDefaults = (command: ChildProcess.Command): ChildProcess.Command =>
   ChildProcess.isStandardCommand(command)
     ? ChildProcess.make(command.command, command.args, {
         ...command.options,
         forceKillAfter: command.options.forceKillAfter ?? KILL_GRACE,
-        env: { ...command.options.env, [CD_FILE_ENV]: undefined },
+        env: childEnv(command.options.env),
         extendEnv:
           command.options.env === undefined || command.options.extendEnv,
       })

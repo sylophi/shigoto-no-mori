@@ -17,7 +17,7 @@ import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { changing, refuseUnmigrated } from "../engine.ts";
-import { withoutCdFile } from "../handOver.ts";
+import { childEnv } from "@shigomori/engine/processes";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import {
@@ -213,7 +213,7 @@ export const pr = Command.make("pr", target, (input) =>
     if (json) return yield* emit(doc);
     const url = doc.url ?? "";
     yield* Effect.callback<void, OpenFailed>((resume) => {
-      execFile("open", [url], { env: withoutCdFile() }, (error) => {
+      execFile("open", [url], { env: childEnv(process.env) }, (error) => {
         resume(
           error === null
             ? Effect.void

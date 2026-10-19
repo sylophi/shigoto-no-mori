@@ -5,6 +5,7 @@
 // color are computed.
 import type { flavorNames } from "@shigomori/engine/flavor";
 import { commandName, projectVerb } from "./aliases.ts";
+import { splitAtDashes } from "./argv.ts";
 import { styles, type Styles } from "./output.ts";
 
 // A usage line, the description beside it, and the detail below it.
@@ -720,8 +721,7 @@ export const helpPages = (look: HelpLook) => {
         code: leading > 0 || rest.length > 0 ? 0 : 2,
       };
     }
-    const end = after.indexOf("--");
-    const own = end === -1 ? after : after.slice(0, end);
+    const { own } = splitAtDashes(after);
     if (own.includes("-h") || own.includes("--help")) {
       return { text: commandPage(command, after), code: 0 };
     }
