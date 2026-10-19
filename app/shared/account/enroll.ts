@@ -67,6 +67,9 @@ const ENROLL_TIMEOUT_MS = 15_000;
 // sign-out waits behind too.
 const UPDATE_TIMEOUT_MS = 10_000;
 
+// A hub call cut at its bound, in the words the person reads.
+const hubSilent = () => new Error("The device hub didn't answer in time.");
+
 // Exchanges a fresh Clerk session token (minted by the renderer's
 // ClerkAccountSync off the live session) for the hub device
 // credential, registering a fresh key pair's public half with it, and
@@ -97,13 +100,14 @@ export async function enrollDevice(
     publicKey: deviceKey.publicKey,
   };
   const deadline = AbortSignal.timeout(ENROLL_TIMEOUT_MS);
-  const ask = () =>
-    deps.service.enroll(token, fields, deadline).catch((error: unknown) => {
-      if (deadline.aborted) {
-        throw new Error("The device hub didn't answer in time.");
-      }
-      throw error;
-    });
+  const ask = () => {
+    if (deadline.aborted) return Promise.reject(hubSilent());
+    return deps.service
+      .enroll(token, fields, deadline)
+      .catch((error: unknown) => {
+        throw deadline.aborted ? hubSilent() : error;
+      });
+  };
   let enrollment: EnrollResponse;
   try {
     enrollment = await ask();
@@ -117,6 +121,7 @@ export async function enrollDevice(
     // revoke that couldn't land (the hub rate-limiting, unreachable) is
     // what the person is told, not the refusal it stands behind.
     if (!(error instanceof HubDeviceEnrolledElsewhereError)) throw error;
+    if (deadline.aborted) throw hubSilent();
     const parked = await retryParkedRevoke(deps);
     if (parked.kind === "failed") throw parked.error;
     if (parked.kind === "none") throw error;
@@ -240,12 +245,12 @@ export async function updateDevice(
     await pending;
     record = deps.store.read() ?? record;
   }
-  await deps.service.update(
-    record.credential,
-    deviceId,
-    patch,
-    AbortSignal.timeout(UPDATE_TIMEOUT_MS),
-  );
+  const bound = AbortSignal.timeout(UPDATE_TIMEOUT_MS);
+  await deps.service
+    .update(record.credential, deviceId, patch, bound)
+    .catch((error: unknown) => {
+      throw bound.aborted ? hubSilent() : error;
+    });
   if (deviceId !== deps.deviceId) return;
   keepFields(deps, record, {
     ...(patch.name === undefined
