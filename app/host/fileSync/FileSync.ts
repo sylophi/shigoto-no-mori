@@ -1,7 +1,7 @@
 // The host's one way to run the file-sync engine (file-sync/, the
 // continuous worktree mirror). Two roles are spawned through here: the
 // long-lived `daemon` behind host/mirror/MirrorDaemon.ts and one `serve`
-// child per stream a peer opens (host/ipc/modules/mirror.ts). Both
+// child per stream a peer opens (host/mirror/serving.ts). Both
 // are spoken to as a byte stream over stdin/stdout, never as document
 // runs: nobody types the engine's commands, and only this process ever
 // starts it.
@@ -141,5 +141,3 @@ const make = (binaryPath: () => string | null) =>
 
 export const layer = (binaryPath: () => string | null) =>
   Layer.effect(FileSync, make(binaryPath));
-
-// For the callers that are not Effect yet.
