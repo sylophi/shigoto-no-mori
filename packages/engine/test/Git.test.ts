@@ -209,7 +209,10 @@ it("a stash whose reset stays refused is saved once and says so, the changes sti
   assert.ok(Exit.isFailure(outcome));
   const error = Option.getOrThrow(Exit.findErrorOption(outcome));
   assert.ok(error instanceof GitRefusedError);
-  assert.match(error.reason, /^Stashed, but another program's git/);
+  assert.match(
+    error.reason,
+    /^It was saved to the stash list, but another program's git/,
+  );
   assert.deepEqual(stashes(), ["On main: raced"], "never saved twice");
   assert.match(git(repo, "status", "--porcelain"), /a\.txt/);
 });

@@ -125,7 +125,7 @@ export const makeStash = ({
           () =>
             new GitRefusedError({
               reason:
-                "Stashed, but another program's git kept hold of the worktree's index, so the changes are still here too. Discard them to finish.",
+                "It was saved to the stash list, but another program's git held the worktree's index, so the changes are also still here. Discard all changes, in the changes list's ⋯ menu, finishes it.",
             }),
         ),
       );
