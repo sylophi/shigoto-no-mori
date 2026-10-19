@@ -444,7 +444,7 @@ export function makeAccountHandlers(
   // two revokes, where the second would 401 against the credential the
   // first already deleted. A caller arriving while one runs rides it
   // (an enroll's own token unused), and the first after it settles
-  // starts afresh: each is cached with no time to live.
+  // starts afresh.
   const enrollOnce = joinInFlight(
     Effect.flatMap(EnrollToken, (token) => Effect.promise(() => enroll(token))),
   );

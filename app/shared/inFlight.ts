@@ -9,17 +9,21 @@ export const joinInFlight = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> => {
   let running: Deferred.Deferred<A, E> | undefined;
-  return Effect.suspend(() => {
-    if (running !== undefined) return Deferred.await(running);
-    const deferred = Deferred.makeUnsafe<A, E>();
-    running = deferred;
-    return effect.pipe(
-      Effect.onExit((exit) =>
-        Effect.sync(() => {
-          running = undefined;
-          Deferred.doneUnsafe(deferred, exit);
-        }),
-      ),
-    );
-  });
+  // Uninterruptible until its settling is in place, or an interrupt in
+  // between would leave every later caller waiting.
+  return Effect.uninterruptibleMask((restore) =>
+    Effect.suspend(() => {
+      if (running !== undefined) return restore(Deferred.await(running));
+      const deferred = Deferred.makeUnsafe<A, E>();
+      running = deferred;
+      return restore(effect).pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            running = undefined;
+            Deferred.doneUnsafe(deferred, exit);
+          }),
+        ),
+      );
+    }),
+  );
 };

@@ -1,6 +1,7 @@
 // joinInFlight (shared/inFlight.ts), the account's enroll and sign-out:
 // callers while a run is out share it, the first after it settles starts
-// another, and a failure is shared as it happened and kept by nothing.
+// another, and a failure or an interrupt is shared as it happened and
+// kept by nothing.
 //
 // Run: pnpm test join-in-flight.
 import assert from "node:assert/strict";
@@ -42,4 +43,23 @@ it("a failure reaches every caller of its run, and the next one asks again", asy
   assert.ok(Exit.isFailure(failed));
   assert.equal(await Effect.runPromise(once), "enrolled");
   assert.equal(runs, 2);
+});
+
+it("a run whose caller is interrupted ends its joiners' wait, and the next one asks again", async () => {
+  let runs = 0;
+  const once = joinInFlight(
+    Effect.suspend(() => (++runs === 1 ? Effect.never : Effect.succeed(runs))),
+  );
+  const joined = await Effect.runPromise(
+    Effect.gen(function* () {
+      const first = yield* Effect.forkChild(once);
+      yield* Effect.yieldNow;
+      const second = yield* Effect.forkChild(once);
+      yield* Effect.yieldNow;
+      yield* Fiber.interrupt(first);
+      return yield* Fiber.await(second);
+    }),
+  );
+  assert.ok(Exit.hasInterrupts(joined));
+  assert.equal(await Effect.runPromise(once), 2);
 });

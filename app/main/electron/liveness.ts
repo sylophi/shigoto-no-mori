@@ -149,6 +149,9 @@ export function attachRenderProcessRecovery(
       );
       lastGiveUp = now;
       deps.onGiveUp(verdict === "give-up");
+      // Its dialog blocks, and the gone windows' events wait behind it:
+      // they are still the same kill once it is dismissed.
+      lastGiveUp = performance.now();
     }
   });
   // Not a crash: the renderer is alive but wedged. Log it so a hang is
@@ -268,10 +271,13 @@ export function installFatalRecovery(deps: {
   const tryRelaunch = () => tryFatalRelaunch(deps.rememberWindows);
   // A run this long was no crash loop: the relaunches before it are
   // forgotten.
-  setTimeout(
-    () => rmSync(relaunchMarkerPath(), { force: true }),
-    FATAL_RELAUNCH.stableMs,
-  ).unref();
+  setTimeout(() => {
+    try {
+      rmSync(relaunchMarkerPath(), { force: true });
+    } catch (error) {
+      log.warn("[liveness] could not forget the relaunches:", error);
+    }
+  }, FATAL_RELAUNCH.stableMs).unref();
   process.on("uncaughtException", (error) => {
     log.error("[liveness] uncaughtException:", error);
     // A process uncaughtException listener suppresses Node and Electron's
