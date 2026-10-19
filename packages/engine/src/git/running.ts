@@ -50,7 +50,7 @@ const STALL_LIMIT = [
 // that writes back the index it refreshed (the app's own views read
 // with both) or another program's git. A command of several steps (a
 // stash, a merge, a rebase, a pull) can be refused after its first, and
-// isn't.
+// isn't: a stash finishes its own (git/stash.ts).
 const WAITS_FOR_INDEX = new Set([
   "add",
   "apply",
@@ -64,21 +64,21 @@ const WAITS_FOR_INDEX = new Set([
   "switch",
   "update-index",
 ]);
-type RunError = GitCommandError | GitOutputTooLargeError;
-// git's own refusal, its first line. A post-checkout hook that prints
-// the same comes after the switch's "Switched to branch"; a pre-commit
-// hook's run again with its commit, which nothing recorded yet.
-const indexHeld = (error: RunError): boolean => {
+// git's own refusal, its first line, "fatal:" or (a stash's first
+// step) "error:". A post-checkout hook that prints the same comes after
+// the switch's "Switched to branch"; a pre-commit hook's run again with
+// its commit, which nothing recorded yet.
+export const indexHeld = (error: unknown): boolean => {
   if (!(error instanceof GitCommandError) || error.exitCode === null) {
     return false;
   }
   const first = stderrOf(error).split("\n", 1)[0] ?? "";
   return (
-    first.startsWith("fatal: Unable to create '") &&
+    /^(fatal|error): Unable to create '/.test(first) &&
     first.endsWith("index.lock': File exists.")
   );
 };
-const waitingForIndex = <A, R>(effect: Effect.Effect<A, RunError, R>) =>
+export const waitingForIndex = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.retry(effect, {
     schedule: Schedule.exponential("50 millis"),
     times: 5,

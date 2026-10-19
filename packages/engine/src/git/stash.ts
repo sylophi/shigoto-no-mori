@@ -13,7 +13,7 @@ import {
   PATCH_MAX_OUTPUT,
 } from "./documents.ts";
 import type { OperationArea } from "./operation.ts";
-import type { RunningArea } from "./running.ts";
+import { indexHeld, type RunningArea, waitingForIndex } from "./running.ts";
 
 // Git words a stash's subject "On <branch>: <message>" when it was
 // given one, and "WIP on <branch>: <hash> <subject>" when not.
@@ -41,7 +41,7 @@ export const makeStash = ({
   readonly operation: OperationArea;
 }) =>
   Effect.sync(() => {
-    const { run, onIndex } = running;
+    const { run, runLenient, onIndex } = running;
     const { conflictedPaths } = operation;
 
     const readStashes = (worktree: string) =>
@@ -95,20 +95,59 @@ export const makeStash = ({
     });
 
     // Untracked files go too, so the worktree comes back clean, which is
-    // what a stash is for here.
+    // what a stash is for here. Git saves the stash before it cleans the
+    // worktree (`clean`, then `reset --hard`), so another program's git
+    // holding index.lock for a moment (an editor's or a prompt's `git
+    // status`) can refuse the reset with the stash saved. Refused before
+    // saving, it changed nothing and is asked again. Refused after, its
+    // cleanup is finished here, the reset waiting the lock out as every
+    // one-step write does; never asked again, which would save it twice.
     const stashChanges = Effect.fn("Git.stashChanges")(function* (
       worktree: string,
       message: string | undefined,
     ) {
-      yield* onIndex(
-        worktree,
-        run(worktree, [
+      const tip = runLenient(worktree, [
+        "rev-parse",
+        "-q",
+        "--verify",
+        "refs/stash",
+      ]).pipe(Effect.map((out) => out.trim()));
+      const cleanup = Effect.gen(function* () {
+        yield* run(worktree, ["clean", "--force", "--quiet", "-d", ":/"]);
+        yield* run(worktree, [
+          "reset",
+          "--hard",
+          "-q",
+          "--no-recurse-submodules",
+        ]);
+      }).pipe(
+        Effect.mapError(
+          () =>
+            new GitRefusedError({
+              reason:
+                "Stashed, but another program's git kept hold of the worktree's index, so the changes are still here too. Discard them to finish.",
+            }),
+        ),
+      );
+      const attempt = Effect.gen(function* () {
+        const before = yield* tip;
+        yield* run(worktree, [
           "stash",
           "push",
           "--include-untracked",
           ...(message?.trim() ? ["-m", message.trim()] : []),
-        ]),
-      );
+        ]).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              if (!indexHeld(error) || (yield* tip) === before) {
+                return yield* Effect.fail(error);
+              }
+              yield* cleanup;
+            }),
+          ),
+        );
+      });
+      yield* onIndex(worktree, waitingForIndex(attempt));
     });
 
     // With `drop`, a pop: the stash goes only once it applied cleanly.
