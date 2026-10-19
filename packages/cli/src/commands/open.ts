@@ -2,7 +2,9 @@
 // its launchers, and sm [worktrees] edit <file> [<worktree>]: one of its
 // files in the editor.
 import { resolve } from "node:path";
+import { flavorNames } from "@shigomori/engine/flavor";
 import * as Open from "@shigomori/engine/Open";
+import * as Paths from "@shigomori/engine/Paths";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -139,6 +141,7 @@ export const app = Command.make("app", { rest }, (input) =>
     }
     yield* (yield* Open.Open).app;
     const { json } = yield* Effect.service(Output);
-    yield* json ? emit({ ok: true }) : out("opened Shigoto no Mori");
+    const { appName } = flavorNames((yield* Paths.Paths).flavor);
+    yield* json ? emit({ ok: true }) : out(`opened ${appName}`);
   }),
 ).pipe(Command.withDescription("Open the Shigoto no Mori app"));

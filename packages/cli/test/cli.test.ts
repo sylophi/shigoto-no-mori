@@ -1351,6 +1351,32 @@ describe("app", () => {
       "smd: This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.\n",
     );
   });
+
+  it("names the app it opened, each flavor's own", async () => {
+    box.fakeBin("open", `printf '%s\\n' "$@" > '${box.home}/open.args'`);
+    for (const [flavor, line] of [
+      ["prod", "opened Shigoto no Mori"],
+      ["v3", "opened Shigoto no Mori (v3)"],
+      ["lab", "opened Shigoto no Mori (lab)"],
+    ] as const) {
+      const binary = join(buildDir, `app-${flavor}`);
+      await new Promise<void>((resolve, reject) =>
+        execFile(
+          process.execPath,
+          ["build.mts", binary, `--flavor=${flavor}`],
+          { cwd: join(import.meta.dirname, "..") },
+          (error) => (error === null ? resolve() : reject(error)),
+        ),
+      );
+      const opened = await box.runAt(binary, "cli", box.home, ["app"]);
+      assert.equal(opened.code, 0);
+      assert.equal(opened.stdout, `${line}\n`);
+      assert.match(
+        readFileSync(join(box.home, "open.args"), "utf8"),
+        new RegExp(`-b\\n${flavorNames(flavor).bundleId}\\n$`),
+      );
+    }
+  }, 300_000);
 });
 
 describe("worktrees edit", () => {
