@@ -92,6 +92,8 @@ const dirs: string[] = [];
 const span = (name: string, outcome: string, error?: string) =>
   JSON.stringify({
     name,
+    traceId: "t1",
+    spanId: "s1",
     start: "2026-10-16T15:17:18.002Z",
     durationMs: 4.6,
     outcome,
