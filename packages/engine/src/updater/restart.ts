@@ -7,6 +7,7 @@ import type { InstallFailure } from "@shigomori/contracts/schemas/runtime";
 import { elapsedMillis } from "../elapsed.ts";
 import { type AppStatus, formatLocalRfc3339 } from "../updateFeed.ts";
 import {
+  CLAIM_WITHIN,
   HandoffFailed,
   RESTART_HINT_AFTER,
   RESTART_TIMEOUT,
@@ -23,23 +24,40 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
       updates: updatesDir,
       installLog,
       installFailure,
-      status: statusPath,
+      request: requestPath,
     } = files.at;
     const { appAlive, readStatus, writeShared } = files;
     // The handed-off install restarts the app. Success is updater.json
     // naming a new pid and a new version: a failed swap relaunching the old
-    // bundle mustn't read as "updated X -> X". An error the old pid
-    // publishes after the request (its installer didn't start) fails at
-    // once. A busy app confirms in a dialog this can't see, and a decline
-    // runs out the clock with the old pid alive.
+    // bundle mustn't read as "updated X -> X". The app says what became of
+    // this request (`handoff`, by its id): a decline, nothing it could
+    // install or an installer that didn't start fails at once. One no app
+    // takes is withdrawn, and so is one this run leaves on its way out, so
+    // no app picks it up after the asker gave up; a withdraw that finds it
+    // gone was taken meanwhile, and the wait goes on.
     const waitForRestart = Effect.fn("Updater.waitForRestart")(function* (
       app: AppStatus,
-      requestedAt: number,
+      id: string,
       input: UpdateInput,
     ) {
       const start = yield* elapsedMillis;
       let sameVersion = false;
       let hinted = false;
+      let claimed = false;
+      // Whether this took the request back; false when the app had taken
+      // it. One that can't be renamed fails, since it may still be taken.
+      const withdraw = fs.rename(requestPath, `${requestPath}.withdrawn`).pipe(
+        Effect.andThen(
+          Effect.ignore(fs.remove(`${requestPath}.withdrawn`, { force: true })),
+        ),
+        Effect.as(true),
+        Effect.catchReason("PlatformError", "NotFound", () =>
+          Effect.succeed(false),
+        ),
+        Effect.mapError(
+          (cause) => new HandoffFailed({ reason: "withdraw", cause }),
+        ),
+      );
       const look = Effect.gen(function* () {
         const status = Option.getOrUndefined(yield* readStatus);
         if (
@@ -50,20 +68,28 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
           if (status.appVersion !== app.appVersion) return Option.some(status);
           sameVersion = true;
         }
-        const state = status?.state;
-        if (status?.pid === app.pid && state?.kind === "error") {
-          // Only an error written since the request: the app never clears
-          // one from an earlier failed check on this path.
-          const info = yield* fs.stat(statusPath).pipe(Effect.option);
-          const written = Option.flatMap(info, (stat) => stat.mtime);
-          if (Option.isSome(written) && written.value.getTime() > requestedAt) {
-            return yield* new HandoffFailed({
-              reason: "install",
-              detail: state.message,
-            });
+        const handoff = status?.handoff;
+        if (handoff?.id === id) {
+          claimed = true;
+          switch (handoff.outcome) {
+            case "declined":
+            case "nothing-staged":
+              return yield* new HandoffFailed({ reason: handoff.outcome });
+            case "failed":
+              return yield* new HandoffFailed({
+                reason: "install",
+                detail: handoff.message,
+              });
           }
         }
-        if (!hinted && (yield* elapsedMillis) - start > RESTART_HINT_AFTER) {
+        const waited = (yield* elapsedMillis) - start;
+        if (!claimed && waited > CLAIM_WITHIN) {
+          if (yield* withdraw) {
+            return yield* new HandoffFailed({ reason: "not-taken" });
+          }
+          claimed = true;
+        }
+        if (!hinted && waited > RESTART_HINT_AFTER) {
           hinted = true;
           yield* report(input, { phase: "waiting-for-restart" });
         }
@@ -74,6 +100,9 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
           until: Option.isSome,
           schedule: polling(RESTART_TIMEOUT),
         }),
+        Effect.onInterrupt(() =>
+          claimed ? Effect.void : Effect.ignore(withdraw),
+        ),
       );
       if (Option.isSome(restarted)) return restarted.value;
       // Tentative, since a late confirmation still installs after this has

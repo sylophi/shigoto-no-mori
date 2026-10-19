@@ -242,7 +242,8 @@ async function updateDevice(
     await restartIntoUpdate(target.api);
     return "installed";
   }
-  await target.api.run(target.api.updater.update());
+  // One whose update reached it meanwhile restarts into it now.
+  await restartIntoUpdate(target.api, "update");
   return "armed";
 }
 

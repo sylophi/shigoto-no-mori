@@ -111,9 +111,11 @@ export class Updater extends Context.Service<
     readonly finishInstall: (input: {
       readonly running: Running;
       readonly appPid: number;
-      // A test build's update stand-ins, which the relaunched app gets.
+      // A test build's update stand-ins, which the relaunched app gets,
+      // and its debugging port, so the lab drives the app it brings back.
       readonly feedUrl?: string;
       readonly releasesUrl?: string;
+      readonly debugPort?: string;
     }) => Effect.Effect<
       void,
       | UpdatesUnavailable

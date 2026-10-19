@@ -8,7 +8,8 @@ import * as Option from "effect/Option";
 import * as Command from "effect/cli/Command";
 import { rest } from "../here.ts";
 import * as Flag from "effect/cli/Flag";
-import { version } from "../build.ts";
+import { flavorNames } from "@shigomori/engine/flavor";
+import { flavor, version } from "../build.ts";
 import { UsageError } from "../errors.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
 import { spinner } from "../spinner.ts";
@@ -92,6 +93,11 @@ export const update = Command.make(
           appPid: /^[+-]?\d+$/.test(pid) ? Number(pid) : 0,
           feedUrl: text(flags.feedUrl),
           releasesUrl: text(flags.releasesUrl),
+          // Only a build that takes a debugger (a test flavor) passes its
+          // port to the app it brings back.
+          ...(flavorNames(flavor).debuggable
+            ? { debugPort: process.env["SHIGOMORI_DEBUG_PORT"] ?? "" }
+            : {}),
         });
       }
       const { json, stdoutColor, stderrColor, binaryName } =

@@ -1,8 +1,8 @@
 // The updater's methods: check, stage, update and the install's finish.
 import type { UpdateRequest } from "@shigomori/contracts/schemas/runtime";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Random from "effect/Random";
 import * as Paths from "../Paths.ts";
 import { pidAlive } from "../processes.ts";
 import {
@@ -51,7 +51,7 @@ export const makeMethods = ({
     const requestPath = files.at.request;
 
     const { run, writeShared, appRunning, runningApp, installedBundle } = files;
-    const { offered, queryFeed } = feeds;
+    const { updates, queryFeed } = feeds;
     const { anchorOf } = signatures;
     const { stageUpdate } = staging;
     const { installStaged } = swap;
@@ -63,7 +63,11 @@ export const makeMethods = ({
     // back checking the real feeds.
     const relaunchArgs = (
       bundle: string,
-      endpoints: { readonly feedUrl?: string; readonly releasesUrl?: string },
+      endpoints: {
+        readonly feedUrl?: string;
+        readonly releasesUrl?: string;
+        readonly debugPort?: string;
+      },
     ) => [
       ...(paths.dataDirSource === "env"
         ? ["--env", `SHIGOMORI_DATA_DIR=${paths.dataDir}`]
@@ -74,14 +78,20 @@ export const makeMethods = ({
       ...(endpoints.releasesUrl
         ? ["--env", `SHIGOMORI_UPDATE_RELEASES_URL=${endpoints.releasesUrl}`]
         : []),
+      ...(endpoints.debugPort
+        ? ["--env", `SHIGOMORI_DEBUG_PORT=${endpoints.debugPort}`]
+        : []),
       bundle,
     ];
 
-    const available =
-      offered === null ? Effect.fail(new UpdatesUnavailable()) : Effect.void;
+    const available = (endpoints: {
+      readonly feedUrl?: string;
+      readonly releasesUrl?: string;
+    }) =>
+      updates(endpoints) ? Effect.void : Effect.fail(new UpdatesUnavailable());
 
     const check = Effect.fn("Updater.check")(function* (input: UpdateInput) {
-      yield* available;
+      yield* available(input);
       yield* report(input, { phase: "checking" });
       const { release } = yield* queryFeed(input);
       if (release === undefined) return upToDate(input.running);
@@ -96,7 +106,7 @@ export const makeMethods = ({
     const stageFor = Effect.fn("Updater.stageFor")(function* (
       input: UpdateInput,
     ) {
-      yield* available;
+      yield* available(input);
       const installed = yield* anchorOf(
         yield* installedBundle(input.running.executable),
       );
@@ -154,8 +164,12 @@ export const makeMethods = ({
           to: installed.version,
         } satisfies Updated;
       }
-      const requestedAt = yield* Clock.currentTimeMillis;
-      const request: UpdateRequest = { action: "install", requestedAt };
+      const request: UpdateRequest = {
+        action: "install",
+        id: `${running.pid}-${(yield* Random.nextInt).toString(36)}`,
+        appPid: app.value.pid,
+        requesterPid: running.pid,
+      };
       yield* writeShared(
         requestPath,
         `${JSON.stringify(request, null, 2)}\n`,
@@ -169,7 +183,7 @@ export const makeMethods = ({
         phase: "restarting",
         version: staged.value.version,
       });
-      const restarted = yield* waitForRestart(app.value, requestedAt, input);
+      const restarted = yield* waitForRestart(app.value, request.id, input);
       return {
         ok: true,
         status: "updated",
@@ -183,8 +197,9 @@ export const makeMethods = ({
       readonly appPid: number;
       readonly feedUrl?: string;
       readonly releasesUrl?: string;
+      readonly debugPort?: string;
     }) {
-      yield* available;
+      yield* available(input);
       if (input.appPid <= 0) return yield* new InvalidAppPid();
       const pid = input.running.pid;
       const failed = (error: unknown, after = "") =>

@@ -193,6 +193,12 @@ export type AppStatus = {
   readonly pid: number;
   readonly appVersion: string;
   readonly state: { readonly kind: string; readonly message: string };
+  // What became of the last install request the app took.
+  readonly handoff?: {
+    readonly id: string;
+    readonly outcome: string;
+    readonly message: string;
+  };
 };
 
 const textOf = (value: unknown) => (typeof value === "string" ? value : "");
@@ -204,10 +210,20 @@ export const appStatusOf = (value: unknown): AppStatus | undefined => {
     return undefined;
   }
   const state = Predicate.isObject(value["state"]) ? value["state"] : {};
+  const handoff = value["handoff"];
   return {
     pid,
     appVersion: textOf(value["appVersion"]),
     state: { kind: textOf(state["kind"]), message: textOf(state["message"]) },
+    ...(Predicate.isObject(handoff)
+      ? {
+          handoff: {
+            id: textOf(handoff["id"]),
+            outcome: textOf(handoff["outcome"]),
+            message: textOf(handoff["message"]),
+          },
+        }
+      : {}),
   };
 };
 

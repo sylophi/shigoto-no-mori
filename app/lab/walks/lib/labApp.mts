@@ -77,6 +77,9 @@ export interface Lab {
   // The window the app shows now, once it has drawn: after the shell
   // put up a new one in place of one whose renderer went, `page` is it.
   followWindow(): Promise<Page>;
+  // The app the installer opened again once this one quit, which is no
+  // child of the walk's, on the same debugging port: `page` is its window.
+  followRelaunch(): Promise<Page>;
   close(): Promise<void>;
 }
 
@@ -92,10 +95,13 @@ export interface LabOptions {
   // A further device on this machine: its own userData, so its own
   // single-instance lock and hub credential (shared/packaging/appName.mts).
   readonly profile?: string;
-  // More of the app's environment (a hub to enroll with): at launch, and
-  // from the login shell's startup files too, since the app rebuilds its
-  // environment from them and may read these before or after.
+  // More of the app's environment (a hub to enroll with, the update
+  // stand-ins): at launch, and from the login shell's startup files too,
+  // since the app rebuilds its environment from them and may read these
+  // before or after.
   readonly env?: Readonly<Record<string, string>>;
+  // Fills the data folder before the app's first start.
+  readonly prepare?: (dataDir: string) => void;
 }
 
 // The walks remove the build's saved windows and, at the end, its whole
@@ -103,20 +109,54 @@ export interface LabOptions {
 // one that is already running is someone's, and a walk would also lose
 // its single-instance lock to it.
 export const refuseRunningLab = () => {
+  const running = labRunning();
+  if (running.length > 0) {
+    throw new Error(
+      `A lab build is running (pid ${running.join(", ")}): quit it before the walks.`,
+    );
+  }
+};
+
+// Any lab build's app, wherever its bundle is: they share one
+// footprint. Its helpers sit under Frameworks, not MacOS.
+function labRunning(): string[] {
   const escaped = NAME.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // Any lab build's app, wherever its bundle is: they share one
-  // footprint. Its helpers sit under Frameworks, not MacOS.
   const pattern = `${escaped}\\.app/Contents/MacOS/${escaped}`;
-  let running = "";
   try {
-    running = execFileSync("pgrep", ["-f", pattern], { encoding: "utf8" });
+    return execFileSync("pgrep", ["-f", pattern], { encoding: "utf8" })
+      .trim()
+      .split("\n")
+      .filter((pid) => pid !== "");
   } catch {
     // pgrep exits 1 when nothing matches.
+    return [];
   }
-  if (running.trim() !== "") {
-    throw new Error(
-      `A lab build is running (pid ${running.trim().split("\n").join(", ")}): quit it before the walks.`,
+}
+
+// The process listening on a loopback port: a relaunched app's main one,
+// by its debugging port.
+function listenerOn(port: number): number | undefined {
+  try {
+    const pid = Number(
+      execFileSync("lsof", ["-ti", `tcp:${port}`, "-sTCP:LISTEN"], {
+        encoding: "utf8",
+      })
+        .trim()
+        .split("\n")[0],
     );
+    return Number.isInteger(pid) && pid > 0 ? pid : undefined;
+  } catch {
+    // lsof exits 1 when nothing listens.
+    return undefined;
+  }
+}
+
+const pidAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 };
 
@@ -321,6 +361,7 @@ async function launch(
   );
 
   options.seed(reposDir, git, home);
+  options.prepare?.(dataDir);
   if (readdirSync(reposDir).length > 0) {
     sm("projects", "add", reposDir, "--all", "--yes");
   }
@@ -336,7 +377,12 @@ async function launch(
       },
       stdio: ["ignore", "ignore", "pipe"],
     });
-    const run = { child, exited: false, browser: null as Browser | null };
+    const run = {
+      child,
+      port,
+      exited: false,
+      browser: null as Browser | null,
+    };
     child.once("exit", () => {
       run.exited = true;
     });
@@ -380,10 +426,10 @@ async function launch(
   let current = await start();
   const close = async () => {
     await current.stop();
-    // Every walk's, for a look at one that failed in CI, where its root
-    // goes with it: the shell's under the walk's home, and the host's
-    // trace where Electron puts the logs folder, under the account's real
-    // home, which the walks' nuke clears at the end.
+    // Every walk's logs, for CI's artifact: the shell's under the walk's
+    // home, and the host's trace where Electron puts the logs folder,
+    // under the account's real home, which the walks' nuke clears at the
+    // end.
     const keep = process.env["SM_WALK_LOGS"];
     if (keep !== undefined && keep !== "") {
       const walk = join(
@@ -442,6 +488,59 @@ async function launch(
       if (host === undefined)
         throw new Error("the lab app has no host process");
       return host.pid;
+    },
+    followRelaunch: async () => {
+      const { port } = current;
+      await current.run.browser?.close().catch(() => {});
+      // The app the installer opens again is the one listening on this
+      // walk's port. From here on closing the lab stops it, however far
+      // this gets: as the menu's Quit does where it is the only lab app
+      // running (a quit by bundle id reaches every one), else by its pid,
+      // and by SIGKILL past the quit's own bound.
+      let relaunched: number | undefined;
+      let browser: Browser | null = null;
+      const stop = async () => {
+        await browser?.close().catch(() => {});
+        relaunched ??= listenerOn(port);
+        const pid = relaunched;
+        if (pid === undefined || !pidAlive(pid)) return;
+        if (labRunning().length === 1) {
+          execFileSync("osascript", [
+            "-e",
+            `tell application id "${BUNDLE_ID}" to quit`,
+          ]);
+        } else {
+          process.kill(pid, "SIGTERM");
+        }
+        await waitFor(
+          () => !pidAlive(pid),
+          "the relaunched lab app to quit",
+          20_000,
+        ).catch(() => process.kill(pid, "SIGKILL"));
+      };
+      current = { ...current, stop };
+      await waitFor(() => current.run.exited, "the lab app to quit", 60_000);
+      await waitFor(
+        async () => {
+          const targets = await fetch(`http://127.0.0.1:${port}/json`)
+            .then((r) => r.json() as Promise<{ type: string }[]>)
+            .catch(() => []);
+          return targets.some((t) => t.type === "page");
+        },
+        "the relaunched app's window",
+        90_000,
+      );
+      relaunched = listenerOn(port);
+      browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+      const page = browser.contexts()[0]?.pages()[0];
+      if (page === undefined)
+        throw new Error("the relaunched app has no window");
+      page.setDefaultTimeout(10_000);
+      await page.waitForFunction(
+        () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
+      );
+      current = { ...current, run: { ...current.run, browser }, page, stop };
+      return page;
     },
     followWindow: async () => {
       const browser = current.run.browser;
