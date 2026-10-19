@@ -2,8 +2,9 @@
 // (main/electron/contentPolicy.ts): a packaged build runs the bundle
 // and Clerk's script alone, with no inline script or eval, connects to
 // the loopback and Clerk alone, and shows images from GitHub and Clerk
-// alone (a remote's come as data: URLs, projects:remoteImage); Clerk's
-// host is the one its key names; and the page has no inline script a
+// alone (a remote's come as data: URLs, projects:remoteImage), as the
+// web client's static policy (vercel.json) does; Clerk's host is the
+// one its key names; and the page has no inline script a
 // policy without an inline allowance would block (the vite-bundled
 // module aside).
 //
@@ -12,6 +13,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "vitest";
+import * as Schema from "effect/Schema";
+import { GITHUB_IMAGE_HOSTS } from "@shigomori/contracts/predicates/imageHosts";
 import {
   clerkFrontendHost,
   rendererContentPolicy,
@@ -67,6 +70,41 @@ it("a packaged build runs no inline script or eval, connects to the loopback and
   assert.deepEqual(policy.get("media-src"), ["'self'", "data:"]);
   assert.deepEqual(policy.get("object-src"), ["'none'"]);
   assert.deepEqual(policy.get("frame-ancestors"), ["'none'"]);
+});
+
+it("the web client's policy shows images from the remote hosts a window's does, GitHub's each with its subdomains", () => {
+  const Vercel = Schema.fromJsonString(
+    Schema.Struct({
+      headers: Schema.Array(
+        Schema.Struct({
+          headers: Schema.Array(
+            Schema.Struct({ key: Schema.String, value: Schema.String }),
+          ),
+        }),
+      ),
+    }),
+  );
+  const vercel = Schema.decodeUnknownSync(Vercel)(
+    readFileSync(join(import.meta.dirname, "..", "vercel.json"), "utf8"),
+  );
+  const web = vercel.headers
+    .flatMap((rule) => rule.headers)
+    .find((header) => header.key === "Content-Security-Policy");
+  assert.ok(web !== undefined, "vercel.json sends a policy");
+  const remote = (policy: string) =>
+    new Set(
+      directives(policy)
+        .get("img-src")
+        ?.filter((source) => source.startsWith("https://")),
+    );
+  const desktop = remote(
+    rendererContentPolicy({ clerkHost: null, dev: false }),
+  );
+  assert.deepEqual(remote(web.value), desktop);
+  for (const host of GITHUB_IMAGE_HOSTS) {
+    assert.ok(desktop.has(`https://${host}`));
+    assert.ok(desktop.has(`https://*.${host}`));
+  }
 });
 
 it("the page has no classic inline script", () => {
