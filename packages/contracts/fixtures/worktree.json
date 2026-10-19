@@ -554,6 +554,17 @@
       {
         "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
         "worktreeId": "e0f76c6cc80a"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "force": true,
+        "refuseRunningScripts": true,
+        "expect": {
+          "branch": "feature",
+          "branchTip": "0123456789abcdef0123456789abcdef01234567",
+          "captureTree": "89abcdef0123456789abcdef0123456789abcdef"
+        }
       }
     ],
     "normalizes": [

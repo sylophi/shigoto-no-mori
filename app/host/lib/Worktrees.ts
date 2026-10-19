@@ -16,6 +16,7 @@ import type {
   CreateWorktreeResult,
   DeleteStackResult,
   DeleteWorktreeResult,
+  MovedSource,
   Worktree,
 } from "@shigomori/contracts/schemas";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
@@ -144,9 +145,12 @@ export class Worktrees extends Context.Service<
       Engine.Services
     >;
     // A delete, its scripts stopped first, unless `refuseRunningScripts`.
+    // With `expect`, a transplant's teardown: refused unless the source
+    // is still what moved, checked right before the delete.
     readonly remove: (
       input: RemoveInput & {
         readonly refuseRunningScripts?: boolean | undefined;
+        readonly expect?: MovedSource | undefined;
       },
       notifyScript: Scripts.NotifyScriptEvent,
     ) => Effect.Effect<

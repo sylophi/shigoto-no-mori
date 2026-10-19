@@ -4,6 +4,7 @@
 // descriptions the app and agents set. The rows and documents keep the
 // shapes `sm worktrees ... --json` prints, field for field.
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -266,6 +267,9 @@ export class Worktrees extends Context.Service<
         readonly keepBranch: boolean;
         readonly skipCleanup: boolean;
         readonly preflighted?: boolean;
+        // A transplant's teardown: what the move took, which the worktree
+        // must still be after its cleanup, right before the delete.
+        readonly expect?: MovedSource;
       },
       reporter: Reporter,
     ) => Effect.Effect<
