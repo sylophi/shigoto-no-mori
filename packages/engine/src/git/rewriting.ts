@@ -32,8 +32,9 @@ export const makeRewriting = ({
 
     // Both make a new commit and refuse to leave anything half done: a
     // conflict aborts, so the worktree is exactly as it was and the error
-    // says so. Git's own refusal over local edits it would overwrite
-    // rides along as it is.
+    // says so, or, the abort refused, the pick is left for the banner
+    // and the error says that. Git's own refusal over local edits it
+    // would overwrite rides along as it is.
     const applyCommit = (
       worktree: string,
       verb: "revert" | "cherry-pick",

@@ -64,13 +64,13 @@ export const makeRemote = ({
     // A rebase for linear history where that is safe (rebaseIsSafe), and
     // a whole-tree merge otherwise or on a per-commit conflict. Each
     // merge passes `--ff`, git's own default, over a `merge.ff` setting
-    // that would refuse it. A merge that conflicts fails with
+    // that would refuse it. Its callers refuse an operation already under
+    // way first, before their fetch. A merge that conflicts fails with
     // SyncConflictsError, which the page offers the merge kept on its
     // conflicts for. Neither command takes a trailing `--`, which it
     // would read as a second revision.
     const rebaseOrMerge = (worktree: string, ref: string) =>
       Effect.gen(function* () {
-        yield* operation.refuseMidOperation(worktree);
         if (yield* rebaseIsSafe(worktree, ref)) {
           const rebased = yield* run(worktree, [
             "rebase",
@@ -104,6 +104,7 @@ export const makeRemote = ({
     // found the whole-tree merge clean.
     const pullRebaseOrMergeAndPush = Effect.fn("Git.pullRebaseOrMergeAndPush")(
       function* (worktree: string) {
+        yield* operation.refuseMidOperation(worktree);
         yield* run(worktree, ["fetch"]);
         yield* rebaseOrMerge(worktree, yield* upstreamRef(worktree));
         yield* run(worktree, ["push"]);
@@ -119,6 +120,7 @@ export const makeRemote = ({
       readonly repo: string;
       readonly primaryRef: string;
     }) {
+      yield* operation.refuseMidOperation(input.worktree);
       yield* fetchAll(input.repo);
       yield* rebaseOrMerge(input.worktree, input.primaryRef);
     });
