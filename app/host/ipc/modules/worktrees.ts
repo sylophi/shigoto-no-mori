@@ -41,14 +41,17 @@ const treeViews = (input: { projectId: string; worktreeId: string }) =>
 // One of the changes page's views of a worktree (`part` its name and
 // input), read again as the tree moves: its project's git, an edit in
 // its files (or a window looking again), a mirror staging into it. A
-// read git refuses for a moment (a lock held) is tried again three
-// times, a second apart and doubling, as a request was, before the
-// view fails.
+// view of refs alone (`refsOnly`: the branch's history, the stashes)
+// follows its project's git only: an edit, a window looking again and
+// a mirror's index rewrite can't move it, and the first and last come
+// as often as a mirror or an agent writes. A read git refuses for a
+// moment (a lock held) is tried again three times, a second apart and
+// doubling, as a request was, before the view fails.
 const treeView = <A, R>(
   input: { projectId: string; worktreeId: string },
   part: string,
   read: () => Effect.Effect<A, unknown, R>,
-  options?: { readonly every?: Duration.Input },
+  options?: { readonly every?: Duration.Input; readonly refsOnly?: boolean },
 ) =>
   Views.view(
     `${treeViews(input)}${part}`,
@@ -60,14 +63,16 @@ const treeView = <A, R>(
           while: (error) => !isEntityGoneError(error),
         }),
       ),
-    Views.either(
-      gitMoved(input.projectId),
-      filesChanged(input.projectId),
-      Views.pushed(mirrorContract, "gitChanged", (staged) => {
-        return staged.worktreeId === input.worktreeId;
-      }),
-    ),
-    options,
+    options?.refsOnly === true
+      ? gitMoved(input.projectId)
+      : Views.either(
+          gitMoved(input.projectId),
+          filesChanged(input.projectId),
+          Views.pushed(mirrorContract, "gitChanged", (staged) => {
+            return staged.worktreeId === input.worktreeId;
+          }),
+        ),
+    options?.every === undefined ? undefined : { every: options.every },
   );
 
 const gitMoved = (projectId: string) =>
@@ -141,32 +146,40 @@ export const worktreesViews: ViewHandlers<
       ),
     ),
   watchBranchHistory: (input) =>
-    treeView(input, "history", () =>
-      Effect.gen(function* () {
-        const identity = yield* findWorktreeIdentity(
-          input.projectId,
-          input.worktreeId,
-          { primaryRef: true },
-        );
-        return yield* (yield* Git.Git).readBranchHistory(identity.path, {
-          base: branchBaseOf(identity),
-          count: BRANCH_HISTORY_COUNT,
-        });
-      }),
+    treeView(
+      input,
+      "history",
+      () =>
+        Effect.gen(function* () {
+          const identity = yield* findWorktreeIdentity(
+            input.projectId,
+            input.worktreeId,
+            { primaryRef: true },
+          );
+          return yield* (yield* Git.Git).readBranchHistory(identity.path, {
+            base: branchBaseOf(identity),
+            count: BRANCH_HISTORY_COUNT,
+          });
+        }),
+      { refsOnly: true },
     ),
   watchStashes: (input) =>
-    treeView(input, "stashes", () =>
-      Effect.gen(function* () {
-        const { worktree } = yield* findProjectAndWorktree(
-          input.projectId,
-          input.worktreeId,
-        );
-        if (worktree.detached) return [];
-        return yield* (yield* Git.Git).listStashes(
-          worktree.path,
-          worktree.branch,
-        );
-      }),
+    treeView(
+      input,
+      "stashes",
+      () =>
+        Effect.gen(function* () {
+          const { worktree } = yield* findProjectAndWorktree(
+            input.projectId,
+            input.worktreeId,
+          );
+          if (worktree.detached) return [];
+          return yield* (yield* Git.Git).listStashes(
+            worktree.path,
+            worktree.branch,
+          );
+        }),
+      { refsOnly: true },
     ),
   watchOperation: (input) =>
     treeView(input, "operation", () =>
