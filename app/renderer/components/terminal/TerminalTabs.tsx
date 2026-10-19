@@ -14,8 +14,7 @@ import { scriptTabId } from "@/store/terminalDrawer";
 import { slotLabel, type ScriptSlot } from "@/store/scriptSlot";
 import { Terminal } from "./Terminal";
 import { TerminalTabsView } from "@shigomori/ui/views/terminal/TerminalTabsView.tsx";
-import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
-import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
+import { peerTerminalsHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 
 const ownedBy = (terminal: TerminalInfo, owner: TerminalOwner): boolean =>
   owner.kind === "device"
@@ -27,10 +26,11 @@ const ownedBy = (terminal: TerminalInfo, owner: TerminalOwner): boolean =>
 type TerminalTabsProps = Parameters<typeof AttachedTerminalTabs>[0];
 
 // The tabs while this device may command the scoped one; while it may
-// not (its control turned off, with a terminal open here), the
-// sentence that says so in their place, and the attached terminal
-// ends with them. The pick is kept by the place the tabs sit in, so
-// control coming back opens them where they were.
+// not (its control turned off, with a terminal open here), the words
+// that say so in their place, and the attached terminal ends with
+// them. The pick is kept by the place the tabs sit in, so control
+// coming back opens them where they were, or a new terminal if none
+// is left, as the tabs do whenever they mount with none.
 export function TerminalTabs(props: TerminalTabsProps) {
   const { canCommand } = useCommandAccess();
   const deviceLabel = useScopedDeviceLabel();
@@ -42,8 +42,9 @@ export function TerminalTabs(props: TerminalTabsProps) {
       onSelect={() => {}}
       onClose={() => {}}
       onHide={props.onHide}
+      note={peerTerminalsHiddenNote(deviceLabel)}
     >
-      <CenteredMessage>{peerReadOnlyNote(deviceLabel)}</CenteredMessage>
+      {null}
     </TerminalTabsView>
   );
 }

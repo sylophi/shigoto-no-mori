@@ -78,7 +78,7 @@ import {
   PullRequestPartsScene,
 } from "./pullRequests.tsx";
 import { SidebarPartsScene } from "./sidebarParts.tsx";
-import { TerminalPartsScene } from "./terminal.tsx";
+import { PeerTerminalsHiddenScene, TerminalPartsScene } from "./terminal.tsx";
 import {
   WorktreePagePartsScene,
   WorktreePageScene,
@@ -164,4 +164,5 @@ export const scenes = {
   folderPicker: { Scene: FolderPickerScene, ...DESKTOP },
   pathPicker: { Scene: PathPickerScene, ...DESKTOP },
   terminalParts: { Scene: TerminalPartsScene, size: [1100, 720] },
+  peerTerminalsHidden: { Scene: PeerTerminalsHiddenScene, size: [900, 320] },
 } satisfies Record<string, Scene>;

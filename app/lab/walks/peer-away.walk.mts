@@ -67,8 +67,8 @@ afterAll(async () => {
   }
 });
 
-const READ_ONLY_A =
-  /Read-only until .*\[walk-a\] turns on .Allow control from other devices./;
+const TERMINALS_HIDDEN_A =
+  /Terminals stay hidden until .*\[walk-a\] turns on .Allow control from other devices./;
 
 // Types into the terminal on screen and waits for what it answers.
 const answers = async (page: Page, marker: string) => {
@@ -115,7 +115,7 @@ it("a device tab switched to one never reached here says it is offline, and list
 // it in its place, and a new one answers once control is back.
 const revokeAndRegrant = async () => {
   await setControl(a.page, false);
-  await main(b.page).getByText(READ_ONLY_A).first().waitFor();
+  await main(b.page).getByText(TERMINALS_HIDDEN_A).waitFor();
   await expect.poll(() => b.page.locator(".xterm").count()).toBe(0);
   await setControl(a.page, true);
   await answers(b.page, "again");
@@ -158,7 +158,14 @@ it("a mirror whose runner quits stays on the copy's page, its control saying so,
   await expect
     .poll(() => mirroring.isDisabled(), { timeout: 60_000 })
     .toBe(true);
-  expect(await live.count()).toBe(1);
+  // Held, past B's own served stream closing on A's dead socket, which
+  // alone kept the pair a moment longer.
+  const away = Date.now();
+  while (Date.now() - away < 8_000) {
+    expect(await mirroring.isDisabled()).toBe(true);
+    expect(await live.count()).toBe(1);
+    await new Promise((done) => setTimeout(done, 250));
+  }
   await main(b.page).getByRole("button", { name: "Options" }).click();
   await b.page.getByText("Auto-pull", { exact: true }).waitFor();
   expect(await b.page.getByText("Transplant", { exact: true }).count()).toBe(0);

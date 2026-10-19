@@ -206,8 +206,6 @@ function useOtherHostMirrors<T>(
   const candidates = useEveryHost().filter(
     (candidate) => candidate.deviceId !== exceptDeviceId,
   );
-  // Read while it can be asked, and kept once it had a session (the
-  // forest's rule): reachability is not whether its mirrors exist.
   const wanted = useViewsWanted(candidates);
   const lists = useViews(
     hostsMirrorsAtom,

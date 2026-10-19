@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { Tabs } from "@base-ui/react/tabs";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
+import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
@@ -28,6 +29,7 @@ export function TerminalTabsView({
   onNew,
   onHide,
   empty = false,
+  note = null,
   children,
 }: {
   tabs: readonly TerminalTab[];
@@ -41,6 +43,9 @@ export function TerminalTabsView({
   // The last tab was closed and nothing opens another by itself (a
   // device's page).
   empty?: boolean;
+  // What shows in place of the tabs' bodies while none can be shown (a
+  // peer that takes no commands from here).
+  note?: string | null;
   // The picked tab's body.
   children: ReactNode;
 }) {
@@ -121,7 +126,9 @@ export function TerminalTabsView({
         )}
       </div>
       <div className="min-h-0 flex-1">
-        {empty ? (
+        {note !== null ? (
+          <CenteredMessage>{note}</CenteredMessage>
+        ) : empty ? (
           <div className="px-6 py-2 phone:px-4">
             <EmptyPanel>
               <p>No terminals open.</p>

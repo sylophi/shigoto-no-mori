@@ -8,13 +8,18 @@ export function peerReadOnlyNote(deviceLabel: string): string {
 }
 
 // The same sentence where "read-only" would be no news: a peer's files
-// are only browsed, and a script's output only followed, on its grant.
+// are only browsed, a script's output only followed, and a terminal
+// only shown, on its grant.
 export function peerFilesHiddenNote(deviceLabel: string): string {
   return `Files stay hidden until ${allowsControl(deviceLabel)}.`;
 }
 
 export function peerOutputHiddenNote(deviceLabel: string): string {
   return `Output stays hidden until ${allowsControl(deviceLabel)}.`;
+}
+
+export function peerTerminalsHiddenNote(deviceLabel: string): string {
+  return `Terminals stay hidden until ${allowsControl(deviceLabel)}.`;
 }
 
 function allowsControl(deviceLabel: string): string {
