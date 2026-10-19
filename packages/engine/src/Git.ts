@@ -489,7 +489,7 @@ export class Git extends Context.Service<
     // fails with SyncConflictsError.
     readonly pullRebaseOrMergeAndPush: (
       worktree: string,
-    ) => Effect.Effect<void, GitError | SyncConflictsError>;
+    ) => Effect.Effect<void, GitError | SyncConflictsError | GitRefusedError>;
     // Brings the primary ref's commits in the same way, after fetching
     // every remote (the primary can live on another remote than the
     // branch tracks).
@@ -497,7 +497,7 @@ export class Git extends Context.Service<
       readonly worktree: string;
       readonly repo: string;
       readonly primaryRef: string;
-    }) => Effect.Effect<void, GitError | SyncConflictsError>;
+    }) => Effect.Effect<void, GitError | SyncConflictsError | GitRefusedError>;
     // The way on from a sync that conflicts: the merge, left stopped on
     // its conflicts. Whether it stopped.
     readonly mergeUpstreamKeepingConflicts: (
