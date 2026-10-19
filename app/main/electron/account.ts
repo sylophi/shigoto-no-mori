@@ -18,6 +18,7 @@ import {
 } from "@shigomori/contracts/schemas/config";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { host, hostDeviceId } from "../hostProcess";
 import { broadcastAll } from "../ipc/register";
@@ -259,13 +260,20 @@ export async function retryParkedSignOut(): Promise<void> {
   });
 }
 
+// The account's changes, one at a time (AccountShell.transitions): the
+// calls' and a nuke's sign-out alike.
+const transitions = Semaphore.makeUnsafe(1);
+
 // A nuke's sign-out: this device revoked on the hub and its credential
 // dropped. Answers why the revoke didn't land when it stays parked for
 // later (offline, the hub down), since the parking goes with userData
 // at the next start; null when it landed, the hub had already let the
 // device go, or there was nothing to revoke. A device signed out
 // before, whose revoke is parked still, tries that one once more.
-export async function signOutForNuke(): Promise<string | null> {
+export const signOutForNuke = (): Promise<string | null> =>
+  Effect.runPromise(transitions.withPermit(Effect.promise(nukeSignOut)));
+
+async function nukeSignOut(): Promise<string | null> {
   const config = serviceConfig();
   const service = createAccountService({ baseUrl: config.hubUrl });
   const deviceId = await hostDeviceId();
@@ -356,6 +364,7 @@ export const desktopAccount: AccountShell = {
   sharedSignIn: () =>
     existsSync(join(app.getPath("userData"), CLONED_LOGIN_MARKER)),
   changed: accountChanged,
+  transitions,
   // The registry as the hub last listed it, which the host's mirrors and
   // forwards follow.
   devicesListed: (devices) =>

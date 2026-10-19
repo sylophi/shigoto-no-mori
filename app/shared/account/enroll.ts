@@ -55,6 +55,21 @@ export function effectiveDeviceIcon(
   return record?.deviceIcon ?? store.rememberedDeviceIcon() ?? detectedIcon;
 }
 
+// How long an enrollment waits on the hub, both its asks together. The
+// account's other changes (a sign-out above all) wait behind it
+// (AccountShell.transitions), so a hub that takes the enroll and never
+// answers must not hold them; with a parked revoke delivered between
+// the asks it stays inside the 30 s another tab's sign-out waits for
+// its turn (web/ipc/register.ts).
+const ENROLL_TIMEOUT_MS = 15_000;
+
+// How long a rename or an icon change waits on the hub's write, which a
+// sign-out waits behind too.
+const UPDATE_TIMEOUT_MS = 10_000;
+
+// A hub call cut at its bound, in the words the person reads.
+const hubSilent = () => new Error("The device hub didn't answer in time.");
+
 // Exchanges a fresh Clerk session token (minted by the renderer's
 // ClerkAccountSync off the live session) for the hub device
 // credential, registering a fresh key pair's public half with it, and
@@ -67,8 +82,8 @@ export async function enrollDevice(
     throw new Error("the device hub is not configured on this build");
   }
   // A record from before device keys counts as the one this enrollment
-  // replaces: the same device, keeping its name, its pick and its
-  // command-access switch.
+  // replaces: the same device, keeping its name, its pick and (read
+  // when the enrollment is stored) its command-access switch.
   const stored = deps.store.read() ?? deps.store.readWithoutKey();
   const deviceName =
     stored?.deviceName ??
@@ -84,9 +99,18 @@ export async function enrollDevice(
     icon: effectiveDeviceIcon(stored, deps.store, deps.detectedIcon),
     publicKey: deviceKey.publicKey,
   };
+  const deadline = AbortSignal.timeout(ENROLL_TIMEOUT_MS);
+  const ask = () => {
+    if (deadline.aborted) return Promise.reject(hubSilent());
+    return deps.service
+      .enroll(token, fields, deadline)
+      .catch((error: unknown) => {
+        throw deadline.aborted ? hubSilent() : error;
+      });
+  };
   let enrollment: EnrollResponse;
   try {
-    enrollment = await deps.service.enroll(token, fields);
+    enrollment = await ask();
   } catch (error) {
     // The hub still lists this device under another account, from a
     // sign-out whose revoke never reached it: deliver that revoke and
@@ -97,12 +121,16 @@ export async function enrollDevice(
     // revoke that couldn't land (the hub rate-limiting, unreachable) is
     // what the person is told, not the refusal it stands behind.
     if (!(error instanceof HubDeviceEnrolledElsewhereError)) throw error;
+    if (deadline.aborted) throw hubSilent();
     const parked = await retryParkedRevoke(deps);
     if (parked.kind === "failed") throw parked.error;
     if (parked.kind === "none") throw error;
-    enrollment = await deps.service.enroll(token, fields);
+    enrollment = await ask();
   }
   const accountId = deriveAccountId(token);
+  // The switch as it is now, not as it was before the hub answered: an
+  // off set while the enrollment waited stays off.
+  const current = deps.store.read() ?? deps.store.readWithoutKey();
   deps.store.write({
     credential: enrollment.credential,
     deviceKey: deviceKey.privateKey,
@@ -113,7 +141,7 @@ export async function enrollDevice(
     hubIcon: fields.icon,
     // A re-enrollment under the same account keeps the command-access
     // switch. Another account starts with it off.
-    ...(stored?.accountId === accountId && stored.acceptsCommands === true
+    ...(current?.accountId === accountId && current.acceptsCommands === true
       ? { acceptsCommands: true }
       : {}),
   });
@@ -217,7 +245,12 @@ export async function updateDevice(
     await pending;
     record = deps.store.read() ?? record;
   }
-  await deps.service.update(record.credential, deviceId, patch);
+  const bound = AbortSignal.timeout(UPDATE_TIMEOUT_MS);
+  await deps.service
+    .update(record.credential, deviceId, patch, bound)
+    .catch((error: unknown) => {
+      throw bound.aborted ? hubSilent() : error;
+    });
   if (deviceId !== deps.deviceId) return;
   keepFields(deps, record, {
     ...(patch.name === undefined
@@ -304,7 +337,12 @@ async function pushStale(
   stale: DeviceFields,
 ): Promise<void> {
   try {
-    await deps.service.update(credential, deps.deviceId, stale);
+    await deps.service.update(
+      credential,
+      deps.deviceId,
+      stale,
+      AbortSignal.timeout(UPDATE_TIMEOUT_MS),
+    );
   } catch (error) {
     log.warn(
       `[account] could not push this device's name or icon to the device hub: ${errorMessageOf(error)}`,
