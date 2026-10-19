@@ -19,7 +19,11 @@ import {
   HUB_PING,
   HUB_PONG,
 } from "@shigomori/contracts/hubProtocol";
-import { type DeviceHub, RELAY_BURST } from "../src/hubObject.ts";
+import {
+  type DeviceHub,
+  RELAY_BURST,
+  SILENT_AFTER_MS,
+} from "../src/hubObject.ts";
 import { buildTicket } from "../src/ticket.ts";
 import {
   BASE,
@@ -431,7 +435,7 @@ describe("what a socket may send", () => {
       env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName("acct-input-rate")),
       (hub: DeviceHub) => {
         const stopped = Date.now();
-        hub.relayClock = () => stopped;
+        hub.clock = () => stopped;
       },
     );
     // Malformed, so nothing is relayed or answered: only the count
@@ -497,20 +501,29 @@ describe("presence", () => {
   });
 });
 
-// The window shortened for the proof, on the account's object.
-async function shortSilence(accountId: string, ms: number) {
+// Stops the account's hub clock one silence past now: every socket heard
+// so far is silent, and one heard from here on is not, however long the
+// proof takes.
+async function silenceSoFar(accountId: string) {
   await runInDurableObject(
     env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName(accountId)),
     (hub: DeviceHub) => {
-      hub.silentAfterMs = ms;
+      const stopped = Date.now() + 1 + SILENT_AFTER_MS;
+      hub.clock = () => stopped;
     },
   );
 }
 
-// Pings as a device does, until the returned stop.
-function keepPinging(socket: { ws: WebSocket }): () => void {
-  const timer = setInterval(() => socket.ws.send(HUB_PING), 50);
-  return () => clearInterval(timer);
+// Pings as a device does, and answers once the hub's runtime has
+// answered.
+async function ping(socket: { ws: WebSocket }): Promise<void> {
+  const pong = new Promise<void>((resolve) => {
+    socket.ws.addEventListener("message", (event) => {
+      if (event.data === HUB_PONG) resolve();
+    });
+  });
+  socket.ws.send(HUB_PING);
+  await pong;
 }
 
 describe("a device that went silent", () => {
@@ -518,37 +531,30 @@ describe("a device that went silent", () => {
     const a = await enrollAndConnect("acct-silent", "dev-silent-a");
     const b = await enrollAndConnect("acct-silent", "dev-silent-b");
     await a.socket.untilPresence(["dev-silent-a", "dev-silent-b"]);
-    await shortSilence("acct-silent", 400);
-    const stop = keepPinging(a.socket);
-    try {
-      await sleep(700);
-      // B stopped pinging (asleep with its socket open); A did not.
-      a.socket.send({ t: "relay", to: "dev-silent-b", frame: "ask" });
-      await a.socket.untilPresence(["dev-silent-a"]);
-      expect(await a.socket.next()).toEqual({
-        t: "nack",
-        to: "dev-silent-b",
-        reason: "offline",
-      });
-      expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
-      // Back from sleep, B dials again and is a device like any other.
-      const back = await openSocket((await mintTicket(b.credential)).ticket);
-      await back.untilPresence(["dev-silent-a", "dev-silent-b"]);
-      await a.socket.untilPresence(["dev-silent-a", "dev-silent-b"]);
-      a.socket.send({ t: "relay", to: "dev-silent-b", frame: "again" });
-      await back.untilRelay("again");
-    } finally {
-      stop();
-    }
+    await silenceSoFar("acct-silent");
+    // B stopped pinging (asleep with its socket open), and A asks it.
+    a.socket.send({ t: "relay", to: "dev-silent-b", frame: "ask" });
+    await a.socket.untilPresence(["dev-silent-a"]);
+    expect(await a.socket.next()).toEqual({
+      t: "nack",
+      to: "dev-silent-b",
+      reason: "offline",
+    });
+    expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
+    // Back from sleep, B dials again and is a device like any other.
+    const back = await openSocket((await mintTicket(b.credential)).ticket);
+    await back.untilPresence(["dev-silent-a", "dev-silent-b"]);
+    await a.socket.untilPresence(["dev-silent-a", "dev-silent-b"]);
+    a.socket.send({ t: "relay", to: "dev-silent-b", frame: "again" });
+    await back.untilRelay("again");
   });
 
   it("spares the device that asks, however long since its last ping", async () => {
     const a = await enrollAndConnect("acct-silent-asker", "dev-silent-qa");
     const b = await enrollAndConnect("acct-silent-asker", "dev-silent-qb");
     await a.socket.untilPresence(["dev-silent-qa", "dev-silent-qb"]);
-    await shortSilence("acct-silent-asker", 400);
+    await silenceSoFar("acct-silent-asker");
     // Neither pings: A wakes and asks before its next ping goes out.
-    await sleep(700);
     a.socket.send({ t: "relay", to: "dev-silent-qb", frame: "ask" });
     await a.socket.untilPresence(["dev-silent-qa"]);
     expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
@@ -565,20 +571,17 @@ describe("a device that went silent", () => {
     const a = await enrollAndConnect("acct-silent-read", "dev-silent-ra");
     const b = await enrollAndConnect("acct-silent-read", "dev-silent-rb");
     await a.socket.untilPresence(["dev-silent-ra", "dev-silent-rb"]);
-    await shortSilence("acct-silent-read", 400);
-    const stop = keepPinging(a.socket);
-    try {
-      await sleep(700);
-      const online = await runInDurableObject(
-        env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName("acct-silent-read")),
-        (hub: DeviceHub) => hub.online(),
-      );
-      expect(online).toEqual(["dev-silent-ra"]);
-      await a.socket.untilPresence(["dev-silent-ra"]);
-      expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
-    } finally {
-      stop();
-    }
+    await silenceSoFar("acct-silent-read");
+    // A pings after the stop (its pong stamped later than it), B never.
+    await sleep(5);
+    await ping(a.socket);
+    const online = await runInDurableObject(
+      env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName("acct-silent-read")),
+      (hub: DeviceHub) => hub.online(),
+    );
+    expect(online).toEqual(["dev-silent-ra"]);
+    await a.socket.untilPresence(["dev-silent-ra"]);
+    expect((await b.socket.closed).code).toBe(CLOSE_SILENT);
   });
 });
 
