@@ -114,7 +114,7 @@ export const fakeApp = async (
   };
   for (const call of LoopbackGroup.requests.values()) {
     const tag = channelOf(call);
-    if (!tag.startsWith("control:")) continue;
+    if (tag.startsWith("link:")) continue;
     handlers[tag] = isInvoke(call)
       ? (input: unknown) =>
           Effect.gen(function* () {

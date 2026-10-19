@@ -417,6 +417,8 @@ const SOURCE_FATE_DONE: Partial<Record<SourceOutcome["fate"], string>> = {
   shelve: "shelved",
   teardown: "removed",
 };
+export const sourceFateDone = (fate: string): string =>
+  isSourceFate(fate) ? (SOURCE_FATE_DONE[fate] ?? "") : "";
 
 // The work landed, but something that should have followed it didn't:
 // the uncommitted changes weren't applied on the copy, the ignored files
@@ -432,7 +434,7 @@ export const caveatsOf = (result: TransferResult): ReadonlyArray<string> => [
     : []),
   ...(result.source !== undefined && !result.source.done
     ? [
-        `the source was not ${isSourceFate(result.source.fate) ? (SOURCE_FATE_DONE[result.source.fate] ?? "") : ""}: ${result.source.error}`,
+        `the source was not ${sourceFateDone(result.source.fate)}: ${result.source.error}`,
       ]
     : []),
 ];
