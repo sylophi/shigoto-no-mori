@@ -2,13 +2,18 @@
 // (EFFECT.md, section 2). `Worktrees.ts` re-exports what consumers use,
 // so they import it from there.
 import { isValidWorktreeDirName } from "@shigomori/contracts/predicates/worktreeDirName";
-import type { CommitSummary } from "@shigomori/contracts/schemas";
+import type {
+  CarryOverReport,
+  CommitSummary,
+  Worktree,
+  WorktreeIdentity as WorktreeIdentityRow,
+} from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { type AgentSession, anyWorking } from "../agentSessions.ts";
-import type { CarryOverReport, Source } from "../CarryOver.ts";
+import type { Source } from "../CarryOver.ts";
 import type { CloneFailed, CloneReport } from "../CloneCheckout.ts";
 import * as Git from "../Git.ts";
 import * as GitHub from "../GitHub.ts";
@@ -50,58 +55,20 @@ export type Located = {
   readonly worktree: WorktreeIdentity;
 };
 
-// A row of `sm worktrees list --json`. The optional fields are left out
-// when empty.
-export type WorktreeRow = {
-  readonly id: string;
-  readonly projectId: string;
-  readonly name: string;
-  readonly branch: string;
-  readonly path: string;
-  readonly ahead: number;
-  readonly behind: number;
-  readonly hasUpstream: boolean;
-  readonly hasRemote: boolean;
-  readonly divergedClean: boolean;
-  readonly behindPrimary: number;
-  readonly unpushedCount: number;
-  readonly primaryRef?: string;
-  readonly primaryBranch?: string;
-  readonly mergedIntoPrimary: boolean;
-  readonly changedCount: number;
-  readonly lastChangeAt?: number;
-  readonly createdAt?: number;
-  readonly recentCommits: ReadonlyArray<CommitSummary>;
-  readonly isPrimary: boolean;
-  readonly isExternal: boolean;
-  readonly detached: boolean;
-  readonly shelved: boolean;
-  readonly autoPull: boolean;
-  // Whether a bound agent session is working (Agents.ts), and the
-  // sessions themselves.
+// A row of `sm worktrees list --json`: the contract's worktree, with
+// its agent fields always there, the sessions as kept, and the project's
+// name. The optional fields are left out when empty.
+export type WorktreeRow = Omit<Worktree, "agentWorking" | "agentSessions"> & {
+  // Whether a bound agent session is working (Agents.ts).
   readonly agentWorking: boolean;
   readonly agentSessions: ReadonlyArray<AgentSession>;
-  readonly title?: string;
-  readonly description?: string;
   readonly projectName: string;
 };
 
-// A row of `sm worktrees list --identities --json`: the identity and
-// its marks, with the project's primary ref when asked for.
-export type IdentityRow = {
-  readonly id: string;
-  readonly projectId: string;
-  readonly name: string;
-  readonly branch: string;
-  readonly path: string;
-  readonly isPrimary: boolean;
-  readonly isExternal: boolean;
-  readonly detached: boolean;
-  readonly shelved: boolean;
-  readonly autoPull: boolean;
+// A row of `sm worktrees list --identities --json`: the contract's
+// identity, its agent mark always there.
+export type IdentityRow = Omit<WorktreeIdentityRow, "agentWorking"> & {
   readonly agentWorking: boolean;
-  readonly primaryRef?: string;
-  readonly primaryBranch?: string;
 };
 
 // The divergence of HEAD from a ref.

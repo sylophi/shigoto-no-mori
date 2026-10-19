@@ -37,6 +37,7 @@ import {
   snakeCase,
 } from "./agentHooks.ts";
 import type { GuideHarness } from "@shigomori/contracts/modules/guide";
+import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/agents";
 import {
   cloneSourceCommand,
   GUIDE_LAUNCHERS,
@@ -57,21 +58,6 @@ import * as Paths from "./Paths.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
 import * as Worktrees from "./Worktrees.ts";
-
-// One harness's hooks on this machine (`sm agents status`): whether the
-// harness is set up here at all (its config dir exists), its hooks
-// file, and whether the hooks that report its sessions are installed,
-// installed by another build (outdated: install again) or missing.
-// trusted is set for a harness that runs a hook only once the user has
-// trusted it (Codex), once installed.
-export type HarnessStatus = {
-  readonly id: string;
-  readonly label: string;
-  readonly detected: boolean;
-  readonly path: string;
-  readonly hooks: "installed" | "outdated" | "missing";
-  readonly trusted?: boolean;
-};
 
 // A session as its harness and id name it.
 export type SessionRef = {
@@ -227,7 +213,7 @@ export class Agents extends Context.Service<
     ) => Effect.Effect<void>;
     // Every harness's hooks, the --json answer of status, install and
     // uninstall alike.
-    readonly statuses: Effect.Effect<ReadonlyArray<HarnessStatus>>;
+    readonly statuses: Effect.Effect<ReadonlyArray<AgentHarnessStatus>>;
     // Installs or removes the hooks of the harnesses `ids` names, every
     // detected one without any, answering the status of each it acted
     // on. An uninstall skips a harness that isn't set up here, where an
@@ -236,7 +222,7 @@ export class Agents extends Context.Service<
       ids: ReadonlyArray<string>,
       install: boolean,
     ) => Effect.Effect<
-      ReadonlyArray<HarnessStatus>,
+      ReadonlyArray<AgentHarnessStatus>,
       UnknownHarness | HarnessMissing | HooksFileError
     >;
   }
@@ -343,7 +329,7 @@ const make = (binary: string) =>
     const status = (harness: Harness) =>
       Effect.gen(function* () {
         const file = yield* hooksPath(harness);
-        const missing: HarnessStatus = {
+        const missing: AgentHarnessStatus = {
           id: harness.id,
           label: harness.label,
           detected: yield* detected(harness),
@@ -363,10 +349,13 @@ const make = (binary: string) =>
           total !== harness.hooks.length ||
           exact.size !== harness.hooks.length
         ) {
-          return { ...missing, hooks: "outdated" } satisfies HarnessStatus;
+          return { ...missing, hooks: "outdated" } satisfies AgentHarnessStatus;
         }
         if (!harness.trust) {
-          return { ...missing, hooks: "installed" } satisfies HarnessStatus;
+          return {
+            ...missing,
+            hooks: "installed",
+          } satisfies AgentHarnessStatus;
         }
         const toml = yield* fs
           .readFileString(path.join(yield* dirOf(harness), "config.toml"))
@@ -388,7 +377,7 @@ const make = (binary: string) =>
           ...missing,
           hooks: "installed",
           trusted,
-        } satisfies HarnessStatus;
+        } satisfies AgentHarnessStatus;
       });
 
     const statuses = Effect.forEach(HARNESSES, status).pipe(
@@ -472,7 +461,7 @@ const make = (binary: string) =>
           picked.push(harness);
         }
       }
-      const done: Array<HarnessStatus> = [];
+      const done: Array<AgentHarnessStatus> = [];
       for (const harness of picked) {
         if (!(yield* detected(harness))) {
           if (install) {
