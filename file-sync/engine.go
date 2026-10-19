@@ -176,13 +176,15 @@ func (h mirrorGatewayHandler) Connect(
 		return nil, fmt.Errorf("mirror gateway unreachable: %w", err)
 	}
 	// The handshake below (our preface exchange, then Mutagen's) is a
-	// series of blocking reads with only the wall-clock deadline for
-	// company. Cancellation must cut it short too: a daemon shutting
-	// down (the host closed the pipe or sent SIGTERM) waits for
-	// in-flight connects, and a peer that accepted but never answers
-	// would otherwise hold the exit for the full timeout. Closing the
-	// conn unblocks every read. Once the endpoint is established the
-	// conn is Mutagen's and this watcher stands down.
+	// series of blocking reads. The preface's have a deadline; Mutagen's
+	// after it have none of ours (the conn is cleared for it), only
+	// cancellation and the device link's own liveness cut, which closes
+	// the bridged socket. Cancellation must cut either short: a daemon
+	// shutting down (the host closed the pipe or sent SIGTERM) waits
+	// for in-flight connects, and a peer that accepted but never answers
+	// would otherwise hold the exit. Closing the conn unblocks every
+	// read. Once the endpoint is established the conn is Mutagen's and
+	// this watcher stands down.
 	handshakeDone := make(chan struct{})
 	defer close(handshakeDone)
 	go func() {
@@ -277,25 +279,19 @@ type mirrorRequest struct {
 	// Ignore patterns in Mutagen's gitignore-like syntax, on top of
 	// the .git pointer that is always held back.
 	Ignores []string `json:"ignores,omitempty"`
-	// A pull: the remote is alpha and files flow one way, remote to
-	// local (Mutagen's one-way-safe), so nothing this side holds ever
-	// reaches the peer. A transplant's one-shot file transfer. Off, the
-	// session is a mirror: local alpha, two-way-safe.
-	Pull bool `json:"pull,omitempty"`
-	// A push, the pull turned around: local stays alpha and files flow
-	// one way, local to remote, so nothing the peer holds ever lands
-	// here. A sent worktree's one-shot file transfer. Pull wins when
-	// both are set.
-	Push bool `json:"push,omitempty"`
-	// A replica: local alpha, one way, and the remote made an exact
-	// copy of the local side (Mutagen's one-way-replica): what the
-	// remote holds that the local side does not is removed, and a path
-	// both hold differently takes the local version. A mirror start's
-	// first pass, so the session opened after it begins on two
-	// identical trees instead of a conflict for every file the copy's
-	// create made on its own (carry-over, the setup script). Pull and
-	// push win over it.
-	Replica bool `json:"replica,omitempty"`
+	// Which way files flow. Absent, a mirror: local alpha, two-way-safe.
+	//   - pull: the remote is alpha and files flow remote to local
+	//     (Mutagen's one-way-safe), so nothing this side holds reaches
+	//     the peer. A transplant's one-shot file transfer.
+	//   - push: the pull turned around, local to remote. A sent
+	//     worktree's one-shot file transfer.
+	//   - replica: local to remote, the remote made an exact copy
+	//     (one-way-replica): what only it holds is removed, and a path
+	//     both hold differently takes the local version. A mirror
+	//     start's first pass, so the session after it begins on two
+	//     identical trees instead of a conflict for every file the
+	//     copy's create made on its own (carry-over, the setup script).
+	Direction string `json:"direction,omitempty"`
 	// terminate, pause, resume
 	Session string `json:"session,omitempty"`
 }
@@ -376,8 +372,9 @@ type mirrorChange struct {
 	Kind string `json:"kind"`
 }
 
-// Runs the daemon until `in` hits EOF or ctx is cancelled (the host
-// closed the pipe, or sent SIGTERM), whichever comes first. Every
+// Runs the daemon until `in` hits EOF, ctx is cancelled (the host
+// closed the pipe, or sent SIGTERM) or its state stream ends, whichever
+// comes first. Every
 // request is served on its own goroutine (a create blocks on two
 // endpoint connects), responses and state docs interleave on `out` one
 // JSON line at a time. On the way out the context is cancelled BEFORE
@@ -411,9 +408,14 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	defer cancel()
 	emitter := &lineEmitter{w: out}
 	emitter.emit(map[string]any{"event": "ready"})
-	go streamMirrorState(ctx, manager, emitter)
+	stateDone := make(chan error, 1)
+	go func() { stateDone <- streamMirrorState(ctx, manager, emitter) }()
 
+	// A request starts only while the daemon is open, so none runs after
+	// the wait below, past the manager's shutdown.
 	var pending sync.WaitGroup
+	var opening sync.Mutex
+	closed := false
 	// The request reader runs on its own goroutine because a blocked
 	// Scan cannot observe ctx: a SIGTERM must end the daemon even while
 	// stdin stays open, and the reader is then simply abandoned (the
@@ -432,23 +434,42 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 				emitter.emit(mirrorResponse{OK: false, Error: "malformed request: " + err.Error()})
 				continue
 			}
-			if ctx.Err() != nil {
+			opening.Lock()
+			if closed {
+				opening.Unlock()
 				break
 			}
 			pending.Go(func() {
 				emitter.emit(handleMirrorRequest(ctx, manager, req))
 			})
+			opening.Unlock()
 		}
 		readerDone <- scanner.Err()
 	}()
-	var readErr error
+	var ended error
+	stateEnded := false
 	select {
-	case readErr = <-readerDone:
+	case ended = <-readerDone:
+	case ended = <-stateDone:
+		// Ending on its own, the stream would leave a daemon whose state
+		// no longer moves (Mutagen's tracker terminated, which it does
+		// only at shutdown today): the daemon ends instead, and the
+		// host's restart ladder brings up one that moves.
+		stateEnded = true
+		if ended != nil {
+			ended = fmt.Errorf("mirror state: %w", ended)
+		}
 	case <-ctx.Done():
 	}
 	cancel()
+	opening.Lock()
+	closed = true
+	opening.Unlock()
 	pending.Wait()
-	return readErr
+	if !stateEnded {
+		<-stateDone
+	}
+	return ended
 }
 
 // v2 said what a session is in three labels (copySide, mirrorBranch,
@@ -548,6 +569,10 @@ func handleMirrorRequest(ctx context.Context, manager *synchronization.Manager, 
 		return respond(req.Session, manager.Pause(ctx, one(), ""))
 	case "resume":
 		return respond(req.Session, manager.Resume(ctx, one(), ""))
+	case "ping":
+		// The host's liveness check: answered at once, whatever else is
+		// in flight (MirrorDaemon.ts).
+		return respond("", nil)
 	default:
 		return respond("", fmt.Errorf("unknown op %q", req.Op))
 	}
@@ -607,13 +632,17 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	ignores = append(ignores, mirrorGitPointerIgnore)
 	alpha, beta := local, remote
 	mode := core.SynchronizationMode_SynchronizationModeTwoWaySafe
-	if req.Pull {
+	switch req.Direction {
+	case "":
+	case "pull":
 		alpha, beta = remote, local
 		mode = core.SynchronizationMode_SynchronizationModeOneWaySafe
-	} else if req.Push {
+	case "push":
 		mode = core.SynchronizationMode_SynchronizationModeOneWaySafe
-	} else if req.Replica {
+	case "replica":
 		mode = core.SynchronizationMode_SynchronizationModeOneWayReplica
+	default:
+		return "", fmt.Errorf("unknown direction %q (pull, push or replica, or none for a mirror)", req.Direction)
 	}
 	configuration := &synchronization.Configuration{
 		SynchronizationMode: mode,
@@ -697,7 +726,8 @@ func mirrorSessionName(name string) string {
 // changed (the projected doc is byte-identical to the last one).
 const mirrorStateMinInterval = 200 * time.Millisecond
 
-func streamMirrorState(ctx context.Context, manager *synchronization.Manager, emitter *lineEmitter) {
+// Nil when ctx ends it.
+func streamMirrorState(ctx context.Context, manager *synchronization.Manager, emitter *lineEmitter) error {
 	var index uint64
 	var last []byte
 	var lastPoll time.Time
@@ -710,16 +740,16 @@ func streamMirrorState(ctx context.Context, manager *synchronization.Manager, em
 		if wait := mirrorStateMinInterval - time.Since(lastPoll); wait > 0 {
 			select {
 			case <-ctx.Done():
-				return
+				return nil
 			case <-time.After(wait):
 			}
 		}
 		next, states, err := manager.List(ctx, &selection.Selection{All: true}, index)
 		if err != nil {
-			if ctx.Err() == nil {
-				emitter.emit(map[string]any{"event": "error", "error": err.Error()})
+			if ctx.Err() != nil {
+				return nil
 			}
-			return
+			return err
 		}
 		index = next
 		doc := mirrorStateDoc{Event: "state", Sessions: make([]mirrorSessionState, 0, len(states))}

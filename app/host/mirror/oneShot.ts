@@ -105,11 +105,7 @@ export const transferFilesOnce = (
                 [MIRROR_LABEL_MODE]: transferModeFor(token),
               },
               ignores: input.ignores,
-              ...(input.direction === "push"
-                ? { push: true }
-                : input.direction === "replica"
-                  ? { replica: true }
-                  : { pull: true }),
+              direction: input.direction ?? "pull",
             }),
           ),
           (session) => waitSettled(daemon, session, onProgress),

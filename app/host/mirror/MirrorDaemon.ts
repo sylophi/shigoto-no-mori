@@ -98,7 +98,6 @@ const DaemonEventSchema = Schema.Union([
     event: Schema.Literal("state"),
     sessions: Schema.Array(MirrorSessionRawSchema),
   }),
-  Schema.Struct({ event: Schema.Literal("error"), error: Schema.String }),
 ]);
 type DaemonEvent = typeof DaemonEventSchema.Type;
 const decodeDaemonEvent = Schema.decodeUnknownResult(DaemonEventSchema);
@@ -145,8 +144,9 @@ const REQUEST_TIMEOUT_MS = 120_000;
 // A request still waiting this long asks whether the daemon answers at
 // all, and one that doesn't answer a ping within PING_ANSWER_MS of the
 // host running is replaced. Its reader answers a ping at once whatever
-// else it is running (requests run beside it, file-sync/engine.go), so
-// silence means a stopped or hung process, not a slow create.
+// else it is running (its `ping` verb, requests running beside it,
+// file-sync/engine.go), so silence means a stopped or hung process, not
+// a slow create.
 const STALL_CHECK_MS = 30_000;
 const PING_ANSWER_MS = 10_000;
 // A create whose answer never came (it timed out, or the daemon went
@@ -306,8 +306,6 @@ const make = (options: Options) =>
             Effect.andThen(changed),
             Effect.andThen(endAbandoned(event.sessions)),
           );
-        case "error":
-          return Effect.logWarning(`[mirror] daemon error: ${event.error}`);
       }
     };
 
@@ -535,9 +533,8 @@ const make = (options: Options) =>
         );
       });
 
-    // The daemon answers every op it reads, one it doesn't know with a
-    // refusal, so a ping needs no verb of its own: any answer is the
-    // daemon answering. Silence replaces it.
+    // `ping` is the protocol's liveness verb, which the daemon answers
+    // at once: silence replaces it.
     const pingOrReplace = Effect.gen(function* () {
       checking = true;
       const answered = Option.isSome(
