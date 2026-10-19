@@ -91,10 +91,10 @@ const refused = (method: string, cause?: unknown) =>
 // rename, so a crash mid-write leaves the previous one. A change is
 // made on a copy of the entries, which become it only once the file
 // holds it, so a failed write leaves them as the file has them and a
-// retry writes again. A file that is
-// there but cannot be read or parsed is never written over: its
-// entries may still be recoverable, so the store reads empty and
-// refuses writes, and the user signs in again for this session.
+// retry writes again. A file that is there but cannot be read or
+// parsed is never written over: its entries may still be recoverable,
+// so the store reads empty and refuses writes, and the user signs in
+// again for this session.
 const jsonFileStore = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
