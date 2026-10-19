@@ -19,6 +19,8 @@ import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as HostPushes from "@host/lib/HostPushes";
 import * as Shell from "@host/lib/Shell";
 import * as Moves from "@host/lib/sync/Moves";
+import * as AccountPeers from "@host/lib/control/AccountPeers";
+import { nameOf } from "@host/lib/control/plan";
 import type { HostServices } from "@host/process/services";
 import {
   canonicalDataDirName,
@@ -38,12 +40,46 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
 
 let moveInFlight = false;
 
+// What the moves have under way, the peers bringing from here by their
+// names on the account, read for a moment only: a refusal's words are
+// not worth holding the move's lock on an unreachable hub.
+const underWayByName = (
+  moves: Moves.Moves["Service"],
+  account: AccountPeers.AccountPeers["Service"],
+) =>
+  Effect.gen(function* () {
+    const { moving, bringing } = yield* moves.underWay;
+    if (bringing.length === 0) return { moving, bringing };
+    const devices = yield* account.listDevices.pipe(
+      Effect.timeoutOrElse({
+        duration: "2 seconds",
+        orElse: () => Effect.succeed([]),
+      }),
+      Effect.orElseSucceed(() => []),
+    );
+    const named = new Set(
+      bringing.map((deviceId) => {
+        const device = devices.find((each) => each.deviceId === deviceId);
+        return device === undefined ? "another device" : nameOf(device);
+      }),
+    );
+    const names = [...named].toSorted((x, y) =>
+      x === "another device" ? 1 : y === "another device" ? -1 : 0,
+    );
+    const [first = "", ...rest] = names;
+    return {
+      moving,
+      bringing: [first.charAt(0).toUpperCase() + first.slice(1), ...rest],
+    };
+  });
+
 // What follows a data-folder move that failed. Before the host let go
 // of the folder, nothing: the app carries on where it was. After, it
 // runs without its loopback and store watch, so it restarts: for a
 // peer's move at once, nobody here to ask; for one asked here, once
 // the user has read why (the shell's dialog, whose one button
 // restarts and whose dismissal quits).
+
 export const afterFailedMove = ({
   watchersStopped,
   unattended,
@@ -100,7 +136,10 @@ export const runtimeHandlers = {
       yield* moveDataDir(parentDir, {
         place: yield* sessionPlace,
         killAllScripts: scripts.stopAll(),
-        movesUnderWay: (yield* Moves.Moves).underWay,
+        movesUnderWay: underWayByName(
+          yield* Moves.Moves,
+          yield* AccountPeers.AccountPeers,
+        ),
         beforeMove: Effect.suspend(() => {
           watchersStopped = true;
           return holders.release;

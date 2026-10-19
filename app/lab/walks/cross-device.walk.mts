@@ -7,6 +7,7 @@
 // what they say and the disks for what git did.
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Page } from "playwright-core";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { type Devices, startDevices } from "./lib/devices.mts";
 import type { Lab } from "./lib/labApp.mts";
@@ -225,6 +226,28 @@ it("sends a worktree to a device with the project at another path, its own ignor
   await expectGone(a, name);
 });
 
+// A formatBytes size back in bytes.
+const sizeOf = (value = "0", unit = "B") =>
+  Number(value) * 1024 ** ["B", "KB", "MB", "GB", "TB"].indexOf(unit);
+
+// Whether a transfer dialog's caption shows its files step under way on
+// at least `bytes` (formatBytes: base 1024, B to TB).
+const filesStepUnderWay = async (page: Page, bytes: number) => {
+  const caption = page
+    .getByRole("dialog")
+    .last()
+    .getByText(/^[\d.]+ [KMGT]?B of [\d.]+ [KMGT]?B$/);
+  if ((await caption.count()) === 0) return false;
+  const match = /^([\d.]+) ([KMGT]?B) of ([\d.]+) ([KMGT]?B)$/.exec(
+    (await caption.first().textContent()) ?? "",
+  );
+  if (match === null) return false;
+  const [, done, doneUnit, total, totalUnit] = match;
+  const sent = sizeOf(done, doneUnit);
+  const whole = sizeOf(total, totalUnit);
+  return whole >= bytes * 0.9 && sent < whole;
+};
+
 // What a device's window reads off the hub, and its own id.
 const hubView = (lab: Lab) =>
   lab.page.evaluate(
@@ -257,10 +280,18 @@ it("sends a worktree while the hub goes away: it completes over the direct link 
   await send();
   let outcome: string | null = null;
   try {
-    expect(
-      await ended.isVisible(),
-      "the send ended before the hub was cut",
-    ).toBe(false);
+    // The cut lands while the files step carries the big file: the
+    // dialog's caption reads "<bytes> of <total>" with the total that
+    // file's, short of it.
+    await expect
+      .poll(() => filesStepUnderWay(a.page, bigBytes), {
+        timeout: 120_000,
+        interval: 100,
+      })
+      .toBe(true);
+    expect(await ended.isVisible(), "the send ended before the cut").toBe(
+      false,
+    );
     await devices.hub.pause();
     await ended.waitFor({ timeout: 180_000 });
     outcome = await ended.textContent();

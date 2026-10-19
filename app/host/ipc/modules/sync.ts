@@ -1,6 +1,6 @@
 // The wire for moving a worktree between devices: the handlers decode,
 // call and answer. The landing is host/lib/sync/landing.ts, the pull
-// and the send host/lib/sync/move.ts, the receipts and the teardown
+// and the send host/lib/sync/move.ts, the teardown
 // host/lib/sync/receipts.ts, and a source's answers
 // host/lib/sync/sourceLink.ts.
 import {
@@ -12,16 +12,12 @@ import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Git from "@shigomori/engine/Git";
 import * as Worktrees from "@host/lib/Worktrees";
 import * as Effect from "effect/Effect";
-import {
-  findProject,
-  findProjectAndWorktree,
-  findWorktreePath,
-} from "@host/lib/projects";
+import { findProject, findWorktreePath } from "@host/lib/projects";
 import * as Moves from "@host/lib/sync/Moves";
 import {
   attachLinkFarEnd,
-  serveSource,
   linkSource,
+  serveOpened,
 } from "@host/lib/sync/sourceLink";
 import { scriptEventNotifier } from "../scriptRun";
 import type { HostServices } from "@host/process/services";
@@ -69,21 +65,9 @@ export const syncHandlers = {
     ),
 
   // A pull's link (and the git follower's fetch): this host is the
-  // source, answering until the peer is done. The open returns once
-  // the link is attached, and the serving runs on without it.
-  openSource: ({ projectId, worktreeId, channelId }, ctx) =>
-    Effect.gen(function* () {
-      const link = attachLinkFarEnd(ctx, channelId);
-      const { project, worktree } = yield* findProjectAndWorktree(
-        projectId,
-        worktreeId,
-      ).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
-      // Served past this call's answer, its answers continuing the
-      // trace of the peer's call.
-      yield* Effect.forkDetach(
-        Effect.ignore(serveSource(link, project, worktree.id)),
-      );
-    }),
+  // source. The open returns once the link is attached, and the
+  // serving runs on without it.
+  openSource: (input, ctx) => serveOpened(ctx, input),
 
   // A send's landing, run here for the sender (host/lib/sync/landing.ts).
   receiveWorktree: landForSender,

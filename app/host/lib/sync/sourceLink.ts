@@ -68,7 +68,12 @@ import { incomingRef } from "@shigomori/engine/Bundle";
 import * as Git from "@shigomori/engine/Git";
 import { PeerReach, peerChannelsFor, peerSyncFor } from "@host/ipc/PeerReach";
 import { mintHexId } from "@host/lib/hexId";
-import { defaultBranchOf, handedCloneUrl } from "@host/lib/projects";
+import {
+  defaultBranchOf,
+  findProjectAndWorktree,
+  handedCloneUrl,
+} from "@host/lib/projects";
+import * as Moves from "@host/lib/sync/Moves";
 import { requireChannels } from "@host/socket/channelStreams";
 
 // What the source's answers reach: the engine (its captures and
@@ -83,7 +88,7 @@ export const LINK_GONE = "the other device went away mid-transfer";
 const MAX_LINE_BYTES = 1 << 20;
 
 // What a link, or the other end over it, refused.
-export class LinkError extends Schema.TaggedError<LinkError>()("LinkError", {
+class LinkError extends Schema.TaggedError<LinkError>()("LinkError", {
   reason: Schema.String,
 }) {
   override get message(): string {
@@ -566,7 +571,7 @@ const answerAsk = (
 // `failure`, so a caller whose run failed can tell its own trouble
 // from the other device's). A malformed message, or a bundle cut off
 // halfway, resets the link and fails.
-export const serveSource = (
+const serveSource = (
   link: Link,
   project: Project,
   worktreeId: string,
@@ -628,6 +633,32 @@ export const serveSource = (
   }).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
 };
 
+// A link a peer opened to ask this host as its source (sync:openSource):
+// attached before the lookup, and reset when the worktree isn't here.
+// The serving runs on past the call's answer, its answers continuing
+// the trace of the peer's call, until the peer is done or the graph
+// closes, which resets the link.
+export const serveOpened = Effect.fn("SourceLink.serveOpened")(function* (
+  ctx: HandlerContext,
+  input: { projectId: string; worktreeId: string; channelId: string },
+) {
+  const link = attachLinkFarEnd(ctx, input.channelId);
+  const { project, worktree } = yield* findProjectAndWorktree(
+    input.projectId,
+    input.worktreeId,
+  ).pipe(Effect.tapError(() => Effect.sync(() => link.reset())));
+  const serving = serveSource(link, project, worktree.id).pipe(
+    Effect.onInterrupt(() => Effect.sync(() => link.reset())),
+    Effect.ignore,
+  );
+  const moves = yield* Moves.Moves;
+  // A peer's bringing from here, counted under it; this machine's own
+  // caller has none.
+  yield* ctx.callerDeviceId === undefined
+    ? moves.fork(serving)
+    : moves.serve(ctx.callerDeviceId, serving);
+});
+
 // The clone's questions: the default branch, as the local branch the
 // clone checks out and as the source's ref it is made of (what the
 // source's checkout is measured against: "refs/remotes/origin/main"
@@ -657,7 +688,9 @@ const cloneFactsOf = (project: Project) =>
 // peer's landing runs under the link (Link.closed) and stops with it.
 // The peer's answer itself is not cut short: an interrupt stops
 // waiting at once, and an answer already on its way when it came is a
-// landing that finished, which `onLate` gets to undo.
+// landing that finished, which `onLate` gets to undo. The call and the
+// undo run on Moves, so they count as under way until they end, and the
+// graph's close ends them.
 export const offer = <T, E, R, R2 = never>(
   deviceId: string,
   project: Project,
@@ -690,13 +723,14 @@ export const offer = <T, E, R, R2 = never>(
         serveSource(link, project, worktreeId, { onProgress, failure }),
       ),
     );
-    const answering = yield* Effect.forkDetach(openOnPeer(channelId));
+    const moves = yield* Moves.Moves;
+    const answering = yield* moves.fork(openOnPeer(channelId));
     return yield* Fiber.join(answering).pipe(
       Effect.onInterrupt(() =>
         onLate === undefined
           ? Effect.void
           : Effect.asVoid(
-              Effect.forkDetach(
+              moves.fork(
                 Fiber.join(answering).pipe(
                   Effect.flatMap(onLate),
                   Effect.ignore,

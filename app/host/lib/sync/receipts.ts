@@ -1,5 +1,6 @@
-// What each move recorded, and the source teardown that decides on it:
-// the teardown runs only when the receipt proves nothing can be lost.
+// The source teardown, which decides on what the move recorded (its
+// receipt, kept by Moves): it runs only when the receipt proves nothing
+// can be lost.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
@@ -7,6 +8,7 @@ import {
   type SyncReceipt,
   type SyncTeardownSourceResult,
 } from "@shigomori/contracts/modules/sync";
+import * as Moves from "@host/lib/sync/Moves";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { movedSourceChange } from "@shigomori/contracts/movedSource";
 import {
@@ -21,37 +23,6 @@ import {
   peerSource,
 } from "@host/lib/sync/sourceLink";
 
-// What each move captured and applied, by source worktree, for the
-// teardown that may follow, kept by the device that ran the move (the
-// destination after a pull, the source after a send, which the
-// destination's landing hands its receipt). Read by the teardown, so
-// the data-loss rule runs on the hosts' own facts: a caller cannot
-// claim a capture landed when it did not. The branch tip and the
-// capture's tree let the teardown prove the source is still exactly
-// what moved, however long the user took to decide. Ephemeral by
-// design (a restart forgets, and the teardown then refuses), bounded
-// so a host that moves worktrees for weeks never grows it.
-const RECEIPT_LIMIT = 64;
-const receipts = new Map<string, SyncReceipt>();
-const receiptKey = (move: SyncMoveRef) =>
-  `${move.direction}:${move.deviceId}/${move.projectId}/${move.worktreeId}`;
-export function remember(move: SyncMoveRef, receipt: SyncReceipt): void {
-  const key = receiptKey(move);
-  receipts.delete(key);
-  receipts.set(key, receipt);
-  for (const oldest of receipts.keys()) {
-    if (receipts.size <= RECEIPT_LIMIT) break;
-    receipts.delete(oldest);
-  }
-}
-
-// The source teardown, after either move. The move's own receipt
-// decides whether it may run at all. Without one (no move, or a
-// restart in between) the call refuses outright rather than guess.
-// The receipt is kept until a teardown actually removes the source,
-// so a refused or failed one can be retried. A pull's source is the
-// peer's worktree, checked over a link and removed through the
-// peer's grant-gated delete. A send's is this device's own.
 // No receipt for the move asked about, in the words of its direction.
 class NoReceiptError extends Schema.TaggedError<NoReceiptError>()(
   "NoReceiptError",
@@ -64,6 +35,13 @@ class NoReceiptError extends Schema.TaggedError<NoReceiptError>()(
   }
 }
 
+// The source teardown, after either move. The move's own receipt
+// (Moves.remember) decides whether it may run at all. Without one (no
+// move, or a restart in between) the call refuses outright rather than
+// guess. The receipt is kept until a teardown actually removes the
+// source, so a refused or failed one can be retried. A pull's source is
+// the peer's worktree, checked over a link and removed through the
+// peer's grant-gated delete. A send's is this device's own.
 export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
   move: SyncMoveRef,
   removeHere: (removal: {
@@ -74,8 +52,8 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
     expect: MovedSource;
   }) => Effect.Effect<unknown, E, R>,
 ) {
-  const key = receiptKey(move);
-  const receipt = receipts.get(key);
+  const moves = yield* Moves.Moves;
+  const receipt = yield* moves.receiptOf(move);
   const pulled = move.direction === "pull";
   if (receipt === undefined) return yield* new NoReceiptError({ pulled });
   const target = {
@@ -112,7 +90,7 @@ export const teardownSource = Effect.fn("Sync.teardownSource")(function* <E, R>(
         : removeHere(removal);
     },
   );
-  if (result.sourceRemoved) receipts.delete(key);
+  if (result.sourceRemoved) yield* moves.forget(move);
   return result;
 });
 

@@ -22,6 +22,10 @@
 //   - a channel id is single use, a finished link is gone at both
 //     ends, a requester that gives up mid-bundle leaves no temp file on
 //     the source, and an ask outside the ref allowlist resets the link;
+//   - what serves or waits past a call ends with its owner: a send
+//     cancelled mid-bundle and a late answer's undo count as under way
+//     until they're done, and the host's moves closing ends a serving
+//     with its temp dir and its channel;
 //   - unpacking a corrupted bundle fails with the coded "bad-bundle";
 //   - the push direction (the git follower's) lands a >2.5 MB bundle
 //     under refs/shigomori/ on the peer.
@@ -62,6 +66,8 @@ import {
   SyncPullProgressSchema,
 } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import { forwardContract } from "@shigomori/contracts/modules/forward";
+import type { HandlerContext } from "@shared/ipc/transport";
 import { WorktreeSchema } from "@shigomori/contracts/schemas";
 import * as Layer from "effect/Layer";
 import * as Tracer from "effect/Tracer";
@@ -80,18 +86,24 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { sendWorktree as sendWorktreeOn } from "@host/lib/sync/move";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Scope from "effect/Scope";
 import { hostContext, runHost, type Services } from "./lib/hostRuntime.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { EngineChanges } from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import * as Scripts from "@host/lib/Scripts";
+import * as Moves from "@host/lib/sync/Moves";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
 import * as Git from "@shigomori/engine/Git";
 import { followDescription as followDescriptionOn } from "@host/lib/sync/worktreeDescription";
 import {
   attachLink,
+  attachLinkFarEnd,
   BundleAnswerSchema,
   LINK_GONE,
   offer,
@@ -165,6 +177,14 @@ const changesUnderWay = async () =>
   (
     await runHost(Effect.map(EngineChanges, (changes) => changes.underWay()))
   ).map(({ kind }) => kind);
+
+// Whether the host's moves read a move under way (Moves.underWay).
+const movesUnderWay = () =>
+  runHost(
+    Effect.flatMap(Moves.Moves, (moves) =>
+      Effect.map(moves.underWay, ({ moving }) => moving),
+    ),
+  );
 
 // The sandbox, the scrubbed process.env with pinned idents, the git
 // wrappers, and the engine on the sandbox's data dir
@@ -280,6 +300,13 @@ let listener: DirectWire["listener"];
 let toListener: DirectWire["toListener"];
 let sync: EffectClient<typeof syncContract>;
 let worktreesOverWire: EffectClient<typeof worktreesContract>;
+let forwardOverWire: EffectClient<typeof forwardContract>;
+// What the listener's forward:open does: a proof's own far end of a
+// link, or a call run on services of the proof's.
+let onPeerOpen: (
+  channelId: string,
+  ctx: HandlerContext,
+) => Effect.Effect<void> = () => Effect.void;
 let dirtyRef: string;
 let observed: ReturnType<typeof observedChannels>;
 let worktreeRef: { projectId: string; worktreeId: string };
@@ -380,8 +407,20 @@ beforeAll(async () => {
       // the Electron binding's concern, so a no-op satisfies the
       // registrar.
       [worktreesContract, worktreesHandlers],
+      // A proof's own far end of a link (onPeerOpen).
+      [
+        forwardContract,
+        {
+          open: ({ channelId }: { channelId: string }, ctx: HandlerContext) =>
+            onPeerOpen(channelId, ctx),
+        },
+      ],
     ],
   }));
+  forwardOverWire = effectClient(
+    forwardContract,
+    linkOver(toListener.transport),
+  );
   sync = effectClient(syncContract, linkOver(toListener.transport));
   worktreesOverWire = effectClient(
     worktreesContract,
@@ -664,6 +703,176 @@ it("lifecycle: finished links are gone at both ends, a channel id is single use,
     () => Effect.runPromise(bad.link.read),
     new RegExp(LINK_GONE),
   );
+});
+
+// ---- What runs past a call, held by the host's moves (Moves.fork):
+// a source's serving, a send's wait on the peer's answer and the undo
+// of an answer that came after a cancel.
+describe("serving past the call", () => {
+  const caller = handlerCtx();
+  const runMove = <A, E>(key: string, move: Effect.Effect<A, E, Services>) => {
+    const running = runHost(
+      Effect.flatMap(Moves.Moves, (moves) => moves.run(caller, key, move)),
+    );
+    running.catch(() => {});
+    return running;
+  };
+  const cancel = (key: string) =>
+    runHost(Effect.flatMap(Moves.Moves, (moves) => moves.cancel(caller, key)));
+  let tmp: string;
+  let tmpBefore: string | undefined;
+  beforeAll(() => {
+    tmp = join(sandbox, "tmp-serving");
+    mkdirSync(tmp);
+    tmpBefore = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+  });
+  afterAll(() => {
+    if (tmpBefore === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = tmpBefore;
+    onPeerOpen = () => Effect.void;
+  });
+
+  it("a send cancelled mid-bundle is under way until the peer has answered, and leaves no temp dir and no channel", async () => {
+    // The peer asks for the huge bundle, reads none of it, and answers
+    // only once the link is gone and `answer` opens.
+    const answer = Deferred.makeUnsafe<void>();
+    let channel: string | undefined;
+    let answered = false;
+    onPeerOpen = (channelId, ctx) =>
+      Effect.gen(function* () {
+        channel = channelId;
+        const link = attachLinkFarEnd(ctx, channelId);
+        yield* Effect.ignore(
+          Effect.andThen(
+            link.write({
+              ask: "bundle",
+              refs: ["refs/heads/huge"],
+              haves: [baseSha],
+            }),
+            link.read,
+          ),
+        );
+        yield* Deferred.await(link.closed);
+        yield* Deferred.await(answer);
+        answered = true;
+      });
+    const source = await findProjectOrThrow(sourceProjectId);
+    const sending = runMove(
+      "serving-cancelled",
+      offer(LISTENER, source, worktreeId, (channelId) =>
+        forwardOverWire.open({ port: 1, channelId }),
+      ),
+    );
+    await waitFor(
+      () => syncTempDirs(tmp).length === 1,
+      "the send to hold its bundle while the peer stalls",
+    );
+    assert.equal(await cancel("serving-cancelled"), true);
+    await assert.rejects(sending, /The move was cancelled/);
+    assert.equal(syncTempDirs(tmp).length, 0, "the bundle's temp dir stayed");
+    assert.ok(channel !== undefined && !observed.has(channel));
+    assert.equal(
+      await movesUnderWay(),
+      true,
+      "the peer's answer still to come reads as nothing under way",
+    );
+    Deferred.doneUnsafe(answer, Exit.void);
+    await waitFor(async () => !(await movesUnderWay()), "the send to be over");
+    assert.equal(answered, true);
+  });
+
+  it("an answer that came after the cancel is undone before nothing reads under way", async () => {
+    const answer = Deferred.makeUnsafe<void>();
+    const undo = Deferred.makeUnsafe<void>();
+    let asked = false;
+    let undoing = false;
+    let undone = false;
+    onPeerOpen = (channelId, ctx) =>
+      Effect.gen(function* () {
+        attachLinkFarEnd(ctx, channelId);
+        asked = true;
+        yield* Deferred.await(answer);
+      });
+    const source = await findProjectOrThrow(sourceProjectId);
+    const sending = runMove(
+      "late-answer",
+      offer(
+        LISTENER,
+        source,
+        worktreeId,
+        (channelId) => forwardOverWire.open({ port: 1, channelId }),
+        undefined,
+        () =>
+          Effect.gen(function* () {
+            undoing = true;
+            yield* Deferred.await(undo);
+            undone = true;
+          }),
+      ),
+    );
+    await waitFor(() => asked, "the peer to be asked");
+    assert.equal(await cancel("late-answer"), true);
+    await assert.rejects(sending, /The move was cancelled/);
+    Deferred.doneUnsafe(answer, Exit.void);
+    await waitFor(() => undoing, "the late answer's undo to start");
+    assert.equal(
+      await movesUnderWay(),
+      true,
+      "a late answer's undo still running reads as nothing under way",
+    );
+    Deferred.doneUnsafe(undo, Exit.void);
+    await waitFor(async () => !(await movesUnderWay()), "the undo to be over");
+    assert.equal(undone, true);
+  });
+
+  it("the host's moves closing mid-bundle ends the serving, its temp dir and its channel", async () => {
+    // The listener's openSource on moves of this proof's own, closed as
+    // the graph closes them, the link it serves left up.
+    const scope = Scope.makeUnsafe();
+    const moves = await runHost(
+      Layer.buildWithScope(Layer.fresh(Moves.layer), scope),
+    );
+    const services = Context.merge(await hostContext(), moves);
+    onPeerOpen = (channelId, ctx) =>
+      syncHandlers
+        .openSource({ ...worktreeRef, channelId }, ctx)
+        .pipe(Effect.orDie, Effect.provideContext(services));
+    const mux = await toListener.channels();
+    const channelId = mintHexId();
+    const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
+    try {
+      await runHost(forwardOverWire.open({ port: 1, channelId }));
+      await Effect.runPromise(
+        link.write({
+          ask: "bundle",
+          refs: ["refs/heads/huge"],
+          haves: [baseSha],
+        }),
+      );
+      await Effect.runPromise(link.read);
+      await waitFor(
+        () => syncTempDirs(tmp).length === 1,
+        "the source to hold its bundle while it sends",
+      );
+      // The serve reads as the peer bringing from here, not as a move.
+      const underWay = await Effect.runPromise(
+        Effect.flatMap(Moves.Moves, (held) => held.underWay).pipe(
+          Effect.provideContext(moves),
+        ),
+      );
+      assert.equal(underWay.moving, false);
+      assert.equal(underWay.bringing.length, 1);
+      await Effect.runPromise(Scope.close(scope, Exit.void));
+      await waitFor(
+        () => syncTempDirs(tmp).length === 0 && !mux.has(channelId),
+        "the serving to end with the moves that held it",
+        10_000,
+      );
+    } finally {
+      link.reset();
+    }
+  });
 });
 
 it('corrupted bundle: unpack fails with the coded "bad-bundle" error', async () => {
