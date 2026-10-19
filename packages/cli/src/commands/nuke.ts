@@ -5,7 +5,9 @@
 // only it can revoke the device and turn its login item off. Then what
 // a start can't take, as something of the app's is still running
 // through it: the app's own folder, its logs and preferences, the
-// config folder once empty, and the bundle (--keep-app keeps it).
+// config folder once empty, and the bundle (--keep-app keeps it). A kept
+// app whose start couldn't delete a file keeps its own folder too, the
+// nuke's marker in it, for its next start to finish.
 import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, realpathSync, rmdirSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -18,6 +20,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { ExitCode, UsageError } from "../errors.ts";
 import { rest } from "../here.ts";
 import { note, out } from "../output.ts";
@@ -107,6 +110,7 @@ export const nuke = Command.make(
       }
 
       let left = false;
+      let marked = false;
       for (let start = 0; ; start += 1) {
         if (start === 3) {
           return yield* new UsageError({
@@ -120,6 +124,11 @@ export const nuke = Command.make(
         if (code === NUKE_EXIT.finished) break;
         if (code === NUKE_EXIT.finishedWithLeft) {
           left = true;
+          break;
+        }
+        if (code === NUKE_EXIT.marked) {
+          left = true;
+          marked = true;
           break;
         }
         if (code === NUKE_EXIT.againWithLeft) left = true;
@@ -140,19 +149,32 @@ export const nuke = Command.make(
         configHome: paths.configHome,
         binHome: "",
       });
-      for (const { what, path } of place.paths) {
-        if (what === "the config folder") {
+      for (const { id, path } of place.paths) {
+        if (id === "config") {
           // Its pointer went with the app's nuke. Anything else in it is
           // the owner's.
           yield* Effect.try(() => {
             if (readdirSync(path).length === 0) rmdirSync(path);
           }).pipe(Effect.ignore);
         } else if (
-          what === "the app's own folder" ||
-          what === "the logs" ||
-          what === "the preferences"
+          (id === "userData" && !(marked && input.keepApp)) ||
+          id === "logs" ||
+          id === "preferences"
         ) {
-          rmSync(path, { recursive: true, force: true });
+          // What the app's start couldn't delete, this can't either: said
+          // as the app says it.
+          const failed = yield* Effect.try(() =>
+            rmSync(path, { recursive: true, force: true }),
+          ).pipe(
+            Effect.as(null),
+            Effect.catch((error) =>
+              Effect.succeed(errorMessageOf(error.cause)),
+            ),
+          );
+          if (failed !== null) {
+            left = true;
+            yield* out(`[nuke] left: ${path}: ${failed}`);
+          }
         }
       }
       if (!input.keepApp) {
@@ -168,7 +190,11 @@ export const nuke = Command.make(
         `nuked ${names.appName}${input.keepApp ? "" : `, ${bundle} with it`}`,
       );
       if (left) {
-        yield* note("Some of it stayed, as said above.");
+        yield* note(
+          marked && input.keepApp
+            ? `Some of it stayed, as said above. Once it's deleted, ${names.appName}'s next start finishes the nuke.`
+            : "Some of it stayed, as said above.",
+        );
         return yield* new ExitCode({ code: 1 });
       }
     }),

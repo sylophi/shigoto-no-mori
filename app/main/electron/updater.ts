@@ -41,6 +41,7 @@ import {
   publishUpdaterState,
   updaterBridge,
 } from "./updaterBridge";
+import { RELAUNCH_ENV } from "@shigomori/engine/relaunchEnv";
 import { debugPortOpened } from "./devCdp";
 import { updateEndpoints } from "./updateEndpoints";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
@@ -162,7 +163,7 @@ function spawnInstaller(): Promise<void> {
         stdio: "ignore",
         ...(debugPort === undefined
           ? {}
-          : { env: { ...process.env, SHIGOMORI_DEBUG_PORT: debugPort } }),
+          : { env: { ...process.env, [RELAUNCH_ENV.debugPort]: debugPort } }),
       },
     );
     child.once("error", reject);
