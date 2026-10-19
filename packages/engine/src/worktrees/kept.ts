@@ -1,18 +1,22 @@
 // What the store keeps under a worktree's id (marks, the shelf, agent
-// sessions, its data) and its pending dirty capture: carried to another
-// id, or forgotten. What clones proved about the old id goes either way.
-// The rows go in one transaction, which a caller may widen to commit
-// them with its own; the capture's ref follows, since git isn't in the
-// transaction, and a later call finishes it. A re-key whose checkout
-// moved records the move in `wt_moves` in the same transaction, which
-// is where anything kept outside the store under the old id (the host's
-// mirrors) learns of it, whoever re-keyed it (WtFolder.movedIds).
+// sessions, its data), its pending dirty capture and its scripts' last
+// output (scriptOutput.ts): carried to another id, or forgotten. What
+// clones proved about the old id goes either way. The rows go in one
+// transaction, which a caller may widen to commit them with its own;
+// the capture's ref follows, since git isn't in the transaction, and a
+// later call finishes it. A re-key whose checkout moved records the
+// move in `wt_moves` in the same transaction, which is where anything
+// kept outside the store under the old id (the host's mirrors) learns
+// of it, whoever re-keyed it (WtFolder.movedIds).
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as CloneCheckout from "../CloneCheckout.ts";
 import { dirtyRef } from "../Dirty.ts";
 import * as Git from "../Git.ts";
+import * as Paths from "../Paths.ts";
+import { scriptOutputDir } from "../scriptOutput.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as WorktreeData from "../WorktreeData.ts";
@@ -27,6 +31,8 @@ export const makeKept = Effect.gen(function* () {
   const registry = yield* Registry.Registry;
   const data = yield* WorktreeData.WorktreeData;
   const cloneCheckout = yield* CloneCheckout.CloneCheckout;
+  const fs = yield* FileSystem.FileSystem;
+  const { dataDir } = yield* Paths.Paths;
 
   // A recorded move from a path is the folder that last left it: a
   // folder made at a path, or moved there, ends the record of whatever
@@ -72,7 +78,18 @@ export const makeKept = Effect.gen(function* () {
           moved === undefined ? Effect.void : recordMove(project, moved),
         ]),
       )
-      .pipe(Effect.orDie);
+      .pipe(
+        Effect.orDie,
+        // The scripts' last output follows, best-effort: it is a log.
+        Effect.andThen(
+          fs
+            .rename(
+              scriptOutputDir(dataDir, from),
+              scriptOutputDir(dataDir, to),
+            )
+            .pipe(Effect.ignore),
+        ),
+      );
 
   // A capture belongs to the worktree, not its old path. It followed (or
   // there was none to carry), stayed because another is kept under `to`
@@ -131,7 +148,17 @@ export const makeKept = Effect.gen(function* () {
           madeAt.length === 0 ? Effect.void : claimed(madeAt),
         ]),
       )
-      .pipe(Effect.orDie);
+      .pipe(
+        Effect.orDie,
+        Effect.andThen(
+          fs
+            .remove(scriptOutputDir(dataDir, worktreeId), {
+              recursive: true,
+              force: true,
+            })
+            .pipe(Effect.ignore),
+        ),
+      );
 
   // Whether anything is kept under `worktreeId`: its marks, sessions,
   // shelf or data rows, or a dirty capture, read strictly.
