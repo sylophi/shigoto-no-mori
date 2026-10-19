@@ -986,18 +986,59 @@ it("a sync whose rebase is stopped and can't be undone stops there, and runs no 
 
 it("a sync whose stopped rebase is undone once the lock goes merges instead", async () => {
   const { repo, feat, lock, rebasing } = withStoppedRebase();
-  // The other git lets go 300 ms after it took the lock, long after the
-  // first abort was refused.
-  const watching = setInterval(() => {
-    if (!existsSync(lock)) return;
-    clearInterval(watching);
-    setTimeout(() => rmSync(lock), 300);
-  }, 5);
+  // The rebase's own exit, as git traces it, so the other git lets go
+  // only once the rebase has stopped: never before its second pick,
+  // however slow the machine.
+  const trace = join(tempDir("trace-"), "events");
+  const rebaseExited = () => {
+    if (!existsSync(trace)) return false;
+    const events = readFileSync(trace, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map(
+        (line) =>
+          JSON.parse(line) as { event: string; sid: string; argv?: string[] },
+      );
+    const rebases = new Set(
+      events
+        .filter(
+          (each) =>
+            each.event === "start" &&
+            each.argv?.includes("rebase") === true &&
+            each.argv.includes("--end-of-options"),
+        )
+        .map((each) => each.sid),
+    );
+    return events.some(
+      (each) => each.event === "exit" && rebases.has(each.sid),
+    );
+  };
+  process.env["GIT_TRACE2_EVENT"] = trace;
   const outcome = await withGit((g) =>
-    Effect.exit(
-      g.syncWithPrimary({ worktree: repo, repo, primaryRef: "main" }),
-    ),
-  ).finally(() => clearInterval(watching));
+    Effect.gen(function* () {
+      const syncing = yield* Effect.forkChild(
+        Effect.exit(
+          g.syncWithPrimary({ worktree: repo, repo, primaryRef: "main" }),
+        ),
+      );
+      // The clock stands still: the refused abort's retry waits on it.
+      while (!rebaseExited()) {
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      rmSync(lock);
+      while (syncing.pollUnsafe() === undefined) {
+        yield* TestClock.adjust("200 millis");
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      return yield* Fiber.join(syncing);
+    }).pipe(Effect.provide(TestClock.layer())),
+  ).finally(() => {
+    delete process.env["GIT_TRACE2_EVENT"];
+  });
   assert.ok(Exit.isSuccess(outcome), "the sync finished");
   assert.ok(!rebasing());
   assert.equal(git(repo, "symbolic-ref", "--short", "HEAD").trim(), "feat");

@@ -45,6 +45,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Scope from "effect/Scope";
 import type * as Engine from "@host/lib/Engine";
+import type * as Moves from "@host/lib/sync/Moves";
 import { elapsedMillis } from "@shigomori/engine/elapsed";
 import {
   isHaltedStatus,
@@ -197,12 +198,14 @@ export const makeGitFollower = (deps: {
 const failureOf = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
-// What the reconciles reach: the engine and git.
+// What the reconciles reach: the engine, git, and the moves a push's
+// link runs on.
 type FollowServices =
   | Engine.Services
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem
-  | PeerReach;
+  | PeerReach
+  | Moves.Moves;
 
 const reconcileOf = (
   deps: Parameters<typeof makeGitFollower>[0],

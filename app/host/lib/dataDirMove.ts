@@ -163,10 +163,14 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     readonly beforeMove: Effect.Effect<void, E, R>;
     // Every script's kill chain, waited for (Scripts.stopAll).
     readonly killAllScripts: Effect.Effect<void, never, R>;
-    // Whether a worktree is being sent or brought (host/lib/sync/Moves),
-    // whose files a copy would miss: asked once the move holds the lock,
-    // so one that starts after is refused by it instead.
-    readonly movesUnderWay: Effect.Effect<boolean>;
+    // Whether a worktree is being sent or brought here, and the devices
+    // bringing one from here, by name (host/lib/sync/Moves): files a
+    // copy would miss. Asked once the move holds the lock, so one that
+    // starts after is refused by it instead.
+    readonly movesUnderWay: Effect.Effect<{
+      readonly moving: boolean;
+      readonly bringing: ReadonlyArray<string>;
+    }>;
     // The copy to another volume, `copyTree` but where a proof stops it.
     readonly copy?: (
       from: string,
@@ -335,10 +339,17 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
           "It's tried again at every start; see the log for what stops it.",
       });
     }
-    if (yield* opts.movesUnderWay) {
+    const underWay = yield* opts.movesUnderWay;
+    if (underWay.moving) {
       return yield* new DataDirMoveError({
         reason:
           "A worktree is still being sent or brought here. Try again when it finishes.",
+      });
+    }
+    if (underWay.bringing.length > 0) {
+      const one = underWay.bringing.length === 1;
+      return yield* new DataDirMoveError({
+        reason: `${underWay.bringing.join(" and ")} ${one ? "is" : "are"} bringing a worktree from here. Try again when ${one ? "it finishes" : "they finish"}.`,
       });
     }
     yield* fsStep(() =>
