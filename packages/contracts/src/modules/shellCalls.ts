@@ -8,6 +8,17 @@ import { HostAddressSchema } from "./window.ts";
 
 // Served by the shell alone, so kept out of allContractModules.
 
+// A host that could not start, and its store when that was what failed:
+// the doctor's report, and whether a newer version of the app made it.
+export const HostFailureSchema = strict(
+  Schema.Struct({
+    message: Schema.String,
+    store: Schema.NullOr(
+      strict(Schema.Struct({ report: Schema.String, newer: Schema.Boolean })),
+    ),
+  }),
+);
+
 const UnattendedSchema = strict(Schema.Struct({ unattended: Schema.Boolean }));
 
 export const shellCallsContract = defineContract(
@@ -24,16 +35,7 @@ export const shellCallsContract = defineContract(
     ),
     VoidSchema,
   ),
-  invoke(
-    "failed",
-    strict(
-      Schema.Struct({
-        message: Schema.String,
-        storeReport: Schema.NullOr(Schema.String),
-      }),
-    ),
-    VoidSchema,
-  ),
+  invoke("failed", HostFailureSchema, VoidSchema),
   invoke("migration", MigrationSchema, VoidSchema),
   // With nobody at it: after a move a peer asked for.
   invoke("relaunch", VoidSchema, VoidSchema),

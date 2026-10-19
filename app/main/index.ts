@@ -29,7 +29,7 @@ import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { type HostFailure, hostBusyForQuit } from "./hostProcess";
+import { type HostFailure, hostBusy } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
 import {
   dataDir,
@@ -381,13 +381,16 @@ app.on("window-all-closed", () => {
 function showHostFailure(failure: HostFailure): void {
   // The log has it too: the dialog below holds the process until it is
   // dismissed, and nothing else says why.
-  log.error("[host] could not start:", failure.storeReport ?? failure.message);
+  log.error(
+    "[host] could not start:",
+    failure.store?.report ?? failure.message,
+  );
   // A host that kept stopping, on a machine kept reachable for other
   // devices: relaunched within the fatal-relaunch budget rather than
   // left on a dialog nobody may be there to dismiss. A store that won't
   // open is no better for a relaunch, and says so.
   if (
-    failure.storeReport === null &&
+    failure.store === null &&
     !isShuttingDown() &&
     tryFatalRelaunch(rememberWindows)
   ) {
@@ -418,7 +421,7 @@ app.on("before-quit", (event) => {
   }
   if (askingToQuit) return;
   askingToQuit = true;
-  void Effect.runPromise(hostBusyForQuit())
+  void Effect.runPromise(hostBusy(true))
     .then((busy) => confirmBusyAction("quit", busy))
     .catch((error: unknown) => {
       // A host that cannot answer has nothing to lose to the quit.

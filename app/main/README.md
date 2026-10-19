@@ -34,8 +34,9 @@ decisions 6 and 9).
   "New Window"), with an ellipsis when the item asks for more first.
 - `core/`: the shell's logic that runs without Electron, so a proof
   drives it under plain node: the account's credential store and default
-  device name, the keychain reset, liveness's rate limits, the start
-  after a nuke, and the shell's own JSON files (`files/`: the ones it
+  device name, the keychain reset, liveness's rate limits, the hold on
+  its host (`host/`: the watchdog, the restart ledger, the busy asks),
+  the start after a nuke, and the shell's own JSON files (`files/`: the ones it
   writes on the way out, synchronously, and the rest on `FileSystem`).
 
 A window reaches its host over the loopback like any other device; its

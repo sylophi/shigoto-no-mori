@@ -38,7 +38,7 @@ export class StoreError extends Schema.TaggedError<StoreError>()("StoreError", {
   }
 }
 
-export const storeWords: Record<Category, string> = {
+const storeWords: Record<Category, string> = {
   busy: "The store is busy: the app or another command is writing to it. Try again in a moment.",
   full: "The store couldn't be written: the disk is full.",
   "read-only":
