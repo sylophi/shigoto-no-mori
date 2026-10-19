@@ -11,7 +11,10 @@
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { gitContract } from "@shigomori/contracts/modules/git";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
+import * as Git from "@shigomori/engine/Git";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -158,6 +161,68 @@ it("each window here gaining focus reads the rows again, for an edit no watch sa
       );
       yield* fetch.sweepForPeer(false);
       assert.equal(yield* changedCountWithin(values, "2 seconds"), before + 3);
+    }).pipe(Effect.scoped),
+  );
+});
+
+it("a branch's history is read again for its git moving, not for edits in the project's files or a mirror's index", async () => {
+  await runHost(
+    Effect.gen(function* () {
+      const pushes = yield* HostPushes.HostPushes;
+      const real = yield* Git.Git;
+      let reads = 0;
+      const counting = Git.Git.of({
+        ...real,
+        readBranchHistory: (...args) =>
+          Effect.suspend(() => {
+            reads += 1;
+            return real.readBranchHistory(...args);
+          }),
+      });
+      const rows = yield* Stream.toQueue(worktreesViews.watch({ projectId }), {
+        capacity: "unbounded",
+      });
+      const [primary] = yield* Queue.take(rows);
+      const worktreeId = primary?.id ?? "";
+      const history = yield* Stream.toQueue(
+        worktreesViews
+          .watchBranchHistory({ projectId, worktreeId })
+          .pipe(Stream.provideService(Git.Git, counting)),
+        { capacity: "unbounded" },
+      );
+      yield* Queue.take(history);
+      assert.equal(reads, 1);
+      const push = <A,>(
+        effect: Effect.Effect<A, never, HostPushes.HostPushes>,
+      ) => effect.pipe(Effect.provideService(HostPushes.HostPushes, pushes));
+      for (let edit = 0; edit < 3; edit += 1) {
+        yield* push(
+          HostPushes.push(worktreesContract, "filesChanged", { projectId }),
+        );
+        yield* Effect.sleep("200 millis");
+      }
+      yield* push(
+        HostPushes.push(mirrorContract, "gitChanged", {
+          projectId,
+          worktreeId,
+        }),
+      );
+      yield* Effect.sleep("1 second");
+      assert.equal(
+        reads,
+        1,
+        "an edit in the project's files or a mirror's index read it again",
+      );
+      yield* push(
+        HostPushes.push(gitContract, "projectChanged", { projectId }),
+      );
+      yield* Queue.take(history).pipe(
+        Effect.timeoutOrElse({
+          duration: "2 seconds",
+          orElse: () => Effect.void,
+        }),
+      );
+      assert.equal(reads, 2, "its git moving didn't read it again");
     }).pipe(Effect.scoped),
   );
 });

@@ -2486,7 +2486,11 @@ it("mirror start into a device with no checkout, the project's default branch a 
         { mirror: true },
       ),
     );
-    assert.ok(sent.cloned, "the mirror made no clone on the peer");
+    // Twice it landed in a project the peer already had: which, said.
+    assert.ok(
+      sent.cloned,
+      `the mirror made no clone on the peer, landing in ${JSON.stringify(sent)}`,
+    );
     const clone = sent.cloned.path;
     assert.equal(
       await gitOut(clone, "symbolic-ref", "HEAD"),
