@@ -330,7 +330,7 @@ export const mergeResultFields = (
   pr: PullRequestSummary,
   branch: string,
   method: MergeMethod | undefined,
-): Record<string, unknown> => ({
+): Document => ({
   number: pr.number,
   title: pr.title,
   branch,

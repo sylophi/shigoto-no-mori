@@ -1,6 +1,6 @@
 // A loopback listener that plays the running app on the device link's
 // loopback, scripted: it serves the link's handshake under TOKEN, then
-// answers each control call with the frames `reply` returns for it: its
+// answers each other call with the frames `reply` returns for it: its
 // progress pushes, then its answer. A reply with no answer drops the
 // connection. The engine and the terminal binary dial it.
 import * as NodeSocketServer from "@effect/platform-node/NodeSocketServer";
@@ -25,7 +25,7 @@ import * as SocketServer from "effect/socket/SocketServer";
 
 export type Frame = Readonly<Record<string, unknown>>;
 
-// A control call as the app received it.
+// A call as the app received it.
 type Received = {
   readonly request: { readonly channel: string; readonly input?: unknown };
 };

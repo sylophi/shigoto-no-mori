@@ -1,5 +1,6 @@
-// A worktree's removal as `rm`, `land` and `done` take and report it:
-// the flags, and the word for a shell left standing in a folder gone.
+// A worktree's removal as `rm` and `land` take it (the flags) and as
+// they and `done` report it (the word for a shell left standing in a
+// folder gone).
 import * as Effect from "effect/Effect";
 import * as Flag from "effect/cli/Flag";
 import { cwdInside } from "./here.ts";
