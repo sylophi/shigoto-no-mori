@@ -117,17 +117,16 @@ export const makeStash = ({
           run(worktree, ["rev-parse", `${stash}^1`]),
           run(worktree, ["rev-parse", "HEAD"]),
         ]).pipe(Effect.map(([parent, head]) => parent.trim() === head.trim()));
-      const unsure = new GitRefusedError({
-        reason:
-          "Another program's git held the worktree's index mid-stash, so the changes are still here, and the newest stash may hold a copy of them.",
-      });
       const finish = (stash: string) =>
         waitingForIndex(
           Effect.gen(function* () {
             if (
               !(yield* succeeds(worktree, ["diff", "--quiet", stash, "--"]))
             ) {
-              return yield* unsure;
+              return yield* new GitRefusedError({
+                reason:
+                  "It was saved to the stash list, with its new files, which are only there now. The worktree changed before the stash could clear it, so nothing was discarded: its other changes are still here.",
+              });
             }
             yield* run(
               worktree,
@@ -137,12 +136,12 @@ export const makeStash = ({
           }),
         ).pipe(
           Effect.catchIf(indexHeld, () =>
-            Effect.fail(
-              new GitRefusedError({
+            Effect.gen(function* () {
+              return yield* new GitRefusedError({
                 reason:
-                  "It was saved to the stash list, but another program's git held the worktree's index, so the changes are also still here. Discard all changes, in the changes list's ⋯ menu, finishes it.",
-              }),
-            ),
+                  "It was saved to the stash list, with its new files, but another program's git held the worktree's index, so its other changes are also still here. Discard all changes, in the changes list's ⋯ menu, finishes it.",
+              });
+            }),
           ),
         );
       const attempt = Effect.gen(function* () {

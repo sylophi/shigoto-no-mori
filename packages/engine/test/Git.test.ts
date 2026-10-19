@@ -211,7 +211,7 @@ it("a stash whose reset stays refused is saved once and says so, the changes sti
   assert.ok(error instanceof GitRefusedError);
   assert.match(
     error.reason,
-    /^It was saved to the stash list, but another program's git/,
+    /^It was saved to the stash list, with its new files, but another program's git/,
   );
   assert.deepEqual(stashes(), ["On main: raced"], "never saved twice");
   assert.match(git(repo, "status", "--porcelain"), /a\.txt/);
@@ -263,7 +263,10 @@ it("a stash whose worktree changes before its reset is finished is left alone, a
   assert.ok(Exit.isFailure(outcome));
   const error = Option.getOrThrow(Exit.findErrorOption(outcome));
   assert.ok(error instanceof GitRefusedError);
-  assert.match(error.reason, /the newest stash may hold a copy/);
+  assert.match(
+    error.reason,
+    /The worktree changed before the stash could clear it, so nothing was discarded/,
+  );
   assert.deepEqual(stashes(), ["On main: raced"], "never saved twice");
   assert.equal(readFileSync(join(repo, "b.txt"), "utf8"), "later\n");
   assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "changed\n");
