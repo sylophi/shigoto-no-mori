@@ -35,6 +35,7 @@ import {
   success,
 } from "../../engine/test/lib/fakeApp.ts";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { NAMESPACE_USAGE } from "../src/errors.ts";
 import { documentedCommands } from "../src/help.ts";
 
 let built: string;
@@ -252,6 +253,20 @@ describe("a command line", () => {
       (_, i) => runs[i]?.stderr !== 'smd: Unknown option "--zzz".\n',
     );
     assert.deepEqual(missing, []);
+  });
+
+  it("tells an unknown subcommand the verbs the help documents", () => {
+    const documented = documentedCommands(flavorNames("dev"));
+    for (const namespace of ["projects", "config", "agents", "shell"]) {
+      const told = /<([^>]+)>/.exec(NAMESPACE_USAGE[namespace] ?? "")?.[1];
+      assert.deepEqual(
+        told?.split("|"),
+        documented.flatMap(([first, second]) =>
+          first === namespace && second !== undefined ? [second] : [],
+        ),
+        namespace,
+      );
+    }
   });
 
   it("refuses the variables the stand-in flags replaced", async () => {
@@ -1762,7 +1777,7 @@ describe("the Go sm's command line", () => {
 
   it("names a mistyped verb as Go's dispatchers did, flags or not", async () => {
     const projects =
-      "Usage: smd projects <list|add|remove|relocate|reorder|config|icon> [args]";
+      "Usage: smd projects <list|icon|add|remove|relocate|reorder|config> [args]";
     const refusals: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
       [["projects", "ad", "--all"], `Unknown subcommand "ad". ${projects}`],
       [
@@ -1771,11 +1786,11 @@ describe("the Go sm's command line", () => {
       ],
       [
         ["agents", "--harness", "claude", "status"],
-        'Unknown subcommand "--harness". Usage: smd agents <bind|unbind|idle|resume|install|uninstall|status> [args]',
+        'Unknown subcommand "--harness". Usage: smd agents <install|uninstall|status|bind|unbind|idle|resume|event> [args]',
       ],
       [
         ["config", "lst", "--data", "x"],
-        'Unknown subcommand "lst". Usage: smd config <list|get|set|unset|edit|launcher> [args]',
+        'Unknown subcommand "lst". Usage: smd config <list|read|get|set|unset|launcher|edit> [args]',
       ],
       // The config namespaces parsed every flag first.
       [["config", "lst", "--bogus"], 'Unknown option "--bogus".'],
