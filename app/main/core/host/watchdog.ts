@@ -9,7 +9,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import { answerWithin } from "@shared/remote/liveness";
+import { answerWithin } from "@shigomori/engine/liveness";
 
 // What a host says when asked whether it is busy, or none when it
 // could not say in time (or at all).

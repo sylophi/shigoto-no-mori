@@ -18,22 +18,23 @@ import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as FiberSet from "effect/FiberSet";
-import * as Layer from "effect/Layer";
 import * as RpcClient from "effect/rpc/RpcClient";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
-import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import type * as Scope from "effect/Scope";
 import type { ClientTransport, Link } from "@shared/ipc/transport";
 import { type ChannelMux, createChannelMux } from "./channels";
-import { watchLiveness } from "./liveness";
-import { type FlatClient, linkTransport, rpcLink } from "./rpcTransport";
+import { watchLiveness } from "@shigomori/engine/liveness";
+import {
+  flatClient,
+  newConnectionId,
+  quietProtocol,
+} from "@shigomori/engine/rpcClient";
+import { linkTransport, rpcLink } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
-import { LINK_MAX_FRAME_BYTES, LinkGroup } from "@shigomori/contracts/link";
+import { LinkGroup } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
 import { CLOSE_HANDSHAKE_FAILED, sealDialer } from "./sealedSocket";
 
@@ -218,32 +219,18 @@ export const dialDevice = (
         openTimeout: options.deadlineMs,
       },
     );
-    const socketProtocol = yield* RpcClient.makeProtocolSocket({
-      // Pings keep the far end's slot alive (its HOST_LIVENESS_TIMEOUT_MS)
-      // and judge nothing: Effect's pinger condemns a link on the age of
-      // the last frame before it sends, on the wall clock. A link to
-      // another machine is judged by watchLiveness below, and the
-      // loopback's to this machine's own host by nothing here: the
-      // shell's watchdog judges that host (V3.md, "Local links and
-      // liveness").
+    // Pings keep the far end's slot alive (its HOST_LIVENESS_TIMEOUT_MS)
+    // and judge nothing. A link to another machine is judged by
+    // watchLiveness below, and the loopback's to this machine's own host
+    // by nothing here: the shell's watchdog judges that host. One
+    // socket, one ticket: a dropped link is the keeper's to redial.
+    const socketProtocol = yield* quietProtocol(socket, {
       pingInterval: PING_INTERVAL_MS,
-      pingTimeout: Duration.infinity,
-      // One socket, one ticket: a dropped link is the keeper's to redial.
-      retryPolicy: Schedule.recurs(0),
-    }).pipe(
-      Effect.provideService(Socket.Socket, socket),
-      Effect.provide(
-        Layer.mergeAll(
-          RpcSerialization.layerSchemaBinary({
-            maxFrameSize: LINK_MAX_FRAME_BYTES,
-          }),
-          Layer.succeed(RpcClient.ConnectionHooks, {
-            onConnect: Effect.void,
-            onDisconnect: Deferred.succeed(dropped, undefined),
-          }),
-        ),
-      ),
-    );
+      hooks: {
+        onConnect: Effect.void,
+        onDisconnect: Deferred.succeed(dropped, undefined),
+      },
+    });
     // A frame this end cannot decode (one past LINK_MAX_FRAME_BYTES)
     // leaves the RPC client's parser unable to find the next, so every
     // later answer fails too while the socket stays up (effect 4.0.2's
@@ -260,13 +247,7 @@ export const dialDevice = (
             : write(message),
         ),
     });
-    // The group is built from the contract's calls as they are listed,
-    // so its client knows each call only as some call: one with a tag,
-    // a payload and an Effect or a Stream back.
-    // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
-    const client = (yield* RpcClient.make(group, { flatten: true }).pipe(
-      Effect.provideService(RpcClient.Protocol, protocol),
-    )) as unknown as FlatClient;
+    const client = yield* flatClient(group, protocol);
     const call = (tag: string, payload: unknown) =>
       client(tag, payload) as Effect.Effect<unknown, unknown>;
     const runFork = yield* FiberSet.makeRuntime<never>();
@@ -438,14 +419,4 @@ function cuttableSocket(wire: Socket.WebSocketLike) {
       }
     },
   };
-}
-
-// This connection's id, which the host tells it apart by: 16 random
-// bytes as hex.
-export function newConnectionId(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
-  );
 }

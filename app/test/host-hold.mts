@@ -42,13 +42,11 @@ import { join } from "node:path";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
+import { flatClient, quietProtocol } from "@shigomori/engine/rpcClient";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as RpcClient from "effect/rpc/RpcClient";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
-import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import { afterAll, it } from "vitest";
@@ -463,21 +461,10 @@ async function helloOn(
       const socket = yield* Socket.fromWebSocket(
         Effect.succeed(ws as Socket.WebSocketLike),
       );
-      const protocol = yield* RpcClient.makeProtocolSocket({
-        retryPolicy: Schedule.recurs(0),
-      }).pipe(
-        Effect.provideService(Socket.Socket, socket),
-        Effect.provide(RpcSerialization.layerSchemaBinary()),
+      const client = yield* flatClient(
+        LoopbackGroup,
+        yield* quietProtocol(socket),
       );
-      // oxlint-disable-next-line shigomori/no-double-cast -- the group's calls are typed only as Rpc.AnyWithProps
-      const client = (yield* RpcClient.make(LoopbackGroup, {
-        flatten: true,
-      }).pipe(
-        Effect.provideService(RpcClient.Protocol, protocol),
-      )) as unknown as (
-        tag: string,
-        payload: unknown,
-      ) => Effect.Effect<unknown, unknown>;
       return yield* client("link:hello", {
         deviceId: "this-device",
         deviceKind: "desktop",
@@ -485,7 +472,7 @@ async function helloOn(
         appVersion: "9.9.9",
         protocolVersion: PROTOCOL_VERSION,
         token,
-      });
+      }) as Effect.Effect<unknown, unknown>;
     }).pipe(Scope.provide(scope)),
   );
   return { exit, closedWith: () => closedWith };

@@ -12,8 +12,9 @@ import {
 } from "@shigomori/contracts/errors";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { answerWithin } from "@shigomori/engine/liveness";
 import * as Schema from "effect/Schema";
 
 export type DirectPeer = {
@@ -49,21 +50,23 @@ export class AccountPeers extends Context.Service<
 >()("sm/host/AccountPeers") {}
 
 // The device list as the terminal's verbs wait on it: a hub that takes
-// the read and never answers ends as the account out of reach.
+// the read and never answers, through a wait this host ran (not one it
+// was stopped for, answerWithin), ends as the account out of reach.
 export const withinAccountRead = <A, E, R>(
   read: Effect.Effect<A, E, R>,
   seconds = 15,
 ) =>
-  read.pipe(
-    Effect.timeoutOrElse({
-      duration: Duration.seconds(seconds),
-      orElse: () =>
-        Effect.fail(
-          new AccountUnreachableError({
-            reason: `it didn't answer in ${seconds} s`,
-          }),
-        ),
-    }),
+  answerWithin(read, seconds * 1_000).pipe(
+    Effect.flatMap(
+      (answered): Effect.Effect<A, E | AccountUnreachableError> =>
+        Option.isSome(answered)
+          ? answered.value
+          : Effect.fail(
+              new AccountUnreachableError({
+                reason: `it didn't answer in ${seconds} s`,
+              }),
+            ),
+    ),
   );
 
 // Why the device list failed, in the words the terminal prints: a

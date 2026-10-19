@@ -2333,7 +2333,10 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
     runHost(Effect.provide(effect, otherContext));
   try {
     const loneRepo = await fixture.initRepo("lone-source");
-    await commitFile(loneRepo, "root.txt", "root\n", "root");
+    // A root of its own: the repo's identity is its root commit, and
+    // another case's root of the same file, words and second is the
+    // same commit, a repo the peer then already holds.
+    await commitFile(loneRepo, "root.txt", "root\n", "lone root");
     const loneMainTip = await gitOut(loneRepo, "rev-parse", "HEAD");
     const loneWtPath = await addWorktree(
       loneRepo,
@@ -2442,7 +2445,8 @@ it("mirror start into a device with no checkout, the project's default branch a 
     runHost(Effect.provide(effect, otherContext));
   try {
     const repo = await fixture.initRepo("tracking-source");
-    await commitFile(repo, "root.txt", "root\n", "root");
+    // A root of its own, as the lone case's.
+    await commitFile(repo, "root.txt", "root\n", "tracking root");
     await commitFile(repo, "ahead.txt", "on origin\n", "ahead on origin");
     const originTip = await gitOut(repo, "rev-parse", "HEAD");
     await git(repo, [
@@ -2486,7 +2490,6 @@ it("mirror start into a device with no checkout, the project's default branch a 
         { mirror: true },
       ),
     );
-    // Twice it landed in a project the peer already had: which, said.
     assert.ok(
       sent.cloned,
       `the mirror made no clone on the peer, landing in ${JSON.stringify(sent)}`,

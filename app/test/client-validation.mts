@@ -36,8 +36,8 @@ import { makePortServer } from "../main/ipc/ShellLink";
 import { createShellRegistrar } from "../main/ipc/shellRegistrar";
 import { portLink } from "@shared/remote/portLink";
 import type { PortEnds } from "@shared/remote/portSocket";
+import type { FlatClient } from "@shigomori/engine/rpcClient";
 import {
-  type FlatClient,
   RemoteDisconnectedError,
   rpcLink,
   UnreadableAnswerError,

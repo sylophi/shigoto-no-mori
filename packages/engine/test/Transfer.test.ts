@@ -4,8 +4,13 @@
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Clock from "effect/Clock";
+import * as Deferred from "effect/Deferred";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import { afterEach, beforeEach, describe, it } from "vitest";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
+import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import * as Control from "../src/Control.ts";
 import { errorDocument, isUsage } from "../src/errorDocument.ts";
 import * as Transfer from "../src/Transfer.ts";
@@ -748,6 +753,90 @@ describe("the loopback", () => {
     publish(app.file("57a1e000000000000000000000000000"));
     assert.deepEqual(await mirrors(), notRunning);
     assert.deepEqual(app.received(), []);
+  });
+
+  const NO_MIRRORS = { daemon: "stopped", daemonFailure: "", mirrors: [] };
+  // The terminal asks for the mirrors on a test clock, through a hello
+  // held by `hold`. Once the app has it, the terminal is stopped for
+  // `stoppedMs` (both clocks move on, no timer runs) and the clock then
+  // moves by each of `turns`.
+  const handshake = async (
+    hold: () => Effect.Effect<void>,
+    stoppedMs: number,
+    turns: ReadonlyArray<Duration.Input>,
+  ) => {
+    app = await fakeApp((request) => [success(request, NO_MIRRORS)], {
+      hello: Effect.suspend(hold),
+    });
+    box.write("loopback.json", app.file());
+    const held = app;
+    return box.engine(
+      Effect.gen(function* () {
+        const control = yield* Control.Control;
+        const test = yield* Clock.Clock;
+        let stopped = 0;
+        const nanos = () => BigInt(stopped) * 1_000_000n;
+        const clock: Clock.Clock = {
+          ...test,
+          monotonicTimeNanosUnsafe: () =>
+            test.monotonicTimeNanosUnsafe() + nanos(),
+          monotonicTimeNanos: Effect.sync(
+            () => test.monotonicTimeNanosUnsafe() + nanos(),
+          ),
+          currentTimeMillisUnsafe: () =>
+            test.currentTimeMillisUnsafe() + stopped,
+          currentTimeMillis: Effect.sync(
+            () => test.currentTimeMillisUnsafe() + stopped,
+          ),
+          currentTimeNanosUnsafe: () => test.currentTimeNanosUnsafe() + nanos(),
+          currentTimeNanos: Effect.sync(
+            () => test.currentTimeNanosUnsafe() + nanos(),
+          ),
+        };
+        const call = yield* Effect.forkChild(
+          control
+            .call("control:mirrors", undefined)
+            .pipe(Effect.provideService(Clock.Clock, clock)),
+        );
+        yield* Effect.promise(() =>
+          vi.waitFor(() => assert.equal(held.hellos(), 1)),
+        );
+        stopped += stoppedMs;
+        for (const turn of turns) yield* TestClock.adjust(turn);
+        return yield* Fiber.join(call);
+      }).pipe(
+        Effect.catchTag("AppNotRunning", () => Effect.succeed("not running")),
+        Effect.provide(TestClock.layer()),
+      ),
+    );
+  };
+
+  it("asks again after a handshake this terminal was stopped through, as a Ctrl-Z or a sleep stops it", async () => {
+    const stopped = Deferred.makeUnsafe<void>();
+    let first = true;
+    const answer = await handshake(
+      () => {
+        if (!first) return Effect.void;
+        first = false;
+        return Deferred.await(stopped);
+      },
+      // Stopped past the handshake's 5 s and LATE_MS, so the turn that
+      // ends it comes late: the app had no window to answer in.
+      6_000,
+      ["5 seconds"],
+    );
+    assert.deepEqual(answer, NO_MIRRORS);
+    assert.equal(app?.hellos(), 2, "asked again on a fresh connection");
+  });
+
+  it("reads a hello unanswered through turns that came on time as the app not running", async () => {
+    const answer = await handshake(
+      () => Effect.never,
+      0,
+      Array.from({ length: 6 }, () => "1 second" as const),
+    );
+    assert.equal(answer, "not running");
+    assert.equal(app?.hellos(), 1, "asked once");
   });
 
   it("tells a busy app from an absent one", async () => {

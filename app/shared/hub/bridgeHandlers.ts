@@ -31,6 +31,12 @@
 // keeper's last failure so the renderer surfaces the honest cause
 // rather than a bare "not connected".
 import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
+
+type DirectPeerFacts = Pick<
+  HubStatus,
+  "peerAppVersions" | "peerAcceptsCommands" | "peerSharesData"
+>;
+type PeerFact = "acceptsCommands" | "sharesData";
 import type { ChannelMux } from "@shared/remote/channels";
 import type { InvokeOptions } from "@shared/ipc/transport";
 import type { Handlers, ViewObserver } from "@shigomori/contracts/types";
@@ -171,29 +177,19 @@ export type HubHandlers = Handlers<typeof hubContract> & {
     input: { deviceId: string; channel: string; input?: unknown },
     observer: ViewObserver<unknown>,
   ): () => void;
-  // The appVersion each ESTABLISHED direct session's welcome
-  // confirmed, keyed by deviceId. This is the whole per-peer data
-  // surface: the owner folds it into HubStatus.peerAppVersions, and
-  // membership in it is what "has a direct session" means (the
-  // renderer derives connectedness from the keys, and the skew check
-  // reads the values).
-  directPeerVersions(): Record<string, string>;
-  // Whether each ESTABLISHED direct session's peer runs this device's
-  // commands, keyed like directPeerVersions: the connectInfo answer's
-  // reading at dial time, moved since by the peer's own push
-  // (setPeerAcceptsCommands). The owner folds it into
-  // HubStatus.peerAcceptsCommands.
-  directPeerAccess(): Record<string, boolean>;
-  // The peer's account:commandAccessChanged push, which carries its
-  // switch: records it on the established session and fans a fresh
-  // status out when it moved. A push for a peer with no established
-  // session is dropped; its next dial's answer carries the switch.
-  setPeerAcceptsCommands(deviceId: string, accepts: boolean): void;
-  // Whether each ESTABLISHED direct session's peer shares with this
-  // device at all, kept the same way off its sharing:changed push
-  // (setPeerSharesData). The owner folds it into HubStatus.peerSharesData.
-  directPeerSharing(): Record<string, boolean>;
-  setPeerSharesData(deviceId: string, shares: boolean): void;
+  // Each ESTABLISHED direct session's facts, keyed by deviceId, as
+  // HubStatus carries them: the appVersion its welcome confirmed
+  // (membership is what "has a direct session" means: the renderer
+  // derives connectedness from the keys, and the skew check reads the
+  // values), and whether its peer runs this device's commands and
+  // shares with it at all, the connectInfo answer's readings at dial
+  // time, moved since by the peer's own pushes (setPeerFact).
+  directPeers(): DirectPeerFacts;
+  // A peer's account:commandAccessChanged or sharing:changed push:
+  // recorded on its established session, with a fresh status fanned out
+  // when it moved. A push for a peer with no established session is
+  // dropped; its next dial's answer carries it.
+  setPeerFact(deviceId: string, fact: PeerFact, value: boolean): void;
   // Close and drop the cached direct sessions for peers no longer in
   // the live roster: the client half of "presence scopes the data
   // plane", so a peer the control plane no longer vouches for loses
@@ -249,8 +245,8 @@ function hubHandlers(
   // entry itself, set on the exact entry the dial belongs to (held
   // lexically, never re-read from the map: the entry may be dropped and
   // replaced mid-dial). A non-null version is also the established
-  // marker directPeerVersions derives from, so a still-dialing entry is
-  // never reported as a live session. acceptsCommands and sharesData
+  // marker directPeers reads, so a still-dialing entry is never
+  // reported as a live session. acceptsCommands and sharesData
   // ride the same entry for the same reason, set with the version.
   type PeerEntry = {
     connection: Deferred.Deferred<PeerConnection, unknown>;
@@ -422,43 +418,24 @@ function hubHandlers(
 
     peerChannels: async (deviceId) => (await requirePeer(deviceId)).channels,
 
-    directPeerVersions: () => {
-      const versions: Record<string, string> = {};
+    directPeers: () => {
+      const peerAppVersions: Record<string, string> = {};
+      const peerAcceptsCommands: Record<string, boolean> = {};
+      const peerSharesData: Record<string, boolean> = {};
       for (const [deviceId, entry] of peers) {
-        if (entry.version !== null) versions[deviceId] = entry.version;
+        if (entry.version === null) continue;
+        peerAppVersions[deviceId] = entry.version;
+        peerAcceptsCommands[deviceId] = entry.acceptsCommands;
+        peerSharesData[deviceId] = entry.sharesData;
       }
-      return versions;
+      return { peerAppVersions, peerAcceptsCommands, peerSharesData };
     },
 
-    directPeerAccess: () => {
-      const access: Record<string, boolean> = {};
-      for (const [deviceId, entry] of peers) {
-        if (entry.version !== null) access[deviceId] = entry.acceptsCommands;
-      }
-      return access;
-    },
-
-    setPeerAcceptsCommands: (deviceId, accepts) => {
+    setPeerFact: (deviceId, fact, value) => {
       const entry = peers.get(deviceId);
       if (entry === undefined || entry.version === null) return;
-      if (entry.acceptsCommands === accepts) return;
-      entry.acceptsCommands = accepts;
-      deps.onDirectChange?.();
-    },
-
-    directPeerSharing: () => {
-      const sharing: Record<string, boolean> = {};
-      for (const [deviceId, entry] of peers) {
-        if (entry.version !== null) sharing[deviceId] = entry.sharesData;
-      }
-      return sharing;
-    },
-
-    setPeerSharesData: (deviceId, shares) => {
-      const entry = peers.get(deviceId);
-      if (entry === undefined || entry.version === null) return;
-      if (entry.sharesData === shares) return;
-      entry.sharesData = shares;
+      if (entry[fact] === value) return;
+      entry[fact] = value;
       deps.onDirectChange?.();
     },
 
