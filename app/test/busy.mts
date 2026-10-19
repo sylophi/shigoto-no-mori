@@ -26,10 +26,11 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -445,6 +446,24 @@ it("a peer's data-folder move is refused over a busy terminal", async () => {
     );
   } finally {
     await terminals((service) => service.close(terminalId));
+  }
+  // What was typed is in the run's history, not the developer's
+  // (hostRuntime.mts), for the shells that keep one: zsh's, bash's.
+  const histories = [
+    join(process.env["ZDOTDIR"] ?? "", ".zsh_history"),
+    process.env["HISTFILE"] ?? "",
+  ];
+  const shell = basename(process.env["SHELL"] ?? "");
+  if (shell === "zsh" || shell === "bash") {
+    await waitFor(
+      () =>
+        histories.some(
+          (history) =>
+            existsSync(history) &&
+            readFileSync(history, "utf8").includes("job.running"),
+        ),
+      "the shell's history in the run",
+    );
   }
 });
 

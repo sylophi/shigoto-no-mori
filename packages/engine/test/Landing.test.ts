@@ -551,7 +551,11 @@ esac`,
       "late",
     );
     const unpushed = await done(located);
-    assert.equal(unpushed["code"], "unpushed-commits");
+    assert.equal(
+      unpushed["code"],
+      "unpushed-commits",
+      JSON.stringify(unpushed),
+    );
     assert.match(
       String(unpushed["error"]),
       /^Branch fox has a commit its merged PR #5 never had, which deleting it would lose: [0-9a-f]+ late\. /,
@@ -559,7 +563,7 @@ esac`,
 
     mergedGh(`echo 'error connecting to api.github.com' >&2; exit 1`);
     const unasked = await done(located);
-    assert.equal(unasked["ok"], false);
+    assert.equal(unasked["ok"], false, JSON.stringify(unasked));
     assert.match(
       String(unasked["error"]),
       /^Couldn't ask GitHub whether fox was merged\. .* gh said: .*error connecting to api\.github\.com/,
