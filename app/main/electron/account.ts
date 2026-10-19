@@ -347,7 +347,7 @@ export const desktopAccount: AccountShell = {
   config: serviceConfig,
   store,
   service: (config) => createAccountService({ baseUrl: config.hubUrl }),
-  deviceId: hostDeviceId,
+  deviceId: () => hostDeviceId(),
   defaultName: defaultDeviceName,
   detectedIcon: detectedDeviceIcon,
   platform: platform(),

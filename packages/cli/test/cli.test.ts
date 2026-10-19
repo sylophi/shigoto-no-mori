@@ -1354,22 +1354,23 @@ describe("app", () => {
     );
   });
 
-  it("names the app it opened, each flavor's own", async () => {
-    box.fakeBin("open", `printf '%s\\n' "$@" > '${box.home}/open.args'`);
+  it("names the app it opened or couldn't, each flavor's own", async () => {
     for (const [flavor, line] of [
       ["prod", "opened Shigoto no Mori"],
       ["v3", "opened Shigoto no Mori (v3)"],
       ["lab", "opened Shigoto no Mori (lab)"],
     ] as const) {
-      const binary = join(buildDir, `app-${flavor}`);
-      await new Promise<void>((resolve, reject) =>
-        execFile(
-          process.execPath,
-          ["build.mts", binary, `--flavor=${flavor}`],
-          { cwd: join(import.meta.dirname, "..") },
-          (error) => (error === null ? resolve() : reject(error)),
+      const binary = builtBinary(flavor);
+      box.fakeBin("open", "exit 1");
+      const refused = await box.runAt(binary, "cli", box.home, ["app"]);
+      assert.equal(refused.code, 1);
+      assert.ok(
+        refused.stderr.endsWith(
+          `Couldn't open ${flavorNames(flavor).appName}. Is the app installed?\n`,
         ),
+        refused.stderr,
       );
+      box.fakeBin("open", `printf '%s\\n' "$@" > '${box.home}/open.args'`);
       const opened = await box.runAt(binary, "cli", box.home, ["app"]);
       assert.equal(opened.code, 0);
       assert.equal(opened.stdout, `${line}\n`);
