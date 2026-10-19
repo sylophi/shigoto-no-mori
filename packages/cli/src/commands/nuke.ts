@@ -14,6 +14,8 @@ import { flavorNames } from "@shigomori/engine/flavor";
 import { withoutCdFile } from "../handOver.ts";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
@@ -43,15 +45,17 @@ const runningFrom = (executable: string): number[] =>
     .filter((row) => row.replace(/^\d+\s+/, "").startsWith(executable))
     .map((row) => Number.parseInt(row, 10));
 
+// Whether `done` came to hold within `ms` of awake time, looked at every
+// quarter second.
 const until = (done: () => boolean, ms: number) =>
-  Effect.gen(function* () {
-    const deadline = Date.now() + ms;
-    while (Date.now() < deadline) {
-      if (done()) return true;
-      yield* Effect.sleep("250 millis");
-    }
-    return done();
-  });
+  Effect.sync(done).pipe(
+    Effect.repeat({
+      until: (held) => held,
+      schedule: Schedule.spaced("250 millis"),
+    }),
+    Effect.timeoutOption(ms),
+    Effect.map(Option.getOrElse(done)),
+  );
 
 export const nuke = Command.make(
   "nuke",

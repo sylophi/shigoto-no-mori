@@ -35,7 +35,7 @@ export function showNotification(input: {
     shown !== undefined &&
     shown.notification.title === input.title &&
     shown.notification.body === input.body &&
-    Date.now() - shown.at < SAME_NOTICE_MS
+    performance.now() - shown.at < SAME_NOTICE_MS
   ) {
     return;
   }
@@ -49,7 +49,7 @@ export function showNotification(input: {
       live.delete(input.route);
     }
   };
-  live.set(input.route, { notification, at: Date.now() });
+  live.set(input.route, { notification, at: performance.now() });
   notification.on("click", () => {
     forget();
     open(input.route);
