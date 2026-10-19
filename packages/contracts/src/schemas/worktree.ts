@@ -364,8 +364,9 @@ export const DeleteWorktreePayloadSchema = Schema.Struct({
   // Refuse ("scripts-running") rather than kill live app scripts, for a
   // transplant's teardown.
   refuseRunningScripts: Schema.optional(Schema.Boolean),
-  // A transplant's teardown: refused, after its cleanup and right
-  // before the delete, unless the source is still what moved.
+  // A transplant's teardown (any other delete has none): refused, after
+  // its cleanup and right before the delete, unless the source is still
+  // what moved.
   expect: Schema.optional(MovedSourceSchema),
 });
 
