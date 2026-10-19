@@ -88,7 +88,10 @@ const refused = (method: string, cause?: unknown) =>
 
 // A string store over the one JSON file, read once: main is its only
 // writer. Writes take turns, and each replaces the file through a
-// rename, so a crash mid-write leaves the previous one. A file that is
+// rename, so a crash mid-write leaves the previous one. A change is
+// made on a copy of the entries, which become it only once the file
+// holds it, so a failed write leaves them as the file has them and a
+// retry writes again. A file that is
 // there but cannot be read or parsed is never written over: its
 // entries may still be recoverable, so the store reads empty and
 // refuses writes, and the user signs in again for this session.
@@ -110,8 +113,8 @@ const jsonFileStore = Effect.fnUntraced(function* (file: string) {
   }
   const writable = Option.isSome(loaded);
   // Values that are not strings are kept as they were found.
-  const entries = new Map(Object.entries(Option.getOrElse(loaded, () => ({}))));
-  const write = (method: string) =>
+  let entries = new Map(Object.entries(Option.getOrElse(loaded, () => ({}))));
+  const write = (method: string, next: Map<string, unknown>) =>
     writable
       ? Effect.suspend(() => {
           const temp = `${file}.tmp`;
@@ -121,7 +124,7 @@ const jsonFileStore = Effect.fnUntraced(function* (file: string) {
               Effect.andThen(
                 fs.writeFileString(
                   temp,
-                  JSON.stringify(Object.fromEntries(entries), undefined, "\t"),
+                  JSON.stringify(Object.fromEntries(next), undefined, "\t"),
                   { mode: 0o600 },
                 ),
               ),
@@ -129,9 +132,23 @@ const jsonFileStore = Effect.fnUntraced(function* (file: string) {
             );
         }).pipe(Effect.mapError((cause) => refused(method, cause)))
       : Effect.fail(refused(method));
-  const update = (method: string, change: () => boolean) =>
+  const update = (
+    method: string,
+    change: (next: Map<string, unknown>) => boolean,
+  ) =>
     writes.withPermits(1)(
-      Effect.suspend(() => (change() ? write(method) : Effect.void)),
+      Effect.suspend(() => {
+        const next = new Map(entries);
+        return change(next)
+          ? write(method, next).pipe(
+              Effect.andThen(
+                Effect.sync(() => {
+                  entries = next;
+                }),
+              ),
+            )
+          : Effect.void;
+      }),
     );
   return KeyValueStore.makeStringOnly({
     get: (key) =>
@@ -140,13 +157,13 @@ const jsonFileStore = Effect.fnUntraced(function* (file: string) {
         return typeof value === "string" ? value : undefined;
       }),
     set: (key, value) =>
-      update("set", () => {
-        entries.set(key, value);
+      update("set", (next) => {
+        next.set(key, value);
         return true;
       }),
-    remove: (key) => update("remove", () => entries.delete(key)),
-    clear: update("clear", () => {
-      entries.clear();
+    remove: (key) => update("remove", (next) => next.delete(key)),
+    clear: update("clear", (next) => {
+      next.clear();
       return true;
     }),
     size: Effect.sync(() => entries.size),
@@ -155,6 +172,10 @@ const jsonFileStore = Effect.fnUntraced(function* (file: string) {
 
 const make = Effect.fnUntraced(function* (file: string) {
   const store = yield* jsonFileStore(file);
+  // Each key operation runs whole before the next starts: a read's
+  // re-encryption lands before a later removal or replacement, never
+  // after it.
+  const gate = yield* Semaphore.make(1);
   // Kept once one resolves. None is asked again next time, since a
   // keyring can come up after launch. Concurrent first calls share one
   // probe.
@@ -212,7 +233,7 @@ const make = Effect.fnUntraced(function* (file: string) {
     const { value, shouldReEncrypt } = decrypted.value;
     if (shouldReEncrypt) yield* keep(key, cipher, value).pipe(Effect.ignore);
     return value;
-  });
+  }, gate.withPermits(1));
 
   const setItem = Effect.fn("ClerkTokens.setItem")(function* (
     key: string,
@@ -221,13 +242,13 @@ const make = Effect.fnUntraced(function* (file: string) {
     const cipher = yield* getCipher;
     if (cipher === null) return yield* warnUnencrypted;
     yield* keep(key, cipher, value);
-  });
+  }, gate.withPermits(1));
 
   const removeItem = Effect.fn("ClerkTokens.removeItem")(function* (
     key: string,
   ) {
     yield* store.remove(key);
-  });
+  }, gate.withPermits(1));
 
   return ClerkTokens.of({ getItem, setItem, removeItem });
 });
