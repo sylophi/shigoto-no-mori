@@ -343,7 +343,7 @@ export const makeRemoving = ({
         }
       }
       // Unforced, git checks the tree again at the delete, which covers
-      // what a cleanup script wrote since the check above. Once git's
+      // what a cleanup script wrote since `removable`'s check. Once git's
       // side is done (an orphaned checkout's too), what is kept under the
       // id goes before anything can cut in: a worktree made at the same
       // path later would take it over.

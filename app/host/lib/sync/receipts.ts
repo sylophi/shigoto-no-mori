@@ -154,6 +154,8 @@ const sourceChangedSince = Effect.fnUntraced(function* (
 ) {
   const tip = yield* source.tip(moved.branch);
   const fresh = yield* source.capture;
+  // A capture that names no tree can't be shown to be what moved.
+  if (fresh.captured && fresh.tree === undefined) return words.changed;
   const change = movedSourceChange(moved, {
     tip,
     ...(fresh.captured && fresh.tree !== undefined

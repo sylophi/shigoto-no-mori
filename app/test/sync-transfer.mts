@@ -1333,8 +1333,9 @@ it("teardownSource: a source edited while its cleanup runs is kept, the check ma
       teardown: `touch '${started}'; while [ ! -e '${release}' ]; do sleep 0.05; done`,
     },
   });
+  let torn: Promise<unknown> | undefined;
   try {
-    const torn = runHost(
+    const tearing = runHost(
       syncHandlers.teardownSource(
         {
           direction: "pull",
@@ -1345,10 +1346,11 @@ it("teardownSource: a source edited while its cleanup runs is kept, the check ma
         pullCtx,
       ),
     );
+    torn = tearing;
     await waitFor(() => existsSync(started), "the teardown script to start");
     writeFileSync(join(wt8Path, "draft.txt"), "draft, edited meanwhile\n");
     writeFileSync(release, "");
-    const result = await torn;
+    const result = await tearing;
     assert.equal(result.sourceRemoved, false);
     assert.match(result.sourceError ?? "", /changed after it was moved/);
     assert.equal(
@@ -1357,6 +1359,9 @@ it("teardownSource: a source edited while its cleanup runs is kept, the check ma
       "the edit made during the cleanup must survive",
     );
   } finally {
+    // Released whatever failed, so no teardown script waits on.
+    writeFileSync(release, "");
+    await torn?.catch(() => undefined);
     await writeProjectConfig(
       sourceProjectId,
       before ?? { defaultBranch: "main" },
