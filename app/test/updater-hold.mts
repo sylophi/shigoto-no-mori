@@ -83,7 +83,7 @@ const withUpdater = async (
   }
 };
 
-// First: a hold lasts the rest of the process.
+// First: the hold below is never resumed.
 it("the periodic check lives on past a tick that lands while another check runs", async () => {
   const scope = Effect.runSync(Scope.make());
   const clock = await Effect.runPromise(
@@ -108,7 +108,7 @@ it("the periodic check lives on past a tick that lands while another check runs"
         // A check from Settings, its download long.
         await updaterCalls.check();
         await waitFor(() => staged === 1, "Settings' check to stage");
-        // The loop's first check lands on it, and waits it out.
+        // The loop's first check lands on it, and is skipped.
         await advance("60 seconds");
         const first = finishes[0];
         assert.ok(first !== undefined);

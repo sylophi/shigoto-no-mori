@@ -41,9 +41,8 @@ export class Shell extends Context.Service<
     };
     // Before a move or a reset of the data folder: the updater starts
     // nothing there from now on (null: no check or install, one under
-    // way ended; a reset's bridge stopped too), or the version an install
-    // under way restarts into ("" when not known). A shell that can't be
-    // asked holds nothing.
+    // way ended), or the version an install under way restarts into (""
+    // when not known). A shell that can't be asked holds nothing.
     readonly holdUpdater: (
       forWhat: "move" | "reset",
     ) => Effect.Effect<string | null>;

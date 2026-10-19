@@ -39,7 +39,6 @@ import { QUIT_AFTER_ANSWER_MS } from "./relaunch";
 import {
   type InstallOutcome,
   publishUpdaterState,
-  releaseUpdaterBridge,
   updaterBridge,
 } from "./updaterBridge";
 import { RELAUNCH_ENV } from "@shigomori/engine/relaunchEnv";
@@ -422,13 +421,18 @@ let heldWords = "";
 // way restarts into ("" when not known), which the caller refuses on;
 // otherwise no check or install starts from here on, and a check under
 // way is ended (its staging lock goes with it, and the next run prunes
-// what it left). A reset lets the bridge go too; a move stops it once
-// nothing can fail before the folder moves (stopUpdaterBridge).
+// what it left). The bridge keeps answering `sm update` (with these
+// words): a move stops it once nothing can fail before the folder moves
+// (stopUpdaterBridge), and a reset's folder goes at the next start.
 async function hold(input: {
   readonly for: "move" | "reset";
 }): Promise<string | null> {
   if (installing) return state.kind === "ready" ? state.version : "";
   held = true;
+  // An Update now armed for the check this ends goes with it, rather
+  // than come back with a later check after a resume.
+  installWhenStaged = null;
+  armedMidCheck = false;
   heldWords =
     input.for === "move"
       ? "The data folder is being moved. The update can install once the app has restarted."
@@ -437,7 +441,6 @@ async function hold(input: {
   if (state.kind === "checking" || state.kind === "downloading") {
     setState({ kind: "idle" });
   }
-  if (input.for === "reset") await releaseUpdaterBridge();
   return null;
 }
 
@@ -478,9 +481,9 @@ export const layer = Layer.effectDiscard(
     // Every check on one handle: one at a time, and a hold ends the one
     // under way.
     const checks = yield* FiberHandle.make<void>();
-    // Awaited, not joined: a check asked while one runs gets that one's
-    // fiber, which onlyIfMissing hands back interrupted, and a join would
-    // end the asker (the periodic loop) with it.
+    // Awaited, not joined: a check asked while one runs is skipped, the
+    // handle answering it with a fiber already interrupted, which a join
+    // would pass on to the asker (the periodic loop, ended for good).
     checkInTurn = FiberHandle.run(checks, runCheck, {
       onlyIfMissing: true,
     }).pipe(Effect.flatMap(Fiber.await), Effect.asVoid);

@@ -133,10 +133,17 @@ export const runtimeHandlers = {
       }
       moveInFlight = true;
       let watchersStopped = false;
+      let updaterHeld = false;
       yield* moveDataDir(parentDir, {
         place: yield* sessionPlace,
         killAllScripts: scripts.stopAll(),
-        holdUpdater: shell.holdUpdater("move"),
+        holdUpdater: shell.holdUpdater("move").pipe(
+          Effect.tap((installing) =>
+            Effect.sync(() => {
+              updaterHeld = installing === null;
+            }),
+          ),
+        ),
         movesUnderWay: underWayByName(
           yield* Moves.Moves,
           yield* AccountPeers.AccountPeers,
@@ -161,7 +168,8 @@ export const runtimeHandlers = {
                 return shell.moveFailed(errorWordsOf(Cause.squash(cause)));
               case "carry-on":
                 moveInFlight = false;
-                return shell.resumeUpdater;
+                // Only a hold this move took: a reset's, or none.
+                return updaterHeld ? shell.resumeUpdater : Effect.void;
             }
           }),
         ),
