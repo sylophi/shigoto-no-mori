@@ -1,21 +1,11 @@
-// Schema-derived stub values for the OS-bound contract surface the web
-// client cannot serve. The bridge answers an eligible unhandled channel
-// (see localRegistrar.ts for the fail-closed eligibility rule) with a benign
-// default derived from the invoke's OUTPUT schema, so a shared
-// component that brushes an OS-only read renders an empty state instead
-// of throwing.
-//
-// The walker is least-privileged: by default it only produces
-// STRUCTURAL emptiness (undefined, false, 0, "", null, [], {} and
-// objects recursively built from those). It refuses to fabricate a
-// value that asserts something, which means any enum, union or literal
-// arm (a first arm is affirmative-biased: a status enum would stub to
-// its "ok"-like value) and any bounded string or number a plain empty
-// cannot satisfy. A schema that cannot be met structurally yields
-// NO_STRUCTURAL_STUB and the channel rejects instead, so a future
-// permission-shaped query can never silently answer "granted". Only a
-// channel on the bridge's explicit allowlist (where the arm choice has
-// been judged harmless) may pass fabricateArms to opt back in.
+// The empty answer an invoke's OUTPUT schema allows, for the reads the
+// web client cannot serve (localRegistrar.ts says which). Only
+// structural emptiness (undefined, false, 0, "", null, [], {} and
+// objects built from those): an enum, union or literal arm, or a bounded
+// string or number, asserts something (a first arm is affirmative-
+// biased: a status enum would stub to its "ok"-like value), so it yields
+// NO_STRUCTURAL_STUB and the call is refused. fabricateArms opts back in,
+// for the lab's fake host (lab/fake-host/bridge.ts).
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import { type ContractSchema, safeDecode } from "@shigomori/contracts/codec";
@@ -33,7 +23,7 @@ const SCALAR_CANDIDATES: readonly unknown[] = [undefined, false, 0, "", null];
 
 export type StubOptions = {
   // Permit fabricated values (enum, union and literal arms, bounded
-  // strings and numbers). Only the bridge allowlist path sets this.
+  // strings and numbers).
   fabricateArms: boolean;
 };
 

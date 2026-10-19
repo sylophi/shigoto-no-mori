@@ -66,6 +66,11 @@ export const DeviceIdSchema = Schema.NonEmptyString.check(
   Schema.isMaxLength(200),
 );
 
+// A device id as every device mints its own, a UUID: what a device
+// keeps of a stored one, minting afresh for anything else.
+export const isMintedDeviceId = (value: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+
 // X25519, 32 bytes as unpadded base64url.
 const DevicePublicKeySchema = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9_-]{43}$/),

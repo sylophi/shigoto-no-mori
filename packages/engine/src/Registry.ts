@@ -1,4 +1,5 @@
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
+import { isMintedDeviceId } from "@shigomori/contracts/hubProtocol";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -185,9 +186,6 @@ export function keepUnlisted(
   }
   return next;
 }
-
-const UUID_SHAPE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const idsIn = (found: ReadonlyArray<{ readonly worktree_id: string }>) =>
   new Set(found.map(({ worktree_id }) => worktree_id));
@@ -556,7 +554,7 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const [stored] = yield* sql<{ device_id: string }>`
         SELECT device_id FROM device WHERE id = 1`;
-        if (stored && UUID_SHAPE.test(stored.device_id))
+        if (stored && isMintedDeviceId(stored.device_id))
           return stored.device_id;
         const minted = yield* randomId;
         yield* sql`INSERT INTO device (id, device_id) VALUES (1, ${minted})

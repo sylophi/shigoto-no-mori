@@ -13,7 +13,9 @@
 // enroll exchanges the Clerk session token for a credential with
 // platform "web" and persists the enc:false envelope, sign-out
 // revokes this device then clears the envelope, a concurrent enroll or
-// sign-out rides the one under way (a failed one not kept),
+// sign-out rides the one under way (a failed one not kept), two tabs
+// enrolling at once enroll once and keep the credential the hub holds,
+// the shared settings another tab wrote reach this tab's watch,
 // read-classified OS-bound
 // channels answer structural stub defaults while every mutation-shaped
 // or unclassified channel REJECTS (fail-closed, including enum/union
@@ -954,5 +956,96 @@ it("device names: client hints name the Chromium forks whose user agent says Chr
       brave: false,
     }),
     "Chrome on macOS",
+  );
+});
+
+// A lock manager as the profile's tabs share one: each name's callbacks
+// run one after another.
+function sharedLocks(): Pick<LockManager, "request"> {
+  const tails = new Map<string, Promise<unknown>>();
+  return {
+    request: ((name: string, callback: () => Promise<unknown>) => {
+      const run = (tails.get(name) ?? Promise.resolve()).then(callback);
+      tails.set(
+        name,
+        run.catch(() => {}),
+      );
+      return run;
+    }) as Pick<LockManager, "request">["request"],
+  };
+}
+
+it("two tabs enrolling at once: one enrolls, and the profile keeps the credential the hub holds", async () => {
+  const localStorage = memoryStorage();
+  const locks = sharedLocks();
+  let minted = 0;
+  const fetchImpl: typeof fetch = async (input, init = {}) => {
+    if (String(input) === `${HUB_URL}/devices/enroll`) {
+      minted += 1;
+      const credential = `cred-${minted}`;
+      assert(init.body instanceof Uint8Array);
+      const body = JSON.parse(new TextDecoder().decode(init.body));
+      // The first enroll answers last, so the two land out of order.
+      if (minted === 1) await new Promise((done) => setTimeout(done, 200));
+      return jsonResponse(200, {
+        credential,
+        device: {
+          ...body,
+          createdAt: Date.now(),
+          lastSeenAt: null,
+          online: false,
+        },
+      });
+    }
+    return jsonResponse(500, { error: "no device hub in this check" });
+  };
+  const tabs = [0, 1].map(() => {
+    const bridge = createWebBridge(
+      makeDeps({ localStorage, fetchImpl, locks }),
+    );
+    trackTest(() => bridge.stop());
+    return bridge;
+  });
+  await Promise.all(
+    tabs.map((tab) =>
+      tab.api.run(tab.api.account.enroll(fakeSessionJwt("acct_1"))),
+    ),
+  );
+  assert.equal(minted, 1, "both tabs enrolled");
+  assert.equal(
+    storedJson(localStorage, "sm.web.account").credential,
+    `cred-${minted}`,
+  );
+});
+
+it("shared settings another tab wrote reach this tab's watch", async () => {
+  const localStorage = memoryStorage();
+  const tab = () => {
+    const bridge = createWebBridge(makeDeps({ localStorage }));
+    trackTest(() => bridge.stop());
+    return bridge;
+  };
+  const here = tab();
+  const there = tab();
+  const seen: unknown[] = [];
+  const stop = here.api.listen(
+    here.api.view(sharedSettingsContract, "watch", undefined),
+    (doc) => seen.push(doc),
+  );
+  trackTest(stop);
+  await there.api.run(
+    there.api.sharedSettings.set({ key: "pinnedProject/p1", value: true }),
+  );
+  // The storage event, which only the other tabs hear.
+  here.notifySharedSettingsChanged();
+  await waitFor(
+    () =>
+      seen.some(
+        (doc) =>
+          (doc as { entries: Record<string, { value: unknown }> }).entries[
+            "pinnedProject/p1"
+          ]?.value === true,
+      ),
+    "the other tab's pick in this tab's watch",
   );
 });

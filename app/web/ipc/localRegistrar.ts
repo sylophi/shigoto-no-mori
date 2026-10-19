@@ -9,29 +9,16 @@
 //
 // A host call nothing here serves is the renderer asking a local host
 // the browser does not have, which it still does in a few places. Those
-// are answered FAIL-CLOSED:
-//
-//   - An invoke explicitly classified `gated: false` (the registrar
-//     makes every remote-exposed host invoke classify itself, and only
-//     reads carry false) may resolve to a schema-derived
-//     structural stub (stubDefaults.ts), so a shared read-only
-//     component renders an empty state instead of throwing.
-//   - A channel on the small STUB_ALLOWED list below may stub too, with
-//     fabricated enum/union arms permitted, because each entry has been
-//     judged harmless by hand.
-//   - EVERYTHING else rejects with a clear "not available in the
-//     browser" error: mutations (`gated: true`), unclassified
-//     local-only channels, and any read whose output cannot be met
-//     without fabricating an affirmative value. A future contract
-//     channel therefore rejects by default until someone classifies it
-//     as a read or allowlists it, so no mutation or permission-shaped
-//     query can ever silently report success on the web.
-//
-// A channel absent from the contract entirely also rejects, because
-// answering it would hide a real wiring bug.
+// are answered FAIL-CLOSED: a read (`gated: false`) or a channel on
+// STUB_ALLOWED below gets the empty answer its output schema allows
+// (stubDefaults.ts), so a shared component renders an empty state, and
+// everything else is refused: a mutation, an unclassified channel, a
+// read with no empty answer, and a view. So a future channel is refused
+// until someone classifies it as a read, and no mutation or permission-
+// shaped query can report success on the web. A channel absent from the
+// contract entirely is a wiring bug, and dies.
 import {
   annotation,
-  callOf,
   callsOf,
   channelOf,
   type ContractCall,
@@ -45,27 +32,19 @@ import {
   scopeOf,
 } from "@shigomori/contracts/contract";
 import { decode } from "@shigomori/contracts/codec";
-import { callFailureOf } from "@shigomori/contracts/errors";
+import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import { allContractModules } from "@shigomori/contracts/allModules";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { HandlerContext, Link } from "@shared/ipc/transport";
 import { pushFanOut } from "@shared/remote/rpcTransport";
 import { createServed, resolvePush, type Served } from "@shared/ipc/served";
-import type {
-  PushKeys,
-  PushProducerPayload,
-  ViewObserver,
-} from "@shigomori/contracts/types";
+import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 
-// The hand-judged exceptions to the gated:false rule. Every entry
-// must state why answering it with a stub is harmless. Keep this list
-// short on purpose: anything not here and not classified as a read
-// rejects.
+// The hand-judged exceptions to the gated:false rule, each saying why a
+// stub is harmless:
 //
 //   - window:previewTheme: fired by ThemeProvider on every applied
 //     theme change to sync the native window chrome. There is no
@@ -75,32 +54,20 @@ import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
 const STUB_ALLOWED = new Set(["window:previewTheme"]);
 
 // A host call the tab cannot answer, the browser having no host: one it
-// may not pretend to serve, or a read with no empty answer to give.
-class BrowserRefusal extends Schema.TaggedError<BrowserRefusal>()(
-  "BrowserRefusal",
-  {
-    channel: Schema.String,
-    reason: Schema.Literals(["unavailable", "noSafeAnswer"]),
-  },
-) {
-  override get message(): string {
-    return this.reason === "unavailable"
-      ? `${this.channel} is not available in the browser`
-      : `${this.channel} has no safe empty answer in the browser`;
-  }
-}
-
-// A view the page serves itself (hub:watchPeer), observed until the
-// returned stop.
-type LocalView = (
-  input: unknown,
-  observer: ViewObserver<unknown>,
-) => () => void;
+// may not pretend to serve, or a read with no empty answer to give. A
+// call failing in the far side's own words (the page is that side), so
+// a window reading it as a view does not ask again every few seconds.
+const refusal = (channel: string, reason: "unavailable" | "noSafeAnswer") =>
+  new RemoteCallError({
+    text:
+      reason === "unavailable"
+        ? `${channel} is not available in the browser`
+        : `${channel} has no safe empty answer in the browser`,
+  });
 
 export type LocalRegistrar = {
   served: Served<HandlerContext, never, unknown>;
   link: Link;
-  view: (module: ContractModule, key: string, view: LocalView) => void;
   // A push to the page, as a host's reaches its windows.
   push: <M extends ContractModule, K extends PushKeys<M>>(
     module: M,
@@ -142,12 +109,12 @@ export function createLocalRegistrar(options: {
     failure: (error) => error,
   });
   const fanOut = pushFanOut();
-  const views = new Map<string, LocalView>();
   const invokeIndex = invokeIndexFor();
+  const viewIndex = invokeIndexFor(undefined, true);
   // Fallback verdicts are computed once per channel: the policy is
   // deterministic and some stub outputs are sizeable object shapes. A
   // verdict is either a resolvable stub value or the refusal.
-  type FallbackVerdict = { stub: unknown } | { refusal: BrowserRefusal };
+  type FallbackVerdict = { stub: unknown } | { refusal: RemoteCallError };
   const verdictCache = new Map<string, FallbackVerdict>();
 
   function fallbackVerdict(
@@ -158,17 +125,13 @@ export function createLocalRegistrar(options: {
     if (annotation(call, Gated) !== false && !allowlisted) {
       // Mutations, and local channels that never classified themselves
       // as reads, must not pretend to succeed.
-      return {
-        refusal: new BrowserRefusal({ channel, reason: "unavailable" }),
-      };
+      return { refusal: refusal(channel, "unavailable") };
     }
-    const stub = stubValueFor(outputOf(call), { fabricateArms: allowlisted });
+    const stub = stubValueFor(outputOf(call), { fabricateArms: false });
     if (stub === NO_STRUCTURAL_STUB) {
       // A read whose output demands a fabricated arm (an enum, a union,
       // a bounded scalar) gets no invented answer either.
-      return {
-        refusal: new BrowserRefusal({ channel, reason: "noSafeAnswer" }),
-      };
+      return { refusal: refusal(channel, "noSafeAnswer") };
     }
     return { stub };
   }
@@ -224,26 +187,19 @@ export function createLocalRegistrar(options: {
     },
     pushes: fanOut.pushes,
     view(channel, input) {
-      const view = views.get(channel);
-      if (view === undefined) {
-        return Stream.fail(
-          new BrowserRefusal({ channel, reason: "unavailable" }),
-        );
+      const call = viewIndex.get(channel);
+      const view = call === undefined ? undefined : served.viewOf(call);
+      if (call === undefined || view === undefined) {
+        return Stream.fail(refusal(channel, "unavailable"));
       }
-      return Stream.callback<unknown, unknown>((queue) =>
-        Effect.acquireRelease(
-          Effect.sync(() =>
-            view(input, {
-              value: (value) => {
-                Queue.offerUnsafe(queue, value);
-              },
-              end: (failure) => {
-                if (failure === undefined) Queue.endUnsafe(queue);
-                else Queue.failCauseUnsafe(queue, Cause.fail(failure));
-              },
-            }),
-          ),
-          (stop) => Effect.sync(stop),
+      // Decoded here as a server's group would, like an invoke's input.
+      return Stream.unwrap(
+        Effect.map(
+          Effect.try({
+            try: () => decode(inputOf(call), input),
+            catch: callFailureOf,
+          }),
+          view,
         ),
       );
     },
@@ -252,9 +208,6 @@ export function createLocalRegistrar(options: {
   return {
     served,
     link,
-    view: (module, key, view) => {
-      views.set(channelOf(callOf(module, key)), view);
-    },
     push: (module, key, payload) => {
       const push = resolvePush(module, key, payload);
       fanOut.emit(push.channel, push.payload);

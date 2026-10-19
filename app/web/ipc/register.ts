@@ -20,6 +20,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import { ClientLinks } from "@/lib/runtime/ClientLinks";
 import { startClientNow } from "@/lib/runtime/client";
 import type { RendererApi } from "@/lib/runtime/pageApi";
@@ -34,8 +35,9 @@ import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import type { EffectHandlers, Handlers } from "@shigomori/contracts/types";
-import { servedInvokePeer } from "@shared/hub/bridgeHandlers";
+import { servedInvokePeer, servedWatchPeer } from "@shared/hub/bridgeHandlers";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
 import { fetchReleases } from "@shared/releases";
@@ -49,6 +51,7 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shigomori/contracts/sharedSettings";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
+import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import { retryParkedRevoke } from "@shared/account/enroll";
 import * as WebHub from "../hub/connection";
 import { createHubTrace } from "../hub/trace";
@@ -83,6 +86,8 @@ export type WebBridgeDeps = {
   // the wss tunnel only (mixed content forbids ws:// under https), which
   // a proof cannot serve, so a proof dials the listener's lan candidate.
   dialableKinds?: ReadonlyArray<"lan" | "tunnel">;
+  // navigator.locks, which every tab of the profile shares.
+  locks?: Pick<LockManager, "request">;
 };
 
 export type WebBridge = {
@@ -95,8 +100,10 @@ export type WebBridge = {
   // transition. The storage event itself only fires in OTHER tabs, so
   // the tab's own push and this never double-fire.
   notifyAccountChanged(): void;
-  // The same for the client config another tab wrote.
+  // The same for the client config, and the shared settings' copy,
+  // another tab wrote.
   notifyClientConfigChanged(): void;
+  notifySharedSettingsChanged(): void;
   // Reconciles the hub socket with the current account state.
   refreshHub(): Promise<void>;
   // The liveness probe for the hub socket and every direct session,
@@ -112,7 +119,7 @@ export type WebBridge = {
 };
 
 export const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
-const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
+export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = resolveServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);
@@ -129,7 +136,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // ---- hub socket lifecycle ----
 
   // The direct plane's shared composition (shared/hub/directPlane.ts),
-  // the same assembly main/ipc/register.ts uses. The browser
+  // the same assembly the host's (host/process/wires.ts). The browser
   // differences are exactly the declared deps: identity facts from
   // this bridge, fan-out on the tab's registrar, dialableKinds
   // ["tunnel"] (an https page cannot dial ws:// interface candidates,
@@ -164,8 +171,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   );
   const hubHandlers = directPlane.handlers;
 
-  // Mirrors main/ipc/register.ts refreshHubConnection: reconcile the
-  // socket with the account state, resolving inside the serialized
+  // As the host's (host/process/wires.ts): reconcile the socket with the
+  // account state, resolving inside the serialized
   // lifecycle, and degrade any failure to a log line. An unconfigured
   // build stops the socket instead of dialing nowhere (the account
   // status says so to the UI), and a device hub refusing the ticket
@@ -262,6 +269,32 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     },
   });
 
+  // The profile's tabs share its storage, and the hub keeps the last
+  // enroll's credential alone: two tabs enrolling at once (a sign-in
+  // reaches every tab of the profile) could store the one the other
+  // rotated away. One tab enrolls at a time, and one whose wait saw
+  // another tab store a credential answers with that. A second call in
+  // this tab rides the one under way, as the handlers' own join does.
+  const locks = deps.locks ?? globalThis.navigator?.locks;
+  let enrolling: Promise<AccountStatus> | undefined;
+  const enrollOneTab: typeof accountHandlers.enroll = (token, ctx) => {
+    if (enrolling !== undefined) return enrolling;
+    const before = store.read()?.credential;
+    const enrollHere = async () =>
+      store.read()?.credential === before
+        ? accountHandlers.enroll(token, ctx)
+        : accountHandlers.status(undefined, ctx);
+    const run = (
+      locks === undefined
+        ? enrollHere()
+        : locks.request("sm.web.enroll", enrollHere)
+    ).finally(() => {
+      enrolling = undefined;
+    });
+    enrolling = run;
+    return run;
+  };
+
   // ---- clientConfig module ----
 
   const readClientConfig = () =>
@@ -271,14 +304,13 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       StoredClientConfigSchema,
       {},
     );
-  // The watchers of this tab's client config (clientConfig:watch), told
-  // of this tab's writes and, through notifyClientConfigChanged, another
-  // tab's.
-  const clientConfigWatchers = new Set<(stored: unknown) => void>();
-  const clientConfigChanged = () => {
-    const stored = readClientConfig();
-    for (const watcher of clientConfigWatchers) watcher(stored);
-  };
+  // What clientConfig:watch streams, moved by this tab's writes and,
+  // through notifyClientConfigChanged, another tab's.
+  const clientConfigNow = Effect.runSync(
+    SubscriptionRef.make(readClientConfig()),
+  );
+  const clientConfigChanged = () =>
+    Effect.runSync(SubscriptionRef.set(clientConfigNow, readClientConfig()));
   const writeClientConfig = (next: Record<string, unknown>) => {
     writeKey(deps.localStorage, CLIENT_CONFIG_KEY, JSON.stringify(next));
     clientConfigChanged();
@@ -324,8 +356,15 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       EMPTY_SHARED_SETTINGS,
     );
   // The copy as a view (sharedSettings:watch), the way a host serves its
-  // own: as it stands, then every move.
-  const sharedSettingsWatchers = new Set<(doc: SharedSettingsDoc) => void>();
+  // own: as it stands, then every move, this tab's and, through
+  // notifySharedSettingsChanged, another tab's.
+  const sharedSettingsNow = Effect.runSync(
+    SubscriptionRef.make<SharedSettingsDoc>(readSharedSettings()),
+  );
+  const announceSharedSettings = (doc: SharedSettingsDoc) => {
+    tab.push(sharedSettingsContract, "changed", doc);
+    Effect.runSync(SubscriptionRef.set(sharedSettingsNow, doc));
+  };
   const sharedSettingsCopy = createSharedSettingsCopy(
     {
       read: readSharedSettings,
@@ -345,10 +384,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     },
     {
       deviceId: () => deviceId,
-      announce: (doc) => {
-        tab.push(sharedSettingsContract, "changed", doc);
-        for (const watcher of sharedSettingsWatchers) watcher(doc);
-      },
+      announce: announceSharedSettings,
     },
   );
 
@@ -369,34 +405,30 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     showItemInFolder: () => {},
   };
 
-  tab.served.serve(accountContract, accountHandlers);
-  tab.served.serve(clientConfigContract, clientConfigHandlers);
-  tab.view(clientConfigContract, "watch", (_input, observer) => {
-    observer.value(readClientConfig());
-    clientConfigWatchers.add(observer.value);
-    return () => {
-      clientConfigWatchers.delete(observer.value);
-    };
+  tab.served.serve(accountContract, {
+    ...accountHandlers,
+    enroll: enrollOneTab,
   });
+  tab.served.serve(clientConfigContract, clientConfigHandlers);
+  tab.served.view(clientConfigContract, {
+    watch: () => SubscriptionRef.changes(clientConfigNow),
+  });
+  // As the host serves its own (host/process/handlers.ts).
   const hubServed: EffectHandlers<typeof hubContract> = {
     status: () =>
-      Effect.promise(async () => hubHandlers.status(undefined, undefined)),
+      Effect.tryPromise({
+        try: async () => hubHandlers.status(undefined, undefined),
+        catch: callFailureOf,
+      }),
     invokePeer: servedInvokePeer(() => hubHandlers),
   };
   tab.served.serve(hubContract, hubServed);
-  tab.view(hubContract, "watchPeer", (input, observer) =>
-    hubHandlers.watchPeer(
-      input as Parameters<typeof hubHandlers.watchPeer>[0],
-      observer,
-    ),
-  );
+  tab.served.view(hubContract, {
+    watchPeer: servedWatchPeer(() => hubHandlers),
+  });
   tab.served.serve(sharedSettingsContract, sharedSettingsHandlers);
-  tab.view(sharedSettingsContract, "watch", (_input, observer) => {
-    observer.value(sharedSettingsCopy.read());
-    sharedSettingsWatchers.add(observer.value);
-    return () => {
-      sharedSettingsWatchers.delete(observer.value);
-    };
+  tab.served.view(sharedSettingsContract, {
+    watch: () => SubscriptionRef.changes(sharedSettingsNow),
   });
   tab.served.serve(shellContract, shellHandlers);
   tab.served.serve(releasesContract, {
@@ -428,6 +460,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
     notifyAccountChanged: () => void accountChanged(),
     notifyClientConfigChanged: clientConfigChanged,
+    notifySharedSettingsChanged: () =>
+      announceSharedSettings(sharedSettingsCopy.read()),
 
     refreshHub,
 

@@ -6,10 +6,6 @@
 // here is a public endpoint or a public Clerk publishable key, never a
 // secret (accountServiceConfig.ts), so inlining the values into the shipped
 // bundle is safe by design.
-// import.meta.env exists in every Vite context but not under plain node,
-// where the headless bridge check imports this module and injects its
-// own env instead. The structural cast keeps the node path honest
-// without weakening the Vite typing at call sites.
 export function viteEnv(): Record<string, string | undefined> {
   // Read as a single `import.meta.env` member expression, NOT via an
   // intermediate `const meta = import.meta`: Vite substitutes the env
@@ -17,11 +13,5 @@ export function viteEnv(): Record<string, string | undefined> {
   // first defeats the substitution and leaves this returning {} in a
   // real build, which reads downstream as "the owner never configured
   // this deployment" and makes web sign-in permanently unreachable.
-  return (
-    (
-      import.meta as ImportMeta & {
-        env?: Record<string, string | undefined>;
-      }
-    ).env ?? {}
-  );
+  return import.meta.env as Record<string, string | undefined>;
 }
