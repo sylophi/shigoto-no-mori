@@ -1,4 +1,4 @@
-// sm shell <init|install|uninstall|status>: shell integration, so cd
+// sm shell <install|uninstall|status|init>: shell integration, so cd
 // moves the calling shell instead of nesting a subshell (the engine's
 // shellHook says how). And sm cd, which enters a worktree through the
 // wrapper's directive file, or in a subshell without one.
