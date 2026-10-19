@@ -42,10 +42,11 @@ const treeViews = (input: { projectId: string; worktreeId: string }) =>
 // input), read again as the tree moves: its project's git, an edit in
 // its files (or a window looking again), a mirror staging into it. A
 // view of refs alone (`refsOnly`: the branch's history, the stashes)
-// skips the edits, which can't move it and come as often as a mirror
-// or an agent writes. A read git refuses for a moment (a lock held) is
-// tried again three times, a second apart and doubling, as a request
-// was, before the view fails.
+// follows its project's git only: an edit, a window looking again and
+// a mirror's index rewrite can't move it, and the first and last come
+// as often as a mirror or an agent writes. A read git refuses for a
+// moment (a lock held) is tried again three times, a second apart and
+// doubling, as a request was, before the view fails.
 const treeView = <A, R>(
   input: { projectId: string; worktreeId: string },
   part: string,
@@ -62,13 +63,15 @@ const treeView = <A, R>(
           while: (error) => !isEntityGoneError(error),
         }),
       ),
-    Views.either(
-      gitMoved(input.projectId),
-      ...(options?.refsOnly === true ? [] : [filesChanged(input.projectId)]),
-      Views.pushed(mirrorContract, "gitChanged", (staged) => {
-        return staged.worktreeId === input.worktreeId;
-      }),
-    ),
+    options?.refsOnly === true
+      ? gitMoved(input.projectId)
+      : Views.either(
+          gitMoved(input.projectId),
+          filesChanged(input.projectId),
+          Views.pushed(mirrorContract, "gitChanged", (staged) => {
+            return staged.worktreeId === input.worktreeId;
+          }),
+        ),
     options?.every === undefined ? undefined : { every: options.every },
   );
 

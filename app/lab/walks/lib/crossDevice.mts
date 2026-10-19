@@ -58,11 +58,8 @@ export const quickCreate = async (
     .not.toMatch(new RegExp(`^(Projects|${before ?? ""})$`));
   const name = (await heading.textContent()) ?? "";
   await main(lab.page).getByText("No uncommitted changes").waitFor();
-  // History's first answer resolves the worktree and reads its branch
-  // against the primary, about eight git runs that queue for the host's
-  // spawn slots: on a CI runner beside two more lab apps and the mirrors
-  // earlier walks left running, each took up to a second and a half
-  // (11.5 s in run 39218375276), so 30 s, as the heading's wait.
+  // History's first answer is eight git runs queued for the host's
+  // spawn slots, slow on a CI runner beside two more apps (V3.md).
   await main(lab.page).getByText("No commits yet").waitFor({ timeout: 30_000 });
   const sawBaseTip = await lab.page.evaluate(
     "window.smWalkBaseTipWatch.disconnect(), window.smWalkSawBaseTip",

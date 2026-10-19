@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gitContract } from "@shigomori/contracts/modules/git";
+import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as Git from "@shigomori/engine/Git";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -164,10 +165,7 @@ it("each window here gaining focus reads the rows again, for an edit no watch sa
   );
 });
 
-// A view of refs alone (the branch's history) is not read again for an
-// edit in the project's files, which can't move it and comes as often
-// as a mirror or an agent writes, and is for its git moving.
-it("a branch's history is read again for its git moving, not for edits in the project's files", async () => {
+it("a branch's history is read again for its git moving, not for edits in the project's files or a mirror's index", async () => {
   await runHost(
     Effect.gen(function* () {
       const pushes = yield* HostPushes.HostPushes;
@@ -203,8 +201,18 @@ it("a branch's history is read again for its git moving, not for edits in the pr
         );
         yield* Effect.sleep("200 millis");
       }
+      yield* push(
+        HostPushes.push(mirrorContract, "gitChanged", {
+          projectId,
+          worktreeId,
+        }),
+      );
       yield* Effect.sleep("1 second");
-      assert.equal(reads, 1, "an edit in the project's files read it again");
+      assert.equal(
+        reads,
+        1,
+        "an edit in the project's files or a mirror's index read it again",
+      );
       yield* push(
         HostPushes.push(gitContract, "projectChanged", { projectId }),
       );
