@@ -130,6 +130,7 @@ export type AccountService = {
     credential: string,
     deviceId: string,
     patch: DevicePatch,
+    signal?: AbortSignal,
   ): Promise<void>;
   // signal aborts the mint on stop or on the caller's mint timeout, so
   // a black-holed route cannot hang the connect.
@@ -223,9 +224,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       );
     },
 
-    async update(credential, deviceId, patch) {
-      await call(credential, (client) =>
-        client.updateDevice({ params: { deviceId }, payload: patch }),
+    async update(credential, deviceId, patch, signal) {
+      await call(
+        credential,
+        (client) =>
+          client.updateDevice({ params: { deviceId }, payload: patch }),
+        signal,
       );
     },
 

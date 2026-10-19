@@ -55,10 +55,17 @@ export function effectiveDeviceIcon(
   return record?.deviceIcon ?? store.rememberedDeviceIcon() ?? detectedIcon;
 }
 
-// How long an enrollment waits on the hub. The account's other changes
-// (a sign-out above all) wait behind it (AccountShell.transitions), so
-// a hub that takes the enroll and never answers must not hold them.
-const ENROLL_TIMEOUT_MS = 30_000;
+// How long an enrollment waits on the hub, both its asks together. The
+// account's other changes (a sign-out above all) wait behind it
+// (AccountShell.transitions), so a hub that takes the enroll and never
+// answers must not hold them; with a parked revoke delivered between
+// the asks it stays inside the 30 s another tab's sign-out waits for
+// its turn (web/ipc/register.ts).
+const ENROLL_TIMEOUT_MS = 15_000;
+
+// How long a rename or an icon change waits on the hub's write, which a
+// sign-out waits behind too.
+const UPDATE_TIMEOUT_MS = 10_000;
 
 // Exchanges a fresh Clerk session token (minted by the renderer's
 // ClerkAccountSync off the live session) for the hub device
@@ -89,13 +96,17 @@ export async function enrollDevice(
     icon: effectiveDeviceIcon(stored, deps.store, deps.detectedIcon),
     publicKey: deviceKey.publicKey,
   };
+  const deadline = AbortSignal.timeout(ENROLL_TIMEOUT_MS);
+  const ask = () =>
+    deps.service.enroll(token, fields, deadline).catch((error: unknown) => {
+      if (deadline.aborted) {
+        throw new Error("The device hub didn't answer in time.");
+      }
+      throw error;
+    });
   let enrollment: EnrollResponse;
   try {
-    enrollment = await deps.service.enroll(
-      token,
-      fields,
-      AbortSignal.timeout(ENROLL_TIMEOUT_MS),
-    );
+    enrollment = await ask();
   } catch (error) {
     // The hub still lists this device under another account, from a
     // sign-out whose revoke never reached it: deliver that revoke and
@@ -109,11 +120,7 @@ export async function enrollDevice(
     const parked = await retryParkedRevoke(deps);
     if (parked.kind === "failed") throw parked.error;
     if (parked.kind === "none") throw error;
-    enrollment = await deps.service.enroll(
-      token,
-      fields,
-      AbortSignal.timeout(ENROLL_TIMEOUT_MS),
-    );
+    enrollment = await ask();
   }
   const accountId = deriveAccountId(token);
   // The switch as it is now, not as it was before the hub answered: an
@@ -233,7 +240,12 @@ export async function updateDevice(
     await pending;
     record = deps.store.read() ?? record;
   }
-  await deps.service.update(record.credential, deviceId, patch);
+  await deps.service.update(
+    record.credential,
+    deviceId,
+    patch,
+    AbortSignal.timeout(UPDATE_TIMEOUT_MS),
+  );
   if (deviceId !== deps.deviceId) return;
   keepFields(deps, record, {
     ...(patch.name === undefined
@@ -320,7 +332,12 @@ async function pushStale(
   stale: DeviceFields,
 ): Promise<void> {
   try {
-    await deps.service.update(credential, deps.deviceId, stale);
+    await deps.service.update(
+      credential,
+      deps.deviceId,
+      stale,
+      AbortSignal.timeout(UPDATE_TIMEOUT_MS),
+    );
   } catch (error) {
     log.warn(
       `[account] could not push this device's name or icon to the device hub: ${errorMessageOf(error)}`,
