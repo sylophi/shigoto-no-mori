@@ -190,6 +190,39 @@ export function summarize(
   };
 }
 
+// What the user acknowledged losing: each risky worktree it was shown,
+// by the verdict it was shown with.
+export type Acknowledged = ReadonlyMap<string, HygieneVerdictKind>;
+
+export function acknowledgementOf(risky: readonly TidyEntry[]): Acknowledged {
+  return new Map(risky.map((entry) => [entry.worktree.id, entry.verdict.kind]));
+}
+
+// Whether an acknowledgement still covers the risk shown. One given for
+// other work does not: a second selected worktree gone dirty, or one
+// acknowledged for its unpushed commits that has uncommitted changes
+// since.
+export function acknowledges(
+  acknowledged: Acknowledged,
+  risky: readonly TidyEntry[],
+): boolean {
+  return risky.every(
+    (entry) => acknowledged.get(entry.worktree.id) === entry.verdict.kind,
+  );
+}
+
+// Whether a removal is forced: only where git would refuse and the
+// user acknowledged losing that worktree's work as it is.
+export function forcedRemoval(
+  entry: TidyEntry,
+  acknowledged: Acknowledged,
+): boolean {
+  return (
+    entry.verdict.needsForce &&
+    acknowledged.get(entry.worktree.id) === entry.verdict.kind
+  );
+}
+
 // The disk walks' progress across the page, as the app's
 // useWorktreeHygiene sums it.
 export interface DiskUsageTotals {

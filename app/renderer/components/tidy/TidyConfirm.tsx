@@ -1,6 +1,9 @@
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
-import type { TidySummary } from "@shigomori/ui/views/tidy/tidyModel.ts";
+import type {
+  Acknowledged,
+  TidySummary,
+} from "@shigomori/ui/views/tidy/tidyModel.ts";
 import { TidyConfirmView } from "@shigomori/ui/views/tidy/TidyConfirmView.tsx";
 
 // The removal's confirm (TidyConfirmView), each project with its icon.
@@ -13,7 +16,7 @@ export function TidyConfirm({
   summary: TidySummary;
   deleteBranches: boolean;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: (acknowledged: Acknowledged) => void;
 }) {
   const icons = new Map(
     summary.selected.map(({ project }) => [

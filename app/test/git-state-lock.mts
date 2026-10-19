@@ -3,7 +3,9 @@
 // integration, a prompt's `git status`) makes `read-tree` fail on the
 // lock, and the apply waits through its backoff and lands once the lock
 // goes. A lock held past the whole backoff fails the apply in git's own
-// words.
+// words. And a checkout moved off the branch the read saw, onto another
+// at the same tip or detached there, refuses the apply rather than be
+// switched back.
 //
 // Run: pnpm test git-state-lock.
 import assert from "node:assert/strict";
@@ -123,3 +125,19 @@ it("a lock held past the whole backoff fails the apply in git's words", async ()
   assert.ok(error !== null, "the apply went through a held lock");
   assert.match(errorWordsOf(error), /index\.lock/);
 });
+
+for (const [moved, move] of [
+  ["onto another branch at the same tip", ["checkout", "-q", "-b", "beta"]],
+  ["detached at the same tip", ["checkout", "-q", "--detach"]],
+] as const) {
+  it(`a checkout moved ${moved} since the read refuses the apply`, async () => {
+    const { repo, apply } = await staged();
+    git(repo, ...move);
+    const head = git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    assert.deepEqual(await apply(), {
+      applied: false,
+      reason: "changed-locally",
+    });
+    assert.equal(git(repo, "rev-parse", "--abbrev-ref", "HEAD").trim(), head);
+  });
+}

@@ -65,7 +65,6 @@ import {
   OFF_MIRROR_BRANCH,
   operationDetail,
   SAME_NAMES,
-  sameHead,
   sameState,
 } from "./followPlan";
 import { chooseDirection, pull, push } from "./followTransfer";
@@ -74,6 +73,7 @@ import {
   type GitStateCore,
   operationInRefusal,
   readGitState,
+  sameHead,
   watchIndexFile,
 } from "./gitState";
 import { log } from "@shared/log";

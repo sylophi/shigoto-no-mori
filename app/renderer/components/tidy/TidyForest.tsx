@@ -26,7 +26,9 @@ import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
+  type Acknowledged,
   buildTidyEntries,
+  forcedRemoval,
   groupByProject,
   projectCount,
   safeToRemove,
@@ -174,7 +176,7 @@ function TidyBody() {
     setPicked((prev) => withToggled(worktreeId)(prev ?? safeIds));
   };
 
-  const runRemovals = async () => {
+  const runRemovals = async (acknowledged: Acknowledged) => {
     setConfirming(false);
     // Snapshot the selection so toggles during the run can't drift it.
     const queue = summary.selected;
@@ -185,11 +187,11 @@ function TidyBody() {
         const result = await deleteWorktree.mutateAsync({
           projectId: entry.project.id,
           worktreeId: entry.worktree.id,
-          // Force only where the user explicitly acknowledged losing
-          // work, and let the verdict decide what counts: untracked
-          // files under `-uno` make git refuse without --force while
-          // changedCount reads zero.
-          force: entry.verdict.needsForce,
+          // Force only where the user acknowledged losing this
+          // worktree's work, and let the verdict decide what counts:
+          // untracked files under `-uno` make git refuse without --force
+          // while changedCount reads zero.
+          force: forcedRemoval(entry, acknowledged),
         });
         // Deletion resolves either way: `ok: false` means a teardown
         // script or a port release failed and the worktree is still on
@@ -272,7 +274,7 @@ function TidyBody() {
             summary={summary}
             deleteBranches={deleteBranches}
             onCancel={() => setConfirming(false)}
-            onConfirm={() => void runRemovals()}
+            onConfirm={(acknowledged) => void runRemovals(acknowledged)}
           />
         )
       }
