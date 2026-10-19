@@ -430,6 +430,7 @@ function fakeMirrorEngine() {
             session,
             name: input.name,
             labels: input.labels,
+            localWorktreeId: input.localWorktreeId,
             localRoot: input.localRoot,
             deviceId: input.deviceId,
             projectId: input.projectId,

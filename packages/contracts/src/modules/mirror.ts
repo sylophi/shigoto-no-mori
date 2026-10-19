@@ -127,8 +127,6 @@ const MirrorConflictSchema = strict(
 const MirrorStagingSchema = strict(
   Schema.Struct({
     path: Schema.String,
-    receivedFiles: Schema.Natural,
-    expectedFiles: Schema.Natural,
     receivedSize: Schema.Natural,
     expectedSize: Schema.Natural,
   }),
@@ -138,10 +136,7 @@ const MirrorEndpointStateSchema = strict(
   Schema.Struct({
     connected: Schema.Boolean,
     scanned: Schema.Boolean,
-    directories: Schema.Natural,
     files: Schema.Natural,
-    symbolicLinks: Schema.Natural,
-    totalFileSize: Schema.Natural,
     problems: Schema.Array(MirrorProblemSchema),
     excludedProblems: Schema.Natural,
     staging: Schema.optional(MirrorStagingSchema),
@@ -290,12 +285,13 @@ export const MirrorSessionSchema = strict(
 );
 export type MirrorSession = typeof MirrorSessionSchema.Type;
 
-// As the daemon's state line carries it. An unknown top-level key is
-// stripped rather than refused, so a newer engine's field can't freeze
-// the stream; the nested shapes stay strict.
+// As the daemon's state line carries it, without what the host adds
+// (its project, its ignore mode, git's status, a stop under way). An
+// unknown top-level key is stripped rather than refused, so a newer
+// engine's field can't freeze the stream; the nested shapes stay
+// strict.
 const {
   localProjectId: _localProjectId,
-  localWorktreeId: _localWorktreeId,
   ignoreMode: _ignoreMode,
   git: _git,
   stopping: _stopping,

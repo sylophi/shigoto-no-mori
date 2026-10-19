@@ -282,7 +282,7 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 		WorktreeID:      "0123456789ab",
 		RemoteRoot:      remote,
 		Name:            "feature-x",
-		Labels:          map[string]string{"localWorktreeId": "ba9876543210"},
+		Labels:          map[string]string{"localProjectId": "proj-local"},
 		LocalWorktreeID: "ba9876543210",
 		Ignores:         ignores,
 	})
@@ -342,20 +342,21 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	})
 	state := d.sessionState(session)
 	for key, want := range map[string]any{
-		"name":       "feature-x",
-		"localRoot":  local,
-		"deviceId":   "peer-1",
-		"projectId":  "proj-a",
-		"worktreeId": "0123456789ab",
-		"remoteRoot": remote,
-		"paused":     false,
+		"name":            "feature-x",
+		"localRoot":       local,
+		"deviceId":        "peer-1",
+		"projectId":       "proj-a",
+		"worktreeId":      "0123456789ab",
+		"remoteRoot":      remote,
+		"paused":          false,
+		"localWorktreeId": "ba9876543210",
 	} {
 		if state[key] != want {
 			t.Errorf("state[%s] = %v, want %v", key, state[key], want)
 		}
 	}
 	labels, _ := state["labels"].(map[string]any)
-	if labels["localWorktreeId"] != "ba9876543210" {
+	if labels["localProjectId"] != "proj-local" {
 		t.Errorf("labels = %v", state["labels"])
 	}
 	echoed, _ := state["ignores"].([]any)
@@ -673,7 +674,7 @@ func TestMirrorSessionSurvivesDaemonRestart(t *testing.T) {
 		DeviceID:        "peer-1",
 		RemoteRoot:      remote,
 		Name:            "feat/mirror",
-		Labels:          map[string]string{"localWorktreeId": "ba9876543210"},
+		Labels:          map[string]string{"localProjectId": "proj-local"},
 		LocalWorktreeID: "ba9876543210",
 	})
 	if created["ok"] != true {
@@ -710,9 +711,13 @@ func TestMirrorSessionSurvivesDaemonRestart(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	labels, _ := second.sessionState(session)["labels"].(map[string]any)
-	if labels["localWorktreeId"] != "ba9876543210" {
+	restarted := second.sessionState(session)
+	labels, _ := restarted["labels"].(map[string]any)
+	if labels["localProjectId"] != "proj-local" {
 		t.Fatalf("labels lost across the restart: %v", labels)
+	}
+	if restarted["localWorktreeId"] != "ba9876543210" {
+		t.Fatalf("the local worktree lost across the restart: %v", restarted["localWorktreeId"])
 	}
 	writeFileT(t, filepath.Join(local, "b.txt"), "b\n")
 	waitForT(t, 30*time.Second, "the restarted session to sync", func() bool {
