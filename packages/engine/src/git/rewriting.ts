@@ -28,7 +28,7 @@ export const makeRewriting = ({
   Effect.sync(() => {
     const { run, runLenient, onIndex } = running;
     const { headAt, isAncestor } = refs;
-    const { conflictedPaths, refuseMidOperation } = operation;
+    const { conflictedPaths, refuseMidOperation, undoStopped } = operation;
 
     // Both make a new commit and refuse to leave anything half done: a
     // conflict aborts, so the worktree is exactly as it was and the error
@@ -72,7 +72,7 @@ export const makeRewriting = ({
                 if (inProgress.trim() === "") return yield* Effect.fail(error);
                 const conflicted =
                   (yield* conflictedPaths(worktree)).length > 0;
-                yield* runLenient(worktree, [verb, "--abort"]);
+                yield* undoStopped(worktree, verb);
                 const words =
                   error instanceof GitCommandError
                     ? stderrOf(error)

@@ -27,7 +27,7 @@ export const makeRemote = ({
   readonly merging: MergingArea;
 }) =>
   Effect.gen(function* () {
-    const { run, runLenient } = running;
+    const { run } = running;
     const { listRemotes } = worktreeVerbs;
     // Overlapping callers share the one in flight, and nothing is kept
     // after it.
@@ -64,12 +64,10 @@ export const makeRemote = ({
     // A rebase for linear history where that is safe (rebaseIsSafe), and
     // a whole-tree merge otherwise or on a per-commit conflict. Each
     // merge passes `--ff`, git's own default, over a `merge.ff` setting
-    // that would refuse it. Both abort paths swallow the abort's failure
-    // so the worktree isn't left half-rebased or half-merged when the
-    // move fails. A merge that conflicts fails with SyncConflictsError,
-    // which the page offers the merge kept on its conflicts for. Neither
-    // command takes a trailing `--`, which it would read as a second
-    // revision.
+    // that would refuse it. A merge that conflicts fails with
+    // SyncConflictsError, which the page offers the merge kept on its
+    // conflicts for. Neither command takes a trailing `--`, which it
+    // would read as a second revision.
     const rebaseOrMerge = (worktree: string, ref: string) =>
       Effect.gen(function* () {
         if (yield* rebaseIsSafe(worktree, ref)) {
@@ -80,9 +78,7 @@ export const makeRemote = ({
           ]).pipe(
             Effect.as(true),
             Effect.catch(() =>
-              runLenient(worktree, ["rebase", "--abort"]).pipe(
-                Effect.as(false),
-              ),
+              operation.undoStopped(worktree, "rebase").pipe(Effect.as(false)),
             ),
           );
           if (rebased) return;
@@ -93,7 +89,7 @@ export const makeRemote = ({
               // Git reports conflicts on stdout, so the files say it.
               const conflicted =
                 (yield* operation.conflictedPaths(worktree)).length > 0;
-              yield* runLenient(worktree, ["merge", "--abort"]);
+              yield* operation.undoStopped(worktree, "merge");
               return yield* conflicted
                 ? Effect.fail(new SyncConflictsError({ ref }))
                 : Effect.fail(error);

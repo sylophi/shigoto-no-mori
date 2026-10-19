@@ -923,6 +923,138 @@ it("every fetch whose remote stops answering ends at its deadline, the project's
   }
 });
 
+// A branch two commits ahead of a main that moved on, whose rebase onto
+// main another program's git stops after its first pick: it takes
+// index.lock as the pick lands, once.
+function withStoppedRebase() {
+  const repo = seedRepo();
+  git(repo, "checkout", "-q", "-b", "feat");
+  write(repo, "f1.txt", "one\n");
+  git(repo, "add", "f1.txt");
+  git(repo, "commit", "-q", "-m", "f1");
+  write(repo, "f2.txt", "two\n");
+  git(repo, "add", "f2.txt");
+  git(repo, "commit", "-q", "-m", "f2");
+  git(repo, "checkout", "-q", "main");
+  write(repo, "m.txt", "main\n");
+  git(repo, "add", "m.txt");
+  git(repo, "commit", "-q", "-m", "main moves on");
+  git(repo, "checkout", "-q", "feat");
+  const feat = rev(repo, "feat");
+  const lock = join(repo, ".git", "index.lock");
+  const stoppedOnce = join(tempDir("stopped-"), "once");
+  const hook = join(repo, ".git", "hooks", "reference-transaction");
+  writeFileSync(
+    hook,
+    `#!/bin/sh\n[ "$1" = committed ] || exit 0\nin=$(cat)\n[ -s '${join(repo, ".git", "rebase-merge", "done")}' ] || exit 0\necho "$in" | grep -q ' HEAD$' || exit 0\n[ -e '${stoppedOnce}' ] && exit 0\ntouch '${stoppedOnce}' '${lock}'\n`,
+  );
+  chmodSync(hook, 0o755);
+  const rebasing = () => existsSync(join(repo, ".git", "rebase-merge"));
+  return { repo, feat, lock, stoppedOnce, rebasing };
+}
+
+it("a sync whose rebase is stopped and can't be undone stops there, and runs no merge on that HEAD", async () => {
+  const { repo, lock, stoppedOnce, rebasing } = withStoppedRebase();
+  const outcome = await withGit((g) =>
+    Effect.gen(function* () {
+      const syncing = yield* Effect.forkChild(
+        Effect.exit(
+          g.syncWithPrimary({ worktree: repo, repo, primaryRef: "main" }),
+        ),
+      );
+      while (syncing.pollUnsafe() === undefined) {
+        yield* TestClock.adjust("200 millis");
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      return yield* Fiber.join(syncing);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  rmSync(lock);
+  assert.ok(existsSync(stoppedOnce), "the rebase was stopped part-way");
+  assert.ok(Exit.isFailure(outcome));
+  const error = Option.getOrThrow(Exit.findErrorOption(outcome));
+  assert.ok(error instanceof GitRefusedError, String(error));
+  assert.match(
+    error.reason,
+    /^The rebase stopped part-way and couldn't be undone/,
+  );
+  assert.ok(rebasing(), "left in git's own rebase, for the banner");
+  assert.ok(!existsSync(join(repo, ".git", "MERGE_HEAD")), "no merge ran");
+});
+
+it("a sync whose stopped rebase is undone once the lock goes merges instead", async () => {
+  const { repo, feat, lock, rebasing } = withStoppedRebase();
+  // The other git lets go 300 ms after it took the lock, long after the
+  // first abort was refused.
+  const watching = setInterval(() => {
+    if (!existsSync(lock)) return;
+    clearInterval(watching);
+    setTimeout(() => rmSync(lock), 300);
+  }, 5);
+  const outcome = await withGit((g) =>
+    Effect.exit(
+      g.syncWithPrimary({ worktree: repo, repo, primaryRef: "main" }),
+    ),
+  ).finally(() => clearInterval(watching));
+  assert.ok(Exit.isSuccess(outcome), "the sync finished");
+  assert.ok(!rebasing());
+  assert.equal(git(repo, "symbolic-ref", "--short", "HEAD").trim(), "feat");
+  // A merge of the branch as it was, not of a half-rebased HEAD.
+  assert.deepEqual(
+    git(repo, "rev-list", "--parents", "-n", "1", "HEAD")
+      .trim()
+      .split(" ")
+      .slice(1),
+    [feat, rev(repo, "main")],
+  );
+});
+
+it("a cherry-pick that conflicts and can't be undone says so, not that nothing changed", async () => {
+  const repo = seedRepo();
+  git(repo, "checkout", "-q", "-b", "other");
+  write(repo, "a.txt", "theirs\n");
+  git(repo, "commit", "-q", "-am", "theirs");
+  const pick = rev(repo, "other");
+  git(repo, "checkout", "-q", "main");
+  write(repo, "a.txt", "ours\n");
+  git(repo, "commit", "-q", "-am", "ours");
+  // Another program's git takes index.lock as the pick stops.
+  const lock = join(repo, ".git", "index.lock");
+  const hook = join(repo, ".git", "hooks", "reference-transaction");
+  writeFileSync(
+    hook,
+    `#!/bin/sh\n[ "$1" = committed ] || exit 0\ngrep -q ' CHERRY_PICK_HEAD$' || exit 0\ntouch '${lock}'\n`,
+  );
+  chmodSync(hook, 0o755);
+  const outcome = await withGit((g) =>
+    Effect.gen(function* () {
+      const picking = yield* Effect.forkChild(
+        Effect.exit(g.cherryPickCommit(repo, pick)),
+      );
+      while (picking.pollUnsafe() === undefined) {
+        yield* TestClock.adjust("200 millis");
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      return yield* Fiber.join(picking);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  const held = existsSync(lock);
+  if (held) rmSync(lock);
+  assert.ok(held, "the lock was taken as the pick stopped");
+  assert.ok(Exit.isFailure(outcome));
+  const error = Option.getOrThrow(Exit.findErrorOption(outcome));
+  assert.ok(error instanceof GitRefusedError, String(error));
+  assert.match(
+    error.reason,
+    /^The cherry-pick stopped part-way and couldn't be undone/,
+  );
+  assert.ok(existsSync(join(repo, ".git", "CHERRY_PICK_HEAD")));
+});
+
 it("publish needs a remote, and pushes the branch with tracking", async () => {
   const { clone } = withRemote();
   git(clone, "checkout", "-q", "-b", "fresh");
