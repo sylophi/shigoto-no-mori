@@ -59,8 +59,8 @@ import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 
 export interface HubDeps {
   // Resolves the enroll bearer (a Clerk session token) to the owning
-  // account, or null when it does not verify. Injected so the test
-  // suite never talks to real Clerk.
+  // account, or null when it does not verify; throws when it could not
+  // be checked. Injected so the test suite never talks to real Clerk.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
   // The fetch the Cloudflare tunnel API is called through, injected
   // like verifyLogin so the suite stubs the CF API inside workerd.
@@ -89,6 +89,14 @@ class CfFetch extends Context.Service<CfFetch, typeof fetch>()(
 const accountHub = (env: Env, accountId: string) =>
   env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName(accountId));
 
+// The refusal for a failed step behind a route, as a catchTags handler,
+// its cause logged: the response says only which step.
+const unavailable =
+  (operation: HubUnavailableError["operation"]) => (cause: unknown) =>
+    Effect.logError(`hub: ${operation} failed`, cause).pipe(
+      Effect.andThen(Effect.fail(new HubUnavailableError({ operation }))),
+    );
+
 // ---- Auth tiers ----
 
 const loginAuth = Layer.effect(
@@ -99,13 +107,11 @@ const loginAuth = Layer.effect(
       bearer: (effect, { credential }) =>
         Effect.gen(function* () {
           const token = Redacted.value(credential);
-          // Any verification failure (expired, foreign instance,
-          // malformed) reads as no login.
           const login =
             token === ""
               ? null
               : yield* Effect.tryPromise(() => verify(token)).pipe(
-                  Effect.orElseSucceed(() => null),
+                  Effect.catchTags({ UnknownError: unavailable("enroll") }),
                 );
           if (login === null) return yield* new HubLoginRejectedError();
           return yield* Effect.provideService(effect, HubLogin, login);
@@ -146,7 +152,7 @@ const deviceAuth = Layer.effect(
             kind: device.platform === "web" ? "web" : "desktop",
             credentialHash: hash,
           });
-        }).pipe(Effect.catchTags({ RegistryError: Effect.die })),
+        }).pipe(Effect.catchTags({ RegistryError: unavailable("credential") })),
     });
   }),
 );
@@ -199,10 +205,6 @@ function ticketTtlMs(env: Env): number {
   return Number.isInteger(override) && override > 0 ? override : TICKET_TTL_MS;
 }
 
-// The refusal for a failed step behind a route, as a catchTags handler.
-const unavailable = (operation: HubUnavailableError["operation"]) => () =>
-  new HubUnavailableError({ operation });
-
 const handlers = Effect.gen(function* () {
   const env = yield* WorkerEnv;
   const registry = yield* Registry.Registry;
@@ -214,7 +216,11 @@ const handlers = Effect.gen(function* () {
   const presenceOrNone = (accountId: string) =>
     Effect.tryPromise(() => accountHub(env, accountId).online()).pipe(
       Effect.map((online): ReadonlySet<string> => new Set(online)),
-      Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
+      Effect.catch((cause) =>
+        Effect.logWarning("hub: presence unread", cause).pipe(
+          Effect.as(new Set<string>() as ReadonlySet<string>),
+        ),
+      ),
     );
 
   // A removed device's tunnel, best-effort, finishing after the
@@ -435,6 +441,16 @@ const handlers = Effect.gen(function* () {
 // wrangler.jsonc.
 const RATE_LIMIT_PERIOD_SECONDS = 60;
 
+// The routes where a caller with no credential still makes the Worker
+// do real work (a sign-in checked at Clerk, an object woken), by the
+// route the router matched, however the request spelled its path.
+const OPEN_ROUTES: ReadonlySet<string> = new Set(
+  [
+    HubApi.groups.enrollment.endpoints.enroll,
+    HubApi.groups.socket.endpoints.connect,
+  ].map((endpoint) => `${endpoint.method} ${endpoint.path}`),
+);
+
 // Keyed on the client IP because most callers here have no verified
 // identity yet, and the work worth bounding happens before one could be
 // established. Cloudflare sets CF-Connecting-IP on every request that
@@ -442,9 +458,9 @@ const RATE_LIMIT_PERIOD_SECONDS = 60;
 // means the request did not come through the edge at all (the suite, a
 // bare `wrangler dev`), where there is nothing to protect. A limiter
 // failure fails open: throttling is a cost guard, and it must never be
-// the reason a device cannot reach its hub. A preflight does no work
-// worth limiting, and a 429 on one would only surface in the browser as
-// an opaque CORS failure.
+// the reason a device cannot reach its hub. It runs on a matched route,
+// before the route's auth; a preflight never reaches it (cors answers
+// it), and a path no route matches does no work.
 const rateLimit = HttpRouter.middleware(
   Effect.gen(function* () {
     const env = yield* WorkerEnv;
@@ -452,20 +468,20 @@ const rateLimit = HttpRouter.middleware(
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const ip = request.headers["cf-connecting-ip"];
-        if (ip === undefined || request.method === "OPTIONS") {
-          return yield* httpEffect;
-        }
-        // Enroll and connect, the two routes where a caller with no
-        // credential still makes the Worker do real work, draw on the
-        // tighter budget.
-        const path = new URL(request.originalUrl, "http://hub").pathname;
-        const open =
-          (request.method === "POST" && path === "/devices/enroll") ||
-          (request.method === "GET" && path === "/connect");
-        const limiter = open ? env.RATE_LIMIT_OPEN : env.RATE_LIMIT;
+        if (ip === undefined) return yield* httpEffect;
+        const { route } = yield* HttpRouter.RouteContext;
+        const limiter = OPEN_ROUTES.has(`${route.method} ${route.path}`)
+          ? env.RATE_LIMIT_OPEN
+          : env.RATE_LIMIT;
         const { success } = yield* Effect.tryPromise(() =>
           limiter.limit({ key: ip }),
-        ).pipe(Effect.orElseSucceed(() => ({ success: true })));
+        ).pipe(
+          Effect.catch((cause) =>
+            Effect.logWarning("hub: rate limiter failed open", cause).pipe(
+              Effect.as({ success: true }),
+            ),
+          ),
+        );
         if (success) return yield* httpEffect;
         return HttpServerResponse.empty({
           status: 429,
@@ -473,6 +489,20 @@ const rateLimit = HttpRouter.middleware(
         });
       });
   }),
+);
+
+// A request that failed past every typed answer (a defect, an untyped
+// failure the router turns into a 500) logs its cause once. The request
+// logger is off for the query's ticket; this names the route alone.
+const logFailures = HttpRouter.middleware(
+  (httpEffect) =>
+    Effect.tapCause(httpEffect, (cause) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const path = new URL(request.originalUrl, "http://hub").pathname;
+        yield* Effect.logError(`hub: ${request.method} ${path} failed`, cause);
+      }),
+    ),
   { global: true },
 );
 
@@ -516,8 +546,9 @@ export function createWorker(deps: HubDeps): HubWorker {
     const api = HttpApiBuilder.layer(HubApi).pipe(
       Layer.provide(Layer.unwrap(handlers)),
       Layer.provide([loginAuth, deviceAuth, protocolFloor]),
-      Layer.provide(rateLimit),
+      Layer.provide(rateLimit.layer),
       Layer.provide(cors),
+      Layer.provide(logFailures),
       Layer.provide(services),
       Layer.provide(HttpServer.layerServices),
     );

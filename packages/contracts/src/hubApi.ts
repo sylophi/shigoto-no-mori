@@ -96,6 +96,7 @@ export class HubUnavailableError extends Schema.TaggedError<HubUnavailableError>
   {
     operation: Schema.Literals([
       "enroll",
+      "credential",
       "list",
       "revoke",
       "update",
@@ -202,7 +203,9 @@ export class LoginAuth extends HttpApiMiddleware.Service<
   { provides: HubLogin }
 >()("sm/contracts/LoginAuth", {
   security: { bearer: HttpApiSecurity.bearer },
-  error: HubLoginRejectedError,
+  // Unavailable when the sign-in could not be checked at all (Clerk
+  // unreachable), which a retry may clear.
+  error: [HubLoginRejectedError, HubUnavailableError],
 }) {}
 
 // credentialHash: what the tickets it mints are bound to.
@@ -221,7 +224,11 @@ export class DeviceAuth extends HttpApiMiddleware.Service<
   { provides: HubDevice }
 >()("sm/contracts/DeviceAuth", {
   security: { bearer: HttpApiSecurity.bearer },
-  error: [HubCredentialRejectedError, HubDeviceRevokedError],
+  error: [
+    HubCredentialRejectedError,
+    HubDeviceRevokedError,
+    HubUnavailableError,
+  ],
 }) {}
 
 // ---- Routes ----

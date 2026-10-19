@@ -19,6 +19,12 @@ import {
   TICKET_TTL_MS,
 } from "../src/ticket.ts";
 import type { Env } from "../src/env.ts";
+import { createWorker } from "../src/worker.ts";
+import { tokenRefused } from "../src/index.ts";
+import {
+  TokenVerificationError,
+  TokenVerificationErrorReason,
+} from "@clerk/backend/errors";
 import {
   BASE,
   TEST_TOKEN_PREFIX,
@@ -702,7 +708,7 @@ describe("logging", () => {
 });
 
 describe("rate limiting", () => {
-  // A missing binding would fail open in rateLimited, so the cases below,
+  // A missing binding would fail open in rateLimit, so the cases below,
   // which stand in their own limiters, would never notice it.
   it("binds both budgets from wrangler.jsonc", async () => {
     const limits = await Promise.all(
@@ -761,6 +767,112 @@ describe("rate limiting", () => {
       testEnv,
     );
     expect(response.status).toBe(429);
+  });
+});
+
+describe("the tight budget, by route", () => {
+  // The router reads a path case-insensitively, with a trailing or a
+  // doubled slash and percent-escapes, so each spelling reaches the
+  // route, and each draws on the route's budget.
+  it("holds every spelling of an open route to the tighter budget", async () => {
+    const testEnv = limitedEnv();
+    const spellings = ["/CONNECT", "/connect/", "//connect", "/%63onnect"];
+    for (const [i, spelling] of spellings.entries()) {
+      const ip = `203.0.113.${40 + i}`;
+      const statuses = await statusesFrom(
+        testEnv,
+        ip,
+        OPEN_BUDGET + 1,
+        spelling,
+      );
+      expect(statuses.slice(0, OPEN_BUDGET)).toEqual(
+        Array(OPEN_BUDGET).fill(403),
+      );
+      expect(statuses.at(-1)).toBe(429);
+    }
+  });
+
+  it("fails open when the limiter itself fails", async () => {
+    const testEnv: Env = {
+      ...env,
+      RATE_LIMIT: {
+        limit: () => Promise.reject(new Error("limiter down")),
+      },
+    };
+    expect(
+      await statusesFrom(testEnv, "203.0.113.50", BUDGET + 1, "/devices"),
+    ).toEqual(Array(BUDGET + 1).fill(401));
+  });
+});
+
+describe("a step that could not run", () => {
+  it("answers a credential check whose registry read failed as unavailable", async () => {
+    const { credential } = await enroll("acct-d1-down", "dev-d1-down");
+    const down: Env = {
+      ...env,
+      DB: new Proxy(
+        {},
+        {
+          get: () => () => {
+            throw new Error("D1 unreachable");
+          },
+        },
+      ) as D1Database,
+    };
+    const response = await call(listRequest(credential), down);
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      _tag: "HubUnavailableError",
+      operation: "credential",
+    });
+  });
+
+  it("answers a sign-in Clerk could not check as unavailable, not refused", async () => {
+    const clerkDown = createWorker({
+      verifyLogin: () => Promise.reject(new Error("JWKS unreachable")),
+    });
+    const response = await call(
+      enrollRequest(`${TEST_TOKEN_PREFIX}acct-clerk-down`, {
+        deviceId: "dev-clerk-down",
+        name: "Laptop",
+        platform: "darwin",
+        icon: "laptop",
+      }),
+      env,
+      clerkDown,
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({
+      _tag: "HubUnavailableError",
+      operation: "enroll",
+    });
+  });
+});
+
+const clerkFailure = (reason: string) =>
+  new TokenVerificationError({ reason, message: reason });
+
+describe("Clerk's verdict on a sign-in", () => {
+  // The deployed verifier (index.ts): a token Clerk refused is no
+  // login, a check that could not run is the hub unavailable.
+  it("refuses the token's own failures and not a check that could not run", () => {
+    expect(
+      tokenRefused(clerkFailure(TokenVerificationErrorReason.TokenExpired)),
+    ).toBe(true);
+    expect(
+      tokenRefused(
+        clerkFailure(TokenVerificationErrorReason.TokenInvalidSignature),
+      ),
+    ).toBe(true);
+    expect(
+      tokenRefused(
+        clerkFailure(TokenVerificationErrorReason.RemoteJWKFailedToLoad),
+      ),
+    ).toBe(false);
+    expect(
+      tokenRefused(clerkFailure(TokenVerificationErrorReason.InvalidSecretKey)),
+    ).toBe(false);
+    expect(tokenRefused(new TypeError("fetch failed"))).toBe(false);
   });
 });
 
