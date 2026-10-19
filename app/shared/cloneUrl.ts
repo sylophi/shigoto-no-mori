@@ -36,6 +36,26 @@ export function pickCloneUrl(
   return picked === undefined ? null : stripUrlCredentials(picked.url);
 }
 
+// The remotes to pick that URL from: each as configured, which the
+// other device rewrites by its own url.insteadOf, unless its URL names
+// no real host (an alias like `gh:owner/repo`, which only this
+// machine's rewrite makes a URL). Then that remote as this machine
+// rewrites it.
+export function handedRemotes(
+  configured: readonly { name: string; url: string }[],
+  effective: readonly { name: string; url: string }[],
+): { name: string; url: string }[] {
+  return configured.flatMap((remote) =>
+    namesAHost(remote.url)
+      ? [remote]
+      : effective.filter((each) => each.name === remote.name),
+  );
+}
+
+const namesAHost = (url: string) =>
+  /^[a-z][a-z0-9+.-]*:\/\//i.test(url.trim()) ||
+  (normalizeRemoteUrl(url)?.split("/")[0]?.includes(".") ?? false);
+
 // Drops the userinfo of an http(s) URL. An ssh URL's `git@` is the
 // login every user of the host shares, not a secret, and the clone
 // needs it.

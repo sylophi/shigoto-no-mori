@@ -315,10 +315,10 @@ const make = Effect.gen(function* () {
     });
 
   // The copy entries a files step will bring: those its ignore patterns,
-  // read by git's own rules, leave in. Its patterns alone (the user's own
-  // excludes cut off, which the step doesn't read), and each path asked
-  // as a file and as a folder, since a folder-only rule (`deps/`) only
-  // matches the second. A symlink entry is never brought: its target is
+  // read by git's own rules, leave in. Its patterns alone, as the only
+  // excludes file (the user's own and a template's are what the step
+  // doesn't read), and each path asked as a file and as a folder, since
+  // a folder-only rule (`deps/`) only matches the second. A symlink entry is never brought: its target is
   // this machine's.
   const broughtBy = (
     ignores: ReadonlyArray<string>,
@@ -330,9 +330,10 @@ const make = Effect.gen(function* () {
         .map((entry) => entry.path);
       if (paths.length === 0) return new Set<string>();
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "sm-carry-" });
-      yield* git.run(dir, ["init", "-q"]);
+      yield* git.run(dir, ["init", "-q", "--template="]);
+      const patterns = path.join(dir, ".git", "sm-ignores");
       yield* fs.writeFileString(
-        yield* git.gitPath(dir, "info/exclude"),
+        patterns,
         ignores.map((pattern) => `${pattern}\n`).join(""),
       );
       const matched = new Set(
@@ -340,7 +341,7 @@ const make = Effect.gen(function* () {
           dir,
           [
             "-c",
-            "core.excludesFile=/dev/null",
+            `core.excludesFile=${patterns}`,
             "check-ignore",
             "--no-index",
             "--stdin",

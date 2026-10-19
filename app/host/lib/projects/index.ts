@@ -19,7 +19,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Ops from "@host/lib/engineOps";
 import * as Git from "@shigomori/engine/Git";
-import { pickCloneUrl } from "@shared/cloneUrl";
+import { handedRemotes, pickCloneUrl } from "@shared/cloneUrl";
 import { dataDir, toAbsolute } from "@shared/paths";
 
 let snapshot: readonly ProjectRow[] = [];
@@ -133,17 +133,14 @@ export const defaultBranchOf = Effect.fnUntraced(function* (project: Project) {
   return { ref: first.primaryRef, branch: first.primaryBranch };
 });
 
-// The URL another device should clone to get the repo at `path`: as
-// configured, which that device rewrites by its own url.insteadOf, unless
-// only this machine's rewrite makes it cloneable (an alias like
-// `gh:owner/repo`).
+// The URL another device should clone to get the repo at `path`.
 export const handedCloneUrl = Effect.fnUntraced(function* (path: string) {
   const git = yield* Git.Git;
   const [configured, effective] = yield* Effect.all(
     [git.listConfiguredRemoteEntries(path), git.listRemoteEntries(path)],
     { concurrency: 2 },
   );
-  return pickCloneUrl(configured) ?? pickCloneUrl(effective);
+  return pickCloneUrl(handedRemotes(configured, effective));
 });
 
 // Resolves which LOCAL project a peer's project corresponds to, by repo

@@ -48,8 +48,13 @@ const githubHostOf = (url: string) =>
   runHost(flatMap(GithubCli, (cli) => cli.hostOf(url)));
 const { cloneUrlOf } =
   await import("@shigomori/contracts/predicates/remoteUrl");
-const { cloneFolderName, pickCloneUrl, repoNameFromUrl, stripUrlCredentials } =
-  await import("../shared/cloneUrl.ts");
+const {
+  cloneFolderName,
+  handedRemotes,
+  pickCloneUrl,
+  repoNameFromUrl,
+  stripUrlCredentials,
+} = await import("../shared/cloneUrl.ts");
 const { CloneProjectPayloadSchema } =
   await import("@shigomori/contracts/schemas/project");
 
@@ -182,6 +187,36 @@ it("the URL handed to another device: origin first, remotes only, never a creden
       { name: "origin", url: "https://ghp_secret@github.com/o/r.git" },
     ]),
     "https://github.com/o/r.git",
+  );
+});
+
+it("each remote is handed as configured, an alias as this machine rewrites it", () => {
+  const handed = (
+    configured: { name: string; url: string }[],
+    effective: { name: string; url: string }[],
+  ) => pickCloneUrl(handedRemotes(configured, effective));
+  // This machine's rewrite (a mirror, a daemon) stays here.
+  assert.equal(
+    handed(
+      [{ name: "origin", url: "https://github.com/o/r.git" }],
+      [{ name: "origin", url: "git://127.0.0.1/r.git" }],
+    ),
+    "https://github.com/o/r.git",
+  );
+  // An alias is a URL only through the rewrite, so the rewrite goes, and
+  // for the same remote: not upstream, someone else's repo.
+  assert.equal(
+    handed(
+      [
+        { name: "origin", url: "gh:o/r" },
+        { name: "upstream", url: "https://github.com/up/r" },
+      ],
+      [
+        { name: "origin", url: "git@github.com:o/r" },
+        { name: "upstream", url: "https://github.com/up/r" },
+      ],
+    ),
+    "git@github.com:o/r",
   );
 });
 
