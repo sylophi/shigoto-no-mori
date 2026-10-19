@@ -13,7 +13,7 @@ import {
   PATCH_MAX_OUTPUT,
 } from "./documents.ts";
 import type { OperationArea } from "./operation.ts";
-import type { RunningArea } from "./running.ts";
+import { indexHeld, type RunningArea, waitingForIndex } from "./running.ts";
 
 // Git words a stash's subject "On <branch>: <message>" when it was
 // given one, and "WIP on <branch>: <hash> <subject>" when not.
@@ -41,7 +41,7 @@ export const makeStash = ({
   readonly operation: OperationArea;
 }) =>
   Effect.sync(() => {
-    const { run, onIndex } = running;
+    const { run, succeeds, onIndex } = running;
     const { conflictedPaths } = operation;
 
     const readStashes = (worktree: string) =>
@@ -95,20 +95,76 @@ export const makeStash = ({
     });
 
     // Untracked files go too, so the worktree comes back clean, which is
-    // what a stash is for here.
+    // what a stash is for here. Git saves the stash, cleans the untracked
+    // files out and then resets, so another program's git holding
+    // index.lock for a moment (an editor's or a prompt's `git status`)
+    // can refuse the reset with the stash saved. Refused with refs/stash
+    // where it was, nothing was saved and it is asked again. Refused with
+    // a new stash that is this worktree's as it stands (made on its HEAD,
+    // its tracked files as the stash holds them), its reset is finished
+    // here, that check made again before each ask, so the reset discards
+    // only what the stash has. Never asked again after that, which would
+    // save it twice.
     const stashChanges = Effect.fn("Git.stashChanges")(function* (
       worktree: string,
       message: string | undefined,
     ) {
-      yield* onIndex(
-        worktree,
-        run(worktree, [
+      const tip = run(worktree, ["rev-parse", "-q", "--verify", "refs/stash"], {
+        okExitCodes: [1],
+      }).pipe(Effect.map((out) => out.trim()));
+      const madeOnHead = (stash: string) =>
+        Effect.all([
+          run(worktree, ["rev-parse", `${stash}^1`]),
+          run(worktree, ["rev-parse", "HEAD"]),
+        ]).pipe(Effect.map(([parent, head]) => parent.trim() === head.trim()));
+      const finish = (stash: string) =>
+        waitingForIndex(
+          Effect.gen(function* () {
+            if (
+              !(yield* succeeds(worktree, ["diff", "--quiet", stash, "--"]))
+            ) {
+              return yield* new GitRefusedError({
+                reason:
+                  "It was saved to the stash list, with its new files, which are only there now. The worktree changed before the stash could clear it, so nothing was discarded: its other changes are still here.",
+              });
+            }
+            yield* run(
+              worktree,
+              ["reset", "--hard", "-q", "--no-recurse-submodules"],
+              { once: true },
+            );
+          }),
+        ).pipe(
+          Effect.catchIf(indexHeld, () =>
+            Effect.gen(function* () {
+              return yield* new GitRefusedError({
+                reason:
+                  "It was saved to the stash list, with its new files, but another program's git held the worktree's index, so its other changes are also still here. Discard all changes, in the changes list's ⋯ menu, finishes it.",
+              });
+            }),
+          ),
+        );
+      const attempt = Effect.gen(function* () {
+        const before = yield* tip;
+        yield* run(worktree, [
           "stash",
           "push",
           "--include-untracked",
           ...(message?.trim() ? ["-m", message.trim()] : []),
-        ]),
-      );
+        ]).pipe(
+          Effect.catch((error) =>
+            Effect.gen(function* () {
+              if (!indexHeld(error)) return yield* Effect.fail(error);
+              const after = yield* tip;
+              if (after === before || !(yield* madeOnHead(after))) {
+                return yield* Effect.fail(error);
+              }
+              yield* finish(after);
+            }),
+          ),
+        );
+      });
+      yield* onIndex(worktree, waitingForIndex(attempt));
     });
 
     // With `drop`, a pop: the stash goes only once it applied cleanly.

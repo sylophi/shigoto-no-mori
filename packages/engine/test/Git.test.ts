@@ -142,6 +142,136 @@ it("a write waits out the moment another git holds index.lock, and fails on one 
   assert.equal(exits(held), 6, "the first try and five more");
 });
 
+// A worktree with a change to stash (a.txt) and an untracked file (u.txt),
+// whose refs/stash update takes index.lock as another program's `git
+// status` would: after the stash is saved, before git's own reset.
+function withStashRace() {
+  const repo = seedRepo();
+  write(repo, "a.txt", "changed\n");
+  write(repo, "u.txt", "untracked\n");
+  const lock = join(repo, ".git", "index.lock");
+  const hook = join(repo, ".git", "hooks", "reference-transaction");
+  writeFileSync(
+    hook,
+    `#!/bin/sh\n[ "$1" = committed ] || exit 0\ngrep -q ' refs/stash$' || exit 0\ntouch '${lock}'\n`,
+  );
+  chmodSync(hook, 0o755);
+  const stashes = () =>
+    git(repo, "stash", "list", "--format=%gs").split("\n").filter(Boolean);
+  return { repo, lock, stashes };
+}
+
+// Stashes `repo`, the test clock run on until it ends, with `onTick`
+// between its steps.
+const stashOnTheClock = (repo: string, onTick: () => void) =>
+  withGit((g) =>
+    Effect.gen(function* () {
+      const stashing = yield* Effect.forkChild(
+        Effect.exit(g.stashChanges(repo, "raced")),
+      );
+      while (stashing.pollUnsafe() === undefined) {
+        onTick();
+        yield* TestClock.adjust("200 millis");
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      return yield* Fiber.join(stashing);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+it("a stash whose reset another git's lock refuses is saved once and finished, the worktree clean", async () => {
+  const { repo, lock, stashes } = withStashRace();
+  // The other git lets go 300 ms after it took the lock, long after
+  // git's own reset was refused.
+  const watching = setInterval(() => {
+    if (!existsSync(lock)) return;
+    clearInterval(watching);
+    setTimeout(() => rmSync(lock), 300);
+  }, 5);
+  const outcome = await withGit((g) =>
+    Effect.exit(g.stashChanges(repo, "raced")),
+  ).finally(() => clearInterval(watching));
+  assert.ok(Exit.isSuccess(outcome), "the stash finished");
+  assert.deepEqual(stashes(), ["On main: raced"]);
+  assert.equal(git(repo, "status", "--porcelain").trim(), "");
+  assert.equal(
+    git(repo, "show", "stash@{0}^3:u.txt"),
+    "untracked\n",
+    "the untracked file is in the stash",
+  );
+});
+
+it("a stash whose reset stays refused is saved once and says so, the changes still here", async () => {
+  const { repo, lock, stashes } = withStashRace();
+  const outcome = await stashOnTheClock(repo, () => {});
+  rmSync(lock);
+  assert.ok(Exit.isFailure(outcome));
+  const error = Option.getOrThrow(Exit.findErrorOption(outcome));
+  assert.ok(error instanceof GitRefusedError);
+  assert.match(
+    error.reason,
+    /^It was saved to the stash list, with its new files, but another program's git/,
+  );
+  assert.deepEqual(stashes(), ["On main: raced"], "never saved twice");
+  assert.match(git(repo, "status", "--porcelain"), /a\.txt/);
+});
+
+it("a stash refused before it saves is asked again, and saved once", async () => {
+  const repo = seedRepo();
+  write(repo, "a.txt", "changed\n");
+  const lock = join(repo, ".git", "index.lock");
+  writeFileSync(lock, "");
+  const outcome = await withGit((g) =>
+    Effect.gen(function* () {
+      const stashing = yield* Effect.forkChild(
+        Effect.exit(g.stashChanges(repo, "raced")),
+      );
+      // The clock stands still while the first push is refused (well
+      // inside half a second); then the other git lets go.
+      yield* Effect.promise(() => new Promise((done) => setTimeout(done, 500)));
+      assert.equal(stashing.pollUnsafe(), undefined, "waiting to ask again");
+      rmSync(lock);
+      while (stashing.pollUnsafe() === undefined) {
+        yield* TestClock.adjust("50 millis");
+        yield* Effect.promise(
+          () => new Promise((done) => setTimeout(done, 20)),
+        );
+      }
+      return yield* Fiber.join(stashing);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+  assert.ok(Exit.isSuccess(outcome));
+  assert.equal(
+    git(repo, "stash", "list", "--format=%gs").trim(),
+    "On main: raced",
+  );
+  assert.equal(git(repo, "status", "--porcelain").trim(), "");
+});
+
+it("a stash whose worktree changes before its reset is finished is left alone, and says so", async () => {
+  const { repo, lock, stashes } = withStashRace();
+  // A write between the save and the reset, which the stash doesn't hold.
+  const hook = join(repo, ".git", "hooks", "reference-transaction");
+  writeFileSync(
+    hook,
+    `#!/bin/sh\n[ "$1" = committed ] || exit 0\ngrep -q ' refs/stash$' || exit 0\ntouch '${lock}'\necho later > '${join(repo, "b.txt")}'\n`,
+  );
+  // Held throughout: the check comes before any ask of the reset.
+  const outcome = await stashOnTheClock(repo, () => {});
+  rmSync(lock);
+  assert.ok(Exit.isFailure(outcome));
+  const error = Option.getOrThrow(Exit.findErrorOption(outcome));
+  assert.ok(error instanceof GitRefusedError);
+  assert.match(
+    error.reason,
+    /The worktree changed before the stash could clear it, so nothing was discarded/,
+  );
+  assert.deepEqual(stashes(), ["On main: raced"], "never saved twice");
+  assert.equal(readFileSync(join(repo, "b.txt"), "utf8"), "later\n");
+  assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "changed\n");
+});
+
 it("a write held by the user's hook leaves the probes their slots", async () => {
   const repo = seedRepo();
   const head = rev(repo, "HEAD");
