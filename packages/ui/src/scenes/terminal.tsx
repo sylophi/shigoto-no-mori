@@ -1,10 +1,11 @@
 // The terminal's parts: a worktree page's drawer with its tabs over a
 // script's console, a device's own terminals on their page over a
-// shell fed a fixture prompt with Nerd Font icons, and the sidebar's
-// list of them.
+// shell fed a fixture prompt with Nerd Font icons, the sidebar's list
+// of them, and a peer's terminals page while it takes no commands.
 import { ScriptConsoleView } from "../views/scriptConsole/ScriptConsoleView.tsx";
 import { DeviceTerminalsPageView } from "../views/terminal/DeviceTerminalsPageView.tsx";
 import { TerminalDrawerView } from "../views/terminal/TerminalDrawerView.tsx";
+import { peerTerminalsHiddenNote } from "../lib/commandAccessCopy.ts";
 import { TerminalTabsView } from "../views/terminal/TerminalTabsView.tsx";
 import {
   type TerminalFeed,
@@ -126,6 +127,27 @@ export function TerminalPartsScene() {
           </TerminalTabsView>
         </DeviceTerminalsPageView>
       </div>
+    </div>
+  );
+}
+
+// A peer's terminals page while it takes no commands from here: the
+// words in place of the tabs.
+export function PeerTerminalsHiddenScene() {
+  const thinkpad = deviceById(THINKPAD_ID);
+  return (
+    <div className="h-full bg-background">
+      <DeviceTerminalsPageView deviceName={thinkpad.label}>
+        <TerminalTabsView
+          tabs={[]}
+          selectedId={null}
+          onSelect={() => {}}
+          onClose={() => {}}
+          note={peerTerminalsHiddenNote(thinkpad.label)}
+        >
+          {null}
+        </TerminalTabsView>
+      </DeviceTerminalsPageView>
     </div>
   );
 }

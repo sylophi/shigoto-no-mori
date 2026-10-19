@@ -7,6 +7,7 @@
 import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { isTestFlavor } from "@shigomori/engine/flavor";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -59,8 +60,10 @@ type ParentPort = {
 // shell's trace.log, rotated to host-trace.old.log past 1 MB as the
 // shell's is: a host that runs for weeks writes a line every few
 // seconds while nothing happens. Written as each span ends, so a
-// rotation has nothing still on its way to the file it moves.
-function traceFile(logsPath: string): (line: string) => void {
+// rotation has nothing still on its way to the file it moves. A test
+// flavor's is kept whole: it is thrown away, and a failed walk needs
+// every minute of its run.
+function traceFile(logsPath: string, rotates: boolean): (line: string) => void {
   const path = join(logsPath, "host-trace.log");
   const open = (flags: "a" | "w") => {
     try {
@@ -78,7 +81,7 @@ function traceFile(logsPath: string): (line: string) => void {
   }
   let fd = open("a");
   return (line) => {
-    if (size > 1_000_000) {
+    if (rotates && size > 1_000_000) {
       if (fd !== null) closeSync(fd);
       let renamed = true;
       try {
@@ -196,7 +199,7 @@ async function main(): Promise<void> {
       Layer.provideMerge(
         Observability.layer({
           packaged: facts.packaged,
-          writeTraceLine: traceFile(facts.logsPath),
+          writeTraceLine: traceFile(facts.logsPath, !isTestFlavor(flavor)),
           openSpans,
         }),
       ),
