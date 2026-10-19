@@ -17,7 +17,10 @@
 // Nor does a test's git read the machine's own config (its global and
 // system files): a signing key there signed a fixture's commit with the
 // owner's key, which can raise a password manager's prompt, and its
-// hooks path, templates or aliases would run as well.
+// hooks path, templates or aliases would run as well. Nor the ignore
+// and attributes files git reads with no config naming them
+// (~/.config/git/ignore and attributes), which would ignore or filter
+// a fixture's files on one machine and not another.
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 
@@ -29,6 +32,9 @@ const ISOLATING = {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
   GIT_CONFIG_NOSYSTEM: "1",
+  // As `git -c` passes them on, so a git's own -c adds to them.
+  GIT_CONFIG_PARAMETERS:
+    "'core.excludesfile'='/dev/null' 'core.attributesfile'='/dev/null'",
 } as const;
 
 // A variable of git's that came from outside: every GIT_* but the
@@ -71,15 +77,31 @@ export function assertGitIsolated(dir: string): void {
     throw new Error(`git's environment reached the tests: ${left.join(", ")}`);
   }
   assertRepositoryHidden(dir);
-  // Outside any repository, git reads config from nowhere at all.
+  // Outside any repository, git reads no config file at all: only what
+  // the isolation passes on the command line.
   const config = spawnSync("git", ["config", "--list", "--show-origin"], {
     cwd: tmpdir(),
     encoding: "utf8",
   });
-  if (config.stdout.trim() !== "") {
+  const read = config.stdout
+    .split("\n")
+    .filter((line) => line !== "" && !line.startsWith("command line:"));
+  if (read.length > 0) {
     throw new Error(
-      `a test's git reads this machine's config:\n${config.stdout}`,
+      `a test's git reads this machine's config:\n${read.join("\n")}`,
     );
+  }
+  // And none of the files git reads unnamed.
+  for (const key of ["core.excludesfile", "core.attributesfile"]) {
+    const value = spawnSync("git", ["config", "--get", key], {
+      cwd: tmpdir(),
+      encoding: "utf8",
+    }).stdout.trim();
+    if (value !== "/dev/null") {
+      throw new Error(
+        `a test's git reads ${key} from ${value || "its default"}`,
+      );
+    }
   }
 }
 
