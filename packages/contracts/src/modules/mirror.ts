@@ -185,12 +185,9 @@ export type MirrorWorktreePayload = typeof MirrorWorktreePayloadSchema.Type;
 const MirrorApplyGitStatePayloadSchema = strict(
   Schema.Struct({
     ...MirrorWorktreePayloadSchema.struct.fields,
-    expect: strict(
-      Schema.Struct({
-        tip: CommitHashSchema,
-        indexTree: TreeHashSchema,
-      }),
-    ),
+    // The state the pushing side read there, in the receiving side's
+    // own names: anything else moved under it, and the apply refuses.
+    expect: GitStateCoreSchema,
     state: GitStateCoreSchema,
     sweep: Schema.optional(
       Schema.Array(SyncLandingRefSchema).check(Schema.isMaxLength(8)),

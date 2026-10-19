@@ -32,6 +32,8 @@ The samples prove one direction: this build reads what the version's samples hol
 
 To bump, raise `PROTOCOL_VERSION`, `git mv` the samples file to the new version's name, run `wire-fixtures`, and record the bump in `V3.md` while the branch lives. The hub deploys with the bump, since its floor is the version.
 
+A version no build has been cut with yet takes its changes in place: its samples file is edited and the version stays, since no build of it exists to read the old bytes. Once a build carries the version, the rules above hold for it. A device on another version never links (the device link's hello asks for its own exactly), so a field a version makes optional is optional for its meaning, never for an older peer.
+
 `pnpm -F @shigomori/contracts wire-fixtures` adds a sample derived from the schema for each part that has none, asks for one by hand where a schema's checks leave nothing to derive, and drops the samples of calls and parts that are gone. It never rewrites a sample that is there, and it formats the file as the repo does (oxfmt), so the diff is the samples it added or dropped. `test/wire.test.ts` also refuses a channel named twice in the file, which `JSON.parse` would hide.
 
 ## Classification

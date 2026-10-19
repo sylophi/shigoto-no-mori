@@ -13,6 +13,7 @@ import {
 import {
   isCommandRefusedError,
   isEntityGoneError,
+  isGhUnavailableError,
   isHubRateLimitedError,
   isNoDirectConnectionError,
   isNotSharingError,
@@ -78,21 +79,22 @@ export function createAppQueryClient(
         refetchOnWindowFocus: true,
         refetchOnMount: true,
         staleTime: 0,
-        // An entity-gone failure (project/worktree deleted out from under
-        // an in-flight query) is deterministic, so retrying only keeps the
-        // page waiting on an answer that cannot change. A command refusal
-        // is deterministic too: the grant moves on the host's push, never
-        // on a retry, and so is a peer not sharing. A read the hub's rate
-        // limiter turned away waits out the hub's own word instead
-        // (accountDevicesQueryOptions). Keep the default three
-        // retries for everything else. A read cut by this machine's own
-        // host going away asks again for as long as it takes: the ask
-        // waits for the link to land on the host that replaces it.
+        // An entity-gone failure (project/worktree deleted out from under an
+        // in-flight query) is deterministic, so retrying only keeps the page
+        // waiting on an answer that cannot change. A command refusal is
+        // deterministic too: the grant moves on the host's push, never on a
+        // retry, and so are a peer not sharing and gh missing or signed out on
+        // the host. A read the hub's rate limiter turned away waits out the
+        // hub's own word instead (accountDevicesQueryOptions). Keep the default
+        // three retries for everything else. A read cut by this machine's own
+        // host going away asks again for as long as it takes: the ask waits for
+        // the link to land on the host that replaces it.
         retry: (failureCount, error) =>
           isOwnAppDrop(error) ||
           (failureCount < 3 &&
             !isHubRateLimitedError(error) &&
             !isEntityGoneError(error) &&
+            !isGhUnavailableError(error) &&
             !isPeerRefusal(error)),
       },
     },

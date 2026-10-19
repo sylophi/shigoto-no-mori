@@ -395,11 +395,8 @@ export const readGitState = Effect.fnUntraced(function* (
 export type ApplyGitStateInput = {
   // The state the caller last observed here. Anything else means the
   // worktree moved under the caller, and the apply refuses so the
-  // caller can look again. A local pull names the HEAD it read; a peer's
-  // push names none, its contract carrying the tip and the index alone.
-  expect: Pick<GitStateCore, "tip" | "indexTree"> & {
-    readonly head?: GitHead;
-  };
+  // caller can look again.
+  expect: GitStateCore;
   state: GitStateCore;
   // App-owned refs to drop once the state landed (a landed incoming
   // branch, a consumed index carrier). Best effort.
@@ -454,8 +451,7 @@ const applyGitStateUnswept = Effect.fnUntraced(function* (
   if (
     current.tip !== input.expect.tip ||
     current.indexTree !== input.expect.indexTree ||
-    (input.expect.head !== undefined &&
-      !sameHead(current.head, input.expect.head))
+    !sameHead(current.head, input.expect.head)
   ) {
     return refused("changed-locally");
   }

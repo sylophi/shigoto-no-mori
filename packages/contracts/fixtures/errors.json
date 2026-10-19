@@ -53,6 +53,10 @@
       {
         "_tag": "HubRateLimitedError",
         "retryAfterSeconds": 60
+      },
+      {
+        "_tag": "GhUnavailableError",
+        "reason": "gh-signed-out"
       }
     ],
     "rejects": [
