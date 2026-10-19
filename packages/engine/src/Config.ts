@@ -131,6 +131,31 @@ export class StructuredConfigKey extends Schema.TaggedError<StructuredConfigKey>
   }
 }
 
+// A write asked for over the settings as they were read, which changed
+// since (the app's save, another command's).
+export class ConfigChangedMeanwhile extends Schema.TaggedError<ConfigChangedMeanwhile>()(
+  "ConfigChangedMeanwhile",
+  {},
+) {
+  override get message(): string {
+    return "The settings changed meanwhile.";
+  }
+}
+
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_, inner: unknown) =>
+    inner !== null && typeof inner === "object" && !Array.isArray(inner)
+      ? Object.fromEntries(
+          Object.entries(inner).toSorted(([x], [y]) => (x < y ? -1 : 1)),
+        )
+      : inner,
+  );
+
+// Whether two documents hold the same settings, whatever their keys'
+// order.
+export const sameConfigDoc = (a: unknown, b: unknown): boolean =>
+  canonical(a) === canonical(b);
+
 // A project's settings must name its default branch, which a write
 // would leave out and git couldn't name. `project` is its name, or its
 // id when it has none.
@@ -211,18 +236,23 @@ export class Config extends Context.Service<
     ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
     // The app's whole-document save: a modeled key the payload omits is
     // removed, a null removes its key, objects merge field by field, and
-    // a key this build doesn't model survives.
+    // a key this build doesn't model survives. With `ifStoredIs`, only
+    // over the settings as they were read.
     readonly write: (
       scope: ConfigScope,
       payload: ConfigDoc,
-    ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
+      ifStoredIs?: ConfigDoc,
+    ) => Effect.Effect<
+      void,
+      InvalidConfigDocument | MissingDefaultBranch | ConfigChangedMeanwhile
+    >;
     // The document as stored, changed by `change` and written back in
     // one transaction: the terminal's verbs over the list-valued
     // settings. A project's default branch is filled in from git when
-    // the document has none.
+    // the document has none. A change that answers null writes nothing.
     readonly change: (
       scope: ConfigScope,
-      change: (doc: ConfigDoc) => ConfigDoc,
+      change: (doc: ConfigDoc) => ConfigDoc | null,
     ) => Effect.Effect<void, MissingDefaultBranch>;
     // The ids of the projects that have settings stored.
     readonly storedProjectIds: Effect.Effect<ReadonlyArray<string>>;
@@ -439,8 +469,12 @@ const make = Effect.gen(function* () {
   // A read-modify-write of the scope's document in one transaction. A
   // project's document keeps its default branch, from git when the
   // write would leave it out, and one on the in-project layout hides
-  // `.shigomori/` from the primary's git status.
-  const update = (scope: ConfigScope, change: (doc: ConfigDoc) => void) => {
+  // `.shigomori/` from the primary's git status. A change that answers
+  // false changes nothing, and nothing is written or filled in.
+  const update = (
+    scope: ConfigScope,
+    change: (doc: ConfigDoc) => void | false,
+  ) => {
     // One try at the write. Without a default branch it fails, unless
     // git named one to fill in.
     const attempt = (fallbackBranch: Option.Option<string>) =>
@@ -448,7 +482,7 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
           const next = structuredClone(before);
-          change(next);
+          if (change(next) === false) return false;
           if (scope.kind === "project" && missingBranch(next)) {
             if (Option.isNone(fallbackBranch)) {
               const [row] = yield* sql<{ readonly name: string }>`
@@ -637,20 +671,32 @@ const make = Effect.gen(function* () {
   const write = Effect.fn("Config.write")(function* (
     scope: ConfigScope,
     payload: ConfigDoc,
+    ifStoredIs?: ConfigDoc,
   ) {
     const problem = documentProblem(keysOf(scope), payload);
     if (problem !== undefined) {
       return yield* new InvalidConfigDocument({ problem });
     }
-    yield* update(scope, (doc) => mergeConfigDoc(keysOf(scope), doc, payload));
+    // Compared in the write's own read, so a save landing between a
+    // read and the write isn't written away.
+    let stale = false;
+    yield* update(scope, (doc) => {
+      if (ifStoredIs !== undefined && !sameConfigDoc(doc, ifStoredIs)) {
+        stale = true;
+        return false;
+      }
+      mergeConfigDoc(keysOf(scope), doc, payload);
+    });
+    if (stale) return yield* new ConfigChangedMeanwhile();
   });
 
   const change = Effect.fn("Config.change")(function* (
     scope: ConfigScope,
-    changed: (doc: ConfigDoc) => ConfigDoc,
+    changed: (doc: ConfigDoc) => ConfigDoc | null,
   ) {
     yield* update(scope, (doc) => {
       const next = changed(structuredClone(doc));
+      if (next === null) return false;
       for (const key of Object.keys(doc)) delete doc[key];
       Object.assign(doc, next);
     });

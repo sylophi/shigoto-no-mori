@@ -2556,3 +2556,26 @@ describe("a data-folder move under way", () => {
     assert.equal(removed.code, 0, removed.stderr);
   });
 });
+
+describe("projects config", () => {
+  it("writes nothing for a refused launcher rm or carryover rm: no default branch seeded", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await box.migrate("cli");
+    for (const verb of [
+      ["launcher", "rm", "nosuch"],
+      ["carryover", "rm", "nosuch"],
+    ]) {
+      const refused = await runAt(alpha, "projects", "config", ...verb);
+      assert.equal(refused.code, 1, refused.stderr);
+      const stored = await runAt(alpha, "--json", "projects", "config");
+      assert.equal(
+        stored.stdout.trim(),
+        "null",
+        `a refused ${verb.join(" ")} wrote`,
+      );
+    }
+  });
+});

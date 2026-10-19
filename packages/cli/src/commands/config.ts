@@ -11,7 +11,6 @@ import {
 import * as Config from "@shigomori/engine/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
@@ -22,17 +21,6 @@ import { rest } from "../here.ts";
 import { interactive } from "../prompt.ts";
 import { launcherVerb } from "./configLists.ts";
 import { emit, out, Output, renderTable, styles } from "../output.ts";
-
-// A document as JSON with its keys in order at every level, so two reads
-// of the same settings compare equal whatever order the store gave.
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_, inner: unknown) =>
-    Predicate.isObject(inner) && !Array.isArray(inner)
-      ? Object.fromEntries(
-          Object.entries(inner).toSorted(([a], [b]) => (a < b ? -1 : 1)),
-        )
-      : inner,
-  );
 
 // Where a verb reads and writes, and how its output names that.
 export type Settings = {
@@ -262,22 +250,24 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       // An edit that changed nothing writes nothing. A save made while
       // the editor was open (the app's, another command's) isn't written
       // away by a document read before it.
-      if (canonical(payload) === canonical(stored)) {
+      if (Config.sameConfigDoc(payload, stored)) {
         rmSync(dir, { recursive: true, force: true });
         return;
       }
-      const now = (yield* config.read(settings.scope)) ?? {};
-      if (canonical(now) !== canonical(stored)) {
-        return yield* new EditFailed({
-          problem: `The settings changed while you edited them, so nothing changed.${kept}`,
-        });
-      }
-      yield* config.write(settings.scope, payload).pipe(
-        Effect.mapError(
-          (error) =>
+      yield* config.write(settings.scope, payload, stored).pipe(
+        Effect.catchTag("ConfigChangedMeanwhile", () =>
+          Effect.fail(
             new EditFailed({
-              problem: `${error.message} Nothing changed.${kept}`,
+              problem: `The settings changed while you edited them, so nothing changed.${kept}`,
             }),
+          ),
+        ),
+        Effect.mapError((error) =>
+          error instanceof EditFailed
+            ? error
+            : new EditFailed({
+                problem: `${error.message} Nothing changed.${kept}`,
+              }),
         ),
       );
       rmSync(dir, { recursive: true, force: true });

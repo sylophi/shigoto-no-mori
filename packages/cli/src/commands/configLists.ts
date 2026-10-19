@@ -53,8 +53,9 @@ const rewrite = (
     config.change(settings.scope, (doc) => {
       const list = entries(doc, key);
       const next = change(list);
-      // A verb that refused hands the list back as it was.
-      if (next === list) return doc;
+      // A verb that refused hands the list back as it was, and nothing
+      // is written: not even a project's default branch filled in.
+      if (next === list) return null;
       const { [key]: _, ...rest } = doc;
       return next.length === 0 ? rest : { ...rest, [key]: next };
     }),
@@ -128,7 +129,7 @@ export const launcherVerb = <E, R>(resolve: Effect.Effect<Settings, E, R>) =>
             ) {
               return yield* usage(settings, "launcher add <label> <command>");
             }
-            if (label.trim() === "" || command.trim() === "") {
+            if (label === "" || command === "") {
               return yield* new UsageError({
                 problem: "Label and command can't be empty.",
               });
@@ -333,7 +334,7 @@ export const carryOverVerb = <E, R>(
             let held = false;
             yield* rewrite(settings, "carryOver", (all) => {
               held = all.some(same(path));
-              return all.filter((entry) => !same(path)(entry));
+              return held ? all.filter((entry) => !same(path)(entry)) : all;
             });
             if (!held) {
               return yield* new NoSuchEntry({
