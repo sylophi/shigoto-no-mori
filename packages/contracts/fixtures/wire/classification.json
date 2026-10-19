@@ -1164,19 +1164,19 @@
     "kind": "invoke",
     "scope": "client"
   },
-  "shigomori:read": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false
-  },
-  "shigomori:write": {
+  "shigomori:patch": {
     "kind": "invoke",
     "scope": "host",
     "remote": true,
     "gated": true,
     "grant": "runCommands",
     "tracksProjectUsage": true
+  },
+  "shigomori:read": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false
   },
   "sync:cancelMove": {
     "kind": "invoke",
@@ -1420,20 +1420,20 @@
     "grant": "changeCode",
     "invitable": "copy"
   },
-  "worktreeData:read": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": false,
-    "invitable": "copy"
-  },
-  "worktreeData:write": {
+  "worktreeData:patchPorts": {
     "kind": "invoke",
     "scope": "host",
     "remote": true,
     "gated": true,
     "grant": "changeCode",
     "tracksProjectUsage": true
+  },
+  "worktreeData:read": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": false,
+    "invitable": "copy"
   },
   "worktrees:abortOperation": {
     "kind": "invoke",

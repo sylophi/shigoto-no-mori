@@ -6,11 +6,12 @@ import { fieldSetter, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
+import { useShigomoriPatch } from "@/hooks/config/useShigomoriPatch";
 import { notifyError } from "@/lib/toast";
 import {
   type CarryOverEntry,
   PROJECT_CONFIG_DEFAULTS,
+  type ProjectSettingsPatch,
   type ShigomoriConfig,
 } from "@shigomori/contracts/schemas";
 import { CarryOverSection } from "./CarryOverSection";
@@ -73,6 +74,29 @@ function toConfig(
   };
 }
 
+// The settings this form edits that differ between two of its documents,
+// each as `after` has it, or null for one it left out: what a save
+// changes, and nothing it didn't touch.
+function patchOf(
+  before: ShigomoriConfig,
+  after: ShigomoriConfig,
+): ProjectSettingsPatch {
+  const fields = {
+    defaultBranch: [before.defaultBranch, after.defaultBranch],
+    "scripts.setup": [before.scripts?.setup, after.scripts?.setup],
+    "scripts.teardown": [before.scripts?.teardown, after.scripts?.teardown],
+    launchers: [before.launchers, after.launchers],
+    carryOver: [before.carryOver, after.carryOver],
+    useWorktreeInclude: [before.useWorktreeInclude, after.useWorktreeInclude],
+    showPrimaryInInbox: [before.showPrimaryInInbox, after.showPrimaryInInbox],
+  } as const;
+  return Object.fromEntries(
+    Object.entries(fields)
+      .filter(([, [was, now]]) => JSON.stringify(was) !== JSON.stringify(now))
+      .map(([key, [, now]]) => [key, now ?? null]),
+  ) as ProjectSettingsPatch;
+}
+
 interface ConfigureFormProps {
   projectId: string;
   projectPath: string;
@@ -96,7 +120,7 @@ export function ConfigureForm({
   const { deviceId, remote } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const navigate = useNavigate();
-  const write = useShigomoriWrite();
+  const write = useShigomoriPatch();
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
     useDirtyForm<FormState>(fromConfig(initialConfig, resolvedDefaultBranch));
@@ -128,7 +152,10 @@ export function ConfigureForm({
 
   const handleSave = async () => {
     const next = toConfig(initialConfig, form);
-    await write.mutateAsync({ projectId, config: next });
+    await write.mutateAsync({
+      projectId,
+      patch: patchOf(toConfig(initialConfig, savedSnapshot), next),
+    });
     // Snapshot what was actually persisted, not the raw form: toConfig
     // drops half-filled launcher rows and normalizes fields. Snapshotting
     // the raw form would mark those leftovers clean, and the post-save

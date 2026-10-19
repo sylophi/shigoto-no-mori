@@ -4,7 +4,7 @@ import {
   ReadWorktreeDataPayloadSchema,
   ShigomoriWorktreeDataSchema,
   VoidSchema,
-  WriteWorktreeDataPayloadSchema,
+  PatchWorktreePortsPayloadSchema,
   WriteWorktreeDescriptionPayloadSchema,
 } from "../schemas/index.ts";
 
@@ -22,7 +22,7 @@ export const worktreeDataContract = defineContract(
     Schema.NullOr(ShigomoriWorktreeDataSchema),
     { remote: true, gated: false, invitable: "copy" },
   ),
-  invoke("write", WriteWorktreeDataPayloadSchema, VoidSchema, {
+  invoke("patchPorts", PatchWorktreePortsPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
     remote: true,
     gated: true,

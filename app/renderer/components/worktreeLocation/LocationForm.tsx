@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
-import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
+import { useShigomoriPatch } from "@/hooks/config/useShigomoriPatch";
 import type { DeviceLayout } from "@shigomori/ui/views/worktreeLocation/layoutOptions.ts";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
@@ -23,7 +23,6 @@ interface LocationFormProps {
   device: DeviceLayout;
   worktrees: readonly Worktree[];
   config: ShigomoriConfig | null;
-  resolvedDefaultBranch: string;
 }
 
 export function LocationForm({
@@ -32,10 +31,9 @@ export function LocationForm({
   device,
   worktrees,
   config,
-  resolvedDefaultBranch,
 }: LocationFormProps) {
   const { toProjectPage } = useProjectNav();
-  const write = useShigomoriWrite();
+  const write = useShigomoriPatch();
   const relocate = useRelocateWorktree();
 
   const savedLayout =
@@ -105,28 +103,25 @@ export function LocationForm({
     // stays disabled across it and a write failure aborts the moves.
     const saveLayoutIfChanged = async (): Promise<boolean> => {
       if (!layoutChanged) return true;
-      // If the project has no on-disk config yet, fall back to the resolved
-      // default branch so we never invent a branch name like "main" on a repo
-      // that uses "master". Hoisted out of the try below: React Compiler
-      // can't lower a ?? inside one.
-      const baseConfig: ShigomoriConfig = config ?? {
-        defaultBranch: resolvedDefaultBranch,
-      };
-      const nextCustomPath = layout === "custom" ? customPath.trim() : "";
-      const nextConfig: ShigomoriConfig = {
-        ...baseConfig,
-        worktreeLayout: layout,
-        customWorktreePath: nextCustomPath || undefined,
-      };
+      // Hoisted out of the try below: React Compiler can't lower a ||
+      // inside one.
+      const nextCustomPath = (layout === "custom" && customPath.trim()) || null;
       try {
         // Answers once the config is read again, so the drafts let go
-        // onto what was stored.
-        await write.mutateAsync({ projectId, config: nextConfig });
+        // onto what was stored. A project with no settings yet takes its
+        // default branch from git (the engine's patch).
+        await write.mutateAsync({
+          projectId,
+          patch: {
+            worktreeLayout: layout,
+            customWorktreePath: nextCustomPath,
+          },
+        });
         setLayout(null);
         setCustomPath(null);
         return true;
       } catch {
-        // useShigomoriWrite already surfaces an error toast via its meta.
+        // useShigomoriPatch already surfaces an error toast via its meta.
         return false;
       }
     };

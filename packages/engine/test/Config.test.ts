@@ -9,6 +9,7 @@ import {
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Config from "../src/Config.ts";
+import * as Registry from "../src/Registry.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -170,6 +171,45 @@ it("refuses a patch whose value isn't the setting's, writing nothing", async () 
 
 // A setting read as it applies, by a key the compiler checks: unset or
 // holding something it can't be, its default.
+it("patches the project's settings it is given and keeps what changed elsewhere, a null removing its key", async () => {
+  const repo = box.repo("proj");
+  const stored = (await box.engine(
+    Effect.gen(function* () {
+      const c = yield* config;
+      const project = yield* (yield* Registry.Registry).register({
+        name: "proj",
+        path: repo,
+      });
+      const scope = {
+        kind: "project",
+        projectId: project.id,
+        path: repo,
+      } as const;
+      yield* c.set(scope, "defaultBranch", "main");
+      yield* c.set(scope, "scripts.teardown", "make clean");
+      // The form saves its two fields; the terminal sets another after
+      // the form read; the form's next save clears one of its own.
+      yield* c.patchProject(scope, {
+        "scripts.setup": "pnpm install",
+        showPrimaryInInbox: true,
+      });
+      yield* c.set(scope, "portBase", "4000");
+      yield* c.patchProject(scope, { "scripts.teardown": null });
+      const refused = yield* Effect.flip(
+        c.patchProject(scope, { defaultBranch: " " }),
+      );
+      return { refused, doc: yield* c.read(scope) };
+    }),
+  )) as { readonly refused: unknown; readonly doc: unknown };
+  assert.ok(stored.refused instanceof Config.InvalidConfigDocument);
+  assert.deepEqual(stored.doc, {
+    defaultBranch: "main",
+    scripts: { setup: "pnpm install" },
+    showPrimaryInInbox: true,
+    portBase: 4000,
+  });
+});
+
 it("reads a device setting as it applies, its default when unset or unreadable", async () => {
   const read = await box.engine(
     Effect.gen(function* () {

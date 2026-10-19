@@ -2129,19 +2129,21 @@
       "unattended": false
     }
   },
+  "shigomori:patch": {
+    "payload": {
+      "projectId": "F",
+      "patch": {
+        "scripts.setup": "pnpm install",
+        "scripts.teardown": null,
+        "showPrimaryInInbox": true
+      }
+    }
+  },
   "shigomori:read": {
     "payload": {
       "projectId": " "
     },
     "success": null
-  },
-  "shigomori:write": {
-    "payload": {
-      "projectId": "fB",
-      "config": {
-        "defaultBranch": " "
-      }
-    }
   },
   "sync:cancelMove": {
     "payload": {
@@ -2553,6 +2555,19 @@
       "description": {}
     }
   },
+  "worktreeData:patchPorts": {
+    "payload": {
+      "projectId": "?[",
+      "worktreeId": "ae7544d2ef34",
+      "remove": [3000],
+      "put": [
+        {
+          "port": 3001,
+          "label": "web"
+        }
+      ]
+    }
+  },
   "worktreeData:read": {
     "payload": {
       "projectId": "z",
@@ -2560,13 +2575,6 @@
     },
     "success": {
       "describedAt": 1
-    }
-  },
-  "worktreeData:write": {
-    "payload": {
-      "projectId": "\t",
-      "worktreeId": "ba5d92355f6c",
-      "data": {}
     }
   },
   "worktrees:abortOperation": {

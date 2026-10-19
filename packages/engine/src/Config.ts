@@ -4,6 +4,7 @@ import {
   DeviceSettingsPatchSchema,
   modeledKeyFields,
   PROJECT_CONFIG_DEFAULTS,
+  type ProjectSettingsPatch,
   ShigomoriConfigSchema,
 } from "@shigomori/contracts/schemas/config";
 import * as Context from "effect/Context";
@@ -202,6 +203,12 @@ export class Config extends Context.Service<
       void,
       UnknownConfigKey | InvalidConfigValue | MissingDefaultBranch
     >;
+    // The app's save of a project's settings, a peer's included: each key
+    // given set, or removed when null, the rest kept, in one transaction.
+    readonly patchProject: (
+      scope: Extract<ConfigScope, { readonly kind: "project" }>,
+      patch: ProjectSettingsPatch,
+    ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
     // The app's whole-document save: a modeled key the payload omits is
     // removed, a null removes its key, objects merge field by field, and
     // a key this build doesn't model survives.
@@ -547,6 +554,34 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const patchProject = Effect.fn("Config.patchProject")(function* (
+    scope: Extract<ConfigScope, { readonly kind: "project" }>,
+    changes: ProjectSettingsPatch,
+  ) {
+    const given = Object.entries(changes).filter(
+      ([, value]) => value !== undefined,
+    );
+    const values: ConfigDoc = {};
+    for (const [key, value] of given) {
+      if (value !== null) docSet(values, key, value);
+    }
+    const problem = documentProblem(
+      projectKeys.filter(({ name }) =>
+        given.some(([key, value]) => key === name && value !== null),
+      ),
+      values,
+    );
+    if (problem !== undefined) {
+      return yield* new InvalidConfigDocument({ problem });
+    }
+    yield* update(scope, (doc) => {
+      for (const [key, value] of given) {
+        if (value === null) docDelete(doc, key);
+        else docSet(doc, key, value);
+      }
+    });
+  });
+
   const unset = Effect.fn("Config.unset")(function* (
     scope: ConfigScope,
     name: string,
@@ -634,6 +669,7 @@ const make = Effect.gen(function* () {
     read,
     device,
     patch,
+    patchProject,
     set,
     unset,
     write,

@@ -53,6 +53,8 @@ import {
   ProjectRowSchema,
   ProjectSchema,
   type MovedSource,
+  type CustomPort,
+  type ProjectSettingsPatch,
   type ShigomoriConfig,
   ShigomoriConfigSchema,
   type ShigomoriWorktreeData,
@@ -430,6 +432,19 @@ const projectScope = (projectId: string) =>
     projectId: project.id,
     path: project.path,
   }));
+
+export const patchProjectConfig = Effect.fnUntraced(function* (
+  projectId: string,
+  patch: ProjectSettingsPatch,
+) {
+  yield* asChange(
+    Effect.gen(function* () {
+      const scope = yield* projectScope(projectId);
+      yield* (yield* EngineConfig.Config).patchProject(scope, patch);
+    }),
+    { projectId },
+  );
+});
 
 export const writeProjectConfig = Effect.fnUntraced(function* (
   projectId: string,
@@ -1172,6 +1187,20 @@ export const readWorktreeData = Effect.fnUntraced(function* (
 
 // The renderer's write: the custom ports, the title and description
 // kept.
+export const patchWorktreePorts = (
+  projectId: string,
+  worktreeId: string,
+  patch: {
+    readonly remove?: ReadonlyArray<number> | undefined;
+    readonly put?: ReadonlyArray<CustomPort> | undefined;
+  },
+) =>
+  asChange(
+    Effect.flatMap(WorktreeData.WorktreeData, (data) =>
+      data.patchPorts(projectId, worktreeId, patch),
+    ),
+  );
+
 export const writeWorktreeData = (
   projectId: string,
   worktreeId: string,

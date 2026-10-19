@@ -416,7 +416,8 @@ function hostHandlersFor(
   const disk = fakeDisks[forest.deviceId] ?? { home: "/home/rin", dirs: {} };
   mirrorWires.set(forest.deviceId, emit);
   // The worktree data files, seeded from the fixtures and mutated by
-  // worktreeData:write so adding and removing ports shows its outcome.
+  // worktreeData:patchPorts so adding and removing ports shows its
+  // outcome.
   const worktreeData = new Map<string, ShigomoriWorktreeData>(
     Object.entries(fakeCustomPorts).map(([id, ports]) => [id, { ports }]),
   );
@@ -794,10 +795,15 @@ function hostHandlersFor(
     }),
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,
-    "worktreeData:write": ({ worktreeId, data }) => {
+    "worktreeData:patchPorts": ({ worktreeId, remove = [], put = [] }) => {
+      const stored = worktreeData.get(worktreeId);
+      const gone = new Set([...remove, ...put.map(({ port }) => port)]);
       worktreeData.set(worktreeId, {
-        ...worktreeData.get(worktreeId),
-        ports: data.ports,
+        ...stored,
+        ports: [
+          ...(stored?.ports ?? []).filter(({ port }) => !gone.has(port)),
+          ...put,
+        ],
       });
     },
     // The host's own merge, with the posed liveness mapped on.
