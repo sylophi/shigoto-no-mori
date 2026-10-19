@@ -63,17 +63,21 @@ export const makeDiffs = ({ running }: { readonly running: RunningArea }) =>
                 "/dev/null",
                 file,
               ]
-            : [
-                "diff",
-                "HEAD",
+            : // diff-index, which never writes the index back (see the
+              // runner), `-M` for the renames porcelain diff finds.
+              [
+                "diff-index",
+                "-p",
+                "-M",
                 "--no-color",
                 "--full-index",
                 ...PATCH_FLAGS,
+                "HEAD",
                 "--",
                 ...paths,
               ]),
         ],
-        { anyExit: true, maxOutputBytes: PATCH_MAX_OUTPUT, background: true },
+        { anyExit: true, maxOutputBytes: PATCH_MAX_OUTPUT },
       ).pipe(Effect.catchTags({ GitCommandError: () => Effect.succeed("") }));
     });
 

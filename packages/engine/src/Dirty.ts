@@ -283,20 +283,28 @@ const make = Effect.gen(function* () {
         count: colliding.length,
       });
     }
-    yield* git
-      .run(worktreePath, [
-        "read-tree",
-        "-m",
-        "-u",
-        "--end-of-options",
-        parent,
-        commit,
-      ])
-      .pipe(
+    // read-tree checks the files by the index's stat cache alone, which
+    // the status above no longer writes back (git/running.ts): refreshed
+    // first, so a file touched with its content unchanged isn't read as
+    // in the way.
+    yield* git.withIndexLock(
+      worktreePath,
+      git.runLenient(worktreePath, ["update-index", "-q", "--refresh"]).pipe(
+        Effect.andThen(
+          git.run(worktreePath, [
+            "read-tree",
+            "-m",
+            "-u",
+            "--end-of-options",
+            parent,
+            commit,
+          ]),
+        ),
         Effect.mapError(
           (cause) => new ApplyRefused({ reason: "overlap", cause }),
         ),
-      );
+      ),
+    );
     // The changes stay in the files, not in the index.
     yield* git.run(worktreePath, ["reset", "-q"]);
     yield* git.deleteRef(projectPath, dirtyRef(worktreeId)).pipe(Effect.ignore);

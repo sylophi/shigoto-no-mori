@@ -624,11 +624,8 @@ export class Git extends Context.Service<
     ) => Effect.Effect<string | null>;
     // The operation under way, whether it can be continued, how many
     // files are conflicted, and a rebase's branch.
-    // `background` for a view's read, which leaves the index as it found
-    // it (RunOptions).
     readonly readOperation: (
       worktree: string,
-      background?: boolean,
     ) => Effect.Effect<
       GitOperationState,
       GitError | PlatformError.PlatformError

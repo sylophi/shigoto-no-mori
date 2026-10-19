@@ -68,15 +68,14 @@ const WAITS_FOR_INDEX = new Set([
 // step) "error:". A post-checkout hook that prints the same comes after
 // the switch's "Switched to branch"; a pre-commit hook's run again with
 // its commit, which nothing recorded yet.
-// What a read leaves the index as: a `git status`, or a view's diff of
-// the working tree, refreshes the index's stat cache and writes it back
-// under index.lock when it can, which refuses the person's own `git
-// commit` or `rebase` in a terminal at that moment (a probe on this
-// repository: 68 of 400 writes refused beside a listing every 0.3 s,
-// none with this). A status is always a read. A diff read inside an
-// action the person took through the app keeps the write-back: nothing
-// of theirs runs beside it, and the next read starts from the fresher
-// cache.
+// What a read leaves the index as: a `git status` refreshes the index's
+// stat cache and writes it back under index.lock when it can, which
+// refuses the person's own `git commit` or `rebase` in a terminal at
+// that moment (a probe on this repository: 68 of 400 writes refused
+// beside a listing every 0.3 s, none with this). A status is always a
+// read. Porcelain `git diff` writes it back too and ignores this, so
+// the reads of the working tree are plumbing (`diff-index`,
+// `diff-files`), which never write it.
 const OPTIONAL_LOCKS_OFF = { GIT_OPTIONAL_LOCKS: "0" };
 
 export const indexHeld = (error: unknown): boolean => {
@@ -142,9 +141,7 @@ export const makeRunning = Effect.gen(function* () {
                   env: {
                     ...options.env,
                     LC_ALL: "C",
-                    ...(subcommand === "status" || options.background === true
-                      ? OPTIONAL_LOCKS_OFF
-                      : {}),
+                    ...(subcommand === "status" ? OPTIONAL_LOCKS_OFF : {}),
                   },
                   extendEnv: true,
                   // In a process group of its own (the spawner's default), so

@@ -183,7 +183,7 @@ export const worktreesViews: ViewHandlers<
     ),
   watchOperation: (input) =>
     treeView(input, "operation", () =>
-      atPath(input, (path) => withGit((git) => git.readOperation(path, true))),
+      atPath(input, (path) => withGit((git) => git.readOperation(path))),
     ),
 };
 

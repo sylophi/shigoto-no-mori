@@ -54,12 +54,15 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
 
     const conflictedPaths = Effect.fn("Git.conflictedPaths")(function* (
       worktree: string,
-      background = false,
     ) {
       return splitZ(
-        yield* run(worktree, ["diff", "--name-only", "--diff-filter=U", "-z"], {
-          background,
-        }),
+        // diff-files, which never writes the index back (see the runner).
+        yield* run(worktree, [
+          "diff-files",
+          "--name-only",
+          "--diff-filter=U",
+          "-z",
+        ]),
       );
     });
 
@@ -151,10 +154,9 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
 
     const readOperation = Effect.fn("Git.readOperation")(function* (
       worktree: string,
-      background = false,
     ) {
       const [dir, conflictedList] = yield* Effect.all(
-        [gitDir(worktree), conflictedPaths(worktree, background)],
+        [gitDir(worktree), conflictedPaths(worktree)],
         { concurrency: 2 },
       );
       const conflicted = conflictedList.length;

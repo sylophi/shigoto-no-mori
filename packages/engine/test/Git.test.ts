@@ -272,7 +272,7 @@ it("a stash whose worktree changes before its reset is finished is left alone, a
   assert.equal(readFileSync(join(repo, "a.txt"), "utf8"), "changed\n");
 });
 
-it("a person's commits in a terminal are never refused by the app's status reads beside them", async () => {
+it("a person's commits in a terminal are never refused by the app's reads beside them", async () => {
   const repo = seedRepo();
   // git's own automatic maintenance, racing a hundred quick commits, can
   // repack away the commit HEAD names (2 of 15 runs with no app at all,
@@ -290,22 +290,30 @@ it("a person's commits in a terminal are never refused by the app's status reads
   await withGit((g) =>
     Effect.gen(function* () {
       let finished = false;
-      // The app reading, as fast as it can, three views at once.
+      // The app reading, as fast as it can: a listing's status, a page's
+      // changes and an open diff.
       const reading = yield* Effect.forkChild(
         Effect.forEach(
-          [1, 2, 3],
-          () =>
+          [
+            g.status(repo),
+            g.changes(repo),
+            g.fileDiff({ worktree: repo, paths: ["a.txt"], untracked: false }),
+          ],
+          (read) =>
             Effect.whileLoop({
               while: () => !finished,
-              body: () => Effect.ignore(g.status(repo)),
+              body: () => Effect.ignore(read),
               step: () => {},
             }),
           { concurrency: "unbounded", discard: true },
         ),
       );
-      // The person: an edit, an add and a commit, two hundred times.
+      // The person: an edit, an add and a commit, two hundred times, with
+      // a file saved unchanged each round, so every read finds the index's
+      // stat cache stale and has something to write back.
       for (let round = 0; round < 200; round += 1) {
         write(repo, "a.txt", `round ${round}\n`);
+        write(repo, `many/${round}.txt`, `${round}\n`);
         for (const args of [
           ["add", "a.txt"],
           [
