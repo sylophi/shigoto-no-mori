@@ -229,6 +229,19 @@ export class HubRateLimitedError extends Schema.TaggedError<HubRateLimitedError>
 
 export const isHubRateLimitedError = Schema.is(HubRateLimitedError);
 
+// gh missing or signed out on the host: every ask answers the same until
+// someone installs it or signs in, so nothing asks again on its own.
+export class GhUnavailableError extends Schema.TaggedError<GhUnavailableError>()(
+  "GhUnavailableError",
+  { reason: Schema.Literals(["gh-missing", "gh-signed-out"]) },
+) {
+  override get message(): string {
+    return `gh is not ready: ${this.reason}`;
+  }
+}
+
+export const isGhUnavailableError = Schema.is(GhUnavailableError);
+
 export const ContractErrorSchema = Schema.Union([
   UnknownProjectError,
   UnknownWorktreeError,
@@ -245,6 +258,7 @@ export const ContractErrorSchema = Schema.Union([
   LinkUnauthenticatedError,
   ChannelRefusedError,
   HubRateLimitedError,
+  GhUnavailableError,
 ]);
 
 export const isContractError = Schema.is(ContractErrorSchema);
