@@ -14,7 +14,7 @@ function findPageApi(): RendererApi {
 }
 
 // The page's api as a handle, to run code in the page with:
-// `(await pageApi(page)).evaluate((api) => api.hub.status())`.
+// `(await pageApi(page)).evaluate((api) => api.run(api.hub.status()))`.
 export function pageApi(page: Page): Promise<JSHandle<RendererApi>> {
   return page.evaluateHandle(findPageApi);
 }
