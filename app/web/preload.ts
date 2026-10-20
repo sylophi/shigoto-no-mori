@@ -1,9 +1,10 @@
 // The browser's preload: the twin of main/preload.ts. Makes the web
-// bridge once, reading the real browser globals and Vite build facts
-// (the factory itself stays injectable for the headless check), and
-// wires the page-level events the bridge cannot see from inside (other
-// tabs, the network coming back). Its api is the page's, which the
-// entry hands to the boot (main.tsx).
+// bridge once, on the profile's device id (settled under the account
+// lock, so it may wait on another tab), reading the real browser
+// globals and Vite build facts (the factory itself stays injectable for
+// the headless check), and wires the page-level events the bridge
+// cannot see from inside (other tabs, the network coming back). Its api
+// is the page's, which the entry hands to the boot (main.tsx).
 import { viteEnv } from "./account/config";
 import { browserHintsOf } from "./account/deviceName";
 import { ACCOUNT_KEY } from "./account/store";
@@ -11,16 +12,26 @@ import { disposeWithPage } from "@/lib/runtime/client";
 import {
   CLIENT_CONFIG_KEY,
   createWebBridge,
+  establishWebDeviceId,
   SHARED_SETTINGS_KEY,
   type WebBridge,
 } from "./ipc/register";
 
-let installed: WebBridge | null = null;
+let installed: Promise<WebBridge> | null = null;
 
-export function installWebBridge(): WebBridge {
-  if (installed !== null) return installed;
+export function installWebBridge(): Promise<WebBridge> {
+  // A storage the page can't open throws on its first read: rejected,
+  // so the entry's handler says so.
+  installed ??= Promise.resolve()
+    .then(() => establishWebDeviceId(window.localStorage))
+    .then(install);
+  return installed;
+}
+
+function install(deviceId: string): WebBridge {
   const bridge = createWebBridge({
     localStorage: window.localStorage,
+    deviceId,
     env: viteEnv(),
     userAgent: navigator.userAgent,
     browserHints: browserHintsOf(navigator),
@@ -30,7 +41,6 @@ export function installWebBridge(): WebBridge {
     isDev: import.meta.env.DEV,
     appVersion: __APP_VERSION__,
   });
-  installed = bridge;
   disposeWithPage({ dispose: bridge.stop });
   // Boot reconcile: connect the hub socket when a credential is
   // already stored, mirroring the desktop's ready-handler refresh.

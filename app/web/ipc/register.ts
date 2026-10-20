@@ -55,12 +55,17 @@ import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import { retryParkedRevoke } from "@shared/account/enroll";
 import * as WebHub from "../hub/connection";
+import { log } from "@shared/log";
 import { createHubTrace } from "../hub/trace";
 import {
   isConfigured,
   resolveServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
-import { getWebDeviceId } from "../account/deviceId";
+import {
+  getWebDeviceId,
+  keepWebDeviceId,
+  readWebDeviceId,
+} from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { defaultWebDeviceShape } from "../account/deviceIcon";
 import { createWebAccountStore } from "../account/store";
@@ -71,6 +76,8 @@ export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
   // client): the device id, the credential envelope and clientConfig.
   localStorage: KeyValueStorage;
+  // The profile's device id, as establishWebDeviceId settled it.
+  deviceId: string;
   // The env record the account service config resolves from
   // (import.meta.env in the real client).
   env: Record<string, string | undefined>;
@@ -122,16 +129,43 @@ export type WebBridge = {
 export const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
 // How long a tab waits for another tab's enroll.
 const ENROLL_WAIT_MS = 30_000;
-// The profile's tabs' account changes, one tab at a time.
+// The profile's tabs' account changes, one tab at a time: its device
+// id, its enrollment and its sign-out.
 const ACCOUNT_LOCK = "sm.web.accountChange";
 
 const isDomError = (error: unknown, name: string): boolean =>
   error instanceof DOMException && error.name === name;
+
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
+
+// The profile's device id. One already stored is read as it is (a tab
+// boots at once); a missing or mangled one is minted under the account
+// lock, so two fresh tabs can't mint two and enroll under one. A tab
+// that waits past ENROLL_WAIT_MS behind another's enrollment reads the
+// id that tab minted before it enrolled, as a sign-out goes ahead.
+export async function establishWebDeviceId(
+  storage: KeyValueStorage,
+  locks: Pick<LockManager, "request"> | undefined = globalThis.navigator?.locks,
+): Promise<string> {
+  const stored = readWebDeviceId(storage);
+  if (stored !== null) return stored;
+  if (locks === undefined) return getWebDeviceId(storage);
+  return await locks
+    .request(
+      ACCOUNT_LOCK,
+      { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
+      async () => getWebDeviceId(storage),
+    )
+    .catch((error: unknown) => {
+      if (isDomError(error, "TimeoutError")) return getWebDeviceId(storage);
+      throw error;
+    });
+}
+
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = resolveServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);
-  const deviceId = getWebDeviceId(deps.localStorage);
+  const { deviceId } = deps;
   const service = createAccountService({
     baseUrl: config.hubUrl,
     fetchImpl: deps.fetchImpl,
@@ -139,7 +173,11 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const tab = createLocalRegistrar({ validateOutputs: deps.isDev });
   // A sign-out whose revoke never reached the hub is delivered at the
   // next boot (enroll.ts retryParkedRevoke), the desktop's rule too.
-  void retryParkedRevoke({ config, service, store, deviceId });
+  // Its clear can fail in a storage that refuses writes, the revoke
+  // itself delivered.
+  void retryParkedRevoke({ config, service, store, deviceId }).catch(
+    (error: unknown) => log.warn("[account] parked revoke:", error),
+  );
 
   // ---- hub socket lifecycle ----
 
@@ -284,15 +322,19 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // rotated away. One tab enrolls at a time, and one whose wait saw
   // another tab store a credential answers with that. A second call in
   // this tab rides the one under way, as the handlers' own join does.
+  // The tab enrolls under the profile's id as storage holds it, so a
+  // credential never lands beside an id other than its own.
   const locks = deps.locks ?? globalThis.navigator?.locks;
   let enrolling: Promise<AccountStatus> | undefined;
   const enrollOneTab: typeof accountHandlers.enroll = (token, ctx) => {
     if (enrolling !== undefined) return enrolling;
     const before = store.read()?.credential;
-    const enrollHere = async () =>
-      store.read()?.credential === before
+    const enrollHere = async () => {
+      keepWebDeviceId(deps.localStorage, deviceId);
+      return store.read()?.credential === before
         ? accountHandlers.enroll(token, ctx)
         : accountHandlers.status(undefined, ctx);
+    };
     const run = (
       locks === undefined
         ? enrollHere()
