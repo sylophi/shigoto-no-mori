@@ -27,7 +27,7 @@ enrolls again to make one.
 What a device relays to another is the connectInfo ask or its answer
 sealed as a Noise handshake message to the addressed device's key
 (`app/shared/hub/link.ts`), as the envelope's `frame`: a string the
-object copies without reading, under the same size limit. A frame
+object copies without reading, sent under the size limit. A frame
 that is not a string is dropped like any malformed envelope. So the
 hub reads only the addressing: who sent it and to whom.
 The device an ask is addressed to remembers each one it answers for
