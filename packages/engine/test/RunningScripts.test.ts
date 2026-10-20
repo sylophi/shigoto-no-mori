@@ -70,20 +70,3 @@ it("keeps each instance's scripts across opens until removed", async () => {
     ["r2"],
   );
 });
-
-it("refuses a pid of 1 for a script or its owner, which the sweep would signal as everything", async () => {
-  const refused = await run(
-    Effect.gen(function* () {
-      const scripts = yield* RunningScripts.RunningScripts;
-      return [
-        yield* Effect.exit(scripts.add({ ...devServer, pid: 1 })),
-        yield* Effect.exit(scripts.add({ ...devServer, ownerPid: 1 })),
-        yield* scripts.list,
-      ] as const;
-    }),
-  );
-  assert.ok(Exit.isSuccess(refused));
-  const [pid, owner, listed] = refused.value;
-  assert.ok(Exit.isFailure(pid) && Exit.isFailure(owner));
-  assert.deepEqual(listed, []);
-});

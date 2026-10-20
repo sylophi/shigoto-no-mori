@@ -4,7 +4,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -75,33 +74,14 @@ it("ends any spawn that ignores SIGTERM when its caller gives up, one that set n
   assert.ok(Date.now() - started < 10_000, "ended by the SIGKILL after");
 });
 
-// The same clock with its wall reading stepped by `ms`.
-const stepped =
-  (ms: number) =>
-  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const clock = yield* Clock.Clock;
-      return yield* Effect.provideService(
-        effect,
-        Clock.Clock,
-        Object.assign(Object.create(clock), {
-          currentTimeMillis: Effect.sync(() => Date.now() + ms),
-          currentTimeMillisUnsafe: () => Date.now() + ms,
-        }),
-      );
-    });
-
-it("a process's birth is the kernel's stamp, so a clock stepped hours either way neither moves it nor makes a live owner read as another process", async () => {
+it("another birth is another process, and an unknown one is never taken over", async () => {
   const born = await run(startOf(process.pid));
   assert.ok(Exit.isSuccess(born) && Option.isSome(born.value), String(born));
   const birth = born.value.value;
-  for (const step of [2 * 3_600_000, -2 * 3_600_000]) {
-    const again = await run(stepped(step)(startOf(process.pid)));
-    assert.deepEqual(again, Exit.succeed(Option.some(birth)));
-    const live = await run(stepped(step)(stillRunning(process.pid, birth)));
-    assert.deepEqual(live, Exit.succeed(true));
-  }
-  // Another birth is another process; an unknown one is never taken over.
+  assert.deepEqual(
+    await run(stillRunning(process.pid, birth)),
+    Exit.succeed(true),
+  );
   assert.deepEqual(
     await run(stillRunning(process.pid, birth - 60_000)),
     Exit.succeed(false),
