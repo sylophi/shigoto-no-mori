@@ -26,6 +26,8 @@ import {
   useEnroll,
 } from "@/hooks/account/useAccount";
 import { useHasLocalHost } from "@/lib/localHost";
+import { openExternalUrl } from "@/lib/openExternal";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 import { toast } from "@/lib/toast";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -79,9 +81,25 @@ function onlyProvider(clerk: Clerk): OAuthStrategy | null {
     : null;
 }
 
-function startSignIn(clerk: Clerk, hasLocalHost: boolean): void {
+// The desktop's sign-in in the browser until it comes back or fails.
+// The bridge takes one at a time and throws at a second, after
+// clerk-js has already replaced the attempt the first one's tab
+// belongs to, so a press while one is out opens that tab's page again.
+let signingIn = false;
+
+function startSignIn(
+  clerk: Clerk,
+  hasLocalHost: boolean,
+  api: RendererApi,
+): void {
   const strategy = onlyProvider(clerk);
   const signIn = clerk.client?.signIn;
+  if (signingIn) {
+    // The provider's page clerk-js handed the bridge, unchanged.
+    const url = signIn?.firstFactorVerification.externalVerificationRedirectURL;
+    if (url) openExternalUrl(api, url.href, "Couldn't open the sign-in");
+    return;
+  }
   if (strategy === null || signIn === undefined) {
     clerk.openSignIn(
       hasLocalHost ? undefined : { forceRedirectUrl: location.href },
@@ -93,6 +111,7 @@ function startSignIn(clerk: Clerk, hasLocalHost: boolean): void {
   // here, marked.
   const back = new URL(location.href);
   back.searchParams.set(REDIRECT_RETURN_PARAM, "1");
+  if (hasLocalHost) signingIn = true;
   signIn
     .authenticateWithRedirect({
       strategy,
@@ -103,6 +122,9 @@ function startSignIn(clerk: Clerk, hasLocalHost: boolean): void {
       toast.error("Couldn't start the sign-in", {
         description: errorMessageOf(error),
       });
+    })
+    .finally(() => {
+      signingIn = false;
     });
 }
 
@@ -159,6 +181,7 @@ export function useEnrollment({ again = false } = {}): {
   const { isSignedIn, getToken } = useAuth();
   const clerk = useClerk();
   const hasLocalHost = useHasLocalHost();
+  const api = useApi();
   const enroll = useEnroll();
   const enrolling = useIsMutating({ mutationKey: ENROLL_MUTATION_KEY }) > 0;
   const step = enrollmentStep({
@@ -175,7 +198,7 @@ export function useEnrollment({ again = false } = {}): {
       if (step === "enroll") {
         enroll.mutate(() => getToken({ skipCache: true }));
       } else if (step === "sign-in") {
-        startSignIn(clerk, hasLocalHost);
+        startSignIn(clerk, hasLocalHost, api);
       }
     },
   };
