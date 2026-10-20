@@ -640,8 +640,10 @@ async function updateInstalled(
 // environment has none.
 async function reopenOnRealFeed(installed: string, dataDir: string) {
   const byHand = `quit ${installed} and open it again, so it checks the real feed`;
-  const running = statusIn(dataDir)?.pid;
   try {
+    // By its executable: the status can still name the app before.
+    const running =
+      runningFrom(executableIn(installed)) ?? statusIn(dataDir)?.pid;
     if (running !== undefined && pidAlive(running)) {
       execFileSync("osascript", [
         "-e",
@@ -697,8 +699,6 @@ async function serve(port: string) {
   const stopped = new Promise<void>((resolve) =>
     child.once("exit", () => resolve()),
   );
-  // A signal ends the process before the removal below.
-  onRunEnd(() => rmSync(root, { recursive: true, force: true }));
   console.log(`serving on 127.0.0.1:${port}, the data folder ${dataDir}`);
   await stopped;
   if (child.pid !== undefined) await stop(child.pid, () => exited);
