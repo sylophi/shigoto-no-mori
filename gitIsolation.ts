@@ -33,7 +33,7 @@ const ISOLATING = {
 
 // A variable of git's that came from outside: every GIT_* but the
 // ceiling and the config isolation sets.
-export const isOutsideGitVariable = (key: string): boolean =>
+const isOutsideGitVariable = (key: string): boolean =>
   key.startsWith("GIT_") &&
   key !== "GIT_CEILING_DIRECTORIES" &&
   !(key in ISOLATING);

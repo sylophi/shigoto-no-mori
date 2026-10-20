@@ -16,12 +16,14 @@
 //
 // Run: node lab/relaunch.mts "<path to the .app>"
 // A v3 build (SM_FLAVOR=v3 pnpm package) runs beside the installed
-// app. It quits the app at the end.
+// app. It quits the app at the end, by SIGKILL (a window whose renderer
+// was killed ignores a quit), whether it passed or not.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { onRunEnd, signalIfAlive } from "./lib/runEnd.mts";
 
 const given = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
 if (given === undefined || !existsSync(given)) {
@@ -34,17 +36,23 @@ const appName = basename(bundle, ".app");
 const executable = join(bundle, "Contents", "MacOS", appName);
 const mainLog = join(homedir(), "Library", "Logs", appName, "main.log");
 
-const pidOfApp = (): number | null => {
+// Every running instance of the app, its main process by its command.
+const pidsOfApp = (): number[] => {
   try {
     const pattern = executable.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const out = execFileSync("pgrep", ["-f", `^${pattern} `], {
       encoding: "utf8",
     });
-    return Number(out.trim().split("\n")[0]) || null;
+    return out
+      .trim()
+      .split("\n")
+      .map(Number)
+      .filter((pid) => pid > 0);
   } catch {
-    return null;
+    return [];
   }
 };
+const pidOfApp = (): number | null => pidsOfApp()[0] ?? null;
 
 // What the app's windows show, through accessibility (JavaScript for
 // Automation over System Events), for `pid`.
@@ -134,6 +142,12 @@ if (pidOfApp() !== null) {
   console.error(`${appName} is running. Quit it first.`);
   process.exit(2);
 }
+// The app runs from LaunchServices, not as this script's child, so it
+// is quit here however the run ends (lib/runEnd.mts): a failure, an
+// exit, a signal.
+onRunEnd(() => {
+  for (const pid of pidsOfApp()) signalIfAlive(pid, "SIGKILL");
+});
 const opened = Date.now();
 execFileSync("open", ["-n", "-a", bundle, "--args", "--sm-lab"]);
 const first = await until("the app", 60_000, () => pidOfApp());
@@ -151,10 +165,6 @@ const windowBack = await drawnWindow(second, asked).catch(() => null);
 await sleep(5000);
 const later = drawn(second);
 const killed = killedLines().slice(killedBefore);
-// A window whose renderer was killed ignores a quit.
-const last = pidOfApp();
-if (last !== null) process.kill(last, "SIGKILL");
-
 console.log(
   `relaunched as ${second} (was ${first}), window ${windowBack === null ? "never drew" : `drawn in ${windowBack} ms`}`,
 );

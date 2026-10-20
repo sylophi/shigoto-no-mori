@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
+import { onRunEnd } from "../../lib/runEnd.mts";
 import type { Lab } from "./labApp.mts";
 
 const REPOSITORY = join(import.meta.dirname, "..", "..", "..", "..");
@@ -118,10 +119,15 @@ export async function startRealOrigin(): Promise<RealOrigin> {
     cwd: path,
   });
   const port = await freeLoopbackPort();
+  // The daemon itself, not `git daemon`, a wrapper a SIGKILL would end
+  // with the daemon left listening.
+  const gitDaemon = join(
+    execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim(),
+    "git-daemon",
+  );
   const daemon = spawn(
-    "git",
+    gitDaemon,
     [
-      "daemon",
       "--reuseaddr",
       "--export-all",
       `--base-path=${base}`,
@@ -135,12 +141,18 @@ export async function startRealOrigin(): Promise<RealOrigin> {
   daemon.once("exit", () => {
     exited = true;
   });
+  // However the run ends (../../lib/runEnd.mts).
+  const forget = onRunEnd(() => {
+    daemon.kill("SIGKILL");
+    rmSync(base, { recursive: true, force: true });
+  });
   const stop = async () => {
     if (!exited) daemon.kill("SIGTERM");
     await waitFor(() => exited, "git daemon to stop", 10_000).catch(() =>
       daemon.kill("SIGKILL"),
     );
     rmSync(base, { recursive: true, force: true });
+    forget();
   };
   const url = `git://127.0.0.1:${port}/${REAL_NAME}.git`;
   try {

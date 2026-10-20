@@ -24,6 +24,7 @@ import { expect } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
 import { devProfileNameSuffix } from "../../../shared/packaging/appName.mts";
+import { onRunEnd, signalIfAlive } from "../../lib/runEnd.mts";
 import { walkFailed } from "./failed.mts";
 
 const APP_DIR = join(import.meta.dirname, "..", "..", "..");
@@ -390,6 +391,30 @@ async function launch(
     { recursive: true, force: true },
   );
 
+  // However the run ends (../../lib/runEnd.mts): every app this lab
+  // started, the relaunched one included, and its folders.
+  const started = new Set<number>();
+  const removeFolders = () => {
+    rmSync(root, { recursive: true, force: true });
+    // A device's own folders, which the walks' nuke leaves: it clears the
+    // build's, and a profile's are named for it.
+    // Retried: a helper the app left can still be writing its last file.
+    if (options.profile !== undefined) {
+      for (const folder of [userData, hostLogsOf(options.profile)]) {
+        rmSync(folder, {
+          recursive: true,
+          force: true,
+          maxRetries: 5,
+          retryDelay: 200,
+        });
+      }
+    }
+  };
+  const forget = onRunEnd(() => {
+    for (const pid of started) signalIfAlive(pid, "SIGKILL");
+    removeFolders();
+  });
+
   options.seed(reposDir, git, home);
   options.prepare?.(dataDir);
   if (readdirSync(reposDir).length > 0) {
@@ -407,6 +432,7 @@ async function launch(
       },
       stdio: ["ignore", "ignore", "pipe"],
     });
+    if (child.pid !== undefined) started.add(child.pid);
     const run = {
       child,
       port,
@@ -466,34 +492,26 @@ async function launch(
     // home, and the host's trace where Electron puts the logs folder,
     // under the account's real home, which the walks' nuke clears at the
     // end.
-    const keep = process.env["SM_WALK_LOGS"];
-    if (keep !== undefined && keep !== "") {
-      const walk = join(
-        keep,
-        basename(expect.getState().testPath ?? root),
-        options.profile ?? "",
-      );
-      for (const [from, to] of [
-        [join(home, "Library", "Logs"), walk],
-        [hostLogsOf(options.profile), join(walk, "host")],
-      ] as const) {
-        if (existsSync(from)) cpSync(from, to, { recursive: true });
+    // A copy that fails (a full disk) still lets the folders go.
+    try {
+      const keep = process.env["SM_WALK_LOGS"];
+      if (keep !== undefined && keep !== "") {
+        const walk = join(
+          keep,
+          basename(expect.getState().testPath ?? root),
+          options.profile ?? "",
+        );
+        for (const [from, to] of [
+          [join(home, "Library", "Logs"), walk],
+          [hostLogsOf(options.profile), join(walk, "host")],
+        ] as const) {
+          if (existsSync(from)) cpSync(from, to, { recursive: true });
+        }
       }
-    }
-    if (walkFailed()) keepFailed(root, options.profile);
-    rmSync(root, { recursive: true, force: true });
-    // A device's own folders, which the walks' nuke leaves: it clears the
-    // build's, and a profile's are named for it.
-    // Retried: a helper the app left can still be writing its last file.
-    if (options.profile !== undefined) {
-      for (const folder of [userData, hostLogsOf(options.profile)]) {
-        rmSync(folder, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 200,
-        });
-      }
+      if (walkFailed()) keepFailed(root, options.profile);
+    } finally {
+      removeFolders();
+      forget();
     }
   };
   const restart: Lab["restart"] = async (hooks) => {
@@ -544,7 +562,11 @@ async function launch(
         // too: no lab app ran before the walks (refuseRunningLab).
         if (relaunched === undefined) {
           await waitFor(
-            () => (relaunched = labListenerOn(port)) !== undefined,
+            () => {
+              relaunched = labListenerOn(port);
+              if (relaunched !== undefined) started.add(relaunched);
+              return relaunched !== undefined;
+            },
             "a late relaunch",
             30_000,
           ).catch(() => {});
@@ -582,6 +604,7 @@ async function launch(
         90_000,
       );
       relaunched = labListenerOn(port);
+      if (relaunched !== undefined) started.add(relaunched);
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
       const page = browser.contexts()[0]?.pages()[0];
       if (page === undefined)
