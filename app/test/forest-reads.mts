@@ -1,18 +1,17 @@
 // Durable proof for the per-project reads (a project's config, its
 // icon, its GitHub description), which the sidebar and
-// the projects page ask of every project at once: however many projects there are, one device never has more of
-// them in flight than a quarter of the host's cap on a connection
-// (MAX_IN_FLIGHT_PER_PEER), so the page's own calls still go. A first
-// run that turns terrier on lists every repo at once, which went past
-// the cap and drew "too many in-flight requests" from the host. A read
-// that fails frees its place, and one device's reads never wait on
-// another's.
+// the projects page ask of every project at once: however many
+// projects there are, one device never has more of them in flight than
+// a third of the link's places (LINK_CALLS_IN_FLIGHT), so the page's
+// own calls still go. A first run that turns terrier on lists every
+// repo at once. A read that fails frees its place, and one device's
+// reads never wait on another's.
 //
 // Run: pnpm test forest-reads.
 import assert from "node:assert/strict";
 import * as Effect from "effect/Effect";
 import { it } from "vitest";
-import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
+import { LINK_CALLS_IN_FLIGHT } from "@shared/remote/rpcTransport";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
 import { projectIconQueryOptions } from "@/hooks/projects/useProjectIcon";
@@ -67,12 +66,12 @@ const readAll = (api: HostApi, deviceId: string, projects: number) =>
     ),
   );
 
-it("keeps a forest's reads to a quarter of the host's cap", async () => {
+it("keeps a forest's reads to a third of the link's places", async () => {
   const { api, counts } = countingApi();
   const results = await readAll(api, "device-a", 60);
   assert.equal(counts.calls, 180);
   assert.ok(results.every((result) => result.status === "fulfilled"));
-  assert.equal(counts.peak, MAX_IN_FLIGHT_PER_PEER / 4);
+  assert.equal(counts.peak, LINK_CALLS_IN_FLIGHT / 3);
 });
 
 it("frees a failed read's place", async () => {
@@ -82,7 +81,7 @@ it("frees a failed read's place", async () => {
   // p3, p13, p23 and p33, each three times.
   assert.equal(failed.length, 12);
   assert.equal(counts.calls, 120);
-  assert.ok(counts.peak <= MAX_IN_FLIGHT_PER_PEER / 4);
+  assert.ok(counts.peak <= LINK_CALLS_IN_FLIGHT / 3);
 });
 
 it("gives each device its own share", async () => {
@@ -92,6 +91,6 @@ it("gives each device its own share", async () => {
     readAll(one.api, "device-c", 30),
     readAll(two.api, "device-d", 30),
   ]);
-  assert.equal(one.counts.peak, MAX_IN_FLIGHT_PER_PEER / 4);
-  assert.equal(two.counts.peak, MAX_IN_FLIGHT_PER_PEER / 4);
+  assert.equal(one.counts.peak, LINK_CALLS_IN_FLIGHT / 3);
+  assert.equal(two.counts.peak, LINK_CALLS_IN_FLIGHT / 3);
 });

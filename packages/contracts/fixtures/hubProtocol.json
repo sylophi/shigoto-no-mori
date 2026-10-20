@@ -512,10 +512,6 @@
     "accepts": [
       {
         "hostname": "dev-enroll.tunnel.example.com",
-        "connectorToken": "eyJh"
-      },
-      {
-        "hostname": "dev-enroll.tunnel.example.com",
         "connectorToken": "eyJh",
         "dnsCreated": true
       },
@@ -538,6 +534,10 @@
         "hostname": "dev-enroll.tunnel.example.com",
         "connectorToken": "eyJh",
         "dnsCreated": null
+      },
+      {
+        "hostname": "dev-enroll.tunnel.example.com",
+        "connectorToken": "eyJh"
       }
     ]
   },

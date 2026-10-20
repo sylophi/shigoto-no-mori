@@ -25,7 +25,7 @@
 //
 // The listener sits on every interface (and behind the tunnel), so it
 // is written to be hostile-safe: an inbound frame cap, an Origin gate,
-// connection and in-flight caps, a failed-auth lockout, and hard
+// connection caps, a failed-auth lockout, and hard
 // termination on every rejection and shutdown.
 import {
   decodeFrame,
@@ -70,7 +70,6 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -110,7 +109,6 @@ import { sameKey } from "@shared/crypto/deviceKey";
 import {
   HELLO_TIMEOUT_MS,
   HOST_LIVENESS_TIMEOUT_MS,
-  MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/remote/link";
 import { changing } from "@host/lib/Engine";
 import * as HostPushes from "@host/lib/HostPushes";
@@ -199,12 +197,6 @@ const SWITCHES = new Set([
   channelOf(callOf(sharingContract, "changed")),
   COMMAND_ACCESS_CHANGED,
 ]);
-
-// Calls that hold no place under the in-flight cap: a channel's
-// numbered calls, which the channel bounds, and the link's ping, which
-// answers at once and must, or a link with a full cap would read as
-// dropped (a wake's probe, shared/remote/deviceLink.ts).
-const UNCOUNTED_CALLS = new Set(["link:read", "link:write", "link:ping"]);
 
 export type WsServerStartOpts = {
   // The port to listen on, 0 for any. A port another process holds
@@ -414,12 +406,10 @@ type Connection = {
     readonly deviceId: string;
     readonly publicKey: Uint8Array;
   } | null;
-  helloSeen: boolean;
   // The loopback's: whether the hello carried the shell's token.
   shell: boolean;
   deviceId: string | null;
   connectionId: string | null;
-  inFlight: number;
   lastInboundAt: number;
   dead: boolean;
   kill(code: number, reason: string): void;
@@ -573,11 +563,6 @@ export const make = (options: {
                 clientVersion: payload.protocolVersion,
               });
             }
-            if (connection.helloSeen) {
-              yield* killSoon(connection, "hello out of turn");
-              return yield* new LinkRefusedError();
-            }
-            connection.helloSeen = true;
             // A peer's hello names the device its ticket was minted for,
             // whose key the handshake proved and the roster still holds
             // for it, and only then spends the ticket: a device removed
@@ -626,7 +611,7 @@ export const make = (options: {
               return yield* new LinkRefusedError();
             }
             failedAuth.delete(connection.ip);
-            preAuth -= 1;
+            if (connection.deviceId === null) preAuth -= 1;
             // The links this one replaces end now, so nothing they still
             // deliver runs: a desktop device's every other, a web
             // device's own stale one. On the loopback every caller is
@@ -800,19 +785,7 @@ export const make = (options: {
             ) {
               return Effect.fail(new LinkUnauthenticatedError());
             }
-            // A stream (a push, a view) lives as long as its reader
-            // wants it, a channel's bytes are bounded per channel
-            // (CHANNEL_CALLS_IN_FLIGHT), and a ping answers at once,
-            // so none holds a place.
-            const call = rpc as ContractCall;
-            const streaming =
-              !isInvoke(call) || UNCOUNTED_CALLS.has(channelOf(call));
-            if (!streaming && connection.inFlight >= MAX_IN_FLIGHT_PER_PEER) {
-              return Effect.fail(
-                new RemoteCallError({ text: "too many in-flight requests" }),
-              );
-            }
-            const served = effect.pipe(
+            return effect.pipe(
               Effect.provideService(LinkPeer, {
                 deviceId: local ? undefined : deviceId,
                 closed: connection.closed.signal,
@@ -826,35 +799,6 @@ export const make = (options: {
                 },
               }),
             );
-            if (streaming) return served;
-            // A call's place frees the moment it is interrupted, not once
-            // its cleanup (the git it spawned, killed) ends: the client's
-            // gate frees its own when it sends the interrupt, and a page
-            // that drops its calls and makes as many new ones would
-            // otherwise find the old still counted here.
-            connection.inFlight += 1;
-            let held = true;
-            const free = Effect.sync(() => {
-              if (!held) return;
-              held = false;
-              connection.inFlight -= 1;
-            });
-            // Started at once, so a call still begins before the next
-            // one on the connection (a channel's bytes after its open).
-            return Effect.uninterruptibleMask((restore) =>
-              Effect.forkDetach(served, {
-                startImmediately: true,
-                uninterruptible: false,
-              }).pipe(
-                Effect.flatMap((fiber) =>
-                  restore(Fiber.join(fiber)).pipe(
-                    Effect.onInterrupt(() =>
-                      free.pipe(Effect.andThen(Fiber.interrupt(fiber))),
-                    ),
-                  ),
-                ),
-              ),
-            ).pipe(Effect.ensuring(free));
           }),
         );
 
@@ -1151,11 +1095,9 @@ export const make = (options: {
                 closed,
                 parser: server.parser(),
                 opened: null,
-                helloSeen: false,
                 shell: false,
                 deviceId: null,
                 connectionId: null,
-                inFlight: 0,
                 lastInboundAt: elapsedMillisUnsafe(clock),
                 dead: false,
                 kill(code, reason) {

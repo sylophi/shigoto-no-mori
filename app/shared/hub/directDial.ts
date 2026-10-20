@@ -79,7 +79,6 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
-  MAX_DIRECT_CANDIDATES,
   type DirectCandidate,
   type DirectCandidateKind,
   type DirectConnectInfoInput,
@@ -107,12 +106,6 @@ export type PeerConnection = Omit<DialedDevice, "link"> & {
   acceptsCommands: boolean;
   sharesData: boolean;
 };
-
-// Candidates dialed at once: the shared advertising cap for interface
-// addresses plus the one tunnel candidate, enforced here too so a
-// hostile or buggy connectInfo answer cannot fan out an unbounded dial
-// burst.
-const MAX_DIAL_CANDIDATES = MAX_DIRECT_CANDIDATES + 1;
 
 // The peer serves no direct listener (a web client), so there is
 // nothing to dial and never will be while it is that platform. Typed so
@@ -290,7 +283,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
   // budget, the race fails with the remembered refusal, or the deadline.
   const raceCandidates = (
     deviceId: string,
-    candidates: DirectCandidate[],
+    candidates: readonly DirectCandidate[],
     budgetMs: number,
     seal: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array },
     connectionId: string,
@@ -487,11 +480,9 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           message: `peer ${deviceId} has no key on the roster`,
         });
       }
-      // The fan-out cap keeps a hostile or buggy answer from dialing an
-      // unbounded burst.
       const { link: _, ...dialed } = yield* raceCandidates(
         deviceId,
-        info.candidates.slice(0, MAX_DIAL_CANDIDATES),
+        info.candidates,
         deadlineMs,
         { localKey, remoteKey },
         connectionId,

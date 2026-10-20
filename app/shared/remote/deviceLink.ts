@@ -85,9 +85,8 @@ export type DeviceLinkOptions = {
   seal?: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array };
   appVersion: string;
   localDeviceId: string;
-  // The peer this dial means to reach: a welcome from any other device
-  // fails the handshake, so a dial that landed on the wrong machine is
-  // never cached under the intended peer.
+  // The peer this dial means to reach, which is this machine's own host
+  // on the loopback.
   expectedDeviceId: string;
   // Every push the peer sends, by channel, decoded.
   onPush?: (channel: string, payload: unknown) => void;
@@ -300,13 +299,6 @@ export const dialDevice = (
             : connectError(`the hello failed: ${errorMessageOf(error)}`),
       ),
     )) as { deviceId: string; appVersion: string };
-    // The wrong machine answered (a stale address, a NAT surprise).
-    // Redialing the same address cannot change who lives there.
-    if (welcome.deviceId !== options.expectedDeviceId) {
-      return yield* Effect.fail(
-        connectError("welcome from an unexpected device", true),
-      );
-    }
 
     const link = yield* rpcLink({
       client,
