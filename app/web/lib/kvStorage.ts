@@ -59,11 +59,3 @@ export function writeKey(
     // Unavailable storage costs persistence across reloads, nothing more.
   }
 }
-
-export function removeKey(storage: KeyValueStorage, key: string): void {
-  try {
-    storage.removeItem(key);
-  } catch {
-    // Same tolerance as writeKey.
-  }
-}

@@ -14,12 +14,7 @@ import {
   type AccountStore,
   type StoreCipher,
 } from "@shared/account/credentialStore";
-import {
-  readKey,
-  removeKey,
-  writeKey,
-  type KeyValueStorage,
-} from "../lib/kvStorage";
+import { readKey, type KeyValueStorage } from "../lib/kvStorage";
 
 export const ACCOUNT_KEY = "sm.web.account";
 
@@ -37,12 +32,16 @@ const plaintextCipher: StoreCipher = {
   },
 };
 
+// The writes reach the core as they are, unlike a preference's: a
+// signed-out remainder that can't be written falls back to removing the
+// document, an enrollment that can't be kept fails, and a sign-out
+// whose removal fails too fails rather than keep the credential.
 export function createWebAccountStore(storage: KeyValueStorage): AccountStore {
   return createAccountStore({
     storage: {
       readRaw: () => readKey(storage, ACCOUNT_KEY),
-      writeRaw: (text) => writeKey(storage, ACCOUNT_KEY, text),
-      removeRaw: () => removeKey(storage, ACCOUNT_KEY),
+      writeRaw: (text) => storage.setItem(ACCOUNT_KEY, text),
+      removeRaw: () => storage.removeItem(ACCOUNT_KEY),
     },
     cipher: plaintextCipher,
   });

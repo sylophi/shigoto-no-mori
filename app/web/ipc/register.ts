@@ -71,6 +71,8 @@ export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
   // client): the device id, the credential envelope and clientConfig.
   localStorage: KeyValueStorage;
+  // The profile's device id, as establishWebDeviceId settled it.
+  deviceId: string;
   // The env record the account service config resolves from
   // (import.meta.env in the real client).
   env: Record<string, string | undefined>;
@@ -122,16 +124,38 @@ export type WebBridge = {
 export const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
 // How long a tab waits for another tab's enroll.
 const ENROLL_WAIT_MS = 30_000;
-// The profile's tabs' account changes, one tab at a time.
+// The profile's tabs' account changes, one tab at a time: its device
+// id, its enrollment and its sign-out.
 const ACCOUNT_LOCK = "sm.web.accountChange";
 
 const isDomError = (error: unknown, name: string): boolean =>
   error instanceof DOMException && error.name === name;
+
+// The profile's device id, read or minted under the account lock, so two
+// fresh tabs can't mint two and enroll under one. A tab waits behind
+// another's enrollment as a sign-out does, and one that waited it out
+// reads the id the other tab minted before enrolling.
+export async function establishWebDeviceId(
+  storage: KeyValueStorage,
+  locks: Pick<LockManager, "request"> | undefined = globalThis.navigator?.locks,
+): Promise<string> {
+  if (locks === undefined) return getWebDeviceId(storage);
+  return await locks
+    .request(
+      ACCOUNT_LOCK,
+      { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
+      async () => getWebDeviceId(storage),
+    )
+    .catch((error: unknown) => {
+      if (isDomError(error, "TimeoutError")) return getWebDeviceId(storage);
+      throw error;
+    });
+}
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = resolveServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);
-  const deviceId = getWebDeviceId(deps.localStorage);
+  const { deviceId } = deps;
   const service = createAccountService({
     baseUrl: config.hubUrl,
     fetchImpl: deps.fetchImpl,

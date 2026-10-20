@@ -9,11 +9,14 @@
 // scalar facts (so renderer components mount unmodified), the
 // localStorage-backed clientConfig store round-trips, heals corrupt
 // JSON and turns an Each launch rotation once per tab, the
-// per-browser deviceId is stable and matches DeviceIdSchema,
+// per-browser deviceId is stable and matches DeviceIdSchema, and two
+// fresh tabs settle one under the account lock and enroll it,
 // enroll exchanges the Clerk session token for a credential with
 // platform "web" and persists the enc:false envelope, sign-out
-// revokes this device then clears the envelope, a concurrent enroll or
-// sign-out rides the one under way (a failed one not kept), two tabs
+// revokes this device then clears the envelope (removing it when
+// storage refuses the remainder, failing when it refuses the removal
+// too, as an enroll fails that can't keep its credential), a
+// concurrent enroll or sign-out rides the one under way (a failed one not kept), two tabs
 // enrolling at once enroll once and keep the credential the hub holds,
 // the shared settings another tab wrote reach this tab's watch,
 // read-classified OS-bound
@@ -38,7 +41,12 @@ import { gitContract } from "@shigomori/contracts/modules/git";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { DeviceIdSchema } from "@shigomori/contracts/hubProtocol";
-import { createWebBridge, type WebBridgeDeps } from "../web/ipc/register.ts";
+import {
+  createWebBridge,
+  establishWebDeviceId,
+  type WebBridgeDeps,
+} from "../web/ipc/register.ts";
+import { getWebDeviceId } from "../web/account/deviceId.ts";
 import * as Effect from "effect/Effect";
 import { createLocalRegistrar } from "../web/ipc/localRegistrar.ts";
 import { windowContract } from "@shigomori/contracts/modules/window";
@@ -67,8 +75,10 @@ const CHROME_MAC_UA =
   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 function makeDeps(overrides: Partial<WebBridgeDeps> = {}): WebBridgeDeps {
+  const localStorage = overrides.localStorage ?? memoryStorage();
   return {
-    localStorage: memoryStorage(),
+    localStorage,
+    deviceId: getWebDeviceId(localStorage),
     env: CONFIGURED_ENV,
     userAgent: CHROME_MAC_UA,
     openExternal: () => {},
@@ -130,24 +140,28 @@ it("surface: the bridge's page api has exactly every contract module by name plu
   assert.equal(bridge.api.isElectron, false);
 });
 
-it("deviceId: stable across bridges over the same storage, schema-valid, and distinct per browser profile", () => {
+it("deviceId: stable over the same storage, schema-valid, and distinct per browser profile", async () => {
   const localStorage = memoryStorage();
-  const first = createWebBridge(makeDeps({ localStorage }));
-  const second = createWebBridge(makeDeps({ localStorage }));
-  assert.equal(first.api.deviceId, second.api.deviceId);
-  assert.ok(Schema.is(DeviceIdSchema)(first.api.deviceId));
+  const first = await establishWebDeviceId(localStorage, sharedLocks());
+  assert.equal(await establishWebDeviceId(localStorage, sharedLocks()), first);
+  assert.ok(Schema.is(DeviceIdSchema)(first));
   assert.match(
-    first.api.deviceId,
+    first,
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     "the minted deviceId is not a well-formed UUID",
   );
-  const other = createWebBridge(makeDeps());
-  assert.notEqual(other.api.deviceId, first.api.deviceId);
+  assert.notEqual(
+    await establishWebDeviceId(memoryStorage(), sharedLocks()),
+    first,
+  );
   // A mangled stored id is replaced rather than trusted.
   localStorage.setItem("sm.web.deviceId", "not-a-uuid");
-  const healed = createWebBridge(makeDeps({ localStorage }));
-  assert.notEqual(healed.api.deviceId, "not-a-uuid");
-  assert.ok(Schema.is(DeviceIdSchema)(healed.api.deviceId));
+  const healed = await establishWebDeviceId(localStorage, sharedLocks());
+  assert.notEqual(healed, "not-a-uuid");
+  assert.ok(Schema.is(DeviceIdSchema)(healed));
+  // The bridge carries the id it is given.
+  const bridge = createWebBridge(makeDeps({ localStorage, deviceId: healed }));
+  assert.equal(bridge.api.deviceId, healed);
 });
 
 it("clientConfig: reads default to {}, patches round-trip through localStorage, and corrupt JSON heals to defaults", async () => {
@@ -1106,4 +1120,181 @@ it("shared settings another tab wrote reach this tab's watch", async () => {
       ),
     "the other tab's pick in this tab's watch",
   );
+});
+
+it("two fresh tabs at once: the device id is read and minted under the account lock, so both tabs and the credential the profile keeps name one device", async () => {
+  const backing = memoryStorage();
+  const shared = sharedLocks();
+  let held = 0;
+  const locks: Pick<LockManager, "request"> = {
+    request: ((
+      name: string,
+      options: { signal?: AbortSignal },
+      callback: () => Promise<unknown>,
+    ) =>
+      shared.request(name, options, async () => {
+        held += 1;
+        try {
+          return await callback();
+        } finally {
+          held -= 1;
+        }
+      })) as Pick<LockManager, "request">["request"],
+  };
+  // Whether the account lock was held at each touch of the id.
+  const touches: boolean[] = [];
+  const touch = (key: string) => {
+    if (key === "sm.web.deviceId") touches.push(held > 0);
+  };
+  const localStorage: KeyValueStorage = {
+    getItem: (key) => (touch(key), backing.getItem(key)),
+    setItem: (key, value) => (touch(key), backing.setItem(key, value)),
+    removeItem: (key) => backing.removeItem(key),
+  };
+  const enrolled: string[] = [];
+  const fetchImpl: typeof fetch = async (input, init = {}) => {
+    if (String(input) === `${HUB_URL}/devices/enroll`) {
+      assert(init.body instanceof Uint8Array);
+      const body = JSON.parse(new TextDecoder().decode(init.body));
+      enrolled.push(body.deviceId);
+      return jsonResponse(200, {
+        credential: "cred-1",
+        device: {
+          ...body,
+          createdAt: Date.now(),
+          lastSeenAt: null,
+          online: false,
+        },
+      });
+    }
+    return jsonResponse(500, { error: "no device hub in this check" });
+  };
+  const ids = await Promise.all(
+    [0, 1].map(() => establishWebDeviceId(localStorage, locks)),
+  );
+  assert.ok(touches.length > 0 && touches.every(Boolean), "read unlocked");
+  const tabs = ids.map((deviceId) => {
+    const bridge = createWebBridge(
+      makeDeps({ localStorage, deviceId, fetchImpl, locks }),
+    );
+    trackTest(() => bridge.stop());
+    return bridge;
+  });
+  await Promise.all(
+    tabs.map((tab) =>
+      tab.api.run(tab.api.account.enroll(fakeSessionJwt("acct_1"))),
+    ),
+  );
+  const [stored] = ids;
+  assert.deepEqual(
+    tabs.map((tab) => tab.api.deviceId),
+    [stored, stored],
+  );
+  assert.equal(backing.getItem("sm.web.deviceId"), stored);
+  assert.deepEqual(enrolled, [stored]);
+});
+
+// The profile's storage refusing the account document's writes, as a
+// full quota or a privacy mode does, and with `removals` its removal.
+const refuseAccount = (key: string) => {
+  if (key === "sm.web.account") {
+    throw new DOMException(
+      "The quota has been exceeded.",
+      "QuotaExceededError",
+    );
+  }
+};
+function refusingAccountWrites(
+  backing: KeyValueStorage,
+  removals = false,
+): KeyValueStorage {
+  return {
+    getItem: (key) => backing.getItem(key),
+    setItem: (key, value) => {
+      refuseAccount(key);
+      backing.setItem(key, value);
+    },
+    removeItem: (key) => {
+      if (removals) refuseAccount(key);
+      backing.removeItem(key);
+    },
+  };
+}
+
+it("sign-out where storage refuses the signed-out remainder: the document goes instead, so this tab and the profile's other tab read signed out, with the revoke delivered or not", async () => {
+  for (const revoke of ["delivered", "offline"] as const) {
+    const backing = memoryStorage();
+    backing.setItem("sm.web.account", STORED_ENVELOPE);
+    const localStorage = refusingAccountWrites(backing);
+    const fetchImpl: typeof fetch = async (_input, init = {}) => {
+      if (revoke === "offline") throw new TypeError("offline");
+      if (init.method === "DELETE") return new Response(null, { status: 204 });
+      return jsonResponse(500, { error: "no device hub in this check" });
+    };
+    const locks = sharedLocks();
+    const open = () => {
+      const bridge = createWebBridge(
+        makeDeps({ localStorage, fetchImpl, locks }),
+      );
+      trackTest(() => bridge.stop());
+      return bridge;
+    };
+    const leaving = open();
+    const other = open();
+    await leaving.api.run(leaving.api.account.signOut());
+    assert.equal(backing.getItem("sm.web.account"), null, `${revoke}: kept`);
+    for (const tab of [leaving, other]) {
+      const status = await tab.api.run(tab.api.account.status());
+      assert.equal(status.signedIn, false, `${revoke}: a tab reads signed in`);
+    }
+  }
+});
+
+it("sign-out where storage refuses the document's removal too: the sign-out fails, and the tab still reads signed in", async () => {
+  const backing = memoryStorage();
+  backing.setItem("sm.web.account", STORED_ENVELOPE);
+  const bridge = createWebBridge(
+    makeDeps({
+      localStorage: refusingAccountWrites(backing, true),
+      fetchImpl: () => Promise.reject(new TypeError("offline")),
+      locks: sharedLocks(),
+    }),
+  );
+  trackTest(() => bridge.stop());
+  await assert.rejects(bridge.api.run(bridge.api.account.signOut()));
+  assert.equal(backing.getItem("sm.web.account"), STORED_ENVELOPE);
+  const status = await bridge.api.run(bridge.api.account.status());
+  assert.equal(status.signedIn, true);
+});
+
+it("enroll where storage refuses the credential: the enroll fails rather than report a sign-in it didn't keep", async () => {
+  const backing = memoryStorage();
+  const fetchImpl: typeof fetch = async (input, init = {}) => {
+    if (String(input) === `${HUB_URL}/devices/enroll`) {
+      assert(init.body instanceof Uint8Array);
+      const body = JSON.parse(new TextDecoder().decode(init.body));
+      return jsonResponse(200, {
+        credential: "cred-1",
+        device: {
+          ...body,
+          createdAt: Date.now(),
+          lastSeenAt: null,
+          online: false,
+        },
+      });
+    }
+    return jsonResponse(500, { error: "no device hub in this check" });
+  };
+  const bridge = createWebBridge(
+    makeDeps({
+      localStorage: refusingAccountWrites(backing),
+      fetchImpl,
+      locks: sharedLocks(),
+    }),
+  );
+  trackTest(() => bridge.stop());
+  await assert.rejects(
+    bridge.api.run(bridge.api.account.enroll(fakeSessionJwt("acct_1"))),
+  );
+  assert.equal(backing.getItem("sm.web.account"), null);
 });
