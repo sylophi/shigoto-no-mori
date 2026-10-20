@@ -24,7 +24,7 @@ import { expect } from "vitest";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
 import { devProfileNameSuffix } from "../../../shared/packaging/appName.mts";
-import { onRunEnd, signalIfAlive } from "../../lib/runEnd.mts";
+import { onRunEnd, signalIfAlive } from "../../../../testProcesses.mts";
 import { walkFailed } from "./failed.mts";
 
 const APP_DIR = join(import.meta.dirname, "..", "..", "..");
@@ -391,7 +391,7 @@ async function launch(
     { recursive: true, force: true },
   );
 
-  // However the run ends (../../lib/runEnd.mts): every app this lab
+  // However the run ends (../../../../testProcesses.mts): every app this lab
   // started, the relaunched one included, and its folders.
   const started = new Set<number>();
   const removeFolders = () => {

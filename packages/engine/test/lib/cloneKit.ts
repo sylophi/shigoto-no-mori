@@ -27,6 +27,7 @@ import * as Paths from "../../src/Paths.ts";
 import { nodeStore } from "./nodeStore.ts";
 import { macfs } from "./sandbox.ts";
 import { GIT_IDENTITY } from "../../../../gitIsolation.ts";
+import { SYNC_SPAWN } from "../../../../testProcesses.mts";
 
 // Commits need an identity and fixed dates. The sandbox module this
 // imports has already kept git's variables and the user's config out.
@@ -50,6 +51,7 @@ export const git = (
   options: { readonly input?: string; readonly env?: NodeJS.ProcessEnv } = {},
 ): string =>
   execFileSync("git", args, {
+    ...SYNC_SPAWN,
     cwd,
     encoding: "utf8",
     input: options.input,

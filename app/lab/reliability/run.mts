@@ -9,6 +9,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { isolateGit } from "../../../gitIsolation.ts";
+import { endAll } from "../../../testProcesses.mts";
 import {
   CLIENT_KINDS,
   Lab,
@@ -289,13 +290,16 @@ async function heal(): Promise<void> {
 }
 
 let stopping = false;
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   process.on(signal, () => {
     if (stopping) return;
     stopping = true;
     lab.note(`${signal}: cleaning up`);
     writeReport();
-    void lab.close().finally(() => process.exit(130));
+    void lab.close().finally(() => {
+      endAll();
+      process.exit(130);
+    });
   });
 }
 
@@ -335,6 +339,7 @@ try {
 } finally {
   writeReport();
   await lab.close();
+  endAll();
 }
 const failed = outcomes.filter((outcome) => outcome.failure !== null).length;
 console.log(

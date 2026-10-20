@@ -12,6 +12,7 @@ ownTestTemp("cli");
 
 export default defineConfig({
   test: {
+    setupFiles: ["../../testProcesses.setup.mts"],
     pool: "forks",
     fileParallelism: false,
     testTimeout: 30_000,

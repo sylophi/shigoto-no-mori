@@ -15,6 +15,7 @@ import {
   isolateGit,
   repositoryRoot,
 } from "../../../../gitIsolation.ts";
+import { SYNC_SPAWN } from "../../../../testProcesses.mts";
 
 // The service runs git under this process's environment. A pre-commit
 // hook's GIT_* variables would point it at the commit in progress, and
@@ -32,6 +33,7 @@ export const tempDir = (prefix = "t-"): string =>
 // git in a sandbox, outside the service, for setting up and looking.
 export const git = (cwd: string, ...args: string[]): string =>
   execFileSync("git", args, {
+    ...SYNC_SPAWN,
     cwd,
     encoding: "utf8",
     env: { ...process.env, LC_ALL: "C" },

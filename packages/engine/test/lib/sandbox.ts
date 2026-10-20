@@ -58,6 +58,7 @@ import {
   repositoryRoot,
 } from "../../../../gitIsolation.ts";
 import { macfs } from "./macfs.ts";
+import { SYNC_SPAWN } from "../../../../testProcesses.mts";
 
 // The darwin helper, for the tests that take it with the sandbox's
 // environment.
@@ -325,12 +326,22 @@ export function sandbox(
     runAt,
     env,
     git: (cwd, ...args) =>
-      execFileSync("git", args, { cwd, env: gitEnv(), encoding: "utf8" }),
+      execFileSync("git", args, {
+        ...SYNC_SPAWN,
+        cwd,
+        env: gitEnv(),
+        encoding: "utf8",
+      }),
     repo: (name, files = {}) => {
       const dir = join(root, name);
       mkdirSync(dir);
       const git = (...args: string[]) =>
-        execFileSync("git", args, { cwd: dir, env: gitEnv(), stdio: "ignore" });
+        execFileSync("git", args, {
+          ...SYNC_SPAWN,
+          cwd: dir,
+          env: gitEnv(),
+          stdio: "ignore",
+        });
       git("init", "-q", "-b", "main");
       for (const [file, content] of Object.entries(files)) {
         mkdirSync(dirname(join(dir, file)), { recursive: true });
@@ -343,7 +354,12 @@ export function sandbox(
     realRepo: (name) => {
       const dir = join(root, name);
       const git = (cwd: string, ...args: string[]) =>
-        execFileSync("git", args, { cwd, env: gitEnv(), stdio: "ignore" });
+        execFileSync("git", args, {
+          ...SYNC_SPAWN,
+          cwd,
+          env: gitEnv(),
+          stdio: "ignore",
+        });
       git(
         root,
         "clone",

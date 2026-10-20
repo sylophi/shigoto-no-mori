@@ -9,7 +9,6 @@ import { childDefaults } from "@shigomori/engine/processes";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Cause from "effect/Cause";
 import * as Console from "effect/Console";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as CliConfig from "effect/cli/CliConfig";
@@ -65,7 +64,13 @@ import { holdStdinFd } from "./stdinFd.ts";
 import { verboseSpawner } from "./verbose.ts";
 import { helpPages } from "./help.ts";
 import { Killed, report } from "./errors.ts";
-import { Output, outputFailure, stdoutGone, watchStreams } from "./output.ts";
+import {
+  Output,
+  outputFailure,
+  READER_GONE,
+  untilReaderGone,
+  watchStreams,
+} from "./output.ts";
 
 // --json, --verbose and --version are global wherever they sit, up to
 // a `--`, past which everything is the command's, as in Go.
@@ -86,7 +91,6 @@ function globalFlags(args: ReadonlyArray<string>) {
 holdStdinFd();
 // Before anything is written (output.ts).
 watchStreams();
-const READER_GONE = Symbol("reader gone");
 
 const {
   version: askedVersion,
@@ -193,9 +197,8 @@ const program = goArgs(sm, canonical(rest, worktreesCommand)).pipe(
     ),
   ),
   Effect.provideService(Console.Console, { ...console, log: () => {} }),
-  // Stdout's reader gone ends the command where it is, its children and
-  // its cleanup run as at a Ctrl-C, and says nothing (output.ts).
-  Effect.raceFirst(Effect.as(Deferred.await(stdoutGone), READER_GONE)),
+  // Stdout's reader gone says nothing.
+  untilReaderGone,
   // A command whose output met a failed stream didn't say what it did.
   Effect.andThen((ended) => {
     const failed = outputFailure();

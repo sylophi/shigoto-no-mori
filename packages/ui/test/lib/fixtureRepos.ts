@@ -9,6 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { GIT_IDENTITY, isolatedGitEnv } from "../../../../gitIsolation.ts";
+import { SYNC_SPAWN } from "../../../../testProcesses.mts";
 
 type Git = (...args: string[]) => string;
 
@@ -19,7 +20,12 @@ function gitIn(repo: string): Git {
   // A diff exits 1 when it finds changes, which --no-index always does.
   return (...args) => {
     try {
-      return execFileSync("git", args, { cwd: repo, env, encoding: "utf8" });
+      return execFileSync("git", args, {
+        ...SYNC_SPAWN,
+        cwd: repo,
+        env,
+        encoding: "utf8",
+      });
     } catch (error) {
       const { status, stdout } = error as { status: number; stdout: string };
       if (status === 1 && args.includes("--no-index")) return stdout;

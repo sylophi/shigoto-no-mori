@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
-import { onRunEnd } from "../../lib/runEnd.mts";
+import { onRunEnd } from "../../../../testProcesses.mts";
 import type { Lab } from "./labApp.mts";
 
 const REPOSITORY = join(import.meta.dirname, "..", "..", "..", "..");
@@ -141,7 +141,7 @@ export async function startRealOrigin(): Promise<RealOrigin> {
   daemon.once("exit", () => {
     exited = true;
   });
-  // However the run ends (../../lib/runEnd.mts).
+  // However the run ends (../../../../testProcesses.mts).
   const forget = onRunEnd(() => {
     daemon.kill("SIGKILL");
     rmSync(base, { recursive: true, force: true });

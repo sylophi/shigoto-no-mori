@@ -2,16 +2,15 @@
 // process of its own under Bun (fixtures/flood.ts): a reader that holds off
 // holds the command back, where its output piled up unread in memory,
 // and one that closes early (`| head`) ends it quietly. Each writes a
-// fixed amount, and a case that fails or runs past its deadline kills
-// its process (lib/groups.ts).
+// fixed amount, and a case that fails or runs past its deadline ends
+// its process (../../../testProcesses.mts).
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { afterEach, it, vi } from "vitest";
-import { reapGroups, spawnGroup, within } from "./lib/groups.ts";
-
-afterEach(() => reapGroups());
+import { it, vi } from "vitest";
+import { own, within } from "../../../testProcesses.mts";
 
 const cli = join(import.meta.dirname, "..");
 
@@ -21,10 +20,12 @@ const waitFor = (ok: () => boolean) =>
   }, 10_000);
 
 const flood = (count: number, ...flags: string[]) =>
-  spawnGroup(
-    "bun",
-    [join("test", "fixtures", "flood.ts"), String(count), ...flags],
-    { cwd: cli },
+  own(
+    spawn(
+      "bun",
+      [join("test", "fixtures", "flood.ts"), String(count), ...flags],
+      { cwd: cli, stdio: ["ignore", "pipe", "pipe"] },
+    ),
   );
 
 it(
@@ -83,6 +84,29 @@ it(
     assert.deepEqual(
       { code, signal, stderr },
       { code: 0, signal: null, stderr: "" },
+    );
+  }),
+  60_000,
+);
+
+it(
+  "a reader that goes ends the command's children and its cleanup with it",
+  within(45_000, async () => {
+    const child = flood(2_000, "quiet", "child");
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk));
+    let first = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      first += chunk;
+      if (first.includes("\n")) child.stdout.destroy();
+    });
+    const [code] = (await once(child, "close")) as [number | null];
+    const held = Number(/^child (\d+)\n$/.exec(stderr)?.[1]);
+    assert.deepEqual({ code, stderr }, { code: 0, stderr: `child ${held}\n` });
+    assert.throws(
+      () => process.kill(held, 0),
+      { code: "ESRCH" },
+      "the command's child outlived it",
     );
   }),
   60_000,

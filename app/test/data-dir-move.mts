@@ -183,10 +183,6 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
   const crashed = await move;
   const partial = await Effect.runPromise(Deferred.await(copying));
 
-  writeFileSync(
-    "/tmp/merry-journal-dump0.txt",
-    readFileSync(join(engineDataDir, JOURNAL), "utf8"),
-  );
   assert.equal(
     await titleOf(identity.id),
     undefined,
@@ -195,10 +191,6 @@ it("a move to another volume that crashed mid-copy is undone at the next start",
   assert.equal(existsSync(destination), false, "the copy fills a sibling");
   assert.equal(existsSync(partial), true);
 
-  writeFileSync(
-    "/tmp/merry-journal-dump.txt",
-    readFileSync(join(engineDataDir, JOURNAL), "utf8"),
-  );
   // The next start, the pointer where it was.
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(
