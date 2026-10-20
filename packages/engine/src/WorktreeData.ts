@@ -65,9 +65,8 @@ export class WorktreeData extends Context.Service<
       projectId: string,
       worktreeId: string,
     ) => Effect.Effect<ReadonlyArray<CustomPort>>;
-    // Replaces them, the title and description kept. Labels are stored
-    // trimmed. Ports the schema refuses are a defect, the transport
-    // having decoded them already.
+    // Replaces them, the title and description kept, as the transport
+    // decoded them (labels trimmed).
     readonly setPorts: (
       projectId: string,
       worktreeId: string,
@@ -226,11 +225,10 @@ const make = Effect.gen(function* () {
     worktreeId: string,
     added: ReadonlyArray<CustomPort>,
   ) {
-    const decoded = yield* Schema.decodeEffect(PortsSchema)(added);
     yield* sql`INSERT INTO worktree_data ${sql.insert({
       project_id: projectId,
       worktree_id: worktreeId,
-      ports: decoded.length === 0 ? null : JSON.stringify(decoded),
+      ports: added.length === 0 ? null : JSON.stringify(added),
     })} ON CONFLICT (project_id, worktree_id) DO UPDATE SET
       ports = excluded.ports`;
   }, Effect.orDie);

@@ -143,16 +143,12 @@ export const makeReads = Effect.gen(function* () {
 
   // The object id git gives the file at `file` as a blob of this mode,
   // its bytes taken as they are: a symlink's target, a file's content.
-  const blobId = Effect.fnUntraced(function* (
-    file: string,
-    mode: number,
-    algorithm: "SHA-1" | "SHA-256",
-  ) {
+  const blobId = Effect.fnUntraced(function* (file: string, mode: number) {
     const content =
       mode === 0o120000
         ? new TextEncoder().encode(yield* fs.readLink(file))
         : yield* fs.readFile(file);
-    return toHex(yield* crypto.digest(algorithm, blobBytes(content)));
+    return toHex(yield* crypto.digest("SHA-1", blobBytes(content)));
   });
 
   return {

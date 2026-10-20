@@ -118,11 +118,10 @@ describe("transfer options", () => {
 });
 
 const result = (fields: Partial<TransferResult> = {}): TransferResult => ({
-  worktree: { name: "feat", path: "/Users/rin/feat" },
+  worktree: { name: "feat" },
   captured: false,
   dirtyApplied: false,
-  device: { deviceId: "d1", name: "Studio Mac" },
-  copySide: "remote",
+  device: { name: "Studio Mac" },
   alreadyMirrored: false,
   ...fields,
 });
@@ -163,7 +162,7 @@ describe("headlines and caveats", () => {
         result({
           captured: true,
           dirtyApplied: true,
-          files: { crossed: true, error: "" },
+          files: { crossed: true, conflicts: 0, error: "" },
           source: { fate: "teardown", done: true, error: "" },
         }),
       ),
@@ -173,7 +172,7 @@ describe("headlines and caveats", () => {
       caveatsOf(
         result({
           captured: true,
-          files: { crossed: false, error: "peer went away" },
+          files: { crossed: false, conflicts: 0, error: "peer went away" },
           source: {
             fate: "teardown",
             done: false,
@@ -362,16 +361,7 @@ describe("send, bring and mirror", () => {
     assert.deepEqual(sent, {
       document: { ...transferAnswer, ok: true, caveats: [caveat] },
       headline: 'sent fox to "Studio Mac"',
-      result: {
-        worktree: { name: "fox", path: "/there/fox" },
-        captured: true,
-        dirtyApplied: false,
-        device: { deviceId: "d1", name: "Studio Mac" },
-        copySide: "remote",
-        alreadyMirrored: false,
-        files: { crossed: true, error: "" },
-        source: { fate: "shelve", done: true, error: "" },
-      },
+      result: transferAnswer,
     });
   });
 
