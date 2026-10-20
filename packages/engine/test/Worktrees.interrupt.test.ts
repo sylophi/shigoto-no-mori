@@ -3,10 +3,11 @@
 // cuts in, a copy across volumes is undone and frees its folder, and an
 // interrupt after the commit finds the move made. A resume deletes only
 // what the move made, leaves a live process's move to it, and carries
-// a capture's ref the crash left behind. The removal's tail, git's remove and the
-// forget, runs whole too. Each step is held by the wrappers in
-// lib/stopAt.ts; the same steps killed outright are the app's proof
-// `interrupted-workflows`.
+// a capture's ref the crash left behind. The removal's tail, git's remove,
+// the forget and the branch, runs whole too, and a removal whose git was
+// killed mid-delete is finished by a forced one. Each step is held by the
+// wrappers in lib/stopAt.ts; the same steps killed outright are the app's
+// proof `interrupted-workflows`.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
@@ -18,6 +19,7 @@ import {
   readFileSync,
   realpathSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -27,6 +29,8 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterEach, beforeEach, it, onTestFinished } from "vitest";
+import * as Config from "../src/Config.ts";
+import { errorDocument } from "../src/errorDocument.ts";
 import * as Registry from "../src/Registry.ts";
 import * as WorktreeData from "../src/WorktreeData.ts";
 import * as Worktrees from "../src/Worktrees.ts";
@@ -170,7 +174,7 @@ it("an interrupt once git is pointed at the copy waits for the carry", () =>
     true,
   ));
 
-it("an interrupt after git's remove waits for the forget", async () => {
+it("an interrupt after git's remove waits for the forget and the branch", async () => {
   const result = await box.engine(
     Effect.gen(function* () {
       const registry = yield* Registry.Registry;
@@ -211,10 +215,124 @@ it("an interrupt after git's remove waits for the forget", async () => {
         ),
         autoPull: (yield* registry.marked("autoPull")).has(fox.id),
         title: (yield* data.description(project.id, fox.id)).title,
+        branch: box.git(repo, "branch", "--list", fox.branch).trim(),
+        parent: existsSync(dirname(fox.path)),
       };
     }),
   );
-  assert.deepEqual(result, { listed: false, autoPull: false, title: "" });
+  assert.deepEqual(result, {
+    listed: false,
+    autoPull: false,
+    title: "",
+    branch: "",
+    parent: false,
+  });
+});
+
+// git killed as it deletes a checkout (an agent's process tree stopped,
+// a logout) leaves the folder without its `.git` and git's entry, which
+// git's remove refuses, forced or not. An unforced remove says so; a
+// forced one finishes it, without the cleanup that ran before the
+// delete (a teardown in what is left would fail), and drops no other
+// entry git holds for a folder that is gone.
+it("a removal whose git was killed mid-delete is finished by a forced one", async () => {
+  const quiet = { report: () => Effect.void, color: false };
+  const result = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const data = yield* WorktreeData.WorktreeData;
+      const repo = box.repo("proj", { "README.md": "hi\n", "keep.txt": "k\n" });
+      const project = yield* registry.register({ name: "proj", path: repo });
+      for (const name of ["fox", "away"]) {
+        yield* worktrees.create(project, { name, skipSetup: true }, quiet);
+      }
+      const rows = yield* worktrees.identities(project);
+      const fox = rows.find((row) => row.name === "fox");
+      const away = rows.find((row) => row.name === "away")?.path;
+      assert.ok(fox && away);
+      // Stands for a worktree on a drive that isn't mounted.
+      rmSync(away, { recursive: true, force: true });
+      const located = { project, worktree: fox };
+      yield* worktrees.setAutoPull(fox, true);
+      yield* data.describe(project.id, fox.id, { title: "the fox" });
+      yield* (yield* Config.Config).write(
+        { kind: "project", projectId: project.id, path: repo },
+        { defaultBranch: "main", scripts: { teardown: "exit 1" } },
+      );
+      const real = box.git(repo, "--exec-path").trim();
+      box.fakeBin(
+        "git",
+        `case "$*" in *"worktree remove"*) rm -f "${fox.path}/.git" "${fox.path}/README.md"; kill -9 $$;; esac\nexec "${real}/git" "$@"`,
+      );
+      const killed = yield* Effect.result(
+        worktrees.remove(
+          located,
+          { force: false, keepBranch: false, skipCleanup: true },
+          quiet,
+        ),
+      );
+      process.env["PATH"] = path;
+      const branch = () =>
+        box
+          .git(
+            repo,
+            "branch",
+            "--list",
+            "--format=%(refname:short)",
+            fox.branch,
+          )
+          .trim();
+      const listed = (at: string) =>
+        worktrees
+          .identities(project)
+          .pipe(Effect.map((now) => now.some((row) => row.path === at)));
+      const left = {
+        listed: yield* listed(fox.path),
+        folder: existsSync(fox.path),
+        dotGit: existsSync(join(fox.path, ".git")),
+        branch: branch(),
+      };
+      const refused = yield* Effect.flip(
+        worktrees.remove(
+          located,
+          { force: false, keepBranch: false, skipCleanup: false },
+          quiet,
+        ),
+      );
+      yield* worktrees.remove(
+        located,
+        { force: true, keepBranch: false, skipCleanup: false },
+        quiet,
+      );
+      return {
+        killed: Result.isFailure(killed),
+        left,
+        refused: errorDocument(refused),
+        listed: yield* listed(fox.path),
+        folder: existsSync(fox.path),
+        branch: branch(),
+        autoPull: (yield* registry.marked("autoPull")).has(fox.id),
+        title: (yield* data.description(project.id, fox.id)).title,
+        away: yield* listed(away),
+      };
+    }),
+  );
+  assert.deepEqual(result, {
+    killed: true,
+    left: { listed: true, folder: true, dotGit: false, branch: "fox" },
+    refused: {
+      error: "Worktree is half removed.",
+      code: "status-unreadable",
+      hint: "Pass --force to finish removing it.",
+    },
+    listed: false,
+    folder: false,
+    branch: "",
+    autoPull: false,
+    title: "",
+    away: true,
+  });
 });
 
 // A project with a worktree fox, marked, and what a resume reads.
