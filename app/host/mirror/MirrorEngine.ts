@@ -68,10 +68,11 @@ export class MirrorEngine extends Context.Service<
     // The git follower's verdict for a session (host/mirror/gitFollow.ts).
     readonly gitStatus: (session: string) => MirrorGitStatus | undefined;
     // The verdict looked at again now, for a decision that must not
-    // read a cached one (the stop's safety check).
+    // read a cached one (the stop's safety check), or "timed-out" when
+    // the look took too long.
     readonly refreshGit: (
       session: string,
-    ) => Effect.Effect<MirrorGitStatus | undefined>;
+    ) => Effect.Effect<MirrorGitStatus | "timed-out" | undefined>;
     // The mirror's thread of events, by local worktree (host/mirror/
     // history.ts), and the way a control op adds to it.
     readonly history: (localWorktreeId: string) => readonly MirrorEvent[];

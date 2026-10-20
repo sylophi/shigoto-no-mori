@@ -69,3 +69,14 @@ export function dropPullRequestDraft(key: string): void {
   next.delete(key);
   drafts.publish(next);
 }
+
+// Every branch's form, for a worktree that is gone.
+export function forgetPullRequestDrafts(
+  deviceId: string,
+  worktreeId: string,
+): void {
+  const prefix = pullRequestDraftKey(deviceId, worktreeId, "");
+  const next = new Map(drafts.get());
+  for (const key of next.keys()) if (key.startsWith(prefix)) next.delete(key);
+  if (next.size !== drafts.get().size) drafts.publish(next);
+}

@@ -163,7 +163,7 @@ build's single-instance lock is machine-wide.
 | `history` | A commit's page with an image, a video and a tone; a 1,500-line file drawn to its end; a branch's changes; the timeline's squash and hard reset; the merge dialog |
 | `stashes` | The stash list and a stash's diff, stashing, a drop and its Undo, restore and keep |
 | `files` | The files viewer: the tree, an image, a video, a tone, markdown, a long text file |
-| `new-worktree` | A branch off a source; a source branch checked out as it is |
+| `new-worktree` | A branch off a source; a source branch checked out as it is; a worktree deleted from its page and made again under its name, drawn afresh |
 | `rename` | Renaming a worktree from its page: the folder moves and the window stays on the worktree's page |
 | `location` | The Worktree location page with the data folder reached through a link: a worktree already in place is not offered a move |
 | `appearance` | Settings > Appearance: a palette and a theme picked stay on the window until Discard, which puts back what is saved |

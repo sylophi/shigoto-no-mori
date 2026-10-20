@@ -29,7 +29,10 @@ import {
   useViewErrorToast,
 } from "@/lib/runtime/viewHooks";
 import { hostViewAtom } from "@/lib/runtime/atoms";
-import { writeBackWorktree } from "@/hooks/worktrees/useWorktrees";
+import {
+  worktreeViewGeneration,
+  writeBackWorktree,
+} from "@/hooks/worktrees/useWorktrees";
 
 // The changes page's views of a worktree.
 type TreeView =
@@ -66,16 +69,24 @@ const treeViewAtom = Atom.family((key: string) => {
 // `failed`.
 export function useTreeView<A>(
   view: TreeView,
-  input: object | null,
+  input: {
+    readonly worktreeId: string;
+    readonly [key: string]: unknown;
+  } | null,
   failed: string,
 ): LiveViewState<A> {
   const { deviceId, hasHost } = useHostScope();
   const registry = useRegistry();
   const atom =
     hasHost && input !== null
-      ? (treeViewAtom(JSON.stringify({ deviceId, view, input })) as Atom.Atom<
-          AsyncResult.AsyncResult<A, unknown>
-        >)
+      ? (treeViewAtom(
+          JSON.stringify({
+            deviceId,
+            view,
+            input,
+            generation: worktreeViewGeneration(deviceId, input.worktreeId),
+          }),
+        ) as Atom.Atom<AsyncResult.AsyncResult<A, unknown>>)
       : null;
   const state = useView(atom);
   useViewErrorToast(state, failed);
@@ -203,7 +214,7 @@ interface CommitInput extends CommitPicks {
 }
 
 export function useCommitChanges() {
-  const { api } = useHostScope();
+  const { api, deviceId } = useHostScope();
   const writeBack = useWorkingTreeWriteBack();
   return useMutation<CommitChangesResult, Error, CommitInput>({
     mutationFn: (input) => api.run(api.worktrees.commit(input)),
@@ -212,7 +223,7 @@ export function useCommitChanges() {
       // copy when the page was left before the commit landed. A commit
       // that kept HEAD's message never used the draft.
       if (vars.summary !== undefined) {
-        clearCommitDraft(vars.projectId, vars.worktreeId);
+        clearCommitDraft(deviceId, vars.projectId, vars.worktreeId);
       }
       writeBack(vars, data.worktree);
     },

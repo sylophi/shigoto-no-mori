@@ -11,6 +11,7 @@ import { portsContract } from "@shigomori/contracts/modules/ports";
 import type { WorktreePortsResult } from "@shigomori/contracts/schemas";
 import * as Atom from "effect/reactivity/Atom";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { worktreeViewGeneration } from "@/hooks/worktrees/useWorktrees";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { type LiveViewState, useView } from "@/lib/runtime/viewHooks";
 
@@ -28,9 +29,12 @@ export function useWorktreePorts(worktree: {
   id: string;
 }): LiveViewState<WorktreePortsResult> {
   const { deviceId, hasHost } = useHostScope();
+  const generation = worktreeViewGeneration(deviceId, worktree.id);
   return useView(
     hasHost
-      ? worktreePortsAtom(`${deviceId}\n${worktree.projectId}\n${worktree.id}`)
+      ? worktreePortsAtom(
+          `${deviceId}\n${worktree.projectId}\n${worktree.id}\n${generation}`,
+        )
       : null,
   );
 }

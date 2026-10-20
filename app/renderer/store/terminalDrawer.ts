@@ -82,3 +82,11 @@ export function closeScriptTab(key: string, slot: ScriptSlot): void {
 export function setDrawerHeight(height: number): void {
   store.publish({ ...store.get(), height });
 }
+
+export function forgetDrawer(key: string): void {
+  const state = store.get();
+  if (!state.drawers.has(key)) return;
+  const drawers = new Map(state.drawers);
+  drawers.delete(key);
+  store.publish({ ...state, drawers });
+}
