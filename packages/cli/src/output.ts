@@ -68,9 +68,11 @@ export const stdoutGone = Deferred.makeUnsafe<void>();
 // early) ends the stream quietly, as a terminal tool does: stdout's ends
 // the command too (its children and its cleanup run as at a Ctrl-C), and
 // stderr's only drops what would have gone there. Any other failure of a
-// stream is the command's (outputFailure).
+// stream is the command's (outputFailure). A stream closed without an
+// error takes nothing more either.
 export const watchStreams = () => {
   for (const each of [STDOUT, STDERR]) {
+    each.stream.on("close", () => (each.ended = true));
     each.stream.on("error", (error: NodeJS.ErrnoException) => {
       each.ended = true;
       if (error.code === "EPIPE") {
@@ -89,13 +91,13 @@ export const watchStreams = () => {
 const drainOf = (to: Stream) => {
   to.drained ??= new Promise<void>((resolve) => {
     const done = () => {
-      to.stream.off("drain", done);
-      to.stream.off("error", done);
+      for (const event of ["drain", "error", "close"]) {
+        to.stream.off(event, done);
+      }
       to.drained = null;
       resolve();
     };
-    to.stream.on("drain", done);
-    to.stream.on("error", done);
+    for (const event of ["drain", "error", "close"]) to.stream.on(event, done);
   });
   return to.drained;
 };
@@ -127,6 +129,13 @@ export const note = (line: string) => write(STDERR, `${line}\n`);
 
 // Bytes for stderr as they came (a script's own output).
 export const toStderr = (text: string) => write(STDERR, text);
+
+// Bytes for stderr not waited for, from a finalizer, which nothing can
+// interrupt: a terminal that stopped reading can't hold the exit.
+export const toStderrNow = (text: string) =>
+  Effect.sync(() => {
+    if (!STDERR.ended) STDERR.stream.write(text);
+  });
 
 const paint = (text: string, code: string, enabled: boolean) =>
   enabled && text !== "" ? `\u001b[${code}m${text}\u001b[0m` : text;
