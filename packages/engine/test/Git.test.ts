@@ -594,6 +594,30 @@ it("a commit and a push end at git's exit, and what their hooks left in the back
   }
 });
 
+it("what a hook left in the background goes on after git fails", async () => {
+  const repo = seedRepo();
+  const pidFile = join(tempDir("hook-"), "child.pid");
+  write(
+    repo,
+    ".git/hooks/pre-commit",
+    `#!/bin/sh\n(exec sleep 30) &\necho $! > '${pidFile}'\nexit 1\n`,
+  );
+  chmodSync(join(repo, ".git/hooks/pre-commit"), 0o755);
+  try {
+    await failureAs(GitCommandError, (g) =>
+      g.run(repo, ["commit", "-q", "--allow-empty", "-m", "refused"]),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    process.kill(Number(readFileSync(pidFile, "utf8")), 0);
+  } finally {
+    try {
+      process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+    } catch {
+      // Gone already, or never started.
+    }
+  }
+});
+
 it("a hook's refusal is git's words, read from its stderr", async () => {
   const repo = seedRepo();
   write(
