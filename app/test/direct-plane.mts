@@ -103,10 +103,9 @@
 //     clock: eager dial on roster entry, the exact shared ladder on
 //     transient failures (capped, forever), stable reset, roster exit
 //     cancels the schedule, hub-down reconciles to empty without
-//     touching sessions, and TERMINAL verdicts (blocked ticket, no
-//     listener, version) PARK with no timer -- the
-//     lockout-protection rule -- until the peer's offline-to-online
-//     transition redials it fresh.
+//     touching sessions, a blocked ticket on the same ladder, and a
+//     peer with no listener PARKED with no timer until its
+//     offline-to-online transition redials it fresh.
 //   - the cloudflared deciders (argv/env secret discipline, the
 //     capped ladder through the supervisor's shared lookup) and the
 //     runner's lifecycle (no-binary, unconfigured asked again on an

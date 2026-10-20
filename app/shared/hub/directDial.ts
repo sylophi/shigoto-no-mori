@@ -60,8 +60,9 @@
 // (shared/hub/directKeeper.ts), which paces redials on the shared
 // backoff ladder and parks on a peer with no listener. Data is direct
 // or nothing: there is no hub fallback behind these failures, the
-// typed rejection IS the outcome the caller surfaces. A second retry owner here would fight
-// the keeper's ladder, so this file deliberately carries none.
+// typed rejection IS the outcome the caller surfaces. A second retry
+// owner here would fight the keeper's ladder, so this file deliberately
+// carries none.
 //
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
