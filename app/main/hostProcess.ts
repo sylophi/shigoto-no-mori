@@ -15,7 +15,6 @@ import {
   type UtilityProcess,
   utilityProcess,
 } from "electron";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { answerWithin } from "@shigomori/engine/liveness";
@@ -55,12 +54,10 @@ import { broadcastAll } from "./ipc/register";
 import { createShellRegistrar } from "./ipc/shellRegistrar";
 import { deviceIdWithin } from "./core/host/deviceId";
 import { beats, busyWithin, watchHost } from "./core/host/watchdog";
-import { clearLoopbackOf } from "./core/host/leftovers";
 import { lastEndedSpans, restartDetail } from "./core/host/restartLog";
 import { CRASH_WINDOW_MS, restartLedger } from "./core/host/restarts";
 import { busyAsks } from "./core/host/busyAsks";
 import { type HostBeat, isHostBeat } from "@shared/hostBeat";
-import { dataDir } from "@shared/paths";
 
 type Address = typeof HostAddressSchema.Type;
 
@@ -115,8 +112,6 @@ const START_STALLS_ALLOWED = 1;
 // How long a killed host is given to exit before it is killed outright
 // (a host stopped by a signal never sees the first).
 const KILL_GRACE_MS = 5_000;
-// How long a restart waits on clearing what the host before it left.
-const CLEAR_WITHIN_MS = 2_000;
 // How long a quit or an update waits to hear whether the host is busy.
 const BUSY_DEADLINE = "3 seconds";
 type HostBusy = Effect.Success<ReturnType<ReturnType<typeof host>["busy"]>>;
@@ -223,7 +218,6 @@ function tell(said: Effect.Effect<unknown, unknown>): void {
 const registrar = createShellRegistrar();
 const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   ready: (reported) => {
-    restarts.up();
     upHost = child;
     startStalls = 0;
     reportedDeviceId = reported.deviceId;
@@ -306,31 +300,14 @@ function killHard(running: UtilityProcess): void {
 
 function fork(): void {
   const { port1, port2 } = new MessageChannelMain();
-  const replacesHosts = restarts.replacesHosts();
-  const facts: HostFacts =
-    replacesHosts.length === 0
-      ? hostFacts()
-      : { ...hostFacts(), replacesHosts };
   const forked = utilityProcess.fork(
     join(__dirname, "host.js"),
-    [`${HOST_FACTS_FLAG}${JSON.stringify(facts)}`],
+    [`${HOST_FACTS_FLAG}${JSON.stringify(hostFacts())}`],
     { serviceName: "Shigoto no Mori Host", stdio: "pipe" },
   );
   child = forked;
   const state: Held = { lastBeat: null, stoppedFor: null };
   held.set(forked, state);
-  // Read at its spawn: an exited utility process's pid reads undefined.
-  let spawned: { pid: number; startedAt: number } | undefined;
-  forked.once("spawn", () => {
-    if (forked.pid !== undefined) {
-      // An instant, which the host's orphan sweep compares with when a
-      // script's process started.
-      spawned = {
-        pid: forked.pid,
-        startedAt: DateTime.toEpochMillis(DateTime.nowUnsafe()),
-      };
-    }
-  });
   // The host's console, into the shell's (and so its log file).
   for (const stream of [forked.stdout, forked.stderr]) {
     stream?.on("data", (chunk: Buffer) => {
@@ -377,27 +354,13 @@ function fork(): void {
   forked.once("exit", (code) => {
     if (child === forked) child = null;
     if (quitting || parkedExit !== null) return;
-    // Gone unasked: what it published of its loopback names a port
-    // nobody serves. A quit's host takes its own away (Loopback.ts).
-    // Cleared before the next host starts, so it can't take that host's
-    // own file, and only waited on so long: a data dir that holds it
-    // holds the next host too, which the start watch then sees.
-    const cleared =
-      spawned === undefined
-        ? Promise.resolve()
-        : Promise.race([
-            clearLoopbackOf(dataDir(), spawned.pid),
-            new Promise<void>((resolve) =>
-              setTimeout(resolve, CLEAR_WITHIN_MS).unref(),
-            ),
-          ]);
     if (stalledOut === forked) return;
     if (state.stoppedFor === null) {
       noteStop(forked, `exited unasked (code ${code})`);
     }
     // One that died before it was up leaves its waiters to the next.
     if (address.settled()) address = deferred<Reported>();
-    const verdict = restarts.exited(spawned, performance.now());
+    const verdict = restarts.exited(performance.now());
     if (verdict.kind === "give-up") {
       onFailed({
         message: `The host stopped ${verdict.crashes} times in a minute.`,
@@ -407,9 +370,7 @@ function fork(): void {
     }
     restartedFor = state.stoppedFor ?? { kind: "exited", code };
     log.warn("[host] starting it again");
-    void cleared.then(() => {
-      if (!quitting) fork();
-    });
+    fork();
   });
 }
 

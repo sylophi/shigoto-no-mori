@@ -25,15 +25,12 @@
 //     process whose loop is stuck in a watch's open (the stall V3.md's
 //     "A watch that froze the host" records) is called silent within
 //     the start limit, and one that beats is left alone.
-//   - a host gone unasked leaves no loopback behind: its pid's
-//     loopback.json and the one it was writing aside go, and a
-//     loopback.json another host published stays.
 //
 // Run: pnpm test host-hold.
 import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import assert from "node:assert/strict";
 import { execFileSync, fork } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Clock from "effect/Clock";
@@ -55,7 +52,6 @@ import type { LinkRegistrar } from "@host/socket/DeviceLink";
 import * as Loopback from "@host/socket/Loopback";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { beats, busyWithin, watchHost } from "../main/core/host/watchdog.ts";
-import { clearLoopbackOf } from "../main/core/host/leftovers.ts";
 import { hostContext } from "./lib/hostRuntime.mts";
 import { pushesLayer } from "./lib/hostStandIns.mts";
 import { sleepingClock, testClock, waitFor } from "./lib/checkKit.mts";
@@ -373,34 +369,6 @@ if (process.argv[2] === "stick") setTimeout(() => watch(process.argv[3]), 500);
   try {
     assert.deepEqual(await watch("stick"), { settled: true, silent: true });
     assert.deepEqual(await watch("beat"), { settled: false, silent: false });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-const published = (pid: number) =>
-  JSON.stringify({ pid, port: 1, token: "t", appVersion: "0" });
-
-it("a host gone unasked leaves no loopback behind, and another host's stays", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "sm-host-left-"));
-  const file = join(dir, "loopback.json");
-  try {
-    writeFileSync(file, published(4242));
-    writeFileSync(`${file}.4242`, published(4242));
-    await clearLoopbackOf(dir, 4242);
-    assert.ok(!existsSync(file), "its loopback.json must go");
-    assert.ok(!existsSync(`${file}.4242`), "its file aside must go");
-
-    writeFileSync(file, published(5151));
-    await clearLoopbackOf(dir, 4242);
-    assert.ok(existsSync(file), "another host's loopback.json must stay");
-
-    // Nothing there, or something unreadable: nothing to clear.
-    rmSync(file);
-    await clearLoopbackOf(dir, 4242);
-    writeFileSync(file, "{");
-    await clearLoopbackOf(dir, 4242);
-    assert.ok(existsSync(file));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
