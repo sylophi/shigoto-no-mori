@@ -140,9 +140,10 @@ type NamedDevice = ControlPeerWorktree["device"];
 type SourceOutcome = NonNullable<ControlTransferResult["source"]>;
 
 // A control call's answer, as its contract types it.
-type Answer<K extends string> = OutputOf<
-  Extract<CallsOf<typeof controlContract>, { readonly _tag: `control:${K}` }>
->["Type"];
+type ControlCall = CallsOf<typeof controlContract>;
+type Answer<
+  K extends ControlCall["_tag"] extends `control:${infer N}` ? N : never,
+> = OutputOf<Extract<ControlCall, { readonly _tag: `control:${K}` }>>["Type"];
 type MirrorStop = Answer<"mirrorStop">;
 type MirrorList = Answer<"mirrors">;
 type DeviceList = Answer<"devices">;
