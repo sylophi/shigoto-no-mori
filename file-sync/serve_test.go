@@ -115,8 +115,12 @@ func TestServeKeepsGitOutOfReach(t *testing.T) {
 		{Path: "sub/.git", New: directory},
 		{Path: "sub/b", New: &core.Entry{Kind: core.EntryKind_Directory, Contents: map[string]*core.Entry{".git": directory}}},
 	} {
-		if _, _, _, err := endpoint.Transition(ctx, []*core.Change{change}); err == nil {
-			t.Fatalf("a change to %s was applied", change.Path)
+		results, problems, _, err := endpoint.Transition(ctx, []*core.Change{change})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(results) != 1 || results[0] != nil || len(problems) != 1 || problems[0].Path != change.Path {
+			t.Fatalf("a change to %s was not refused as a problem: %v %v", change.Path, results, problems)
 		}
 	}
 	for _, path := range []string{".git/hooks", "sub/.git", "sub/b", "link", "sub/d"} {
@@ -132,11 +136,66 @@ func TestServeKeepsGitOutOfReach(t *testing.T) {
 	}
 }
 
+// One transition that mixes .git with an ordinary change applies the
+// ordinary one: a .githooks -> .git/hooks link must not hold back every
+// other edit. Each refused change stays as it was, as a problem.
+func TestServeAppliesTheRestOfABatchThatTouchesGit(t *testing.T) {
+	t.Setenv("MUTAGEN_DATA_DIRECTORY", filepath.Join(t.TempDir(), "mutagen"))
+	root := t.TempDir()
+	writeFileT(t, filepath.Join(root, ".githooks"), "hooks\n")
+	writeFileT(t, filepath.Join(root, "sub", "a.txt"), "a\n")
+	session, err := identifier.New(identifier.PrefixSynchronization)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := dialServed(t, root, session, &synchronization.Configuration{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	snapshot, err, _ := endpoint.Scan(ctx, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory := &core.Entry{Kind: core.EntryKind_Directory}
+	changes := []*core.Change{
+		{Path: ".githooks", Old: snapshot.Content.Contents[".githooks"], New: &core.Entry{Kind: core.EntryKind_SymbolicLink, Target: ".git/hooks"}},
+		{Path: "sub/c", New: directory},
+		{Path: ".GIT/hooks", New: directory},
+	}
+	results, problems, _, err := endpoint.Transition(ctx, changes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != len(changes) {
+		t.Fatalf("%d results for %d changes", len(results), len(changes))
+	}
+	if !results[0].Equal(changes[0].Old, true) || results[2] != nil {
+		t.Fatal("a refused change's result is not its old entry")
+	}
+	if results[1].Kind != core.EntryKind_Directory {
+		t.Fatalf("sub/c came back as %v (%v)", results[1], problems)
+	}
+	if len(problems) != 2 || problems[0].Path != ".githooks" || problems[1].Path != ".GIT/hooks" {
+		t.Fatalf("problems: %v", problems)
+	}
+	if info, err := os.Stat(filepath.Join(root, "sub", "c")); err != nil || !info.IsDir() {
+		t.Fatal("the ordinary change was not applied")
+	}
+	if info, err := os.Lstat(filepath.Join(root, ".githooks")); err != nil || !info.Mode().IsRegular() {
+		t.Fatal(".githooks was changed")
+	}
+	if _, err := os.Lstat(filepath.Join(root, ".git")); err == nil {
+		t.Fatal(".git was written")
+	}
+}
+
 // A real repository, a primary checkout whose remote's URL holds a
 // credential and a linked worktree whose .git is a pointer file: a peer
-// that names .git, or stages into it, is refused before anything is
-// read, while a worktree file still comes; and a nested pointer stays
-// out of the scan under the Docker ignore syntax a client may ask for.
+// that reads .git is refused before anything is read, and one that
+// stages into it has only the rest staged, while a worktree file still
+// comes; and a nested pointer stays out of the scan under the Docker
+// ignore syntax a client may ask for.
 func TestServeRefusesARealRepositorysGitByName(t *testing.T) {
 	t.Setenv("MUTAGEN_DATA_DIRECTORY", filepath.Join(t.TempDir(), "mutagen"))
 	scratch := t.TempDir()
@@ -180,24 +239,7 @@ func TestServeRefusesARealRepositorysGitByName(t *testing.T) {
 		if got := supplied(t, endpoint, served.reader); got != "hello\n" {
 			t.Fatalf("%s: %s came as %q", served.root, served.reader, got)
 		}
-		// Each refusal ends the stream, so each is asked on one of its own.
-		for _, path := range served.asked {
-			session, err := identifier.New(identifier.PrefixSynchronization)
-			if err != nil {
-				t.Fatal(err)
-			}
-			staging, err := dialServed(t, served.root, session, &synchronization.Configuration{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err, _ := staging.Scan(context.Background(), nil, true); err != nil {
-				t.Fatal(err)
-			}
-			if _, _, _, err := staging.Stage([]string{path}, [][]byte{{1}}); err == nil {
-				t.Fatalf("%s: staging %s was taken", served.root, path)
-			}
-		}
-		// And a stream of its own stages a worktree file.
+		// Staging the .git paths beside a worktree file stages the file alone.
 		session, err = identifier.New(identifier.PrefixSynchronization)
 		if err != nil {
 			t.Fatal(err)
@@ -209,8 +251,17 @@ func TestServeRefusesARealRepositorysGitByName(t *testing.T) {
 		if _, err, _ := staging.Scan(context.Background(), nil, true); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, _, err := staging.Stage([]string{"new.txt"}, [][]byte{{1}}); err != nil {
-			t.Fatalf("%s: staging new.txt was refused: %v", served.root, err)
+		paths := append(served.asked, "new.txt")
+		digests := make([][]byte, len(paths))
+		for d := range digests {
+			digests[d] = []byte{1}
+		}
+		staged, _, _, err := staging.Stage(paths, digests)
+		if err != nil {
+			t.Fatalf("%s: staging was refused: %v", served.root, err)
+		}
+		if len(staged) != 1 || staged[0] != "new.txt" {
+			t.Fatalf("%s: staged %v", served.root, staged)
 		}
 	}
 	// Each refusal ends the stream, so each read is asked on its own.
@@ -321,8 +372,8 @@ func TestTheDaemonsLocalSideHoldsGit(t *testing.T) {
 		t.Fatal(err)
 	}
 	hooks := &core.Entry{Kind: core.EntryKind_Directory}
-	if _, _, _, err := endpoint.Transition(context.Background(), []*core.Change{{Path: ".GIT/hooks2", New: hooks}}); err == nil {
-		t.Fatal("a change under .GIT was applied")
+	if _, problems, _, err := endpoint.Transition(context.Background(), []*core.Change{{Path: ".GIT/hooks2", New: hooks}}); err != nil || len(problems) != 1 {
+		t.Fatalf("a change under .GIT was not refused as a problem: %v %v", problems, err)
 	}
 	if _, err := os.Lstat(filepath.Join(root, ".git", "hooks2")); err == nil {
 		t.Fatal(".git/hooks2 was written")

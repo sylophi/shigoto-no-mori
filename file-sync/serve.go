@@ -21,7 +21,9 @@ package main
 // Mutagen's endpoint reads whatever paths the client names and applies
 // whatever transitions it computed, so the .git rule is held at the
 // endpoint itself (guardedEndpoint), on every call that names a path,
-// not left to the configuration.
+// not left to the configuration. A read of .git ends the stream; a
+// change that touches it is left undone and reported as a problem, so
+// the rest of its cycle (and every later one) still syncs.
 
 import (
 	"bufio"
@@ -152,25 +154,32 @@ func servedConfiguration(asked *synchronization.Configuration) *synchronization.
 	return served
 }
 
-// A local endpoint that refuses any call touching .git, at any depth: a
-// path read, staged or changed through one, or a folder whose old or new
-// contents hold one.
+// A local endpoint that keeps .git, at any depth, out of every call: a
+// read through one is refused, and a path staged or changed through one,
+// or a folder whose old or new contents hold one, is left out.
 type guardedEndpoint struct {
 	synchronization.Endpoint
 }
 
 func (e guardedEndpoint) Supply(paths []string, signatures []*rsync.Signature, receiver rsync.Receiver) error {
-	if err := refuseGitPaths("read", paths); err != nil {
+	if err := refuseGitReads(paths); err != nil {
 		return err
 	}
 	return e.Endpoint.Supply(paths, signatures, receiver)
 }
 
+// The paths left out are never staged: their changes come back as
+// problems from Transition.
 func (e guardedEndpoint) Stage(paths []string, digests [][]byte) ([]string, []*rsync.Signature, rsync.Receiver, error) {
-	if err := refuseGitPaths("stage", paths); err != nil {
-		return nil, nil, nil, err
+	var allowedPaths []string
+	var allowedDigests [][]byte
+	for p, path := range paths {
+		if !touchesGit(path) {
+			allowedPaths = append(allowedPaths, path)
+			allowedDigests = append(allowedDigests, digests[p])
+		}
 	}
-	return e.Endpoint.Stage(paths, digests)
+	return e.Endpoint.Stage(allowedPaths, allowedDigests)
 }
 
 // The daemon's own side of each session, which applies what the peer's
@@ -205,22 +214,42 @@ func holdGitOnLocalEndpoints() {
 	}
 }
 
-func refuseGitPaths(verb string, paths []string) error {
+func refuseGitReads(paths []string) error {
 	for _, p := range paths {
 		if touchesGit(p) {
-			return fmt.Errorf("refused to %s %q: .git is not synchronized", verb, p)
+			return fmt.Errorf("refused to read %q: .git is not synchronized", p)
 		}
 	}
 	return nil
 }
 
+// The inner endpoint is called at most once: the local one refuses a
+// second transition without a scan between.
 func (e guardedEndpoint) Transition(ctx context.Context, transitions []*core.Change) ([]*core.Entry, []*core.Problem, bool, error) {
-	for _, change := range transitions {
+	results := make([]*core.Entry, len(transitions))
+	var problems []*core.Problem
+	var allowed []*core.Change
+	var allowedAt []int
+	for t, change := range transitions {
 		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) || linksIntoGit(change.Path, change.New) {
-			return nil, nil, false, fmt.Errorf("refused a change to %q: .git is not synchronized", change.Path)
+			results[t] = change.Old
+			problems = append(problems, &core.Problem{Path: change.Path, Error: ".git is not synchronized"})
+		} else {
+			allowed = append(allowed, change)
+			allowedAt = append(allowedAt, t)
 		}
 	}
-	return e.Endpoint.Transition(ctx, transitions)
+	if len(allowed) == 0 {
+		return results, problems, false, nil
+	}
+	applied, appliedProblems, stagerMissingFiles, err := e.Endpoint.Transition(ctx, allowed)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	for a, t := range allowedAt {
+		results[t] = applied[a]
+	}
+	return results, append(problems, appliedProblems...), stagerMissingFiles, nil
 }
 
 func touchesGit(p string) bool {
