@@ -1,6 +1,6 @@
 // pnpm reliability [--clients web,desktop,tunnel,terminal]
 //   [--scenarios a,b] [--soak <duration>] [--gap <min>-<max>] [--seed <n>]
-//   [--headed] [--keep] [--deploy-local-hub]
+//   [--headed] [--keep] [--revoke-host] [--deploy-local-hub]
 //
 // The clients' reliability scenarios against the dev hub, once each
 // or looped for a soak, with a report of every recovery and failure and
@@ -20,9 +20,8 @@ import {
 } from "./lab.mts";
 import {
   ALL_SCENARIOS,
-  hubMatchesRelease,
+  hubDiffersFromRelease,
   recovered,
-  SOAK_SCENARIOS,
   showProject,
   silentFailures,
   terminalRoundTrip,
@@ -42,6 +41,7 @@ const { values } = parseArgs({
     seed: { type: "string" },
     headed: { type: "boolean", default: false },
     keep: { type: "boolean", default: false },
+    "revoke-host": { type: "boolean", default: false },
     "deploy-local-hub": { type: "boolean", default: false },
   },
 });
@@ -82,9 +82,9 @@ const clients = new Set(
 
 let chosen: readonly Scenario[] =
   values.scenarios === undefined
-    ? soakMs === null
-      ? ALL_SCENARIOS.filter((scenario) => !scenario.destructive)
-      : SOAK_SCENARIOS
+    ? ALL_SCENARIOS.filter(
+        (scenario) => !scenario.destructive && !scenario.onlyNamed,
+      )
     : values.scenarios.split(",").map((name) => {
         const found = ALL_SCENARIOS.find((scenario) => scenario.name === name);
         if (found === undefined) throw new Error(`no scenario ${name}`);
@@ -94,13 +94,14 @@ chosen = [
   ...chosen.filter((scenario) => !scenario.destructive),
   ...chosen.filter((scenario) => scenario.destructive),
 ];
-if (
+const differs =
   chosen.some((scenario) => scenario.name === "hub-redeploy") &&
-  !values["deploy-local-hub"] &&
-  !hubMatchesRelease()
-) {
+  !values["deploy-local-hub"]
+    ? hubDiffersFromRelease()
+    : null;
+if (differs !== null) {
   console.log(
-    "[reliability] skipping hub-redeploy: this checkout's hub differs from origin/release/v3 (--deploy-local-hub deploys it anyway)",
+    `[reliability] skipping hub-redeploy: ${differs} (--deploy-local-hub deploys it anyway)`,
   );
   chosen = chosen.filter((scenario) => scenario.name !== "hub-redeploy");
 }
@@ -110,6 +111,7 @@ const lab = new Lab({
   headed: values.headed,
   out,
   keep: values.keep,
+  revokeHost: values["revoke-host"],
   clients,
 });
 chosen = chosen.filter((scenario) => {

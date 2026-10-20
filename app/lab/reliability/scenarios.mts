@@ -12,6 +12,11 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import {
+  PING_INTERVAL_MS,
+  PING_TIMEOUT_MS,
+  PROBE_TIMEOUT_MS,
+} from "../../shared/remote/link.ts";
+import {
   repoDir,
   sleep,
   within,
@@ -36,6 +41,8 @@ export type Scenario = {
   // Leaves the profile signed out, so it runs only when named, last,
   // and checks its own outcome rather than a recovery.
   readonly destructive?: boolean;
+  // Reaches past the lab, so it runs only when named.
+  readonly onlyNamed?: true;
 };
 
 type PageState = {
@@ -526,6 +533,9 @@ const hubRedeploy: Scenario = {
   name: "hub-redeploy",
   does: "The dev hub is deployed again from this checkout's hub/ (wrangler deploy --env dev), which restarts its Durable Objects and drops every socket.",
   boundMs: 60_000,
+  // The dev hub is shared: every v3 build talks to it, the installed
+  // betas among them, and it may run behind release/v3 on purpose.
+  onlyNamed: true,
   async run(lab) {
     changeHost(lab);
     const started = Date.now();
@@ -627,15 +637,23 @@ const laptopSleep: Scenario = {
   },
 };
 
+// How long a page may go on reading a silent host as Connected: a probe
+// goes out a round after the host's last answer, and once it has been
+// out for the timeout, a fresh one unanswered gives the link up
+// (packages/engine/src/liveness.ts). Then the page has a moment.
+const SILENT_HOST_SHOWN_MS =
+  PING_INTERVAL_MS + PING_TIMEOUT_MS + PROBE_TIMEOUT_MS + 5_000;
+
 const hostSleep: Scenario = {
   name: "host-sleep",
-  does: "The host's machine sleeps for 30 to 120 s: its whole app stopped (SIGSTOP), cloudflared and all, so its sockets go silent without closing. The clients must stop showing it as Connected, then find it again once it goes on (SIGCONT). The terminal lists and sends meanwhile.",
+  does: `The host's machine sleeps for 30 to 120 s: its whole app stopped (SIGSTOP), cloudflared and all, so its sockets go silent without closing. The clients must stop showing it as Connected within ${SILENT_HOST_SHOWN_MS / 1000} s (a shorter sleep only notes it), then find it again once it goes on (SIGCONT). The terminal lists and sends meanwhile.`,
   boundMs: 60_000,
   async run(lab, random) {
     const ms = between(random, 30_000, 120_000);
     lab.note(`the host asleep for ${ms} ms`);
     const asleep = Date.now();
     const pids = lab.hostApp.freeze();
+    const bound = Math.min(ms, SILENT_HOST_SHOWN_MS);
     const shown = waitFor(
       "every page to stop showing the host as Connected",
       async () => {
@@ -644,20 +662,22 @@ const hostSleep: Scenario = {
         }
         return true;
       },
-      ms,
+      bound,
     ).then(
-      () =>
+      () => {
         lab.note(
           `every page showed the host gone after ${Date.now() - asleep} ms`,
-        ),
-      () =>
-        lab.note(
-          `some page still read the host as Connected after ${ms} ms asleep`,
-          "warning",
-        ),
+        );
+        return [];
+      },
+      () => {
+        const said = `some page still read the host as Connected ${bound} ms into its sleep`;
+        if (bound === SILENT_HOST_SHOWN_MS) return [said];
+        lab.note(said, "warning");
+        return [];
+      },
     );
-    const broke = await terminalDuringOutage(lab);
-    await shown;
+    const broke = [...(await terminalDuringOutage(lab)), ...(await shown)];
     await sleep(Math.max(0, asleep + ms - Date.now()));
     lab.hostApp.thaw(pids);
     lab.note("the host is awake");
@@ -879,7 +899,7 @@ async function signedOut(tab: Tab): Promise<boolean> {
     .signedIn;
 }
 
-export const SOAK_SCENARIOS: readonly Scenario[] = [
+export const ALL_SCENARIOS: readonly Scenario[] = [
   networkDrop,
   networkBlip,
   hubRedeploy,
@@ -893,31 +913,33 @@ export const SOAK_SCENARIOS: readonly Scenario[] = [
   twoTabsRedial,
   tokenExpiry,
   clockSkew,
-];
-
-export const ALL_SCENARIOS: readonly Scenario[] = [
-  ...SOAK_SCENARIOS,
   signOutWithSibling,
 ];
 
-// Whether this checkout's hub is the one on release/v3, so a redeploy
-// puts back what the dev hub already runs.
-export function hubMatchesRelease(): boolean {
+const git = (...args: string[]) =>
+  execFileSync("git", args, {
+    cwd: repoDir,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+// Why this checkout's hub is not release/v3's as GitHub has it now, or
+// null when it is: fetched first, since a stale origin/release/v3 would
+// pass old hub code as current, and a file git doesn't track counts.
+export function hubDiffersFromRelease(): string | null {
+  const paths = ["--", "hub", "packages/contracts"];
   try {
-    execFileSync(
-      "git",
-      [
-        "diff",
-        "--quiet",
-        "origin/release/v3",
-        "--",
-        "hub",
-        "packages/contracts",
-      ],
-      { cwd: repoDir },
-    );
-    return true;
+    git("fetch", "-q", "origin", "release/v3");
   } catch {
-    return false;
+    return "release/v3 could not be fetched";
   }
+  try {
+    git("diff", "--quiet", "origin/release/v3", ...paths);
+  } catch {
+    return "this checkout's hub differs from release/v3";
+  }
+  if (git("ls-files", "--others", "--exclude-standard", ...paths) !== "") {
+    return "this checkout's hub has files git doesn't track";
+  }
+  return null;
 }
