@@ -61,8 +61,16 @@ let failure: OutputFailed | undefined;
 // What the command's output met, if a stream failed.
 export const outputFailure = () => failure;
 
-// Stdout's reader gone, which ends the command where it is (main.ts).
-export const stdoutGone = Deferred.makeUnsafe<void>();
+// Stdout's reader gone, which ends the command where it is.
+const stdoutGone = Deferred.makeUnsafe<void>();
+
+export const READER_GONE = Symbol("reader gone");
+
+// The command, ended where it is once stdout's reader goes, its children
+// and its cleanup run as at a Ctrl-C (main.ts): READER_GONE then.
+export const untilReaderGone = Effect.raceFirst(
+  Effect.as(Deferred.await(stdoutGone), READER_GONE),
+);
 
 // Once, before the command runs. A reader gone (`| head`, a pager quit
 // early) ends the stream quietly, as a terminal tool does: stdout's ends

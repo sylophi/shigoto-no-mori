@@ -29,7 +29,7 @@ export default defineConfig({
   test: {
     include: ["test/*.mts"],
     exclude: ["test/run.mts"],
-    setupFiles: ["test/lib/hostSetup.mts"],
+    setupFiles: ["../testProcesses.setup.mts", "test/lib/hostSetup.mts"],
     pool: "forks",
     fileParallelism: false,
     // A check can build sm from a cold Go cache, or drive a whole

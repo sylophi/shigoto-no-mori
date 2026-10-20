@@ -4,6 +4,7 @@
 // and a script handed the terminal, its signals and its ending.
 import assert from "node:assert/strict";
 import { execFile, execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import {
   chmodSync,
   existsSync,
@@ -28,7 +29,7 @@ import {
 } from "vitest";
 import { type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
 import { builtBinary } from "./lib/binary.ts";
-import { reapGroups, runGroup, within } from "./lib/groups.ts";
+import { own as owned, within } from "../../../testProcesses.mts";
 import {
   type FakeApp,
   fakeApp,
@@ -50,8 +51,6 @@ beforeEach(() => {
   box = sandbox();
 });
 afterEach(() => box.remove());
-// Before the sandbox goes (hooks run last registered first).
-afterEach(() => reapGroups());
 
 const runAt = (cwd: string, ...args: string[]) =>
   box.runAt(built, "cli", cwd, args);
@@ -71,11 +70,13 @@ const start = (
   args: ReadonlyArray<string>,
   env: NodeJS.ProcessEnv = {},
 ) => {
-  const child = spawn(built, args, {
-    cwd,
-    env: { ...box.env("cli"), ...env },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const child = owned(
+    spawn(built, args, {
+      cwd,
+      env: { ...box.env("cli"), ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+    }),
+  );
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
@@ -97,11 +98,13 @@ const piped = (
   input: string,
 ) =>
   new Promise<{ code: number | null; stdout: string }>((resolve) => {
-    const child = spawn(built, args, {
-      cwd,
-      env: { ...box.env("cli"), ...env },
-      stdio: ["pipe", "pipe", "ignore"],
-    });
+    const child = owned(
+      spawn(built, args, {
+        cwd,
+        env: { ...box.env("cli"), ...env },
+        stdio: ["pipe", "pipe", "ignore"],
+      }),
+    );
     let stdout = "";
     child.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
     child.on("close", (code) => resolve({ code, stdout }));
@@ -167,11 +170,21 @@ describe("a command line", () => {
         projects: [{ id: "H", name: "headed", path: repo }],
       });
       await box.migrate("cli");
-      const shell = (line: string) =>
-        runGroup("bash", ["-o", "pipefail", "-c", line], {
-          cwd: repo,
-          env: box.env("cli"),
-        });
+      const shell = async (line: string) => {
+        const child = owned(
+          spawn("bash", ["-o", "pipefail", "-c", line], {
+            cwd: repo,
+            env: box.env("cli"),
+            stdio: ["ignore", "pipe", "pipe"],
+          }),
+        );
+        let stdout = "";
+        let stderr = "";
+        child.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
+        child.stderr.on("data", (chunk: Buffer) => (stderr += chunk));
+        const [status] = (await once(child, "close")) as [number | null];
+        return { status, stdout, stderr };
+      };
       for (const args of ["worktrees list --json", "worktrees list"]) {
         const headed = await shell(`"${built}" ${args} | head -1`);
         assert.equal(headed.status, 0, `${args}: ${headed.stderr}`);

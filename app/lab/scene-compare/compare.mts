@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { isolateGit } from "../../../gitIsolation.ts";
 import { ownTestTemp } from "../../../testTemp.mts";
-import { onRunEnd, signalIfAlive } from "../lib/runEnd.mts";
+import { onRunEnd, signalIfAlive } from "../../../testProcesses.mts";
 import * as Predicate from "effect/Predicate";
 import { chromium, type Browser, type Page } from "playwright-core";
 
@@ -57,7 +57,7 @@ const servers: ChildProcess[] = [];
 let browser: Browser | undefined;
 
 // Each step whatever the one before did: a server already gone, a
-// checkout never added. However the run ends (../lib/runEnd.mts).
+// checkout never added. However the run ends (../../../testProcesses.mts).
 function cleanUp(): void {
   for (const server of servers) {
     if (server.pid) signalIfAlive(-server.pid, "SIGTERM");

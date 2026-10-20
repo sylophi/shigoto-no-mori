@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
-import { onRunEnd } from "../../lib/runEnd.mts";
+import { onRunEnd } from "../../../../testProcesses.mts";
 
 const HUB_DIR = join(import.meta.dirname, "..", "..", "..", "..", "hub");
 const WRANGLER = join(HUB_DIR, "node_modules", ".bin", "wrangler");
@@ -151,7 +151,7 @@ export async function startLabHub(): Promise<LabHub> {
     );
   };
   // Detached, it hears no Ctrl-C of the run's: the run's end takes it
-  // (../../lib/runEnd.mts).
+  // (../../../../testProcesses.mts).
   const forget = onRunEnd(() => {
     signal("SIGKILL");
     rmSync(root, { recursive: true, force: true });

@@ -44,6 +44,7 @@ import {
   waitFor,
 } from "./lib/checkKit.mts";
 import { addProject, builtSm, hostEngine } from "./lib/smBinary.mts";
+import { own } from "../../testProcesses.mts";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 
 const gitEnv = scrubbedGitEnv();
@@ -140,19 +141,21 @@ function dataDirFor(label: string) {
   // Runs sm held at `stop`, kills its whole process group there.
   const killedAt = async (args: string[], stop: Stop, crossVolume = false) => {
     const mark = join(root, `held-${Date.now()}`);
-    const child = spawn(binary, ["--json", ...args], {
-      env: {
-        ...env,
-        ...stopWrappers(join(root, "bin"), {
-          stop,
-          mark,
-          seconds: 600,
-          crossVolume,
-        }),
-      },
-      detached: true,
-      stdio: "ignore",
-    });
+    const child = own(
+      spawn(binary, ["--json", ...args], {
+        env: {
+          ...env,
+          ...stopWrappers(join(root, "bin"), {
+            stop,
+            mark,
+            seconds: 600,
+            crossVolume,
+          }),
+        },
+        detached: true,
+        stdio: "ignore",
+      }),
+    );
     const exited = new Promise<void>((resolve) =>
       child.once("exit", () => resolve()),
     );
