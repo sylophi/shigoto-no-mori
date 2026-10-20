@@ -181,6 +181,9 @@ export const replayable = (history: string, alternate: boolean): string => {
   return history.slice(0, alternateScreen(history).enteredAt ?? 0);
 };
 
+// How a shell ended: its status, and whether a signal ended it.
+type Ended = { readonly code: number; readonly killed: boolean };
+
 interface Session {
   readonly terminal: Terminal;
   readonly pty: PtyHandle;
@@ -373,7 +376,7 @@ const make = <R, E>(options: {
     // as a chunk, then the exit once the shell is gone.
     const pump = (
       session: Session,
-      reads: Queue.Queue<string | { readonly exit: number | null }>,
+      reads: Queue.Queue<string | Ended>,
       backlog: { bytes: number; paused: boolean },
     ) =>
       Effect.gen(function* () {
@@ -382,10 +385,10 @@ const make = <R, E>(options: {
           if (typeof first === "string") yield* Effect.sleep(BATCH);
           const taken = [first, ...(yield* Queue.clear(reads))];
           let data = "";
-          let exit: Option.Option<number | null> = Option.none();
+          let ended: Option.Option<Ended> = Option.none();
           for (const item of taken) {
             if (typeof item === "string") data += item;
-            else exit = Option.some(item.exit);
+            else ended = Option.some(item);
           }
           backlog.bytes -= data.length;
           if (backlog.paused && backlog.bytes < RESUME_AT) {
@@ -407,21 +410,21 @@ const make = <R, E>(options: {
               seq: session.seq,
             });
           }
-          if (Option.isSome(exit)) {
-            session.exited = exit;
+          if (Option.isSome(ended)) {
+            session.exited = Option.some(ended.value.code);
             session.forget = true;
             yield* PubSub.publish(session.events, {
               kind: "exit",
-              code: exit.value,
+              code: ended.value.code,
             });
-            // A shell that exited cleanly goes with its tab. One that
-            // failed or was killed stays listed, dead, its screen kept to
-            // be read, until it is closed. Its scope closes from outside
-            // it, since this fiber is in it.
+            // A shell that exited goes with its tab, whatever its status.
+            // One killed stays listed, dead, its screen kept to be read,
+            // until it is closed. Its scope closes from outside it, since
+            // this fiber is in it.
             yield* Effect.forkIn(
-              exit.value === 0
-                ? end(session)
-                : Scope.close(session.scope, Exit.void),
+              ended.value.killed
+                ? Scope.close(session.scope, Exit.void)
+                : end(session),
               layerScope,
             );
             return;
@@ -554,9 +557,7 @@ const make = <R, E>(options: {
           forget: false,
         };
         yield* Scope.addFinalizer(scope, PubSub.shutdown(session.events));
-        const reads = yield* Queue.unbounded<
-          string | { readonly exit: number | null }
-        >();
+        const reads = yield* Queue.unbounded<string | Ended>();
         const backlog = { bytes: 0, paused: false };
         pty.onData((data) => {
           backlog.bytes += data.length;
@@ -574,9 +575,10 @@ const make = <R, E>(options: {
         // A shell that dies of a signal reads 128 + its number, as a
         // shell tells a child's.
         pty.onExit(({ exitCode, signal }) => {
+          const killed = signal !== undefined && signal !== 0;
           Queue.offerUnsafe(reads, {
-            exit:
-              signal !== undefined && signal !== 0 ? 128 + signal : exitCode,
+            code: killed ? 128 + signal : exitCode,
+            killed,
           });
         });
         yield* Effect.forkIn(pump(session, reads, backlog), scope);

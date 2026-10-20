@@ -10,7 +10,7 @@
 //     reconnect from a seq repeats no chunk,
 //   - a resize reaches every attached client,
 //   - a close ends every attach with an exit and leaves the list,
-//   - a shell that exits cleanly leaves the list; one that fails or is
+//   - a shell that exits leaves the list, whatever its status; one
 //     killed (128 + its signal) stays, its screen kept, until closed,
 //     and holds no folder,
 //   - a quit saves each terminal, and the next start opens it again
@@ -388,7 +388,7 @@ describe("the service", () => {
     }
   });
 
-  it("a failed exit ends the attach with its code and stays listed until closed", async () => {
+  it("an exit ends the attach with its code and leaves the list, whatever its status", async () => {
     const app = launch();
     try {
       const { terminalId } = await withTerminals(app, (terminals) =>
@@ -396,10 +396,31 @@ describe("the service", () => {
       );
       const attached = attach(app, terminalId);
       await withTerminals(app, (terminals) =>
-        terminals.write(terminalId, "echo kept-$((40+2)); exit 3\r"),
+        terminals.write(terminalId, "exit 3\r"),
       );
       await app.runPromise(Fiber.join(attached.fiber));
       assert.deepEqual(attached.events.at(-1), { kind: "exit", code: 3 });
+      await waitFor(
+        async () => (await listedIds(app)).length === 0,
+        "the exit's leaving",
+      );
+    } finally {
+      await app.dispose();
+    }
+  });
+
+  it("a killed shell reads 128 + its signal and stays listed, dead, until closed", async () => {
+    const app = launch();
+    try {
+      const { terminalId } = await withTerminals(app, (terminals) =>
+        terminals.open({ owner: { kind: "device" } }),
+      );
+      const attached = attach(app, terminalId);
+      await withTerminals(app, (terminals) =>
+        terminals.write(terminalId, "echo kept-$((40+2)); kill -KILL $$\r"),
+      );
+      await app.runPromise(Fiber.join(attached.fiber));
+      assert.deepEqual(attached.events.at(-1), { kind: "exit", code: 137 });
       assert.deepEqual(await listedIds(app), [terminalId]);
       const openHere = await withTerminals(app, (terminals) =>
         Effect.sync(() => terminals.openIn({ id: "none", path: root })),
@@ -409,42 +430,10 @@ describe("the service", () => {
       const again = attach(app, terminalId);
       await app.runPromise(Fiber.join(again.fiber));
       assert.ok(again.output().includes("kept-42"), "its screen went");
-      assert.deepEqual(again.events.at(-1), { kind: "exit", code: 3 });
+      assert.deepEqual(again.events.at(-1), { kind: "exit", code: 137 });
 
       await withTerminals(app, (terminals) => terminals.close(terminalId));
       assert.deepEqual(await listedIds(app), []);
-    } finally {
-      await app.dispose();
-    }
-  });
-
-  it("a killed shell reads 128 + its signal, and a clean exit leaves the list", async () => {
-    const app = launch();
-    try {
-      const { terminalId } = await withTerminals(app, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
-      );
-      const attached = attach(app, terminalId);
-      await withTerminals(app, (terminals) =>
-        terminals.write(terminalId, "kill -KILL $$\r"),
-      );
-      await app.runPromise(Fiber.join(attached.fiber));
-      assert.deepEqual(attached.events.at(-1), { kind: "exit", code: 137 });
-      await withTerminals(app, (terminals) => terminals.close(terminalId));
-
-      const clean = await withTerminals(app, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
-      );
-      const ends = attach(app, clean.terminalId);
-      await withTerminals(app, (terminals) =>
-        terminals.write(clean.terminalId, "exit 0\r"),
-      );
-      await app.runPromise(Fiber.join(ends.fiber));
-      assert.deepEqual(ends.events.at(-1), { kind: "exit", code: 0 });
-      await waitFor(
-        async () => (await listedIds(app)).length === 0,
-        "the clean exit's leaving",
-      );
     } finally {
       await app.dispose();
     }
