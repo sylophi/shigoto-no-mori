@@ -12,9 +12,9 @@
 // one exchange per ask with nothing readable on the hub, id correlation
 // across concurrent asks, the hub-stamped caller, an ask sealed under a
 // key other than the roster's and a tampered answer refused, the
-// void-field framing invariant, error
-// serialization (message only), unknown asks refused, the no-listener
-// refusal of a device serving nothing, offline nacks, the per-ask timeout, presence-driven and
+// void-field framing invariant, error serialization (message only),
+// unknown asks refused, the no-listener refusal of a device serving
+// nothing, offline nacks, the per-ask timeout, presence-driven and
 // teardown rejection of pending asks, misrouted answers dropped, an
 // off-roster ask left unanswered, supervisor redial with a fresh ticket
 // per attempt, the blocked verdicts for the revoked and superseded

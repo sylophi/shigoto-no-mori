@@ -22,10 +22,10 @@ export type HubConnectionOpts = Omit<Shared.HubConnectionDeps, "openSocket">;
 // RawData decode, and the hard terminate the shared core prefers for
 // orphan sockets and arms after an owner close.
 function openWsSocket(url: string): Shared.HubSocketAdapter {
-  // Bound inbound buffering at the DO's own forwarding limit (nothing
-  // it sends is larger: relays are measured against it and a full
-  // presence roster fits under it), and disable perMessageDeflate so a
-  // compression bomb cannot inflate a tiny frame past the limit.
+  // Bound inbound buffering at the DO's inbound limit (a full presence
+  // roster fits under it, and a relay it forwards is longer only by its
+  // sender's id), and disable perMessageDeflate so a compression bomb
+  // cannot inflate a tiny frame past the limit.
   // An oversize frame past maxPayload closes the socket (1009), so
   // shrinking MAX_HUB_MESSAGE_BYTES means shipping devices that still
   // read the old size before the Worker enforces the new one
