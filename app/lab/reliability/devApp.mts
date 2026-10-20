@@ -34,9 +34,9 @@ export class DevApp {
   readonly userDataDir: string;
   readonly logDir: string;
   readonly options: DevAppOptions;
-  // Launched this run and never got signed in on the hub: a device
-  // revoked while the app was off, say, which a kept profile would
-  // carry into every run after.
+  // Launched this run and read signed out: a device revoked while the
+  // app was off, say, which a kept profile would carry into every run
+  // after.
   stuckSignedOut = false;
   private debugPort = 0;
   private launched: ChildProcess | null = null;
@@ -117,21 +117,27 @@ export class DevApp {
       60_000,
     );
     if (this.options.signedOut) return;
-    this.stuckSignedOut = true;
     await waitFor(
       `${this.profile} to be signed in and on the hub`,
-      async () =>
-        (await pageApi(page)).evaluate(async (api) => {
+      async () => {
+        const read = await (
+          await pageApi(page)
+        ).evaluate(async (api) => {
           const [account, hub] = await Promise.all([
             api.run(api.account.status()),
             api.run(api.hub.status()),
           ]);
-          return account.signedIn && hub.socket.phase === "connected";
-        }),
+          return {
+            signedIn: account.signedIn,
+            connected: hub.socket.phase === "connected",
+          };
+        });
+        this.stuckSignedOut = !read.signedIn;
+        return read.signedIn && read.connected;
+      },
       180_000,
       1000,
     );
-    this.stuckSignedOut = false;
     if (!this.options.needsTunnel) return;
     // A new device's tunnel has a new hostname, which can take minutes
     // to route: the host allows it long enough to outlast a cached

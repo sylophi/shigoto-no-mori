@@ -70,12 +70,12 @@ authorize URL (handed to it as `$AUTH_URL`) and prints the URL GitHub
 redirects to, which the tab then opens.
 
 At the end it signs the browser, A and C out (revoking their devices)
-and deletes their profiles, unless `--keep`. The browser profile
+and deletes A's and C's profiles, unless `--keep`. The browser profile
 stays, and enrolls again on the next run. B stays enrolled, with its
 profile and its tunnel, until a run with `--revoke-host` (or a run
-whose B never signed in, so the next starts afresh). Run one before
-the worktree goes: the account holds 16 devices, past which the hub
-drops its stalest offline one.
+whose B reads signed out, so the next starts afresh), once B is up to
+sign itself out. Run one before the worktree goes: the account holds
+16 devices, past which the hub drops its stalest offline one.
 
 ## The scenarios
 
