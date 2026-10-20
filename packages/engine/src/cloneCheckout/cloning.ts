@@ -198,14 +198,10 @@ export const makeCloning = ({
         }),
       );
 
+      // SHA-1 alone: git's sha256 format is experimental, and GitHub
+      // hosts none.
       const format = reads.format.trim();
-      const algorithm =
-        format === "sha1"
-          ? "SHA-1"
-          : format === "sha256"
-            ? "SHA-256"
-            : undefined;
-      if (algorithm === undefined) {
+      if (format !== "sha1") {
         return yield* new CloneFailed({
           reason: "unknown-format",
           cause: format,
@@ -353,9 +349,7 @@ export const makeCloning = ({
       const hashes = yield* Effect.forEach(
         toHash,
         ({ p, entry }) =>
-          blobId(path.join(worktree, p), entry.mode, algorithm).pipe(
-            Effect.option,
-          ),
+          blobId(path.join(worktree, p), entry.mode).pipe(Effect.option),
         { concurrency: 4 },
       );
       toHash.forEach(({ p, entry, stat, record }, index) => {
@@ -391,7 +385,7 @@ export const makeCloning = ({
       const toGit = targets
         .filter((target) => !kept.has(target.path))
         .map((target) => target.path);
-      yield* writeIndex(worktree, targets, kept, algorithm).pipe(
+      yield* writeIndex(worktree, targets, kept).pipe(
         Effect.mapError(fail("write")),
       );
       if (toGit.length > 0) {
@@ -490,10 +484,9 @@ export const makeCloning = ({
       worktree: string,
       targets: ReadonlyArray<TreeEntry>,
       stats: ReadonlyMap<string, IndexStat>,
-      algorithm: "SHA-1" | "SHA-256",
     ) {
-      const body = indexBody(targets, stats, algorithm === "SHA-1" ? 20 : 32);
-      const sum = yield* crypto.digest(algorithm, body);
+      const body = indexBody(targets, stats);
+      const sum = yield* crypto.digest("SHA-1", body);
       const file = new Uint8Array(body.length + sum.length);
       file.set(body);
       file.set(sum, body.length);

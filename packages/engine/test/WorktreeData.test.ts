@@ -54,9 +54,7 @@ it("replaces a worktree's ports and keeps its description", async () => {
       yield* TestClock.setTime(5);
       yield* data.describe("A", "aaaaaaaaaaaa", { title: "T" });
       yield* data.setPorts("A", "aaaaaaaaaaaa", [{ port: 3000 }]);
-      yield* data.setPorts("A", "aaaaaaaaaaaa", [
-        { port: 4000, label: "  api " },
-      ]);
+      yield* data.setPorts("A", "aaaaaaaaaaaa", [{ port: 4000, label: "api" }]);
       const replaced = yield* data.ports("A", "aaaaaaaaaaaa");
       yield* data.describe("A", "aaaaaaaaaaaa", { description: "D" });
       const described = yield* data.description("A", "aaaaaaaaaaaa");

@@ -73,9 +73,7 @@ const onProgress = Effect.map(
   ({ json, stderrColor }): Transfer.OnProgress =>
     ({ document, line }) =>
       json
-        ? document === undefined
-          ? Effect.void
-          : emit(document)
+        ? emit(document)
         : line === undefined
           ? Effect.void
           : note(styles(stderrColor).dim(`  ${line}`)),

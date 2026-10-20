@@ -4,7 +4,7 @@ The data model and the store, git, worktrees, landing, the cross-device verbs, d
 
 - `src/`: one module per service, named for it (`Store.ts`), shaped as `EFFECT.md` section 2 says, and its pure helpers beside it in lowercase modules. Consumers import a module by its name: `@shigomori/engine/Store`.
 - `src/worktrees/`, `src/doctor/`, `src/git/`, `src/updater/`, `src/landing/`: the five largest services, each split by area into sub-makers that its module's `make` composes (`EFFECT.md`, section 2). An area's file says what it covers; `documents.ts` holds the errors, documents and helpers the areas share, which the service module re-exports, so a consumer still imports `@shigomori/engine/Worktrees`.
-- `src/goJson.ts`: JSON from another program (gh, the app's control answers) read as Go read it, a field absent or null at its zero value.
+- `src/goJson.ts`: JSON from another program (gh) read as Go read it, a field absent or null at its zero value.
 - `src/layer.ts`: the engine's layer graph (`engineLayer`), built once per process by the terminal, the host and the test sandbox.
 - `src/migrations/`: the store's schema history, which `Store` runs on open.
 - `src/data/`: the data the engine ships with: the launcher catalog and the worktree name pools.

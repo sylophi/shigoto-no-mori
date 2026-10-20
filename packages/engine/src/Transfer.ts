@@ -13,10 +13,10 @@
 // qualifies when none is named) and the folder a clone goes in, so a
 // name is passed through as given. Answers are the documents `sm --json`
 // prints, with the headline a person reads.
+import type { CallsOf, OutputOf } from "@shigomori/contracts/contract";
 import {
-  type ControlDevice,
+  type controlContract,
   ControlLeaveOutSchema,
-  type ControlMirror,
   type ControlPeerWorktree,
   ControlSourceFateSchema,
   type ControlTransferResult,
@@ -25,10 +25,7 @@ import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import { count, flag, list, struct, text } from "./goJson.ts";
 import * as Control from "./Control.ts";
 import type * as Git from "./Git.ts";
 import * as Paths from "./Paths.ts";
@@ -48,14 +45,13 @@ export type TransferFlags = {
   readonly noSetup?: boolean | undefined;
 };
 
-// A progress push: the event `sm --json` prints for it (none for a
-// payload that isn't an object), and the step's line when it differs
-// from the one before (a transfer pushes per chunk).
+// A progress push: the event `sm --json` prints for it, and the step's
+// line when it differs from the one before (a transfer pushes per chunk).
 type ProgressDocument = Readonly<SyncPullProgress> & {
   readonly event: "progress";
 };
 export type Progress = {
-  readonly document: ProgressDocument | undefined;
+  readonly document: ProgressDocument;
   readonly line: string | undefined;
 };
 
@@ -130,136 +126,28 @@ export class StopUnconfirmed extends Schema.TaggedError<StopUnconfirmed>()(
   }
 }
 
-// The app's answer isn't the shape this build reads.
-class UnreadableAnswer extends Schema.TaggedError<UnreadableAnswer>()(
-  "UnreadableAnswer",
-  { channel: Schema.String, cause: Schema.Defect() },
-) {
-  override get message(): string {
-    return `The app answered ${this.channel} with something this CLI can't read. The two may be different versions.`;
-  }
-}
-
-// --- the slices of the app's documents ------------------------------------
-
-// A lenient read of the contracts' type T: every field it names is one
-// of T's, whatever T holds there decodes, and an absent field reads as
-// Go's zero value.
-type Reads<T, S extends Schema.Top> = [
-  Exclude<keyof S["Type"], keyof T>,
-] extends [never]
-  ? [T] extends [S["Encoded"]]
-    ? S
-    : never
-  : never;
-const reading =
-  <T>() =>
-  <S extends Schema.Top>(schema: S & Reads<T, S>): S =>
-    schema;
+// What a headline and the caveats read of a transfer's answer.
+export type TransferResult = Pick<
+  ControlTransferResult,
+  "captured" | "dirtyApplied" | "files" | "source" | "alreadyMirrored"
+> & {
+  readonly worktree: { readonly name: string };
+  readonly device: { readonly name: string };
+  readonly cloned?: { readonly name: string; readonly path: string };
+};
 
 type NamedDevice = ControlPeerWorktree["device"];
-const namedDevice = struct(
-  reading<NamedDevice>()(Schema.Struct({ deviceId: text, name: text })),
-);
-
 type SourceOutcome = NonNullable<ControlTransferResult["source"]>;
 
-const TransferResultSchema = reading<ControlTransferResult>()(
-  Schema.Struct({
-    worktree: struct(
-      reading<ControlTransferResult["worktree"]>()(
-        Schema.Struct({ name: text, path: text }),
-      ),
-    ),
-    captured: flag,
-    dirtyApplied: flag,
-    device: namedDevice,
-    copySide: text,
-    alreadyMirrored: flag,
-    cloned: Schema.optional(
-      reading<NonNullable<ControlTransferResult["cloned"]>>()(
-        Schema.Struct({ name: text, path: text }),
-      ),
-    ),
-    files: Schema.optional(
-      reading<NonNullable<ControlTransferResult["files"]>>()(
-        Schema.Struct({ crossed: flag, error: text }),
-      ),
-    ),
-    source: Schema.optional(
-      reading<SourceOutcome>()(
-        Schema.Struct({ fate: text, done: flag, error: text }),
-      ),
-    ),
-  }),
-);
-export type TransferResult = typeof TransferResultSchema.Type;
-
-const MirrorSchema = reading<ControlMirror>()(
-  Schema.Struct({
-    device: namedDevice,
-    localRoot: text,
-    copySide: text,
-    paused: flag,
-    status: text,
-    git: text,
-    conflicts: count,
-  }),
-);
-
-type MirrorStop = {
-  readonly mirror: ControlMirror;
-  readonly copyStayed?: string;
-};
-const MirrorStopSchema = reading<MirrorStop>()(
-  Schema.Struct({ mirror: struct(MirrorSchema), copyStayed: text }),
-);
-
-type MirrorList = {
-  readonly daemon: string;
-  // Empty unless the engine is failing.
-  readonly daemonFailure: string;
-  readonly mirrors: ReadonlyArray<ControlMirror>;
-};
-const MirrorsSchema = reading<MirrorList>()(
-  Schema.Struct({
-    daemon: text,
-    daemonFailure: text,
-    mirrors: list(MirrorSchema),
-  }),
-);
-
-type DeviceList = {
-  readonly thisDevice: NamedDevice;
-  readonly devices: ReadonlyArray<ControlDevice>;
-};
-const DevicesSchema = reading<DeviceList>()(
-  Schema.Struct({
-    thisDevice: namedDevice,
-    devices: list(
-      reading<ControlDevice>()(
-        Schema.Struct({ name: text, platform: text, block: text }),
-      ),
-    ),
-  }),
-);
-
-// The worktree is the app's document, passed through.
-const PeerWorktreesSchema = Schema.Struct({
-  worktrees: list(
-    reading<ControlPeerWorktree>()(
-      Schema.Struct({
-        device: namedDevice,
-        worktree: Schema.optional(Schema.Unknown),
-      }),
-    ),
-  ),
-  unreachable: list(Schema.String),
-});
-
-const ProgressSchema = reading<SyncPullProgress>()(
-  Schema.Struct({ step: text, createPhase: text }),
-);
+// A control call's answer, as its contract types it.
+type ControlCall = CallsOf<typeof controlContract>;
+type Answer<
+  K extends ControlCall["_tag"] extends `control:${infer N}` ? N : never,
+> = OutputOf<Extract<ControlCall, { readonly _tag: `control:${K}` }>>["Type"];
+type MirrorStop = Answer<"mirrorStop">;
+type MirrorList = Answer<"mirrors">;
+type DeviceList = Answer<"devices">;
+type PeerWorktreeList = Answer<"peerWorktrees">;
 
 // --- what the verbs answer ------------------------------------------------
 
@@ -268,12 +156,12 @@ type Ok<T> = Readonly<T> & { readonly ok: true };
 type WithCaveats<T> = Ok<T> & { readonly caveats: ReadonlyArray<string> };
 
 // A finished send, bring or mirror: the document `sm --json` prints (the
-// terminal exits 3 when it has caveats), the headline, and the fields
-// Go's lines read, each absent one as Go's zero value.
+// terminal exits 3 when it has caveats), the headline, and the answer
+// the lines read.
 export type Transferred = {
   readonly document: WithCaveats<ControlTransferResult>;
   readonly headline: string;
-  readonly result: TransferResult;
+  readonly result: ControlTransferResult;
 };
 
 // A project's worktrees on the other devices: the document (list's
@@ -299,7 +187,7 @@ type ResolveError =
   | Registry.UnknownProject
   | Git.GitError;
 
-type ReadError = Control.ControlError | UnreadableAnswer;
+type ReadError = Control.ControlError;
 
 type TransferError = TransferRefused | ResolveError | ReadError;
 
@@ -429,12 +317,12 @@ export const caveatsOf = (result: TransferResult): ReadonlyArray<string> => [
         "the uncommitted changes did not apply on the copy, so they exist only on the source",
       ]
     : []),
-  ...(result.files !== undefined && result.files.error !== ""
-    ? [`the ignored files did not all cross: ${result.files.error}`]
+  ...((result.files?.error ?? "") !== ""
+    ? [`the ignored files did not all cross: ${result.files?.error}`]
     : []),
   ...(result.source !== undefined && !result.source.done
     ? [
-        `the source was not ${sourceFateDone(result.source.fate)}: ${result.source.error}`,
+        `the source was not ${sourceFateDone(result.source.fate)}: ${result.source.error ?? ""}`,
       ]
     : []),
 ];
@@ -470,40 +358,16 @@ const STEP_LABELS: ReadonlyMap<string, string> = new Map([
 ]);
 
 // A step's line: its label, and the create phase while one runs.
-const stepLine = (payload: unknown): string | undefined => {
-  const decoded = Schema.decodeUnknownOption(ProgressSchema)(
-    withoutNulls(payload),
-  );
-  if (Option.isNone(decoded)) return undefined;
-  const { step, createPhase } = decoded.value;
+const stepLine = ({ step, createPhase }: SyncPullProgress): string => {
   const label = STEP_LABELS.get(step) ?? step;
-  return createPhase !== "" && createPhase !== "idle"
-    ? `${label} (${createPhase})`
-    : label;
+  return createPhase === undefined ? label : `${label} (${createPhase})`;
 };
 
-const isDocument = (
-  value: unknown,
-): value is Readonly<Record<string, unknown>> =>
-  Predicate.isObject(value) && !Array.isArray(value);
-
-// Go's decode reads an explicit null as absent, and a null answer as an
-// empty one.
-const withoutNulls = (value: unknown): unknown =>
-  Array.isArray(value)
-    ? value.map(withoutNulls)
-    : isDocument(value)
-      ? Object.fromEntries(
-          Object.entries(value)
-            .filter(([, field]) => field !== null)
-            .map(([key, field]) => [key, withoutNulls(field)]),
-        )
-      : value;
-
-// The app's own document, whole, with the fields beside it. The app
-// sends what the contracts type, and a field read here was checked.
-const appDocument = <T>(raw: unknown): Ok<T> =>
-  ({ ...(isDocument(raw) ? raw : {}), ok: true }) as Ok<T>;
+// The app's own document, whole, with the fields beside it.
+const appDocument = <T extends object>(answer: T): Ok<T> => ({
+  ...answer,
+  ok: true,
+});
 
 // --- the service ----------------------------------------------------------
 
@@ -512,22 +376,13 @@ const make = Effect.gen(function* () {
   const worktrees = yield* Worktrees.Worktrees;
   const { binaryName: binary } = yield* Paths.Paths;
 
-  // A call, its answer decoded into the slice the verb reads.
-  const invoke = <S extends Schema.Decoder<unknown>>(
-    schema: S,
+  // A call's answer as the contracts type it: the loopback's RpcClient
+  // decoded it against LoopbackGroup before Control handed it on.
+  const invoke = <T>(
     channel: string,
     input: unknown,
     onPush?: (pushed: string, payload: unknown) => Effect.Effect<void>,
-  ) =>
-    Effect.gen(function* () {
-      const raw = yield* control.call(channel, input, onPush);
-      const decoded = yield* Schema.decodeUnknownEffect(schema)(
-        raw === null ? {} : withoutNulls(raw),
-      ).pipe(
-        Effect.mapError((cause) => new UnreadableAnswer({ channel, cause })),
-      );
-      return { raw, decoded };
-    });
+  ) => control.call(channel, input, onPush) as Effect.Effect<T, ReadError>;
 
   // A blank device is refused, not read as none: an unset shell
   // variable in `--from "$DEVICE"` would otherwise read as no direction,
@@ -547,13 +402,12 @@ const make = Effect.gen(function* () {
     let last = "";
     return (channel: string, payload: unknown) => {
       if (channel !== "sync:pullProgress") return Effect.void;
-      const line = stepLine(payload);
-      const fresh = line !== undefined && line !== last;
+      const pushed = payload as SyncPullProgress;
+      const line = stepLine(pushed);
+      const fresh = line !== last;
       if (fresh) last = line;
       return onProgress({
-        document: isDocument(payload)
-          ? ({ ...payload, event: "progress" } as ProgressDocument)
-          : undefined,
+        document: { ...pushed, event: "progress" },
         line: fresh ? line : undefined,
       });
     };
@@ -565,19 +419,15 @@ const make = Effect.gen(function* () {
     direction: { readonly mirror: boolean; readonly sent: boolean },
     onProgress: OnProgress,
   ) {
-    const { raw, decoded } = yield* invoke(
-      TransferResultSchema,
+    const result = yield* invoke<ControlTransferResult>(
       channel,
       input,
       progressOf(onProgress),
     );
     return {
-      document: {
-        ...appDocument<ControlTransferResult>(raw),
-        caveats: caveatsOf(decoded),
-      },
-      headline: headlineOf(decoded, direction),
-      result: decoded,
+      document: { ...appDocument(result), caveats: caveatsOf(result) },
+      headline: headlineOf(result, direction),
+      result,
     };
   });
 
@@ -685,15 +535,11 @@ const make = Effect.gen(function* () {
     options: { readonly force: boolean },
   ) {
     const located = yield* worktrees.resolve(here, target);
-    const { raw, decoded } = yield* invoke(
-      MirrorStopSchema,
-      "control:mirrorStop",
-      {
-        projectId: located.project.id,
-        worktreeId: located.worktree.id,
-        ...(options.force ? { force: true } : {}),
-      },
-    ).pipe(
+    const stopped = yield* invoke<MirrorStop>("control:mirrorStop", {
+      projectId: located.project.id,
+      worktreeId: located.worktree.id,
+      ...(options.force ? { force: true } : {}),
+    }).pipe(
       Effect.catchTags({
         ControlRefused: (error) =>
           error.code === "stop-unconfirmed"
@@ -704,15 +550,16 @@ const make = Effect.gen(function* () {
     // The mirror stopped either way. A copy that stayed is the caveat.
     return {
       document: {
-        ...appDocument<MirrorStop>(raw),
-        caveats: decoded.copyStayed === "" ? [] : [decoded.copyStayed],
+        ...appDocument(stopped),
+        caveats:
+          (stopped.copyStayed ?? "") === "" ? [] : [stopped.copyStayed ?? ""],
       },
       worktree: located.worktree,
     };
   });
 
-  const mirrors = invoke(MirrorsSchema, "control:mirrors", undefined).pipe(
-    Effect.map(({ raw }) => appDocument<MirrorList>(raw)),
+  const mirrors = invoke<MirrorList>("control:mirrors", undefined).pipe(
+    Effect.map(appDocument),
     Effect.withSpan("Transfer.mirrors"),
   );
 
@@ -727,8 +574,7 @@ const make = Effect.gen(function* () {
     const input = scoped
       ? { projectId: (yield* worktrees.resolveProjectRef(here, ref)).id }
       : {};
-    const { raw } = yield* invoke(DevicesSchema, "control:devices", input);
-    return appDocument<DeviceList>(raw);
+    return appDocument(yield* invoke<DeviceList>("control:devices", input));
   });
 
   const peerWorktrees = Effect.fn("Transfer.peerWorktrees")(function* (
@@ -740,23 +586,19 @@ const make = Effect.gen(function* () {
     yield* checkDeviceFlags({ from: ref.from });
     const project = yield* worktrees.resolveProjectRef(here, ref);
     const from = ref.from ?? "";
-    const { decoded } = yield* invoke(
-      PeerWorktreesSchema,
+    const listed = yield* invoke<PeerWorktreeList>(
       "control:peerWorktrees",
       from === ""
         ? { projectId: project.id }
         : { projectId: project.id, device: from },
     );
     return {
-      document: decoded.worktrees.map(
-        ({ device, worktree }) =>
-          ({
-            ...(isDocument(worktree) ? worktree : {}),
-            device,
-          }) as PeerWorktrees["document"][number],
-      ),
+      document: listed.worktrees.map(({ device, worktree }) => ({
+        ...worktree,
+        device,
+      })),
       project,
-      unreachable: decoded.unreachable,
+      unreachable: listed.unreachable,
     };
   });
 

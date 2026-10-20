@@ -1,8 +1,7 @@
-// JSON from another program (gh, the agent hooks, the app's control
-// answers) read as Go's encoding/json read it into a struct: a field
-// that is absent or null takes its zero value, and a key nothing models
-// is dropped. A field of the wrong type fails the document, as it failed
-// Go's.
+// JSON from another program (gh) read as Go's encoding/json read it
+// into a struct: a field that is absent or null takes its zero value,
+// and a key nothing models is dropped. A field of the wrong type fails
+// the document, as it failed Go's.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";

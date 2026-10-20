@@ -130,9 +130,10 @@ export type ControlError =
 export class Control extends Context.Service<
   Control,
   {
-    // One call over a fresh connection, answered with the result as the
-    // app sent it. `onPush` sees each progress push the call streams to
-    // its caller before its answer. An undefined input sends none.
+    // One call over a fresh connection, answered with the result the
+    // RpcClient decoded against LoopbackGroup's schema. `onPush` sees
+    // each progress push the call streams to its caller before its
+    // answer. An undefined input sends none.
     readonly call: (
       channel: string,
       input: unknown,
