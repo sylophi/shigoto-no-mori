@@ -564,11 +564,13 @@ async function updateInstalled(
   const { url, server } = await serveRelease(bundle, next, identity, root);
   // Once quit here, the app is owed a start on the real feed.
   let owed = false;
-  const forgetOwed = onRunEnd(() =>
-    console.error(
-      `the installed app may be on a stand-in release list that is gone: quit ${installed} and open it again`,
-    ),
-  );
+  const forgetOwed = onRunEnd(() => {
+    if (owed) {
+      console.error(
+        `the installed app may be on a stand-in release list that is gone: quit ${installed} and open it again`,
+      );
+    }
+  });
   try {
     // Quit as the menu's Quit does (a busy app asks first), and started
     // again on the local release list.
@@ -576,11 +578,11 @@ async function updateInstalled(
       "-e",
       `tell application id "${bundleIdOf(installed)}" to quit`,
     ]);
-    owed = true;
     const quitting = before.pid;
     if (!(await until(() => !pidAlive(quitting), STAGE_WITHIN_MS))) {
       fail("the installed app didn't quit");
     }
+    owed = true;
     execFileSync("open", [
       "-a",
       installed,
@@ -645,7 +647,8 @@ async function reopenOnRealFeed(installed: string, dataDir: string) {
         "-e",
         `tell application id "${bundleIdOf(installed)}" to quit`,
       ]);
-      if (!(await until(() => !pidAlive(running), QUIT_WITHIN_MS))) {
+      // A busy app asks first.
+      if (!(await until(() => !pidAlive(running), STAGE_WITHIN_MS))) {
         console.error(`the installed app didn't quit: ${byHand}`);
         return;
       }
@@ -694,6 +697,8 @@ async function serve(port: string) {
   const stopped = new Promise<void>((resolve) =>
     child.once("exit", () => resolve()),
   );
+  // A signal ends the process before the removal below.
+  onRunEnd(() => rmSync(root, { recursive: true, force: true }));
   console.log(`serving on 127.0.0.1:${port}, the data folder ${dataDir}`);
   await stopped;
   if (child.pid !== undefined) await stop(child.pid, () => exited);
