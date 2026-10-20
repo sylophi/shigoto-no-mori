@@ -57,6 +57,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isolateGit } from "../../gitIsolation.ts";
+import { endsWithRun, onRunEnd, own } from "../../testProcesses.mts";
 import { ownTestTemp } from "../../testTemp.mts";
 
 const OPEN_WITHIN_MS = 60_000;
@@ -92,9 +93,24 @@ const bundle: string = argument;
 // repository and this machine's config (../../gitIsolation.ts).
 ownTestTemp("smoke");
 isolateGit();
+// A signal, a crash or a failure ends every app the smoke started, those
+// the installer opened through LaunchServices too (`own`), where only
+// the `finally` blocks did (../../testProcesses.mts).
+endsWithRun();
 const appName = basename(bundle, ".app");
 const executableIn = (app: string) => join(app, "Contents", "MacOS", appName);
 const logs = join(homedir(), "Library", "Logs", appName);
+
+const sizeOf = (path: string) => (existsSync(path) ? statSync(path).size : 0);
+// Where each log stood as the smoke started: a failure shows what this
+// run added, not another run's lines (the installed app's, on
+// --update-installed).
+const logsAtStart = new Map(
+  ["main.log", "host-trace.log"].map((file) => {
+    const path = join(logs, file);
+    return [path, sizeOf(path)];
+  }),
+);
 
 async function until(done: () => boolean, ms: number): Promise<boolean> {
   const deadline = Date.now() + ms;
@@ -107,15 +123,19 @@ async function until(done: () => boolean, ms: number): Promise<boolean> {
 }
 
 function printLogs(dataDir?: string): void {
-  const files = ["main.log", "host-trace.log"].map((file) => join(logs, file));
+  const files = [...logsAtStart.keys()];
   if (dataDir !== undefined) {
     files.push(join(dataDir, "updater.json"));
     files.push(join(dataDir, "updates", "install.log"));
   }
   for (const path of files) {
     if (!existsSync(path)) continue;
-    console.log(`--- ${path}`);
-    console.log(readFileSync(path, "utf8").split("\n").slice(-40).join("\n"));
+    const text = readFileSync(path);
+    // A log rotated since is read whole.
+    const from = logsAtStart.get(path) ?? 0;
+    const added = text.subarray(from <= text.length ? from : 0).toString();
+    console.log(`--- ${path}${logsAtStart.has(path) ? " (this run's)" : ""}`);
+    console.log(added.split("\n").slice(-40).join("\n"));
   }
 }
 
@@ -177,6 +197,12 @@ async function launch(label: string, prepare: (dataDir: string) => void) {
 }
 
 const plist = (app: string) => join(app, "Contents", "Info.plist");
+const bundleIdOf = (app: string) =>
+  execFileSync(
+    "plutil",
+    ["-extract", "CFBundleIdentifier", "raw", "-o", "-", plist(app)],
+    { encoding: "utf8" },
+  ).trim();
 const versionOf = (app: string) =>
   execFileSync(
     "plutil",
@@ -325,6 +351,8 @@ async function update(identity: string) {
   // The apps the installer opened, through LaunchServices: no children
   // of ours, found by their executable.
   const opened = new Set<number>();
+  const noteOpened = (pid: number) => opened.add(own(pid));
+  const forgetChmod = onRunEnd(() => chmodSync(installedDir, 0o755));
   const fail: (message: string) => never = (message) => {
     printLogs(dataDir);
     throw new Error(`the update: ${message}`);
@@ -380,7 +408,7 @@ async function update(identity: string) {
       return status !== null && status.pid !== child.pid;
     }, RESTART_WITHIN_MS);
     const restored = statusIn(dataDir);
-    if (restored !== null) opened.add(restored.pid);
+    if (restored !== null) noteOpened(restored.pid);
     chmodSync(installedDir, 0o755);
     if (!back)
       fail("the installer didn't bring the app back after its swap failed");
@@ -411,8 +439,11 @@ async function update(identity: string) {
       },
       stdio: "inherit",
     });
-    const pid = again.pid ?? 0;
-    opened.add(pid);
+    // No pid is a spawn that failed: none to wait on, and stopping pid 0
+    // would signal the smoke's own group.
+    const { pid } = again;
+    if (pid === undefined) fail("the app didn't start again");
+    noteOpened(pid);
     await until(() => {
       const status = statusIn(dataDir);
       return (
@@ -439,7 +470,7 @@ async function update(identity: string) {
     );
     const relaunched = runningFrom(executableIn(installed));
     if (relaunched === null) fail("the installer didn't open the app again");
-    opened.add(relaunched);
+    noteOpened(relaunched);
     if (versionOf(installed) !== next) {
       fail(`the app came back as ${versionOf(installed)}, not ${next}`);
     }
@@ -464,6 +495,7 @@ async function update(identity: string) {
       `the update: ${version} swapped for ${next} and opened again (pid ${relaunched})`,
     );
   } finally {
+    forgetChmod();
     chmodSync(installedDir, 0o755);
     if (!exited && child.pid !== undefined) await stop(child.pid, () => exited);
     await Promise.all(
@@ -490,8 +522,9 @@ function runningFrom(executable: string): number | null {
 // `bundle` through Settings' button and comes back on it, signed in. The
 // candidate is built as the next version up from the installed one, so
 // the release cut after it is still an update, and offered from a local
-// release list the app is started on. The relaunch is on the real feed
-// again.
+// release list the app is started on. The installer reopens it on that
+// list too (updater/methods.ts carries the stand-ins on), so however the
+// smoke ends, it quits the app and opens it again on the real feed.
 async function updateInstalled(
   identity: string,
   installed: string,
@@ -529,18 +562,21 @@ async function updateInstalled(
   if (!signedIn()) fail("the installed app isn't signed in");
   const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-candidate-")));
   const { url, server } = await serveRelease(bundle, next, identity, root);
+  // Once quit here, the app is owed a start on the real feed.
+  let owed = false;
+  const forgetOwed = onRunEnd(() =>
+    console.error(
+      `the installed app may be on a stand-in release list that is gone: quit ${installed} and open it again`,
+    ),
+  );
   try {
     // Quit as the menu's Quit does (a busy app asks first), and started
     // again on the local release list.
-    const bundleId = execFileSync(
-      "plutil",
-      ["-extract", "CFBundleIdentifier", "raw", "-o", "-", plist(installed)],
-      { encoding: "utf8" },
-    ).trim();
     execFileSync("osascript", [
       "-e",
-      `tell application id "${bundleId}" to quit`,
+      `tell application id "${bundleIdOf(installed)}" to quit`,
     ]);
+    owed = true;
     const quitting = before.pid;
     if (!(await until(() => !pidAlive(quitting), STAGE_WITHIN_MS))) {
       fail("the installed app didn't quit");
@@ -593,6 +629,31 @@ async function updateInstalled(
   } finally {
     server.close();
     rmSync(root, { recursive: true, force: true });
+    if (owed) await reopenOnRealFeed(installed, dataDir);
+    forgetOwed();
+  }
+}
+
+// Quit as the menu's Quit does, and opened with no stand-ins: launchd's
+// environment has none.
+async function reopenOnRealFeed(installed: string, dataDir: string) {
+  const byHand = `quit ${installed} and open it again, so it checks the real feed`;
+  const running = statusIn(dataDir)?.pid;
+  try {
+    if (running !== undefined && pidAlive(running)) {
+      execFileSync("osascript", [
+        "-e",
+        `tell application id "${bundleIdOf(installed)}" to quit`,
+      ]);
+      if (!(await until(() => !pidAlive(running), QUIT_WITHIN_MS))) {
+        console.error(`the installed app didn't quit: ${byHand}`);
+        return;
+      }
+    }
+    execFileSync("open", ["-a", installed]);
+    console.log("the installed app: opened again on the real feed");
+  } catch (error) {
+    console.error(`${String(error)}: ${byHand}`);
   }
 }
 
@@ -629,11 +690,10 @@ async function serve(port: string) {
   child.once("exit", () => {
     exited = true;
   });
-  const stopped = new Promise<void>((resolve) => {
-    process.once("SIGINT", resolve);
-    process.once("SIGTERM", resolve);
-    child.once("exit", () => resolve());
-  });
+  // Until stopped: a signal ends the app with the run (endsWithRun).
+  const stopped = new Promise<void>((resolve) =>
+    child.once("exit", () => resolve()),
+  );
   console.log(`serving on 127.0.0.1:${port}, the data folder ${dataDir}`);
   await stopped;
   if (child.pid !== undefined) await stop(child.pid, () => exited);
