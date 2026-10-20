@@ -208,12 +208,16 @@ function askListAgain(): void {
 
 // The list as the shared cache holds it, refetching only when it is
 // missing or invalidated (staleTime Infinity says so, and fetchQuery
-// honours an invalidation regardless of it).
+// honours an invalidation regardless of it). Asked once: a pass that
+// fails has its fallback at once, and the next hub event or list
+// landing asks again, where the page's retries would hold every pass
+// (and a window loaded with the hub away, its peers) for seconds.
 function fetchDeviceList(): Promise<readonly DeviceInfo[]> {
   return throughCancel(() =>
     boundClient().fetchQuery({
       ...accountDevicesQueryOptions(pageApi()),
       staleTime: Infinity,
+      retry: false,
     }),
   );
 }

@@ -512,6 +512,9 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
 
 it("remote devices: a window loaded while the hub is away lists the peers the shell last had, one with a live session as connected", async () => {
   const { registry, queryClient } = page();
+  // The app's client retries a failed read (1 s, 2 s, 4 s), which the
+  // pass must not wait out.
+  queryClient.setDefaultOptions({ queries: { retry: 3 } });
   // Nothing cached: the window's first read of the list fails.
   const account: Pick<
     RendererApi["account"],
