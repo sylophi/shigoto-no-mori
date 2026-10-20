@@ -18,6 +18,7 @@ import assert from "node:assert/strict";
 import { it } from "vitest";
 import { hubContract } from "@shigomori/contracts/modules/hub";
 import { makeConnectInfo } from "@host/direct/connectInfo";
+import { getWebDeviceId } from "../web/account/deviceId.ts";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
 import { LISTENER, startDirectListener } from "./lib/directBoot.mts";
 import { bootDevice } from "./lib/hubBoot.mts";
@@ -81,6 +82,7 @@ async function boot() {
   const tab = (): WebBridge => {
     const bridge = createWebBridge({
       localStorage: storage,
+      deviceId: getWebDeviceId(storage),
       env: {
         SM_DEVICE_HUB_URL: stub.hubUrl,
         SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_test_check",

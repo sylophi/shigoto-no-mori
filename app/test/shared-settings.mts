@@ -60,6 +60,7 @@ import { onSandboxEngine } from "./lib/sandboxEngine.mts";
 import * as SharedSettings from "@shigomori/engine/SharedSettings";
 import * as Effect from "effect/Effect";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
+import { getWebDeviceId } from "../web/account/deviceId.ts";
 import { createWebBridge, type WebBridge } from "../web/ipc/register.ts";
 import { it } from "vitest";
 import { memoryStorage, tempDir } from "./lib/checkKit.mts";
@@ -71,8 +72,10 @@ const KIWI = "00000000-0000-4000-8000-00000000000a";
 const LYCHEE = "00000000-0000-4000-8000-00000000000b";
 
 function webBridge() {
+  const localStorage = memoryStorage();
   return createWebBridge({
-    localStorage: memoryStorage(),
+    localStorage,
+    deviceId: getWebDeviceId(localStorage),
     env: {},
     userAgent: "check",
     openExternal: () => {},
