@@ -2,15 +2,17 @@
 // under plain node: the launchd base, the sentinel parse, the merge
 // order, and real zsh runs from a throwaway ZDOTDIR for the capture
 // itself: its banner and logout output, a startup file that leaves a
-// child behind holding stdout, and its SIGKILL timeout. The Electron
+// child behind holding stdout, a shell slow at login, and its SIGKILL
+// timeout. The Electron
 // side (when main/index.ts starts and awaits it) is a human-verify
 // item: launch the packaged app from a terminal with a marker variable
 // exported, run a script, and the marker must not be in its env.
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 import {
+  CAPTURE_TIMEOUT_MS,
   captureShellEnv,
   LAUNCHD_PATH,
   launchBaseEnv,
@@ -21,8 +23,11 @@ import {
 } from "../shared/shellEnv.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 import { afterAll, beforeAll, it } from "vitest";
-import { makeTracker, tempDir } from "./lib/checkKit.mts";
+import { makeTracker, tempDir, waitFor } from "./lib/checkKit.mts";
 
 const { track, teardown } = makeTracker();
 
@@ -243,6 +248,63 @@ if (existsSync(ZSH)) {
       Date.now() - started < 1500,
       "the timeout waited out the sleep instead of killing the shell",
     );
+  });
+
+  // A shell slow at login, on the test clock: its .zshrc says it has
+  // started, then waits for `go` (for at most 30 s of real time, so a
+  // failed run leaves nothing behind). The deadline is the default one.
+  const slow = (
+    steps: (
+      fiber: Fiber.Fiber<Record<string, string> | null>,
+    ) => Effect.Effect<Record<string, string> | null>,
+  ) => {
+    rc([
+      `: > "$ZDOTDIR/started"`,
+      "i=0",
+      `while [[ ! -e "$ZDOTDIR/go" ]] && (( i++ < 600 )); do sleep 0.05; done`,
+      "export SM_SHELL_ENV_TEST_EXPORT=slow",
+    ]);
+    for (const name of ["started", "go"]) {
+      rmSync(join(zdotdir, name), { force: true });
+    }
+    return Effect.runPromise(
+      Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(captureShellEnv(ZSH, base));
+        yield* Effect.promise(() =>
+          waitFor(() => existsSync(join(zdotdir, "started")), "the shell"),
+        );
+        return yield* steps(fiber).pipe(
+          Effect.ensuring(Fiber.interrupt(fiber)),
+        );
+      }).pipe(
+        Effect.provide(Layer.merge(TestClock.layer(), NodeServices.layer)),
+      ),
+    );
+  };
+
+  it("a shell slower than 5 s at login is still captured", async () => {
+    const captured = await slow((fiber) =>
+      Effect.gen(function* () {
+        yield* TestClock.adjust("6 seconds");
+        writeFileSync(join(zdotdir, "go"), "");
+        return yield* Fiber.join(fiber);
+      }),
+    );
+    assert.equal(captured?.["SM_SHELL_ENV_TEST_EXPORT"], "slow");
+  });
+
+  it("a shell that never answers gives up at the deadline", async () => {
+    const hung = await slow((fiber) =>
+      Effect.gen(function* () {
+        yield* TestClock.adjust(CAPTURE_TIMEOUT_MS - 1);
+        // Real time, which the test clock doesn't count.
+        yield* Effect.promise(() => new Promise((ok) => setTimeout(ok, 300)));
+        assert.equal(fiber.pollUnsafe(), undefined, "it gave up early");
+        yield* TestClock.adjust(1);
+        return yield* Fiber.join(fiber);
+      }),
+    );
+    assert.equal(hung, null);
   });
 } else {
   console.log("(no /bin/zsh here, the live capture checks were skipped)");
