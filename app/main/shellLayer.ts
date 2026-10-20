@@ -17,17 +17,14 @@ import { shellLinkLayer } from "./ipc/register";
 // direct session, so the dead ones are redialed within seconds rather
 // than read as connected until the next heartbeat.
 const wake = () => {
-  HostProcess.noteWake();
   void Effect.runFork(Effect.ignore(HostProcess.host().wake()));
 };
 const resumeProbe = lifetime(
   "the resume probe",
   Effect.sync(() => {
-    powerMonitor.on("suspend", HostProcess.noteSleep);
     powerMonitor.on("resume", wake);
   }),
   () => {
-    powerMonitor.off("suspend", HostProcess.noteSleep);
     powerMonitor.off("resume", wake);
   },
 );
