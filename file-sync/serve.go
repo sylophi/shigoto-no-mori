@@ -234,7 +234,7 @@ func (e guardedEndpoint) Transition(ctx context.Context, transitions []*core.Cha
 	for t, change := range transitions {
 		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) || linksIntoGit(change.Path, change.New) {
 			results[t] = change.Old
-			problems = append(problems, &core.Problem{Path: change.Path, Error: "in or linking into .git, which is not synchronized"})
+			problems = append(problems, &core.Problem{Path: change.Path, Error: "touches .git, which is not synchronized"})
 		} else {
 			allowed = append(allowed, change)
 			allowedAt = append(allowedAt, t)
