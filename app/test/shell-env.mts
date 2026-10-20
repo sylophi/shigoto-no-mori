@@ -3,10 +3,10 @@
 // order, and real zsh runs from a throwaway ZDOTDIR for the capture
 // itself: its banner and logout output, a startup file that leaves a
 // child behind holding stdout, a shell slow at login, and its SIGKILL
-// timeout. The Electron
-// side (when main/index.ts starts and awaits it) is a human-verify
-// item: launch the packaged app from a terminal with a marker variable
-// exported, run a script, and the marker must not be in its env.
+// timeout. The Electron side (when main/index.ts starts and awaits it)
+// is a human-verify item: launch the packaged app from a terminal with
+// a marker variable exported, run a script, and the marker must not be
+// in its env.
 import assert from "node:assert/strict";
 import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { userInfo } from "node:os";
@@ -251,8 +251,9 @@ if (existsSync(ZSH)) {
   });
 
   // A shell slow at login, on the test clock: its .zshrc says it has
-  // started, then waits for `go` (for at most 30 s of real time, so a
-  // failed run leaves nothing behind). The deadline is the default one.
+  // started, then waits for `go`, for about 30 s of real time at most,
+  // so a runner killed mid-proof leaves nothing for long. The deadline
+  // is the default one.
   const slow = (
     steps: (
       fiber: Fiber.Fiber<Record<string, string> | null>,
