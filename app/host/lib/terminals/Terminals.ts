@@ -314,12 +314,14 @@ const make = <R, E>(options: {
       ),
     );
 
-    const find = (terminalId: string) => {
+    // A listed terminal, a dead one included (`live` leaves it out).
+    const listedSession = (terminalId: string, live = false) => {
       const session = sessions.get(terminalId);
-      return session === undefined || Option.isSome(session.exited)
+      return session === undefined || (live && Option.isSome(session.exited))
         ? Effect.fail(new UnknownTerminalError({ terminalId }))
         : Effect.succeed(session);
     };
+    const find = (terminalId: string) => listedSession(terminalId, true);
 
     // The folder a shell is in now, read off the process.
     const folderOf = (session: Session) =>
@@ -410,8 +412,16 @@ const make = <R, E>(options: {
               kind: "exit",
               code: exit.value,
             });
-            // Its scope closes from outside it, since this fiber is in it.
-            yield* Effect.forkIn(end(session), layerScope);
+            // A shell that exited cleanly goes with its tab. One that
+            // failed or was killed stays listed, dead, its screen kept to
+            // be read, until it is closed. Its scope closes from outside
+            // it, since this fiber is in it.
+            yield* Effect.forkIn(
+              exit.value === 0
+                ? end(session)
+                : Scope.close(session.scope, Exit.void),
+              layerScope,
+            );
             return;
           }
         }
@@ -559,10 +569,12 @@ const make = <R, E>(options: {
         pty.onError((error) => {
           log.warn(`[terminals] a terminal's PTY failed: ${error.message}`);
         });
-        // A shell that dies of a signal has no code to tell.
+        // A shell that dies of a signal reads 128 + its number, as a
+        // shell tells a child's.
         pty.onExit(({ exitCode, signal }) => {
           Queue.offerUnsafe(reads, {
-            exit: signal !== undefined && signal !== 0 ? null : exitCode,
+            exit:
+              signal !== undefined && signal !== 0 ? 128 + signal : exitCode,
           });
         });
         yield* Effect.forkIn(pump(session, reads, backlog), scope);
@@ -652,32 +664,43 @@ const make = <R, E>(options: {
       list: SubscriptionRef.changes(listed),
       open,
       close: Effect.fn("Terminals.close")(function* (terminalId: string) {
-        const session = yield* find(terminalId);
+        const session = yield* listedSession(terminalId);
         session.forget = true;
         yield* end(session);
       }),
       attach: (terminalId, after) =>
         Stream.unwrap(
           Effect.gen(function* () {
-            const session = yield* find(terminalId);
-            const live = yield* PubSub.subscribe(session.events);
-            // A chunk sent between the subscription and this read is in
-            // both, and the seq tells which.
-            const past = session.history.since(
-              after?.incarnation === session.incarnation
-                ? after.seq
-                : undefined,
-            );
-            const head: TerminalEvent[] = [
-              { kind: "history", incarnation: session.incarnation, ...past },
-              { kind: "size", ...session.size },
-            ];
+            const session = yield* listedSession(terminalId);
+            const headOf = () => {
+              const past = session.history.since(
+                after?.incarnation === session.incarnation
+                  ? after.seq
+                  : undefined,
+              );
+              return {
+                past,
+                head: [
+                  {
+                    kind: "history",
+                    incarnation: session.incarnation,
+                    ...past,
+                  },
+                  { kind: "size", ...session.size },
+                ] satisfies TerminalEvent[],
+              };
+            };
+            // A dead one's events went with its scope.
             if (Option.isSome(session.exited)) {
               return Stream.fromIterable([
-                ...head,
+                ...headOf().head,
                 { kind: "exit", code: session.exited.value },
               ] satisfies TerminalEvent[]);
             }
+            const live = yield* PubSub.subscribe(session.events);
+            // A chunk sent between the subscription and this read is in
+            // both, and the seq tells which.
+            const { past, head } = headOf();
             return Stream.fromIterable(head).pipe(
               Stream.concat(
                 Stream.fromSubscription(live).pipe(

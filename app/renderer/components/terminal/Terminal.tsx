@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { exitSentinel } from "@/hooks/scripts/scriptRuns";
 import { attachTerminal } from "@/lib/terminalFeed";
 import {
   TerminalView,
@@ -15,8 +16,13 @@ export function Terminal({ terminalId }: { terminalId: string }) {
   const [ended, setEnded] = useState(false);
   // Kept the same while the device and the terminal are (React
   // Compiler), so the view attaches once.
+  // A shell that failed or was killed stays, its end marked as a
+  // script's is. One closed or gone (null) leaves with its tab.
   const feed: TerminalFeed = (screen) =>
-    attachTerminal(api, terminalId, screen, () => setEnded(true));
+    attachTerminal(api, terminalId, screen, (code) => {
+      if (code !== null && code !== 0) screen.write(exitSentinel(code));
+      setEnded(true);
+    });
   return (
     <TerminalView
       feed={feed}
