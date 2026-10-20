@@ -1,6 +1,12 @@
 // Each crosses every wire as its tag and fields and decodes back into
 // the same class, so callers tell them apart by tag, never by text.
 import * as Schema from "effect/Schema";
+import {
+  HubCredentialRejectedError,
+  HubDeviceRevokedError,
+  HubLoginRejectedError,
+  HubUpdateRequiredError,
+} from "./hubApi.ts";
 
 export function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -230,6 +236,19 @@ export class HubRateLimitedError extends Schema.TaggedError<HubRateLimitedError>
 
 export const isHubRateLimitedError = Schema.is(HubRateLimitedError);
 
+// The device hub could not be reached at all: offline, a DNS or TLS
+// failure, or a browser hiding a failed response behind CORS.
+export class HubUnreachableError extends Schema.TaggedError<HubUnreachableError>()(
+  "HubUnreachableError",
+  {},
+) {
+  override get message(): string {
+    return "the device hub could not be reached";
+  }
+}
+
+export const isHubUnreachableError = Schema.is(HubUnreachableError);
+
 // gh missing or signed out on the host: every ask answers the same until
 // someone installs it or signs in, so nothing asks again on its own.
 export class GhUnavailableError extends Schema.TaggedError<GhUnavailableError>()(
@@ -301,6 +320,13 @@ export const ContractErrorSchema = Schema.Union([
   LinkUnauthenticatedError,
   ChannelRefusedError,
   HubRateLimitedError,
+  HubUnreachableError,
+  // The hub's refusals of this device, which a window words apart
+  // (isHubRefusal).
+  HubLoginRejectedError,
+  HubCredentialRejectedError,
+  HubDeviceRevokedError,
+  HubUpdateRequiredError,
   GhUnavailableError,
   ForwardConnectFailedError,
   GitOperationInProgressError,

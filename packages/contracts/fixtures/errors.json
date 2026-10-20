@@ -55,6 +55,17 @@
         "retryAfterSeconds": 60
       },
       {
+        "_tag": "HubUnreachableError"
+      },
+      {
+        "_tag": "HubCredentialRejectedError"
+      },
+      {
+        "_tag": "HubUpdateRequiredError",
+        "floor": 16,
+        "error": "Update Shigoto no Mori to keep using the device hub."
+      },
+      {
         "_tag": "GhUnavailableError",
         "reason": "gh-signed-out"
       },
