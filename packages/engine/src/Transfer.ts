@@ -13,10 +13,10 @@
 // qualifies when none is named) and the folder a clone goes in, so a
 // name is passed through as given. Answers are the documents `sm --json`
 // prints, with the headline a person reads.
+import type { CallsOf, OutputOf } from "@shigomori/contracts/contract";
 import {
-  type ControlDevice,
+  type controlContract,
   ControlLeaveOutSchema,
-  type ControlMirror,
   type ControlPeerWorktree,
   ControlSourceFateSchema,
   type ControlTransferResult,
@@ -139,27 +139,14 @@ export type TransferResult = Pick<
 type NamedDevice = ControlPeerWorktree["device"];
 type SourceOutcome = NonNullable<ControlTransferResult["source"]>;
 
-type MirrorStop = {
-  readonly mirror: ControlMirror;
-  readonly copyStayed?: string;
-};
-
-type MirrorList = {
-  readonly daemon: string;
-  // Empty unless the engine is failing.
-  readonly daemonFailure: string;
-  readonly mirrors: ReadonlyArray<ControlMirror>;
-};
-
-type DeviceList = {
-  readonly thisDevice: NamedDevice;
-  readonly devices: ReadonlyArray<ControlDevice>;
-};
-
-type PeerWorktreeList = {
-  readonly worktrees: ReadonlyArray<ControlPeerWorktree>;
-  readonly unreachable: ReadonlyArray<string>;
-};
+// A control call's answer, as its contract types it.
+type Answer<K extends string> = OutputOf<
+  Extract<CallsOf<typeof controlContract>, { readonly _tag: `control:${K}` }>
+>["Type"];
+type MirrorStop = Answer<"mirrorStop">;
+type MirrorList = Answer<"mirrors">;
+type DeviceList = Answer<"devices">;
+type PeerWorktreeList = Answer<"peerWorktrees">;
 
 // --- what the verbs answer ------------------------------------------------
 
