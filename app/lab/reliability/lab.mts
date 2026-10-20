@@ -690,10 +690,10 @@ export class Lab {
     // would only wait on again; and only once it is up to sign itself
     // out, or its device would stay enrolled with no profile to revoke
     // it from.
-    const hostUp = (this.hostApp?.windows().length ?? 0) > 0;
+    const hostUp = this.hostApp.windows().length > 0;
     if (this.options.revokeHost && !this.options.keep && !hostUp) {
       this.note(
-        `${this.hostApp?.profile ?? "B"} is kept: it never came up to sign itself out`,
+        `${this.hostApp.profile} is kept: it is not up to sign itself out`,
         "warning",
       );
     }
