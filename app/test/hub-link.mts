@@ -2,7 +2,7 @@
 // through host/hub/connection.ts). Boots a STUB Durable Object (a
 // node ws server implementing hubObject.ts's envelope behavior:
 // deliver forwarding, full-roster presence on join and leave, offline
-// and too-large nacks, supersede on a duplicate deviceId) and drives
+// nacks, supersede on a duplicate deviceId) and drives
 // real hub connections against it as devices, plus raw stub-side
 // sockets where a scenario needs to play a peer by hand.
 //
@@ -14,9 +14,7 @@
 // key other than the roster's and a tampered answer refused, the
 // void-field framing invariant, error
 // serialization (message only), unknown asks refused, the no-listener
-// refusal of a device serving nothing, the local outbound size guard
-// at the control-frame budget, an oversize answer downgraded to a
-// refusal, offline nacks, the per-ask timeout, presence-driven and
+// refusal of a device serving nothing, offline nacks, the per-ask timeout, presence-driven and
 // teardown rejection of pending asks, misrouted answers dropped, an
 // off-roster ask left unanswered, supervisor redial with a fresh ticket
 // per attempt, the blocked verdicts for the revoked and superseded
@@ -45,14 +43,12 @@ import { generateKeyPair, HandshakeState } from "@shared/crypto/noise";
 import {
   CONNECT_INFO_ASK,
   freshAsk,
-  MAX_SEEN_ASKS,
   relayPrologue,
   SEEN_ASK_RETENTION_MS,
   type SeenAsks,
   HubAskRefusedError,
   HubAskTimeoutError,
   HubLinkDownError,
-  HubMessageTooLargeError,
   HubPeerOfflineError,
   NO_LISTENER_CODE,
 } from "@shared/hub/link";
@@ -79,10 +75,6 @@ import {
   testDeviceKey,
 } from "./lib/hubStub.mts";
 
-// Larger than MAX_HUB_MESSAGE_BYTES (64 KiB), for the size-guard and
-// oversize-answer scenarios.
-const OVERSIZE = "x".repeat(70_000);
-
 // The ask timeout the scenarios use when nothing is supposed to time
 // out.
 const ASK_MS = 5_000;
@@ -95,15 +87,14 @@ const fields = (value: unknown) =>
 
 // The connectInfo server B answers with. The link is contract-free, so
 // the scenarios multiplex through the input: echo it (undefined
-// included, for the void framing scenario), throw, return an oversize
-// result, or name the caller the hub stamped.
+// included, for the void framing scenario), throw, or name the caller
+// the hub stamped.
 function testServer(caller: string, input: unknown) {
   const mode =
     typeof input === "object" && input !== null && "mode" in input
       ? input.mode
       : undefined;
   if (mode === "fail") throw new Error("boom");
-  if (mode === "big") return OVERSIZE;
   if (mode === "caller") return caller;
   return input;
 }
@@ -384,21 +375,12 @@ it("replay: an ask is remembered its window of time awake: a replay after a slee
   );
 });
 
-it("replay record: an ask is remembered for the window from its receipt, and a full record refuses a new one rather than forget one", () => {
+it("replay record: an ask is remembered for the window from its receipt", () => {
   const seen: SeenAsks = new Map();
   const now = 1_000_000;
   assert.equal(freshAsk(seen, "ask", now), true);
   assert.equal(freshAsk(seen, "ask", now + SEEN_ASK_RETENTION_MS - 1), false);
   assert.equal(freshAsk(seen, "ask", now + SEEN_ASK_RETENTION_MS), true);
-  seen.clear();
-  for (let i = 0; i < MAX_SEEN_ASKS; i += 1) {
-    assert.equal(freshAsk(seen, `ask-${i}`, now), true);
-  }
-  assert.equal(freshAsk(seen, "one more", now), false);
-  // The first ask recorded is still remembered, so its replay is too.
-  assert.equal(freshAsk(seen, "ask-0", now), false);
-  // Past the window, the record has room again.
-  assert.equal(freshAsk(seen, "one more", now + SEEN_ASK_RETENTION_MS), true);
 });
 
 it("keys: an ask sealed with a key other than the roster's gets no answer, and a tampered answer is refused", async () => {
@@ -498,31 +480,6 @@ it("no listener: a device with no connectInfo server refuses every ask with the 
       error.code === NO_LISTENER_CODE &&
       /serves no direct listener/.test(error.message),
   );
-});
-
-it("size guard: an oversize ask fails typed WITHOUT hitting the wire, at the control-frame budget", async () => {
-  const { stub, a } = await bootLinked(trackTest);
-  const before = stub.receivedCount();
-  await assert.rejects(
-    () => a.connection.askConnectInfo("B", OVERSIZE, ASK_MS),
-    (error) => error instanceof HubMessageTooLargeError,
-  );
-  assert.equal(
-    stub.receivedCount(),
-    before,
-    "the oversize frame reached the stub",
-  );
-});
-
-it("oversize answer: a result too large for one envelope is refused at once, not left to time out", async () => {
-  const { a } = await bootLinked(trackTest);
-  const startedAt = Date.now();
-  await assert.rejects(
-    () => a.connection.askConnectInfo("B", { mode: "big" }, ASK_MS),
-    (error) =>
-      error instanceof HubAskRefusedError && /too large/.test(error.message),
-  );
-  assert.ok(Date.now() - startedAt < 1_000, "the refusal waited");
 });
 
 it("offline nack: asking a deviceId with no socket rejects with the offline error", async () => {

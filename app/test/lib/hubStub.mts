@@ -1,7 +1,7 @@
 // The stub Durable Object shared by the hub-transport checks: a node
 // ws server implementing hubObject.ts's envelope behavior (deliver
 // forwarding to every socket of a device, full-roster presence on join
-// and leave, offline and too-large nacks, and supersede: a desktop
+// and leave, offline nacks, and supersede: a desktop
 // device's second socket, or a connection dialing again). Extracted from
 // hub-link.mts so sync-transfer.mts drives the same stub
 // instead of a second copy.
@@ -15,7 +15,6 @@ import {
   HUB_PING,
   encodeRelayFrame,
   HUB_PONG,
-  hubTextWithinLimit,
   type ServerEnvelope,
 } from "@shigomori/contracts/hubProtocol";
 import { sha256 } from "@noble/hashes/sha2.js";
@@ -200,12 +199,6 @@ export function startStubHub(
           return;
         }
         const outbound = deliveredRelay(deviceId, envelope.frame);
-        if (!hubTextWithinLimit(outbound)) {
-          ws.send(
-            encodeEnvelope({ t: "nack", to: envelope.to, reason: "too-large" }),
-          );
-          return;
-        }
         forwarded += 1;
         for (const target of targets) target.send(outbound);
       });

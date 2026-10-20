@@ -911,11 +911,6 @@
         "t": "nack",
         "to": "dev-b",
         "reason": "offline"
-      },
-      {
-        "t": "nack",
-        "to": "dev-b",
-        "reason": "too-large"
       }
     ],
     "rejects": [

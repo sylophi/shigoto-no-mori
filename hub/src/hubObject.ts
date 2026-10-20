@@ -393,13 +393,6 @@ export class DeviceHub extends DurableObject<Env> {
     // The frame is copied verbatim into the outbound envelope. The
     // hub never reads it.
     const outbound = deliveredRelay(from, envelope.frame);
-    if (!hubTextWithinLimit(outbound)) {
-      this.safeSend(
-        ws,
-        encodeEnvelope({ t: "nack", to: envelope.to, reason: "too-large" }),
-      );
-      return;
-    }
     for (const target of targets) this.safeSend(target, outbound);
   }
 
