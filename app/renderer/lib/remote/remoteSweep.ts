@@ -21,10 +21,9 @@ type Deps = {
 
 // The asks and their renewals per device, for as long as `attend(true)`
 // holds. A failed ask (a request that timed out or lost its answer on a
-// session that stayed up) is asked again at the next renewal, still
-// within the lease of the one before. A refusal (commands or sharing
-// off on the peer) is the peer's answer, not a failure: it waits for the
-// next focus or landing.
+// session that stayed up) is asked again at the next renewal. A refusal
+// (commands or sharing off on the peer) is the peer's answer, not a
+// failure: it waits for the next focus or landing.
 export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   // The latest ask per device, from a count that never goes back, so the

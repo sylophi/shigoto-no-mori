@@ -386,7 +386,7 @@ it("renewal: a failed ask while the session stays up is asked again at the next 
         }
         return fail
           ? Promise.reject(new Error("timed out"))
-          : Promise.resolve({ leaseMs: 120_000 });
+          : Promise.resolve({ leaseMs: 60_000 });
       },
       connected: () => true,
     },
@@ -394,22 +394,22 @@ it("renewal: a failed ask while the session stays up is asked again at the next 
   );
   trackTest(() => renewals.stop());
   renewals.landed("B");
-  await vi.advanceTimersByTimeAsync(60_000);
+  await vi.advanceTimersByTimeAsync(30_000);
   assert.deepEqual(asks, [false, true]);
 
   // The next renewal fails: asked again a renewal later, and carrying on.
   fail = true;
-  await vi.advanceTimersByTimeAsync(60_000);
+  await vi.advanceTimersByTimeAsync(30_000);
   fail = false;
-  await vi.advanceTimersByTimeAsync(60_000 - 1);
+  await vi.advanceTimersByTimeAsync(30_000 - 1);
   assert.equal(asks.length, 3, "not before the next renewal");
   await vi.advanceTimersByTimeAsync(1);
-  await vi.advanceTimersByTimeAsync(60_000);
+  await vi.advanceTimersByTimeAsync(30_000);
   assert.deepEqual(asks, [false, true, true, true, true]);
 
   // A refusal is the peer's answer: nothing asks again until a landing.
   refusal = true;
-  await vi.advanceTimersByTimeAsync(60_000);
+  await vi.advanceTimersByTimeAsync(30_000);
   const refused = asks.length;
   await vi.advanceTimersByTimeAsync(10 * 60_000);
   assert.equal(asks.length, refused, "a refusal parks");
@@ -420,7 +420,7 @@ it("renewal: a failed ask while the session stays up is asked again at the next 
 
   // Unfocused, nothing is asked again or renewed.
   fail = true;
-  await vi.advanceTimersByTimeAsync(60_000);
+  await vi.advanceTimersByTimeAsync(30_000);
   renewals.attend(false, []);
   const count = asks.length;
   await vi.advanceTimersByTimeAsync(10 * 60_000);
