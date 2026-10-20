@@ -193,8 +193,8 @@ export async function signOutDevice(deps: {
 // Delivers the revoke a sign-out parked, if any: at boot (both
 // shells) and on an enrollment the hub refused for it. A delivered or
 // refused revoke clears the parking, anything else keeps it for the
-// next try. Never throws: resolves to whether there was one, and
-// whether it was cleared or why not.
+// next try. Resolves to whether there was one, and whether it was
+// cleared or why not; only clearing the parking can throw.
 export async function retryParkedRevoke(deps: {
   config: AccountServiceConfig;
   service: AccountService;

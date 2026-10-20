@@ -299,8 +299,7 @@ export function createAccountStore(opts: {
     clear() {
       const doc = readDoc();
       // The remainder is a nicety, the sign-out is not. A remainder
-      // that cannot be written falls back to removing the document,
-      // which the backing swallows.
+      // that cannot be written falls back to removing the document.
       try {
         if (doc !== null) {
           setSignedOut(
