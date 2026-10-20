@@ -28,10 +28,9 @@
 //     missing engine reads as unavailable,
 //   - the last snapshot stands through a restart, read as stale until
 //     the next run sends its own,
-//   - a create the daemon made but never answered in time, or answered
-//     only after a kill and a restart, is read back as the session it
-//     made, and one it made after the read back found none is ended as
-//     it shows up.
+//   - a create the daemon made but never answered in time, or made
+//     before it exited, is read back as the session it made, and one
+//     it made after the read back found none is ended as it shows up.
 //
 // Run: pnpm test mirror-daemon-lines.
 import assert from "node:assert/strict";
@@ -81,7 +80,6 @@ async function harness() {
   const err = Effect.runSync(Queue.unbounded<Uint8Array>());
   // How often the daemon announced a change.
   const changes = { count: 0 };
-  const kills = { count: 0 };
   // What the next spawns fail with, while set.
   const spawning: {
     refusal?: FileSync.FileSyncUnavailableError | PlatformError.PlatformError;
@@ -115,10 +113,7 @@ async function harness() {
             isRunning: Effect.succeed(true),
             // As SIGKILL does, whatever the child is doing.
             kill: () =>
-              Effect.sync(() => {
-                kills.count += 1;
-                Deferred.doneUnsafe(exit, Effect.succeed(137));
-              }),
+              Effect.sync(() => Deferred.doneUnsafe(exit, Effect.succeed(137))),
             stdin: Sink.drain,
             stdout: Stream.fromQueue(out).pipe(
               Stream.interruptWhen(Deferred.await(exit)),
@@ -192,8 +187,6 @@ async function harness() {
       runtime.runPromise(MirrorDaemon.onDaemon((d) => d.pause(id))),
     resume: (id: string) =>
       runtime.runPromise(MirrorDaemon.onDaemon((d) => d.resume(id))),
-    checkResponsive: () =>
-      runtime.runPromise(MirrorDaemon.onDaemon((d) => d.checkResponsive)),
   };
   await settleTurns();
   const send = async (line: unknown) => {
@@ -227,7 +220,6 @@ async function harness() {
     requests,
     logs,
     exits,
-    kills,
     adjust,
     exit,
   };
@@ -403,43 +395,6 @@ it("a daemon that stops reads failing with why until it is ready, one that can't
   assert.equal(daemon.status(), "unavailable");
 });
 
-it("a daemon that stops answering (a SIGSTOP) is found by its ping, killed and started again once, its waiting request failed as unresponsive", async () => {
-  const { daemon, send, requests, exits, kills, adjust } = await harness();
-  await send({ event: "ready" });
-  // A wake's check of a daemon that answers: its refusal of the ping is
-  // an answer.
-  const answered = daemon.checkResponsive();
-  await adjust(0);
-  const ping = requests.find((request) => request["op"] === "ping");
-  assert.ok(ping !== undefined, "no ping was sent");
-  await send({ id: ping["id"], ok: false, error: 'unknown op "ping"' });
-  await answered;
-  assert.equal(kills.count, 0);
-
-  // Stopped: it reads nothing and answers nothing, and stays "running".
-  const pausing = daemon.pause("s1").then(
-    () => assert.fail("the pause resolved"),
-    (error: unknown) => error,
-  );
-  await adjust(29_000);
-  assert.equal(daemon.status(), "running");
-  assert.equal(kills.count, 0);
-  await adjust(1_000 + 10_000);
-  assert.equal(kills.count, 1, "the silent daemon was not killed");
-  const failed = await pausing;
-  assert.ok(failed instanceof MirrorDaemon.MirrorDaemonError);
-  assert.equal(failed.reason, "unresponsive");
-  assert.equal(daemon.status(), "failing");
-  assert.equal(daemon.failure(), "stopped answering");
-
-  // Started again on the ladder, and one owner: the old child is gone.
-  await adjust(1_000);
-  assert.equal(exits.length, 2);
-  await send({ event: "ready" });
-  assert.equal(daemon.status(), "running");
-  assert.equal(kills.count, 1);
-});
-
 it("the last snapshot stands through a restart, stale until the next run sends its own", async () => {
   const { daemon, send, exit, adjust } = await harness();
   await send({ event: "ready" });
@@ -471,15 +426,6 @@ const lastCreate = (requests: Record<string, unknown>[]) => {
   return { labels: create["labels"] as Record<string, string> };
 };
 
-const answerPing = async (
-  requests: Record<string, unknown>[],
-  send: (line: unknown) => Promise<void>,
-) => {
-  const ping = requests.findLast((request) => request["op"] === "ping");
-  assert.ok(ping !== undefined, "no ping was sent");
-  await send({ id: ping["id"], ok: false, error: 'unknown op "ping"' });
-};
-
 it("a create the daemon made but answered too late is read back as its session", async () => {
   const { daemon, send, requests, adjust } = await harness();
   await send({ event: "ready" });
@@ -490,21 +436,17 @@ it("a create the daemon made but answered too late is read back as its session",
     event: "state",
     sessions: [{ ...session("made"), labels }],
   });
-  await adjust(30_000);
-  await answerPing(requests, send);
-  await adjust(90_000);
+  await adjust(120_000);
   assert.equal(await creating, "made");
 });
 
-it("a create the daemon made before it was killed is read back off its next run", async () => {
-  const { daemon, send, requests, adjust, kills } = await harness();
+it("a create the daemon made before it exited is read back off its next run", async () => {
+  const { daemon, send, requests, adjust, exit } = await harness();
   await send({ event: "ready" });
   const creating = daemon.create();
   await settleTurns();
   const { labels } = lastCreate(requests);
-  // Stopped: the ping goes unanswered, and the daemon is replaced.
-  await adjust(30_000 + 10_000);
-  assert.equal(kills.count, 1);
+  await exit(0);
   await adjust(1_000);
   await send({ event: "ready" });
   await send({
@@ -524,9 +466,7 @@ it("a create read back with no session fails, and the session it makes later is 
   );
   await settleTurns();
   const { labels } = lastCreate(requests);
-  await adjust(30_000);
-  await answerPing(requests, send);
-  await adjust(90_000);
+  await adjust(120_000);
   const failed = await creating;
   assert.ok(failed instanceof MirrorDaemon.MirrorDaemonError);
   assert.equal(failed.reason, "timed-out");

@@ -111,8 +111,11 @@ requests failed while it logged nothing about its connection.
 
 What the scenarios cannot do: a desktop app's own processes get no
 online or offline signal from the OS (the network is cut at the
-proxies, not the interface), and SIGSTOP stops a process's monotonic
-and wall clocks alike, where a real sleep stops only the first.
+proxies, not the interface), and under SIGSTOP a process's monotonic
+and wall clocks both run on, where a real sleep stops the first. So
+after a long freeze the host's sweep can cut a peer's link for silence
+("heartbeat timeout" in its log), which a real sleep doesn't; the peer
+redials.
 
 ## The report
 

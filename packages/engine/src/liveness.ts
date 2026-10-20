@@ -2,10 +2,11 @@
 // probe the far end had its whole window to answer while this end ran
 // (V3.md, "Time"). One observation for the device links and the hub
 // socket, and one rule for a question asked once (the terminal's
-// handshake with the app, a helper process, a host at a quit). Effect's pinger judged the age of the last frame before it
-// sent a ping, on the wall clock: a hidden page whose timers run once a
-// minute cut a quiet, healthy peer on its next turn, and a wake cut
-// whatever was asked before the sleep.
+// handshake with the app, the shell's watchdog, a host at a quit).
+// Effect's pinger judged the age of the last frame before it sent a
+// ping, on the wall clock: a hidden page whose timers run once a minute
+// cut a quiet, healthy peer on its next turn, and a wake cut whatever
+// was asked before the sleep.
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -22,8 +23,8 @@ const readClocks = Effect.all({
   mono: elapsedMillis,
 });
 
-// The same rule for one question asked at a moment that matters (a
-// helper process after a wait, a host at a quit): what `ask` came back
+// The same rule for one question asked at a moment that matters (the
+// watchdog's round, a host at a quit): what `ask` came back
 // with, a failure or a defect included, or none once it stayed silent
 // for `timeoutMs` that this end ran through. A wait whose limit came
 // late by either clock asks again rather than say none.

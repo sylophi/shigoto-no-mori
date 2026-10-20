@@ -567,10 +567,6 @@ func handleMirrorRequest(ctx context.Context, manager *synchronization.Manager, 
 		return respond(req.Session, manager.Pause(ctx, one(), ""))
 	case "resume":
 		return respond(req.Session, manager.Resume(ctx, one(), ""))
-	case "ping":
-		// The host's liveness check: answered at once, whatever else is
-		// in flight (MirrorDaemon.ts).
-		return respond("", nil)
 	default:
 		return respond("", fmt.Errorf("unknown op %q", req.Op))
 	}

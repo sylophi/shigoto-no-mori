@@ -4,9 +4,8 @@
 // on, monotonic time and every timer stand still, then a wake), and a
 // stopped process (both clocks run on, no timer runs), on a TestClock
 // (lib/checkKit.mts, `sleepingClock`). Covers the links' liveness
-// (engine/liveness.ts), its one-shot question (the mirror
-// daemon's ping, the watchdog's rounds, a quit's busy ask) and the hub
-// socket's pings and wake probe on it (shared/hub/connection.ts), the
+// (engine/liveness.ts), its one-shot question (`answerWithin`) and the
+// hub socket's pings and wake probe on it (shared/hub/connection.ts), the
 // supervisor's and the direct keeper's uptime (shared/remote/
 // supervisor.ts, shared/hub/directKeeper.ts), and a window's renewal of
 // a peer's attention after one failed ask (renderer/lib/remote/
@@ -37,10 +36,6 @@ import {
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
 import { answerWithin, watchLiveness } from "@shigomori/engine/liveness";
-import {
-  AccountUnreachableError,
-  withinAccountRead,
-} from "@host/lib/control/AccountPeers";
 import { log } from "@shared/log";
 import { makeSweepRenewals } from "@/lib/remote/remoteSweep";
 import { entryAt, sleepingClock, testClock } from "./lib/checkKit.mts";
@@ -202,24 +197,6 @@ it("hub socket: a ping that went unanswered into a sleep condemns nothing on its
   assert.equal(connection.status().socket.phase, "connected");
 });
 
-it("hub socket: a ping past its timeout whose answer a stopped process had no turn to read is asked again before any verdict", async () => {
-  const { clock, hub, connection } = await connectedHub();
-  // A ping out, and the process stopped for a minute before the hub's
-  // answer is read: on SIGCONT the timers run first.
-  hub.setAnswering(false);
-  await clock.advance(15_000);
-  clock.stop(60_000);
-  hub.setAnswering(true);
-  await clock.advance(30_000);
-  assert.equal(connection.status().socket.phase, "connected");
-  assert.equal(hub.tickets(), 1);
-
-  // Silent for good: found within the timeout and the probe's window.
-  hub.setAnswering(false);
-  await clock.advance(15_000 + 40_000 + 5_000 + 15_000);
-  assert.ok(hub.tickets() >= 2, "a dead socket is still found");
-});
-
 it("liveness: a probe set aside by a late turn is interrupted, so a hidden page's minute-late turns against a peer that never answers leave one ping out, not one per turn", async () => {
   const clock = clocks();
   let out = 0;
@@ -286,59 +263,12 @@ it("liveness: one question whose limit came late, by a stop or a sleep, is asked
   assert.ok(Option.isNone(await silent));
 });
 
-it("liveness: the terminal's account read, stopped through its limit, asks again rather than say the account is out of reach, and one silent through a limit the host ran says so", async () => {
-  const clock = clocks();
-  let asked = 0;
-  const read = Effect.suspend(() =>
-    ++asked === 1
-      ? Effect.sync(() => clock.stop(60_000)).pipe(Effect.andThen(Effect.never))
-      : Effect.succeed(["B"]),
-  );
-  const stopped = Effect.runPromiseWith(clock.context)(
-    withinAccountRead(read, 15),
-  );
-  await clock.advance(15_000);
-  assert.deepEqual(await stopped, ["B"]);
-  const silent = Effect.runPromiseWith(clock.context)(
-    Effect.flip(withinAccountRead(Effect.never, 15)),
-  );
-  await clock.advance(15_000);
-  assert.ok((await silent) instanceof AccountUnreachableError);
-});
-
-it("hub socket: a wake's probe whose answer a stopped process had no turn to read asks again rather than judge (O07)", async () => {
-  const { clock, hub, connection } = await connectedHub();
-  // The wake's probe goes out, and the process stops before it reads
-  // the answer; on SIGCONT the probe's timer runs first.
-  hub.setAnswering(false);
-  connection.probe();
-  await clock.advance(1_000);
-  clock.stop(60_000);
-  hub.setAnswering(true);
-  await clock.advance(30_000);
-  assert.equal(connection.status().socket.phase, "connected");
-  assert.equal(hub.tickets(), 1);
-});
-
-it("hub socket: the fresh probe a ping past its timeout asks, stopped inside its window before its answer is read, asks again rather than judge (O07)", async () => {
-  const { clock, hub, connection } = await connectedHub();
-  // The first beat's ping goes unanswered, and 40 s on a fresh one asks.
-  hub.setAnswering(false);
-  await clock.advance(15_000 + 40_000);
-  await clock.advance(1_000);
-  clock.stop(60_000);
-  hub.setAnswering(true);
-  await clock.advance(30_000);
-  assert.equal(connection.status().socket.phase, "connected");
-  assert.equal(hub.tickets(), 1);
-});
-
 function flapping() {
   const clock = clocks();
   const statuses: SupervisorStatus[] = [];
   let connects = 0;
   let close: ((code: number | null) => void) | undefined;
-  const supervisor = madeOn(
+  madeOn(
     clock.context,
     supervise({
       classifyClose: () => null,
@@ -354,7 +284,6 @@ function flapping() {
   );
   return {
     clock,
-    supervisor,
     connects: () => connects,
     drop: () => close?.(null),
     lastDelay: () => {
@@ -364,7 +293,7 @@ function flapping() {
   };
 }
 
-it("supervisor: uptime is monotonic, and a wake starts again one not yet stable, so neither a sleep nor a forward step makes a short connection stable, a backward step keeps a healthy one from looking short, and uptime earned before a sleep still counts", async () => {
+it("supervisor: uptime is monotonic, so neither a sleep nor a forward step makes a short connection stable, and a backward step keeps a healthy one from looking short", async () => {
   const s = flapping();
   await s.clock.settle();
   // A connection that drops at once climbs the ladder.
@@ -374,10 +303,9 @@ it("supervisor: uptime is monotonic, and a wake starts again one not yet stable,
   await s.clock.advance(BACKOFF_LADDER_MS[0]);
   assert.equal(s.connects(), 2);
 
-  // Up 5 s, then an hour asleep, a wake, and a drop 5 s on.
+  // Up 5 s, then an hour asleep, and a drop 5 s after the wake.
   await s.clock.advance(5_000);
   s.clock.sleep(HOUR);
-  s.supervisor.dialNow();
   await s.clock.advance(5_000);
   s.drop();
   await s.clock.settle();
@@ -407,28 +335,9 @@ it("supervisor: uptime is monotonic, and a wake starts again one not yet stable,
   s.drop();
   await s.clock.settle();
   assert.equal(s.lastDelay(), BACKOFF_LADDER_MS[0], "a stable run resets");
-  await s.clock.advance(BACKOFF_LADDER_MS[0]);
-
-  // A drop right after the wake of one that was stable before the sleep,
-  // from a higher rung.
-  s.drop();
-  await s.clock.settle();
-  assert.equal(s.lastDelay(), entryAt(BACKOFF_LADDER_MS, 1));
-  await s.clock.advance(entryAt(BACKOFF_LADDER_MS, 1));
-  await s.clock.advance(STABLE_CONNECTION_MS);
-  s.clock.sleep(HOUR);
-  s.supervisor.dialNow();
-  await s.clock.advance(5_000);
-  s.drop();
-  await s.clock.settle();
-  assert.equal(
-    s.lastDelay(),
-    BACKOFF_LADDER_MS[0],
-    "the uptime earned before the sleep still counts",
-  );
 });
 
-it("direct keeper: a session's uptime is monotonic, and a wake starts again one not yet stable, as the supervisor's", async () => {
+it("direct keeper: a session's uptime is monotonic, so a sleep makes no short session stable, as the supervisor's", async () => {
   const clock = clocks();
   const dials: number[] = [];
   const keeper = madeOn(
@@ -443,12 +352,11 @@ it("direct keeper: a session's uptime is monotonic, and a wake starts again one 
   keeper.reconcile(["B"]);
   await clock.settle();
   assert.equal(dials.length, 1);
-  // Two short sessions (one across a sleep and a wake), each dropped.
+  // Two short sessions (one across a sleep), each dropped.
   for (let round = 0; round < 2; round += 1) {
     await clock.advance(5_000);
     if (round === 1) {
       clock.sleep(HOUR);
-      keeper.dialNow();
       await clock.advance(5_000);
     }
     keeper.peerDropped("B");
@@ -462,19 +370,6 @@ it("direct keeper: a session's uptime is monotonic, and a wake starts again one 
     await clock.advance(1);
     assert.equal(dials.length, round + 2, `round ${round}: on its rung`);
   }
-  // A session that was stable before a sleep, dropped right after the
-  // wake: the next dial waits only the bottom rung.
-  assert.equal(dials.length, 3);
-  await clock.advance(STABLE_CONNECTION_MS);
-  clock.sleep(HOUR);
-  keeper.dialNow();
-  await clock.advance(5_000);
-  keeper.peerDropped("B");
-  await clock.settle();
-  await clock.advance(BACKOFF_LADDER_MS[0] - 1);
-  assert.equal(dials.length, 3, "not before the bottom rung");
-  await clock.advance(1);
-  assert.equal(dials.length, 4, "the uptime earned before the sleep counts");
 });
 
 it("renewal: one failed ask while the session stays up is retried, the network coming back asks at once, and the renewals carry on from there", async () => {

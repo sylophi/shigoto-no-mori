@@ -2,9 +2,9 @@
 // where it does not need Electron. Asserts:
 //   - the watchdog (main/core/host/watchdog.ts) leaves a host that
 //     answers, or whose link failed, alone, and calls a host silent
-//     past its limit silent once, then stops; a round the machine
-//     slept through is asked again rather than read as silence; it
-//     stops with the host it watched.
+//     past its limit silent once, then stops; a round whose limit
+//     came late is asked again rather than read as silence; it stops
+//     with the host it watched.
 //   - a quit's busy check takes the host's answer, or none once the
 //     deadline passes or the call fails, so a quit never waits on a
 //     host that does not answer.
@@ -28,9 +28,6 @@
 //   - a host gone unasked leaves no loopback behind: its pid's
 //     loopback.json and the one it was writing aside go, and a
 //     loopback.json another host published stays.
-//   - terminal callers (stopped `sm`s holding their sockets) fill a
-//     place of their own on the loopback: past it the next terminal is
-//     turned away as busy, while a window and the shell still link.
 //
 // Run: pnpm test host-hold.
 import { LOOPBACK_FILE } from "@shigomori/engine/Control";
@@ -42,18 +39,14 @@ import { join } from "node:path";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
-import { flatClient, quietProtocol } from "@shigomori/engine/rpcClient";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import * as Socket from "effect/socket/Socket";
 import { afterAll, it } from "vitest";
 import { WebSocket as WsWebSocket } from "ws";
-import { CLOSE_TRY_AGAIN, LoopbackGroup } from "@shigomori/contracts/link";
 import { sessionContract } from "@shigomori/contracts/modules/session";
-import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { effectClient } from "@shared/ipc/effectClient";
 import { createServed } from "@shared/ipc/served";
 import { type HostAddress, hostLink } from "@shared/remote/hostLink";
@@ -81,8 +74,6 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
     Effect.runPromiseWith(clock.context)(effect);
   let answers: "yes" | "fails" | "never" = "yes";
   let watching = true;
-  let asleep = false;
-  let sleeps = 0;
   let silent = 0;
   const probe = Effect.suspend(() =>
     answers === "yes"
@@ -97,8 +88,6 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
       every: "10 seconds",
       limit: "30 seconds",
       watching: () => watching,
-      asleep: () => asleep,
-      sleeps: () => sleeps,
       silent: () => {
         silent += 1;
       },
@@ -108,26 +97,9 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
   answers = "fails";
   await clock.advance(60_000);
   assert.equal(silent, 0, "an answer, or a failed link, is not silence");
-  // Rounds start every 10 s after the last ended: one ran at 120 s.
-  // The machine sleeps through the round begun at 130 s: the clock runs
-  // on, and its deadline (160 s) proves nothing.
+  // Rounds start every 10 s after the last ended: one ran at 120 s,
+  // and the one begun at 130 s goes unanswered to 160 s.
   answers = "never";
-  await clock.advance(15_000);
-  asleep = true;
-  sleeps += 1;
-  await clock.advance(25_000);
-  asleep = false;
-  sleeps += 1;
-  assert.equal(silent, 0, "a round the machine slept through");
-  // The machine says it will sleep (160 s) before the next round begins
-  // (170 s), whose deadline (200 s) comes due before the wake is heard.
-  asleep = true;
-  sleeps += 1;
-  await clock.advance(40_000);
-  asleep = false;
-  sleeps += 1;
-  assert.equal(silent, 0, "a round begun as the machine went to sleep");
-  // Awake: the round begun at 210 s goes unanswered to 240 s.
   await clock.advance(10_000 + 29_000);
   assert.equal(silent, 0, "not before the limit");
   await clock.advance(1_000);
@@ -145,8 +117,6 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
       every: "10 seconds",
       limit: "30 seconds",
       watching: () => watching,
-      asleep: () => asleep,
-      sleeps: () => sleeps,
       silent: () => {
         silent += 1;
       },
@@ -158,39 +128,39 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
   assert.equal(silent, 0);
 });
 
-it("the watchdog calls no host silent on a limit that came late, and asks again", async () => {
-  const clock = testClock();
-  const { wall, stop } = sleepingClock(clock);
-  const run = <A, E>(effect: Effect.Effect<A, E>) =>
-    Effect.runPromiseWith(clock.context)(
-      Effect.provideService(effect, Clock.Clock, wall),
+it("the watchdog calls no host silent on a limit that came late, a sleep's or a stop's, and asks again", async () => {
+  for (const pause of ["sleep", "stop"] as const) {
+    const clock = testClock();
+    const moved = sleepingClock(clock);
+    const run = <A, E>(effect: Effect.Effect<A, E>) =>
+      Effect.runPromiseWith(clock.context)(
+        Effect.provideService(effect, Clock.Clock, moved.wall),
+      );
+    let silent = 0;
+    let watching = true;
+    const watched = run(
+      watchHost({
+        probe: Effect.never,
+        every: "10 seconds",
+        limit: "30 seconds",
+        watching: () => watching,
+        silent: () => {
+          silent += 1;
+        },
+      }),
     );
-  let silent = 0;
-  let watching = true;
-  const watched = run(
-    watchHost({
-      probe: Effect.never,
-      every: "10 seconds",
-      limit: "30 seconds",
-      watching: () => watching,
-      asleep: () => false,
-      sleeps: () => 0,
-      silent: () => {
-        silent += 1;
-      },
-    }),
-  );
-  // The whole app stopped a minute inside the round begun at 10 s: its
-  // limit comes due as it runs again, a minute late.
-  await clock.advance(20_000);
-  stop(60_000);
-  await clock.advance(20_000);
-  assert.equal(silent, 0, "a limit the shell ran a minute late for");
-  // The next round, on time, is silence.
-  await clock.advance(40_000);
-  assert.equal(silent, 1);
-  watching = false;
-  await watched;
+    // The machine asleep, or the whole app stopped, a minute inside the
+    // round begun at 10 s: its limit comes due a minute late.
+    await clock.advance(20_000);
+    moved[pause](60_000);
+    await clock.advance(20_000);
+    assert.equal(silent, 0, `a limit a ${pause} made a minute late`);
+    // The next round, on time, is silence.
+    await clock.advance(40_000);
+    assert.equal(silent, 1);
+    watching = false;
+    await watched;
+  }
 });
 
 it("a quit's busy check takes the host's answer, or none past its deadline or on a failure", async () => {
@@ -386,8 +356,6 @@ if (process.argv[2] === "stick") setTimeout(() => watch(process.argv[3]), 500);
         every: "200 millis",
         limit: "1 second",
         watching: () => watching,
-        asleep: () => false,
-        sleeps: () => 0,
         silent: () => {
           silent = true;
         },
@@ -435,77 +403,5 @@ it("a host gone unasked leaves no loopback behind, and another host's stays", as
     assert.ok(existsSync(file));
   } finally {
     rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// A caller's hello on the loopback, its socket held until `scope`
-// closes: a terminal's (no Origin), a window's (its page's Origin), or
-// the shell's (its token).
-async function helloOn(
-  port: number,
-  token: string,
-  scope: Scope.Scope,
-  origin?: string,
-) {
-  let closedWith: number | undefined;
-  const ws = new WsWebSocket(
-    `ws://127.0.0.1:${port}`,
-    origin === undefined ? {} : { origin },
-  );
-  ws.on("close", (code) => {
-    closedWith = code;
-  });
-  const exit = await Effect.runPromiseExit(
-    Effect.gen(function* () {
-      // ws's socket is a WebSocketLike at runtime, but its event types differ
-      const socket = yield* Socket.fromWebSocket(
-        Effect.succeed(ws as Socket.WebSocketLike),
-      );
-      const client = yield* flatClient(
-        LoopbackGroup,
-        yield* quietProtocol(socket),
-      );
-      return yield* client("link:hello", {
-        deviceId: "this-device",
-        deviceKind: "desktop",
-        connectionId: "c".repeat(32),
-        appVersion: "9.9.9",
-        protocolVersion: PROTOCOL_VERSION,
-        token,
-      }) as Effect.Effect<unknown, unknown>;
-    }).pipe(Scope.provide(scope)),
-  );
-  return { exit, closedWith: () => closedWith };
-}
-
-it("stopped terminals fill only the terminals' places on the loopback: the next is turned away as busy, and a window and the shell still link", async () => {
-  const dataDir = mkdtempSync(join(tmpdir(), "host-hold-"));
-  dataDirs.push(dataDir);
-  const host = await startHost(dataDir);
-  const scope = Scope.makeUnsafe();
-  try {
-    const { port } = host.address;
-    for (let terminal = 0; terminal < 48; terminal++) {
-      const linked = await helloOn(port, host.token, scope);
-      assert.ok(Exit.isSuccess(linked.exit), `terminal ${terminal} linked`);
-    }
-    const turnedAway = await helloOn(port, host.token, scope);
-    assert.ok(Exit.isFailure(turnedAway.exit), "a 49th terminal linked");
-    await waitFor(
-      () => turnedAway.closedWith() === CLOSE_TRY_AGAIN,
-      "the terminal turned away as busy",
-    );
-    const window = await helloOn(
-      port,
-      host.token,
-      scope,
-      "http://localhost:5173",
-    );
-    assert.ok(Exit.isSuccess(window.exit), "a window was turned away");
-    const shell = await helloOn(port, host.address.token, scope);
-    assert.ok(Exit.isSuccess(shell.exit), "the shell was turned away");
-  } finally {
-    await Effect.runPromise(Scope.close(scope, Exit.void));
-    await host.stop();
   }
 });

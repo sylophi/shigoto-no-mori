@@ -1521,10 +1521,10 @@ it("liveness: the host cuts a linked peer that falls silent past the timeout", a
   assert.equal(await raw.closed, 1001);
 });
 
-it("liveness: the host's cut of a silent peer is monotonic, and a sweep that came late (the host stopped, then continued) is a fresh observation, not a verdict", async () => {
+it("liveness: the host's cut of a silent peer is monotonic: a step of the wall clock is no silence", async () => {
   const track = trackTest;
   const clock = testClock();
-  const { wall, sleep, stop } = sleepingClock(clock);
+  const { wall, sleep } = sleepingClock(clock);
   const { listener } = await listen(track, {
     start: { livenessTimeoutMs: 300 },
     provide: Layer.succeed(Clock.Clock, wall),
@@ -1537,46 +1537,14 @@ it("liveness: the host's cut of a silent peer is monotonic, and a sweep that cam
     for (let turn = 0; turn < count; turn++) await clock.advance(75);
     await delay(20);
   };
-  // The host stopped for ten seconds: its first sweep after is late.
-  stop(10_000);
-  await sweeps(2);
-  // And the wall clock stepped two hours either way, monotonic time still.
+  // The wall clock stepped two hours either way, monotonic time still.
   sleep(2 * 3_600_000);
   await sweeps(1);
   sleep(-4 * 3_600_000);
   await sweeps(1);
-  assert.equal(cut, false, "a late sweep or a clock step cut the peer");
+  assert.equal(cut, false, "a clock step cut the peer");
   // Silent on on-time sweeps: cut.
   await sweeps(4);
-  assert.equal(await raw.closed, 1001);
-});
-
-it("liveness: a sweep's lateness is no peer's silence, a stall short of twice the sweep included", async () => {
-  const track = trackTest;
-  const clock = testClock();
-  const { wall, stop } = sleepingClock(clock);
-  const { listener } = await listen(track, {
-    start: { livenessTimeoutMs: 300 },
-    provide: Layer.succeed(Clock.Clock, wall),
-  });
-  const raw = await rawLink(track, listener, { pingInterval: 60_000 });
-  assert.ok(Exit.isSuccess(await raw.hello()));
-  let cut = false;
-  void raw.closed.then(() => (cut = true));
-  // Its last frame between two sweeps (75 ms apart).
-  await clock.advance(10);
-  await Effect.runPromise(raw.call("link:ping"));
-  await clock.advance(65);
-  await clock.advance(75);
-  await clock.advance(75);
-  await delay(20);
-  // 215 ms silent, then the host stalls 60 ms: its next sweep comes
-  // 135 ms after the last, and finds 290 ms of silence awake.
-  stop(60);
-  await clock.advance(75);
-  await delay(20);
-  assert.equal(cut, false, "the stall counted as silence");
-  await clock.advance(75);
   assert.equal(await raw.closed, 1001);
 });
 

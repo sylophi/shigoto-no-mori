@@ -39,7 +39,6 @@ import {
   type MirrorSessionRaw,
   MirrorSessionRawSchema,
 } from "@shigomori/contracts/modules/mirror";
-import { answerWithin } from "@shigomori/engine/liveness";
 import { BACKOFF_LADDER_MS, restartSchedule } from "@shared/remote/supervisor";
 import { MIRROR_GATEWAY_TOKEN_ENV, MirrorGateway } from "./MirrorGateway";
 
@@ -54,7 +53,6 @@ export class MirrorDaemonError extends Schema.TaggedError<MirrorDaemonError>()(
       "not-running",
       "exited",
       "stopped",
-      "unresponsive",
       "timed-out",
       "malformed",
       "refused",
@@ -70,8 +68,6 @@ export class MirrorDaemonError extends Schema.TaggedError<MirrorDaemonError>()(
         return "mirror daemon exited";
       case "stopped":
         return "mirror daemon stopped";
-      case "unresponsive":
-        return "mirror daemon stopped answering and was restarted";
       case "timed-out":
         return `mirror ${this.op} timed out`;
       case "malformed":
@@ -141,14 +137,6 @@ const RESTART_LADDER_MS: readonly [number, ...number[]] = [
 // A create blocks on two endpoint connects (the peer side spawns a
 // process and Mutagen handshakes), so requests get a generous ceiling.
 const REQUEST_TIMEOUT_MS = 120_000;
-// A request still waiting this long asks whether the daemon answers at
-// all, and one that doesn't answer a ping within PING_ANSWER_MS of the
-// host running is replaced. Its reader answers a ping at once whatever
-// else it is running (its `ping` verb, requests running beside it,
-// file-sync/engine.go), so silence means a stopped or hung process, not
-// a slow create.
-const STALL_CHECK_MS = 30_000;
-const PING_ANSWER_MS = 10_000;
 // A create whose answer never came (it timed out, or the daemon went
 // with it) may have made its session all the same, persisted to come
 // back with the next run: its snapshot is waited for this long before
@@ -187,11 +175,6 @@ export class MirrorDaemon extends Context.Service<
     readonly resume: (
       session: string,
     ) => Effect.Effect<string, MirrorDaemonError>;
-    // Whether the running daemon still answers, asked after a wake: one
-    // that doesn't is killed and started again, its pending requests
-    // failed as "unresponsive". Its exit alone says nothing of a stopped
-    // process, which stays "running" with its last sessions.
-    readonly checkResponsive: Effect.Effect<void>;
   }
 >()("sm/host/MirrorDaemon") {}
 
@@ -227,11 +210,6 @@ const make = (options: Options) =>
       }
     >();
     let nextRequestId = 1;
-    // The running child's outright kill, and whether a check found it
-    // unresponsive, for the run to say so as it ends.
-    let killChild: Effect.Effect<void> | null = null;
-    let unresponsive = false;
-    let checking = false;
     const runInScope = yield* FiberSet.makeRuntime<never>();
 
     // The last change is replayed to a subscriber that comes after it,
@@ -268,7 +246,7 @@ const make = (options: Options) =>
       ),
     );
 
-    const failAllPending = (reason: "exited" | "stopped" | "unresponsive") =>
+    const failAllPending = (reason: "exited" | "stopped") =>
       Effect.forEach(
         [...pending],
         ([id, { op, response }]) => {
@@ -415,8 +393,6 @@ const make = (options: Options) =>
         return;
       }
       const child = spawned.success;
-      unresponsive = false;
-      killChild = child.kill({ killSignal: "SIGKILL" }).pipe(Effect.ignore);
       yield* Ref.set(stdin, Option.some(input));
       yield* starting;
       yield* child.stderr.pipe(
@@ -443,18 +419,8 @@ const make = (options: Options) =>
         Effect.map((exit): number | null => exit),
         Effect.orElseSucceed(() => null),
       );
-      killChild = null;
       yield* Ref.set(stdin, Option.none());
       yield* Ref.set(fresh, false);
-      if (unresponsive) {
-        yield* failAllPending("unresponsive");
-        yield* Effect.logWarning(
-          "[mirror] daemon stopped answering, killed it, restarting",
-        );
-        yield* failed("stopped answering");
-        yield* changed;
-        return;
-      }
       yield* failAllPending("exited");
       yield* Effect.logWarning(
         `[mirror] daemon exited unexpectedly (code ${code}), restarting`,
@@ -533,40 +499,8 @@ const make = (options: Options) =>
         );
       });
 
-    // `ping` is the protocol's liveness verb, which the daemon answers
-    // at once: silence replaces it.
-    const pingOrReplace = Effect.gen(function* () {
-      checking = true;
-      const answered = Option.isSome(
-        yield* answerWithin(
-          ask("ping", {}, REQUEST_TIMEOUT_MS),
-          PING_ANSWER_MS,
-        ),
-      );
-      if (!answered && killChild !== null) {
-        unresponsive = true;
-        yield* killChild;
-      }
-    }).pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          checking = false;
-        }),
-      ),
-    );
-    // One check at a time: a second asked meanwhile joins nothing.
-    const checkResponsive = Effect.suspend(() =>
-      checking || killChild === null ? Effect.void : pingOrReplace,
-    );
-
     const request = (op: string, fields: Record<string, unknown>) =>
       Effect.gen(function* () {
-        // Run in the daemon's scope, so a kill it starts finishes even
-        // once this request is failed by it.
-        yield* Effect.sleep(STALL_CHECK_MS).pipe(
-          Effect.andThen(Effect.sync(() => runInScope(checkResponsive))),
-          Effect.forkChild,
-        );
         const response = yield* ask(op, fields, REQUEST_TIMEOUT_MS);
         if (!response.ok) {
           return yield* new MirrorDaemonError({
@@ -658,7 +592,6 @@ const make = (options: Options) =>
       resume: Effect.fn("MirrorDaemon.resume")((session: string) =>
         request("resume", { session }),
       ),
-      checkResponsive,
     });
   });
 
