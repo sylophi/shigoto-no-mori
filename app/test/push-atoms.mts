@@ -512,9 +512,9 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
 
 it("remote devices: a window loaded while the hub is away lists the peers the shell last had, one with a live session as connected", async () => {
   const { registry, queryClient } = page();
-  // The app's client retries a failed read (1 s, 2 s, 4 s), which the
-  // pass must not wait out.
-  queryClient.setDefaultOptions({ queries: { retry: 3 } });
+  // The app's client retries a failed read (1 s, 2 s, 4 s): one retry
+  // a second out, which the list must not wait for.
+  queryClient.setDefaultOptions({ queries: { retry: 1, retryDelay: 1000 } });
   // Nothing cached: the window's first read of the list fails.
   const account: Pick<
     RendererApi["account"],
@@ -552,7 +552,11 @@ it("remote devices: a window loaded while the hub is away lists the peers the sh
             device.deviceId === PEER && device.status.phase === "connected",
         ),
     "the peer listed, connected",
+    500,
   );
+  // The sync's passes run one at a time: the next case's waits on this
+  // one's read.
+  await waitFor(() => queryClient.isFetching() === 0, "the read given up");
   registry.dispose();
 });
 
@@ -561,8 +565,12 @@ it("remote devices: a burst of hub pushes naming a device the list lacks reads t
   queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
   let asked = 0;
   let cancelled = 0;
-  const account: Pick<RendererApi["account"], "status" | "listDevices"> = {
+  const account: Pick<
+    RendererApi["account"],
+    "status" | "listDevices" | "lastListedDevices"
+  > = {
     status: () => Effect.never,
+    lastListedDevices: () => Effect.succeed([]),
     listDevices: () =>
       Effect.sync(() => {
         asked += 1;
@@ -621,8 +629,12 @@ it("remote devices: an account change during the list's first read, which no pag
   // Each push the sync listens to, by its key, to deliver by hand.
   const handlers = new Map<string, (value: unknown) => void>();
   let asked = 0;
-  const account: Pick<RendererApi["account"], "status" | "listDevices"> = {
+  const account: Pick<
+    RendererApi["account"],
+    "status" | "listDevices" | "lastListedDevices"
+  > = {
     status: () => Effect.never,
+    lastListedDevices: () => Effect.succeed([]),
     listDevices: () =>
       Effect.sync(() => {
         asked += 1;
@@ -676,6 +688,7 @@ it("remote devices: a peer that stops taking commands is refused before the devi
     deviceId: LOCAL,
     account: {
       status: () => Effect.never,
+      lastListedDevices: () => Effect.succeed([]),
       listDevices: () =>
         Effect.suspend(() => {
           fetching = true;
@@ -744,6 +757,7 @@ it("remote devices: a pass out since before a refusal doesn't hand the peer its 
     deviceId: LOCAL,
     account: {
       status: () => Effect.never,
+      lastListedDevices: () => Effect.succeed([]),
       listDevices: () =>
         Effect.promise(
           () =>
@@ -805,6 +819,7 @@ it("hub status: a failed boot fetch falls back on the next pass's", async () => 
     deviceId: LOCAL,
     account: {
       status: () => Effect.never,
+      lastListedDevices: () => Effect.succeed([]),
       listDevices: () => Effect.succeed([studio]),
     },
     hub: {

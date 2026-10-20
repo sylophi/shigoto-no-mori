@@ -208,16 +208,12 @@ function askListAgain(): void {
 
 // The list as the shared cache holds it, refetching only when it is
 // missing or invalidated (staleTime Infinity says so, and fetchQuery
-// honours an invalidation regardless of it). Asked once: a pass that
-// fails has its fallback at once, and the next hub event or list
-// landing asks again, where the page's retries would hold every pass
-// (and a window loaded with the hub away, its peers) for seconds.
+// honours an invalidation regardless of it).
 function fetchDeviceList(): Promise<readonly DeviceInfo[]> {
   return throughCancel(() =>
     boundClient().fetchQuery({
       ...accountDevicesQueryOptions(pageApi()),
       staleTime: Infinity,
-      retry: false,
     }),
   );
 }
@@ -252,22 +248,35 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   // the socket was down. This pass runs on the list as it stands, and
   // the refetch's landing runs the corrected one.
   if (reconnected) askListAgain();
+  // This machine is not a remote device to itself, so it is skipped.
+  const entries = (infos: readonly DeviceInfo[]) =>
+    infos
+      .filter((info) => info.deviceId !== localDeviceId)
+      .map((info) => buildEntry(info, current, online));
+  const cached = boundClient().getQueryData<readonly DeviceInfo[]>(
+    queryKeys.accountDevices(),
+  );
+  // A window with nothing fetched (one loaded while the hub is away)
+  // draws the list the shell last had while its own read is out, which
+  // the client's retries keep out for seconds. Its sessions outlive the
+  // window, so a live one reads connected.
+  const kept =
+    cached ??
+    (await pageApi()
+      .run(pageApi().account.lastListedDevices())
+      .catch(() => []));
+  if (cached === undefined) setRemoteDevices(registry(), entries(kept));
   let list: readonly DeviceInfo[];
   try {
     list = await fetchDeviceList();
   } catch {
     // Offline or signed out mid-flight. react-query keeps the last
     // good data through a failed refetch, so the store keeps whatever
-    // we had. A window loaded while the hub is away has nothing
-    // fetched, and its peers come from the list the shell last had
-    // (its sessions outlive the window, so a live one reads connected).
+    // we had.
     list =
       boundClient().getQueryData<readonly DeviceInfo[]>(
         queryKeys.accountDevices(),
-      ) ??
-      (await pageApi()
-        .run(pageApi().account.lastListedDevices())
-        .catch(() => []));
+      ) ?? kept;
   }
   const knownIds = new Set(list.map((info) => info.deviceId));
   // A presence roster naming a device the account list has never seen
@@ -290,10 +299,7 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
     (id) => id !== localDeviceId && !knownIds.has(id),
   );
   if ((hasUnknownOnline || someoneLeft) && hubDriven) askListAgain();
-  // This machine is not a remote device to itself, so it is skipped.
-  const others = list.filter((info) => info.deviceId !== localDeviceId);
-  const devices = others.map((info) => buildEntry(info, current, online));
-  setRemoteDevices(registry(), devices);
+  setRemoteDevices(registry(), entries(list));
   if (newestStatus !== undefined && newestStatus !== current) {
     applyCommandAccess(newestStatus);
   }
