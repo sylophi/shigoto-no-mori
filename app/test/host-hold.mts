@@ -128,37 +128,39 @@ it("the watchdog leaves an answering host alone and calls a silent one once", as
   assert.equal(silent, 0);
 });
 
-it("the watchdog calls no host silent on a limit that came late, and asks again", async () => {
-  const clock = testClock();
-  const { wall, stop } = sleepingClock(clock);
-  const run = <A, E>(effect: Effect.Effect<A, E>) =>
-    Effect.runPromiseWith(clock.context)(
-      Effect.provideService(effect, Clock.Clock, wall),
+it("the watchdog calls no host silent on a limit that came late, a sleep's or a stop's, and asks again", async () => {
+  for (const pause of ["sleep", "stop"] as const) {
+    const clock = testClock();
+    const moved = sleepingClock(clock);
+    const run = <A, E>(effect: Effect.Effect<A, E>) =>
+      Effect.runPromiseWith(clock.context)(
+        Effect.provideService(effect, Clock.Clock, moved.wall),
+      );
+    let silent = 0;
+    let watching = true;
+    const watched = run(
+      watchHost({
+        probe: Effect.never,
+        every: "10 seconds",
+        limit: "30 seconds",
+        watching: () => watching,
+        silent: () => {
+          silent += 1;
+        },
+      }),
     );
-  let silent = 0;
-  let watching = true;
-  const watched = run(
-    watchHost({
-      probe: Effect.never,
-      every: "10 seconds",
-      limit: "30 seconds",
-      watching: () => watching,
-      silent: () => {
-        silent += 1;
-      },
-    }),
-  );
-  // The whole app stopped a minute inside the round begun at 10 s: its
-  // limit comes due as it runs again, a minute late.
-  await clock.advance(20_000);
-  stop(60_000);
-  await clock.advance(20_000);
-  assert.equal(silent, 0, "a limit the shell ran a minute late for");
-  // The next round, on time, is silence.
-  await clock.advance(40_000);
-  assert.equal(silent, 1);
-  watching = false;
-  await watched;
+    // The machine asleep, or the whole app stopped, a minute inside the
+    // round begun at 10 s: its limit comes due a minute late.
+    await clock.advance(20_000);
+    moved[pause](60_000);
+    await clock.advance(20_000);
+    assert.equal(silent, 0, `a limit a ${pause} made a minute late`);
+    // The next round, on time, is silence.
+    await clock.advance(40_000);
+    assert.equal(silent, 1);
+    watching = false;
+    await watched;
+  }
 });
 
 it("a quit's busy check takes the host's answer, or none past its deadline or on a failure", async () => {

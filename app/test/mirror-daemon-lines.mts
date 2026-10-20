@@ -29,8 +29,8 @@
 //   - the last snapshot stands through a restart, read as stale until
 //     the next run sends its own,
 //   - a create the daemon made but never answered in time, or made
-//     before it exited, is read back as the session it made, and one it made after the read back found none is ended as
-//     it shows up.
+//     before it exited, is read back as the session it made, and one
+//     it made after the read back found none is ended as it shows up.
 //
 // Run: pnpm test mirror-daemon-lines.
 import assert from "node:assert/strict";
