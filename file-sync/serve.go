@@ -156,7 +156,8 @@ func servedConfiguration(asked *synchronization.Configuration) *synchronization.
 
 // A local endpoint that keeps .git, at any depth, out of every call: a
 // read through one is refused, and a path staged or changed through one,
-// or a folder whose old or new contents hold one, is left out.
+// a folder whose old or new contents hold one, or a link into one, is
+// left out.
 type guardedEndpoint struct {
 	synchronization.Endpoint
 }
@@ -233,7 +234,7 @@ func (e guardedEndpoint) Transition(ctx context.Context, transitions []*core.Cha
 	for t, change := range transitions {
 		if touchesGit(change.Path) || holdsGit(change.Old) || holdsGit(change.New) || linksIntoGit(change.Path, change.New) {
 			results[t] = change.Old
-			problems = append(problems, &core.Problem{Path: change.Path, Error: ".git is not synchronized"})
+			problems = append(problems, &core.Problem{Path: change.Path, Error: "in or linking into .git, which is not synchronized"})
 		} else {
 			allowed = append(allowed, change)
 			allowedAt = append(allowedAt, t)
