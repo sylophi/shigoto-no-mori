@@ -369,33 +369,6 @@ describe("relaying", () => {
     });
   });
 
-  it("nacks an oversize forward instead of sending it", async () => {
-    const a = await enrollAndConnect("acct-big", "dev-big-a");
-    const b = await enrollAndConnect("acct-big", "dev-big-b");
-    await a.socket.untilPresence(["dev-big-a", "dev-big-b"]);
-    await b.socket.untilPresence(["dev-big-a", "dev-big-b"]);
-    // A send right at the device hub's control-frame cap (64 KiB), whose
-    // forward, naming the sender where the send named the target, lands
-    // just past it: a legitimate broker frame is far smaller, so anything
-    // here is a client aiming data at the wrong wire and gets the nack.
-    const overhead = encodeEnvelope({
-      t: "relay",
-      to: "dev-big-b",
-      frame: "",
-    }).length;
-    a.socket.send({
-      t: "relay",
-      to: "dev-big-b",
-      frame: "x".repeat(MAX_HUB_MESSAGE_BYTES - overhead),
-    });
-    expect(await a.socket.next()).toEqual({
-      t: "nack",
-      to: "dev-big-b",
-      reason: "too-large",
-    });
-    await b.socket.expectSilence();
-  });
-
   it("drops malformed envelopes without killing the socket", async () => {
     const a = await enrollAndConnect("acct-malformed", "dev-malformed-a");
     const b = await enrollAndConnect("acct-malformed", "dev-malformed-b");

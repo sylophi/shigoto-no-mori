@@ -24,8 +24,7 @@
 // managed service and the roster of every device's key. An ask is
 // answered only for a sender in the latest presence roster whose
 // handshake proves the key the roster names for it, so neither a
-// misrouted `from` nor a party in the middle mints tickets. The size
-// guard is a sanity bound.
+// misrouted `from` nor a party in the middle mints tickets.
 //
 // Pure on purpose: the shared frame and envelope schemas and an
 // injected send function. No node builtins, no ws, no electron, so the
@@ -43,12 +42,9 @@ import {
   decodeRelayFrame,
   encodeEnvelope,
   encodeRelayFrame,
-  MAX_HUB_MESSAGE_BYTES,
-  hubTextWithinLimit,
   type OnlineDevice,
   type RelayFrame,
   ServerEnvelopeSchema,
-  deliveredRelayGrowth,
 } from "@shigomori/contracts/hubProtocol";
 import { fromBase64Url, sameKey, toBase64Url } from "@shared/crypto/deviceKey";
 import { HandshakeState, type KeyPair } from "@shared/crypto/noise";
@@ -78,10 +74,6 @@ export function relayPrologue(askerId: string, askedId: string): Uint8Array {
   return utf8Encoder.encode(`sm-relay-v1:${askerId}>${askedId}`);
 }
 
-// IK's second message: the responder's ephemeral key, then the payload
-// and its tag.
-const ANSWER_OVERHEAD_BYTES = 32 + 16;
-
 // How long a device remembers an ask it has answered, from when it
 // received it, on its own monotonic clock, which neither a sleep nor a
 // clock step moves: no time is compared across devices, so one whose
@@ -96,10 +88,6 @@ export const SEEN_ASK_RETENTION_MS = 10 * 60_000;
 // The asks a device has read, by their handshake hash, each until its
 // retention ends: what turns a replayed ask away. Kept by the hub
 // connection, so it outlives the link a socket redial replaces.
-// Bounded: while it is full, a new ask is refused until an entry
-// lapses, since forgetting one that has not would let it be replayed.
-export const MAX_SEEN_ASKS = 4096;
-
 export type SeenAsks = Map<string, number>;
 
 // Whether an ask with this handshake hash, received now, is one to
@@ -108,7 +96,7 @@ export function freshAsk(seen: SeenAsks, hash: string, now: number): boolean {
   for (const [key, until] of seen) {
     if (until <= now) seen.delete(key);
   }
-  if (seen.has(hash) || seen.size >= MAX_SEEN_ASKS) return false;
+  if (seen.has(hash)) return false;
   seen.set(hash, now + SEEN_ASK_RETENTION_MS);
   return true;
 }
@@ -121,18 +109,6 @@ export class HubPeerOfflineError extends Error {
   constructor(deviceId: string) {
     super(`hub peer is offline (device ${deviceId})`);
     this.name = "HubPeerOfflineError";
-  }
-}
-
-// An outbound envelope would exceed the device hub's message limit. The
-// guard runs BEFORE the frame touches the wire, measuring the same
-// deliver shape the DO measures. A legitimate ask fits with room to
-// spare, so oversize is a hard error surfaced to the caller instead of
-// a round trip ending in a nack.
-export class HubMessageTooLargeError extends Error {
-  constructor() {
-    super(`hub message exceeds the ${MAX_HUB_MESSAGE_BYTES} byte limit`);
-    this.name = "HubMessageTooLargeError";
   }
 }
 
@@ -222,14 +198,12 @@ type PendingAsk = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-// Attacker-controlled ids are truncated in log lines so a hostile hub
-// cannot flood the log with a huge forged `from`.
-function truncateId(id: string): string {
-  return id.length > 64 ? `${id.slice(0, 64)}...` : id;
-}
-
 function refusal(message: string, code?: string): AnswerPayload {
   return { ok: false, message, ...(code === undefined ? {} : { code }) };
+}
+
+function encodeRelay(to: string, frame: RelayFrame): string {
+  return encodeEnvelope({ t: "relay", to, frame: encodeRelayFrame(frame) });
 }
 
 export function createHubLink(deps: HubLinkDeps): HubLink {
@@ -251,47 +225,6 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     droppedInbound += 1;
     if (droppedInbound % 50 === 1) {
       log.warn(`[hub] ${message()} (dropped ${droppedInbound} inbound so far)`);
-    }
-  }
-
-  // Encode the send envelope once and report whether the DELIVER shape
-  // fits the limit, so nothing stringifies twice.
-  function encodeFor(
-    to: string,
-    frame: RelayFrame,
-  ): { text: string; fits: boolean } {
-    const text = encodeEnvelope({
-      t: "relay",
-      to,
-      frame: encodeRelayFrame(frame),
-    });
-    // Measured as the hub will deliver it.
-    return {
-      text,
-      fits: hubTextWithinLimit(
-        text,
-        deliveredRelayGrowth(deps.localDeviceId, to),
-      ),
-    };
-  }
-
-  // Whether an answer of this many payload bytes, once sealed, fits the
-  // limit: measured before sealing, since the handshake seals once.
-  function answerFits(to: string, id: number, payloadBytes: number): boolean {
-    const sealedBytes = ANSWER_OVERHEAD_BYTES + payloadBytes;
-    const sealed = "x".repeat(Math.ceil((sealedBytes * 4) / 3));
-    return encodeFor(to, { kind: "answer", id, sealed }).fits;
-  }
-
-  // The send path for answers nobody here awaits. A failure is logged,
-  // not thrown: the asker times out or sees the disconnect.
-  function sendAnswerText(to: string, text: string): void {
-    try {
-      deps.send(text);
-    } catch (error) {
-      log.warn(
-        `[hub] failed to answer ${truncateId(to)}: ${errorMessageOf(error)}`,
-      );
     }
   }
 
@@ -339,7 +272,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     // forged and gets nothing, not even a refusal.
     const fromKey = online.get(from);
     if (fromKey === undefined) {
-      warnDrop(() => `dropping ask from off-roster peer ${truncateId(from)}`);
+      warnDrop(() => `dropping ask from off-roster peer ${from}`);
       return;
     }
     // An ask that does not open, or opens under a key other than the one
@@ -364,9 +297,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       }
       ask = opened.value;
     } catch {
-      warnDrop(
-        () => `dropping an ask that does not open from ${truncateId(from)}`,
-      );
+      warnDrop(() => `dropping an ask that does not open from ${from}`);
       return;
     }
     // A replayed ask opens like the original, so it is told apart by
@@ -378,27 +309,22 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         deps.now(),
       )
     ) {
-      warnDrop(() => `dropping a repeated ask from ${truncateId(from)}`);
+      warnDrop(() => `dropping a repeated ask from ${from}`);
       return;
     }
     // Answered once the server has (it may wait on the tunnel), unless
     // the link went meanwhile.
     void answerFor(from, ask).then((answer) => {
       if (closed) return;
-      let payload = utf8Encoder.encode(JSON.stringify(answer));
-      // An oversize result would be nacked and leave the asker waiting
-      // out its timeout, so it becomes a refusal the asker rejects on at
-      // once. A refusal is tiny and always fits.
-      if (!answerFits(from, frame.id, payload.length)) {
-        payload = utf8Encoder.encode(
-          JSON.stringify(refusal("answer too large for the device hub")),
-        );
+      // Nobody here awaits the answer, so a failure is logged, not
+      // thrown: the asker times out or sees the disconnect.
+      try {
+        const payload = utf8Encoder.encode(JSON.stringify(answer));
+        const sealed = toBase64Url(handshake.writeMessage(payload).message);
+        deps.send(encodeRelay(from, { kind: "answer", id: frame.id, sealed }));
+      } catch (error) {
+        log.warn(`[hub] failed to answer ${from}: ${errorMessageOf(error)}`);
       }
-      const sealed = toBase64Url(handshake.writeMessage(payload).message);
-      sendAnswerText(
-        from,
-        encodeFor(from, { kind: "answer", id: frame.id, sealed }).text,
-      );
     });
   }
 
@@ -442,15 +368,8 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       try {
         const ask: AskPayload = { ask: CONNECT_INFO_ASK, input };
         const payload = utf8Encoder.encode(JSON.stringify(ask));
-        // Sealed, it only grows, so an ask over the limit already is
-        // refused before the handshake's own bound would be.
-        if (payload.length > MAX_HUB_MESSAGE_BYTES) {
-          throw new HubMessageTooLargeError();
-        }
         const sealed = toBase64Url(handshake.writeMessage(payload).message);
-        const { text, fits } = encodeFor(deviceId, { kind: "ask", id, sealed });
-        if (!fits) throw new HubMessageTooLargeError();
-        deps.send(text);
+        deps.send(encodeRelay(deviceId, { kind: "ask", id, sealed }));
       } catch (error) {
         takePending(id)?.reject(error);
       }
@@ -477,7 +396,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       // read after this one either.
       entry.reject(
         new HubAskRefusedError(
-          `the answer from ${truncateId(from)} did not open`,
+          `the answer from ${from} did not open`,
           undefined,
         ),
       );
@@ -501,7 +420,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       // No pinning: the roster is the trust root, and a device that
       // enrolled again holds a new key. The change is only noted.
       if (before !== undefined && !sameKey(before, key)) {
-        log.info(`[hub] device ${truncateId(device.deviceId)} has a new key`);
+        log.info(`[hub] device ${device.deviceId} has a new key`);
       }
       online.set(device.deviceId, key);
     }
@@ -527,7 +446,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
   function handleFrame(from: string, text: string): void {
     const frame = decodeRelayFrame(text);
     if (frame === null) {
-      warnDrop(() => `dropping unparseable frame from ${truncateId(from)}`);
+      warnDrop(() => `dropping unparseable frame from ${from}`);
     } else if (frame.kind === "ask") {
       handleAsk(from, frame);
     } else {
@@ -548,13 +467,8 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         applyPresence(envelope.online);
       } else if (envelope.t === "nack") {
         // A nack names no ask, so it fails every ask pending to that
-        // device. too-large should be unreachable: asks pre-measure
-        // the exact deliver shape the DO does.
-        const error =
-          envelope.reason === "offline"
-            ? () => new HubPeerOfflineError(envelope.to)
-            : () => new HubMessageTooLargeError();
-        rejectAsksTo(envelope.to, error);
+        // device.
+        rejectAsksTo(envelope.to, () => new HubPeerOfflineError(envelope.to));
       } else {
         handleFrame(envelope.from, envelope.frame);
       }

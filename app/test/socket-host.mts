@@ -594,20 +594,9 @@ it("lockout: tickets that lapsed (replaced by the connection's next ask, expired
   await dialListener(track, listener);
 });
 
-it("lockout: a device on another version, refused past the threshold, leaves a correct dial from the same address accepted", async () => {
+it("lockout: a device on another protocol version, refused past the threshold, leaves a correct dial from the same address accepted", async () => {
   const track = trackTest;
   const { listener } = await listen(track);
-  // A build before sealed links opens with a clear frame of its own.
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const code = await new Promise<number>((resolve) => {
-      const ws = new WebSocket(`ws://127.0.0.1:${listener.port}`);
-      ws.on("open", () => ws.send(Buffer.from("link:challenge, in the clear")));
-      ws.on("close", (closed) => resolve(closed));
-      ws.on("error", () => {});
-    });
-    assert.equal(code, CLOSE_HANDSHAKE_FAILED);
-  }
-  // A sealed build on another protocol version.
   for (let attempt = 0; attempt < 6; attempt++) {
     const refused = await dialFails(listener, {
       protocolVersion: PROTOCOL_VERSION + 1,

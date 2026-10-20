@@ -21,18 +21,12 @@ import { PortNumberSchema } from "./schemas/ports.ts";
 export const MAX_HUB_MESSAGE_BYTES = 64 * 1024;
 
 // A UTF-16 unit is one to three UTF-8 bytes, so only the band between
-// needs a real count. `extraBytes` is what the text grows by on its way
-// (deliveredRelayGrowth).
+// needs a real count.
 const utf8 = new TextEncoder();
-export function hubTextWithinLimit(text: string, extraBytes = 0): boolean {
-  const budget = MAX_HUB_MESSAGE_BYTES - extraBytes;
-  if (text.length > budget) return false;
-  if (text.length * 3 <= budget) return true;
-  return utf8.encode(text).byteLength <= budget;
-}
-
-export function utf8ByteLength(text: string): number {
-  return utf8.encode(text).byteLength;
+export function hubTextWithinLimit(text: string): boolean {
+  if (text.length > MAX_HUB_MESSAGE_BYTES) return false;
+  if (text.length * 3 <= MAX_HUB_MESSAGE_BYTES) return true;
+  return utf8.encode(text).byteLength <= MAX_HUB_MESSAGE_BYTES;
 }
 
 // The client's cap on a presence roster (the DO runs no admission gate
@@ -192,17 +186,9 @@ const HubDeliverEnvelopeSchema = Schema.Struct({
 });
 
 // The relay the hub delivers for one it was sent: the same frame, the
-// sender's id in place of the target's. The hub measures this against
-// MAX_HUB_MESSAGE_BYTES, and a sender predicts it from its own envelope
-// by deliveredRelayGrowth, so the two cannot disagree on the shape.
+// sender's id in place of the target's.
 export const deliveredRelay = (from: string, frame: string): string =>
   encodeEnvelope({ t: "relay", from, frame });
-
-// How many bytes the delivered relay is longer than the one sent, each
-// id as JSON writes it.
-export const deliveredRelayGrowth = (from: string, to: string): number =>
-  utf8ByteLength(`"from":${JSON.stringify(from)}`) -
-  utf8ByteLength(`"to":${JSON.stringify(to)}`);
 
 const OnlineDeviceSchema = Schema.Struct({
   deviceId: DeviceIdSchema,
@@ -222,7 +208,7 @@ const PresenceEnvelopeSchema = Schema.Struct({
 const NackEnvelopeSchema = Schema.Struct({
   t: Schema.Literal("nack"),
   to: DeviceIdSchema,
-  reason: Schema.Literals(["offline", "too-large"]),
+  reason: Schema.Literal("offline"),
 });
 
 export const ServerEnvelopeSchema = Schema.Union([

@@ -5,8 +5,8 @@
 // handed this in place of the platform socket on both ends, so the RPC
 // client and server above it never see a clear byte on the wire.
 //
-// The dialer's first frame names this link's version, then carries the
-// connect ticket in clear and the handshake's first message; the ticket is the prologue too, so a
+// The dialer's first frame carries the connect ticket in clear and the
+// handshake's first message; the ticket is the prologue too, so a
 // handshake replayed under another ticket does not open. The listener
 // checks the ticket before any crypto runs (`admit`), which names the
 // device it was minted for and the key the hub's roster holds for it,
@@ -57,48 +57,25 @@ function prologueOf(ticket: string): Uint8Array {
   return utf8.encode(`sm-link-v1:${ticket}`);
 }
 
-// What opens a first frame: "sm", then this link's version. A frame
-// without it comes from a build before sealed links, and one with
-// another version from a build on another link; either is a device
-// that cannot talk to this one, not a guess at a ticket.
-const MAGIC = [0x73, 0x6d];
-const LINK_VERSION = 1;
-const HEADER_BYTES = MAGIC.length + 1;
-
-// The header, the ticket's length as two bytes, the ticket, then the
-// message.
+// The ticket's length as two bytes, the ticket, then the message.
 function firstFrame(ticket: string, message: Uint8Array): Uint8Array {
   const ticketBytes = utf8.encode(ticket);
-  const frame = new Uint8Array(
-    HEADER_BYTES + 2 + ticketBytes.length + message.length,
-  );
-  frame.set([...MAGIC, LINK_VERSION]);
-  new DataView(frame.buffer).setUint16(HEADER_BYTES, ticketBytes.length);
-  frame.set(ticketBytes, HEADER_BYTES + 2);
-  frame.set(message, HEADER_BYTES + 2 + ticketBytes.length);
+  const frame = new Uint8Array(2 + ticketBytes.length + message.length);
+  new DataView(frame.buffer).setUint16(0, ticketBytes.length);
+  frame.set(ticketBytes, 2);
+  frame.set(message, 2 + ticketBytes.length);
   return frame;
 }
 
 function splitFirstFrame(
   frame: Uint8Array,
-): { ticket: string; message: Uint8Array } | "another version" | "malformed" {
-  if (
-    frame.length < HEADER_BYTES ||
-    frame[0] !== MAGIC[0] ||
-    frame[1] !== MAGIC[1] ||
-    frame[2] !== LINK_VERSION
-  ) {
-    return "another version";
-  }
-  const at = HEADER_BYTES + 2;
-  if (frame.length < at) return "malformed";
-  const length = new DataView(frame.buffer, frame.byteOffset).getUint16(
-    HEADER_BYTES,
-  );
-  if (frame.length < at + length) return "malformed";
+): { ticket: string; message: Uint8Array } | null {
+  if (frame.length < 2) return null;
+  const length = new DataView(frame.buffer, frame.byteOffset).getUint16(0);
+  if (frame.length < 2 + length) return null;
   return {
-    ticket: new TextDecoder().decode(frame.subarray(at, at + length)),
-    message: frame.subarray(at + length),
+    ticket: new TextDecoder().decode(frame.subarray(2, 2 + length)),
+    message: frame.subarray(2 + length),
   };
 }
 
@@ -258,9 +235,8 @@ export function sealDialer(
 // sends, and `opened` hears the ticket and the key the handshake proved
 // once it has; `refused` hears every failure, for the listener's log,
 // and whether it was a guess (a ticket never issued, a key that did not
-// hold), which alone counts toward the listener's lockout: a device on
-// another version, or a dial that came after its ticket lapsed, is
-// refused, not suspected.
+// hold), which alone counts toward the listener's lockout: a dial that
+// came after its ticket lapsed is refused, not suspected.
 export function sealListener(
   ws: Socket.WebSocketLike,
   options: {
@@ -284,10 +260,7 @@ export function sealListener(
     if (started) return refuse("a second first frame");
     started = true;
     const first = splitFirstFrame(frame);
-    if (first === "another version") {
-      return refuse("a first frame from another link version");
-    }
-    if (first === "malformed") return refuse("a malformed first frame");
+    if (first === null) return refuse("a malformed first frame");
     void options.admit(first.ticket).then(
       (peerKey) => {
         if (peerKey === ROSTER_UNAVAILABLE) {
