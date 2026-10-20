@@ -128,6 +128,7 @@ it("surface: the bridge's page api has exactly every contract module by name plu
       "clerkPublishableKey",
       "isDev",
       "isElectron",
+      "platform",
     ].toSorted(),
     "the bridge's top-level keys drifted from the preload surface",
   );

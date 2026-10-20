@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { TunnelState } from "@shigomori/contracts/modules/hub";
-import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import type { CommandAccess } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
@@ -17,6 +16,7 @@ import {
   deviceRowLabels,
   DeviceRegistryRowView,
   ExposureSwitchesView,
+  type RowDevice,
 } from "@shigomori/ui/views/remote/DeviceRegistryRowView.tsx";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
@@ -41,7 +41,7 @@ export function DeviceRegistryRow({
   tunnel,
   access,
 }: {
-  device: DeviceInfo;
+  device: RowDevice;
   isThisDevice: boolean;
   name: string;
   // What the row's mark draws: this device's own answer, a peer's

@@ -539,6 +539,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // a browser cannot bind a local TCP listener, and the tab's registrar
     // rejects the client-scoped portForward channels anyway.
     isElectron: false,
+    platform: WEB_PLATFORM,
     ...client.api,
   };
 

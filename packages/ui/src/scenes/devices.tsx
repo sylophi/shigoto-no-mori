@@ -38,7 +38,10 @@ import {
   UnreachableDeviceView,
 } from "../views/remote/RemoteScopeView.tsx";
 import { ShareDataToggleView } from "../views/remote/ShareDataToggleView.tsx";
-import { deviceRowStatus } from "../views/remote/deviceRegistryStatus.ts";
+import {
+  peerRowStatus,
+  thisDeviceRowStatus,
+} from "../views/remote/deviceRegistryStatus.ts";
 import {
   accountDevices,
   forests,
@@ -87,7 +90,9 @@ function row(
   const status =
     !isThisDevice && device.online
       ? deviceById(device.deviceId).status
-      : deviceRowStatus(device, isThisDevice, undefined, null, Date.now());
+      : isThisDevice
+        ? thisDeviceRowStatus(null)
+        : peerRowStatus(device, undefined, Date.now());
   const icon = device.icon ?? "desktop";
   const { controlLabel } = deviceRowLabels({
     device,
@@ -156,7 +161,11 @@ const FORWARD = {
   connCount: 2,
 };
 
-function registry(rows: ReactNode[], banner: ReactNode = null) {
+function registry(
+  self: ReactNode,
+  rows: ReactNode[],
+  banner: ReactNode = null,
+) {
   return (
     <DeviceRegistryView
       account={
@@ -170,6 +179,7 @@ function registry(rows: ReactNode[], banner: ReactNode = null) {
         />
       }
       banner={banner}
+      self={self}
       list={{ state: "ready", rows }}
     />
   );
@@ -191,33 +201,33 @@ export function DevicesPageScene() {
         watermark="アカウント"
       >
         {registry(
-          [HERE, THINKPAD, MINI, WORKPC].flatMap((device) =>
+          HERE &&
+            row(HERE, {
+              exposure: (
+                <ExposureSwitchesView>
+                  <ShareDataToggleView on disabled={false} onChange={noop} />
+                  <AcceptCommandsToggleView
+                    enabled
+                    isError={false}
+                    pending={false}
+                    onChange={noop}
+                  />
+                  <KeepReachableToggleView
+                    on
+                    pending={false}
+                    onChange={noop}
+                    launchAtLogin
+                  />
+                </ExposureSwitchesView>
+              ),
+            }),
+          [THINKPAD, MINI, WORKPC].flatMap((device) =>
             device === undefined
               ? []
               : [
                   row(device, {
                     exposure:
-                      device === HERE ? (
-                        <ExposureSwitchesView>
-                          <ShareDataToggleView
-                            on
-                            disabled={false}
-                            onChange={noop}
-                          />
-                          <AcceptCommandsToggleView
-                            enabled
-                            isError={false}
-                            pending={false}
-                            onChange={noop}
-                          />
-                          <KeepReachableToggleView
-                            on
-                            pending={false}
-                            onChange={noop}
-                            launchAtLogin
-                          />
-                        </ExposureSwitchesView>
-                      ) : device === THINKPAD ? (
+                      device === THINKPAD ? (
                         <PortForwardSectionView
                           canStart
                           forwards={[FORWARD]}
@@ -262,6 +272,7 @@ export function DevicesPartsScene() {
             }
             signOut={null}
             banner={null}
+            self={null}
             list={{ state: "loading" }}
           />
         </Part>
@@ -287,6 +298,7 @@ export function DevicesPartsScene() {
                 This device was removed from the account, so it is signing out.
               </SignInBannerView>
             }
+            self={null}
             list={{
               state: "failed",
               message:

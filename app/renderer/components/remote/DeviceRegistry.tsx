@@ -41,7 +41,10 @@ import {
   SignInBannerView,
 } from "@shigomori/ui/views/remote/DeviceRegistryView.tsx";
 import { useHostChipIndex } from "./deviceHostChips";
-import { deviceRowStatus } from "@shigomori/ui/views/remote/deviceRegistryStatus.ts";
+import {
+  peerRowStatus,
+  thisDeviceRowStatus,
+} from "@shigomori/ui/views/remote/deviceRegistryStatus.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 
 export function DeviceRegistry({ accountId }: { accountId: string }) {
@@ -77,46 +80,70 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   const hosts = useHostChipIndex(localDeviceId);
   const now = useNow();
 
-  // This device first, everything else in the order the device hub
-  // listed it, so the peers keep their registry order.
-  const devices = devicesQuery.data ?? [];
-  const rows = [
-    ...devices.filter((device) => device.deviceId === localDeviceId),
-    ...devices.filter((device) => device.deviceId !== localDeviceId),
-  ].map((device) => {
-    const isThisDevice = device.deviceId === localDeviceId;
-    const hubDevice = hubById.get(device.deviceId);
-    return {
-      device,
-      isThisDevice,
-      // This device's name and icon are the copies it keeps of the
-      // hub's, current the moment a change here lands. The row shows
-      // the ones every other surface of this device draws.
-      name: isThisDevice ? local.name : device.name,
-      icon: isThisDevice ? local.icon : device.icon,
-      status: deviceRowStatus(
+  // This device's row is drawn from what the window knows, so its
+  // switches are there whatever the hub's list is doing. The peers keep
+  // the order the device hub listed them in.
+  const self = {
+    device: { deviceId: localDeviceId, platform: api.platform },
+    isThisDevice: true,
+    name: local.name,
+    icon: local.icon,
+    status: thisDeviceRowStatus(socket),
+    access: commandAccessOf(localDeviceId, localDeviceId, undefined),
+    // This machine knows its own version synchronously.
+    appVersion: api.appVersion,
+  };
+  // Only a list that is ready draws its peers: a failed refetch keeps
+  // the old data, which must not count toward the names below either.
+  const listed = devicesQuery.isError ? [] : (devicesQuery.data ?? []);
+  const peers = listed
+    .filter((device) => device.deviceId !== localDeviceId)
+    .map((device) => {
+      const hubDevice = hubById.get(device.deviceId);
+      return {
         device,
-        isThisDevice,
-        hubDevice?.status,
-        socket,
-        now,
-      ),
-      // Whether THIS device may drive verbs on the peer: the peer's own
-      // "allow control from other devices" switch, as it reports it.
-      access: commandAccessOf(localDeviceId, device.deviceId, hubDevice),
-      // This machine knows its own version synchronously. A peer
-      // confirms one only once its direct session's welcome lands.
-      appVersion: isThisDevice ? api.appVersion : (hubDevice?.appVersion ?? ""),
-    };
-  });
+        isThisDevice: false,
+        name: device.name,
+        icon: device.icon,
+        status: peerRowStatus(device, hubDevice?.status, now),
+        // Whether THIS device may drive verbs on the peer: the peer's
+        // own "allow control from other devices" switch, as it reports
+        // it.
+        access: commandAccessOf(localDeviceId, device.deviceId, hubDevice),
+        // A peer confirms its version only once its direct session's
+        // welcome lands.
+        appVersion: hubDevice?.appVersion ?? "",
+      };
+    });
   // Two machines wearing the same name are told apart by their ids,
   // which the rows otherwise keep out of sight: an id is nothing a
   // person recognises, so it only earns its place when the name alone
   // cannot say which machine the Remove confirm is about.
   const nameCount = new Map<string, number>();
-  for (const row of rows) {
+  for (const row of [self, ...peers]) {
     nameCount.set(row.name, (nameCount.get(row.name) ?? 0) + 1);
   }
+  const rowOf = (row: typeof self) => (
+    <DeviceRegistryRow
+      key={row.device.deviceId}
+      {...row}
+      showId={(nameCount.get(row.name) ?? 0) > 1}
+      chips={hosts.byDevice.get(row.device.deviceId) ?? []}
+      // An unreachable peer's queries are disabled, so it is never the
+      // one still fetching: without this gate one slow peer would
+      // suppress every other row's empty state.
+      chipsLoading={
+        row.isThisDevice
+          ? hosts.localLoading
+          : hosts.remoteLoading && row.status.reachable
+      }
+      onRevokeDevice={() => revokeDevice.mutate(row.device.deviceId)}
+      revokePending={
+        revokeDevice.isPending && revokeDevice.variables === row.device.deviceId
+      }
+      tunnel={row.isThisDevice ? tunnel : undefined}
+    />
+  );
 
   return (
     <DeviceRegistryView
@@ -141,6 +168,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
           <SessionMissingBanner />
         )
       }
+      self={rowOf(self)}
       list={
         devicesQuery.isLoading
           ? { state: "loading" }
@@ -155,34 +183,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
                     ? describeListError(devicesQuery.error)
                     : null,
               }
-            : {
-                state: "ready",
-                rows: rows.map((row) => (
-                  <DeviceRegistryRow
-                    key={row.device.deviceId}
-                    {...row}
-                    showId={(nameCount.get(row.name) ?? 0) > 1}
-                    chips={hosts.byDevice.get(row.device.deviceId) ?? []}
-                    // An unreachable peer's queries are disabled, so it
-                    // is never the one still fetching: without this gate
-                    // one slow peer would suppress every other row's
-                    // empty state.
-                    chipsLoading={
-                      row.isThisDevice
-                        ? hosts.localLoading
-                        : hosts.remoteLoading && row.status.reachable
-                    }
-                    onRevokeDevice={() =>
-                      revokeDevice.mutate(row.device.deviceId)
-                    }
-                    revokePending={
-                      revokeDevice.isPending &&
-                      revokeDevice.variables === row.device.deviceId
-                    }
-                    tunnel={row.isThisDevice ? tunnel : undefined}
-                  />
-                )),
-              }
+            : { state: "ready", rows: peers.map(rowOf) }
       }
     />
   );
