@@ -557,6 +557,12 @@ it("remote devices: a window loaded while the hub is away lists the peers the sh
   // The sync's passes run one at a time: the next case's waits on this
   // one's read.
   await waitFor(() => queryClient.isFetching() === 0, "the read given up");
+  assert.deepEqual(
+    registry
+      .get(remoteDevicesAtom)
+      .map((device) => [device.deviceId, device.status.phase]),
+    [[PEER, "connected"]],
+  );
   registry.dispose();
 });
 

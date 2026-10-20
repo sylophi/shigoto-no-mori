@@ -256,27 +256,33 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   const cached = boundClient().getQueryData<readonly DeviceInfo[]>(
     queryKeys.accountDevices(),
   );
-  // A window with nothing fetched (one loaded while the hub is away)
-  // draws the list the shell last had while its own read is out, which
-  // the client's retries keep out for seconds. Its sessions outlive the
-  // window, so a live one reads connected.
-  const kept =
-    cached ??
-    (await pageApi()
+  // What the shell last had from the hub, for the account it holds
+  // now. Its sessions outlive the window, so a live one reads connected.
+  const kept = () =>
+    pageApi()
       .run(pageApi().account.lastListedDevices())
-      .catch(() => []));
-  if (cached === undefined) setRemoteDevices(registry(), entries(kept));
+      .catch(() => []);
+  // A window with nothing fetched (one loaded while the hub is away)
+  // draws the shell's list while its own read is out, which the
+  // client's retries keep out for seconds.
+  if (cached === undefined) {
+    setRemoteDevices(registry(), entries(await kept()));
+    if (newestStatus !== undefined && newestStatus !== current) {
+      applyCommandAccess(newestStatus);
+    }
+  }
   let list: readonly DeviceInfo[];
   try {
     list = await fetchDeviceList();
   } catch {
     // Offline or signed out mid-flight. react-query keeps the last
     // good data through a failed refetch, so the store keeps whatever
-    // we had.
+    // we had. The shell's list is asked again, since the account can
+    // have changed during the read.
     list =
       boundClient().getQueryData<readonly DeviceInfo[]>(
         queryKeys.accountDevices(),
-      ) ?? kept;
+      ) ?? (await kept());
   }
   const knownIds = new Set(list.map((info) => info.deviceId));
   // A presence roster naming a device the account list has never seen
