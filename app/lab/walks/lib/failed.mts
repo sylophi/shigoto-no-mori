@@ -3,7 +3,8 @@ import { expect } from "vitest";
 // Set by setup.mts, read by labApp.mts's close. A walk none of whose
 // cases began failed in a hook (its beforeAll), which skipped them all.
 // A device closed inside a file's first case closes before its
-// afterEach counts it, so a case under way is not that.
+// afterEach counts it, so a case under way is not that, failing or
+// not, as for any later case: its logs are what SM_WALK_LOGS keeps.
 let ran = 0;
 let failed = false;
 

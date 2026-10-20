@@ -18,11 +18,27 @@ export const setControl = async (page: Page, on: boolean) => {
   await sidebar(page).getByRole("button", { name: "Back" }).click();
 };
 
+// The project's rows in the sidebar, shown.
+const expandProject = async (page: Page) => {
+  const project = sidebar(page).getByRole("button", {
+    name: REAL_NAME,
+    exact: true,
+  });
+  if (
+    (await project.isVisible()) &&
+    (await project.getAttribute("aria-expanded")) !== "true"
+  ) {
+    await project.click();
+  }
+};
+
 // A worktree made as the owner makes one: quick create, off origin/main,
 // in the project at `project` on `lab`. Answers its name, which is its
 // branch's: the one local branch the create adds on `lab`'s disk. A
 // heading that merely changes could be a name a torn-down worktree
-// freed, picked again.
+// freed, picked again. It starts from the primary checkout, since a
+// reused name's worktree has the torn-down one's id and route, whose
+// page would read as the new one's.
 export const quickCreate = async (
   lab: Lab,
   project: string,
@@ -30,7 +46,10 @@ export const quickCreate = async (
   await sidebar(lab.page)
     .getByRole("radio", { name: /This device/ })
     .click();
+  await expandProject(lab.page);
+  await sidebar(lab.page).getByText("main", { exact: true }).first().click();
   const heading = main(lab.page).getByRole("heading", { level: 1 });
+  await expect.poll(() => heading.textContent()).toBe("main");
   const branches = () =>
     lab
       .git(project, "for-each-ref", "--format=%(refname:short)", "refs/heads")
@@ -88,16 +107,7 @@ const openWorktree = async (
   name: string,
 ) => {
   await sidebar(page).getByRole("radio", { name: device }).click();
-  const project = sidebar(page).getByRole("button", {
-    name: REAL_NAME,
-    exact: true,
-  });
-  if (
-    (await project.isVisible()) &&
-    (await project.getAttribute("aria-expanded")) !== "true"
-  ) {
-    await project.click();
-  }
+  await expandProject(page);
   await sidebar(page).getByRole("button", { name: row }).click();
   await main(page)
     .getByRole("heading", { level: 1, name, exact: true })
