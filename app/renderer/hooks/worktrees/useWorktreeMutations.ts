@@ -174,7 +174,6 @@ function useReplaceWorktree<
 }
 
 // The old external worktree's id no longer maps to anything on disk.
-// Drop any cached script runs so they don't linger in the UI.
 export function useConvertExternalWorktree() {
   return useReplaceWorktree<ConvertExternalWorktreeInput, CreateWorktreeResult>(
     (api, input) => api.worktrees.convertExternal(input),
@@ -188,8 +187,7 @@ interface RelocateWorktreeInput {
   destinationPath: string;
 }
 
-// The relocated worktree's id changes (it's derived from path), so
-// any cached script runs keyed by the pre-move id are stranded.
+// The relocated worktree's id changes (it's derived from path).
 export function useRelocateWorktree() {
   return useReplaceWorktree<RelocateWorktreeInput, Worktree>(
     (api, input) => api.worktrees.relocate(input),
@@ -291,14 +289,13 @@ function forgetDeletedWorktrees(
   }
 }
 
-// What the window holds under a worktree's id once the id is gone (the
-// worktree removed, or moved to another id): its script runs, queries,
-// views and commit draft. The id is the path's, so it comes back with
-// the next worktree made under the same name, which must find none of
-// it. A query a page still reads is emptied rather than removed (a
-// reader would fetch a removed one again, for a worktree that is gone),
-// and goes once its last reader does: the worktree's page swaps its
-// contents out in the render the row's going makes.
+// Once a worktree's id is gone (removed, or moved to another id). The
+// id is the path's, so it comes back with the next worktree made under
+// the same name, which must find none of this. A query a page still
+// reads is emptied rather than removed (a reader would fetch a removed
+// one again, for a worktree that is gone), and goes once its last
+// reader does: the worktree's page swaps its contents out in the render
+// the row's going makes.
 function forgetWorktreeState(
   queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
