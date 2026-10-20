@@ -10,9 +10,11 @@
 // going away updates without a refetch.
 import { credentialRevoked } from "@shared/remote/supervisor";
 import { useIsMutating } from "@tanstack/react-query";
-import { errorMessageOf } from "@shigomori/contracts/errors";
-import { isHubRefusal } from "@shigomori/contracts/hubApi";
-import { isHubUnreachable } from "@shared/account/service";
+import {
+  isHubRefusal,
+  isHubUnreachableError,
+  errorMessageOf,
+} from "@shigomori/contracts/errors";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import {
@@ -198,7 +200,7 @@ function describeListError(error: unknown): string {
   if (isHubRefusal(error)) {
     return "The device hub refused this request, so the device list is unavailable.";
   }
-  if (isHubUnreachable(error)) {
+  if (isHubUnreachableError(error)) {
     return (
       "Couldn't reach the device hub. Either you are offline, or this " +
       "build's hub URL does not point at a reachable Worker."

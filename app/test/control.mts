@@ -57,7 +57,14 @@
 // test/sync-transfer.mts: what separates them is the direct wire.
 // Run: pnpm test control.
 import { LOOPBACK_FILE } from "@shigomori/engine/Control";
-import { HubDeviceRevokedError } from "@shigomori/contracts/hubApi";
+import {
+  HubDeviceRevokedError,
+  HubRateLimitedError,
+  LinkUnauthenticatedError,
+  NoDirectConnectionError,
+  NotSharingError,
+  RemoteCallError,
+} from "@shigomori/contracts/errors";
 import { callOf } from "@shigomori/contracts/contract";
 import assert from "node:assert/strict";
 import {
@@ -136,13 +143,6 @@ import { sessionContract } from "@shigomori/contracts/modules/session";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
-import {
-  HubRateLimitedError,
-  LinkUnauthenticatedError,
-  NoDirectConnectionError,
-  NotSharingError,
-  RemoteCallError,
-} from "@shigomori/contracts/errors";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import { LoopbackGroup } from "@shigomori/contracts/link";
 import * as Context from "effect/Context";

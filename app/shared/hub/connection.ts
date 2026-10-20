@@ -14,8 +14,10 @@
 // adapter, and everything account flavored (deviceId, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts.
 import {
-  errorMessageOf,
   HubRateLimitedError,
+  isHubDeviceRevoked,
+  isHubRefusal,
+  errorMessageOf,
 } from "@shigomori/contracts/errors";
 import {
   HELLO_TIMEOUT_MS,
@@ -38,11 +40,7 @@ import type {
   HubConnectionStatus,
 } from "@shared/hub/connectionTypes";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
-import {
-  HubApi,
-  isHubDeviceRevoked,
-  isHubRefusal,
-} from "@shigomori/contracts/hubApi";
+import { HubApi } from "@shigomori/contracts/hubApi";
 import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,

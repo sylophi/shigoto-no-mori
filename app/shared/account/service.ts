@@ -5,10 +5,11 @@
 // the account proof drives every method with a recording fetch stub.
 //
 // A call rejects with the hub's refusal as its contract error
-// (HubDeviceRevokedError, HubUnknownDeviceError, ...), or with an
-// HttpClientError when the hub could not be reached or answered
-// something the API does not name (a bare 5xx), or with
-// HubRateLimitedError for the rate limiter's 429.
+// (HubDeviceRevokedError, HubUnknownDeviceError, ...), with
+// HubUnreachableError when the hub could not be reached, with
+// HubRateLimitedError for the rate limiter's 429, or with an
+// HttpClientError when it answered something the API does not name (a
+// bare 5xx).
 //
 // Auth-tier discipline lives here. enroll is the only call that carries
 // the short-lived Clerk session token proving the sign-in. listDevices,
@@ -26,9 +27,14 @@ import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import {
   HubApi,
   HubTunnelUnconfiguredError,
-  isHubRefusal,
   PROTOCOL_HEADER,
 } from "@shigomori/contracts/hubApi";
+import {
+  HubRateLimitedError,
+  HubUnreachableError,
+  isHubRefusal,
+  errorMessageOf,
+} from "@shigomori/contracts/errors";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
 import {
   DeviceListResponseSchema,
@@ -40,19 +46,6 @@ import {
   type TunnelProvisionResponse,
 } from "@shigomori/contracts/hubProtocol";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
-import {
-  errorMessageOf,
-  HubRateLimitedError,
-} from "@shigomori/contracts/errors";
-
-// The hub could not be reached at all: offline, a DNS or TLS failure,
-// or a browser hiding a failed response behind CORS.
-export function isHubUnreachable(error: unknown): boolean {
-  return (
-    HttpClientError.isHttpClientError(error) &&
-    error.reason instanceof HttpClientError.TransportError
-  );
-}
 
 // The Worker refused this device's provision outright: a refusal of its
 // credential, or a request it will not serve (an older Worker with no
@@ -81,6 +74,15 @@ function rateLimitedOf(error: unknown): HubRateLimitedError | undefined {
     retryAfterSeconds:
       Number.isFinite(seconds) && seconds > 0 ? seconds : undefined,
   });
+}
+
+// A failure with no answer from the hub, as the one error a window
+// can tell apart once it crosses the shell's port.
+function unreachableOf(error: unknown): HubUnreachableError | undefined {
+  return HttpClientError.isHttpClientError(error) &&
+    error.reason instanceof HttpClientError.TransportError
+    ? new HubUnreachableError({ detail: errorMessageOf(error) })
+    : undefined;
 }
 
 // A status the API names no error for, from a client error (the rate
@@ -190,7 +192,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       ),
       { signal },
     ).catch((error: unknown) => {
-      throw rateLimitedOf(error) ?? error;
+      throw rateLimitedOf(error) ?? unreachableOf(error) ?? error;
     });
 
   return {
