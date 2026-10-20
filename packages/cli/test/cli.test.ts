@@ -28,6 +28,7 @@ import {
 } from "vitest";
 import { type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
 import { builtBinary } from "./lib/binary.ts";
+import { reapGroups, runGroup, within } from "./lib/groups.ts";
 import {
   type FakeApp,
   fakeApp,
@@ -49,6 +50,8 @@ beforeEach(() => {
   box = sandbox();
 });
 afterEach(() => box.remove());
+// Before the sandbox goes (hooks run last registered first).
+afterEach(() => reapGroups());
 
 const runAt = (cwd: string, ...args: string[]) =>
   box.runAt(built, "cli", cwd, args);
@@ -139,6 +142,43 @@ describe("a command line", () => {
     );
     assert.doesNotMatch((await runAt(repo, "list")).stderr, /\[git\]/);
   });
+
+  it(
+    "lists into a reader that takes one line and quits, and ends cleanly with nothing said",
+    within(25_000, async () => {
+      const repo = box.repo("headed");
+      for (let i = 0; i < 40; i++) {
+        box.git(
+          repo,
+          "worktree",
+          "add",
+          "-q",
+          "-b",
+          `w${i}`,
+          `${box.home}/w${i}`,
+        );
+      }
+      box.write("registry.json", {
+        projects: [{ id: "H", name: "headed", path: repo }],
+      });
+      await box.migrate("cli");
+      const shell = (line: string) =>
+        runGroup("bash", ["-o", "pipefail", "-c", line], {
+          cwd: repo,
+          env: box.env("cli"),
+        });
+      for (const args of ["worktrees list --json", "worktrees list"]) {
+        const headed = await shell(`"${built}" ${args} | head -1`);
+        assert.equal(headed.status, 0, `${args}: ${headed.stderr}`);
+        assert.equal(headed.stderr, "", args);
+        assert.equal(headed.stdout.split("\n").length, 2, args);
+        // A reader that has gone before the first write.
+        const gone = await shell(`"${built}" ${args} | (exec 0<&-; sleep 0.5)`);
+        assert.equal(gone.status, 0, `${args}: ${gone.stderr}`);
+        assert.equal(gone.stderr, "", args);
+      }
+    }),
+  );
 
   it("sets, reads and clears autoShelveDays, off while unset", async () => {
     const get = () =>
