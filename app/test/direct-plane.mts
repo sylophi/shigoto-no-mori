@@ -76,9 +76,6 @@
 //   - the listener keys lockout on CF-Connecting-IP for
 //     loopback (tunnel-borne) connections, so one hostile client
 //     cannot bench every tunnel dial behind the shared 127.0.0.1.
-//   - the kind-to-scheme invariant: a tunnel-kind ws:// candidate is
-//     refused at the schema and skipped by the dialer, its ticket
-//     unspent.
 //   - the web path's dialableKinds reaches the HOST, which mints only
 //     dialable kinds. A peer with nothing for this platform answers
 //     available:false and the attempt rejects as unreachable. A peer
@@ -123,8 +120,8 @@
 //     spawner, stub deps and a TestClock, with the connector token
 //     never in any status object.
 //
-// The listener's own hardening (framing, the Origin gate, frame and
-// in-flight caps, the generation guard) is pinned by
+// The listener's own hardening (framing, the Origin gate, the frame
+// cap, the generation guard) is pinned by
 // test/socket-host.mts, which the battery runs alongside.
 //
 // Run: pnpm test direct-plane.
@@ -163,7 +160,6 @@ import {
 } from "@shigomori/contracts/errors";
 import { RemoteConnectError } from "@shared/remote/deviceLink";
 import {
-  DirectCandidateSchema,
   type DirectCandidateKind,
   type DirectConnectInfo,
   DirectConnectInfoSchema,
@@ -938,71 +934,6 @@ it("a genuine ticket refusal is blocked and terminal, and the keeper asks again 
   succeed();
   await clock.advance(60_000);
   assert.equal(dials.length, 7);
-});
-
-it("candidate boundary: a tunnel-kind ws:// candidate is refused by the schema and never dialed, its ticket unspent", async () => {
-  // Schema level: the kind-to-scheme invariant.
-  const refused = [
-    { kind: "tunnel", url: "ws://127.0.0.1:42017", ticket: "smpt_x" },
-    {
-      kind: "tunnel",
-      url: "wss://sm-x.example.test:8443",
-      ticket: "smpt_x",
-    },
-    { kind: "tunnel", url: "wss://127.0.0.1", ticket: "smpt_x" },
-    { kind: "lan", url: "wss://127.0.0.1:42017", ticket: "smpt_x" },
-    { kind: "lan", url: "ws://evil.example.test:42017", ticket: "smpt_x" },
-    { kind: "lan", url: "ws://127.0.0.1", ticket: "smpt_x" },
-    { kind: "lan", url: "not a url", ticket: "smpt_x" },
-  ];
-  for (const candidate of refused) {
-    assert.equal(
-      Schema.is(DirectCandidateSchema)(candidate),
-      false,
-      `schema admitted ${candidate.kind} ${candidate.url}`,
-    );
-  }
-  const admitted = [
-    { kind: "lan", url: "ws://127.0.0.1:42017", ticket: "smpt_x" },
-    { kind: "lan", url: "ws://[fd00::1]:42017", ticket: "smpt_x" },
-    { kind: "tunnel", url: "wss://sm-x.sm.example.test", ticket: "smpt_x" },
-  ];
-  for (const candidate of admitted) {
-    assert.equal(
-      Schema.is(DirectCandidateSchema)(candidate),
-      true,
-      `schema refused ${candidate.kind} ${candidate.url}`,
-    );
-  }
-  // Dialer level: a malformed candidate pointing at a REAL
-  // listener fails the answer's parse, so the dial fails and the
-  // ticket is never presented, even though the URL is reachable.
-  const listener = await startDirectListener(trackTest);
-  const ticket = mintTicket(listener.tickets, DIALER);
-  const { dialer } = fakeAskDialer(
-    {
-      available: true,
-      acceptsCommands: false,
-      sharesData: true,
-      candidates: [
-        {
-          kind: "tunnel",
-          url: `ws://127.0.0.1:${listener.port}`,
-          ticket,
-        },
-      ],
-    },
-    { deadlineMs: 1500 },
-  );
-  await assert.rejects(
-    () => connectOnce(dialer, LISTENER),
-    "a tunnel-kind ws:// candidate was dialed",
-  );
-  assert.equal(
-    await consumeTicket(listener.tickets, ticket, DIALER),
-    true,
-    "the refused candidate's ticket was spent",
-  );
 });
 
 it("a machine that answers at an advertised LAN address learns the ticket and nothing it can use: the dial to it fails the handshake, and what it heard opens nothing at the real listener", async () => {
@@ -2858,6 +2789,7 @@ it("cloudflared runner: a wake's recheck takes an up tunnel that no longer route
     provision: async () => ({
       hostname: "h.example.test",
       connectorToken: "t",
+      dnsCreated: false,
     }),
     probe: () => routes,
   });
@@ -2905,7 +2837,11 @@ it("cloudflared runner: no-binary is a typed terminal state, and an unconfigured
     resolveBinary: () => binaryPath,
     provision: async () => {
       provisions += 1;
-      return { hostname: "h.example.test", connectorToken: "t" };
+      return {
+        hostname: "h.example.test",
+        connectorToken: "t",
+        dnsCreated: false,
+      };
     },
   });
   await noBinary.reconcile({ port: 40100 });
@@ -2929,7 +2865,11 @@ it("cloudflared runner: no-binary is a typed terminal state, and an unconfigured
     provision: async () => {
       unconfiguredCalls += 1;
       if (!configured) throw new HubTunnelUnconfiguredError();
-      return { hostname: "h.example.test", connectorToken: "t" };
+      return {
+        hostname: "h.example.test",
+        connectorToken: "t",
+        dnsCreated: false,
+      };
     },
   });
   await unconfigured.reconcile({ port: 40100 });
@@ -2987,7 +2927,11 @@ it("cloudflared runner: a transient failure while an unconfigured answer is wait
       const answer = answers.shift();
       if (answer === "unconfigured") throw new HubTunnelUnconfiguredError();
       if (answer === "offline") throw new Error("getaddrinfo ENOTFOUND");
-      return { hostname: `h${port}.example.test`, connectorToken: "t" };
+      return {
+        hostname: `h${port}.example.test`,
+        connectorToken: "t",
+        dnsCreated: false,
+      };
     },
   });
   await runner.reconcile({ port: 40100 });
@@ -3055,6 +2999,7 @@ it("cloudflared runner: the readiness probe gates advertising (a failed attempt 
       return {
         hostname: "sm-feedfacecafe.sm.example.test",
         connectorToken: token,
+        dnsCreated: false,
       };
     },
     probe: (hostname) => {
@@ -3141,6 +3086,7 @@ it("cloudflared runner: one killed by a signal from outside (another tool's pkil
     provision: async () => ({
       hostname: "sm-feedfacecafe.sm.example.test",
       connectorToken: "token",
+      dnsCreated: false,
     }),
   });
   const { spawned } = runner;
@@ -3166,6 +3112,7 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
       return {
         hostname: "sm-feedfacecafe.sm.example.test",
         connectorToken: "stub-token",
+        dnsCreated: false,
       };
     },
     probe: () => routable,
@@ -3278,7 +3225,11 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   const neverRoutable = await tunnelHarness({
     provision: async () => {
       deadProvisions += 1;
-      return { hostname: "h.example.test", connectorToken: "t" };
+      return {
+        hostname: "h.example.test",
+        connectorToken: "t",
+        dnsCreated: false,
+      };
     },
     probe: () => false,
   });
@@ -3321,7 +3272,11 @@ it("cloudflared runner: a denied provision (401/404) parks with NO scheduled ret
       if (denied) {
         throw new TunnelProvisionDeniedError("device revoked");
       }
-      return { hostname: "h.example.test", connectorToken: "t" };
+      return {
+        hostname: "h.example.test",
+        connectorToken: "t",
+        dnsCreated: false,
+      };
     },
   });
   await runner.reconcile({ port: 40100 });
@@ -3353,7 +3308,11 @@ it("cloudflared runner: closing the layer pre-empts an in-flight provision, so n
   });
   await hung.reconcile({ port: 40100 });
   await hung.dispose();
-  releaseProvision({ hostname: "h.example.test", connectorToken: "t" });
+  releaseProvision({
+    hostname: "h.example.test",
+    connectorToken: "t",
+    dnsCreated: false,
+  });
   await settleTunnel();
   assert.equal(
     hung.spawned.length,

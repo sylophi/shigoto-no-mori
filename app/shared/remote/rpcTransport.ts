@@ -3,10 +3,7 @@
 // (effectClient) once it is open, for the device link (deviceLink.ts),
 // the loopback (hostLink.ts) and the desktop window's link to its shell
 // (portLink.ts) alike. Every push the group serves is subscribed to as
-// the link is made, and fanned out here by channel. The RpcClient
-// decodes every answer, push and view value with the call's schema, so
-// one from a far end on another build that this build does not read is
-// refused here, naming the call.
+// the link is made, and fanned out here by channel.
 import {
   channelOf,
   type ContractCall,
@@ -26,14 +23,12 @@ import * as Fiber from "effect/Fiber";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
-import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import type { ClientTransport, Link } from "@shared/ipc/transport";
 import { log } from "@shared/log";
 import type { FlatClient } from "@shigomori/engine/rpcClient";
-import { MAX_IN_FLIGHT_PER_PEER } from "./link";
 
 // The link dropped while calls were in flight, or a call came after it
 // did: a disconnect, distinct from the handler's own failure. `local`
@@ -57,24 +52,12 @@ export class RemoteDisconnectedError extends Error {
 export const isOwnAppDrop = (error: unknown): boolean =>
   error instanceof RemoteDisconnectedError && error.local;
 
-// A far end on another build answered a call, or sent a view's value,
-// in a shape this build does not read.
-export class UnreadableAnswerError extends Schema.TaggedError<UnreadableAnswerError>()(
-  "UnreadableAnswerError",
-  { channel: Schema.String, cause: Schema.Defect() },
-) {
-  override get message(): string {
-    return `${this.channel} answered in a shape this build does not read`;
-  }
-}
-
-// Calls a link has out at once. A host takes MAX_IN_FLIGHT_PER_PEER
-// from a connection, its own windows' loopback included, and refuses
-// the rest, so a page's burst of calls waits here for its turn instead.
-// Streams (pushes, views) hold no place, as on the host, and neither do
-// a byte channel's numbered calls, which go on the client beside the
-// link (deviceLink.ts).
-export const LINK_CALLS_IN_FLIGHT = (MAX_IN_FLIGHT_PER_PEER * 3) / 4;
+// Calls a link has out at once, so a page's burst of calls waits here
+// for its turn rather than start a git or CLI process each on the host.
+// Streams (pushes, views) hold no place, and neither do a byte
+// channel's numbered calls, which go on the client beside the link
+// (deviceLink.ts).
+export const LINK_CALLS_IN_FLIGHT = 48;
 
 // Lets `permits` effects run at once and the rest wait, admitted in the
 // order they came. Not a Semaphore: a released permit there goes to
@@ -123,13 +106,6 @@ function fifoGate(permits: number) {
       }),
     );
 }
-
-// What a call or a view that the RpcClient could not decode dies with,
-// as the failure that names it; any other defect stays one.
-const unreadable = (channel: string) => (defect: unknown) =>
-  Schema.isSchemaError(defect)
-    ? new UnreadableAnswerError({ channel, cause: defect })
-    : undefined;
 
 // Handlers by channel, which a link's pushes fan out to. A stream over
 // one channel's pushes holds a handler for as long as it runs.
@@ -184,30 +160,14 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
   for (const call of group.requests.values()) {
     if (!isPush(call)) continue;
     const channel = channelOf(call);
-    // A push this build does not read ends the RPC stream it came on,
-    // there being no caller to fail: it is dropped, named, and the
-    // channel heard again, so the next one still lands.
-    const hear: Effect.Effect<void, unknown> = Stream.runForEach(
+    yield* Stream.runForEach(
       client(channel, undefined) as Stream.Stream<unknown, unknown>,
       (payload) =>
         Effect.sync(() => {
           options.onPush?.(channel, payload);
           fanOut.emit(channel, payload);
         }),
-    ).pipe(
-      Effect.catchDefect((defect) =>
-        Schema.isSchemaError(defect)
-          ? Effect.logWarning(
-              `dropped a ${channel} push this build does not read`,
-              defect,
-            ).pipe(Effect.andThen(Effect.suspend(() => hear)))
-          : Effect.die(defect),
-      ),
-    );
-    yield* hear.pipe(
-      Effect.ignore,
-      Effect.forkScoped({ startImmediately: true }),
-    );
+    ).pipe(Effect.ignore, Effect.forkScoped({ startImmediately: true }));
   }
   return {
     call: (channel, input, span) => {
@@ -217,7 +177,6 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           new Error(`No handler registered for channel "${channel}"`),
         );
       }
-      const refused = unreadable(channel);
       const called = Effect.suspend(() =>
         (
           client(
@@ -226,7 +185,7 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           ) as Effect.Effect<unknown, unknown>
         ).pipe(
           Effect.catchDefect((defect) => {
-            const error = refused(defect) ?? dropped(defect);
+            const error = dropped(defect);
             return error === undefined
               ? Effect.die(defect)
               : Effect.fail(error);
@@ -242,7 +201,6 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           new Error(`No view registered for channel "${channel}"`),
         );
       }
-      const refused = unreadable(channel);
       return Stream.suspend(() =>
         (
           client(
@@ -251,7 +209,7 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           ) as Stream.Stream<unknown, unknown>
         ).pipe(
           Stream.catchDefect((defect) => {
-            const error = refused(defect) ?? dropped(defect);
+            const error = dropped(defect);
             return error === undefined
               ? Stream.die(defect)
               : Stream.fail(error);

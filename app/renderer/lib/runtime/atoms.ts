@@ -37,7 +37,6 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Link } from "@shared/ipc/transport";
-import { UnreadableAnswerError } from "@shared/remote/rpcTransport";
 import { ClientLinks } from "./ClientLinks";
 import { peerLink } from "./peerLink";
 
@@ -156,9 +155,8 @@ export function pushesOn<R extends ContractCall>(
   );
 }
 
-// A view's values on a link, decoded where they may come from another
-// build (a peer's). One this build does not read ends the view, naming
-// it.
+// A view's values on a link, decoded where they come untyped (a
+// peer's, over the hub hop). One that doesn't read ends the view.
 export function viewOn<R extends ContractCall>(
   link: Link,
   view: R,
@@ -169,15 +167,7 @@ export function viewOn<R extends ContractCall>(
   const values = link.view(channel, input);
   if (link.local === true) return values as Stream.Stream<A, unknown>;
   const decode = Schema.decodeUnknownEffect(payloadOf(view));
-  return values.pipe(
-    Stream.mapEffect((value) =>
-      decode(value).pipe(
-        Effect.mapError(
-          (cause) => new UnreadableAnswerError({ channel, cause }),
-        ),
-      ),
-    ),
-  );
+  return values.pipe(Stream.mapEffect((value) => decode(value)));
 }
 
 // One device's pushes on its host (contracts' callOf), as they come, for

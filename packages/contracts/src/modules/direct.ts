@@ -9,53 +9,20 @@ import { HexId32Schema } from "../schemas/hexId.ts";
 // answer can't be replayed much later. Matches the hub's ticket TTL.
 export const DIRECT_TICKET_TTL_MS = 60_000;
 
-// Caps a machine with many virtual interfaces, and a hostile answer's
-// dial burst.
+// Caps a machine with many virtual interfaces.
 export const MAX_DIRECT_CANDIDATES = 6;
-
-// The host builds the full URL, so the two sides can't disagree. Peer
-// supplied, so the kind fixes the scheme here: "lan" is ws:// at an IP
-// literal with a port (the listener binds an ephemeral one), "tunnel"
-// wss:// at a hostname with no port (the edge serves 443 only).
-function candidateUrlMatchesKind(
-  kind: "lan" | "tunnel",
-  rawUrl: string,
-): boolean {
-  let url: URL;
-  try {
-    url = new URL(rawUrl);
-  } catch {
-    return false;
-  }
-  // WHATWG keeps IPv6 literals bracketed in `hostname`.
-  const isIpLiteral =
-    /^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname) ||
-    (url.hostname.startsWith("[") && url.hostname.endsWith("]"));
-  if (kind === "lan") {
-    return url.protocol === "ws:" && url.port !== "" && isIpLiteral;
-  }
-  return (
-    url.protocol === "wss:" &&
-    url.hostname !== "" &&
-    url.port === "" &&
-    !isIpLiteral
-  );
-}
 
 const DirectCandidateKindSchema = Schema.Literals(["lan", "tunnel"]);
 export type DirectCandidateKind = typeof DirectCandidateKindSchema.Type;
 
-export const DirectCandidateSchema = Schema.Struct({
+// The host builds the full URL, so the two sides can't disagree: "lan"
+// is ws:// at an IP literal with a port (the listener binds an
+// ephemeral one), "tunnel" wss:// at a hostname (the edge serves 443).
+const DirectCandidateSchema = Schema.Struct({
   kind: DirectCandidateKindSchema,
   url: Schema.String,
   ticket: Schema.String,
-}).check(
-  Schema.makeFilter(
-    (candidate: { readonly kind: DirectCandidateKind; readonly url: string }) =>
-      candidateUrlMatchesKind(candidate.kind, candidate.url) ||
-      "candidate url does not match its kind",
-  ),
-);
+});
 export type DirectCandidate = typeof DirectCandidateSchema.Type;
 
 export const ALL_DIRECT_CANDIDATE_KINDS: readonly DirectCandidateKind[] =

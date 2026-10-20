@@ -514,17 +514,16 @@ export class DeviceHub extends DurableObject<Env> {
   }
 }
 
-// A socket's connection time, 0 for one accepted before sockets carried
-// it, which then counts as the oldest.
+// Every accepted socket carries its attachment from the moment it is
+// accepted, and a deploy closes them all.
 function connectedAt(ws: WebSocket): number {
-  const attachment = ws.deserializeAttachment() as SocketAttachment | null;
-  return attachment?.connectedAt ?? 0;
+  return (ws.deserializeAttachment() as SocketAttachment).connectedAt;
 }
 
 // When the socket last sent a message, or connected.
 function heardAt(ws: WebSocket): number {
-  const attachment = ws.deserializeAttachment() as SocketAttachment | null;
-  return attachment?.heardAt ?? attachment?.connectedAt ?? 0;
+  const attachment = ws.deserializeAttachment() as SocketAttachment;
+  return attachment.heardAt ?? attachment.connectedAt;
 }
 
 // The enrollment's reads and writes, run under the account's admission

@@ -229,8 +229,7 @@ type TunnelStatus = {
 export type TunnelProvision = {
   hostname: string;
   connectorToken: string;
-  // Absent from an older Worker: read as a reused tunnel.
-  dnsCreated?: boolean;
+  dnsCreated: boolean;
 };
 
 // The hub Worker's provision call failed. `cause` is its error:
@@ -637,7 +636,7 @@ const make = (options: Options) =>
             port,
             hostname: provisioned.success.hostname,
             connectorToken: provisioned.success.connectorToken,
-            dnsCreated: provisioned.success.dnsCreated === true,
+            dnsCreated: provisioned.success.dnsCreated,
             ready: false,
           };
         }
