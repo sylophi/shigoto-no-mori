@@ -251,12 +251,16 @@ export const makeMoving = ({
         yield* sql`UPDATE moving SET partial = ${partial}
           WHERE from_path = ${from}`.pipe(Effect.orDie);
         let renamed = false;
+        // git pointed back at the original before the copy goes, so a
+        // delete of it cut short reads as undone, not as landed.
         const undo = Effect.suspend(() =>
           wipe(partial).pipe(
-            Effect.andThen(renamed ? wipeLinkLast(to) : Effect.void),
             Effect.andThen(
-              git.run(project.path, ["worktree", "repair", "--", from]),
+              git
+                .run(project.path, ["worktree", "repair", "--", from])
+                .pipe(Effect.ignore),
             ),
+            Effect.andThen(renamed ? wipeLinkLast(to) : Effect.void),
           ),
         ).pipe(Effect.ignore);
         const cp = (flags: ReadonlyArray<string>) =>

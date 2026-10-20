@@ -454,8 +454,9 @@ it("a cancelled copy across volumes frees its folder for the next move", async (
 
 // A crash partway through the delete of the original a copy across
 // volumes leaves, its record left as a dead process's (a defect at the
-// delete stands for it): an rm takes a folder's entries in no set order,
-// so `.git` first, and nothing after.
+// delete stands for it). It lands where the delete reaches the `.git`,
+// which it takes while anything else is left: an rm takes a folder's
+// entries in no set order.
 it("a copy across volumes whose delete of the original was cut short is finished by the resume", async () => {
   let cut: string | undefined;
   const crashing = sandbox({
@@ -463,16 +464,17 @@ it("a copy across volumes whose delete of the original was cut short is finished
       ...real,
       remove: (target, options) =>
         Effect.suspend(() => {
-          if (cut === undefined || !`${target}/`.startsWith(`${cut}/`)) {
+          if (
+            cut === undefined ||
+            (target !== cut && target !== join(cut, ".git"))
+          ) {
             return real.remove(target, options);
           }
+          if (readdirSync(cut).some((entry) => entry !== ".git")) {
+            rmSync(join(cut, ".git"));
+          }
           cut = undefined;
-          return real
-            .remove(join(target, ".git"))
-            .pipe(
-              Effect.ignore,
-              Effect.andThen(Effect.die("crashed mid-delete")),
-            );
+          return Effect.die("crashed mid-delete");
         }),
     }),
   });
