@@ -58,6 +58,10 @@
         "_tag": "HubUnreachableError"
       },
       {
+        "_tag": "HubUnreachableError",
+        "detail": "Transport error (GET http://127.0.0.1:8787/devices)"
+      },
+      {
         "_tag": "HubCredentialRejectedError"
       },
       {

@@ -11,10 +11,10 @@
 import { credentialRevoked } from "@shared/remote/supervisor";
 import { useIsMutating } from "@tanstack/react-query";
 import {
-  errorMessageOf,
+  isHubRefusal,
   isHubUnreachableError,
+  errorMessageOf,
 } from "@shigomori/contracts/errors";
-import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import {

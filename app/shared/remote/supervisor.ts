@@ -29,8 +29,10 @@ import * as Exit from "effect/Exit";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import { HubUpdateRequiredError } from "@shigomori/contracts/hubApi";
-import { isHubRateLimitedError } from "@shigomori/contracts/errors";
+import {
+  HubUpdateRequiredError,
+  isHubRateLimitedError,
+} from "@shigomori/contracts/errors";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
   type DeviceConnection,

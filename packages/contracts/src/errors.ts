@@ -1,12 +1,6 @@
 // Each crosses every wire as its tag and fields and decodes back into
 // the same class, so callers tell them apart by tag, never by text.
 import * as Schema from "effect/Schema";
-import {
-  HubCredentialRejectedError,
-  HubDeviceRevokedError,
-  HubLoginRejectedError,
-  HubUpdateRequiredError,
-} from "./hubApi.ts";
 
 export function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -236,14 +230,75 @@ export class HubRateLimitedError extends Schema.TaggedError<HubRateLimitedError>
 
 export const isHubRateLimitedError = Schema.is(HubRateLimitedError);
 
-// The device hub could not be reached at all: offline, a DNS or TLS
-// failure, or a browser hiding a failed response behind CORS.
-export class HubUnreachableError extends Schema.TaggedError<HubUnreachableError>()(
-  "HubUnreachableError",
+// The hub's refusals of this device (its HTTP API's, hubApi.ts).
+
+export class HubLoginRejectedError extends Schema.TaggedError<HubLoginRejectedError>()(
+  "HubLoginRejectedError",
   {},
+  { httpApiStatus: 401 },
 ) {
   override get message(): string {
-    return "the device hub could not be reached";
+    return "The device hub did not accept this sign-in.";
+  }
+}
+
+export class HubCredentialRejectedError extends Schema.TaggedError<HubCredentialRejectedError>()(
+  "HubCredentialRejectedError",
+  {},
+  { httpApiStatus: 401 },
+) {
+  override get message(): string {
+    return "The device hub no longer accepts this device's credential.";
+  }
+}
+
+// The one refusal the app signs out on. The socket's close code only
+// reaches a device online at the revoke.
+export class HubDeviceRevokedError extends Schema.TaggedError<HubDeviceRevokedError>()(
+  "HubDeviceRevokedError",
+  {},
+  { httpApiStatus: 403 },
+) {
+  override get message(): string {
+    return "This device was removed from the account.";
+  }
+}
+
+// `error` is the sentence a v2 build shows (it knows no tags). A 403,
+// which v2 treats as terminal rather than retrying forever.
+export class HubUpdateRequiredError extends Schema.TaggedError<HubUpdateRequiredError>()(
+  "HubUpdateRequiredError",
+  { floor: Schema.Int, error: Schema.String },
+  { httpApiStatus: 403 },
+) {
+  override get message(): string {
+    return this.error;
+  }
+}
+
+// Terminal until the account changes: a retry can't succeed.
+export const isHubRefusal = Schema.is(
+  Schema.Union([
+    HubLoginRejectedError,
+    HubCredentialRejectedError,
+    HubDeviceRevokedError,
+    HubUpdateRequiredError,
+  ]),
+);
+
+export const isHubDeviceRevoked = Schema.is(HubDeviceRevokedError);
+
+// The device hub could not be reached at all: offline, a DNS or TLS
+// failure, or a browser hiding a failed response behind CORS.
+// `detail` is the transport's own words, for the logs.
+export class HubUnreachableError extends Schema.TaggedError<HubUnreachableError>()(
+  "HubUnreachableError",
+  { detail: Schema.optional(Schema.String) },
+) {
+  override get message(): string {
+    return this.detail === undefined
+      ? "the device hub could not be reached"
+      : `the device hub could not be reached: ${this.detail}`;
   }
 }
 

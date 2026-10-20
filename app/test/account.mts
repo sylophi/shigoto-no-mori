@@ -42,21 +42,19 @@ import {
   updateDevice,
 } from "../shared/account/enroll.ts";
 import {
+  callFailureOf,
+  CallFailureSchema,
   HubDeviceRevokedError,
+  HubRateLimitedError,
+  HubUnreachableError,
+  isHubRateLimitedError,
   isHubRefusal,
-} from "@shigomori/contracts/hubApi";
+  isHubUnreachableError,
+} from "@shigomori/contracts/errors";
 import {
   TunnelProvisionDeniedError,
   createAccountService,
 } from "../shared/account/service.ts";
-import {
-  CallFailureSchema,
-  callFailureOf,
-  HubRateLimitedError,
-  HubUnreachableError,
-  isHubRateLimitedError,
-  isHubUnreachableError,
-} from "@shigomori/contracts/errors";
 import { createAppQueryClient } from "@/lib/queryClientOptions";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import type { RendererApi } from "@/lib/runtime/pageApi";
