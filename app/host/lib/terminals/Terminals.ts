@@ -181,6 +181,9 @@ export const replayable = (history: string, alternate: boolean): string => {
   return history.slice(0, alternateScreen(history).enteredAt ?? 0);
 };
 
+// How a shell ended: its status, and whether a signal ended it.
+type Ended = { readonly code: number; readonly killed: boolean };
+
 interface Session {
   readonly terminal: Terminal;
   readonly pty: PtyHandle;
@@ -244,7 +247,7 @@ export class Terminals extends Context.Service<
       terminalId: string,
       size: Size,
     ) => Effect.Effect<void, UnknownTerminalError>;
-    // How many open terminals are the worktree's, or in its folder.
+    // How many live terminals are the worktree's, or in its folder.
     readonly openIn: (worktree: {
       readonly id: string;
       readonly path: string;
@@ -314,12 +317,16 @@ const make = <R, E>(options: {
       ),
     );
 
-    const find = (terminalId: string) => {
+    // A listed terminal, a dead one included (`live` leaves it out).
+    const listedSession = (terminalId: string, live = false) => {
       const session = sessions.get(terminalId);
-      return session === undefined || Option.isSome(session.exited)
+      return session === undefined || (live && Option.isSome(session.exited))
         ? Effect.fail(new UnknownTerminalError({ terminalId }))
         : Effect.succeed(session);
     };
+    const find = (terminalId: string) => listedSession(terminalId, true);
+    const living = () =>
+      [...sessions.values()].filter((session) => Option.isNone(session.exited));
 
     // The folder a shell is in now, read off the process.
     const folderOf = (session: Session) =>
@@ -350,7 +357,7 @@ const make = <R, E>(options: {
     // The device's next terminal starts where its newest open one is,
     // else where the last one was, else home.
     const deviceFolder = Effect.gen(function* () {
-      const newest = [...sessions.values()].findLast(
+      const newest = living().findLast(
         (session) => session.terminal.owner.kind === "device",
       );
       const candidates = [
@@ -369,7 +376,7 @@ const make = <R, E>(options: {
     // as a chunk, then the exit once the shell is gone.
     const pump = (
       session: Session,
-      reads: Queue.Queue<string | { readonly exit: number | null }>,
+      reads: Queue.Queue<string | Ended>,
       backlog: { bytes: number; paused: boolean },
     ) =>
       Effect.gen(function* () {
@@ -378,10 +385,10 @@ const make = <R, E>(options: {
           if (typeof first === "string") yield* Effect.sleep(BATCH);
           const taken = [first, ...(yield* Queue.clear(reads))];
           let data = "";
-          let exit: Option.Option<number | null> = Option.none();
+          let ended: Option.Option<Ended> = Option.none();
           for (const item of taken) {
             if (typeof item === "string") data += item;
-            else exit = Option.some(item.exit);
+            else ended = Option.some(item);
           }
           backlog.bytes -= data.length;
           if (backlog.paused && backlog.bytes < RESUME_AT) {
@@ -403,15 +410,23 @@ const make = <R, E>(options: {
               seq: session.seq,
             });
           }
-          if (Option.isSome(exit)) {
-            session.exited = exit;
+          if (Option.isSome(ended)) {
+            session.exited = Option.some(ended.value.code);
             session.forget = true;
             yield* PubSub.publish(session.events, {
               kind: "exit",
-              code: exit.value,
+              code: ended.value.code,
             });
-            // Its scope closes from outside it, since this fiber is in it.
-            yield* Effect.forkIn(end(session), layerScope);
+            // A shell that exited goes with its tab, whatever its status.
+            // One killed stays listed, dead, its screen kept to be read,
+            // until it is closed. Its scope closes from outside it, since
+            // this fiber is in it.
+            yield* Effect.forkIn(
+              ended.value.killed
+                ? Scope.close(session.scope, Exit.void)
+                : end(session),
+              layerScope,
+            );
             return;
           }
         }
@@ -542,9 +557,7 @@ const make = <R, E>(options: {
           forget: false,
         };
         yield* Scope.addFinalizer(scope, PubSub.shutdown(session.events));
-        const reads = yield* Queue.unbounded<
-          string | { readonly exit: number | null }
-        >();
+        const reads = yield* Queue.unbounded<string | Ended>();
         const backlog = { bytes: 0, paused: false };
         pty.onData((data) => {
           backlog.bytes += data.length;
@@ -559,10 +572,13 @@ const make = <R, E>(options: {
         pty.onError((error) => {
           log.warn(`[terminals] a terminal's PTY failed: ${error.message}`);
         });
-        // A shell that dies of a signal has no code to tell.
+        // A shell that dies of a signal reads 128 + its number, as a
+        // shell tells a child's.
         pty.onExit(({ exitCode, signal }) => {
+          const killed = signal !== undefined && signal !== 0;
           Queue.offerUnsafe(reads, {
-            exit: signal !== undefined && signal !== 0 ? null : exitCode,
+            code: killed ? 128 + signal : exitCode,
+            killed,
           });
         });
         yield* Effect.forkIn(pump(session, reads, backlog), scope);
@@ -652,32 +668,43 @@ const make = <R, E>(options: {
       list: SubscriptionRef.changes(listed),
       open,
       close: Effect.fn("Terminals.close")(function* (terminalId: string) {
-        const session = yield* find(terminalId);
+        const session = yield* listedSession(terminalId);
         session.forget = true;
         yield* end(session);
       }),
       attach: (terminalId, after) =>
         Stream.unwrap(
           Effect.gen(function* () {
-            const session = yield* find(terminalId);
-            const live = yield* PubSub.subscribe(session.events);
-            // A chunk sent between the subscription and this read is in
-            // both, and the seq tells which.
-            const past = session.history.since(
-              after?.incarnation === session.incarnation
-                ? after.seq
-                : undefined,
-            );
-            const head: TerminalEvent[] = [
-              { kind: "history", incarnation: session.incarnation, ...past },
-              { kind: "size", ...session.size },
-            ];
+            const session = yield* listedSession(terminalId);
+            const headOf = () => {
+              const past = session.history.since(
+                after?.incarnation === session.incarnation
+                  ? after.seq
+                  : undefined,
+              );
+              return {
+                past,
+                head: [
+                  {
+                    kind: "history",
+                    incarnation: session.incarnation,
+                    ...past,
+                  },
+                  { kind: "size", ...session.size },
+                ] satisfies TerminalEvent[],
+              };
+            };
+            // A dead one's events went with its scope.
             if (Option.isSome(session.exited)) {
               return Stream.fromIterable([
-                ...head,
+                ...headOf().head,
                 { kind: "exit", code: session.exited.value },
               ] satisfies TerminalEvent[]);
             }
+            const live = yield* PubSub.subscribe(session.events);
+            // A chunk sent between the subscription and this read is in
+            // both, and the seq tells which.
+            const { past, head } = headOf();
             return Stream.fromIterable(head).pipe(
               Stream.concat(
                 Stream.fromSubscription(live).pipe(
@@ -719,7 +746,7 @@ const make = <R, E>(options: {
       // A shell is busy while its terminal's foreground process group
       // is not its own: a job it started holds the terminal.
       busy: Effect.gen(function* () {
-        const pids = [...sessions.values()].map((session) => session.pty.pid);
+        const pids = living().map((session) => session.pty.pid);
         if (pids.length === 0) return 0;
         const { stdout } = yield* Processes.exec("ps", [
           "-o",
@@ -739,7 +766,7 @@ const make = <R, E>(options: {
           .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid).length;
       }).pipe(Effect.withSpan("Terminals.busy")),
       openIn: (worktree) =>
-        [...sessions.values()].filter(({ terminal: { owner, cwd } }) =>
+        living().filter(({ terminal: { owner, cwd } }) =>
           owner.kind === "worktree"
             ? owner.worktreeId === worktree.id
             : isSameOrInside(cwd, worktree.path),
