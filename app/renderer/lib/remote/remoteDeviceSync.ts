@@ -254,11 +254,16 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   } catch {
     // Offline or signed out mid-flight. react-query keeps the last
     // good data through a failed refetch, so the store keeps whatever
-    // we had, an empty list when nothing was ever fetched.
+    // we had. A window loaded while the hub is away has nothing
+    // fetched, and its peers come from the list the shell last had
+    // (its sessions outlive the window, so a live one reads connected).
     list =
       boundClient().getQueryData<readonly DeviceInfo[]>(
         queryKeys.accountDevices(),
-      ) ?? [];
+      ) ??
+      (await pageApi()
+        .run(pageApi().account.lastListedDevices())
+        .catch(() => []));
   }
   const knownIds = new Set(list.map((info) => info.deviceId));
   // A presence roster naming a device the account list has never seen

@@ -80,6 +80,38 @@ const answers = async (page: Page, marker: string) => {
     .toContain(`${marker}-42`);
 };
 
+// Whom a window sees on the hub.
+const onlineOn = (lab: Lab) =>
+  lab.page.evaluate(
+    `((api) => api.run(api.hub.status()))(window.__smLab.api)`,
+  ) as Promise<{ onlineDeviceIds: string[] }>;
+const deviceIdOf = (lab: Lab) =>
+  lab.page.evaluate(`window.__smLab.api.deviceId`) as Promise<string>;
+
+it("a window loaded while the hub is away still lists the other device it has a session with, and opens its worktree", async () => {
+  await setControl(a.page, true);
+  const name = await quickCreate(a, join(a.root, "repos", REAL_NAME));
+  await openPeerWorktree(b.page, "a", name);
+  await devices.hub.pause();
+  try {
+    await b.page.reload();
+    await openPeerWorktree(b.page, "a", name);
+  } finally {
+    await devices.hub.resume();
+  }
+  for (const [lab, other] of [
+    [a, b],
+    [b, a],
+  ] as const) {
+    const otherId = await deviceIdOf(other);
+    await expect
+      .poll(async () => (await onlineOn(lab)).onlineDeviceIds, {
+        timeout: 60_000,
+      })
+      .toContain(otherId);
+  }
+});
+
 it("a device tab switched to one never reached here says it is offline, and lists nothing of the last device", async () => {
   await setControl(a.page, true);
   // C is on the account and offline, and never reached by B's window:

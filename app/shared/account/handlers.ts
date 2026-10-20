@@ -77,6 +77,12 @@ export function makeAccountHandlers(
   shell: AccountShell,
 ): Handlers<typeof accountContract> {
   const accountIdOf = () => shell.store().read()?.accountId ?? null;
+  // The hub's last answer, kept for the shell's life with the account
+  // it was for (lastListedDevices).
+  let lastListed: {
+    readonly accountId: string;
+    readonly devices: DeviceInfo[];
+  } | null = null;
 
   const status = async (): Promise<AccountStatus> => {
     const store = shell.store();
@@ -229,8 +235,14 @@ export function makeAccountHandlers(
         }
       });
       shell.devicesListed(devices);
+      lastListed = { accountId: account.record.accountId, devices };
       return devices;
     },
+
+    lastListedDevices: async () =>
+      lastListed !== null && lastListed.accountId === accountIdOf()
+        ? lastListed.devices
+        : [],
 
     setDeviceName: ({ deviceId, name }) => update(deviceId, { name }),
     setDeviceIcon: ({ deviceId, icon }) => update(deviceId, { icon }),

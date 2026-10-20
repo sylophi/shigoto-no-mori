@@ -510,6 +510,49 @@ it("hub status and remote devices: from the hub's pushes and the device list", a
   registry.dispose();
 });
 
+it("remote devices: a window loaded while the hub is away lists the peers the shell last had, one with a live session as connected", async () => {
+  const { registry, queryClient } = page();
+  // Nothing cached: the window's first read of the list fails.
+  const account: Pick<
+    RendererApi["account"],
+    "status" | "listDevices" | "lastListedDevices"
+  > = {
+    status: () => Effect.never,
+    listDevices: () => Effect.die(new Error("the hub is away")),
+    lastListedDevices: () => Effect.succeed([studio]),
+  };
+  const away = status({
+    socket: { phase: "backoff", attempt: 1, delayMs: 1 },
+    peerAppVersions: { [PEER]: "3.0.0" },
+  });
+  // oxlint-disable-next-line shigomori/no-double-cast -- the sync reads only these of the page's api, and the list's read fails
+  const api = {
+    ...runtime,
+    deviceId: LOCAL,
+    account,
+    hub: { status: () => Effect.succeed(away) },
+    peerApi: noPeerApi,
+  } as unknown as RendererApi;
+  startRemoteDeviceSync(
+    api,
+    queryClient,
+    registry,
+    () => () => {},
+    new AbortController().signal,
+  );
+  await waitFor(
+    () =>
+      registry
+        .get(remoteDevicesAtom)
+        .some(
+          (device) =>
+            device.deviceId === PEER && device.status.phase === "connected",
+        ),
+    "the peer listed, connected",
+  );
+  registry.dispose();
+});
+
 it("remote devices: a burst of hub pushes naming a device the list lacks reads the list one at a time, once more after the read out, and cancels none", async () => {
   const { registry, queryClient, hubPush } = page();
   queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
