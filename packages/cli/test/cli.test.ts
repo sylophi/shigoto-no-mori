@@ -166,6 +166,14 @@ describe("a command line", () => {
       assert.equal(headed.status, 0, `${args}: ${headed.stderr}`);
       assert.equal(headed.stderr, "", args);
       assert.equal(headed.stdout.split("\n").length, 2, args);
+      // A reader that has gone before the first write.
+      const gone = spawnSync(
+        "bash",
+        ["-o", "pipefail", "-c", `"${built}" ${args} | (exec 0<&-; sleep 0.5)`],
+        { cwd: repo, env: box.env("cli"), encoding: "utf8" },
+      );
+      assert.equal(gone.status, 0, `${args}: ${gone.stderr}`);
+      assert.equal(gone.stderr, "", args);
     }
   });
 

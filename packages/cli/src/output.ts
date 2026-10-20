@@ -3,7 +3,9 @@
 // terminal, never under --json, NO_COLOR or TERM=dumb.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 
 export class Output extends Context.Service<
@@ -31,58 +33,87 @@ class OutputFailed extends Schema.TaggedError<OutputFailed>()("OutputFailed", {
   }
 }
 
-type Stream = { readonly name: string; readonly stream: NodeJS.WriteStream };
-const STDOUT: Stream = { name: "stdout", stream: process.stdout };
-const STDERR: Stream = { name: "stderr", stream: process.stderr };
-
-// The first failure of a stream, after which writes to it are dropped.
-let failure: OutputFailed | undefined;
-const fail = ({ name }: Stream, error: unknown) => {
-  failure ??= new OutputFailed({ stream: name, reason: errorMessageOf(error) });
+type Stream = {
+  readonly name: string;
+  readonly stream: NodeJS.WriteStream;
+  // Its reader gone or the stream failed: later writes to it dropped.
+  ended: boolean;
+  // The drain every write held past the stream's mark waits for, one
+  // per stream however many wait.
+  drained: Promise<void> | null;
 };
+const STDOUT: Stream = {
+  name: "stdout",
+  stream: process.stdout,
+  ended: false,
+  drained: null,
+};
+const STDERR: Stream = {
+  name: "stderr",
+  stream: process.stderr,
+  ended: false,
+  drained: null,
+};
+
+// The first failure of a stream other than its reader going.
+let failure: OutputFailed | undefined;
 
 // What the command's output met, if a stream failed.
 export const outputFailure = () => failure;
 
-// Once, before the command runs: a reader gone (`| head`, a pager quit
-// early) ends the command quietly, as a terminal tool does, with nothing
-// said and nothing left to say it to; any other failure of a stream is
-// the command's (outputFailure).
+// Stdout's reader gone, which ends the command where it is (main.ts).
+export const stdoutGone = Deferred.makeUnsafe<void>();
+
+// Once, before the command runs. A reader gone (`| head`, a pager quit
+// early) ends the stream quietly, as a terminal tool does: stdout's ends
+// the command too (its children and its cleanup run as at a Ctrl-C), and
+// stderr's only drops what would have gone there. Any other failure of a
+// stream is the command's (outputFailure).
 export const watchStreams = () => {
   for (const each of [STDOUT, STDERR]) {
     each.stream.on("error", (error: NodeJS.ErrnoException) => {
-      if (error.code === "EPIPE") process.exit(0);
-      fail(each, error);
+      each.ended = true;
+      if (error.code === "EPIPE") {
+        if (each === STDOUT) Deferred.doneUnsafe(stdoutGone, Exit.void);
+        return;
+      }
+      failure ??= new OutputFailed({
+        stream: each.name,
+        reason: errorMessageOf(error),
+      });
     });
   }
+};
+
+// The stream's next drain, or its end.
+const drainOf = (to: Stream) => {
+  to.drained ??= new Promise<void>((resolve) => {
+    const done = () => {
+      to.stream.off("drain", done);
+      to.stream.off("error", done);
+      to.drained = null;
+      resolve();
+    };
+    to.stream.on("drain", done);
+    to.stream.on("error", done);
+  });
+  return to.drained;
 };
 
 // A write, done once the stream has taken it: one the stream holds past
 // its mark waits for its drain, so a reader slower than the command
 // slows the command, where the output piled up unread in memory. Bun
 // answers a write's callback before the pipe takes the bytes, so the
-// drain is the signal. Never fails: the engine's reporters can't, and a
-// stream's failure is the command's at its end.
+// drain is the signal, waited for in the same turn as the write so none
+// is missed. Never fails: the engine's reporters can't, and a stream's
+// failure is the command's at its end.
 const write = (to: Stream, text: string) =>
-  Effect.suspend(() => {
-    if (failure !== undefined && failure.stream === to.name) {
-      return Effect.void;
+  Effect.callback<void>((resume) => {
+    if (to.ended || to.stream.write(text)) {
+      resume(Effect.void);
+      return;
     }
-    const { stream } = to;
-    if (stream.write(text)) return Effect.void;
-    return Effect.callback<void>((resume) => {
-      const done = () => {
-        stream.off("drain", done);
-        stream.off("error", done);
-        resume(Effect.void);
-      };
-      stream.once("drain", done);
-      stream.once("error", done);
-      return Effect.sync(() => {
-        stream.off("drain", done);
-        stream.off("error", done);
-      });
-    });
+    void drainOf(to).then(() => resume(Effect.void));
   });
 
 // Written as they are, since the parser runs with a console that says

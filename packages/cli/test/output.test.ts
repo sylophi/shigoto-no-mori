@@ -7,9 +7,14 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { it } from "vitest";
+import { it, vi } from "vitest";
 
 const cli = join(import.meta.dirname, "..");
+
+const waitFor = (ok: () => boolean) =>
+  vi.waitFor(() => {
+    if (!ok()) throw new Error("not yet");
+  }, 10_000);
 
 const flood = (count: number, ...flags: string[]) =>
   spawn(
@@ -31,6 +36,8 @@ it("a reader that holds off holds the output back, and reading on takes every do
     const counts = stderr.trim().split("\n").map(Number);
     done = Math.max(done, ...counts.filter(Number.isFinite));
   });
+  // Held from the first write, however long Bun took to start.
+  await waitFor(() => done > 0);
   await sleep(1_000);
   assert.ok(done < 256, `${done} of 256 writes were done with nothing read`);
   let stdout = "";
@@ -70,4 +77,23 @@ it("a reader that closes after the first line ends the command quietly, with not
     { code, signal, stderr },
     { code: 0, signal: null, stderr: "" },
   );
+}, 60_000);
+
+it("a write the stream holds is waited out however often the scheduler yields between it and its wait", async () => {
+  const child = flood(300, "quiet", "budget=3");
+  child.stdout.pause();
+  let stdout = "";
+  child.stdout.on("data", (chunk: Buffer) => (stdout += chunk));
+  await sleep(300);
+  child.stdout.resume();
+  const closed = once(child, "close") as Promise<[number | null]>;
+  const outcome = await Promise.race([
+    closed.then(([code]) => ({ code })),
+    sleep(20_000).then(() => {
+      child.kill();
+      return { code: "hung" as const };
+    }),
+  ]);
+  assert.deepEqual(outcome, { code: 0 });
+  assert.equal(stdout.trim().split("\n").length, 300);
 }, 60_000);
