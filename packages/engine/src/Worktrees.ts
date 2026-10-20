@@ -8,6 +8,7 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as PlatformError from "effect/PlatformError";
 import { type AgentSession } from "./agentSessions.ts";
 import type { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
@@ -261,7 +262,9 @@ export class Worktrees extends Context.Service<
     // Port-pool's release and the teardown script, the checkout, what is
     // kept under its id, and its branch when the device's setting says so.
     // `preflighted` skips the dirty check a caller already ran with
-    // checkRemovable. The primary checkout is refused regardless.
+    // checkRemovable. The primary checkout is refused regardless. A
+    // checkout a removal left half removed is finished when forced,
+    // without the cleanup that ran before its delete.
     readonly remove: (
       located: Located,
       options: {
@@ -281,6 +284,8 @@ export class Worktrees extends Context.Service<
       | CleanupFailed
       | OrphanedWorktree
       | Git.GitError
+      // A half-removed checkout's wipe.
+      | PlatformError.PlatformError
     >;
     // Whether removing `worktree` deletes its branch: never an external
     // or a detached one's, or one kept, else as the device's setting says.

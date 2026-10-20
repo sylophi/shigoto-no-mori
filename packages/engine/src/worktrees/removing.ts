@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -161,6 +162,30 @@ export const makeRemoving = ({
         );
       });
 
+    // A managed checkout git still lists whose folder is there without
+    // its `.git`: what a removal leaves when its git is killed mid-delete
+    // (git deletes the folder first and its entry last), which git's
+    // remove refuses, forced or not. Not a folder that is gone, as one on
+    // a drive that isn't mounted is.
+    const halfRemoved = Effect.fnUntraced(function* (
+      worktree: WorktreeIdentity,
+    ) {
+      if (worktree.isPrimary || worktree.isExternal) return false;
+      const there = yield* fs
+        .exists(worktree.path)
+        .pipe(Effect.orElseSucceed(() => false));
+      return there && (yield* gone(path.join(worktree.path, ".git")));
+    });
+
+    // What is left of a half-removed checkout, then git's entry, which a
+    // remove of a path that is gone drops alone.
+    const finishCheckout = (repo: string, worktreePath: string) =>
+      wipe(worktreePath).pipe(
+        Effect.andThen(
+          git.removeWorktree({ repo, path: worktreePath, force: false }),
+        ),
+      );
+
     // Removes the folders a worktree leaves empty when they are ours.
     const pruneEmptyParents = (worktreePath: string, projectPath: string) =>
       Effect.gen(function* () {
@@ -195,10 +220,23 @@ export const makeRemoving = ({
         }
       }).pipe(Effect.ignore);
 
-    const removable = (worktree: WorktreeIdentity, force: boolean) =>
-      notPrimary(worktree).pipe(
-        Effect.andThen(requireClean(worktree, force, "remove", "")),
-      );
+    // A half-removed checkout is refused unforced, as one whose status
+    // can't be read is: a `.git` deleted by mistake looks the same.
+    const removable = Effect.fnUntraced(function* (
+      worktree: WorktreeIdentity,
+      force: boolean,
+    ) {
+      yield* notPrimary(worktree);
+      if (!force && (yield* halfRemoved(worktree))) {
+        return yield* new DirtyWorktree({
+          reason: "half-removed",
+          count: 0,
+          verb: "remove",
+          destroys: "",
+        });
+      }
+      yield* requireClean(worktree, force, "remove", "");
+    });
 
     // Whether removing `worktree` deletes its branch: never an external
     // worktree's, a detached one's (it has none), or one kept, else as the
@@ -238,10 +276,13 @@ export const makeRemoving = ({
       yield* options.preflighted
         ? notPrimary(worktree)
         : removable(worktree, options.force);
+      // A half-removed checkout's cleanup ran before the delete that was
+      // cut short.
+      const half = yield* halfRemoved(worktree);
       const deletingBranch = yield* deletesBranch(worktree, options.keepBranch);
       // Never for an external worktree: no provision ever ran.
       let cleanupRan = false;
-      if (!worktree.isExternal && !options.skipCleanup) {
+      if (!worktree.isExternal && !options.skipCleanup && !half) {
         const { settings } = yield* projectSettings(project);
         const teardown = lifecycleCommand(
           { kind: "teardown" },
@@ -344,21 +385,34 @@ export const makeRemoving = ({
       }
       // Unforced, git checks the tree again at the delete, which covers
       // what a cleanup script wrote since `removable`'s check. Once git's
-      // side is done (an orphaned checkout's too), what is kept under the
-      // id goes before anything can cut in: a worktree made at the same
-      // path later would take it over.
+      // side is done (an orphaned checkout's too), the rest goes before
+      // anything can cut in: what is kept under the id, which a worktree
+      // made at the same path later would take over, and the branch, which
+      // nothing would remove after an interrupt (a Ctrl-C, a quit).
       const removed = yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          const outcome = yield* removeCheckout(
-            project.path,
-            worktree.path,
-            options.force,
-          ).pipe(Effect.result);
+          const checkout: Effect.Effect<
+            void,
+            Git.GitError | OrphanedWorktree | PlatformError.PlatformError
+          > = half
+            ? finishCheckout(project.path, worktree.path)
+            : removeCheckout(project.path, worktree.path, options.force);
+          const outcome = yield* Effect.result(checkout);
           if (
-            Result.isSuccess(outcome) ||
-            outcome.failure instanceof OrphanedWorktree
+            Result.isFailure(outcome) &&
+            !(outcome.failure instanceof OrphanedWorktree)
           ) {
-            yield* kept.forget(project, worktree.id);
+            return outcome;
+          }
+          yield* kept.forget(project, worktree.id);
+          if (!worktree.isExternal) {
+            yield* pruneEmptyParents(worktree.path, project.path);
+          }
+          if (deletingBranch) {
+            // The branch may be shared, or the primary's: a failure is fine.
+            yield* git
+              .run(project.path, ["branch", "-D", "--", worktree.branch])
+              .pipe(Effect.ignore);
           }
           return outcome;
         }),
@@ -381,15 +435,6 @@ export const makeRemoving = ({
           });
         }
         return yield* failure;
-      }
-      if (!worktree.isExternal) {
-        yield* pruneEmptyParents(worktree.path, project.path);
-      }
-      if (deletingBranch) {
-        // The branch may be shared, or the primary's: a failure is fine.
-        yield* git
-          .run(project.path, ["branch", "-D", "--", worktree.branch])
-          .pipe(Effect.ignore);
       }
       if (Result.isFailure(removed)) return yield* removed.failure;
       return {
