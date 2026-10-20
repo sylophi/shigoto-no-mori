@@ -35,6 +35,7 @@ import {
   isolatedGitEnv,
   isolateGit,
 } from "../../../gitIsolation.ts";
+import { own, SYNC_SPAWN } from "../../../testProcesses.mts";
 
 // The app root (app/ in the repo), resolved from this file's location
 // under test/lib/.
@@ -251,7 +252,7 @@ export function sandboxGit(
 ): SandboxGit {
   const env = { ...GIT_IDENTITY, ...gitEnv };
   return (cwd, ...args) =>
-    execFileSync("git", args, { cwd, env, encoding: "utf8" });
+    execFileSync("git", args, { ...SYNC_SPAWN, cwd, env, encoding: "utf8" });
 }
 
 // A few turns of the event loop, for a reader to take a line and a
@@ -451,10 +452,7 @@ export function createCliRunner(
 ): CliRunner {
   const runCli: RunCli = (args, onSpawn) =>
     new Promise((resolve, reject) => {
-      const child = spawn(binary, ["--json", ...args], {
-        env,
-        detached: true,
-      });
+      const child = own(spawn(binary, ["--json", ...args], { env }));
       if (child.pid !== undefined) onSpawn?.(child.pid);
       let stdout = "";
       child.stdout.on("data", (chunk: Buffer) => {

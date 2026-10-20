@@ -1,6 +1,11 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
+    ".": {
+      // testProcesses.setup.mts runs under each workspace's own vitest,
+      // which its vitest config names.
+      "ignoreDependencies": ["vitest"],
+    },
     "app": {
       "entry": [
         // forge.config.ts names main's and the host's entries to Vite as

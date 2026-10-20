@@ -12,6 +12,7 @@ ownTestTemp("ui");
 export default defineConfig({
   test: {
     include: ["test/**/*.test.{ts,tsx}"],
+    setupFiles: ["../../testProcesses.setup.mts"],
     // Every case renders synchronously and waits on nothing, so a slow
     // machine only makes it slower: no per-case deadline to miss.
     testTimeout: 0,

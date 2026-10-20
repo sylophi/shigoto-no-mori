@@ -34,21 +34,21 @@ import { afterAll, it } from "vitest";
 import * as OrphanSweep from "../host/lib/scripts/OrphanSweep.ts";
 import { hostContext, runHost } from "./lib/hostRuntime.mts";
 import { makeTracker, processAlive, waitFor } from "./lib/checkKit.mts";
+import { own } from "../../testProcesses.mts";
 
 const { track, teardown } = makeTracker();
 afterAll(teardown);
 
 // A process group of its own, as a script's PTY child leads one.
 function leader(seconds: string): ChildProcess & { pid: number } {
-  const child = spawn("sleep", [seconds], {
-    detached: true,
-    stdio: "ignore",
-  });
+  const child = own(
+    spawn("sleep", [seconds], {
+      detached: true,
+      stdio: "ignore",
+    }),
+  );
   const { pid } = child;
   assert.ok(pid !== undefined, "sleep did not start");
-  track(() => {
-    if (processAlive(pid)) process.kill(pid, "SIGKILL");
-  });
   return Object.assign(child, { pid });
 }
 
@@ -58,13 +58,12 @@ function leader(seconds: string): ChildProcess & { pid: number } {
 async function headlessGroup(
   seconds: string,
 ): Promise<{ leader: number; stray: number }> {
-  const child = spawn(
-    "sh",
-    ["-c", `nohup sleep ${seconds} >/dev/null 2>&1 &`],
-    {
+  // Owned by its group, which outlives the leader.
+  const child = own(
+    spawn("sh", ["-c", `nohup sleep ${seconds} >/dev/null 2>&1 &`], {
       detached: true,
       stdio: "ignore",
-    },
+    }),
   );
   const leaderPid = child.pid;
   assert.ok(leaderPid !== undefined, "sh did not start");
@@ -77,9 +76,6 @@ async function headlessGroup(
     .map((line) => line.trim().split(/\s+/).map(Number))
     .find(([pid, pgid]) => pgid === leaderPid && pid !== leaderPid)?.[0];
   assert.ok(stray !== undefined, "nothing was left in the group");
-  track(() => {
-    if (processAlive(stray)) process.kill(stray, "SIGKILL");
-  });
   return { leader: leaderPid, stray };
 }
 
