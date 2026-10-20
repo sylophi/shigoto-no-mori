@@ -18,9 +18,27 @@ export const setControl = async (page: Page, on: boolean) => {
   await sidebar(page).getByRole("button", { name: "Back" }).click();
 };
 
+// The project's rows in the sidebar, shown.
+const expandProject = async (page: Page) => {
+  const project = sidebar(page).getByRole("button", {
+    name: REAL_NAME,
+    exact: true,
+  });
+  if (
+    (await project.isVisible()) &&
+    (await project.getAttribute("aria-expanded")) !== "true"
+  ) {
+    await project.click();
+  }
+};
+
 // A worktree made as the owner makes one: quick create, off origin/main,
-// in the project at `project` on `lab`. Answers its name, the page's
-// heading.
+// in the project at `project` on `lab`. Answers its name, which is its
+// branch's: the one local branch the create adds on `lab`'s disk. A
+// heading that merely changes could be a name a torn-down worktree
+// freed, picked again. It starts from the primary checkout, since a
+// reused name's worktree has the torn-down one's id and route, whose
+// page would read as the new one's.
 export const quickCreate = async (
   lab: Lab,
   project: string,
@@ -28,23 +46,31 @@ export const quickCreate = async (
   await sidebar(lab.page)
     .getByRole("radio", { name: /This device/ })
     .click();
+  await expandProject(lab.page);
+  await sidebar(lab.page).getByText("main", { exact: true }).first().click();
   const heading = main(lab.page).getByRole("heading", { level: 1 });
-  const before = await heading.textContent();
+  await expect.poll(() => heading.textContent()).toBe("main");
+  const branches = () =>
+    lab
+      .git(project, "for-each-ref", "--format=%(refname:short)", "refs/heads")
+      .split("\n")
+      .filter((branch) => branch !== "");
+  const before = new Set(branches());
+  const added = () => branches().filter((branch) => !before.has(branch));
   // Whether the new worktree's page ever shows the newest commit of the
-  // branch it came from, which isn't one of its own.
+  // branch it came from, which isn't one of its own: the headings it
+  // was seen under, read against the name once the create has one.
   const tip = lab
     .git(project, "log", "-1", "--format=%s", "origin/main")
     .trim();
   await lab.page.evaluate(`(() => {
-    const was = ${JSON.stringify(before ?? "")};
     const subject = ${JSON.stringify(tip)};
     window.smWalkBaseTipWatch?.disconnect();
-    window.smWalkSawBaseTip = false;
+    window.smWalkBaseTipTitles = new Set();
     window.smWalkBaseTipWatch = new MutationObserver(() => {
       const page = document.querySelector("main");
-      const title = page?.querySelector("h1")?.textContent;
-      if (title !== was && title !== "Projects" && page?.textContent?.includes(subject)) {
-        window.smWalkSawBaseTip = true;
+      if (page?.textContent?.includes(subject)) {
+        window.smWalkBaseTipTitles.add(page.querySelector("h1")?.textContent);
       }
     });
     window.smWalkBaseTipWatch.observe(document.body, { subtree: true, childList: true, characterData: true });
@@ -53,16 +79,17 @@ export const quickCreate = async (
     .getByRole("button", { name: `Quick-create worktree in ${REAL_NAME}` })
     .first()
     .click();
+  await expect.poll(() => added().length, { timeout: 30_000 }).toBe(1);
+  const [name = ""] = added();
   await expect
     .poll(() => heading.textContent(), { timeout: 30_000 })
-    .not.toMatch(new RegExp(`^(Projects|${before ?? ""})$`));
-  const name = (await heading.textContent()) ?? "";
+    .toBe(name);
   await main(lab.page).getByText("No uncommitted changes").waitFor();
   // History's first answer is eight git runs queued for the host's
   // spawn slots, slow on a CI runner beside two more apps (V3.md).
   await main(lab.page).getByText("No commits yet").waitFor({ timeout: 30_000 });
   const sawBaseTip = await lab.page.evaluate(
-    "window.smWalkBaseTipWatch.disconnect(), window.smWalkSawBaseTip",
+    `window.smWalkBaseTipWatch.disconnect(), window.smWalkBaseTipTitles.has(${JSON.stringify(name)})`,
   );
   expect(
     sawBaseTip,
@@ -80,16 +107,7 @@ const openWorktree = async (
   name: string,
 ) => {
   await sidebar(page).getByRole("radio", { name: device }).click();
-  const project = sidebar(page).getByRole("button", {
-    name: REAL_NAME,
-    exact: true,
-  });
-  if (
-    (await project.isVisible()) &&
-    (await project.getAttribute("aria-expanded")) !== "true"
-  ) {
-    await project.click();
-  }
+  await expandProject(page);
   await sidebar(page).getByRole("button", { name: row }).click();
   await main(page)
     .getByRole("heading", { level: 1, name, exact: true })
