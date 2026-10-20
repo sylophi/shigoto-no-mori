@@ -294,7 +294,7 @@ export class Worktrees extends Context.Service<
       keepBranch: boolean,
     ) => Effect.Effect<boolean>;
     // The guards every removal shares: never the primary checkout, and no
-    // uncommitted or unreadable worktree unless forced.
+    // uncommitted, unreadable or half-removed worktree unless forced.
     readonly checkRemovable: (
       located: Located,
       force: boolean,

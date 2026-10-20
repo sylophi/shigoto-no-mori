@@ -166,11 +166,12 @@ export const makeRemoving = ({
     // its `.git`: what a removal leaves when its git is killed mid-delete
     // (git deletes the folder first and its entry last), which git's
     // remove refuses, forced or not. Not a folder that is gone, as one on
-    // a drive that isn't mounted is.
+    // a drive that isn't mounted is, nor a locked entry, which git keeps
+    // after the wipe and refuses with its reason.
     const halfRemoved = Effect.fnUntraced(function* (
       worktree: WorktreeIdentity,
     ) {
-      if (worktree.isPrimary || worktree.isExternal) return false;
+      if (worktree.isExternal || worktree.locked) return false;
       const there = yield* fs
         .exists(worktree.path)
         .pipe(Effect.orElseSucceed(() => false));
