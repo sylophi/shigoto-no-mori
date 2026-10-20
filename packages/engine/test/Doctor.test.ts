@@ -3,6 +3,7 @@
 // The machine checks (git, gh, the app bundle, PATH) are left to their
 // pure helpers, since their lines describe the machine, not the code.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -29,6 +30,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { afterEach, beforeEach, describe, it } from "vitest";
 import * as Config from "../src/Config.ts";
 import * as Doctor from "../src/Doctor.ts";
+import { flavorNames } from "../src/flavor.ts";
 import {
   belowGitFloor,
   formatSize,
@@ -315,6 +317,38 @@ describe("the data dir", () => {
     const fixed = await run({ fix: true });
     assert.deepEqual(fixed.repaired, ["deleted the stale update staging lock"]);
     assert.deepEqual(findingsFor(fixed, "staging-lock"), []);
+  });
+
+  it("warns about a cloudflared that outlived the app, from the pid file the app writes", async () => {
+    box.write("registry.json", { projects: [] });
+    const userData = join(
+      box.home,
+      "Library",
+      "Application Support",
+      flavorNames("dev").userDataDir,
+    );
+    mkdirSync(userData, { recursive: true });
+    const standIn = join(box.home, "cloudflared");
+    symlinkSync("/bin/sleep", standIn);
+    // Started from a shell that exits at once, so launchd takes it over
+    // as it does a crashed app's connector.
+    const pid = Number(
+      execFileSync(
+        "/bin/sh",
+        ["-c", '"$0" 600 >/dev/null 2>&1 & echo $!', standIn],
+        { encoding: "utf8" },
+      ).trim(),
+    );
+    try {
+      // Tunnel.ts's format: the bare pid.
+      writeFileSync(join(userData, "cloudflared.pid"), `${pid}\n`);
+      assert.match(
+        only(await run(), "tunnel", "warn").detail,
+        new RegExp(`pid ${pid}\\)`),
+      );
+    } finally {
+      process.kill(pid, "SIGKILL");
+    }
   });
 
   it("sweeps update scratch, but never while a stager owns it", async () => {
