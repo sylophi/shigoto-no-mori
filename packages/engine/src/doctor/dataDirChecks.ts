@@ -329,16 +329,18 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const registeredLine = (
       projects: ReadonlyArray<{
         readonly id?: string | undefined;
+        readonly name?: string | undefined;
         readonly path?: string | undefined;
       }>,
       fix: string,
     ) => {
       const malformed = projects.filter(
         ({ id, path: at }) => (id ?? "") === "" || (at ?? "") === "",
-      ).length;
-      if (malformed > 0) {
+      );
+      if (malformed.length > 0) {
+        const named = malformed.flatMap(({ name }) => (name ? [name] : []));
         return registryLine.warn(
-          `${malformed} ${plural(malformed, "project is", "projects are")} missing an id or path`,
+          `${malformed.length} ${plural(malformed.length, "project is", "projects are")} missing an id or path${named.length > 0 ? `: ${named.join(", ")}` : ""}`,
           fix,
         );
       }
