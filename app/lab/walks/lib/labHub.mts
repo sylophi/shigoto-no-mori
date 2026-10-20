@@ -3,9 +3,16 @@
 // "lab:<account>" in place of a Clerk session token (hub/src/lab.ts). No
 // network and no Clerk, so it runs the same on a laptop and in CI.
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { expect } from "vitest";
 import { freeLoopbackPort, waitFor } from "../../../test/lib/checkKit.mts";
 import { onRunEnd } from "../../../../testProcesses.mts";
 
@@ -63,7 +70,22 @@ export async function startLabHub(): Promise<LabHub> {
   const config = join(root, "wrangler.json");
   writeFileSync(config, JSON.stringify(labConfig()));
   const state = join(root, "state");
-  const env = { ...process.env, WRANGLER_SEND_METRICS: "false" };
+  // SM_WALK_LOGS keeps wrangler's debug log and its output beside the
+  // walk's app logs (labApp.mts's close).
+  const keep = process.env["SM_WALK_LOGS"];
+  const logs =
+    keep === undefined || keep === ""
+      ? undefined
+      : join(keep, basename(expect.getState().testPath ?? root), "hub");
+  if (logs !== undefined) mkdirSync(logs, { recursive: true });
+  const env = {
+    ...process.env,
+    WRANGLER_SEND_METRICS: "false",
+    ...(logs === undefined ? {} : { WRANGLER_LOG_PATH: logs }),
+  };
+  const output = (chunk: Buffer) => {
+    if (logs !== undefined) appendFileSync(join(logs, "output.log"), chunk);
+  };
   execFileSync(
     WRANGLER,
     [
@@ -83,6 +105,10 @@ export async function startLabHub(): Promise<LabHub> {
   const url = `http://127.0.0.1:${port}`;
   let child: ReturnType<typeof spawn> | null = null;
   let exited = true;
+  // Set while a halt (a pause, the stop, the run's end) is the exit's
+  // cause. Any other exit is reported as it happens, since the walk
+  // only sees it as calls failing later.
+  let halting = false;
   let stderr = "";
   // The whole group, workerd with wrangler, whether or not wrangler is
   // still there; a group already gone is no error.
@@ -109,15 +135,24 @@ export async function startLabHub(): Promise<LabHub> {
         "--var",
         "TICKET_SIGNING_KEY:lab-only-not-a-secret",
       ],
-      { cwd: root, env, detached: true, stdio: ["ignore", "ignore", "pipe"] },
+      { cwd: root, env, detached: true, stdio: ["ignore", "pipe", "pipe"] },
     );
     child = launched;
     exited = false;
-    launched.once("exit", () => {
-      if (child === launched) exited = true;
+    halting = false;
+    launched.once("exit", (code, signalName) => {
+      if (child !== launched) return;
+      exited = true;
+      if (!halting) {
+        console.error(
+          `[walks] the lab hub exited (${code}, ${signalName}): ${stderr.slice(-1000)}`,
+        );
+      }
     });
+    launched.stdout?.on("data", output);
     launched.stderr?.on("data", (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-4000);
+      output(chunk);
     });
     await waitFor(
       async () => {
@@ -132,6 +167,7 @@ export async function startLabHub(): Promise<LabHub> {
     );
   };
   const halt = async () => {
+    halting = true;
     signal("SIGTERM");
     await waitFor(() => exited, "the lab hub to stop", 10_000).catch(
       async () => {
@@ -153,6 +189,7 @@ export async function startLabHub(): Promise<LabHub> {
   // Detached, it hears no Ctrl-C of the run's: the run's end takes it
   // (../../../../testProcesses.mts).
   const forget = onRunEnd(() => {
+    halting = true;
     signal("SIGKILL");
     rmSync(root, { recursive: true, force: true });
   });

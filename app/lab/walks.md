@@ -80,7 +80,11 @@ person does in both is in `lib/crossDevice.mts`.
   a Clerk session token (`hub/src/lab.ts`). Each device enrolls through the page api with
   it. No network and no Clerk: the window logs that Clerk's UI didn't
   load, and nothing else of the account needs it. The devices reach
-  each other directly on loopback, as two Macs on one network do.
+  each other directly on loopback, as two Macs on one network do. An
+  exit no pause or stop asked for prints `[walks] the lab hub exited`
+  with its code, signal and stderr's tail, and is not restarted. With
+  `SM_WALK_LOGS`, wrangler's debug log and output land in the walk's
+  `hub` folder there.
 - **The project** (`lib/realRepo.mts`): this repository at a pinned
   commit, 2,562 files and 1,076 commits, served by `git daemon` on
   loopback as the remote, so a clone from a peer carries it (a local
