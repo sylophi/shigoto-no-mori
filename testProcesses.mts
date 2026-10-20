@@ -121,6 +121,9 @@ function processTable(): Map<number, Row> {
     ["-axo", "pid=,ppid=,pgid=,stat=,command="],
     { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
+  if (listed.error !== undefined) {
+    throw new Error(`ps didn't run: ${listed.error.message}`);
+  }
   const rows = new Map<number, Row>();
   for (const line of listed.stdout.split("\n")) {
     const [pid, ppid, pgid, stat, ...command] = line.trim().split(/\s+/);

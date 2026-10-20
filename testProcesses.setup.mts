@@ -12,5 +12,6 @@ beforeEach(() => {
 afterAll(endAll);
 endsWithRun();
 // vitest's own process gone without stopping this fork (a SIGTERM to it
-// alone exits it at once): the fork's exit ends what it started.
-process.once("disconnect", () => process.exit(1));
+// alone exits it at once): the fork ends as a SIGTERM ends it, what it
+// started with it. vitest makes a case's process.exit throw.
+process.once("disconnect", () => process.kill(process.pid, "SIGTERM"));
