@@ -1152,6 +1152,24 @@ const scripted = async () => {
   return { repo, worktree };
 };
 
+describe("a refusal", () => {
+  it("names the flag past it after the words, and apart under --json", async () => {
+    const { repo, worktree } = await scripted();
+    writeFileSync(join(worktree, "dirty.txt"), "x\n");
+    const said = await runAt(repo, "worktrees", "rm", "w");
+    assert.equal(said.code, 1, said.stderr);
+    assert.match(
+      said.stderr,
+      /: Worktree has 1 uncommitted change\(s\)[^\n]*\. Pass --force to remove anyway\.\n$/,
+    );
+    const doc = JSON.parse(
+      (await runAt(repo, "--json", "worktrees", "rm", "w")).stdout,
+    );
+    assert.doesNotMatch(doc.error, /--force/);
+    assert.equal(doc.hint, "Pass --force to remove anyway.");
+  });
+});
+
 describe("cd", () => {
   it("writes the worktree's path to the wrapper's directive file", async () => {
     const { repo, worktree } = await scripted();

@@ -124,6 +124,22 @@ const checkDormantState = (
     ];
   });
 
+// The device's settings, each value checked against the key it sets,
+// none when there are none.
+const checkGlobalConfig = (
+  stored: Option.Option<ConfigDoc>,
+  fix = "Set it again in the app's Settings.",
+) => {
+  const line = check("Data dir", "config", "settings");
+  if (Option.isNone(stored)) return line.ok("absent, so defaults apply");
+  const device = stored.value;
+  const keys = Object.keys(device).length;
+  if (storedProblem({ kind: "device" }, device) !== undefined) {
+    return line.warn("a setting has the wrong type, so it is ignored", fix);
+  }
+  return line.ok(`valid, ${pluralize(keys, "key")}`);
+};
+
 export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -306,39 +322,26 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const configFile = path.join(dataDir, "config.json");
     const registryFile = path.join(dataDir, "registry.json");
 
-    // The device's settings, each value checked against the key it sets.
-    // The device's settings, none when there are none.
-    const checkGlobalConfig = (stored: Option.Option<ConfigDoc>) => {
-      const line = check("Data dir", "config", "config.json");
-      if (Option.isNone(stored)) return line.ok("absent, so defaults apply");
-      const device = stored.value;
-      const keys = Object.keys(device).length;
-      if (storedProblem({ kind: "device" }, device) !== undefined) {
-        return line.warn(
-          "parses, but a field has the wrong type and is being dropped",
-          `Check ${tildify(configFile, home)} against the app's Settings.`,
-        );
-      }
-      return line.ok(`valid, ${pluralize(keys, "key")}`);
-    };
+    const registryLine = check("Data dir", "registry", "projects");
 
-    const registryLine = check("Data dir", "registry", "registry.json");
-
-    // The registry's line, by its projects and the file that holds them.
+    // The registry's line, by its projects, and how an incomplete one
+    // goes.
     const registeredLine = (
       projects: ReadonlyArray<{
         readonly id?: string | undefined;
+        readonly name?: string | undefined;
         readonly path?: string | undefined;
       }>,
-      file: string,
+      fix: string,
     ) => {
       const malformed = projects.filter(
         ({ id, path: at }) => (id ?? "") === "" || (at ?? "") === "",
-      ).length;
-      if (malformed > 0) {
+      );
+      if (malformed.length > 0) {
+        const named = malformed.flatMap(({ name }) => (name ? [name] : []));
         return registryLine.warn(
-          `${malformed} registry ${plural(malformed, "entry is", "entries are")} missing an id or path`,
-          `Remove the incomplete entries from ${tildify(file, home)}.`,
+          `${malformed.length} ${plural(malformed.length, "project is", "projects are")} missing an id or path${named.length > 0 ? `: ${named.join(", ")}` : ""}`,
+          fix,
         );
       }
       return registryLine.ok(
@@ -348,7 +351,10 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
 
     const checkRegistry = Effect.gen(function* () {
       const registry = yield* Registry.Registry;
-      return registeredLine(yield* registry.projects, registryFile);
+      return registeredLine(
+        yield* registry.projects,
+        `Remove each with \`${binaryName} projects remove <name>\`, then add it again.`,
+      );
     });
 
     // Lock files under the data dir older than a write can take: the
@@ -605,7 +611,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (listing.kind === "missing") {
         return [
           line.warn(
-            "enabled in config.json but `port-pool` isn't on PATH, so provisioning is skipped",
+            "on in Settings but `port-pool` isn't on PATH, so provisioning is skipped",
             "Install port-pool, or turn the toggle off in the app's Settings.",
           ),
         ];

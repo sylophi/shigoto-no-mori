@@ -91,6 +91,12 @@ export class ApplyRefused extends Schema.TaggedError<ApplyRefused>()(
     }
   }
 
+  get flagHint(): string | undefined {
+    return this.reason === "uncommitted" || this.reason === "unreadable"
+      ? "Pass --force to apply anyway."
+      : undefined;
+  }
+
   override get message(): string {
     const names = this.names ?? [];
     const count = this.count ?? 0;
@@ -101,9 +107,9 @@ export class ApplyRefused extends Schema.TaggedError<ApplyRefused>()(
       case "base-mismatch":
         return `The capture was taken on ${first.slice(0, 12)} but this worktree is on ${second.slice(0, 12)}. Sync the branch first, then apply.`;
       case "uncommitted":
-        return `Worktree has ${count} uncommitted change(s) that apply would overwrite. Commit them first, or pass --force.`;
+        return `Worktree has ${count} uncommitted change(s) that apply would overwrite. Commit them first.`;
       case "unreadable":
-        return `Couldn't check for uncommitted changes (${messageOf(this.cause)}). Fix the worktree, or pass --force to apply anyway.`;
+        return `Couldn't check for uncommitted changes (${messageOf(this.cause)}). Fix the worktree first.`;
       case "overwrite": {
         const more = count > 3 ? ` and ${count - 3} more` : "";
         return `Applying would overwrite existing file(s) the capture adds: ${names.join(", ")}${more}. Move or delete them first.`;

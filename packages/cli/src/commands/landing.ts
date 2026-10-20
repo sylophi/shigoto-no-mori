@@ -9,6 +9,7 @@ import {
   MergeMethodSchema,
 } from "@shigomori/contracts/schemas/pullRequest";
 import { execFile } from "node:child_process";
+import { withHint } from "@shigomori/engine/errorDocument";
 import * as Landing from "@shigomori/engine/Landing";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
@@ -167,7 +168,7 @@ const landingReporter = Effect.gen(function* () {
 const failureOf = (doc: Landing.Document) =>
   doc.cleanupError !== undefined
     ? Worktrees.cleanupFailureWords(doc.cleanupError)
-    : (doc.error ?? "");
+    : withHint(doc.error ?? "", doc.hint);
 
 // How land, done and rm --stack end, from the document: this checkout
 // removed or put back on the primary branch. The steps before it were

@@ -425,14 +425,18 @@ export class DirtyWorktree extends Schema.TaggedError<DirtyWorktree>()(
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
+  get flagHint(): string {
+    return `Pass --force to ${this.verb} anyway.`;
+  }
+
   override get message(): string {
     if (this.reason === "unreadable") {
       const said = errorMessageOf(this.cause);
-      return `Couldn't check for uncommitted changes (${said}). Fix the worktree, or pass --force to ${this.verb} anyway.`;
+      return `Couldn't check for uncommitted changes (${said}). Fix the worktree first.`;
     }
     return this.destroys === ""
-      ? `Worktree has ${this.count} uncommitted change(s). Pass --force to ${this.verb} anyway.`
-      : `Worktree has ${this.count} uncommitted change(s) that ${this.destroys} would destroy. Commit them first, or pass --force.`;
+      ? `Worktree has ${this.count} uncommitted change(s).`
+      : `Worktree has ${this.count} uncommitted change(s) that ${this.destroys} would destroy. Commit them first.`;
   }
 }
 
@@ -469,6 +473,17 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
+  get flagHint(): string | undefined {
+    switch (this.reason) {
+      case "changed-during-cleanup":
+        return "Pass --force --skip-cleanup to remove it without running the scripts again.";
+      case "uncommitted-at-remove":
+        return "Pass --force to remove anyway.";
+      default:
+        return undefined;
+    }
+  }
+
   // The command line was what was wrong (the terminal exits 2).
   get usage(): boolean {
     return [
@@ -497,11 +512,11 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       case "remove-primary":
         return "Cannot delete the project's primary worktree";
       case "changed-during-cleanup":
-        return `Changes appeared in ${this.subject} while its cleanup scripts ran, so it was kept. Remove them, or pass --force --skip-cleanup to remove it without running the scripts again.`;
+        return `Changes appeared in ${this.subject} while its cleanup scripts ran, so it was kept. Remove them first.`;
       case "changed-since-move":
         return `${this.subject} changed after it was moved to another device (its branch moved, or its uncommitted work isn't what moved), so it was kept.`;
       case "uncommitted-at-remove":
-        return `Worktree ${this.subject} has uncommitted changes. Pass --force to remove anyway.`;
+        return `Worktree ${this.subject} has uncommitted changes.`;
       case "invalid-branch":
         return `Invalid --branch: ${quoted} is not a valid git ref name.`;
       case "invalid-base":

@@ -219,7 +219,7 @@ const make = Effect.gen(function* () {
   const listingOf = (listed: Effect.Success<typeof probe>): TerrierListing => {
     if (listed.kind === "missing") {
       return trouble(
-        "enabled in config.json but `terrier` isn't on PATH, so no terrier projects are listed",
+        "on in Settings but `terrier` isn't on PATH, so no terrier projects are listed",
         "Install terrier, or turn the toggle off in the app's Settings.",
       );
     }

@@ -386,7 +386,12 @@ export const makeCleanup = ({
               "land",
               "guard",
               [],
-              [other.name, other.branch, errorDocument(guarded.failure).error],
+              [
+                other.name,
+                other.branch,
+                errorDocument(guarded.failure).error,
+                errorDocument(guarded.failure).hint ?? "",
+              ],
             );
           }
           const layer = chain.find((pr) => pr.headRefName === other.branch);
