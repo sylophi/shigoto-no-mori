@@ -55,12 +55,13 @@ import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import { retryParkedRevoke } from "@shared/account/enroll";
 import * as WebHub from "../hub/connection";
+import { log } from "@shared/log";
 import { createHubTrace } from "../hub/trace";
 import {
   isConfigured,
   resolveServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
-import { getWebDeviceId } from "../account/deviceId";
+import { getWebDeviceId, readWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { defaultWebDeviceShape } from "../account/deviceIcon";
 import { createWebAccountStore } from "../account/store";
@@ -131,15 +132,20 @@ const ACCOUNT_LOCK = "sm.web.accountChange";
 const isDomError = (error: unknown, name: string): boolean =>
   error instanceof DOMException && error.name === name;
 
-// The profile's device id, read or minted under the account lock, so two
-// fresh tabs can't mint two and enroll under one. A tab waits behind
-// another's enrollment as a sign-out does, and one that waited it out
-// reads the id the other tab minted before enrolling.
+export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
+// The profile's device id. One already stored is read as it is (a tab
+// boots at once); a missing or mangled one is minted under the account
+// lock, so two fresh tabs can't mint two and enroll under one. A tab
+// that waits past ENROLL_WAIT_MS behind another's enrollment reads the
+// id that tab minted before it enrolled, as a sign-out goes ahead.
 export async function establishWebDeviceId(
   storage: KeyValueStorage,
   locks: Pick<LockManager, "request"> | undefined = globalThis.navigator?.locks,
 ): Promise<string> {
-  if (locks === undefined) return getWebDeviceId(storage);
+  const stored = readWebDeviceId(storage);
+  if (stored !== null || locks === undefined) {
+    return stored ?? getWebDeviceId(storage);
+  }
   return await locks
     .request(
       ACCOUNT_LOCK,
@@ -151,7 +157,7 @@ export async function establishWebDeviceId(
       throw error;
     });
 }
-export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
+
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = resolveServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);
@@ -163,7 +169,11 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const tab = createLocalRegistrar({ validateOutputs: deps.isDev });
   // A sign-out whose revoke never reached the hub is delivered at the
   // next boot (enroll.ts retryParkedRevoke), the desktop's rule too.
-  void retryParkedRevoke({ config, service, store, deviceId });
+  // Its clear can fail in a storage that refuses writes, the revoke
+  // itself delivered.
+  void retryParkedRevoke({ config, service, store, deviceId }).catch(
+    (error: unknown) => log.warn("[account] parked revoke:", error),
+  );
 
   // ---- hub socket lifecycle ----
 

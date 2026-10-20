@@ -18,13 +18,19 @@ function isValidDeviceId(value: string | null): value is string {
   return value !== null && isMintedDeviceId(value);
 }
 
+// The persisted id, or null when it is missing or malformed.
+export function readWebDeviceId(storage: KeyValueStorage): string | null {
+  const found = readKey(storage, DEVICE_ID_KEY);
+  return isValidDeviceId(found) ? found : null;
+}
+
 // Reads the persisted id, minting and persisting one when it is missing
 // or malformed. Idempotent: repeat calls against the same storage return
 // the same id. crypto.randomUUID is a WebCrypto global in browsers and
 // node 22 alike, so the headless check can drive this too.
 export function getWebDeviceId(storage: KeyValueStorage): string {
-  const found = readKey(storage, DEVICE_ID_KEY);
-  if (isValidDeviceId(found)) return found;
+  const found = readWebDeviceId(storage);
+  if (found !== null) return found;
   const minted = crypto.randomUUID();
   writeKey(storage, DEVICE_ID_KEY, minted);
   return minted;

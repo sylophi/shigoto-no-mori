@@ -3,8 +3,12 @@
 import { bootWeb } from "./boot";
 import { installWebBridge } from "./preload";
 import { exposeToLab } from "@/lib/runtime/labHandle";
+import { log } from "@shared/log";
 
-void installWebBridge().then((page) => {
-  if (import.meta.env.DEV) exposeToLab(page.api);
-  bootWeb(page);
-});
+installWebBridge().then(
+  (page) => {
+    if (import.meta.env.DEV) exposeToLab(page.api);
+    bootWeb(page);
+  },
+  (error: unknown) => log.error("[boot] the page's bridge:", error),
+);

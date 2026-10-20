@@ -9,15 +9,15 @@
 // scalar facts (so renderer components mount unmodified), the
 // localStorage-backed clientConfig store round-trips, heals corrupt
 // JSON and turns an Each launch rotation once per tab, the
-// per-browser deviceId is stable and matches DeviceIdSchema, and two
-// fresh tabs settle one under the account lock and enroll it,
-// enroll exchanges the Clerk session token for a credential with
-// platform "web" and persists the enc:false envelope, sign-out
-// revokes this device then clears the envelope (removing it when
-// storage refuses the remainder, failing when it refuses the removal
-// too, as an enroll fails that can't keep its credential), a
-// concurrent enroll or sign-out rides the one under way (a failed one not kept), two tabs
-// enrolling at once enroll once and keep the credential the hub holds,
+// per-browser deviceId is stable and matches DeviceIdSchema (two
+// fresh tabs mint one under the account lock and enroll it, a stored
+// one boots without it), enroll exchanges the Clerk session token for
+// a credential with platform "web" and persists the enc:false
+// envelope, sign-out revokes this device then clears the envelope
+// (removing it when storage refuses the remainder, failing when it
+// refuses the removal too, as an enroll fails that can't keep its
+// credential), a concurrent enroll or sign-out rides the one under
+// way (a failed one not kept), two tabs enrolling at once enroll once and keep the credential the hub holds,
 // the shared settings another tab wrote reach this tab's watch,
 // read-classified OS-bound
 // channels answer structural stub defaults while every mutation-shaped
@@ -78,7 +78,7 @@ function makeDeps(overrides: Partial<WebBridgeDeps> = {}): WebBridgeDeps {
   const localStorage = overrides.localStorage ?? memoryStorage();
   return {
     localStorage,
-    deviceId: getWebDeviceId(localStorage),
+    deviceId: overrides.deviceId ?? getWebDeviceId(localStorage),
     env: CONFIGURED_ENV,
     userAgent: CHROME_MAC_UA,
     openExternal: () => {},
@@ -1122,7 +1122,7 @@ it("shared settings another tab wrote reach this tab's watch", async () => {
   );
 });
 
-it("two fresh tabs at once: the device id is read and minted under the account lock, so both tabs and the credential the profile keeps name one device", async () => {
+it("two fresh tabs at once: the device id is minted under the account lock, so both tabs and the credential the profile keeps name one device", async () => {
   const backing = memoryStorage();
   const shared = sharedLocks();
   let held = 0;
@@ -1141,14 +1141,14 @@ it("two fresh tabs at once: the device id is read and minted under the account l
         }
       })) as Pick<LockManager, "request">["request"],
   };
-  // Whether the account lock was held at each touch of the id.
-  const touches: boolean[] = [];
-  const touch = (key: string) => {
-    if (key === "sm.web.deviceId") touches.push(held > 0);
-  };
+  // Whether the account lock was held at each write of the id.
+  const writes: boolean[] = [];
   const localStorage: KeyValueStorage = {
-    getItem: (key) => (touch(key), backing.getItem(key)),
-    setItem: (key, value) => (touch(key), backing.setItem(key, value)),
+    getItem: (key) => backing.getItem(key),
+    setItem: (key, value) => {
+      if (key === "sm.web.deviceId") writes.push(held > 0);
+      backing.setItem(key, value);
+    },
     removeItem: (key) => backing.removeItem(key),
   };
   const enrolled: string[] = [];
@@ -1172,7 +1172,7 @@ it("two fresh tabs at once: the device id is read and minted under the account l
   const ids = await Promise.all(
     [0, 1].map(() => establishWebDeviceId(localStorage, locks)),
   );
-  assert.ok(touches.length > 0 && touches.every(Boolean), "read unlocked");
+  assert.deepEqual(writes, [true], "minted unlocked, or twice");
   const tabs = ids.map((deviceId) => {
     const bridge = createWebBridge(
       makeDeps({ localStorage, deviceId, fetchImpl, locks }),
@@ -1192,6 +1192,24 @@ it("two fresh tabs at once: the device id is read and minted under the account l
   );
   assert.equal(backing.getItem("sm.web.deviceId"), stored);
   assert.deepEqual(enrolled, [stored]);
+});
+
+it("deviceId: a stored id boots without the account lock, and a tab that waits the lock out mints its own", async () => {
+  const localStorage = memoryStorage();
+  const timedOut: Pick<LockManager, "request"> = {
+    request: (() =>
+      Promise.reject(
+        new DOMException("The lock wait timed out.", "TimeoutError"),
+      )) as Pick<LockManager, "request">["request"],
+  };
+  const minted = await establishWebDeviceId(localStorage, timedOut);
+  assert.equal(localStorage.getItem("sm.web.deviceId"), minted);
+  const unasked: Pick<LockManager, "request"> = {
+    request: (() => {
+      throw new Error("the lock was asked for a stored id");
+    }) as Pick<LockManager, "request">["request"],
+  };
+  assert.equal(await establishWebDeviceId(localStorage, unasked), minted);
 });
 
 // The profile's storage refusing the account document's writes, as a
