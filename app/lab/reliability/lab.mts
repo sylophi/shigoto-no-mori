@@ -686,9 +686,16 @@ export class Lab {
       await step(`thawing ${app.profile}`, () => app.thaw(app.appPids()));
     }
     await step("the network", () => this.network.restore({ cut: true }));
+    // B is kept, unless asked or it never signed in, which the next run
+    // would only wait on again.
     const dropped = this.options.keep
       ? []
-      : apps.filter((app) => app !== this.hostApp || this.options.revokeHost);
+      : apps.filter(
+          (app) =>
+            app !== this.hostApp ||
+            this.options.revokeHost ||
+            app.stuckSignedOut,
+        );
     if (!this.options.keep) {
       // The web client's device, and each app's. The browser keeps its
       // Clerk session, so the next run enrolls it again.

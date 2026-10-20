@@ -22,7 +22,7 @@ pnpm reliability --soak 4h                  # random order and gaps, for 4 hours
 | `--seed <n>` | Replay a soak's order and gaps (the report names its seed). |
 | `--headed` | Show the browser, for watching or for signing it in. |
 | `--keep` | Leave every profile and its device enrolled, for a quicker next run. |
-| `--revoke-host` | Sign B out at the end and delete its profile, which is kept otherwise. |
+| `--revoke-host` | Sign B out at the end and delete its profile, which is kept otherwise. `--keep` wins. |
 | `--deploy-local-hub` | Let a named `hub-redeploy` deploy this checkout's `hub/` when it differs from release/v3. |
 
 ## What it sets up
@@ -72,9 +72,10 @@ redirects to, which the tab then opens.
 At the end it signs the browser, A and C out (revoking their devices)
 and deletes their profiles, unless `--keep`. The browser profile
 stays, and enrolls again on the next run. B stays enrolled, with its
-profile and its tunnel, until a run with `--revoke-host`, which is
-also what clears a B signed out some other way (its next run would
-wait for a sign-in that never comes).
+profile and its tunnel, until a run with `--revoke-host` (or a run
+whose B never signed in, so the next starts afresh). Run one before
+the worktree goes: the account holds 16 devices, past which the hub
+drops its stalest offline one.
 
 ## The scenarios
 
@@ -86,7 +87,7 @@ wait for a sign-in that never comes).
 | `host-kill` | B's host process is killed, and its shell forks it again. | 60 s |
 | `app-relaunch` | B's whole dev app quits and launches again. | 60 s from the relaunch |
 | `laptop-sleep` | The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, A and C stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and their windows hear the network come back, as a wake tells them, and the tabs wake. | 30 s |
-| `host-sleep` | B's machine sleeps for 30 to 120 s: its whole app stopped, cloudflared and all, its sockets silent but open. Every page must stop reading B as Connected within 60 s, the link's heartbeat (a shorter sleep only notes it), the terminal runs its verbs meanwhile, and all find B again once it goes on. | 60 s |
+| `host-sleep` | B's machine sleeps for 30 to 120 s: its whole app stopped, cloudflared and all, its sockets silent but open. Every page must stop reading B as Connected within 65 s, the link's heartbeat (a shorter sleep only notes it), the terminal runs its verbs meanwhile, and all find B again once it goes on. | 60 s |
 | `desk-host-kill` | A's own host process is killed. Its windows and the terminal have to find it once its shell forks it again. | 30 s |
 | `reload-and-second-tab` | The tab is reloaded, a second tab of the profile opened, then closed, each step recovering. | 30 s each |
 | `reload-and-third-window` | A's first window is reloaded, a third window opened (New Window), then closed, each step recovering. | 30 s each |

@@ -22,7 +22,6 @@ import {
   ALL_SCENARIOS,
   hubDiffersFromRelease,
   recovered,
-  SOAK_SCENARIOS,
   showProject,
   silentFailures,
   terminalRoundTrip,
@@ -83,7 +82,7 @@ const clients = new Set(
 
 let chosen: readonly Scenario[] =
   values.scenarios === undefined
-    ? (soakMs === null ? ALL_SCENARIOS : SOAK_SCENARIOS).filter(
+    ? ALL_SCENARIOS.filter(
         (scenario) => !scenario.destructive && !scenario.onlyNamed,
       )
     : values.scenarios.split(",").map((name) => {

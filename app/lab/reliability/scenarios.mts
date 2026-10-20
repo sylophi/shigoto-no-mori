@@ -11,7 +11,11 @@
 // clients are cut off, so a view that did not catch up shows as stale.
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { PING_INTERVAL_MS, PING_TIMEOUT_MS } from "../../shared/remote/link.ts";
+import {
+  PING_INTERVAL_MS,
+  PING_TIMEOUT_MS,
+  PROBE_TIMEOUT_MS,
+} from "../../shared/remote/link.ts";
 import {
   repoDir,
   sleep,
@@ -633,10 +637,12 @@ const laptopSleep: Scenario = {
   },
 };
 
-// How long a page may go on reading a silent host as Connected: its
-// link gives the host up once nothing has come for the timeout, which
-// a ping round checks (../../shared/remote/link.ts).
-const SILENT_HOST_SHOWN_MS = PING_INTERVAL_MS + PING_TIMEOUT_MS + 5_000;
+// How long a page may go on reading a silent host as Connected: a probe
+// goes out a round after the host's last answer, and once it has been
+// out for the timeout, a fresh one unanswered gives the link up
+// (packages/engine/src/liveness.ts). Then the page has a moment.
+const SILENT_HOST_SHOWN_MS =
+  PING_INTERVAL_MS + PING_TIMEOUT_MS + PROBE_TIMEOUT_MS + 5_000;
 
 const hostSleep: Scenario = {
   name: "host-sleep",
@@ -893,7 +899,7 @@ async function signedOut(tab: Tab): Promise<boolean> {
     .signedIn;
 }
 
-export const SOAK_SCENARIOS: readonly Scenario[] = [
+export const ALL_SCENARIOS: readonly Scenario[] = [
   networkDrop,
   networkBlip,
   hubRedeploy,
@@ -907,10 +913,6 @@ export const SOAK_SCENARIOS: readonly Scenario[] = [
   twoTabsRedial,
   tokenExpiry,
   clockSkew,
-];
-
-export const ALL_SCENARIOS: readonly Scenario[] = [
-  ...SOAK_SCENARIOS,
   signOutWithSibling,
 ];
 
