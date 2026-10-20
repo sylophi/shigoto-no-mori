@@ -128,9 +128,9 @@ const hostLinkOf = (deviceId: string, localDeviceId: string) =>
       : peerLink(linkOf(hubContract), deviceId);
   });
 
-// A push's payloads on a link, decoded where they may come from another
-// build (a peer's). One this build does not read is dropped, there
-// being no caller to fail.
+// A push's payloads on a link, decoded unless the link is to this
+// machine's own app (a peer's cross the hub hop untyped). One that
+// doesn't read is dropped, there being no caller to fail.
 export function pushesOn<R extends ContractCall>(
   link: Link,
   push: R,
