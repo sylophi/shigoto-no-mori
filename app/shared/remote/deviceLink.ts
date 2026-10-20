@@ -42,9 +42,9 @@ import { CLOSE_HANDSHAKE_FAILED, sealDialer } from "./sealedSocket";
 // the wrong machine answering, or a peer on another protocol version,
 // which the dial race remembers and the hub supervisor keys on; the
 // direct keeper retries it on its ladder like anything else (a socket
-// that would not open, the host's temporary lockout, a slow host). `code` is the close code when a
-// socket close ended it. `error` is the peer's own refusal, for a
-// caller that shows it (a version mismatch).
+// that would not open, the host's temporary lockout, a slow host).
+// `code` is the close code when a socket close ended it. `error` is the
+// peer's own refusal, for a caller that shows it (a version mismatch).
 export class RemoteConnectError extends Error {
   readonly code: number | null;
   readonly blocked: boolean;

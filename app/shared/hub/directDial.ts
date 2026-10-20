@@ -32,8 +32,9 @@
 // because this side has no other honest source. The host refuses a bad
 // ticket or key by closing the handshake with its own code (read as
 // LinkRefusedError, blocked) and closes on a locked-out client before
-// it (retryable), and only the host can tell those apart: the lockout keys on client IP, and benches whoever
-// dials next even with a perfect ticket.
+// it (retryable), and only the host can tell those apart: the lockout
+// keys on client IP, and benches whoever dials next even with a perfect
+// ticket.
 //
 // A blocked verdict decides the attempt, but it does NOT end the race:
 // a refusing far end has proved nothing, and a LAN address may be held
