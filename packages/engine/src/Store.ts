@@ -104,7 +104,7 @@ const history = (platform: Platform, lenient: boolean) => ({
   "5_unshelved_at": Effect.provideContext(unshelvedAt, platform),
   "6_terminals": terminals,
   "7_wt_folder": wtFolder,
-  "8_running_scripts": Effect.provideContext(runningScripts, platform),
+  "8_running_scripts": runningScripts,
   "9_mirror_agreements": Effect.provideContext(mirrorAgreements, platform),
   "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
   "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),

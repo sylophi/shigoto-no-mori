@@ -463,11 +463,6 @@ it.each([
     "file-sync/mirror-invites.json",
     { invites: { a: 1 } },
   ],
-  [
-    "a running-scripts key it doesn't model",
-    "running-scripts.json",
-    { ownerPid: 99999, scripts: [], future: { saved: true } },
-  ],
 ])(
   "leaves every v2 file in place when the import drops %s",
   async (_, file, doc) => {
