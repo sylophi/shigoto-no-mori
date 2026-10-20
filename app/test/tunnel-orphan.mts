@@ -17,6 +17,7 @@ import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import { it } from "vitest";
+import { tunnelPidText } from "@shigomori/engine/tunnelPid";
 import { reapOrphanedConnector } from "@host/direct/Tunnel";
 import { tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
@@ -37,7 +38,7 @@ const recorded = (dir: string, command: string) => {
     return exited;
   });
   const pidFile = join(dir, "cloudflared.pid");
-  writeFileSync(pidFile, `${child.pid}\n`);
+  writeFileSync(pidFile, tunnelPidText(child.pid ?? 0));
   // The signal that ended it: the reap's SIGKILL, or else the SIGTERM
   // sent here, so the proof never waits on an exit that isn't coming.
   const endedBy = () => {

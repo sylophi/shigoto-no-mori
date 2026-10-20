@@ -50,6 +50,7 @@ import {
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
 import * as Processes from "@shigomori/engine/processes";
+import { readTunnelPid, tunnelPidText } from "@shigomori/engine/tunnelPid";
 import { elapsedMillis, elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 
 // ---- pure deciders, exported for the direct-plane check ----
@@ -402,10 +403,10 @@ export const reapOrphanedConnector = (pidFile: string) =>
     const fs = yield* FileSystem.FileSystem;
     const raw = yield* fs.readFileString(pidFile).pipe(Effect.option);
     if (Option.isNone(raw)) return;
-    const pid = Number.parseInt(raw.value.trim(), 10);
+    const pid = readTunnelPid(raw.value);
     // The same pid floor as scripts/process.ts safeKill: never signal
     // groups, self, or launchd on a corrupt file.
-    if (Number.isInteger(pid) && pid >= 2 && (yield* Processes.pidAlive(pid))) {
+    if (pid !== undefined && pid >= 2 && (yield* Processes.pidAlive(pid))) {
       // Bounded: the host's boot waits on this.
       const name = yield* Processes.exec(
         "ps",
@@ -676,7 +677,7 @@ const make = (options: Options) =>
             const path = yield* pidFile;
             if (path !== null) {
               yield* fs
-                .writeFileString(path, `${child.pid}\n`)
+                .writeFileString(path, tunnelPidText(child.pid))
                 .pipe(Effect.ignore);
               yield* Effect.addFinalizer(() =>
                 fs.remove(path, { force: true }).pipe(Effect.ignore),

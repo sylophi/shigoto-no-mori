@@ -44,6 +44,7 @@ import { parse } from "semver";
 import { engineLayer } from "../src/layer.ts";
 import * as Migration from "../src/Migration.ts";
 import * as Registry from "../src/Registry.ts";
+import { tunnelPidText } from "../src/tunnelPid.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import { nodeStore, openNode } from "./lib/nodeStore.ts";
 import { macfs, type Sandbox, sandbox } from "./lib/sandbox.ts";
@@ -335,19 +336,20 @@ describe("the data dir", () => {
     const pid = Number(
       execFileSync(
         "/bin/sh",
-        ["-c", '"$0" 600 >/dev/null 2>&1 & echo $!', standIn],
+        ["-c", '"$0" 60 >/dev/null 2>&1 & echo $!', standIn],
         { encoding: "utf8" },
       ).trim(),
     );
     try {
-      // Tunnel.ts's format: the bare pid.
-      writeFileSync(join(userData, "cloudflared.pid"), `${pid}\n`);
+      writeFileSync(join(userData, "cloudflared.pid"), tunnelPidText(pid));
       assert.match(
         only(await run(), "tunnel", "warn").detail,
         new RegExp(`pid ${pid}\\)`),
       );
     } finally {
-      process.kill(pid, "SIGKILL");
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {}
     }
   });
 
