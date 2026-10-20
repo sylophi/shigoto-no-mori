@@ -401,13 +401,8 @@ export const hostRuntime = () => effectClient(runtimeContract, link());
 export const letHostGo = (): Promise<void> => Effect.runPromise(stop(true));
 
 // What the host is busy with, as a quit or an update asks, within a
-// few seconds. An ask older than the watchdog's limit says nothing of
-// the host now.
-const busy = busyAsks<UtilityProcess, HostBusy>({
-  idle: IDLE,
-  freshMs: SILENT_LIMIT_S * 1000,
-  now: () => performance.now(),
-});
+// few seconds.
+const busy = busyAsks<UtilityProcess, HostBusy>({ idle: IDLE });
 export const hostBusy = (quitAfter: boolean) =>
   Effect.suspend(() =>
     busy.ask(child, busyWithin(host().busy(), BUSY_DEADLINE), quitAfter),
