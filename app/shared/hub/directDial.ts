@@ -41,10 +41,10 @@
 // no candidate wins (at exhaustion or at the deadline).
 //
 // STRUCTURAL VERDICTS: two answers to the ask are facts about the peer
-// rather than failed calls, so they reject typed and terminal
-// (isTerminalDialError) instead of as the plain refusal they arrive
-// as, or eager supervision would redial them on the ladder's cap
-// forever:
+// rather than failed calls, so they reject typed
+// (NoDialableCandidateError) instead of as the plain refusal they
+// arrive as, or eager supervision would redial them on the ladder's
+// cap forever:
 //
 //   - the peer serves no direct listener (a web client, by
 //     construction), answered with NO_LISTENER_CODE.
@@ -57,10 +57,9 @@
 // single deadline, and a failure rejects typed with no retry and no
 // memo. Retry lives in exactly one place, the presence-driven keeper
 // (shared/hub/directKeeper.ts), which paces redials on the shared
-// backoff ladder and parks on the terminal verdicts
-// (isTerminalDialError below). Data is direct or nothing: there is no
-// hub fallback behind these failures, the typed rejection IS the
-// outcome the caller surfaces. A second retry owner here would fight
+// backoff ladder and parks on a peer with no listener. Data is direct
+// or nothing: there is no hub fallback behind these failures, the
+// typed rejection IS the outcome the caller surfaces. A second retry owner here would fight
 // the keeper's ladder, so this file deliberately carries none.
 //
 // Pure browser-global-plus-shared code: no node builtins, no electron,
@@ -128,21 +127,6 @@ class DirectDialError extends Data.TaggedError("DirectDialError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
-
-// True when redialing at once cannot change the outcome: a blocked
-// verdict (a ticket the host read and refused, or the wrong machine
-// answered) or a peer with no direct listener. The keeper parks on the
-// second, and asks again after the first only on its slow refusal
-// ladder, which keeps eager supervision from feeding the host's
-// per-identity failed-auth lockout a steady diet of refused tickets.
-// Every other failure (unreachable, deadline, no listener yet) is
-// transient and retries forever on the shared ladder.
-export function isTerminalDialError(error: unknown): boolean {
-  return (
-    (error instanceof RemoteConnectError && error.blocked) ||
-    error instanceof NoDialableCandidateError
-  );
-}
 
 export type DirectDialerDeps = {
   // Asks the peer for its connect info over the device hub (the hub

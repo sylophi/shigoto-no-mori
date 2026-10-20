@@ -7,16 +7,10 @@
 // long as this window stays focused. Boot-scoped like the device sync.
 import { focusManager } from "@tanstack/react-query";
 import { isPeerRefusal } from "@shigomori/contracts/errors";
-import { backoffDelayMs } from "@shared/remote/supervisor";
 import { documentFocused } from "@/lib/focus";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { remoteDevicesAtom } from "./devices";
 import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
-
-// After a failed ask, while the window stays focused and the session
-// up, asked again after these, capped at the last: each within the
-// host's two-minute lease of the renewal before it.
-const RETRY_MS: readonly [number, ...number[]] = [2_000, 5_000, 15_000, 30_000];
 
 type Deps = {
   sweep: (deviceId: string, renewal: boolean) => Promise<{ leaseMs: number }>;
@@ -27,21 +21,20 @@ type Deps = {
 
 // The asks and their renewals per device, for as long as `attend(true)`
 // holds. A failed ask (a request that timed out or lost its answer on a
-// session that stayed up) is retried on RETRY_MS, and `retryNow` (the
-// network back) asks every failed one at once. A refusal (commands or
-// sharing off on the peer) is the peer's answer, not a failure: it
-// waits for the next focus or landing.
+// session that stayed up) is asked again at the next renewal, still
+// within the lease of the one before. A refusal (commands or sharing
+// off on the peer) is the peer's answer, not a failure: it waits for the
+// next focus or landing.
 export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
-  // Per device with a retry pending: failed asks in a row, and whether
-  // the ask that failed was a renewal.
-  const failures = new Map<string, { count: number; renewal: boolean }>();
   // The latest ask per device, from a count that never goes back, so the
   // answer to a superseded one (from before a blur, say) schedules
   // nothing.
   const latest = new Map<string, number>();
   let asked = 0;
   let attended = attendedAtStart;
+  // Half the host's lease (BackgroundFetch.ts), once an answer says it.
+  let renewMs = 60_000;
 
   const cancel = (deviceId: string): void => {
     clearTimeout(timers.get(deviceId));
@@ -53,28 +46,25 @@ export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
     asked += 1;
     const id = asked;
     latest.set(deviceId, id);
-    const later = (delayMs: number, next: boolean) => {
+    const later = (next: boolean) => {
       cancel(deviceId);
       timers.set(
         deviceId,
-        setTimeout(() => ask(deviceId, next), delayMs),
+        setTimeout(() => ask(deviceId, next), renewMs),
       );
     };
     deps.sweep(deviceId, renewal).then(
       ({ leaseMs }) => {
         if (latest.get(deviceId) !== id) return;
-        failures.delete(deviceId);
-        if (attended) later(leaseMs / 2, true);
+        renewMs = leaseMs / 2;
+        if (attended) later(true);
       },
       (error: unknown) => {
         if (latest.get(deviceId) !== id) return;
         if (!attended || !deps.connected(deviceId) || isPeerRefusal(error)) {
-          failures.delete(deviceId);
           return;
         }
-        const count = (failures.get(deviceId)?.count ?? 0) + 1;
-        failures.set(deviceId, { count, renewal });
-        later(backoffDelayMs(RETRY_MS, count - 1), renewal);
+        later(renewal);
       },
     );
   };
@@ -82,12 +72,11 @@ export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
   const stop = (): void => {
     for (const timer of timers.values()) clearTimeout(timer);
     timers.clear();
-    failures.clear();
     latest.clear();
   };
 
   return {
-    // This window focused or not. Losing focus ends every renewal and retry.
+    // This window focused or not. Losing focus ends every renewal.
     attend: (next: boolean, connectedDevices: readonly string[]): void => {
       if (next === attended) return;
       attended = next;
@@ -96,11 +85,6 @@ export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
     },
     landed: (deviceId: string): void => {
       if (attended) ask(deviceId);
-    },
-    retryNow: (): void => {
-      for (const [deviceId, { renewal }] of failures) {
-        if (timers.has(deviceId)) ask(deviceId, renewal);
-      }
     },
     stop,
   };
@@ -128,7 +112,6 @@ export function startRemoteSweepRequests(
   const unfocus = focusManager.subscribe((focused) =>
     renewals.attend(focused, connectedDevices()),
   );
-  window.addEventListener("online", renewals.retryNow, { signal });
   signal.addEventListener(
     "abort",
     () => {

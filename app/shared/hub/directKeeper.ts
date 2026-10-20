@@ -15,23 +15,14 @@
 // ladder and restart schedule this reuses rather than copying):
 // forever-retry with capped backoff for transient failures, a stable
 // reset so a healthy session that blips does not inherit a punishing
-// delay. A refused verdict (a ticket the host read and rejected) asks
-// again only on a slow ladder of its own, spaced so a run of refusals
-// never reaches the host's per-identity failed-auth lockout: a refusal
-// can be transient (a sibling tab's newer ask voiding this one's
-// ticket) with no roster change to follow it, so waiting for one left
-// the tab without a session. A peer there is structurally nothing to
-// dial ON parks instead: a web client serves no direct listener by
+// delay. A refused ticket and the host's failed-auth lockout ride the
+// same ladder: the lockout expires on its own, and a refused connection
+// does not extend it. A peer there is structurally nothing to dial ON
+// parks instead: a web client serves no direct listener by
 // construction, and without a park every desktop would redial every
 // open browser tab forever. It waits for its roster presence to
 // transition offline to online (its app restarted, or our own hub link
 // came back, both of which reset the roster diff).
-//
-// Being INSIDE the host's lockout window is no refusal either -- it
-// expires on its own, and refusing a connection does not extend it.
-// The host says which case it is with a distinct close code
-// (CLOSE_AUTH_LOCKED_OUT), so a lockout arrives here as a transient
-// failure and rides the shared ladder out.
 //
 // The keeper is the ONLY caller that starts a dial (the bridge's
 // dialPeer, whose cache makes a re-dial of a live or in-flight peer a
@@ -54,12 +45,11 @@ import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import {
   BACKOFF_LADDER_MS,
-  backoffDelayMs,
   makeWake,
   restartSchedule,
   type Wake,
 } from "@shared/remote/supervisor";
-import { isTerminalDialError, NoDialableCandidateError } from "./directDial";
+import { NoDialableCandidateError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
@@ -88,8 +78,7 @@ export type DirectKeeper = {
   // bridge's no-session rejection. Null when none applies.
   unavailableReason(deviceId: string): string | null;
   // The network is back, the machine awake or a tab back: every peer
-  // waiting out the shared ladder dials now. A refused peer keeps its
-  // slow ladder, which is what keeps it clear of the host's lockout.
+  // waiting out the ladder dials now.
   dialNow(): void;
 };
 
@@ -101,26 +90,12 @@ type PeerState = {
   lastFailure: string | null;
   // Failed dials since the last session (or since the peer came online).
   failures: number;
-  // Refused dials in a row, for the refusal ladder.
-  refusals: number;
   // Since when the live session's uptime counts (monotonic), null
   // while there is none.
   upSince: number | null;
   // Cuts its wait on the shared ladder short.
   wake: Wake;
 };
-
-// An attempt's answer for a refused dial, which the schedule reads as
-// "wait out the refusal ladder" instead of the shared one.
-const REFUSED = -1;
-
-// How long after a refused dial the keeper asks again. The host locks
-// a client out after five failed hellos each within 30 s of the last,
-// so a run of refusals stays at three before a gap that clears its
-// count, and then asks once a minute.
-const REFUSED_LADDER_MS: readonly [number, ...number[]] = [
-  2_000, 8_000, 35_000, 60_000,
-];
 
 // The keeper, for the length of the scope it is made in: the peers'
 // loops run in it (on its Clock, which a check makes a TestClock to
@@ -180,15 +155,9 @@ export const make = (
           state.lastFailure = message;
           // A peer with no listener (a web client) has nothing to dial
           // while it is one, so the loop parks until its roster re-entry
-          // (see the header). Any other verdict asks again on the slow
-          // refusal ladder: a refused ticket can be a sibling tab's
-          // newer ask voiding this one's, which no roster change follows.
+          // (see the header).
           if (error instanceof NoDialableCandidateError) {
             return yield* Effect.never;
-          }
-          if (isTerminalDialError(error)) {
-            state.refusals += 1;
-            return REFUSED;
           }
           return 0;
         }
@@ -200,7 +169,6 @@ export const make = (
         }
         state.lastFailure = null;
         state.failures = 0;
-        state.refusals = 0;
         yield* Deferred.await(dropped);
         const uptime =
           state.upSince === null
@@ -216,7 +184,6 @@ export const make = (
         dropped: null,
         lastFailure: null,
         failures: 0,
-        refusals: 0,
         upSince: null,
         wake: makeWake(),
       };
@@ -224,14 +191,8 @@ export const make = (
         attempt(deviceId, state).pipe(
           Effect.repeat(
             restartSchedule(BACKOFF_LADDER_MS).pipe(
-              Schedule.modifyDelay(({ input, duration }) =>
-                input === REFUSED
-                  ? Effect.succeed(
-                      Duration.millis(
-                        backoffDelayMs(REFUSED_LADDER_MS, state.refusals - 1),
-                      ),
-                    )
-                  : Effect.as(state.wake.wait(duration), Duration.zero),
+              Schedule.modifyDelay(({ duration }) =>
+                Effect.as(state.wake.wait(duration), Duration.zero),
               ),
             ),
           ),

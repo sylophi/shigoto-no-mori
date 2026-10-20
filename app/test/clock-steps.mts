@@ -8,7 +8,7 @@
 // hub socket's pings and wake probe on it (shared/hub/connection.ts), the
 // supervisor's and the direct keeper's uptime (shared/remote/
 // supervisor.ts, shared/hub/directKeeper.ts), and a window's renewal of
-// a peer's attention after one failed ask (renderer/lib/remote/
+// a peer's attention after a failed ask (renderer/lib/remote/
 // remoteSweep.ts).
 import assert from "node:assert/strict";
 import * as Clock from "effect/Clock";
@@ -372,7 +372,7 @@ it("direct keeper: a session's uptime is monotonic, so a sleep makes no short se
   }
 });
 
-it("renewal: one failed ask while the session stays up is retried, the network coming back asks at once, and the renewals carry on from there", async () => {
+it("renewal: a failed ask while the session stays up is asked again at the next renewal, a refusal parks until a landing, and an unfocused window asks nothing", async () => {
   vi.useFakeTimers();
   const asks: boolean[] = [];
   let fail = false;
@@ -397,40 +397,28 @@ it("renewal: one failed ask while the session stays up is retried, the network c
   await vi.advanceTimersByTimeAsync(60_000);
   assert.deepEqual(asks, [false, true]);
 
-  // The next renewal fails, and so does its first retry.
-  fail = true;
-  await vi.advanceTimersByTimeAsync(60_000 + 2_000);
-  assert.deepEqual(asks, [false, true, true, true]);
-  // The network back, focus unchanged: asked at once, not at the rung.
-  fail = false;
-  renewals.retryNow();
-  await vi.advanceTimersByTimeAsync(0);
-  assert.equal(asks.length, 5);
-  await vi.advanceTimersByTimeAsync(60_000);
-  assert.equal(asks.length, 6, "renewing on the lease again");
-
-  // Without the network event, the retry ladder carries it alone.
+  // The next renewal fails: asked again a renewal later, and carrying on.
   fail = true;
   await vi.advanceTimersByTimeAsync(60_000);
   fail = false;
-  await vi.advanceTimersByTimeAsync(2_000);
+  await vi.advanceTimersByTimeAsync(60_000 - 1);
+  assert.equal(asks.length, 3, "not before the next renewal");
+  await vi.advanceTimersByTimeAsync(1);
   await vi.advanceTimersByTimeAsync(60_000);
-  assert.equal(asks.length, 9);
+  assert.deepEqual(asks, [false, true, true, true, true]);
 
   // A refusal is the peer's answer: nothing asks again until a landing.
-  const refused = asks.length;
-  fail = false;
-  await vi.advanceTimersByTimeAsync(60_000);
-  assert.equal(asks.length, refused + 1);
   refusal = true;
+  await vi.advanceTimersByTimeAsync(60_000);
+  const refused = asks.length;
   await vi.advanceTimersByTimeAsync(10 * 60_000);
-  assert.equal(asks.length, refused + 2, "a refusal parks");
+  assert.equal(asks.length, refused, "a refusal parks");
   refusal = false;
   renewals.landed("B");
   await vi.advanceTimersByTimeAsync(0);
-  assert.equal(asks.length, refused + 3);
+  assert.equal(asks.length, refused + 1);
 
-  // Unfocused, nothing is retried or renewed.
+  // Unfocused, nothing is asked again or renewed.
   fail = true;
   await vi.advanceTimersByTimeAsync(60_000);
   renewals.attend(false, []);
