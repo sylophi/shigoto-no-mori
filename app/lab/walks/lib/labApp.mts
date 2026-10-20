@@ -180,15 +180,6 @@ function listenerOn(port: number): number | undefined {
   }
 }
 
-const pidAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 function appPids(app: number | undefined): { pid: number; command: string }[] {
   if (app === undefined) return [];
   const listed = execFileSync("ps", ["-A", "-o", "pid=,ppid=,command="], {
@@ -575,7 +566,10 @@ async function launch(
         }
         const pid = relaunched;
         if (pid === undefined) return;
-        if (pidAlive(pid)) {
+        // Not our child, so a crashed one's pid can be another
+        // process's by now.
+        const running = () => labRunning().includes(String(pid));
+        if (running()) {
           try {
             if (labRunning().length === 1) quitByBundleId();
             else process.kill(pid, "SIGTERM");
@@ -583,7 +577,7 @@ async function launch(
             // A quit that hung or failed: the kill below.
           }
           await waitFor(
-            () => !pidAlive(pid),
+            () => !running(),
             "the relaunched lab app to quit",
             20_000,
           ).catch(() => {
