@@ -62,7 +62,7 @@ export const makeFileReads = ({
 
     // config.json's line, read from the file.
     const configFromFile = Effect.gen(function* () {
-      const line = check("Data dir", "config", "config.json");
+      const line = check("Data dir", "config", "settings");
       const found: JsonFile = yield* readJsonFile(configFile);
       switch (found.state) {
         case "absent":
@@ -78,7 +78,10 @@ export const makeFileReads = ({
             `Repair the JSON in ${tildify(configFile, home)}, or delete it to fall back to defaults.`,
           );
         case "parsed":
-          return checkGlobalConfig(Option.some(found.doc));
+          return checkGlobalConfig(
+            Option.some(found.doc),
+            `Check ${tildify(configFile, home)} against the app's Settings.`,
+          );
       }
     });
 
@@ -111,7 +114,13 @@ export const makeFileReads = ({
           projects: listed,
         };
       }
-      return { entry: registeredLine(listed, file), projects: listed };
+      return {
+        entry: registeredLine(
+          listed,
+          `Remove the incomplete entries from ${tildify(file, home)}.`,
+        ),
+        projects: listed,
+      };
     };
 
     // registry.json's line and its projects, read from the file.

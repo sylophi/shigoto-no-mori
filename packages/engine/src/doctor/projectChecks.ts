@@ -754,7 +754,7 @@ export const makeProjectChecks = ({
         } else if (stored !== null && settings === null) {
           entries.push(
             check("Projects", "project-config", project.name).warn(
-              "project.json exists but is invalid (bad JSON or no defaultBranch), so its scripts and layout are ignored",
+              "its settings have no default branch, so its scripts and layout are ignored",
               `Run \`${binaryName} projects config --default-branch <ref> -p ${project.name}\` to rewrite it.`,
             ),
           );
