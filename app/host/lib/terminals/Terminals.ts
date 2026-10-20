@@ -244,7 +244,7 @@ export class Terminals extends Context.Service<
       terminalId: string,
       size: Size,
     ) => Effect.Effect<void, UnknownTerminalError>;
-    // How many open terminals are the worktree's, or in its folder.
+    // How many live terminals are the worktree's, or in its folder.
     readonly openIn: (worktree: {
       readonly id: string;
       readonly path: string;
@@ -322,6 +322,8 @@ const make = <R, E>(options: {
         : Effect.succeed(session);
     };
     const find = (terminalId: string) => listedSession(terminalId, true);
+    const living = () =>
+      [...sessions.values()].filter((session) => Option.isNone(session.exited));
 
     // The folder a shell is in now, read off the process.
     const folderOf = (session: Session) =>
@@ -352,7 +354,7 @@ const make = <R, E>(options: {
     // The device's next terminal starts where its newest open one is,
     // else where the last one was, else home.
     const deviceFolder = Effect.gen(function* () {
-      const newest = [...sessions.values()].findLast(
+      const newest = living().findLast(
         (session) => session.terminal.owner.kind === "device",
       );
       const candidates = [
@@ -742,7 +744,7 @@ const make = <R, E>(options: {
       // A shell is busy while its terminal's foreground process group
       // is not its own: a job it started holds the terminal.
       busy: Effect.gen(function* () {
-        const pids = [...sessions.values()].map((session) => session.pty.pid);
+        const pids = living().map((session) => session.pty.pid);
         if (pids.length === 0) return 0;
         const { stdout } = yield* Processes.exec("ps", [
           "-o",
@@ -762,7 +764,7 @@ const make = <R, E>(options: {
           .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid).length;
       }).pipe(Effect.withSpan("Terminals.busy")),
       openIn: (worktree) =>
-        [...sessions.values()].filter(({ terminal: { owner, cwd } }) =>
+        living().filter(({ terminal: { owner, cwd } }) =>
           owner.kind === "worktree"
             ? owner.worktreeId === worktree.id
             : isSameOrInside(cwd, worktree.path),

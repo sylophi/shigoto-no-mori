@@ -23,7 +23,7 @@ export function attachTerminal(
   api: Pick<HostApi, "view" | "listen">,
   terminalId: string,
   screen: TerminalScreen,
-  // The shell exited (its code, null for a signal or a close), or the
+  // The shell exited (its code, null for a close), or the
   // terminal is gone from the host.
   onEnd: (code: number | null) => void,
 ): () => void {

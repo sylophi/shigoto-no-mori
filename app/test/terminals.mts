@@ -12,6 +12,7 @@
 //   - a close ends every attach with an exit and leaves the list,
 //   - a shell that exits cleanly leaves the list; one that fails or is
 //     killed (128 + its signal) stays, its screen kept, until closed,
+//     and holds no folder,
 //   - a quit saves each terminal, and the next start opens it again
 //     under its history in the folder it was in, the history's lines
 //     left where they are, and a client that held it before starts over
@@ -400,6 +401,10 @@ describe("the service", () => {
       await app.runPromise(Fiber.join(attached.fiber));
       assert.deepEqual(attached.events.at(-1), { kind: "exit", code: 3 });
       assert.deepEqual(await listedIds(app), [terminalId]);
+      const openHere = await withTerminals(app, (terminals) =>
+        Effect.sync(() => terminals.openIn({ id: "none", path: root })),
+      );
+      assert.equal(openHere, 0, "a dead one holds its folder");
 
       const again = attach(app, terminalId);
       await app.runPromise(Fiber.join(again.fiber));
@@ -432,7 +437,7 @@ describe("the service", () => {
       );
       const ends = attach(app, clean.terminalId);
       await withTerminals(app, (terminals) =>
-        terminals.write(clean.terminalId, "exit\r"),
+        terminals.write(clean.terminalId, "exit 0\r"),
       );
       await app.runPromise(Fiber.join(ends.fiber));
       assert.deepEqual(ends.events.at(-1), { kind: "exit", code: 0 });
