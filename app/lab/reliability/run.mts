@@ -297,8 +297,11 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     lab.note(`${signal}: cleaning up`);
     writeReport();
     void lab.close().finally(() => {
-      endAll();
-      process.exit(130);
+      try {
+        endAll();
+      } finally {
+        process.exit(130);
+      }
     });
   });
 }
@@ -338,8 +341,11 @@ try {
   }
 } finally {
   writeReport();
-  await lab.close();
-  endAll();
+  try {
+    await lab.close();
+  } finally {
+    endAll();
+  }
 }
 const failed = outcomes.filter((outcome) => outcome.failure !== null).length;
 console.log(

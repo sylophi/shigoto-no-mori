@@ -197,7 +197,8 @@ const program = goArgs(sm, canonical(rest, worktreesCommand)).pipe(
     ),
   ),
   Effect.provideService(Console.Console, { ...console, log: () => {} }),
-  // Stdout's reader gone says nothing.
+  // Stdout's reader gone ends the command where it is (output.ts), and
+  // says nothing.
   untilReaderGone,
   // A command whose output met a failed stream didn't say what it did.
   Effect.andThen((ended) => {

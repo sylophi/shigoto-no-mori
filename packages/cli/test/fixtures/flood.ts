@@ -4,8 +4,8 @@
 // the scheduler yielding every `budget` operations when one is given.
 // With `child`, it first starts a `sleep` as a command starts git, its
 // pid on stderr, and waits on it after the writes, the whole run as
-// main.ts runs a command, ended once stdout's reader goes. The tests hold or close its reader
-// (output.test.ts).
+// main.ts runs a command, ended once stdout's reader goes. The tests
+// hold or close its reader (output.test.ts).
 //
 //   bun test/fixtures/flood.ts <count> [quiet] [budget=<n>] [child]
 import * as BunServices from "@effect/platform-bun/BunServices";

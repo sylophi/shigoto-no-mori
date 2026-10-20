@@ -134,6 +134,9 @@ it("ends a process deaf to SIGTERM and the one it left in a session of its own, 
   assert.deepEqual(running([pidOf(deaf), pidOf(parent), grandchild]), []);
 });
 
+// ps orders by terminal, then pid.
+const byPid = (pids: number[]) => pids.toSorted((a, b) => a - b);
+
 // This process and every one above it: vitest, pnpm, lefthook under a
 // commit, the terminal's job.
 function lineage(): number[] {
@@ -162,10 +165,7 @@ it("ends a child that shares this process's group, and signals neither this proc
   assert.ok(above.length > 1, "no process above this one");
   endTrees([pidOf(child)]);
   assert.deepEqual(running([pidOf(child), grandchild]), []);
-  assert.deepEqual(
-    running(above),
-    above.toSorted((a, b) => a - b),
-  );
+  assert.deepEqual(byPid(running(above)), byPid(above));
 });
 
 // What the file owns outside its cases outlives them.
@@ -186,7 +186,7 @@ it.fails("(a case that runs out of time, holding processes)", async () => {
   const { parent, grandchild } = await smLike();
   leftByTimeout = [pidOf(parent), grandchild];
   await new Promise(() => {});
-}, 2_000);
+}, 10_000);
 
 it("a case that failed or ran out of time left nothing it owned running, and the file's own still runs", () => {
   assert.equal(leftByFailure.length, 2);
