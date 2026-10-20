@@ -18,6 +18,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
@@ -172,6 +173,11 @@ export function sandbox(
     readonly env?: Readonly<Record<string, string>>;
     // The darwin helper in macfs/'s place, for a case where it fails.
     readonly macfs?: string;
+    // The engine's file system made over the real one, for a case that
+    // stops it at one call.
+    readonly fileSystem?: (
+      real: FileSystem.FileSystem,
+    ) => FileSystem.FileSystem;
   } = {},
 ): Sandbox {
   const helper = options.macfs ?? macfs();
@@ -190,11 +196,21 @@ export function sandbox(
     return dir;
   };
 
+  const node =
+    options.fileSystem === undefined
+      ? NodeServices.layer
+      : Layer.merge(
+          NodeServices.layer,
+          Layer.effect(
+            FileSystem.FileSystem,
+            Effect.map(FileSystem.FileSystem, options.fileSystem),
+          ).pipe(Layer.provide(NodeServices.layer)),
+        );
   // The platform under a side, the engine's by default, its data dir
   // seeded first.
   const platform = (side = "engine") =>
     Layer.merge(
-      NodeServices.layer,
+      node,
       ConfigProvider.layer(
         ConfigProvider.fromEnv({
           env: {
