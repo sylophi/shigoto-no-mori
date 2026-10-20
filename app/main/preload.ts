@@ -34,6 +34,9 @@ const bridge = {
   // Widened past the `as const` below so RendererApi says boolean and
   // the web bridge's false assigns.
   isElectron: true as boolean,
+  // What this machine enrolls under (os.platform()), so its own row
+  // draws without the hub's copy. Widened like isElectron.
+  platform: process.platform as string,
   // Asks for the page's shell port, which arrives as a window message
   // (SHELL_PORT_CHANNEL): the renderer listens first, then asks.
   requestShellPort,

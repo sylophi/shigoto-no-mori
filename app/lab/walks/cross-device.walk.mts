@@ -22,7 +22,7 @@ import {
   settle,
   transplant,
 } from "./lib/crossDevice.mts";
-import { main } from "./lib/page.mts";
+import { main, sidebar } from "./lib/page.mts";
 import {
   applyOwnerSettings,
   CARRIED,
@@ -254,6 +254,22 @@ const hubView = (lab: Lab) =>
     `((api) => Promise.all([api.run(api.hub.status()), api.deviceId]))(window.__smLab.api)`,
   ) as Promise<[{ onlineDeviceIds: string[] }, string]>;
 
+// Back on the hub, each sees the other, as the device it was.
+const backOnHub = async (ids: readonly [string, string]) => {
+  for (const [lab, other, otherBefore] of [
+    [a, b, ids[1]],
+    [b, a, ids[0]],
+  ] as const) {
+    const otherId = (await hubView(other))[1];
+    expect(otherId).toBe(otherBefore);
+    await expect
+      .poll(async () => (await hubView(lab))[0].onlineDeviceIds, {
+        timeout: 60_000,
+      })
+      .toContain(otherId);
+  }
+};
+
 it("sends a worktree while the hub goes away: it completes over the direct link and both windows show it, or it stops with words and a retry starts clean, with no half state on either disk", async () => {
   const name = await quickCreate(a, projectOn(a));
   const source = worktreeOn(a, name);
@@ -303,19 +319,7 @@ it("sends a worktree while the hub goes away: it completes over the direct link 
   } finally {
     await devices.hub.resume();
   }
-  // Back on the hub, each sees the other, as the device it was.
-  for (const [lab, other, otherBefore] of [
-    [a, b, ids[1]],
-    [b, a, ids[0]],
-  ] as const) {
-    const otherId = (await hubView(other))[1];
-    expect(otherId).toBe(otherBefore);
-    await expect
-      .poll(async () => (await hubView(lab))[0].onlineDeviceIds, {
-        timeout: 60_000,
-      })
-      .toContain(otherId);
-  }
+  await backOnHub(ids);
   if (outcome === "Transplant stopped") {
     // Nothing of it on B, and A's worktree as it was.
     expect(
@@ -338,6 +342,35 @@ it("sends a worktree while the hub goes away: it completes over the direct link 
   await expectLanded(b, name);
   expect(statSync(join(worktreeOn(b, name), big)).size).toBe(bigBytes);
   await expectGone(a, name);
+});
+
+it("keeps this device's own switches on its Account page while the hub is away, and they still switch", async () => {
+  const ids = [(await hubView(a))[1], (await hubView(b))[1]] as const;
+  await devices.hub.pause();
+  try {
+    await sidebar(b.page).getByRole("button", { name: "Settings" }).click();
+    await sidebar(b.page).getByRole("button", { name: "Account" }).click();
+    await main(b.page)
+      .getByText(/^Couldn't reach the device hub/)
+      .waitFor({ timeout: 60_000 });
+    for (const name of [
+      "Share with other devices",
+      "Keep this device reachable",
+    ]) {
+      await main(b.page).getByRole("switch", { name }).waitFor();
+    }
+    const control = main(b.page).getByRole("switch", {
+      name: "Allow control from other devices",
+    });
+    for (const on of [false, true]) {
+      await control.click();
+      await expect.poll(() => control.isChecked()).toBe(on);
+    }
+    await sidebar(b.page).getByRole("button", { name: "Back" }).click();
+  } finally {
+    await devices.hub.resume();
+  }
+  await backOnHub(ids);
 });
 
 it("brings the other device's worktree here, into the project here, and tears the source down", async () => {

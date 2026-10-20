@@ -2160,6 +2160,7 @@ export function installFakeHostBridge(
     clerkPublishableKey: "pk_test_fake",
     isDev: opts.dev ?? true,
     isElectron: !WEB_SHELL,
+    platform: WEB_SHELL ? WEB_PLATFORM : "darwin",
     ...fixtureClient.api,
   };
 
