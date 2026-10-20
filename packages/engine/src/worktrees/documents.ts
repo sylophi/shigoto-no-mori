@@ -413,12 +413,13 @@ export class RelocateRefused extends Schema.TaggedError<RelocateRefused>()(
 }
 
 // A worktree whose uncommitted changes would go with it, or whose status
-// can't be read (which must not pass for clean). `verb` is the command
-// that refused, `destroys` set when the changes would be lost with it.
+// can't be read (which must not pass for clean), a half-removed one's
+// included. `verb` is the command that refused, `destroys` set when the
+// changes would be lost with it.
 export class DirtyWorktree extends Schema.TaggedError<DirtyWorktree>()(
   "DirtyWorktree",
   {
-    reason: Schema.Literals(["uncommitted", "unreadable"]),
+    reason: Schema.Literals(["uncommitted", "unreadable", "half-removed"]),
     count: Schema.Int,
     verb: Schema.String,
     destroys: Schema.String,
@@ -426,10 +427,13 @@ export class DirtyWorktree extends Schema.TaggedError<DirtyWorktree>()(
   },
 ) {
   get flagHint(): string {
-    return `Pass --force to ${this.verb} anyway.`;
+    return this.reason === "half-removed"
+      ? "Pass --force to finish removing it."
+      : `Pass --force to ${this.verb} anyway.`;
   }
 
   override get message(): string {
+    if (this.reason === "half-removed") return "Worktree is half removed.";
     if (this.reason === "unreadable") {
       const said = errorMessageOf(this.cause);
       return `Couldn't check for uncommitted changes (${said}). Fix the worktree first.`;
