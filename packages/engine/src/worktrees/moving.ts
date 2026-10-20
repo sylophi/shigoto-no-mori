@@ -210,6 +210,19 @@ export const makeMoving = ({
       });
     const holdsLink = (dir: string, link: string) =>
       Effect.map(linkOf(dir), (found) => link !== "" && found === link);
+    // A folder the move knows by its `.git` deleted with that file last,
+    // so a delete cut short leaves one the resume still knows, and
+    // finishes.
+    const wipeLinkLast = (dir: string) =>
+      Effect.gen(function* () {
+        const entries = yield* fs.readDirectory(dir);
+        yield* Effect.forEach(
+          entries.filter((entry) => entry !== ".git"),
+          (entry) => wipe(path.join(dir, entry)),
+          { discard: true },
+        );
+        yield* wipe(dir);
+      });
 
     // The move git can't make, across volumes: the checkout copied into a
     // sibling of `to` and renamed in once whole, git pointed at it, and the
@@ -236,12 +249,16 @@ export const makeMoving = ({
         yield* sql`UPDATE moving SET partial = ${partial}
           WHERE from_path = ${from}`.pipe(Effect.orDie);
         let renamed = false;
+        // git pointed back at the original before the copy goes, so a
+        // delete of it cut short reads as undone, not as landed.
         const undo = Effect.suspend(() =>
           wipe(partial).pipe(
-            Effect.andThen(renamed ? wipe(to) : Effect.void),
             Effect.andThen(
-              git.run(project.path, ["worktree", "repair", "--", from]),
+              git
+                .run(project.path, ["worktree", "repair", "--", from])
+                .pipe(Effect.ignore),
             ),
+            Effect.andThen(renamed ? wipeLinkLast(to) : Effect.void),
           ),
         ).pipe(Effect.ignore);
         const cp = (flags: ReadonlyArray<string>) =>
@@ -391,7 +408,7 @@ export const makeMoving = ({
             const landed = yield* carry(project, worktree.path, to);
             // The original a copy across volumes leaves, once git lists the
             // copy: a stray folder, not a failed move.
-            if (crossed) yield* wipe(worktree.path).pipe(Effect.ignore);
+            if (crossed) yield* wipeLinkLast(worktree.path).pipe(Effect.ignore);
             // A capture's ref that couldn't follow keeps the record, for the
             // next start to carry it.
             if (landed.captured) yield* forgetRecord(worktree.path);
@@ -537,7 +554,7 @@ export const makeMoving = ({
               record.partial !== null &&
               (yield* holdsLink(record.from_path, record.link))
             ) {
-              yield* wipe(record.from_path).pipe(Effect.ignore);
+              yield* wipeLinkLast(record.from_path).pipe(Effect.ignore);
             }
             yield* pruneEmptyParents(record.from_path, project.path);
             if (carried.captured) yield* forgetRecord(record.from_path);
@@ -550,7 +567,7 @@ export const makeMoving = ({
             ((yield* holdsLink(record.to_path, record.link)) ||
               (yield* sameGitFile(record.to_path, record.from_path)))
           ) {
-            yield* wipe(record.to_path).pipe(Effect.ignore);
+            yield* wipeLinkLast(record.to_path).pipe(Effect.ignore);
           }
           yield* pruneEmptyParents(record.to_path, project.path);
           yield* forgetRecord(record.from_path);
