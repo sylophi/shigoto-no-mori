@@ -141,6 +141,11 @@ describe("a command line", () => {
       ),
     );
     assert.doesNotMatch((await runAt(repo, "list")).stderr, /\[git\]/);
+    // A git that runs hooks writes to files under a shell, and is traced
+    // as itself.
+    const created = await runAt(repo, "--verbose", "create", "v", "--no-setup");
+    assert.equal(created.code, 0, created.stderr);
+    assert.match(created.stderr, /^\[git\] worktree add .* \(cwd /m);
   });
 
   it(
