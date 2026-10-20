@@ -18,6 +18,10 @@
     "kind": "invoke",
     "scope": "client"
   },
+  "account:lastListedDevices": {
+    "kind": "invoke",
+    "scope": "client"
+  },
   "account:listDevices": {
     "kind": "invoke",
     "scope": "client"
