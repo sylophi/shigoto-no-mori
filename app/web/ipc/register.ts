@@ -61,7 +61,11 @@ import {
   isConfigured,
   resolveServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
-import { getWebDeviceId, readWebDeviceId } from "../account/deviceId";
+import {
+  getWebDeviceId,
+  keepWebDeviceId,
+  readWebDeviceId,
+} from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { defaultWebDeviceShape } from "../account/deviceIcon";
 import { createWebAccountStore } from "../account/store";
@@ -133,6 +137,7 @@ const isDomError = (error: unknown, name: string): boolean =>
   error instanceof DOMException && error.name === name;
 
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
+
 // The profile's device id. One already stored is read as it is (a tab
 // boots at once); a missing or mangled one is minted under the account
 // lock, so two fresh tabs can't mint two and enroll under one. A tab
@@ -143,9 +148,8 @@ export async function establishWebDeviceId(
   locks: Pick<LockManager, "request"> | undefined = globalThis.navigator?.locks,
 ): Promise<string> {
   const stored = readWebDeviceId(storage);
-  if (stored !== null || locks === undefined) {
-    return stored ?? getWebDeviceId(storage);
-  }
+  if (stored !== null) return stored;
+  if (locks === undefined) return getWebDeviceId(storage);
   return await locks
     .request(
       ACCOUNT_LOCK,
@@ -318,15 +322,19 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // rotated away. One tab enrolls at a time, and one whose wait saw
   // another tab store a credential answers with that. A second call in
   // this tab rides the one under way, as the handlers' own join does.
+  // The tab enrolls under the profile's id as storage holds it, so a
+  // credential never lands beside an id other than its own.
   const locks = deps.locks ?? globalThis.navigator?.locks;
   let enrolling: Promise<AccountStatus> | undefined;
   const enrollOneTab: typeof accountHandlers.enroll = (token, ctx) => {
     if (enrolling !== undefined) return enrolling;
     const before = store.read()?.credential;
-    const enrollHere = async () =>
-      store.read()?.credential === before
+    const enrollHere = async () => {
+      keepWebDeviceId(deps.localStorage, deviceId);
+      return store.read()?.credential === before
         ? accountHandlers.enroll(token, ctx)
         : accountHandlers.status(undefined, ctx);
+    };
     const run = (
       locks === undefined
         ? enrollHere()

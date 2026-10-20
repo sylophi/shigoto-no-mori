@@ -17,7 +17,9 @@
 // (removing it when storage refuses the remainder, failing when it
 // refuses the removal too, as an enroll fails that can't keep its
 // credential), a concurrent enroll or sign-out rides the one under
-// way (a failed one not kept), two tabs enrolling at once enroll once and keep the credential the hub holds,
+// way (a failed one not kept), two tabs enrolling at once enroll
+// once and keep the credential the hub holds, a tab enrolls under the
+// id storage holds (writing back one gone, refusing one replaced),
 // the shared settings another tab wrote reach this tab's watch,
 // read-classified OS-bound
 // channels answer structural stub defaults while every mutation-shaped
@@ -1194,22 +1196,69 @@ it("two fresh tabs at once: the device id is minted under the account lock, so b
   assert.deepEqual(enrolled, [stored]);
 });
 
-it("deviceId: a stored id boots without the account lock, and a tab that waits the lock out mints its own", async () => {
+it("deviceId: a stored id boots without the account lock, and a tab that waits the lock out reads the id the tab holding it minted", async () => {
   const localStorage = memoryStorage();
+  const minted = getWebDeviceId(memoryStorage());
   const timedOut: Pick<LockManager, "request"> = {
-    request: (() =>
-      Promise.reject(
+    request: (() => {
+      // The tab holding the lock minted, then held it past the wait.
+      localStorage.setItem("sm.web.deviceId", minted);
+      return Promise.reject(
         new DOMException("The lock wait timed out.", "TimeoutError"),
-      )) as Pick<LockManager, "request">["request"],
+      );
+    }) as Pick<LockManager, "request">["request"],
   };
-  const minted = await establishWebDeviceId(localStorage, timedOut);
-  assert.equal(localStorage.getItem("sm.web.deviceId"), minted);
+  assert.equal(await establishWebDeviceId(localStorage, timedOut), minted);
   const unasked: Pick<LockManager, "request"> = {
     request: (() => {
       throw new Error("the lock was asked for a stored id");
     }) as Pick<LockManager, "request">["request"],
   };
   assert.equal(await establishWebDeviceId(localStorage, unasked), minted);
+});
+
+it("enroll: a tab whose id went from storage (the site's data cleared under it) writes it back and enrolls under it, and one whose id another tab replaced refuses", async () => {
+  const localStorage = memoryStorage();
+  const enrolled: string[] = [];
+  const fetchImpl: typeof fetch = async (input, init = {}) => {
+    if (String(input) === `${HUB_URL}/devices/enroll`) {
+      assert(init.body instanceof Uint8Array);
+      const body = JSON.parse(new TextDecoder().decode(init.body));
+      enrolled.push(body.deviceId);
+      return jsonResponse(200, {
+        credential: "cred-1",
+        device: {
+          ...body,
+          createdAt: Date.now(),
+          lastSeenAt: null,
+          online: false,
+        },
+      });
+    }
+    return jsonResponse(500, { error: "no device hub in this check" });
+  };
+  const locks = sharedLocks();
+  const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl, locks }));
+  trackTest(() => bridge.stop());
+  const { deviceId } = bridge.api;
+  localStorage.removeItem("sm.web.deviceId");
+  await bridge.api.run(bridge.api.account.enroll(fakeSessionJwt("acct_1")));
+  assert.equal(localStorage.getItem("sm.web.deviceId"), deviceId);
+  assert.deepEqual(enrolled, [deviceId]);
+
+  const replaced = memoryStorage();
+  const stale = createWebBridge(
+    makeDeps({ localStorage: replaced, fetchImpl, locks }),
+  );
+  trackTest(() => stale.stop());
+  const other = getWebDeviceId(memoryStorage());
+  replaced.setItem("sm.web.deviceId", other);
+  await assert.rejects(
+    stale.api.run(stale.api.account.enroll(fakeSessionJwt("acct_1"))),
+    /Reload this tab/,
+  );
+  assert.equal(enrolled.length, 1);
+  assert.equal(replaced.getItem("sm.web.account"), null);
 });
 
 // The profile's storage refusing the account document's writes, as a

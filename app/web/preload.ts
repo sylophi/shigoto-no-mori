@@ -20,7 +20,11 @@ import {
 let installed: Promise<WebBridge> | null = null;
 
 export function installWebBridge(): Promise<WebBridge> {
-  installed ??= establishWebDeviceId(window.localStorage).then(install);
+  // A storage the page can't open throws on its first read: rejected,
+  // so the entry's handler says so.
+  installed ??= Promise.resolve()
+    .then(() => establishWebDeviceId(window.localStorage))
+    .then(install);
   return installed;
 }
 
