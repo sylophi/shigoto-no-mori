@@ -1,6 +1,7 @@
 // Git's runner: a git process in a worktree, its spawn slots, and one index write at a time per worktree.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
@@ -20,7 +21,12 @@ import {
   identity,
   stderrOf,
 } from "./documents.ts";
-import { readAll, readAllBytes, readToExit } from "../processes.ts";
+import {
+  captureToFiles,
+  readAll,
+  readAllBytes,
+  readToExit,
+} from "../processes.ts";
 
 // A transfer that stalls (a connection left half open by a sleep or a
 // network that changed) ends rather than waiting for good: http's own
@@ -32,6 +38,23 @@ const NETWORK_SUBCOMMANDS = new Set([
   "push",
   "ls-remote",
   "clone",
+]);
+// The commands git runs the person's hooks for, whose output goes to
+// files (captureToFiles): a hook gets git's stderr, and pre-push its
+// stdout too, and what it leaves in the background is the person's.
+const RUNS_HOOKS = new Set([
+  "am",
+  "checkout",
+  "cherry-pick",
+  "clone",
+  "commit",
+  "merge",
+  "pull",
+  "push",
+  "rebase",
+  "revert",
+  "switch",
+  "worktree add",
 ]);
 // A fetch that hasn't finished in five minutes is stuck (a remote that
 // stopped answering mid-transfer over ssh, which the stall limit can't
@@ -98,6 +121,7 @@ export const waitingForIndex = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 export const makeRunning = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const fs = yield* FileSystem.FileSystem;
   const slots = yield* Semaphore.make(SPAWN_SLOTS);
 
   // A git in `cwd`, its stdout taken whole by `read`.
@@ -128,58 +152,74 @@ export const makeRunning = Effect.gen(function* () {
         new GitOutputTooLargeError({ subcommand, limitBytes: limit });
       const once = Effect.scoped(
         Effect.gen(function* () {
-          const handle = yield* spawner
-            .spawn(
-              ChildProcess.make(
-                "git",
-                NETWORK_SUBCOMMANDS.has(subcommand)
-                  ? [...STALL_LIMIT, ...args]
-                  : [...args],
-                {
-                  cwd,
-                  // LC_ALL=C pins git's messages to English, so what the
-                  // engine matches on and relays reads the same everywhere.
-                  env: {
-                    ...options.env,
-                    LC_ALL: "C",
-                    ...(subcommand === "status" ? OPTIONAL_LOCKS_OFF : {}),
-                  },
-                  extendEnv: true,
-                  // In a process group of its own (the spawner's default), so
-                  // closing the scope ends git with its hooks and its ssh.
-                  // That also leaves it no terminal to prompt on: a
-                  // credential or host-key question fails instead of waiting.
-                  stdin:
-                    options.stdin === undefined
-                      ? "ignore"
-                      : Stream.make(encoder.encode(options.stdin)),
-                },
-              ),
-            )
-            .pipe(Effect.mapError(failed(null)));
-          // Its exit ends its process group: git hands a hook its pipes,
-          // and what a hook leaves running would hold them open.
+          const gitArgs = NETWORK_SUBCOMMANDS.has(subcommand)
+            ? [...STALL_LIMIT, ...args]
+            : [...args];
+          // LC_ALL=C pins git's messages to English, so what the engine
+          // matches on and relays reads the same everywhere.
+          const env = {
+            ...options.env,
+            LC_ALL: "C",
+            ...(subcommand === "status" ? OPTIONAL_LOCKS_OFF : {}),
+          };
+          const stdin =
+            options.stdin === undefined
+              ? undefined
+              : Stream.make(encoder.encode(options.stdin));
+          // In a process group of its own (the spawner's default), so
+          // closing the scope ends git with its hooks and its ssh. That
+          // also leaves it no terminal to prompt on: a credential or
+          // host-key question fails instead of waiting.
+          const ran = RUNS_HOOKS.has(slotKey)
+            ? captureToFiles(spawner, "git", gitArgs, { cwd, env, stdin }).pipe(
+                Effect.provideService(FileSystem.FileSystem, fs),
+                Effect.flatMap(({ stdout, stderr, code }) =>
+                  Effect.map(
+                    read(Stream.make(stdout), limit, tooLarge),
+                    (out) => ({
+                      read: [
+                        out,
+                        decoder.decode(stderr.subarray(0, DEFAULT_MAX_OUTPUT)),
+                      ] as const,
+                      code,
+                    }),
+                  ),
+                ),
+              )
+            : Effect.gen(function* () {
+                const handle = yield* spawner.spawn(
+                  ChildProcess.make("git", gitArgs, {
+                    cwd,
+                    env,
+                    extendEnv: true,
+                    stdin: stdin ?? "ignore",
+                  }),
+                );
+                // Its exit ends its process group: what a child of it
+                // leaves running would hold its pipes open.
+                return yield* readToExit(
+                  handle,
+                  Effect.all(
+                    [
+                      read(
+                        handle.stdout.pipe(Stream.mapError(failed(null))),
+                        limit,
+                        tooLarge,
+                      ),
+                      readAll(
+                        handle.stderr.pipe(Stream.mapError(failed(null))),
+                        DEFAULT_MAX_OUTPUT,
+                        { decoder },
+                      ),
+                    ],
+                    { concurrency: 2 },
+                  ),
+                );
+              });
           const {
             read: [stdout, stderr],
             code,
-          } = yield* readToExit(
-            handle,
-            Effect.all(
-              [
-                read(
-                  handle.stdout.pipe(Stream.mapError(failed(null))),
-                  limit,
-                  tooLarge,
-                ),
-                readAll(
-                  handle.stderr.pipe(Stream.mapError(failed(null))),
-                  DEFAULT_MAX_OUTPUT,
-                  { decoder },
-                ),
-              ],
-              { concurrency: 2 },
-            ),
-          ).pipe(
+          } = yield* ran.pipe(
             Effect.catchTag("PlatformError", (cause) =>
               Effect.fail(failed(null)(cause)),
             ),

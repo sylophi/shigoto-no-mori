@@ -4,13 +4,12 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { envVar } from "../environment.ts";
 import * as Git from "../Git.ts";
 import { splitZ } from "../gitParse.ts";
-import { capture } from "../processes.ts";
+import { captureToFiles } from "../processes.ts";
 import { HookFailed } from "./documents.ts";
 
 export const makeHook = Effect.gen(function* () {
@@ -68,28 +67,23 @@ export const makeHook = Effect.gen(function* () {
       GIT_DIR: undefined,
       GIT_WORK_TREE: undefined,
     };
-    const runOne = (command: string, commandArgs: ReadonlyArray<string>) =>
-      capture(spawner, command, commandArgs, {
-        from: "all",
+    // A script without a #! line runs as sh's own, as git hands it to sh.
+    const run = (command: string, commandArgs: ReadonlyArray<string>) =>
+      captureToFiles(spawner, command, commandArgs, {
+        all: true,
         cwd: dir,
         env: hookEnv,
-      });
-    const run = (command: string, commandArgs: ReadonlyArray<string>) =>
-      runOne(command, commandArgs).pipe(
-        // A script without a #! line, which git hands to sh as a shell
-        // would.
-        Effect.catchIf(
-          (error) =>
-            Predicate.isTagged(error, "PlatformError") &&
-            String(error.cause ?? "").includes("ENOEXEC"),
-          () => runOne("/bin/sh", [command, ...commandArgs]),
-        ),
-        Effect.map(({ code, output }) =>
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.map(({ code, stdout }) =>
           code === 0
             ? Option.none<HookFailed>()
             : Option.some(
                 new HookFailed({
-                  cause: new Error(output.trim() || `exit status ${code}`),
+                  cause: new Error(
+                    new TextDecoder().decode(stdout).trim() ||
+                      `exit status ${code}`,
+                  ),
                 }),
               ),
         ),
