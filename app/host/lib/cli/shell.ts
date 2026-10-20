@@ -5,7 +5,7 @@
 // ours, or which shells qualify. The app contributes where the login
 // shell's config lives.
 import type { ShellIntegrationStatus } from "@shigomori/contracts/modules/cli";
-import { CAPTURE_TIMEOUT_MS, outputUntil } from "@shared/shellEnv";
+import { outputUntil } from "@shared/shellEnv";
 import * as Ops from "@host/lib/engineOps";
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
@@ -31,6 +31,8 @@ import { keptAnswers } from "../util/kept";
 // rc file.
 const SENTINEL = "__SHIGOMORI_HOOK_ENV__";
 const END = "__SHIGOMORI_HOOK_ENV_END__";
+// Asked while Settings waits, and asked again after a failure.
+const PROBE_TIMEOUT_MS = 5000;
 
 // What the probe printed between its sentinels: ZDOTDIR, then
 // XDG_CONFIG_HOME. Empty values still count: they neutralize a stale
@@ -84,7 +86,7 @@ export const layer = Layer.effect(
           return yield* Effect.fromOption(
             code === 0 ? Option.flatMap(output, hookPlaceOf) : Option.none(),
           );
-        }).pipe(Effect.scoped, Effect.timeout(CAPTURE_TIMEOUT_MS)),
+        }).pipe(Effect.scoped, Effect.timeout(PROBE_TIMEOUT_MS)),
       Duration.hours(1),
     );
     return HookShell.of({
