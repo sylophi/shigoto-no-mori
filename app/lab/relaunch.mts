@@ -6,18 +6,24 @@
 // saw, when the new instance never came, its window drew nothing, or a
 // child process was killed.
 //
-// A packaged build takes no debugging port (main/electron/
-// debugSwitches.ts), so the lab asks and looks from outside: started
-// with --sm-lab, the app relaunches on SIGUSR2 (main/index.ts); the
-// window is read through macOS accessibility, which a page whose
-// renderer died has nothing in (as the flavors thread drove its window); and main.log says which child process
+// A packaged prod or v3 build takes no debugging port (main/electron/
+// debugSwitches.ts), so the lab asks and looks from outside, as it can
+// on any flavor: started with --sm-lab, the app relaunches on SIGUSR2
+// (main/index.ts); the window is read through macOS accessibility,
+// which a page whose renderer died has nothing in (as the flavors
+// thread drove its window); and main.log says which child process
 // was killed. Accessibility needs the terminal running this to be
 // allowed in System Settings > Privacy & Security > Accessibility.
 //
-// Run: node lab/relaunch.mts "<path to the .app>"
-// A v3 build (SM_FLAVOR=v3 pnpm package) runs beside the installed
-// app. It quits the app at the end, by SIGKILL (a window whose renderer
-// was killed ignores a quit), whether it passed or not.
+// Run it on a test flavor's build, which shares nothing with the
+// installed apps (lab/dev-app.md, "Packaged build, as a test flavor"),
+// and take that build off the machine after:
+//   SM_FLAVOR=lab pnpm package
+//   node lab/relaunch.mts "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app"
+//   "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app/Contents/Resources/smlab" nuke --yes
+// A prod or v3 build opens on the installed app's data. It quits the
+// app at the end, by SIGKILL (a window whose renderer was killed
+// ignores a quit), whether it passed or not.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";

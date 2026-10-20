@@ -14,7 +14,7 @@ which `api` below stands for. Reaching it takes a debugging port, which
 a packaged build refuses (`dev-app.md`, "Packaged build"):
 
 ```json
-{ "js": "const api = window.__smLab.api; return api.run(api.hub.status())" }
+{ "js": "((api) => api.run(api.hub.status()))(window.__smLab.api)" }
 ```
 
 The lab's scripts read it through `reliability/pageApi.mts`.

@@ -31,8 +31,8 @@ Then drive them:
 
 ```json
 { "session": "a", "steps": [
-  { "expect": { "js": "window.__smLab.api.account.status().then((s) => s.signedIn)" }, "timeout": 60000 },
-  { "js": "window.__smLab.api.hub.status()" },
+  { "expect": { "js": "((api) => api.run(api.account.status()).then((s) => s.signedIn))(window.__smLab.api)" }, "timeout": 60000 },
+  { "js": "((api) => api.run(api.hub.status()))(window.__smLab.api)" },
   { "js": "window.__smLab.api.deviceId", "on": "b" },
   { "shot": "b-devices", "on": "b" }
 ] }
@@ -103,8 +103,8 @@ lives. Never use the **Sign out** button in a cloned window
 
 ```json
 { "session": "a", "steps": [
-  { "js": "((api) => api.account.listDevices().then((ds) => Promise.all(ds.filter((d) => / \\[<tag>-[a-z0-9-]+\\]$/.test(d.name) && d.deviceId !== api.deviceId).map((d) => api.account.revokeDevice(d.deviceId).then(() => d.name)))))(window.__smLab.api)" },
-  { "js": "window.__smLab.api.account.signOut()" }
+  { "js": "((api) => api.run(api.account.listDevices()).then((ds) => Promise.all(ds.filter((d) => / \\[<tag>-[a-z0-9-]+\\]$/.test(d.name) && d.deviceId !== api.deviceId).map((d) => api.run(api.account.revokeDevice(d.deviceId)).then(() => d.name)))))(window.__smLab.api)" },
+  { "js": "((api) => api.run(api.account.signOut()))(window.__smLab.api)" }
 ] }
 ```
 

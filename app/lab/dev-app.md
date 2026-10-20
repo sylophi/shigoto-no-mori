@@ -262,10 +262,10 @@ cloning exists.
 - **Never press Sign out in a cloned window.** A cloned sign-in shares
   one Clerk client with the plain dev app, so signing out ends the
   session for both. End a cloned profile by revoking its device
-  instead: run `api.account.signOut()` in a `js` step (`bridge.md`
-  says how a step reaches `api`), or use the
-  account page of another device. Then run with `--fresh` or delete
-  the folders.
+  instead: run `api.run(api.account.signOut())` in a `js` step
+  (`bridge.md` says how a step reaches `api`), or use the account
+  page of another device. Then run with `--fresh` or delete the
+  folders.
 - **`--fresh` is local only.** A device the profile enrolled stays on
   the hub, with its tunnel, until revoked. Leftovers show on the
   account page of any device on the account and can be revoked there.
