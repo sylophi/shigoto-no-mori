@@ -2,8 +2,9 @@
 // a closing graph): from the record of the move to its commit nothing
 // cuts in, a copy across volumes is undone and frees its folder, and an
 // interrupt after the commit finds the move made. A resume deletes only
-// what the move made, leaves a live process's move to it, and carries
-// a capture's ref the crash left behind. The removal's tail, git's remove,
+// what the move made, finishes the delete of an original a crash cut
+// short, leaves a live process's move to it, and carries a capture's
+// ref the crash left behind. The removal's tail, git's remove,
 // the forget and the branch, runs whole too, and a removal whose git was
 // killed mid-delete is finished by a forced one. Each step is held by the
 // wrappers in lib/stopAt.ts; the same steps killed outright are the app's
@@ -24,6 +25,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -342,12 +344,13 @@ const withFox = <A, E>(
     worktree: Worktrees.WorktreeIdentity;
     repo: string;
   }) => Effect.Effect<A, E, Engine>,
+  on: Sandbox = box,
 ) =>
-  box.engine(
+  on.engine(
     Effect.gen(function* () {
       const registry = yield* Registry.Registry;
       const worktrees = yield* Worktrees.Worktrees;
-      const repo = box.repo("proj", { "README.md": "hi\n" });
+      const repo = on.repo("proj", { "README.md": "hi\n" });
       const project = yield* registry.register({ name: "proj", path: repo });
       const made = yield* worktrees.create(
         project,
@@ -447,6 +450,69 @@ it("a cancelled copy across volumes frees its folder for the next move", async (
     }),
   );
   assert.deepEqual(result, { left: 0, at: true });
+});
+
+// A crash partway through the delete of the original a copy across
+// volumes leaves, its record left as a dead process's (a defect at the
+// delete stands for it). It lands where the delete reaches the `.git`,
+// which it takes while anything else is left: an rm takes a folder's
+// entries in no set order.
+it("a copy across volumes whose delete of the original was cut short is finished by the resume", async () => {
+  let cut: string | undefined;
+  const crashing = sandbox({
+    fileSystem: (real) => ({
+      ...real,
+      remove: (target, options) =>
+        Effect.suspend(() => {
+          if (
+            cut === undefined ||
+            (target !== cut && target !== join(cut, ".git"))
+          ) {
+            return real.remove(target, options);
+          }
+          if (readdirSync(cut).some((entry) => entry !== ".git")) {
+            rmSync(join(cut, ".git"));
+          }
+          cut = undefined;
+          return Effect.die("crashed mid-delete");
+        }),
+    }),
+  });
+  onTestFinished(() => crashing.remove());
+  const result = await withFox(
+    ({ project, worktree }) =>
+      Effect.gen(function* () {
+        const worktrees = yield* Worktrees.Worktrees;
+        const to = join(dirname(worktree.path), "vixen");
+        process.env["PATH"] = stopWrappers(join(crashing.home, "stop-bin"), {
+          mark: join(crashing.home, "held"),
+          seconds: 0,
+          crossVolume: true,
+        }).PATH;
+        cut = worktree.path;
+        const moved = yield* Effect.exit(
+          worktrees.move({ project, worktree }, to),
+        );
+        process.env["PATH"] = path;
+        yield* worktrees.resumeMoves;
+        const again = yield* worktrees
+          .create(
+            project,
+            { name: "fox", branch: "fox-again", skipSetup: true },
+            { report: () => Effect.void, color: false },
+          )
+          .pipe(Effect.result);
+        return {
+          crashed: Exit.isFailure(moved),
+          records: (yield* records).length,
+          again: Result.isSuccess(again)
+            ? again.success.worktree.path === worktree.path
+            : errorDocument(again.failure),
+        };
+      }),
+    crashing,
+  );
+  assert.deepEqual(result, { crashed: true, records: 0, again: true });
 });
 
 it("a move another live process holds is left to it", async () => {
