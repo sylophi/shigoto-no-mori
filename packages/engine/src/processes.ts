@@ -206,6 +206,66 @@ export const capture = (
     }),
   );
 
+// The shell captureToFiles runs its command under, which opens the
+// files: `sh -c FILES_SCRIPT <stdout file> <stderr file> command ...args`.
+export const FILES_SCRIPT = 'err=$1; shift; exec "$@" >>"$0" 2>>"$err"';
+
+// A command with its output in files, not pipes, read at its exit to
+// the size each had then: for one that runs the person's hooks. What a
+// hook leaves in the background (a post-checkout `pnpm install &`)
+// holds nothing of this process's and writes on into them unread, and
+// after a clean exit it runs on, as in a terminal; a failed exit ends
+// the command's group, as an interrupt or a timeout does. `all` takes
+// both streams as one, in the order written, as `stdout`.
+export const captureToFiles = (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  command: string,
+  args: ReadonlyArray<string>,
+  options: {
+    readonly all?: boolean;
+    readonly cwd?: string;
+    // A variable set to undefined is unset.
+    readonly env?: Record<string, string | undefined> | undefined;
+    readonly stdin?: Stream.Stream<Uint8Array>;
+  } = {},
+) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const out = yield* fs.makeTempFileScoped({ prefix: "sm-out-" });
+      const err =
+        options.all === true
+          ? out
+          : yield* fs.makeTempFileScoped({ prefix: "sm-err-" });
+      const handle = yield* spawner.spawn(
+        ChildProcess.make(
+          "/bin/sh",
+          ["-c", FILES_SCRIPT, out, err, command, ...args],
+          {
+            stdin: options.stdin ?? "ignore",
+            stdout: "ignore",
+            stderr: "ignore",
+            ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+            ...(options.env === undefined
+              ? {}
+              : { env: options.env, extendEnv: true }),
+          },
+        ),
+      );
+      const code = Number(yield* handle.exitCode);
+      const sizeOf = (file: string) =>
+        Effect.map(fs.stat(file), ({ size }) => Number(size));
+      const [outSize, errSize] = yield* Effect.all([sizeOf(out), sizeOf(err)]);
+      if (code === 0) yield* Effect.asVoid(handle.unref);
+      const stdout = (yield* fs.readFile(out)).subarray(0, outSize);
+      const stderr =
+        options.all === true
+          ? new Uint8Array()
+          : (yield* fs.readFile(err)).subarray(0, errSize);
+      return { stdout, stderr, code };
+    }),
+  );
+
 // How often a running script's output file is read for what it added.
 const TAIL_EVERY = "50 millis";
 const TAIL_CHUNK = 64 * 1024;

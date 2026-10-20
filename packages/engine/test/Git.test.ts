@@ -549,7 +549,7 @@ it("an interrupted run takes its git down with it, hooks and all", async () => {
   });
 });
 
-it("a commit and a push end at git's exit while a hook's child holds its stderr", async () => {
+it("a commit and a push end at git's exit, and what their hooks left in the background goes on", async () => {
   // A project as a user has one, pushing to a scratch remote that holds
   // its history (a shallow checkout's clone can't push to an empty one).
   const repo = realClone();
@@ -557,29 +557,55 @@ it("a commit and a push end at git's exit while a hook's child holds its stderr"
   git(repo, "clone", "-q", "--bare", repo, remote);
   git(repo, "remote", "set-url", "origin", remote);
   const pids = join(tempDir("hook-"), "pids");
-  // git hands a hook its stderr for stdout too; the child keeps both.
+  // git hands a hook its stderr for stdout too; the child keeps both,
+  // writing on after git exits.
   for (const hook of ["pre-commit", "pre-push"]) {
     write(
       repo,
       `.git/hooks/${hook}`,
-      `#!/bin/sh\n(echo started; sleep 30) &\necho $! >> '${pids}'\n`,
+      `#!/bin/sh\n(echo started; sleep 1; echo later >&2; exec sleep 30) &\necho $! >> '${pids}'\n`,
     );
     chmodSync(join(repo, `.git/hooks/${hook}`), 0o755);
   }
-  await withGit((g) =>
-    Effect.gen(function* () {
-      yield* g.run(repo, ["commit", "-q", "--allow-empty", "-m", "hooked"]);
-      yield* g.run(repo, ["push", "-q", "origin", "HEAD:refs/heads/hooked"]);
-    }).pipe(Effect.timeout("10 seconds")),
-  );
-  assert.equal(rev(remote, "hooked"), rev(repo, "HEAD"));
-  // What the hooks left goes with git's process group as the run ends.
-  for (const pid of readFileSync(pids, "utf8").trim().split("\n")) {
-    await vi.waitFor(
-      () => assert.throws(() => process.kill(Number(pid), 0), /ESRCH/),
-      { timeout: 5000, interval: 20 },
+  const left = () =>
+    existsSync(pids)
+      ? readFileSync(pids, "utf8").trim().split("\n").map(Number)
+      : [];
+  try {
+    await withGit((g) =>
+      Effect.gen(function* () {
+        yield* g.run(repo, ["commit", "-q", "--allow-empty", "-m", "hooked"]);
+        yield* g.run(repo, ["push", "-q", "origin", "HEAD:refs/heads/hooked"]);
+      }).pipe(Effect.timeout("10 seconds")),
     );
+    assert.equal(rev(remote, "hooked"), rev(repo, "HEAD"));
+    // Past the children's late write, which a closed pipe would have
+    // ended them at.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    for (const pid of left()) process.kill(pid, 0);
+  } finally {
+    for (const pid of left()) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // Gone already.
+      }
+    }
   }
+});
+
+it("a hook's refusal is git's words, read from its stderr", async () => {
+  const repo = seedRepo();
+  write(
+    repo,
+    ".git/hooks/commit-msg",
+    "#!/bin/sh\necho 'no WIP here' >&2\nexit 1\n",
+  );
+  chmodSync(join(repo, ".git/hooks/commit-msg"), 0o755);
+  const refused = await failureAs(GitCommandError, (g) =>
+    g.run(repo, ["commit", "-q", "--allow-empty", "-m", "WIP"]),
+  );
+  assert.match(stderrOf(refused), /^no WIP here$/m);
 });
 
 // --- worktrees ------------------------------------------------------

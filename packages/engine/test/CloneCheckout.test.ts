@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
-import { afterAll, describe, it, vi } from "vitest";
+import { afterAll, describe, it } from "vitest";
 import * as CloneCheckout from "../src/CloneCheckout.ts";
 import * as Darwin from "../src/Darwin.ts";
 import { ordinaryIndexFlags, parseLsFilesDebug } from "../src/gitIndex.ts";
@@ -252,28 +252,51 @@ describe("clone checkout", () => {
     assertSameAsPlain(repo, wt, "other");
   });
 
-  it("ends a hook at its exit while a child it left holds its output", async () => {
+  it("ends a hook at its exit, and what it left in the background goes on", async () => {
     const repo = cloneFixture();
     const pidFile = join(scratch("clone-hook-"), "child.pid");
     write(
       join(repo, ".git/hooks/post-checkout"),
-      `#!/bin/sh\n(echo installing; sleep 30) &\necho $! > '${pidFile}'\n`,
+      `#!/bin/sh\n(echo installing; sleep 1; echo done; exec sleep 30) &\necho $! > '${pidFile}'\n`,
+      0o755,
+    );
+    const wt = join(dirname(repo), "clone");
+    addNoCheckout(repo, wt, "clone", "other");
+    try {
+      const outcome = await withService((service) =>
+        service
+          .finish({ source: repo, worktree: wt })
+          .pipe(Effect.timeout("20 seconds")),
+      );
+      assert.ok(Result.isSuccess(outcome), String(outcome));
+      // Past the child's late write, which a closed pipe would have
+      // ended it at.
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      process.kill(Number(readFileSync(pidFile, "utf8")), 0);
+    } finally {
+      try {
+        process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+      } catch {
+        // Gone already, or never started.
+      }
+    }
+  });
+
+  it("runs a hook with no #! line as sh's", async () => {
+    const repo = cloneFixture();
+    const hookLog = join(scratch("clone-hook-"), "hook.log");
+    write(
+      join(repo, ".git/hooks/post-checkout"),
+      `echo "$@" >> '${hookLog}'\n`,
       0o755,
     );
     const wt = join(dirname(repo), "clone");
     addNoCheckout(repo, wt, "clone", "other");
     const outcome = await withService((service) =>
-      service
-        .finish({ source: repo, worktree: wt })
-        .pipe(Effect.timeout("20 seconds")),
+      service.finish({ source: repo, worktree: wt }),
     );
     assert.ok(Result.isSuccess(outcome), String(outcome));
-    // What it left goes with its process group as the hook's run ends.
-    const child = Number(readFileSync(pidFile, "utf8"));
-    await vi.waitFor(
-      () => assert.throws(() => process.kill(child, 0), /ESRCH/),
-      { timeout: 5000, interval: 20 },
-    );
+    assert.match(readFileSync(hookLog, "utf8"), / 1\n$/);
   });
 });
 
