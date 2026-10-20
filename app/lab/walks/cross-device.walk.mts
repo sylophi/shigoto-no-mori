@@ -370,8 +370,8 @@ it("keeps this device's own switches on its Account page while the hub is away, 
       await expect.poll(() => control.isChecked()).toBe(on);
     }
   } finally {
-    await sidebar(b.page).getByRole("button", { name: "Back" }).click();
     await devices.hub.resume();
+    await sidebar(b.page).getByRole("button", { name: "Back" }).click();
   }
   await backOnHub(ids);
 });
