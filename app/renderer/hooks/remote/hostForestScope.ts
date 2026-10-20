@@ -2,7 +2,7 @@
 // scoped caller (a useHostScope consumer, the sidebar's remote fan-out)
 // runs on any device. A peer's data caches under its own id, and an api
 // of undefined means "this device has no connection": nothing is asked.
-import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
+import { LINK_CALLS_IN_FLIGHT } from "@shared/remote/rpcTransport";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 
 export type HostForestScope = {
@@ -14,13 +14,12 @@ export type HostForestScope = {
 // config, its icon, its GitHub description) go to one device at once.
 // The sidebar and the projects page ask them of every project, four
 // calls a project, and turning terrier on lists every repo the person
-// has in one go. The link lets a share of the host's
-// MAX_IN_FLIGHT_PER_PEER out at once and queues the rest in order
-// (shared/remote/rpcTransport.ts, LINK_CALLS_IN_FLIGHT), so a burst of
-// these alone would put the page's own calls behind hundreds of them:
-// held to a quarter of the cap, they leave the link's other places to
+// has in one go. The link lets LINK_CALLS_IN_FLIGHT out at once and
+// queues the rest in order (shared/remote/rpcTransport.ts), so a burst
+// of these alone would put the page's own calls behind hundreds of
+// them: held to a third of the link's places, they leave the rest to
 // the page.
-const FOREST_READS_PER_DEVICE = MAX_IN_FLIGHT_PER_PEER / 4;
+const FOREST_READS_PER_DEVICE = LINK_CALLS_IN_FLIGHT / 3;
 
 const forestQueues = new Map<
   string,

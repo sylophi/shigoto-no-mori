@@ -4,8 +4,8 @@
 // ticket handshake by the real dialer, asserting the calls, the pushes,
 // the errors crossing as their classes, and the hardening: a refused
 // ticket and the lockout behind it, the protocol version, calls before
-// a hello, the hello timeout, the Origin gate, the frame cap, the
-// in-flight cap, supersede (a desktop's second link) and a web device's
+// a hello, the hello timeout, the Origin gate, the frame cap,
+// supersede (a desktop's second link) and a web device's
 // several (one per tab), liveness and the listener stopping.
 //
 // The command gate (CommandGate): a call annotated gated:false runs for
@@ -51,7 +51,6 @@ import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import * as Paths from "@shigomori/engine/Paths";
 import { reconcileOnLastPort, rememberedPort } from "@host/direct/listenerPort";
-import { mintHexId } from "@host/lib/hexId";
 import { MAX_MESSAGE_BYTES } from "@host/socket/boundedMessages";
 import { flatClient, quietProtocol } from "@shigomori/engine/rpcClient";
 import * as Effect from "effect/Effect";
@@ -110,7 +109,6 @@ import {
   sealDialer,
 } from "@shared/remote/sealedSocket";
 import { generateKeyPair } from "@shared/crypto/noise";
-import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import {
   dropMirrorInvitesWithPeers,
   inviteMirror,
@@ -819,54 +817,6 @@ it("tickets: a ticket survives a socket whose handshake fails and one whose firs
   assert.ok(again.refusal instanceof LinkRefusedError);
 });
 
-it("in-flight cap: one call past the per-peer cap is refused rather than run", async () => {
-  const track = trackTest;
-  const { listener, seen } = await listen(track);
-  // The raw link: the dialer's own lets fewer out at once
-  // (rpcTransport.ts, LINK_CALLS_IN_FLIGHT), and this is the host's
-  // cap.
-  const raw = await rawLink(track, listener);
-  assert.ok(Exit.isSuccess(await raw.hello()));
-  const calls = Array.from({ length: MAX_IN_FLIGHT_PER_PEER }, () =>
-    Effect.runPromise(raw.call("worktrees:list", { projectId: "p" })),
-  );
-  await waitFor(
-    () => seen.hanging.length === MAX_IN_FLIGHT_PER_PEER,
-    "every call under the cap to run",
-  );
-  const over = await Effect.runPromiseExit(
-    raw.call("worktrees:list", { projectId: "p" }),
-  );
-  assert.match(String(over), /too many in-flight requests/);
-  for (const call of seen.hanging) call.resolve([]);
-  await Promise.all(calls);
-});
-
-it("in-flight cap: streams a peer holds open take no place under it", async () => {
-  const track = trackTest;
-  const { listener } = await listen(track);
-  const raw = await rawLink(track, listener);
-  assert.ok(Exit.isSuccess(await raw.hello()));
-  const open = Array.from({ length: MAX_IN_FLIGHT_PER_PEER + 1 }, () =>
-    Effect.runFork(
-      Stream.runDrain(
-        raw.watch("ports:watch", { projectId: "p", worktreeId: "w" }),
-      ),
-    ),
-  );
-  track(() =>
-    Promise.all(open.map((fiber) => Effect.runPromise(Fiber.interrupt(fiber)))),
-  );
-  // Let every stream reach the host before the call.
-  await Effect.runPromise(raw.call("link:ping"));
-  assert.deepEqual(
-    await Effect.runPromise(raw.call("git:sweep", { renewal: true })),
-    {
-      leaseMs: 5,
-    },
-  );
-});
-
 it("command gate: with commands off a command is refused with the typed error and never runs while a read is served, and turning them on needs no reconnect", async () => {
   const track = trackTest;
   const { listener, seen } = await listen(track);
@@ -1223,36 +1173,6 @@ it("byte channels: a reader that holds its pieces holds back its own channel alo
     for (const consumed of held.splice(0)) consumed();
     await delay(10);
   }
-});
-
-it("byte channels: the reads idle channels hold take no place under the in-flight cap", async () => {
-  const track = trackTest;
-  const { listener } = await listen(track);
-  listener.setAccepts(true);
-  const connection = await dialListener(track, listener);
-  // Twelve channels with nothing to say, each holding its reads ahead
-  // on the host: past the cap's 64 calls.
-  let resets = 0;
-  const ids: string[] = [];
-  for (let n = 0; n < 12; n++) {
-    const id = mintHexId();
-    ids.push(id);
-    connection.channels.attach(id, {
-      onData: (_data, consumed) => consumed(),
-      onEnd: () => {},
-      onReset: () => {
-        resets += 1;
-      },
-      onWritable: () => {},
-    });
-    await invoke(connection, "forward:open", { port: 2, channelId: id });
-  }
-  assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
-    leaseMs: 5,
-  });
-  await delay(200);
-  assert.equal(resets, 0, "no channel was refused its reads");
-  assert.ok(ids.every((id) => connection.channels.has(id)));
 });
 
 it("streams: a client behind a flood is handed it in messages within the cap, and the link's calls still answer", async () => {

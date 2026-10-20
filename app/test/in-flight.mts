@@ -1,13 +1,10 @@
 // Durable proof for the calls a link has in flight: the client's gate
-// (rpcLink's fifoGate, shared/remote/rpcTransport.ts) and the host's
-// cap (MAX_IN_FLIGHT_PER_PEER, host/socket/DeviceLink.ts), over the
-// REAL loopback (host/socket/Loopback.ts) a window's link dials. The
-// client is the window's own pieces on one socket: an RpcClient on
+// (rpcLink's fifoGate, shared/remote/rpcTransport.ts), over the REAL
+// loopback (host/socket/Loopback.ts) a window's link dials. The client
+// is the window's own pieces on one socket: an RpcClient on
 // LoopbackGroup said hello on with the loopback's token, the REAL
 // rpcLink over it (what dialDevice hands hostLink), and the renderer's
-// runner (a FiberSet's runPromise, Api.ts's `run`). The bare RpcClient
-// beside the link is the same connection with no gate in front, so the
-// host's count on it can be filled to the cap and read back. Asserts:
+// runner (a FiberSet's runPromise, Api.ts's `run`). Asserts:
 //   - a fetch a query supersedes stops the host's work: the REAL
 //     worktrees:changeStatus handler (host/ipc/modules/worktrees.ts),
 //     on a project the terminal sm registered, runs a `git status` a
@@ -15,16 +12,13 @@
 //     Query's signal, is cancelled by the next invalidateQueries as a
 //     push would (cancelRefetch, which spares a query's first fetch,
 //     so it has answered once before), and that git and its hook are
-//     gone while the new fetch answers. The connection then takes all 64 calls the cap
-//     allows, so the cancelled call's place came back.
+//     gone while the new fetch answers.
 //   - calls dropped while their host cleanup still runs (a killed git
-//     not yet gone) free their places as they are dropped: as many
-//     new calls made at once all run, and none is refused.
+//     not yet gone) free their places in the gate as they are dropped:
+//     as many new calls made at once all reach the host.
 //   - a burst of 300 calls on the link all answer, with no refusal: the
 //     host never runs more than LINK_CALLS_IN_FLIGHT (48) at once, and
 //     starts them in the order they were made.
-//   - with the cap full, the link's ping still answers, while one more
-//     call is refused;
 //   - a page's refresh as it opens (git:refreshProject) makes no quit
 //     ask, and the refresh its button asks for (git:fetchProject) reads
 //     as a fetch being made.
@@ -61,7 +55,6 @@ import * as Loopback from "@host/socket/Loopback";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { effectClient } from "@shared/ipc/effectClient";
 import { createServed } from "@shared/ipc/served";
-import { MAX_IN_FLIGHT_PER_PEER } from "@shared/remote/link";
 import { LINK_CALLS_IN_FLIGHT, rpcLink } from "@shared/remote/rpcTransport";
 import { flatClient, quietProtocol } from "@shigomori/engine/rpcClient";
 import { EngineChanges } from "@host/lib/Engine";
@@ -245,31 +238,7 @@ async function openLink() {
   );
 }
 
-type OpenLink = Awaited<ReturnType<typeof openLink>>;
-
-// Holds MAX_IN_FLIGHT_PER_PEER calls on the connection, past the gate:
-// every one runs only if the host counted none in flight before. One
-// more is refused, so the cap is where it was.
-async function fillCap({ raw, run }: OpenLink) {
-  const calls = Array.from({ length: MAX_IN_FLIGHT_PER_PEER }, (_, n) =>
-    run(raw("git:refreshProject", { projectId: `fill${n}` })),
-  );
-  trackTest(async () => {
-    releaseHeld();
-    await Promise.allSettled(calls);
-  });
-  await waitFor(
-    () => held.running === MAX_IN_FLIGHT_PER_PEER,
-    "every call under the cap to run",
-  );
-  const over = await run(
-    Effect.flip(raw("git:refreshProject", { projectId: "over" })),
-  );
-  assert.match(String(over), /too many in-flight requests/);
-  return calls;
-}
-
-it("superseded: a fetch a query's refetch cancels stops the host's git, and its place under the cap comes back", async () => {
+it("superseded: a fetch a query's refetch cancels stops the host's git", async () => {
   resetHeld();
   const connection = await openLink();
   const worktrees = effectClient(worktreesContract, connection.link);
@@ -314,11 +283,9 @@ it("superseded: a fetch a query's refetch cancels stops the host's git, and its 
     "the superseded git and its hook to end",
   );
   assert.equal(slowPids().length, 2, "only the superseded git was held");
-
-  await fillCap(connection);
 });
 
-it("dropped: calls cancelled while their host cleanup runs free their places at once, so as many new ones are all taken", async () => {
+it("dropped: calls cancelled while their host cleanup runs free their places in the gate at once, so as many new ones all reach the host", async () => {
   resetHeld();
   const { link, run } = await openLink();
   const dropping = new AbortController();
@@ -410,14 +377,6 @@ it("burst: 300 calls on the link all answer, never more than the gate's at once 
     held.order,
     Array.from({ length: total }, (_, n) => `b${n}`),
   );
-});
-
-it("full cap: with every place on a connection held, its ping still answers", async () => {
-  resetHeld();
-  const connection = await openLink();
-  await fillCap(connection);
-  await connection.run(connection.raw("link:ping"));
-  assert.equal(held.running, MAX_IN_FLIGHT_PER_PEER);
 });
 
 // The changes the sandbox's engine counts, which the loopback serves

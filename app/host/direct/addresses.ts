@@ -15,8 +15,7 @@ import { MAX_DIRECT_CANDIDATES } from "@shigomori/contracts/modules/direct";
 
 // The dialer races candidates on a fixed budget, so a host with many
 // virtual interfaces (Docker bridges, VPNs, VMs) must not fan out
-// junk. The advertised cap is the shared MAX_DIRECT_CANDIDATES (the
-// dialer bounds its race on the same constant), IPv4 first so a
+// junk. The advertised cap is MAX_DIRECT_CANDIDATES, IPv4 first so a
 // reachable LAN address makes the cut.
 
 function isLinkLocal(address: string, family: string): boolean {
