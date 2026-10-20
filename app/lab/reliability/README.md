@@ -16,13 +16,14 @@ pnpm reliability --soak 4h                  # random order and gaps, for 4 hours
 | Flag | Effect |
 | --- | --- |
 | `--clients a,b` | Which clients run: `web`, `desktop`, `tunnel`, `terminal` (default all). `terminal` brings the desktop device without its windows. |
-| `--scenarios a,b` | Run these, in this order. |
+| `--scenarios a,b` | Run these, in this order. `hub-redeploy` and `sign-out-with-sibling` run only when named. |
 | `--soak <d>` | Loop the soak's scenarios for `<d>` (`90m`, `4h`), in random order, with a random gap between them. |
 | `--gap <min>-<max>` | The soak's gap, default `30s-3m`. |
 | `--seed <n>` | Replay a soak's order and gaps (the report names its seed). |
 | `--headed` | Show the browser, for watching or for signing it in. |
-| `--keep` | Leave the profiles and their devices enrolled, for a quicker next run. |
-| `--deploy-local-hub` | Let `hub-redeploy` deploy this checkout's `hub/` when it differs from `origin/release/v3`. |
+| `--keep` | Leave every profile and its device enrolled, for a quicker next run. |
+| `--revoke-host` | Sign B out at the end and delete its profile, which is kept otherwise. `--keep` wins. |
+| `--deploy-local-hub` | Let a named `hub-redeploy` deploy this checkout's `hub/` when it differs from release/v3. |
 
 ## What it sets up
 
@@ -31,10 +32,12 @@ this laptop: their network is what goes down, and their machine is what
 sleeps.
 
 - **The host (B)**: the dev app as the profile `<worktree>-host`
-  (`../dev-app.md`), seeded with one repo, signed in with
-  `--clone-login` (the plain dev app must be signed in), admitting the
-  web client's origin and accepting the desktop device's commands. It
-  advertises its direct listener on a port of the harness's
+  (`../dev-app.md`), kept from one run to the next. Its first run
+  seeds it with one repo and signs it in with `--clone-login` (the
+  plain dev app must be signed in), and then waits for its new tunnel
+  to route, which can take minutes. It admits the web client's origin
+  and accepts the desktop device's commands. It advertises its direct
+  listener on a port of the harness's
   (`SHIGOMORI_DIRECT_FRONT_PORT`), where a TCP front passes every
   connection on to the listener, LAN candidates and the tunnel's
   connector alike. Every client's device link to B rides through it.
@@ -66,9 +69,13 @@ needs one: run with `--headed` and sign in with GitHub, or set
 authorize URL (handed to it as `$AUTH_URL`) and prints the URL GitHub
 redirects to, which the tab then opens.
 
-At the end it signs every device out (revoking them) and deletes the
-profiles, unless `--keep`. The browser profile stays, and enrolls
-again on the next run.
+At the end it signs the browser, A and C out (revoking their devices)
+and deletes A's and C's profiles, unless `--keep`. The browser profile
+stays, and enrolls again on the next run. B stays enrolled, with its
+profile and its tunnel, until a run with `--revoke-host` (or a run
+whose B reads signed out, so the next starts afresh), once B is up to
+sign itself out. Run one before the worktree goes: the account holds
+16 devices, past which the hub drops its stalest offline one.
 
 ## The scenarios
 
@@ -76,11 +83,11 @@ again on the next run.
 | --- | --- | --- |
 | `network-drop` | The clients' network goes for 20 to 60 s (flows stall, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. A tab has to stop reading the host as Connected within 10 s and a window within 15 s. The terminal runs `devices`, `list --remote` and a `send` meanwhile. | 30 s |
 | `network-blip` | Every flow stalls for 5 to 15 s and resumes, with no offline event. | 30 s |
-| `hub-redeploy` | The dev hub is deployed again from this checkout, which restarts its Durable Objects and drops every socket. Skipped when this checkout's hub differs from `origin/release/v3`. | 60 s |
+| `hub-redeploy` | The dev hub is deployed again from this checkout, which restarts its Durable Objects and drops every socket. Runs only when named: the dev hub is shared (every v3 build talks to it, the installed betas among them) and may run behind release/v3 on purpose, holding an older protocol floor for the installed betas, which a deploy from even an up-to-date checkout would lock out. Named, it is skipped when this checkout's `hub/` or contracts differ from release/v3 as fetched then, untracked files included. | 60 s |
 | `host-kill` | B's host process is killed, and its shell forks it again. | 60 s |
 | `app-relaunch` | B's whole dev app quits and launches again. | 60 s from the relaunch |
 | `laptop-sleep` | The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, A and C stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and their windows hear the network come back, as a wake tells them, and the tabs wake. | 30 s |
-| `host-sleep` | B's machine sleeps for 30 to 120 s: its whole app stopped, cloudflared and all, its sockets silent but open. Every page must stop reading B as Connected, the terminal runs its verbs meanwhile, and all find B again once it goes on. | 60 s |
+| `host-sleep` | B's machine sleeps for 30 to 120 s: its whole app stopped, cloudflared and all, its sockets silent but open. Every page must stop reading B as Connected within 65 s, the link's heartbeat (a shorter sleep only notes it), the terminal runs its verbs meanwhile, and all find B again once it goes on. | 60 s |
 | `desk-host-kill` | A's own host process is killed. Its windows and the terminal have to find it once its shell forks it again. | 30 s |
 | `reload-and-second-tab` | The tab is reloaded, a second tab of the profile opened, then closed, each step recovering. | 30 s each |
 | `reload-and-third-window` | A's first window is reloaded, a third window opened (New Window), then closed, each step recovering. | 30 s each |
