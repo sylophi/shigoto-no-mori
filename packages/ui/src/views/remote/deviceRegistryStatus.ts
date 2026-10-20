@@ -62,30 +62,30 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
   }
 }
 
-export function deviceRowStatus(
+// This machine never appears in the hub store, and running the app is
+// not the same as being on the account: its presence to the other
+// devices IS its hub socket (a browser's especially), so its row reads
+// that. A connected socket is "Online" (the roster word, not
+// "Connected", which is what a direct session to a peer earns). Any
+// other phase is the same honest transport fact a peer row would show.
+// No snapshot yet (null) reads as online, the common case.
+export function thisDeviceRowStatus(
+  socket: HubStatus["socket"] | null,
+): DeviceRowStatus {
+  if (socket === null || socket.phase === "connected") {
+    return { tone: "emerald", label: "Online", reachable: true };
+  }
+  return deviceStatusView(socket);
+}
+
+export function peerRowStatus(
   device: DeviceInfo,
-  isThisDevice: boolean,
   // The peer's status in the live hub store, undefined before it has
   // an entry.
   hubStatus: RemoteDeviceStatus | undefined,
-  // THIS device's own hub socket, null before the first snapshot.
-  socket: HubStatus["socket"] | null,
   // The registry's clock (useNow), for the "last seen" label.
   now: number,
 ): DeviceRowStatus {
-  // This machine never appears in the hub store, and running the app
-  // is not the same as being on the account: its presence to the
-  // other devices IS its hub socket (a browser's especially), so the
-  // row reads that. A connected socket is "Online" (the roster word,
-  // not "Connected", which is what a direct session to a peer earns).
-  // Any other phase is the same honest transport fact a peer row
-  // would show. No snapshot yet reads as online, the common case.
-  if (isThisDevice) {
-    if (socket === null || socket.phase === "connected") {
-      return { tone: "emerald", label: "Online", reachable: true };
-    }
-    return deviceStatusView(socket);
-  }
   // A peer absent from the hub roster -- or with no store entry at
   // all, which is the same fact before the first reconcile lands -- is
   // off, not broken.

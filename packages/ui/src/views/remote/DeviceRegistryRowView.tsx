@@ -31,6 +31,10 @@ import { deviceTraits } from "../../lib/deviceTraits.ts";
 import { DeviceRenameButtonView } from "./DeviceNameFieldView.tsx";
 import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus.ts";
 
+// What a row reads of the machine itself. This device's row builds it
+// from what the window knows, so the row needs no hub to draw.
+export type RowDevice = Pick<DeviceInfo, "deviceId" | "platform">;
+
 // What the row's controls call the machine: this one by its role, a
 // peer by name, and where the name alone cannot pick it out, the same
 // id fragment the header shows joins it, so the Remove button a screen
@@ -42,7 +46,7 @@ export function deviceRowLabels({
   name,
   showId,
 }: {
-  device: DeviceInfo;
+  device: RowDevice;
   isThisDevice: boolean;
   name: string;
   showId: boolean;
@@ -78,7 +82,7 @@ export function DeviceRegistryRowView({
   hosts,
   exposure,
 }: {
-  device: DeviceInfo;
+  device: RowDevice;
   isThisDevice: boolean;
   // The name the row shows: this device's locally stored one, a peer's
   // registry one. Resolved by the registry so its collision check and

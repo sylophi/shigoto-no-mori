@@ -1,10 +1,12 @@
 // The account's device registry, drawn (DeviceRegistry.tsx binds it):
 // the account line with its sign-out, what is wrong with this device's
-// sign-in, and one row per machine.
+// sign-in, and one row per machine: this one's first, whatever the
+// hub's list is doing, then the others the list holds.
 import type { ReactNode } from "react";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { abbreviateId } from "../../lib/abbreviateId.ts";
 
+// The account's other machines, from the hub.
 export type RegistryList =
   | { state: "loading" }
   // A failed list is unknown, not empty. The message is null when the
@@ -16,6 +18,7 @@ export function DeviceRegistryView({
   account,
   signOut,
   banner,
+  self,
   list,
 }: {
   // Who is signed in (AccountIdentityView).
@@ -23,6 +26,9 @@ export function DeviceRegistryView({
   signOut: ReactNode;
   // What is wrong with this device's sign-in, if anything.
   banner: ReactNode;
+  // This device's row. It is drawn from what the window knows, so its
+  // switches stay within reach while the hub is away.
+  self: ReactNode;
   list: RegistryList;
 }) {
   return (
@@ -39,16 +45,18 @@ export function DeviceRegistryView({
 
       {banner}
 
+      <ul className="divide-y divide-border">
+        {self}
+        {list.state === "ready" && list.rows}
+      </ul>
+
       {list.state === "loading" ? (
         <p className="text-xs text-muted-foreground/70">
-          Loading devices&hellip;
+          Loading other devices&hellip;
         </p>
-      ) : list.state === "failed" ? (
-        list.message !== null && <ErrorBanner>{list.message}</ErrorBanner>
-      ) : list.rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground/70">No devices yet.</p>
       ) : (
-        <ul className="divide-y divide-border">{list.rows}</ul>
+        list.state === "failed" &&
+        list.message !== null && <ErrorBanner>{list.message}</ErrorBanner>
       )}
     </section>
   );
