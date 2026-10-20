@@ -215,9 +215,7 @@ export const makeMoving = ({
     // finishes.
     const wipeLinkLast = (dir: string) =>
       Effect.gen(function* () {
-        const entries = yield* fs
-          .readDirectory(dir)
-          .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+        const entries = yield* fs.readDirectory(dir);
         yield* Effect.forEach(
           entries.filter((entry) => entry !== ".git"),
           (entry) => wipe(path.join(dir, entry)),
