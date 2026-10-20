@@ -25,6 +25,10 @@ const pidOf = (child: ChildProcess): number => {
   return child.pid;
 };
 
+// Roots for endTrees, as `own` records them: owned now.
+const ownedNow = (...pids: number[]) =>
+  new Map(pids.map((pid) => [pid, Date.now()]));
+
 // As `sm` runs git: a child whose own child is in a session of its own,
 // out of the child's group. Answers both pids.
 const SM_LIKE = `const c = require("node:child_process").spawn("sleep", ["600"], { detached: true, stdio: "ignore" });
@@ -130,7 +134,7 @@ it("ends a process deaf to SIGTERM and the one it left in a session of its own, 
     spawn("sh", ["-c", "trap '' TERM; sleep 600"], { stdio: "ignore" }),
   );
   const { parent, grandchild } = await smLike();
-  endTrees([pidOf(deaf), pidOf(parent)]);
+  endTrees(ownedNow(pidOf(deaf), pidOf(parent)));
   assert.deepEqual(running([pidOf(deaf), pidOf(parent), grandchild]), []);
 });
 
@@ -163,9 +167,30 @@ it("ends a child that shares this process's group, and signals neither this proc
   const grandchild = Number(line.toString().trim());
   const above = lineage();
   assert.ok(above.length > 1, "no process above this one");
-  endTrees([pidOf(child)]);
+  endTrees(ownedNow(pidOf(child)));
   assert.deepEqual(running([pidOf(child), grandchild]), []);
   assert.deepEqual(byPid(running(above)), byPid(above));
+});
+
+it("leaves a root alone that started after it was owned, as a process that took its pid did", () => {
+  const later = pidOf(own(spawn("sleep", ["600"], { stdio: "ignore" })));
+  endTrees(new Map([[later, Date.now() - 10_000]]));
+  assert.deepEqual(running([later]), [later]);
+});
+
+it("ends a process of its own in a group another leads, and never signals that group", async () => {
+  // The group is the shell's, which execs a sleep of its own.
+  const leader = own(
+    spawn("sh", ["-c", "sleep 600 & echo $!; exec sleep 600"], {
+      detached: true,
+      stdio: ["ignore", "pipe", "ignore"],
+    }),
+  );
+  const [line] = (await once(leader.stdout, "data")) as [Buffer];
+  const member = Number(line.toString().trim());
+  endTrees(ownedNow(member));
+  assert.deepEqual(running([member]), []);
+  assert.deepEqual(running([pidOf(leader)]), [pidOf(leader)]);
 });
 
 // What the file owns outside its cases outlives them.

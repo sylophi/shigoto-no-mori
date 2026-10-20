@@ -11,6 +11,7 @@ import { afterAll, it } from "vitest";
 import * as Lifecycle from "../src/Lifecycle.ts";
 import * as Paths from "../src/Paths.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
+import { pidIn } from "../../../testProcesses.mts";
 
 const scratch = mkdtempSync(join(tmpdir(), "engine-lifecycle-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -96,7 +97,8 @@ it("tells the script its worktree, NULs dropped, and reports start, output and e
 it("leaves what the script started in the background running", async () => {
   const { events, answer } = await run("sleep 30 >/dev/null 2>&1 & echo $!");
   assert.equal(answer.code, 0);
-  const pid = Number(output(events).trim());
+  const pid = pidIn(output(events));
+  assert.ok(pid !== undefined, "the script said no pid");
   try {
     // Signal 0 only asks whether the process is there.
     assert.doesNotThrow(() => process.kill(pid, 0));
@@ -121,9 +123,9 @@ it("ends at the shell's exit while a child it left holds the output, which keeps
         color: false,
         report: (event) => Effect.sync(() => void events.push(event)),
       });
-      const pid = Number(output(events).split("\n")[0]);
+      const pid = pidIn(output(events).split("\n")[0] ?? "");
       yield* Effect.sleep("1500 millis");
-      const alive = processAlive(pid);
+      const alive = pid !== undefined && processAlive(pid);
       return { events, answer, pid, alive };
     }).pipe(Effect.provide(lifecycleLayer), Effect.timeout("10 seconds")),
   );
@@ -136,7 +138,7 @@ it("ends at the shell's exit while a child it left holds the output, which keeps
     assert.equal(kinds.at(-1), "exit");
     assert.match(output(answered.events), /^\d+\n(tick\n)*ready\n/);
   } finally {
-    process.kill(answered.pid, "SIGKILL");
+    if (answered.pid !== undefined) process.kill(answered.pid, "SIGKILL");
   }
 });
 

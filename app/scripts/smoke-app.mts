@@ -431,6 +431,9 @@ async function update(identity: string) {
     // update ready from the start; then Settings' button, the way the
     // window presses it.
     await stop(failed.pid, () => !pidAlive(failed.pid));
+    // Gone, so the end has no pid of it to stop: another process may
+    // take the number.
+    opened.delete(failed.pid);
     const again = spawn(executableIn(installed), [], {
       env: {
         ...process.env,
@@ -462,6 +465,7 @@ async function update(identity: string) {
     if (!(await until(() => !pidAlive(pid), RESTART_WITHIN_MS))) {
       fail("the app answered Restart to update and didn't quit");
     }
+    opened.delete(pid);
     console.log("the update: Restart to update answered, and the app quit");
 
     await until(

@@ -31,6 +31,7 @@ import {
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
+import { pidIn } from "../../testProcesses.mts";
 
 const { track, teardown } = makeTracker();
 let root: string;
@@ -124,8 +125,10 @@ it("a run that finishes while its record is written keeps its output and exit", 
 it("a cancel takes the whole process group down and reads as stopped", async () => {
   const pidFile = join(root, "background.pid");
   const { runId, exit } = await run(`sleep 60 & echo $! > ${pidFile}; wait`);
-  await waitFor(() => existsSync(pidFile), "the background child to start");
-  const background = Number(readFileSync(pidFile, "utf8").trim());
+  const written = () =>
+    existsSync(pidFile) ? pidIn(readFileSync(pidFile, "utf8")) : undefined;
+  await waitFor(() => written() !== undefined, "the background child to start");
+  const background = written() ?? assert.fail("the background pid went");
   assert.ok(processAlive(background));
   assert.equal(await withScripts((scripts) => scripts.cancel(runId)), true);
   assert.deepEqual(exit(), { runId, kind: "exit", code: null });

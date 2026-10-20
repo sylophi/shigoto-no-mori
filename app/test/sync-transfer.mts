@@ -132,6 +132,7 @@ import {
 } from "./lib/directBoot.mts";
 import type { ShigomoriConfig } from "@shigomori/contracts/schemas";
 import { addProject, secondEngine } from "./lib/smBinary.mts";
+import { pidIn } from "../../testProcesses.mts";
 
 // The host's engine reads and moves as Promises, on the sandbox's
 // engine (runHost).
@@ -2024,13 +2025,11 @@ describe("cancelMove", () => {
   let targetConfigBefore: ShigomoriConfig | null;
   const setupPidPath = join(sandbox, "setup.pid");
   // The setup script has started: its pid is in the file, and it is
-  // the sleep (exec'd, so the pid is the one process to watch). The
-  // shell makes the file before echo writes the pid into it.
-  const setupPid = () => {
-    if (!existsSync(setupPidPath)) return undefined;
-    const pid = Number(readFileSync(setupPidPath, "utf8").trim());
-    return Number.isInteger(pid) && pid > 1 ? pid : undefined;
-  };
+  // the sleep (exec'd, so the pid is the one process to watch).
+  const setupPid = () =>
+    existsSync(setupPidPath)
+      ? pidIn(readFileSync(setupPidPath, "utf8"))
+      : undefined;
   const setupStarted = async () => {
     if (existsSync(setupPidPath)) rmSync(setupPidPath);
     await waitFor(
