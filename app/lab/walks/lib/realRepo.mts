@@ -119,10 +119,15 @@ export async function startRealOrigin(): Promise<RealOrigin> {
     cwd: path,
   });
   const port = await freeLoopbackPort();
+  // The daemon itself, not `git daemon`, a wrapper a SIGKILL would end
+  // with the daemon left listening.
+  const gitDaemon = join(
+    execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim(),
+    "git-daemon",
+  );
   const daemon = spawn(
-    "git",
+    gitDaemon,
     [
-      "daemon",
       "--reuseaddr",
       "--export-all",
       `--base-path=${base}`,
