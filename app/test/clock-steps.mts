@@ -4,9 +4,8 @@
 // on, monotonic time and every timer stand still, then a wake), and a
 // stopped process (both clocks run on, no timer runs), on a TestClock
 // (lib/checkKit.mts, `sleepingClock`). Covers the links' liveness
-// (engine/liveness.ts), its one-shot question (the watchdog's rounds,
-// a quit's busy ask) and the hub
-// socket's pings and wake probe on it (shared/hub/connection.ts), the
+// (engine/liveness.ts), its one-shot question (`answerWithin`) and the
+// hub socket's pings and wake probe on it (shared/hub/connection.ts), the
 // supervisor's and the direct keeper's uptime (shared/remote/
 // supervisor.ts, shared/hub/directKeeper.ts), and a window's renewal of
 // a peer's attention after one failed ask (renderer/lib/remote/
