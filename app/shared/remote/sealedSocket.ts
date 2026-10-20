@@ -5,8 +5,8 @@
 // handed this in place of the platform socket on both ends, so the RPC
 // client and server above it never see a clear byte on the wire.
 //
-// The dialer's first frame names this link's version, then carries the
-// connect ticket in clear and the handshake's first message; the ticket is the prologue too, so a
+// The dialer's first frame carries the connect ticket in clear and the
+// handshake's first message; the ticket is the prologue too, so a
 // handshake replayed under another ticket does not open. The listener
 // checks the ticket before any crypto runs (`admit`), which names the
 // device it was minted for and the key the hub's roster holds for it,

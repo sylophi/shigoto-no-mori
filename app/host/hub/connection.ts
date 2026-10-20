@@ -24,7 +24,7 @@ export type HubConnectionOpts = Omit<Shared.HubConnectionDeps, "openSocket">;
 function openWsSocket(url: string): Shared.HubSocketAdapter {
   // Bound inbound buffering at the DO's inbound limit (a full presence
   // roster fits under it, and a relay it forwards is longer only by its
-  // sender's id), and disable perMessageDeflate so a compression bomb
+  // ids' difference), and disable perMessageDeflate so a compression bomb
   // cannot inflate a tiny frame past the limit.
   // An oversize frame past maxPayload closes the socket (1009), so
   // shrinking MAX_HUB_MESSAGE_BYTES means shipping devices that still
