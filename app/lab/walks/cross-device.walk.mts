@@ -350,8 +350,10 @@ it("keeps this device's own switches on its Account page while the hub is away, 
   try {
     await sidebar(b.page).getByRole("button", { name: "Settings" }).click();
     await sidebar(b.page).getByRole("button", { name: "Account" }).click();
+    // The list's failure, in whichever words the error reaching the
+    // window allows.
     await main(b.page)
-      .getByText(/^Couldn't reach the device hub/)
+      .getByText(/^Couldn't (reach the device hub|load the device list)/)
       .waitFor({ timeout: 60_000 });
     for (const name of [
       "Share with other devices",
@@ -367,8 +369,8 @@ it("keeps this device's own switches on its Account page while the hub is away, 
       await control.click();
       await expect.poll(() => control.isChecked()).toBe(on);
     }
-    await sidebar(b.page).getByRole("button", { name: "Back" }).click();
   } finally {
+    await sidebar(b.page).getByRole("button", { name: "Back" }).click();
     await devices.hub.resume();
   }
   await backOnHub(ids);
