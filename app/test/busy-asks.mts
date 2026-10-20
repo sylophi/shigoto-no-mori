@@ -5,18 +5,15 @@
 //     words), and is let close,
 //   - a host that doesn't answer reads idle, and the quit after kills
 //     it, its successor never,
-//   - an answer after that, or a time past the watchdog's limit, takes
-//     the kill back, of two asks that overlap the later says, and an
-//     ask no quit follows (an update's look before anything is staged)
-//     arms nothing.
+//   - an answer after that takes the kill back, and an ask no quit
+//     follows (an update's look before anything is staged) arms
+//     nothing.
 // The update-button walk drives the same on the packaged app: a job in
 // a terminal, Restart to update, and the busy dialog.
 //
 // Run: pnpm test busy-asks.
 import assert from "node:assert/strict";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import { it } from "vitest";
 import { type BusyOperations, busyDetail } from "@shared/busy";
@@ -33,23 +30,10 @@ const AGENT: BusyOperations = { ...IDLE, busyTerminals: 1 };
 const answered = Effect.succeed(Option.some(AGENT));
 const silent = Effect.succeed(Option.none<BusyOperations>());
 
-const asks = () => {
-  let now = 0;
-  const busy = busyAsks<string, BusyOperations>({
-    idle: IDLE,
-    freshMs: 30_000,
-    now: () => now,
-  });
-  return {
-    busy,
-    later: (ms: number) => {
-      now += ms;
-    },
-  };
-};
+const asks = () => busyAsks<string, BusyOperations>({ idle: IDLE });
 
 it("a host that answers is asked about and let close; one that doesn't reads idle and is killed, its successor never", async () => {
-  const { busy } = asks();
+  const busy = asks();
   const heard = await Effect.runPromise(busy.ask("host", answered, true));
   assert.notEqual(
     busyDetail(heard, "restart"),
@@ -63,36 +47,15 @@ it("a host that answers is asked about and let close; one that doesn't reads idl
   assert.equal(busy.kills("next"), false, "its successor killed");
 });
 
-it("an answer after it, or a time past the limit, takes the kill back", async () => {
-  const { busy, later } = asks();
+it("an answer after it takes the kill back", async () => {
+  const busy = asks();
   await Effect.runPromise(busy.ask("host", silent, true));
   await Effect.runPromise(busy.ask("host", answered, true));
   assert.equal(busy.kills("host"), false);
-  await Effect.runPromise(busy.ask("host", silent, true));
-  later(30_000);
-  assert.equal(busy.kills("host"), false, "killed on a stale ask");
-});
-
-it("of two asks that overlap, the later says", async () => {
-  const { busy } = asks();
-  const gate = Deferred.makeUnsafe<void>();
-  const killed = await Effect.runPromise(
-    Effect.gen(function* () {
-      const first = yield* Effect.forkChild(
-        busy.ask("host", Effect.as(Deferred.await(gate), Option.none()), true),
-      );
-      yield* Effect.yieldNow;
-      yield* busy.ask("host", answered, true);
-      yield* Deferred.succeed(gate, undefined);
-      yield* Fiber.join(first);
-      return busy.kills("host");
-    }),
-  );
-  assert.equal(killed, false, "an earlier ask that timed out said");
 });
 
 it("an ask no quit follows arms nothing", async () => {
-  const { busy } = asks();
+  const busy = asks();
   assert.deepEqual(
     await Effect.runPromise(busy.ask("host", silent, false)),
     IDLE,

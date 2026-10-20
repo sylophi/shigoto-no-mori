@@ -38,14 +38,13 @@ import { LinkGroup } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
 import { CLOSE_HANDSHAKE_FAILED, sealDialer } from "./sealedSocket";
 
-// A dial that failed before the welcome. `blocked` is the verdict the
-// keeper and the hub supervisor key on: a refused ticket, the wrong
-// machine answering, or a peer on another protocol version must never
-// auto-retry, or a refusal turns into a hammering loop. Everything else
-// (a socket that would not open, the host's temporary lockout, a slow
-// host) is safe to back off and retry. `code` is the close code when a
-// socket close ended it. `error` is the peer's own refusal, for a
-// caller that shows it (a version mismatch).
+// A dial that failed before the welcome. `blocked` is a refused ticket,
+// the wrong machine answering, or a peer on another protocol version,
+// which the dial race remembers and the hub supervisor keys on; the
+// direct keeper retries it on its ladder like anything else (a socket
+// that would not open, the host's temporary lockout, a slow host).
+// `code` is the close code when a socket close ended it. `error` is the
+// peer's own refusal, for a caller that shows it (a version mismatch).
 export class RemoteConnectError extends Error {
   readonly code: number | null;
   readonly blocked: boolean;
