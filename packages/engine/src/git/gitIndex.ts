@@ -155,9 +155,8 @@ export const makeGitIndex = ({
             { env },
           )).trim();
           // Named by a number one past the repository's highest and made
-          // only where no ref is yet, so a snapshot from another worktree
-          // taking the number first sends this one to the next, and no
-          // clock orders them.
+          // only where no ref is yet, so no clock orders them. A snapshot
+          // from another worktree taking the number first fails this one.
           const numbered = run(worktree, [
             "for-each-ref",
             "--format=%(refname)",
@@ -170,29 +169,13 @@ export const makeGitIndex = ({
               }),
             ),
           );
-          yield* Effect.gen(function* () {
-            const highest = (yield* numbered).reduce(
-              (a, b) => Math.max(a, b),
-              0,
-            );
-            yield* run(worktree, [
-              "update-ref",
-              `${DISCARD_REF_PREFIX}${highest + 1}`,
-              snapshot,
-              ABSENT_REF,
-            ]);
-          }).pipe(
-            Effect.retry({
-              times: 8,
-              // Taken by another snapshot since it was read, or held by
-              // its write: either way the next number is free.
-              while: (error) =>
-                error instanceof GitCommandError &&
-                /reference already exists|cannot lock ref/.test(
-                  stderrOf(error),
-                ),
-            }),
-          );
+          const highest = (yield* numbered).reduce((a, b) => Math.max(a, b), 0);
+          yield* run(worktree, [
+            "update-ref",
+            `${DISCARD_REF_PREFIX}${highest + 1}`,
+            snapshot,
+            ABSENT_REF,
+          ]);
           // Best effort: a failed prune leaves a ref.
           yield* numbered.pipe(
             Effect.flatMap((numbers) =>

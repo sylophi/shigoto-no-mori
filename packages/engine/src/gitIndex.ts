@@ -337,11 +337,10 @@ export const toHex = (bytes: Uint8Array) =>
 // A version 2 index without extensions (git adds what it wants on its
 // next write), each path with its stat (zeroes for none, which git reads
 // as changed until checkout-index fills them in), its trailing checksum
-// left to the caller. `oidBytes` is the object format's hash size.
+// left to the caller. Object ids are SHA-1's.
 export function indexBody(
   entries: ReadonlyArray<TreeEntry>,
   stats: ReadonlyMap<string, IndexStat>,
-  oidBytes: number,
 ): Uint8Array {
   // By the bytes of their paths, as git sorts them.
   const named = entries.map((entry) => ({
@@ -359,7 +358,7 @@ export function indexBody(
   for (const entry of sorted) {
     const st = stats.get(entry.path) ?? NO_STAT;
     const oid = hexBytes(entry.oid);
-    if (oid === undefined || oid.length !== oidBytes) {
+    if (oid === undefined || oid.length !== 20) {
       throw new Error(`bad object id ${entry.oid} for ${entry.path}`);
     }
     const name = encoder.encode(entry.path);
