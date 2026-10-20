@@ -3,11 +3,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { plural, pluralize } from "@shigomori/contracts/words";
-import { atoi, parseProcessTable } from "../doctorParse.ts";
+import { parseProcessTable } from "../doctorParse.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Paths from "../Paths.ts";
 import { pidAlive, PS_BIRTH_ENV } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
+import { readTunnelPid } from "../tunnelPid.ts";
 import { SCRIPT_START_TOLERANCE_MS, check } from "./documents.ts";
 import type { ReadsArea } from "./reads.ts";
 
@@ -30,7 +31,7 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       );
       const raw = yield* readText(path.join(userData, "cloudflared.pid"));
       if (Option.isNone(raw)) return [];
-      const pid = atoi(raw.value.trim());
+      const pid = readTunnelPid(raw.value);
       if (pid === undefined || pid < 2) return [];
       const ps = yield* capture("ps", [
         "-o",
