@@ -126,16 +126,16 @@ const checkDormantState = (
 
 // The device's settings, each value checked against the key it sets,
 // none when there are none.
-const checkGlobalConfig = (stored: Option.Option<ConfigDoc>) => {
+const checkGlobalConfig = (
+  stored: Option.Option<ConfigDoc>,
+  fix = "Set it again in the app's Settings.",
+) => {
   const line = check("Data dir", "config", "settings");
   if (Option.isNone(stored)) return line.ok("absent, so defaults apply");
   const device = stored.value;
   const keys = Object.keys(device).length;
   if (storedProblem({ kind: "device" }, device) !== undefined) {
-    return line.warn(
-      "a setting has the wrong type, so it is ignored",
-      "Set it again in the app's Settings.",
-    );
+    return line.warn("a setting has the wrong type, so it is ignored", fix);
   }
   return line.ok(`valid, ${pluralize(keys, "key")}`);
 };
@@ -324,21 +324,22 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
 
     const registryLine = check("Data dir", "registry", "projects");
 
-    // The registry's line, by its projects and the file that holds them.
+    // The registry's line, by its projects, and how an incomplete one
+    // goes.
     const registeredLine = (
       projects: ReadonlyArray<{
         readonly id?: string | undefined;
         readonly path?: string | undefined;
       }>,
-      file: string,
+      fix: string,
     ) => {
       const malformed = projects.filter(
         ({ id, path: at }) => (id ?? "") === "" || (at ?? "") === "",
       ).length;
       if (malformed > 0) {
         return registryLine.warn(
-          `${malformed} registry ${plural(malformed, "entry is", "entries are")} missing an id or path`,
-          `Remove the incomplete entries from ${tildify(file, home)}.`,
+          `${malformed} ${plural(malformed, "project is", "projects are")} missing an id or path`,
+          fix,
         );
       }
       return registryLine.ok(
@@ -348,7 +349,10 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
 
     const checkRegistry = Effect.gen(function* () {
       const registry = yield* Registry.Registry;
-      return registeredLine(yield* registry.projects, registryFile);
+      return registeredLine(
+        yield* registry.projects,
+        `Remove each with \`${binaryName} projects remove <name>\`, then add it again.`,
+      );
     });
 
     // Lock files under the data dir older than a write can take: the

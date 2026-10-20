@@ -7,6 +7,7 @@ import {
   type ErrorDocument,
   errorDocument,
   isUsage,
+  withHint,
 } from "@shigomori/engine/errorDocument";
 import { storeErrorOf } from "@shigomori/engine/storeErrors";
 import * as Cause from "effect/Cause";
@@ -129,7 +130,7 @@ export const report = (
       yield* emit({ ok: false, ...document });
     } else {
       yield* note(
-        `${styles(stderrColor).red(`${binaryName}:`)} ${[document.error, document.hint].filter(Boolean).join(" ")}`,
+        `${styles(stderrColor).red(`${binaryName}:`)} ${withHint(document.error, document.hint)}`,
       );
     }
     return problem !== undefined || isUsage(error) ? 2 : 1;

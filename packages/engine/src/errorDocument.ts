@@ -88,6 +88,14 @@ export const errorDocument = (error: unknown): ErrorDocument => {
   };
 };
 
+// A failure's words with its hint after them, as the terminal says it.
+// The words may end in another program's own (gh's), with no stop.
+export const withHint = (error: string, hint?: string): string => {
+  if (hint === undefined) return error;
+  const words = error.trimEnd();
+  return `${words}${/[.!?]$/.test(words) ? "" : "."} ${hint}`;
+};
+
 const hintOf = (error: unknown): string | undefined =>
   Predicate.hasProperty(error, "flagHint") && typeof error.flagHint === "string"
     ? error.flagHint
