@@ -7,6 +7,7 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync, type WriteStream } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shigomori/contracts/modules/hub";
 import { chromium, type Browser, type Page } from "playwright-core";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { pageApi, withPageApi } from "./pageApi.mts";
@@ -23,6 +24,8 @@ export type DevAppOptions = {
   // Runs with no account (the guide's lab): up once its window is.
   readonly signedOut?: true;
   readonly logs: WriteStream;
+  // Where a long wait says how it goes.
+  readonly note?: (text: string) => void;
 };
 
 export class DevApp {
@@ -72,11 +75,13 @@ export class DevApp {
     return { ...process.env, SHIGOMORI_DATA_DIR: this.dataDir };
   }
 
-  async launch(cloneLogin: boolean): Promise<void> {
+  // `fresh`: a profile just seeded, which signs in by cloning the plain
+  // dev app's sign-in and enrolls a device of its own.
+  async launch(fresh: boolean): Promise<void> {
     this.debugPort = await freePort();
     this.launched = spawn(
       "pnpm",
-      ["device", this.profile, ...(cloneLogin ? ["--clone-login"] : [])],
+      ["device", this.profile, ...(fresh ? ["--clone-login"] : [])],
       {
         cwd: appDir,
         detached: true,
@@ -90,12 +95,12 @@ export class DevApp {
     );
     this.launched.stdout?.pipe(this.options.logs, { end: false });
     this.launched.stderr?.pipe(this.options.logs, { end: false });
-    await this.attach();
+    await this.attach(fresh);
   }
 
   // Attaches to the windows' debugging port and waits until the app is
   // signed in, on the hub, and (for a host) with its tunnel up.
-  async attach(): Promise<void> {
+  async attach(fresh: boolean): Promise<void> {
     this.browser = await waitFor(
       `${this.profile}'s debugging port`,
       () => chromium.connectOverCDP(`http://127.0.0.1:${this.debugPort}`),
@@ -108,23 +113,47 @@ export class DevApp {
       60_000,
     );
     if (this.options.signedOut) return;
-    const needsTunnel = this.options.needsTunnel;
     await waitFor(
-      `${this.profile} to be signed in and on the hub${needsTunnel ? ", with its tunnel up" : ""}`,
+      `${this.profile} to be signed in and on the hub`,
       async () =>
-        (await pageApi(page)).evaluate(async (api, tunnel) => {
+        (await pageApi(page)).evaluate(async (api) => {
           const [account, hub] = await Promise.all([
             api.run(api.account.status()),
             api.run(api.hub.status()),
           ]);
-          return (
-            account.signedIn &&
-            hub.socket.phase === "connected" &&
-            (!tunnel || hub.tunnel === "up")
-          );
-        }, needsTunnel),
+          return account.signedIn && hub.socket.phase === "connected";
+        }),
       180_000,
       1000,
+    );
+    if (!this.options.needsTunnel) return;
+    // A new device's tunnel has a new hostname, which can take minutes
+    // to route: the host allows it long enough to outlast a cached
+    // negative DNS answer (host/direct/Tunnel.ts). A kept device's
+    // routes in seconds.
+    const started = Date.now();
+    let told = started;
+    await waitFor(
+      `${this.profile}'s tunnel to be up`,
+      async () => {
+        const up = await (
+          await pageApi(page)
+        ).evaluate(
+          async (api) => (await api.run(api.hub.status())).tunnel === "up",
+        );
+        if (!up && Date.now() - told >= 60_000) {
+          told = Date.now();
+          this.options.note?.(
+            `${this.profile}'s tunnel is not up yet, ${Math.round((told - started) / 60_000)} min in`,
+          );
+        }
+        return up;
+      },
+      fresh ? TUNNEL_PROBE_DEADLINE_FRESH_MS : 180_000,
+      1000,
+    );
+    this.options.note?.(
+      `${this.profile}'s tunnel is up, ${Math.round((Date.now() - started) / 1000)} s after it signed in${fresh ? " (a new hostname)" : ""}`,
     );
   }
 

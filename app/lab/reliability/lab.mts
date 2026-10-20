@@ -204,6 +204,9 @@ export type LabOptions = {
   // Keep the profiles and the devices enrolled at the end, for the
   // next run.
   readonly keep: boolean;
+  // Sign B out and delete its profile at the end too, which is kept
+  // otherwise: a new B's tunnel can take minutes to route.
+  readonly revokeHost: boolean;
   readonly clients: ReadonlySet<ClientKind>;
 };
 
@@ -260,6 +263,7 @@ export class Lab {
         env: {},
         needsTunnel,
         logs: this.logs,
+        note: (text) => this.note(text),
       });
     this.hostApp = app(this.profile, true);
     this.desk =
@@ -522,8 +526,8 @@ export class Lab {
     await this.hostApp.stop();
   }
 
-  async launchHost(cloneLogin: boolean): Promise<void> {
-    await this.hostApp.launch(cloneLogin);
+  async launchHost(fresh: boolean): Promise<void> {
+    await this.hostApp.launch(fresh);
   }
 
   async hostEval<T>(fn: (api: RendererApi) => T | Promise<T>): Promise<T> {
@@ -682,6 +686,9 @@ export class Lab {
       await step(`thawing ${app.profile}`, () => app.thaw(app.appPids()));
     }
     await step("the network", () => this.network.restore({ cut: true }));
+    const dropped = this.options.keep
+      ? []
+      : apps.filter((app) => app !== this.hostApp || this.options.revokeHost);
     if (!this.options.keep) {
       // The web client's device, and each app's. The browser keeps its
       // Clerk session, so the next run enrolls it again.
@@ -691,9 +698,9 @@ export class Lab {
           withPageApi(tab.page, (api) => api.run(api.account.signOut())),
         );
       }
-      for (const app of apps) {
-        await step(`signing ${app.profile} out`, () => app.revoke());
-      }
+    }
+    for (const app of dropped) {
+      await step(`signing ${app.profile} out`, () => app.revoke());
     }
     // B and C before A, whose launcher serves their renderer, and every
     // app before the browser, the one a signal is most likely to cut.
@@ -705,7 +712,7 @@ export class Lab {
     if (this.webServer?.pid !== undefined) {
       killGroup(this.webServer.pid, "SIGTERM");
     }
-    if (!this.options.keep) for (const app of apps) app.removeProfile();
+    for (const app of dropped) app.removeProfile();
     this.logs.end();
   }
 }
