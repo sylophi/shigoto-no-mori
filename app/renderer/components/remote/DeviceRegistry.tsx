@@ -93,7 +93,10 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
     // This machine knows its own version synchronously.
     appVersion: api.appVersion,
   };
-  const peers = (devicesQuery.data ?? [])
+  // Only a list that is ready draws its peers: a failed refetch keeps
+  // the old data, which must not count toward the names below either.
+  const listed = devicesQuery.isError ? [] : (devicesQuery.data ?? []);
+  const peers = listed
     .filter((device) => device.deviceId !== localDeviceId)
     .map((device) => {
       const hubDevice = hubById.get(device.deviceId);

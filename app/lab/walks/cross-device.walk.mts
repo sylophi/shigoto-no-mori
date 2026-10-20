@@ -362,7 +362,8 @@ it("keeps this device's own switches on its Account page while the hub is away, 
     const control = main(b.page).getByRole("switch", {
       name: "Allow control from other devices",
     });
-    for (const on of [false, true]) {
+    const was = await control.isChecked();
+    for (const on of [!was, was]) {
       await control.click();
       await expect.poll(() => control.isChecked()).toBe(on);
     }
