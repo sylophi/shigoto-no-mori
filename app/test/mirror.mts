@@ -1352,6 +1352,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     const released: string[] = [];
     let status: Effect.Success<MirrorEngine["Service"]["status"]> = "running";
     let verdict: MirrorGitStatus = { status: "synced", detail: "" };
+    let timedOut = false;
     let failTerminate = false;
     standInMirror({
       ...inertImpl(),
@@ -1366,7 +1367,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
               live.delete(id);
             }),
       gitStatus: () => verdict,
-      refreshGit: () => Effect.sync(() => verdict),
+      refreshGit: () => Effect.sync(() => (timedOut ? "timed-out" : verdict)),
       noteEvent: (worktreeId, kind, detail) =>
         noted.push([worktreeId, kind, detail]),
       releaseCopy: (raw) =>
@@ -1421,6 +1422,15 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     verdict = { status: "following", detail: "to the other device" };
     await assert.rejects(stop({ session: "ahead" }), isMirrorStopUnconfirmed);
     verdict = { status: "synced", detail: "" };
+    // A look at git that ran out of time is no verdict, and the refusal
+    // says so rather than that git was never looked at.
+    timedOut = true;
+    await assert.rejects(stop({ session: "ahead" }), (error: unknown) => {
+      assert.ok(isMirrorStopUnconfirmed(error));
+      assert.match(errorMessageOf(error), /git didn't finish checking in time/);
+      return true;
+    });
+    timedOut = false;
     await stop({ session: "ahead" });
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
 

@@ -433,7 +433,8 @@ export function mirrorFilesSettled(
 // Words that finish "Not confirmed in step: …".
 export function mirrorStopBlocker(
   session: Parameters<typeof mirrorFilesSettled>[0] & {
-    git?: MirrorGitStatus;
+    // "timed-out": the stop's own look at git didn't finish.
+    git?: MirrorGitStatus | "timed-out";
   },
 ): string | undefined {
   if (session.paused) return "the mirror is paused";
@@ -448,6 +449,7 @@ export function mirrorStopBlocker(
       : `${conflicts} files changed on both sides`;
   }
   if (!mirrorFilesSettled(session)) return "files are still syncing";
+  if (session.git === "timed-out") return "git didn't finish checking in time";
   switch (session.git?.status) {
     case "synced":
       return undefined;

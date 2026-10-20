@@ -135,6 +135,27 @@ export function forgetWorktreeRows(
   });
 }
 
+// How many times a device's worktree id has gone (forgetWorktreeViews),
+// in the keys of the views read under it (useTreeView, useWorktreePorts).
+// A view is kept a while after its last reader (hostViewAtom), and the
+// id is the path's, so it comes back with the next worktree made under
+// the same name: a reader after the removal asks afresh, rather than
+// find the removed one's last value or failure.
+const viewGenerations = new Map<string, number>();
+
+export const worktreeViewGeneration = (deviceId: string, worktreeId: string) =>
+  viewGenerations.get(`${deviceId}\n${worktreeId}`) ?? 0;
+
+export function forgetWorktreeViews(
+  deviceId: string,
+  worktreeId: string,
+): void {
+  viewGenerations.set(
+    `${deviceId}\n${worktreeId}`,
+    worktreeViewGeneration(deviceId, worktreeId) + 1,
+  );
+}
+
 // A device's project's worktrees: nothing is read with no project, for
 // a device with no host behind it (a peer without a session, the web
 // client's own scope), or while `enabled` holds it off.

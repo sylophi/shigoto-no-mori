@@ -778,7 +778,7 @@ it("a stepped wall clock neither holds a copy-gone report back nor lets one thro
   assert.equal(reports, 2, "a wall clock stepped forward let one through");
 });
 
-it("a stop's fresh git check that doesn't finish in its limit answers no status, never the verdict from before it", async () => {
+it("a stop's fresh git check that doesn't finish in its limit times out, never answering the verdict from before it", async () => {
   const held = mkdtempSync(join(root, "held-"));
   // The peer answers the first look, then holds every later one.
   let holding = false;
@@ -831,7 +831,7 @@ it("a stop's fresh git check that doesn't finish in its limit answers no status,
   await clock.advance(10_000);
   assert.equal(
     await checked,
-    undefined,
+    "timed-out",
     "the stop read the verdict from before",
   );
 });

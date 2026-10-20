@@ -3,6 +3,7 @@ import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useSearch } from "@tanstack/react-router";
 import { changesState } from "@/lib/changesState";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
@@ -105,6 +106,7 @@ function WorktreeChanges({
 }) {
   const { canCommand } = useCommandAccess();
   const deviceLabel = useScopedDeviceLabel();
+  const { deviceId } = useHostScope();
   const { projectId, id: worktreeId } = worktree;
   const { data: files, error: statusError } = useWorktreeChanges(
     projectId,
@@ -161,7 +163,7 @@ function WorktreeChanges({
   const undo = useUndoCommits(worktree);
   const stash = useStashChanges();
   const resolve = useResolveConflict();
-  const [draft, setDraft] = useCommitDraft(projectId, worktreeId);
+  const [draft, setDraft] = useCommitDraft(deviceId, projectId, worktreeId);
 
   // The last commit is only up for rewriting while no remote has it. A
   // requested amend only takes effect while that holds (a push from

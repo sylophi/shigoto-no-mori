@@ -23,16 +23,17 @@ import { useRegistry } from "@/lib/runtime/viewHooks";
 import {
   changeWorktreeRow,
   forgetWorktreeRows,
+  forgetWorktreeViews,
   spliceWorktreeRow,
 } from "@/hooks/worktrees/useWorktrees";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
-import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { useWorktreeRemoving } from "@/hooks/worktrees/useWorktreeLifecycle";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { isOwnPullRequest } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
+import { clearCommitDraft } from "@/lib/commitDraft";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -130,7 +131,7 @@ export function useRenamingWorktree(
 }
 
 // Convert and relocate both leave the worktree under a new id: swap
-// the row in the list and drop the script runs cached under the old id.
+// the row in the list and forget what was held under the old id.
 function useReplaceWorktree<
   Input extends { projectId: string; worktreeId: string },
   Result,
@@ -143,11 +144,11 @@ function useReplaceWorktree<
   // hook's callbacks, which outlive the page, not a caller's mutate.
   follow = false,
 ) {
+  const queryClient = useQueryClient();
   const registry = useRegistry();
   const router = useRouter();
   const nav = useWorktreeNav();
   const { api, deviceId } = useHostScope();
-  const scriptRuns = useScriptRuns();
   return useMutation<Result, Error, Input, { from: string }>({
     ...(follow ? { mutationKey: renameKey(deviceId) } : {}),
     mutationFn: (input) => api.run(call(api, input)),
@@ -155,7 +156,13 @@ function useReplaceWorktree<
     onSuccess: (result, vars, context) => {
       const row = rowOf(result);
       spliceWorktreeRow(registry, deviceId, row, vars.worktreeId);
-      scriptRuns.clearForWorktree(vars.worktreeId);
+      forgetWorktreeState(
+        queryClient,
+        registry,
+        deviceId,
+        vars.projectId,
+        vars.worktreeId,
+      );
       // Only a window still where the rename started: one that went
       // elsewhere meanwhile stays there.
       if (follow && router.state.location.pathname === context?.from) {
@@ -252,11 +259,11 @@ export function isOwnDeletePending(
 
 // What the renderer does once a worktree is gone from a device: drop
 // it from its list at once (consumers routing off the back of the
-// mutation must not read it until the host's list drops it too), clear
-// its script runs, and remove its no-longer-observed queries so nothing
-// can refetch or replay them. Run by this window's own delete on
-// success, by a mirror stop, and for every removal a host announces
-// (boot's worktrees:removal follower), whoever asked for it.
+// mutation must not read it until the host's list drops it too), and
+// forget what the window held under its id (forgetWorktreeState). Run
+// by this window's own delete on success, by a mirror stop, and for
+// every removal a host announces (boot's worktrees:removal follower),
+// whoever asked for it.
 export function forgetDeletedWorktree(
   queryClient: QueryClient,
   registry: AtomRegistry.AtomRegistry,
@@ -280,15 +287,35 @@ function forgetDeletedWorktrees(
   if (worktreeIds.length === 0) return;
   forgetWorktreeRows(registry, deviceId, projectId, worktreeIds);
   for (const worktreeId of worktreeIds) {
-    scriptRunsOf(registry, deviceId).clearForWorktree(worktreeId);
-    // Same treatment as project removal. Active queries (the detail
-    // route unmounts only after the post-delete navigation) are left
-    // to go inactive and gc naturally.
-    queryClient.removeQueries({
-      type: "inactive",
-      predicate: worktreeQueriesOn(deviceId, worktreeId),
-    });
+    forgetWorktreeState(queryClient, registry, deviceId, projectId, worktreeId);
   }
+}
+
+// What the window holds under a worktree's id once the id is gone (the
+// worktree removed, or moved to another id): its script runs, queries,
+// views and commit draft. The id is the path's, so it comes back with
+// the next worktree made under the same name, which must find none of
+// it. A query a page still reads is emptied rather than removed (a
+// reader would fetch a removed one again, for a worktree that is gone),
+// and goes once its last reader does: the worktree's page swaps its
+// contents out in the render the row's going makes.
+function forgetWorktreeState(
+  queryClient: QueryClient,
+  registry: AtomRegistry.AtomRegistry,
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): void {
+  scriptRunsOf(registry, deviceId).clearForWorktree(worktreeId);
+  const cache = queryClient.getQueryCache();
+  for (const query of cache.findAll({
+    predicate: worktreeQueriesOn(deviceId, worktreeId),
+  })) {
+    if (query.isActive()) query.reset();
+    else cache.remove(query);
+  }
+  forgetWorktreeViews(deviceId, worktreeId);
+  clearCommitDraft(deviceId, projectId, worktreeId);
 }
 
 export function useDeleteWorktree() {
