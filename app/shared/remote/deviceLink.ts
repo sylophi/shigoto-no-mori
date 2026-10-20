@@ -85,8 +85,8 @@ export type DeviceLinkOptions = {
   seal?: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array };
   appVersion: string;
   localDeviceId: string;
-  // The peer this dial means to reach: its key on a sealed link, or this
-  // machine's own host on the loopback.
+  // The peer this dial means to reach, which is this machine's own host
+  // on the loopback.
   expectedDeviceId: string;
   // Every push the peer sends, by channel, decoded.
   onPush?: (channel: string, payload: unknown) => void;

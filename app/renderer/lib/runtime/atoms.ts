@@ -155,8 +155,8 @@ export function pushesOn<R extends ContractCall>(
   );
 }
 
-// A view's values on a link, decoded where they come untyped (a
-// peer's, over the hub hop). One that doesn't read ends the view.
+// A view's values on a link, decoded unless the link is to this
+// machine's own app. One that doesn't read ends the view.
 export function viewOn<R extends ContractCall>(
   link: Link,
   view: R,

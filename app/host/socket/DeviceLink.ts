@@ -611,7 +611,7 @@ export const make = (options: {
               return yield* new LinkRefusedError();
             }
             failedAuth.delete(connection.ip);
-            preAuth -= 1;
+            if (connection.deviceId === null) preAuth -= 1;
             // The links this one replaces end now, so nothing they still
             // deliver runs: a desktop device's every other, a web
             // device's own stale one. On the loopback every caller is

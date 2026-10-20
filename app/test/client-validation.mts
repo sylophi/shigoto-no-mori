@@ -18,6 +18,7 @@ import {
   push,
   view,
 } from "@shigomori/contracts/contract";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -131,7 +132,10 @@ it("an answer this build reads passes, and a malformed one fails the call", asyn
   );
   const bad = await linkTo(otherBuild, "two");
   const exit = await Effect.runPromiseExit(bad.call("probe:count", undefined));
-  assert.ok(Exit.isFailure(exit), "a malformed answer passed");
+  assert.ok(
+    Exit.isFailure(exit) && Schema.isSchemaError(Cause.squash(exit.cause)),
+    `a malformed answer failed otherwise: ${exit}`,
+  );
 });
 
 it("a request the socket couldn't write is the link gone, for a call and a view alike", async () => {
