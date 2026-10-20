@@ -17,13 +17,14 @@
 //
 // Run it on a test flavor's build, which shares nothing with the
 // installed apps (lab/dev-app.md, "Packaged build, as a test flavor"),
-// and take that build off the machine after:
+// and take what it left off the machine after (`--keep-app` keeps the
+// bundle, which the walks run too):
 //   SM_FLAVOR=lab pnpm package
 //   node lab/relaunch.mts "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app"
-//   "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app/Contents/Resources/smlab" nuke --yes
-// A prod or v3 build opens on the installed app's data. It quits the
-// app at the end, by SIGKILL (a window whose renderer was killed
-// ignores a quit), whether it passed or not.
+//   "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app/Contents/Resources/smlab" nuke --yes --keep-app
+// A prod or v3 build opens on the installed app's data. The script
+// quits the app at the end, by SIGKILL (a window whose renderer was
+// killed ignores a quit), whether it passed or not.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";

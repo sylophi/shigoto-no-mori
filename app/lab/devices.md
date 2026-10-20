@@ -40,8 +40,8 @@ Then drive them:
 
 Two ways in, and most checks use both: as a person (a `look`, then
 clicks by role and name, the way the UI reads) and through the bridge
-(a `js` step on the page's api, `bridge.md`, which awaits what a call
-returns). Drive the UI when the UI is what changed. Check outcomes where they land:
+(a `js` step on the page's api, `bridge.md`, which awaits what
+`api.run(call)` returns). Drive the UI when the UI is what changed. Check outcomes where they land:
 the bridge's answers, the other device's window, and the disk.
 
 ## What you can exercise
@@ -60,17 +60,17 @@ the bridge's answers, the other device's window, and the disk.
   and the disk. What each should do is in its contract
   (`packages/contracts/src/modules/`) and in `bridge.md`. Two mirror cases
   no proof covers: relocate a mirrored original on the device running
-  it (its session leaves `api.mirror.list()`, and the other
+  it (its session leaves `api.run(api.mirror.list())`, and the other
   device's page for the copy stops saying it is mirrored), and a
   delete the CLI refuses (dirty tree, no force) leaves the mirror
   running.
 - **Command access.** A device that just enrolled accepts no commands,
   so moves onto it are refused (the dialogs show it read-only) until
   its switch is on: Allow control on its account page, or
-  `api.account.setAcceptsCommands(true)`. Turn it off on one
+  `api.run(api.account.setAcceptsCommands(true))`. Turn it off on one
   device to see the other's asks refused and what the UI says.
 - **Sharing.** Share with other devices off on one device's account
-  page (or `api.sharing.set(false)`) and the other shows it as
+  page (or `api.run(api.sharing.set(false))`) and the other shows it as
   not sharing, with none of its projects, while mirrors it asked for
   keep running.
 - **The CLI between them.** `smd` pointed at a profile's data dir runs
