@@ -21,40 +21,14 @@ import {
   TunnelProvisionRequestSchema,
   TunnelProvisionResponseSchema,
 } from "./hubProtocol.ts";
+import {
+  HubCredentialRejectedError,
+  HubDeviceRevokedError,
+  HubLoginRejectedError,
+  HubUpdateRequiredError,
+} from "./errors.ts";
 
 // ---- Refusals ----
-
-export class HubLoginRejectedError extends Schema.TaggedError<HubLoginRejectedError>()(
-  "HubLoginRejectedError",
-  {},
-  { httpApiStatus: 401 },
-) {
-  override get message(): string {
-    return "The device hub did not accept this sign-in.";
-  }
-}
-
-export class HubCredentialRejectedError extends Schema.TaggedError<HubCredentialRejectedError>()(
-  "HubCredentialRejectedError",
-  {},
-  { httpApiStatus: 401 },
-) {
-  override get message(): string {
-    return "The device hub no longer accepts this device's credential.";
-  }
-}
-
-// The one refusal the app signs out on. The socket's close code only
-// reaches a device online at the revoke.
-export class HubDeviceRevokedError extends Schema.TaggedError<HubDeviceRevokedError>()(
-  "HubDeviceRevokedError",
-  {},
-  { httpApiStatus: 403 },
-) {
-  override get message(): string {
-    return "This device was removed from the account.";
-  }
-}
 
 // Left by a sign-out whose revoke never reached the hub.
 export class HubDeviceEnrolledElsewhereError extends Schema.TaggedError<HubDeviceEnrolledElsewhereError>()(
@@ -163,34 +137,10 @@ export const HUB_PROTOCOL_FLOOR = PROTOCOL_VERSION;
 
 export const PROTOCOL_HEADER = "sm-protocol";
 
-// `error` is the sentence a v2 build shows (it knows no tags). A 403,
-// which v2 treats as terminal rather than retrying forever.
-export class HubUpdateRequiredError extends Schema.TaggedError<HubUpdateRequiredError>()(
-  "HubUpdateRequiredError",
-  { floor: Schema.Int, error: Schema.String },
-  { httpApiStatus: 403 },
-) {
-  override get message(): string {
-    return this.error;
-  }
-}
-
 export class ProtocolFloor extends HttpApiMiddleware.Service<ProtocolFloor>()(
   "sm/contracts/ProtocolFloor",
   { error: HubUpdateRequiredError },
 ) {}
-
-// Terminal until the account changes: a retry can't succeed.
-export const isHubRefusal = Schema.is(
-  Schema.Union([
-    HubLoginRejectedError,
-    HubCredentialRejectedError,
-    HubDeviceRevokedError,
-    HubUpdateRequiredError,
-  ]),
-);
-
-export const isHubDeviceRevoked = Schema.is(HubDeviceRevokedError);
 
 // ---- Auth tiers ----
 

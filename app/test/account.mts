@@ -42,20 +42,19 @@ import {
   updateDevice,
 } from "../shared/account/enroll.ts";
 import {
+  callFailureOf,
+  CallFailureSchema,
   HubDeviceRevokedError,
+  HubRateLimitedError,
+  HubUnreachableError,
+  isHubRateLimitedError,
   isHubRefusal,
-} from "@shigomori/contracts/hubApi";
+  isHubUnreachableError,
+} from "@shigomori/contracts/errors";
 import {
   TunnelProvisionDeniedError,
   createAccountService,
-  isHubUnreachable,
 } from "../shared/account/service.ts";
-import {
-  CallFailureSchema,
-  callFailureOf,
-  HubRateLimitedError,
-  isHubRateLimitedError,
-} from "@shigomori/contracts/errors";
 import { createAppQueryClient } from "@/lib/queryClientOptions";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import type { RendererApi } from "@/lib/runtime/pageApi";
@@ -482,6 +481,17 @@ it("a rate-limited answer crosses the window's wire whole", () => {
   );
   assert.ok(isHubRateLimitedError(crossed));
   assert.equal(crossed.retryAfterSeconds, 60);
+});
+
+// A failure as the window receives it over the shell's port.
+const overThePort = (error: unknown) =>
+  Schema.decodeUnknownSync(CallFailureSchema)(
+    Schema.encodeSync(CallFailureSchema)(callFailureOf(error)),
+  );
+
+it("an unreachable hub and the hub's refusals cross the window's wire as themselves", () => {
+  assert.ok(isHubUnreachableError(overThePort(new HubUnreachableError())));
+  assert.ok(isHubRefusal(overThePort(new HubDeviceRevokedError())));
 });
 
 it("service: a rate-limited tunnel provision stays retryable, any other 4xx is a denial", async () => {
@@ -1282,7 +1292,7 @@ it("sign-out flow: signOutDevice revokes THIS device then clears, and still clea
     },
   });
   assert.equal(store.read(), null, "a failed revoke blocked the clear");
-  assert.ok(isHubUnreachable(reported), String(reported));
+  assert.ok(isHubUnreachableError(reported), String(reported));
   // The undelivered revoke is parked with the credential it needs,
   // and delivered by the retry: a 204 clears it, and so does a
   // refusal (the hub already does not honor it), while an outage

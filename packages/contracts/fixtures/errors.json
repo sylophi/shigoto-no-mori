@@ -55,6 +55,21 @@
         "retryAfterSeconds": 60
       },
       {
+        "_tag": "HubUnreachableError"
+      },
+      {
+        "_tag": "HubUnreachableError",
+        "detail": "Transport error (GET http://127.0.0.1:8787/devices)"
+      },
+      {
+        "_tag": "HubCredentialRejectedError"
+      },
+      {
+        "_tag": "HubUpdateRequiredError",
+        "floor": 16,
+        "error": "Update Shigoto no Mori to keep using the device hub."
+      },
+      {
         "_tag": "GhUnavailableError",
         "reason": "gh-signed-out"
       },

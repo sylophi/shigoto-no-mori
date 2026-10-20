@@ -5,10 +5,10 @@
 // reached through PeerReach (host/ipc/PeerReach.ts).
 import { ControlError } from "@shigomori/contracts/modules/control";
 import { errorWordsOf } from "@host/lib/errorWords";
-import { isHubRefusal } from "@shigomori/contracts/hubApi";
 import {
   type HubRateLimitedError,
   isHubRateLimitedError,
+  isHubRefusal,
 } from "@shigomori/contracts/errors";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Context from "effect/Context";
