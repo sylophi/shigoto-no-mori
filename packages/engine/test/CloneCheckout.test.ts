@@ -29,6 +29,7 @@ import {
   seedRepo,
   write,
 } from "./lib/cloneKit.ts";
+import { pidIn } from "../../../testProcesses.mts";
 
 const roots: string[] = [];
 afterAll(() => {
@@ -272,10 +273,13 @@ describe("clone checkout", () => {
       // Past the child's late write, which a closed pipe would have
       // ended it at.
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      process.kill(Number(readFileSync(pidFile, "utf8")), 0);
+      const pid = pidIn(readFileSync(pidFile, "utf8"));
+      assert.ok(pid !== undefined, "the hook wrote no pid");
+      process.kill(pid, 0);
     } finally {
       try {
-        process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+        const pid = pidIn(readFileSync(pidFile, "utf8"));
+        if (pid !== undefined) process.kill(pid, "SIGKILL");
       } catch {
         // Gone already, or never started.
       }

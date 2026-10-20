@@ -180,15 +180,6 @@ function listenerOn(port: number): number | undefined {
   }
 }
 
-const pidAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
 function appPids(app: number | undefined): { pid: number; command: string }[] {
   if (app === undefined) return [];
   const listed = execFileSync("ps", ["-A", "-o", "pid=,ppid=,command="], {
@@ -441,6 +432,8 @@ async function launch(
     };
     child.once("exit", () => {
       run.exited = true;
+      // Its pid may go to another process from here on.
+      if (child.pid !== undefined) started.delete(child.pid);
     });
     let stderr = "";
     child.stderr.on("data", (chunk: Buffer) => {
@@ -572,24 +565,30 @@ async function launch(
           ).catch(() => {});
         }
         const pid = relaunched;
-        if (pid === undefined || !pidAlive(pid)) return;
-        try {
-          if (labRunning().length === 1) quitByBundleId();
-          else process.kill(pid, "SIGTERM");
-        } catch {
-          // A quit that hung or failed: the kill below.
-        }
-        await waitFor(
-          () => !pidAlive(pid),
-          "the relaunched lab app to quit",
-          20_000,
-        ).catch(() => {
+        if (pid === undefined) return;
+        // Not our child, so a crashed one's pid can be another
+        // process's by now.
+        const running = () => labRunning().includes(String(pid));
+        if (running()) {
           try {
-            process.kill(pid, "SIGKILL");
+            if (labRunning().length === 1) quitByBundleId();
+            else process.kill(pid, "SIGTERM");
           } catch {
-            // Gone meanwhile.
+            // A quit that hung or failed: the kill below.
           }
-        });
+          await waitFor(
+            () => !running(),
+            "the relaunched lab app to quit",
+            20_000,
+          ).catch(() => {
+            try {
+              process.kill(pid, "SIGKILL");
+            } catch {
+              // Gone meanwhile.
+            }
+          });
+        }
+        started.delete(pid);
       };
       current = { ...current, stop };
       await waitFor(() => current.run.exited, "the lab app to quit", 60_000);

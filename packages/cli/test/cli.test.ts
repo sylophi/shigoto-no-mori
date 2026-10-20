@@ -29,7 +29,12 @@ import {
 } from "vitest";
 import { type Sandbox, sandbox } from "../../engine/test/lib/sandbox.ts";
 import { builtBinary } from "./lib/binary.ts";
-import { own as owned, within } from "../../../testProcesses.mts";
+import {
+  own as owned,
+  pidIn,
+  signalIfAlive,
+  within,
+} from "../../../testProcesses.mts";
 import {
   type FakeApp,
   fakeApp,
@@ -2738,6 +2743,9 @@ describe("projects config", () => {
   });
 });
 
+const pidOf = (file: string) =>
+  existsSync(file) ? pidIn(readFileSync(file, "utf8")) : undefined;
+
 describe("a setup that leaves a child in the background", () => {
   // The project, its setup `(sleep 60; echo late) &`, which writes the
   // child's pid and its sleep's where the proof ends them.
@@ -2756,13 +2764,21 @@ describe("a setup that leaves a child in the background", () => {
       `(sleep 60 & echo $! > "${pidFile}.sleep"; wait; echo late) & echo $! > "${pidFile}"`,
     );
     assert.equal(set.code, 0, set.stderr);
-    const endChild = () => {
-      for (const file of [pidFile, `${pidFile}.sleep`]) {
-        try {
-          process.kill(Number(readFileSync(file, "utf8")), "SIGKILL");
-        } catch {
-          // Not started, or gone.
-        }
+    // The child, and the sleep it runs, whose pid the child writes on
+    // its own clock, after the create may have returned.
+    const endChild = async () => {
+      const child = pidOf(pidFile);
+      if (child === undefined) return;
+      try {
+        const sleeping = await vi.waitFor(
+          () =>
+            pidOf(`${pidFile}.sleep`) ??
+            assert.fail("the setup's child never wrote its sleep's pid"),
+          { timeout: 5_000 },
+        );
+        signalIfAlive(sleeping, "SIGKILL");
+      } finally {
+        signalIfAlive(child, "SIGKILL");
       }
     };
     return { alpha, pidFile, endChild };
@@ -2775,10 +2791,11 @@ describe("a setup that leaves a child in the background", () => {
       const made = await runAt(alpha, "--json", "worktrees", "create", "fox");
       assert.equal(made.code, 0, made.stderr);
       assert.ok(performance.now() - began < 30_000, "held by the child");
-      const pid = Number(readFileSync(pidFile, "utf8"));
+      const pid = pidOf(pidFile);
+      assert.ok(pid !== undefined, "the setup wrote no pid");
       process.kill(pid, 0);
     } finally {
-      endChild();
+      await endChild();
     }
   }, 60_000);
 
@@ -2821,7 +2838,6 @@ describe("a setup that leaves a child in the background", () => {
       }
       assert.match(screen, /now-in=\S*\/fox\r?\n/);
     } finally {
-      endChild();
       if (child.pid !== undefined) {
         try {
           process.kill(-child.pid, "SIGKILL");
@@ -2829,6 +2845,7 @@ describe("a setup that leaves a child in the background", () => {
           // Gone.
         }
       }
+      await endChild();
     }
   }, 60_000);
 });

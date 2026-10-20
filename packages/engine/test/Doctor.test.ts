@@ -48,6 +48,7 @@ import { tunnelPidText } from "../src/tunnelPid.ts";
 import { worktreeIdFromPath } from "../src/worktreeLayout.ts";
 import { nodeStore, openNode } from "./lib/nodeStore.ts";
 import { macfs, type Sandbox, sandbox } from "./lib/sandbox.ts";
+import { pidIn } from "../../../testProcesses.mts";
 
 let box: Sandbox;
 beforeEach(() => {
@@ -333,13 +334,14 @@ describe("the data dir", () => {
     symlinkSync("/bin/sleep", standIn);
     // Started from a shell that exits at once, so launchd takes it over
     // as it does a crashed app's connector.
-    const pid = Number(
+    const pid = pidIn(
       execFileSync(
         "/bin/sh",
         ["-c", '"$0" 60 >/dev/null 2>&1 & echo $!', standIn],
         { encoding: "utf8" },
-      ).trim(),
+      ),
     );
+    assert.ok(pid !== undefined, "the stand-in never started");
     try {
       writeFileSync(join(userData, "cloudflared.pid"), tunnelPidText(pid));
       assert.match(

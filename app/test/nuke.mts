@@ -15,10 +15,10 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { basename, join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -31,6 +31,7 @@ import {
   NUKE_MARKER,
   writeNukeMarker,
 } from "../main/core/nuke/finish.ts";
+import { pidIn, signalIfAlive } from "../../testProcesses.mts";
 
 const fixture = cliSandbox("sm-nuke-");
 beforeAll(async () => {
@@ -223,14 +224,15 @@ it("removes every worktree the app made, and a second run finishes an interrupte
 it("a teardown script that never ends, deaf to SIGTERM, holds no nuke up", async () => {
   const project = await repo("slow");
   await fixture.projectIdOf(project);
+  const sleepPid = join(sandbox, "teardown.pid");
   await fixture.sm(
     "projects",
     "config",
     "-p",
     "slow",
     "--teardown",
-    // A sleep no other process runs, to look for after.
-    "trap '' TERM; sleep 6017",
+    // A sleep that says its pid, to end after.
+    `trap '' TERM; sleep 6017 & echo $! > '${sleepPid}'; wait`,
   );
   const kite = join(dataDir, "wt", "slow", "kite");
   await git(project, ["worktree", "add", "-q", "-b", "kite", kite]);
@@ -238,10 +240,10 @@ it("a teardown script that never ends, deaf to SIGTERM, holds no nuke up", async
   // (Lifecycle.ts), out of this process's tree, so the proof ends its
   // own, passed or failed.
   onTestFinished(() => {
-    const orphans = spawnSync("pgrep", ["-f", "sleep 6017"]).stdout.toString();
-    for (const pid of orphans.split("\n").filter(Boolean)) {
-      process.kill(Number(pid), "SIGKILL");
-    }
+    const pid = existsSync(sleepPid)
+      ? pidIn(readFileSync(sleepPid, "utf8"))
+      : undefined;
+    if (pid !== undefined) signalIfAlive(pid, "SIGKILL");
   });
   const started = Date.now();
   await nuke([], undefined, 1000);
