@@ -81,9 +81,12 @@ const END = "__SHIGOMORI_ENV_END__";
 
 const MAX_OUTPUT = 4 * 1024 * 1024;
 
-// Same budget as the other login-shell probe (host/lib/cli/shell.ts).
-// Past it the app runs on the Finder-launch environment.
-export const CAPTURE_TIMEOUT_MS = 5000;
+// The window waits on the capture, and the app keeps what it gets for
+// its whole life. A shell that answers in a tenth of a second can take
+// seconds while the machine is still logging in, so the wait is for a
+// slow shell, not a typical one. Past it the app runs on the
+// Finder-launch environment.
+export const CAPTURE_TIMEOUT_MS = 20_000;
 
 // How long output may trail the shell's exit.
 const EXIT_GRACE_MS = 250;
