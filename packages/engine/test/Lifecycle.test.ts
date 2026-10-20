@@ -123,9 +123,9 @@ it("ends at the shell's exit while a child it left holds the output, which keeps
         color: false,
         report: (event) => Effect.sync(() => void events.push(event)),
       });
-      const pid = Number(output(events).split("\n")[0]);
+      const pid = pidIn(output(events).split("\n")[0] ?? "");
       yield* Effect.sleep("1500 millis");
-      const alive = processAlive(pid);
+      const alive = pid !== undefined && processAlive(pid);
       return { events, answer, pid, alive };
     }).pipe(Effect.provide(lifecycleLayer), Effect.timeout("10 seconds")),
   );
@@ -138,7 +138,7 @@ it("ends at the shell's exit while a child it left holds the output, which keeps
     assert.equal(kinds.at(-1), "exit");
     assert.match(output(answered.events), /^\d+\n(tick\n)*ready\n/);
   } finally {
-    process.kill(answered.pid, "SIGKILL");
+    if (answered.pid !== undefined) process.kill(answered.pid, "SIGKILL");
   }
 });
 

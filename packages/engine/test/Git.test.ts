@@ -541,7 +541,9 @@ it("an interrupted run takes its git down with it, hooks and all", async () => {
     }),
   );
   assert.ok(Exit.hasInterrupts(outcome));
-  const hook = Number(readFileSync(pidFile, "utf8"));
+  const hook =
+    pidIn(readFileSync(pidFile, "utf8")) ??
+    assert.fail("the hook wrote no pid");
   // Killed is not yet reaped: a zombie still answers a signal 0 until
   // whoever adopts it collects it.
   await vi.waitFor(() => assert.throws(() => process.kill(hook, 0), /ESRCH/), {
