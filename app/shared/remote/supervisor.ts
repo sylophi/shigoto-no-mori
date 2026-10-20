@@ -19,10 +19,8 @@
 // (the renderer runtime forbids Math.random anyway), and time is the
 // Clock of the context the supervisor is made in, so a test on a
 // TestClock asserts the ladder and the reset without sleeping real
-// seconds. Uptime is monotonic elapsed time (`@shigomori/engine/elapsed`), and
-// a wake starts again an uptime not yet past the stable threshold: a
-// sleep is not time a connection proved itself healthy, and a clock
-// step is no time at all.
+// seconds. Uptime is monotonic elapsed time (`@shigomori/engine/elapsed`):
+// a sleep and a clock step are no time at all.
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -112,8 +110,7 @@ type SupervisorOptions = {
 export type Supervisor = {
   // The network is back, the machine awake or a tab back: a backoff
   // wait ends now and the next attempt starts, instead of after the
-  // rest of its rung, and a live connection not yet stable counts its
-  // uptime again from this observation.
+  // rest of its rung.
   dialNow(): void;
 };
 
@@ -308,14 +305,6 @@ export const supervise = (
       Effect.forkScoped,
     );
     return {
-      dialNow: () => {
-        // Uptime already past the threshold was earned: the run is
-        // stable whatever ends it now.
-        const now = elapsedMillisUnsafe(clock);
-        if (upSince !== null && now - upSince < STABLE_CONNECTION_MS) {
-          upSince = now;
-        }
-        wake.now();
-      },
+      dialNow: () => wake.now(),
     };
   });

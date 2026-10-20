@@ -537,15 +537,11 @@ func TestMirrorCreateRefusesInvalidLabel(t *testing.T) {
 	<-daemon.done
 }
 
-// The host's liveness check is a verb of the protocol, answered as
-// one, beside an unknown op, refused, and a create's direction outside
-// the four.
-func TestMirrorDaemonAnswersPingAndRefusesTheUnknown(t *testing.T) {
+// An unknown op is refused, and so is a create's direction outside the
+// four.
+func TestMirrorDaemonRefusesTheUnknown(t *testing.T) {
 	gateway, _ := startTestGateway(t, t.TempDir())
 	daemon := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "data"))
-	if pinged := daemon.call(mirrorRequest{ID: "1", Op: "ping"}); pinged["ok"] != true {
-		t.Fatalf("ping was not answered ok: %v", pinged)
-	}
 	if unknown := daemon.call(mirrorRequest{ID: "2", Op: "nope"}); unknown["ok"] != false {
 		t.Fatalf("an unknown op was answered ok: %v", unknown)
 	}

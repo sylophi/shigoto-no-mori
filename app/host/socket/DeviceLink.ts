@@ -238,10 +238,6 @@ type LinkServerStatus = {
 
 // Total sockets (linked plus pending) the listener holds.
 const MAX_CONNECTIONS = 64;
-// The loopback's linked terminal callers (a terminal `sm`, neither a
-// window nor the shell): a stopped one holds its socket, and this many
-// leave the rest for the windows and the shell.
-const MAX_TERMINAL_CONNECTIONS = 48;
 // Sockets before their hello, a tighter cap so a flood that never says
 // hello cannot crowd out real peers.
 const MAX_PREAUTH_CONNECTIONS = 16;
@@ -419,10 +415,8 @@ type Connection = {
     readonly publicKey: Uint8Array;
   } | null;
   helloSeen: boolean;
-  // The loopback's: whether the hello carried the shell's token, and
-  // whether a page dialed (its Origin), which only a window does.
+  // The loopback's: whether the hello carried the shell's token.
   shell: boolean;
-  readonly fromPage: boolean;
   deviceId: string | null;
   connectionId: string | null;
   inFlight: number;
@@ -630,25 +624,6 @@ export const make = (options: {
               log.warn(`[link] refused a hello from ${connection.ip}`);
               yield* killSoon(connection, "auth failed");
               return yield* new LinkRefusedError();
-            }
-            // Closed before the answer, so the terminal reads the code
-            // (Control.ts's AppBusy).
-            if (local && !shell && !connection.fromPage) {
-              let terminals = 0;
-              for (const other of connections.values()) {
-                if (
-                  !other.dead &&
-                  other.deviceId !== null &&
-                  !other.shell &&
-                  !other.fromPage
-                ) {
-                  terminals += 1;
-                }
-              }
-              if (terminals >= MAX_TERMINAL_CONNECTIONS) {
-                connection.kill(CLOSE_TRY_AGAIN, "over capacity");
-                return yield* new LinkRefusedError();
-              }
             }
             failedAuth.delete(connection.ip);
             preAuth -= 1;
@@ -1178,7 +1153,6 @@ export const make = (options: {
                 opened: null,
                 helloSeen: false,
                 shell: false,
-                fromPage: req.headers.origin !== undefined,
                 deviceId: null,
                 connectionId: null,
                 inFlight: 0,
@@ -1231,23 +1205,14 @@ export const make = (options: {
         // dropped it. Never a process on this machine: one that dies
         // closes its socket, and a wall clock that jumped over a sleep
         // would cut the app's own windows at every wake (V3.md, "Local
-        // links and liveness"). Silence is monotonic elapsed time, and
-        // however late a sweep comes (this host stopped, or its machine
-        // asleep) its lateness is no peer's silence: frames waiting to
-        // be read may answer it, and the sweep runs before they are.
+        // links and liveness"). Silence is monotonic elapsed time, which
+        // stands still while the machine sleeps.
         const livenessMs = opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
         const sweepMs = Math.max(50, Math.floor(livenessMs / 4));
-        let lastSweep = elapsedMillisUnsafe(clock);
         if (!local)
           yield* Effect.sync(() => {
             const now = elapsedMillisUnsafe(clock);
-            const late = Math.max(0, now - lastSweep - sweepMs);
-            lastSweep = now;
             for (const connection of connections.values()) {
-              connection.lastInboundAt = Math.min(
-                now,
-                connection.lastInboundAt + late,
-              );
               if (now - connection.lastInboundAt > livenessMs) {
                 connection.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
               }

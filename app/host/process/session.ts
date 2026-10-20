@@ -12,7 +12,6 @@ import * as Graph from "./graph";
 import type { HostServices } from "./services";
 import * as BackgroundFetch from "@host/lib/BackgroundFetch";
 import * as Tunnel from "@host/direct/Tunnel";
-import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import { launchGuide } from "@host/lib/engineOps";
 import { dirname } from "node:path";
 import * as HostFacts from "@host/lib/HostFacts";
@@ -59,22 +58,12 @@ export function startHost(options: {
           ).catch(() => {}),
       ),
     // A wake, or the network changing: the remote links probe now, and
-    // the helpers whose exit is all their supervisor sees are asked
-    // whether they still answer.
+    // the tunnel checks it is still reachable.
     wake: () =>
       Effect.sync(() => {
         probeRemoteConnections();
         void Graph.run(
-          Effect.all(
-            [
-              Effect.flatMap(
-                MirrorDaemon.MirrorDaemon,
-                (daemon) => daemon.checkResponsive,
-              ),
-              Effect.flatMap(Tunnel.Tunnel, (tunnel) => tunnel.recheck),
-            ],
-            { concurrency: "unbounded", discard: true },
-          ),
+          Effect.flatMap(Tunnel.Tunnel, (tunnel) => tunnel.recheck),
         ).catch(() => {});
       }),
     busy: () => Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy),

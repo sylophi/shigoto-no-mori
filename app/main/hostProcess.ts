@@ -254,8 +254,6 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
           every: WATCH_EVERY,
           limit: `${SILENT_LIMIT_S} seconds`,
           watching: () => child === watched && !quitting,
-          asleep: () => asleep,
-          sleeps: () => sleeps,
           silent: () => stopSilent(watched, SILENT_LIMIT_S),
         }),
       );
@@ -361,8 +359,6 @@ function fork(): void {
         upHost !== forked &&
         !quitting &&
         parkedExit === null,
-      asleep: () => asleep,
-      sleeps: () => sleeps,
       silent: () => {
         startStalls += 1;
         if (startStalls > START_STALLS_ALLOWED) {
@@ -455,19 +451,6 @@ export const hostBusy = (quitAfter: boolean) =>
   Effect.suspend(() =>
     busy.ask(child, busyWithin(host().busy(), BUSY_DEADLINE), quitAfter),
   );
-
-// The machine is going to sleep, or woke: a watchdog round around
-// either proves nothing (watchHost).
-let asleep = false;
-let sleeps = 0;
-export function noteSleep(): void {
-  asleep = true;
-  sleeps += 1;
-}
-export function noteWake(): void {
-  asleep = false;
-  sleeps += 1;
-}
 
 export function hostAddress(): Promise<Address> {
   return address.promise.then(({ port, token, deviceId }) => ({
