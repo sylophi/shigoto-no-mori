@@ -441,6 +441,8 @@ async function launch(
     };
     child.once("exit", () => {
       run.exited = true;
+      // Its pid may go to another process from here on.
+      if (child.pid !== undefined) started.delete(child.pid);
     });
     let stderr = "";
     child.stderr.on("data", (chunk: Buffer) => {
@@ -572,24 +574,27 @@ async function launch(
           ).catch(() => {});
         }
         const pid = relaunched;
-        if (pid === undefined || !pidAlive(pid)) return;
-        try {
-          if (labRunning().length === 1) quitByBundleId();
-          else process.kill(pid, "SIGTERM");
-        } catch {
-          // A quit that hung or failed: the kill below.
-        }
-        await waitFor(
-          () => !pidAlive(pid),
-          "the relaunched lab app to quit",
-          20_000,
-        ).catch(() => {
+        if (pid === undefined) return;
+        if (pidAlive(pid)) {
           try {
-            process.kill(pid, "SIGKILL");
+            if (labRunning().length === 1) quitByBundleId();
+            else process.kill(pid, "SIGTERM");
           } catch {
-            // Gone meanwhile.
+            // A quit that hung or failed: the kill below.
           }
-        });
+          await waitFor(
+            () => !pidAlive(pid),
+            "the relaunched lab app to quit",
+            20_000,
+          ).catch(() => {
+            try {
+              process.kill(pid, "SIGKILL");
+            } catch {
+              // Gone meanwhile.
+            }
+          });
+        }
+        started.delete(pid);
       };
       current = { ...current, stop };
       await waitFor(() => current.run.exited, "the lab app to quit", 60_000);

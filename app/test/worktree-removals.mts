@@ -61,6 +61,7 @@ import {
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
+import { pidIn } from "../../testProcesses.mts";
 
 // The host's git runs in this process: a commit hook's GIT_* would point
 // it at the repository being committed.
@@ -320,7 +321,8 @@ it("a refusal at the plan announces nothing, marks nothing and stops nothing", a
   await assert.rejects(runHost(removeStack()), /still open/);
   assert.deepEqual(announced, []);
   assert.equal(await marks(), 0);
-  const pid = Number(readFileSync(join(run, "bear.pid"), "utf8"));
+  const pid = pidIn(readFileSync(join(run, "bear.pid"), "utf8"));
+  assert.ok(pid !== undefined, "bear's script wrote no pid");
   assert.doesNotThrow(() => process.kill(pid, 0), "bear's script still runs");
   assert.ok((await listed()).includes(bear.id));
 });

@@ -286,6 +286,9 @@ it("superseded: a fetch a query's refetch cancels stops the host's git", async (
     "the superseded git and its hook to end",
   );
   assert.equal(slowPids().length, 2, "only the superseded git was held");
+  // Ended, so the file's end has no pid of theirs to signal.
+  rmSync(PIDS, { recursive: true });
+  mkdirSync(PIDS);
 });
 
 it("dropped: calls cancelled while their host cleanup runs free their places in the gate at once, so as many new ones all reach the host", async () => {

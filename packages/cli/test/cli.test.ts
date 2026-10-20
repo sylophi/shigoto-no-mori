@@ -2769,14 +2769,17 @@ describe("a setup that leaves a child in the background", () => {
     const endChild = async () => {
       const child = pidOf(pidFile);
       if (child === undefined) return;
-      const sleeping = await vi.waitFor(
-        () =>
-          pidOf(`${pidFile}.sleep`) ??
-          assert.fail("the setup's child never wrote its sleep's pid"),
-        { timeout: 5_000 },
-      );
-      signalIfAlive(sleeping, "SIGKILL");
-      signalIfAlive(child, "SIGKILL");
+      try {
+        const sleeping = await vi.waitFor(
+          () =>
+            pidOf(`${pidFile}.sleep`) ??
+            assert.fail("the setup's child never wrote its sleep's pid"),
+          { timeout: 5_000 },
+        );
+        signalIfAlive(sleeping, "SIGKILL");
+      } finally {
+        signalIfAlive(child, "SIGKILL");
+      }
     };
     return { alpha, pidFile, endChild };
   };
