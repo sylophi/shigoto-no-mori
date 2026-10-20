@@ -115,9 +115,7 @@ it("draws a worktree made again under a torn-down one's name afresh", async () =
   await main(page)
     .getByRole("heading", { level: 1, name: "reused", exact: true })
     .waitFor();
-  await expect
-    .poll(() => main(page).innerText(), { timeout: 10_000 })
-    .toContain("No commits yet");
+  await expect.poll(() => main(page).innerText()).toContain("No commits yet");
   assert.deepEqual(
     await page.evaluate(() => Reflect.get(globalThis, "staleSeen")),
     [],

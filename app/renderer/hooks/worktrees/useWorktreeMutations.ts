@@ -34,6 +34,9 @@ import { isOwnPullRequest } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { clearCommitDraft } from "@/lib/commitDraft";
+import { forgetPicks } from "@/hooks/worktrees/useChangesPicks";
+import { forgetPullRequestDrafts } from "@/store/pullRequestDrafts";
+import { drawerKey, forgetDrawer } from "@/store/terminalDrawer";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -313,6 +316,9 @@ function forgetWorktreeState(
   }
   forgetWorktreeViews(deviceId, worktreeId);
   clearCommitDraft(deviceId, projectId, worktreeId);
+  forgetPicks(deviceId, projectId, worktreeId);
+  forgetPullRequestDrafts(deviceId, worktreeId);
+  forgetDrawer(drawerKey(deviceId, projectId, worktreeId));
 }
 
 export function useDeleteWorktree() {

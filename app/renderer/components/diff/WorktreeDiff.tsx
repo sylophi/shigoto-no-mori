@@ -117,9 +117,9 @@ function WorktreeChanges({
     statusError,
     worktree.changedCount,
   );
-  const picks = useChangesPicks(projectId, worktreeId);
-  const setPicks = (change: Parameters<typeof updatePicks>[2]) =>
-    updatePicks(projectId, worktreeId, change);
+  const picks = useChangesPicks(deviceId, projectId, worktreeId);
+  const setPicks = (change: Parameters<typeof updatePicks>[3]) =>
+    updatePicks(deviceId, projectId, worktreeId, change);
   // The pick is held as the row's key and resolved against the live
   // list, so a file that stops being changed (discarded, committed,
   // reverted in an editor) falls back to the first row instead of
@@ -145,10 +145,10 @@ function WorktreeChanges({
     if (!files) return;
     const pane =
       paneKey && fileHunks ? { key: paneKey, hunks: fileHunks } : undefined;
-    updatePicks(projectId, worktreeId, (current) =>
+    updatePicks(deviceId, projectId, worktreeId, (current) =>
       prunedPicks(current, files, pane),
     );
-  }, [projectId, worktreeId, files, paneKey, fileHunks]);
+  }, [deviceId, projectId, worktreeId, files, paneKey, fileHunks]);
   const { mutate: discardHunks, isPending: discardingHunks } =
     useDiscardHunks();
   const diff = useFileDiff(
