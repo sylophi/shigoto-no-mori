@@ -44,7 +44,7 @@ import {
   waitFor,
 } from "./lib/checkKit.mts";
 import { addProject, builtSm, hostEngine } from "./lib/smBinary.mts";
-import { own } from "../../testProcesses.mts";
+import { own, pidIn } from "../../testProcesses.mts";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 
 const gitEnv = scrubbedGitEnv();
@@ -159,20 +159,23 @@ function dataDirFor(label: string) {
     const exited = new Promise<void>((resolve) =>
       child.once("exit", () => resolve()),
     );
+    // The wrapper's pid, once it has written it whole.
+    const held = () =>
+      existsSync(mark) ? pidIn(readFileSync(mark, "utf8")) : undefined;
     await waitFor(
-      () => existsSync(mark),
+      () => held() !== undefined,
       `sm ${args.join(" ")} held at ${stop.tool} ${stop.when} ${stop.match}`,
       30_000,
     );
-    process.kill(-(child.pid ?? 0), "SIGKILL");
+    if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
     // The engine runs each command in a process group of its own, which
     // the held wrapper is in.
-    const held = Number(readFileSync(mark, "utf8"));
-    const group = Number(
-      execFileSync("ps", ["-o", "pgid=", "-p", String(held)], {
+    const group = pidIn(
+      execFileSync("ps", ["-o", "pgid=", "-p", String(held())], {
         encoding: "utf8",
-      }).trim(),
+      }),
     );
+    assert.ok(group !== undefined, "the held wrapper has no group");
     process.kill(-group, "SIGKILL");
     await exited;
   };

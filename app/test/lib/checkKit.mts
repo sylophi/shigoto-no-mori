@@ -445,7 +445,7 @@ export type CliRunner = {
   sm(...args: string[]): Promise<CliResult>;
 };
 
-// The binary in its own process group, so a group it signals is its own.
+// The binary, in this process's group, ending with the case it ran in.
 export function createCliRunner(
   binary: string,
   env: NodeJS.ProcessEnv,

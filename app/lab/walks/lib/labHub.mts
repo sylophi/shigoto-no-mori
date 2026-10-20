@@ -149,6 +149,8 @@ export async function startLabHub(): Promise<LabHub> {
       "the lab hub's port to be free",
       10_000,
     );
+    // Nothing of its group is left, and its number may go to another's.
+    child = null;
   };
   // Detached, it hears no Ctrl-C of the run's: the run's end takes it
   // (../../../../testProcesses.mts).

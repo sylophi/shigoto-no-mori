@@ -15,6 +15,7 @@ import * as Layer from "effect/Layer";
 import { afterAll, it } from "vitest";
 import { HookShell, layer } from "../host/lib/cli/shell.ts";
 import { makeTracker, tempDir } from "./lib/checkKit.mts";
+import { pidIn } from "../../testProcesses.mts";
 
 const { track, teardown } = makeTracker();
 afterAll(teardown);
@@ -97,7 +98,8 @@ it.skipIf(!existsSync(ZSH))(
     } finally {
       // Ended with the probe's process group, unless the probe never was.
       try {
-        process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+        const pid = pidIn(readFileSync(pidFile, "utf8"));
+        if (pid !== undefined) process.kill(pid, "SIGKILL");
       } catch {}
     }
   },

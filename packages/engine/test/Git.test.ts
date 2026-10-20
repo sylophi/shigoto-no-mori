@@ -47,6 +47,7 @@ import {
   withGit,
   write,
 } from "./lib/gitRepos.ts";
+import { pidIn } from "../../../testProcesses.mts";
 
 // A repository, a bare remote it pushed main to, and a clone of that.
 function withRemote() {
@@ -569,7 +570,9 @@ it("a commit and a push end at git's exit, and what their hooks left in the back
   }
   const left = () =>
     existsSync(pids)
-      ? readFileSync(pids, "utf8").trim().split("\n").map(Number)
+      ? readFileSync(pids, "utf8")
+          .split("\n")
+          .flatMap((line) => pidIn(line) ?? [])
       : [];
   try {
     await withGit((g) =>
@@ -582,6 +585,7 @@ it("a commit and a push end at git's exit, and what their hooks left in the back
     // Past the children's late write, which a closed pipe would have
     // ended them at.
     await new Promise((resolve) => setTimeout(resolve, 1500));
+    assert.equal(left().length, 2, "a hook wrote no pid");
     for (const pid of left()) process.kill(pid, 0);
   } finally {
     for (const pid of left()) {
@@ -608,10 +612,13 @@ it("what a hook left in the background goes on after git fails", async () => {
       g.run(repo, ["commit", "-q", "--allow-empty", "-m", "refused"]),
     );
     await new Promise((resolve) => setTimeout(resolve, 500));
-    process.kill(Number(readFileSync(pidFile, "utf8")), 0);
+    const pid = pidIn(readFileSync(pidFile, "utf8"));
+    assert.ok(pid !== undefined, "the hook wrote no pid");
+    process.kill(pid, 0);
   } finally {
     try {
-      process.kill(Number(readFileSync(pidFile, "utf8")), "SIGKILL");
+      const pid = pidIn(readFileSync(pidFile, "utf8"));
+      if (pid !== undefined) process.kill(pid, "SIGKILL");
     } catch {
       // Gone already, or never started.
     }

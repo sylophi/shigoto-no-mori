@@ -60,6 +60,15 @@ export function onRunEnd(end: () => void): () => void {
   };
 }
 
+// The pid `text` holds (a pid file, a line of output), or undefined
+// while it holds none: a file `echo $! >` writes is empty until echo has
+// written, and Number("") is 0, which process.kill takes for this
+// process's own group.
+export function pidIn(text: string): number | undefined {
+  const pid = Number(text);
+  return Number.isInteger(pid) && pid > 1 ? pid : undefined;
+}
+
 // A signal to `pid` that may have gone already.
 export function signalIfAlive(pid: number, name: NodeJS.Signals | 0): boolean {
   try {
@@ -70,9 +79,10 @@ export function signalIfAlive(pid: number, name: NodeJS.Signals | 0): boolean {
   }
 }
 
-// Owned pids, by the scope they end with: a vitest case's, or the
-// file's (or the lab run's) when no case is running.
-const runScope = new Set<number>();
+// Owned pids, by the scope they end with (a vitest case's, or the
+// file's or the lab run's when no case is running), each with when it
+// was owned.
+const runScope = new Map<number, number>();
 let scope = runScope;
 
 // `child`, or a process that is no child of ours (an app opened through
@@ -82,21 +92,21 @@ export function own<T extends ChildProcess | number>(child: T): T {
   const pid = typeof child === "number" ? child : child.pid;
   if (pid === undefined) return child;
   endsWithRun();
-  scope.add(pid);
-  runScope.add(pid);
+  const at = Date.now();
+  scope.set(pid, at);
+  runScope.set(pid, at);
   return child;
 }
 
 // A vitest case's scope opens: what it owns until the function returned
 // ends it.
 export function caseScope(): () => void {
-  const mine = new Set<number>();
+  const mine = new Map<number, number>();
   scope = mine;
   return () => {
     scope = runScope;
-    const pids = [...mine];
-    for (const pid of pids) runScope.delete(pid);
-    endTrees(pids);
+    for (const pid of mine.keys()) runScope.delete(pid);
+    endTrees(mine);
   };
 }
 
@@ -104,36 +114,49 @@ export function caseScope(): () => void {
 // test's children too, a host's git or a script it ran) and everything
 // it owns, ended and checked gone.
 export function endAll(): void {
-  const pids = [process.pid, ...runScope];
+  const roots = new Map([[process.pid, Date.now()], ...runScope]);
   runScope.clear();
-  endTrees(pids);
+  endTrees(roots);
 }
 
 const GRACE_MS = 250;
 const KILLED_WITHIN_MS = 2_000;
 const POLL_MS = 50;
 
-type Row = { ppid: number; pgid: number; zombie: boolean; command: string };
+type Row = {
+  ppid: number;
+  pgid: number;
+  zombie: boolean;
+  // When it started, to the second.
+  start: number;
+  command: string;
+};
 
 function processTable(): Map<number, Row> {
   const listed = spawnSync(
     "/bin/ps",
-    ["-axo", "pid=,ppid=,pgid=,stat=,command="],
-    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    ["-axo", "pid=,ppid=,pgid=,stat=,lstart=,command="],
+    {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      // lstart in a form Date.parse reads, whatever the locale.
+      env: { ...process.env, LC_ALL: "C", TZ: "UTC" },
+    },
   );
   if (listed.error !== undefined) {
     throw new Error(`ps didn't run: ${listed.error.message}`);
   }
   const rows = new Map<number, Row>();
   for (const line of listed.stdout.split("\n")) {
-    const [pid, ppid, pgid, stat, ...command] = line.trim().split(/\s+/);
+    const [pid, ppid, pgid, stat, ...rest] = line.trim().split(/\s+/);
     // ps lists itself, a child of this process.
     if (stat === undefined || Number(pid) === listed.pid) continue;
     rows.set(Number(pid), {
       ppid: Number(ppid),
       pgid: Number(pgid),
       zombie: stat.startsWith("Z"),
-      command: command.join(" "),
+      start: Date.parse(`${rest.slice(0, 5).join(" ")} UTC`),
+      command: rest.slice(5).join(" "),
     });
   }
   return rows;
@@ -156,64 +179,74 @@ function keptOf(rows: Map<number, Row>) {
   return { pids, groups };
 }
 
-// Grows `pids` and `groups` to every live process below them or in one
-// of their groups, and their groups, never one that is kept. A root's
-// pid counts as a group even once it has exited, as a detached child's
-// is.
+// Grows `ours` (pid to start) to every process below one of them or in
+// one of their groups, never one that is kept, and answers those groups
+// as listed now: never a kept one, nor one led by a process not ours. A
+// pid listed with another start than ours had is another process.
 function grow(
-  pids: Set<number>,
-  groups: Set<number>,
+  ours: Map<number, number>,
   rows: Map<number, Row>,
   kept: ReturnType<typeof keptOf>,
-) {
+): Set<number> {
+  const isOurs = (pid: number) => {
+    const start = rows.get(pid)?.start;
+    return start !== undefined && ours.get(pid) === start;
+  };
+  const groups = new Set<number>();
   for (let grew = true; grew;) {
     grew = false;
-    for (const [pid, row] of rows) {
-      if (pids.has(pid) || kept.pids.has(pid)) continue;
-      if (pids.has(row.ppid) || groups.has(row.pgid)) {
-        pids.add(pid);
-        grew = true;
+    for (const [pid, { pgid }] of rows) {
+      if (isOurs(pid) && !kept.groups.has(pgid)) {
+        if (!rows.has(pgid) || isOurs(pgid)) groups.add(pgid);
       }
     }
-    for (const pid of pids) {
-      const group = rows.get(pid)?.pgid;
-      if (
-        group !== undefined &&
-        !kept.groups.has(group) &&
-        !groups.has(group)
-      ) {
-        groups.add(group);
+    for (const [pid, row] of rows) {
+      if (ours.has(pid) || kept.pids.has(pid)) continue;
+      if (isOurs(row.ppid) || groups.has(row.pgid)) {
+        ours.set(pid, row.start);
         grew = true;
       }
     }
   }
+  return groups;
 }
 
 const sleepSync = (ms: number) =>
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
-// Ends each pid and everything under it (this process's pid: only what
-// is under it): SIGTERM, a short grace, then SIGKILL, and throws naming
-// whatever is still running after that.
+// Ends each root (a pid, with when it was owned) and everything under it
+// (this process: only what is under it): SIGTERM, a short grace, then
+// SIGKILL, and throws naming whatever is still running after that. A
+// root that started after it was owned took the pid once ours had gone,
+// and is left alone.
 // Synchronous, so it can run from an exit or a signal. The whole tree is
 // found before any of it is signalled: once `sm` is gone, the git it
 // started in a session of its own has no parent to be found by.
-export function endTrees(roots: readonly number[]): void {
-  if (roots.length === 0) return;
+export function endTrees(roots: ReadonlyMap<number, number>): void {
+  if (roots.size === 0) return;
   let rows = processTable();
   const kept = keptOf(rows);
-  const pids = new Set(roots);
-  const groups = new Set(roots.filter((pid) => !kept.groups.has(pid)));
+  const ours = new Map<number, number>();
+  for (const [pid, ownedAt] of roots) {
+    const start = rows.get(pid)?.start;
+    if (pid > 1 && start !== undefined && start <= ownedAt) {
+      ours.set(pid, start);
+    }
+  }
+  let groups = new Set<number>();
   const alive = () => {
-    grow(pids, groups, rows, kept);
-    return [...pids].filter((pid) => {
+    groups = grow(ours, rows, kept);
+    return [...ours].flatMap(([pid, start]) => {
       const row = rows.get(pid);
-      return !kept.pids.has(pid) && row !== undefined && !row.zombie;
+      return !kept.pids.has(pid) && row?.start === start && !row.zombie
+        ? [pid]
+        : [];
     });
   };
   const signal = (name: NodeJS.Signals) => {
+    const pids = alive();
     for (const group of groups) signalIfAlive(-group, name);
-    for (const pid of alive()) signalIfAlive(pid, name);
+    for (const pid of pids) signalIfAlive(pid, name);
   };
   const waitGone = (ms: number) => {
     const deadline = Date.now() + ms;

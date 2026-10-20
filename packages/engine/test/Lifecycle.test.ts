@@ -11,6 +11,7 @@ import { afterAll, it } from "vitest";
 import * as Lifecycle from "../src/Lifecycle.ts";
 import * as Paths from "../src/Paths.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
+import { pidIn } from "../../../testProcesses.mts";
 
 const scratch = mkdtempSync(join(tmpdir(), "engine-lifecycle-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -96,7 +97,8 @@ it("tells the script its worktree, NULs dropped, and reports start, output and e
 it("leaves what the script started in the background running", async () => {
   const { events, answer } = await run("sleep 30 >/dev/null 2>&1 & echo $!");
   assert.equal(answer.code, 0);
-  const pid = Number(output(events).trim());
+  const pid = pidIn(output(events));
+  assert.ok(pid !== undefined, "the script said no pid");
   try {
     // Signal 0 only asks whether the process is there.
     assert.doesNotThrow(() => process.kill(pid, 0));

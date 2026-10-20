@@ -64,6 +64,7 @@ import { cliSandbox } from "./lib/cliSandbox.mts";
 import { hostContext } from "./lib/hostRuntime.mts";
 import { pushesLayer } from "./lib/hostStandIns.mts";
 import { trackTest } from "./lib/vitestKit.mts";
+import { pidIn } from "../../testProcesses.mts";
 
 const fixture = cliSandbox("sm-in-flight-");
 const { sandbox, dataDir, git, initRepo, commitFile, projectIdOf } = fixture;
@@ -198,7 +199,9 @@ afterAll(async () => {
 function slowPids(): number[] {
   if (!existsSync(PIDS)) return [];
   return readdirSync(PIDS).flatMap((file) =>
-    readFileSync(join(PIDS, file), "utf8").trim().split(" ").map(Number),
+    readFileSync(join(PIDS, file), "utf8")
+      .split(" ")
+      .flatMap((text) => pidIn(text) ?? []),
   );
 }
 
