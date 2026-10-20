@@ -16,6 +16,7 @@ import * as Worktrees from "../Worktrees.ts";
 export type Document = Readonly<Record<string, unknown>> & {
   readonly ok?: boolean;
   readonly error?: string;
+  readonly hint?: string;
   readonly cleanupError?: ReturnType<typeof Worktrees.cleanupErrorOf>;
   readonly removed?: Worktrees.Removed;
   readonly worktree?: Worktrees.WorktreeRow;
@@ -79,9 +80,27 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
     binary: Schema.String,
   },
 ) {
+  get flagHint(): string | undefined {
+    switch (this.reason) {
+      case "not-merged":
+        return "Pass --force to discard it.";
+      case "unpushed":
+        return this.verb === "rm"
+          ? "Pass --force to discard them, or --keep-branch to keep the branch."
+          : "Pass --force to discard them.";
+      case "head-unread":
+        return "Pass --force to discard what it lacks.";
+      case "guard":
+        // The worktree's own refusal's.
+        return this.names[3] || undefined;
+      default:
+        return undefined;
+    }
+  }
+
   override get message(): string {
     const [n0 = 0, n1 = 0] = this.numbers;
-    const [a = "", b = "", c = "", d = ""] = this.names;
+    const [a = "", b = "", c = ""] = this.names;
     const bin = this.binary;
     switch (this.reason) {
       case "no-branch":
@@ -135,26 +154,26 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
       case "no-primary":
         return `No local branches found in ${a}`;
       case "not-merged":
-        return `Branch ${a} isn't merged into ${b} (no merge found, no merged PR). Merge it first, or pass --force to discard it.`;
+        return `Branch ${a} isn't merged into ${b} (no merge found, no merged PR). Merge it first.`;
       case "unpushed": {
         // `n0` commits on branch `a` that PR #`n1`'s head lacks, `b`
         // naming them.
         const commits = n0 === 1 ? "a commit" : `${n0} commits`;
         return this.verb === "done"
-          ? `Branch ${a} has ${commits} its merged PR #${n1} never had, which deleting it would lose: ${b}. Push them to a new PR, or pass --force to discard them.`
+          ? `Branch ${a} has ${commits} its merged PR #${n1} never had, which deleting it would lose: ${b}. Push them to a new PR first.`
           : this.verb === "rm"
-            ? `Branch ${a} has ${commits} its merged PR #${n1} never had, which removing it would delete: ${b}. Push them to a new PR, or pass --force or --keep-branch.`
-            : `Branch ${a} has ${commits} PR #${n1} doesn't have, which landing would delete: ${b}. Push them to the PR first, or pass --force to discard them.`;
+            ? `Branch ${a} has ${commits} its merged PR #${n1} never had, which removing it would delete: ${b}. Push them to a new PR first.`
+            : `Branch ${a} has ${commits} PR #${n1} doesn't have, which landing would delete: ${b}. Push them to the PR first.`;
       }
       case "head-unread":
-        return `Couldn't read PR #${n0}'s head (${b}) to check that ${a} has no commits it lacks. Fetch it, or pass --force to discard what it lacks.`;
+        return `Couldn't read PR #${n0}'s head (${b}) to check that ${a} has no commits it lacks. Fetch it first.`;
       case "not-on-branch":
         return `${a} is on ${b}, not ${c}`;
       case "vanished":
         return "worktree disappeared after switching branches";
       case "guard":
         // A worktree a stack land would remove refused the removal.
-        return `worktree ${a} (${b}): ${c}${d}`;
+        return `worktree ${a} (${b}): ${c}`;
     }
   }
 }
@@ -165,8 +184,12 @@ export class MergeUnverified extends Schema.TaggedError<MergeUnverified>()(
   "MergeUnverified",
   { branch: Schema.String, cause: Schema.Defect() },
 ) {
+  get flagHint(): string {
+    return "Pass --force to discard the branch.";
+  }
+
   override get message(): string {
-    return `Couldn't ask GitHub whether ${this.branch} was merged. Try again once gh can reach it, or pass --force to discard the branch.`;
+    return `Couldn't ask GitHub whether ${this.branch} was merged. Try again once gh can reach it.`;
   }
 }
 

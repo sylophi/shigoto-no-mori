@@ -167,7 +167,7 @@ const landingReporter = Effect.gen(function* () {
 const failureOf = (doc: Landing.Document) =>
   doc.cleanupError !== undefined
     ? Worktrees.cleanupFailureWords(doc.cleanupError)
-    : (doc.error ?? "");
+    : [doc.error, doc.hint].filter(Boolean).join(" ");
 
 // How land, done and rm --stack end, from the document: this checkout
 // removed or put back on the primary branch. The steps before it were

@@ -16,6 +16,9 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 export type ErrorDocument = {
   readonly error: string;
   readonly code?: string;
+  // The terminal's way past a refusal (a flag), which the app's own
+  // words and buttons stand in for.
+  readonly hint?: string;
 };
 
 // What a failure says: the words of the git or gh that failed, or of the
@@ -77,7 +80,15 @@ export const isUsage = (error: unknown): boolean =>
 
 export const errorDocument = (error: unknown): ErrorDocument => {
   const code = codeOf(error);
-  return code === undefined
-    ? { error: messageOf(error) }
-    : { error: messageOf(error), code };
+  const hint = hintOf(error);
+  return {
+    error: messageOf(error),
+    ...(code === undefined ? {} : { code }),
+    ...(hint === undefined ? {} : { hint }),
+  };
 };
+
+const hintOf = (error: unknown): string | undefined =>
+  Predicate.hasProperty(error, "flagHint") && typeof error.flagHint === "string"
+    ? error.flagHint
+    : undefined;

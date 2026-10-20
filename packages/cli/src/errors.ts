@@ -3,7 +3,11 @@
 // engine's error document with `ok: false`. A person gets `sm: <message>`
 // on stderr.
 import { constants } from "node:os";
-import { errorDocument, isUsage } from "@shigomori/engine/errorDocument";
+import {
+  type ErrorDocument,
+  errorDocument,
+  isUsage,
+} from "@shigomori/engine/errorDocument";
 import { storeErrorOf } from "@shigomori/engine/storeErrors";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -117,7 +121,7 @@ export const report = (
       error instanceof CliError.ShowHelp ? error.commandPath.slice(1) : [];
     // The first problem, as Go's parser stopped at it.
     const [problem] = problems;
-    const document =
+    const document: ErrorDocument =
       problem !== undefined
         ? { error: usageOf(path) ?? problem.message }
         : errorDocument(error);
@@ -125,7 +129,7 @@ export const report = (
       yield* emit({ ok: false, ...document });
     } else {
       yield* note(
-        `${styles(stderrColor).red(`${binaryName}:`)} ${document.error}`,
+        `${styles(stderrColor).red(`${binaryName}:`)} ${[document.error, document.hint].filter(Boolean).join(" ")}`,
       );
     }
     return problem !== undefined || isUsage(error) ? 2 : 1;

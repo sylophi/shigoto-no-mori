@@ -474,8 +474,9 @@ describe("commits the pull request never had", () => {
     assert.equal(doc["code"], "unpushed-commits");
     assert.match(
       String(doc["error"]),
-      /^Branch fox has a commit PR #5 doesn't have, which landing would delete: [0-9a-f]+ late\. /,
+      /^Branch fox has a commit PR #5 doesn't have, which landing would delete: [0-9a-f]+ late\. Push them to the PR first\.$/,
     );
+    assert.equal(doc["hint"], "Pass --force to discard them.");
     assert.deepEqual(gh.merges(), [], "nothing merged");
     assert.equal(await foxSurvives(located), true);
   });
@@ -489,7 +490,11 @@ describe("commits the pull request never had", () => {
     assert.equal(doc["code"], "unpushed-commits", JSON.stringify(doc));
     assert.match(
       String(doc["error"]),
-      /^Branch fox has a commit its merged PR #5 never had, which removing it would delete: [0-9a-f]+ late\. Push them to a new PR/,
+      /^Branch fox has a commit its merged PR #5 never had, which removing it would delete: [0-9a-f]+ late\. Push them to a new PR first\.$/,
+    );
+    assert.equal(
+      doc["hint"],
+      "Pass --force to discard them, or --keep-branch to keep the branch.",
     );
     assert.deepEqual(gh.merges(), ["pr merge 5 --auto --squash"]);
     assert.equal(await foxSurvives(located), true);
@@ -558,16 +563,18 @@ esac`,
     );
     assert.match(
       String(unpushed["error"]),
-      /^Branch fox has a commit its merged PR #5 never had, which deleting it would lose: [0-9a-f]+ late\. /,
+      /^Branch fox has a commit its merged PR #5 never had, which deleting it would lose: [0-9a-f]+ late\. Push them to a new PR first\.$/,
     );
+    assert.equal(unpushed["hint"], "Pass --force to discard them.");
 
     mergedGh(`echo 'error connecting to api.github.com' >&2; exit 1`);
     const unasked = await done(located);
     assert.equal(unasked["ok"], false, JSON.stringify(unasked));
     assert.match(
       String(unasked["error"]),
-      /^Couldn't ask GitHub whether fox was merged\. .* gh said: .*error connecting to api\.github\.com/,
+      /^Couldn't ask GitHub whether fox was merged\. Try again once gh can reach it\. gh said: .*error connecting to api\.github\.com/,
     );
+    assert.equal(unasked["hint"], "Pass --force to discard the branch.");
     assert.equal(await foxSurvives(located), true);
   });
 

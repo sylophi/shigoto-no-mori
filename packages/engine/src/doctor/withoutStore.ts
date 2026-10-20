@@ -35,7 +35,7 @@ export const makeWithoutStore = ({
     // lines (locks and what an update left) and a tunnel a crash left
     // running. `failed` says the store wouldn't open, which is a line of
     // its own unless the data dir's line already says why. Skipped, since
-    // they read what the store keeps: config.json's and registry.json's
+    // they read what the store keeps: the settings' and projects'
     // lines, the port pool, launchers, terrier, dormant state, worktree
     // marks, the scripts a crash left running and every project.
     const checkWithoutState = (input: RunInput, failed: boolean) =>

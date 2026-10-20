@@ -124,6 +124,22 @@ const checkDormantState = (
     ];
   });
 
+// The device's settings, each value checked against the key it sets,
+// none when there are none.
+const checkGlobalConfig = (stored: Option.Option<ConfigDoc>) => {
+  const line = check("Data dir", "config", "settings");
+  if (Option.isNone(stored)) return line.ok("absent, so defaults apply");
+  const device = stored.value;
+  const keys = Object.keys(device).length;
+  if (storedProblem({ kind: "device" }, device) !== undefined) {
+    return line.warn(
+      "a setting has the wrong type, so it is ignored",
+      "Set it again in the app's Settings.",
+    );
+  }
+  return line.ok(`valid, ${pluralize(keys, "key")}`);
+};
+
 export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -306,23 +322,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const configFile = path.join(dataDir, "config.json");
     const registryFile = path.join(dataDir, "registry.json");
 
-    // The device's settings, each value checked against the key it sets.
-    // The device's settings, none when there are none.
-    const checkGlobalConfig = (stored: Option.Option<ConfigDoc>) => {
-      const line = check("Data dir", "config", "config.json");
-      if (Option.isNone(stored)) return line.ok("absent, so defaults apply");
-      const device = stored.value;
-      const keys = Object.keys(device).length;
-      if (storedProblem({ kind: "device" }, device) !== undefined) {
-        return line.warn(
-          "parses, but a field has the wrong type and is being dropped",
-          `Check ${tildify(configFile, home)} against the app's Settings.`,
-        );
-      }
-      return line.ok(`valid, ${pluralize(keys, "key")}`);
-    };
-
-    const registryLine = check("Data dir", "registry", "registry.json");
+    const registryLine = check("Data dir", "registry", "projects");
 
     // The registry's line, by its projects and the file that holds them.
     const registeredLine = (
@@ -605,7 +605,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       if (listing.kind === "missing") {
         return [
           line.warn(
-            "enabled in config.json but `port-pool` isn't on PATH, so provisioning is skipped",
+            "on in Settings but `port-pool` isn't on PATH, so provisioning is skipped",
             "Install port-pool, or turn the toggle off in the app's Settings.",
           ),
         ];
