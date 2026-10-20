@@ -4,7 +4,7 @@
 import type * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
-import { emit, note, Output, styles } from "./output.ts";
+import { emit, note, Output, styles, toStderr } from "./output.ts";
 
 const PHASES = {
   carryOver: "carry-over",
@@ -78,7 +78,7 @@ export const reporter = (
               slots.set(event.runId, slotLabel(event.slot));
               return note(`${marker(event.runId)} running`);
             case "data":
-              return Effect.sync(() => process.stderr.write(event.data));
+              return toStderr(event.data);
             case "error":
               return note(`${marker(event.runId)} ${event.data}`);
             case "exit":
