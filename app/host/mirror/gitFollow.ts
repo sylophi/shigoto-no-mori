@@ -108,7 +108,7 @@ const DEFAULT_SWEEP_MS = 60_000;
 // onCopyGone: every signal fails the same way until the owner acts.
 const COPY_GONE_EVERY_MS = 60_000;
 
-// How long reconcileNow waits on a reconcile before answering none. A
+// How long reconcileNow waits on a reconcile before it times out. A
 // stalled peer can hold a round for as long as its transport's timeout,
 // and the caller is a user waiting on a stop.
 const RECONCILE_NOW_LIMIT_MS = 10_000;
@@ -675,11 +675,11 @@ function makeFollower(
     // A reconcile of one session right away, for a caller about to act
     // on its verdict (a stop's safety check): queued behind one in
     // flight, and answered once both have run. Bounded, and one that
-    // does not finish in time (a stalled peer) answers no status, which
-    // the stop reads as not confirmed: the status as it stood is the
-    // verdict before a commit made a moment ago, the one thing the
+    // does not finish in time (a stalled peer) answers "timed-out",
+    // which the stop reads as not confirmed: the status as it stood is
+    // the verdict before a commit made a moment ago, the one thing the
     // check is for. A limit that came late (this process stopped) is
-    // waited again (answerWithin). Undefined too when the session is not
+    // waited again (answerWithin). Undefined when the session is not
     // followed.
     reconcileNow: (session: string) =>
       Effect.gen(function* () {
@@ -694,7 +694,7 @@ function makeFollower(
             yield* answerWithin(Fiber.await(running), RECONCILE_NOW_LIMIT_MS),
           )
         ) {
-          return undefined;
+          return "timed-out" as const;
         }
         return records.get(session)?.status;
       }).pipe(Effect.orElseSucceed(() => undefined)),

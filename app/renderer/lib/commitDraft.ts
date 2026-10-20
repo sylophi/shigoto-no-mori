@@ -4,13 +4,24 @@ import { readStoredJson, removeStored, writeStored } from "@/lib/localStorage";
 
 export const EMPTY_DRAFT: CommitDraft = { summary: "", description: "" };
 
-function draftKey(projectId: string, worktreeId: string): string {
-  return `commit.draft.${projectId}.${worktreeId}`;
+// By device too: the ids can be paths' (a terrier project's, every
+// worktree's), so two devices with the same layout share them, and a
+// worktree removed on one keeps the other's draft.
+function draftKey(
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): string {
+  return `commit.draft.${deviceId}.${projectId}.${worktreeId}`;
 }
 
-function readCommitDraft(projectId: string, worktreeId: string): CommitDraft {
+function readCommitDraft(
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): CommitDraft {
   const stored = readStoredJson<Partial<CommitDraft>>(
-    draftKey(projectId, worktreeId),
+    draftKey(deviceId, projectId, worktreeId),
     {},
   );
   return {
@@ -20,8 +31,12 @@ function readCommitDraft(projectId: string, worktreeId: string): CommitDraft {
   };
 }
 
-export function clearCommitDraft(projectId: string, worktreeId: string): void {
-  removeStored(draftKey(projectId, worktreeId));
+export function clearCommitDraft(
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): void {
+  removeStored(draftKey(deviceId, projectId, worktreeId));
 }
 
 export function isEmptyDraft(draft: CommitDraft): boolean {
@@ -35,12 +50,13 @@ const listeners = new Set<(key: string, draft: CommitDraft) => void>();
 // empty, so a message being written is never lost to it. An undone
 // commit's message comes back this way.
 export function fillEmptyCommitDraft(
+  deviceId: string,
   projectId: string,
   worktreeId: string,
   draft: CommitDraft,
 ): void {
-  if (!isEmptyDraft(readCommitDraft(projectId, worktreeId))) return;
-  const key = draftKey(projectId, worktreeId);
+  if (!isEmptyDraft(readCommitDraft(deviceId, projectId, worktreeId))) return;
+  const key = draftKey(deviceId, projectId, worktreeId);
   writeStored(key, JSON.stringify(draft));
   for (const listener of listeners) listener(key, draft);
 }
@@ -51,16 +67,20 @@ export function fillEmptyCommitDraft(
 // (fillEmptyCommitDraft) can fill it. Persisted from an effect rather
 // than in the setter, so amend mode can seed it during render without a
 // storage write in the middle of one.
-export function useCommitDraft(projectId: string, worktreeId: string) {
+export function useCommitDraft(
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+) {
   const [draft, setDraft] = useState<CommitDraft>(() =>
-    readCommitDraft(projectId, worktreeId),
+    readCommitDraft(deviceId, projectId, worktreeId),
   );
   // Ahead of the persisting effect: a fill that landed between the first
   // render and this subscription is picked up here, before that effect
   // would clear it with the empty draft the render read.
   useEffect(() => {
-    const key = draftKey(projectId, worktreeId);
-    const stored = readCommitDraft(projectId, worktreeId);
+    const key = draftKey(deviceId, projectId, worktreeId);
+    const stored = readCommitDraft(deviceId, projectId, worktreeId);
     if (!isEmptyDraft(stored)) {
       setDraft((current) => (isEmptyDraft(current) ? stored : current));
     }
@@ -73,13 +93,16 @@ export function useCommitDraft(projectId: string, worktreeId: string) {
     return () => {
       listeners.delete(onFill);
     };
-  }, [projectId, worktreeId]);
+  }, [deviceId, projectId, worktreeId]);
   useEffect(() => {
     if (isEmptyDraft(draft)) {
-      clearCommitDraft(projectId, worktreeId);
+      clearCommitDraft(deviceId, projectId, worktreeId);
     } else {
-      writeStored(draftKey(projectId, worktreeId), JSON.stringify(draft));
+      writeStored(
+        draftKey(deviceId, projectId, worktreeId),
+        JSON.stringify(draft),
+      );
     }
-  }, [draft, projectId, worktreeId]);
+  }, [draft, deviceId, projectId, worktreeId]);
   return [draft, setDraft] as const;
 }

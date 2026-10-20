@@ -3,6 +3,7 @@ import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useSearch } from "@tanstack/react-router";
 import { changesState } from "@/lib/changesState";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
@@ -105,6 +106,7 @@ function WorktreeChanges({
 }) {
   const { canCommand } = useCommandAccess();
   const deviceLabel = useScopedDeviceLabel();
+  const { deviceId } = useHostScope();
   const { projectId, id: worktreeId } = worktree;
   const { data: files, error: statusError } = useWorktreeChanges(
     projectId,
@@ -115,9 +117,9 @@ function WorktreeChanges({
     statusError,
     worktree.changedCount,
   );
-  const picks = useChangesPicks(projectId, worktreeId);
-  const setPicks = (change: Parameters<typeof updatePicks>[2]) =>
-    updatePicks(projectId, worktreeId, change);
+  const picks = useChangesPicks(deviceId, projectId, worktreeId);
+  const setPicks = (change: Parameters<typeof updatePicks>[3]) =>
+    updatePicks(deviceId, projectId, worktreeId, change);
   // The pick is held as the row's key and resolved against the live
   // list, so a file that stops being changed (discarded, committed,
   // reverted in an editor) falls back to the first row instead of
@@ -143,10 +145,10 @@ function WorktreeChanges({
     if (!files) return;
     const pane =
       paneKey && fileHunks ? { key: paneKey, hunks: fileHunks } : undefined;
-    updatePicks(projectId, worktreeId, (current) =>
+    updatePicks(deviceId, projectId, worktreeId, (current) =>
       prunedPicks(current, files, pane),
     );
-  }, [projectId, worktreeId, files, paneKey, fileHunks]);
+  }, [deviceId, projectId, worktreeId, files, paneKey, fileHunks]);
   const { mutate: discardHunks, isPending: discardingHunks } =
     useDiscardHunks();
   const diff = useFileDiff(
@@ -161,7 +163,7 @@ function WorktreeChanges({
   const undo = useUndoCommits(worktree);
   const stash = useStashChanges();
   const resolve = useResolveConflict();
-  const [draft, setDraft] = useCommitDraft(projectId, worktreeId);
+  const [draft, setDraft] = useCommitDraft(deviceId, projectId, worktreeId);
 
   // The last commit is only up for rewriting while no remote has it. A
   // requested amend only takes effect while that holds (a push from

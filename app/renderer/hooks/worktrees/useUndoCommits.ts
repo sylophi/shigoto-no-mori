@@ -38,7 +38,8 @@ export function useUndoCommits(worktree: Worktree) {
         commitMessageQueryOptions(scope, projectId, worktreeId, hash),
       ),
     ).then(
-      (message) => fillEmptyCommitDraft(projectId, worktreeId, message),
+      (message) =>
+        fillEmptyCommitDraft(scope.deviceId, projectId, worktreeId, message),
       () => {},
     );
 
