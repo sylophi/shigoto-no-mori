@@ -394,8 +394,9 @@ interface Memory {
 // it, and it keeps fronting the hostname onto a port anything local may
 // rebind. Run once as the next host starts (process/host.ts), before
 // this host's own connector can write the file. The file names the
-// connector's pid, and its process name is checked too, so a recycled
-// pid is never taken out (`sm doctor` reads the same file).
+// connector's pid, and its process name is checked too, so a pid
+// handed to another program is never taken out (`sm doctor` reads the
+// same file).
 // When the app is never opened again, the orphan runs until it is
 // killed or the machine restarts.
 export const reapOrphanedConnector = (pidFile: string) =>
