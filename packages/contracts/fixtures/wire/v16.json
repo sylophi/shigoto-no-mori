@@ -23,6 +23,19 @@
       "needsDeviceKey": false
     }
   },
+  "account:lastListedDevices": {
+    "success": [
+      {
+        "deviceId": "",
+        "name": "0",
+        "platform": "",
+        "icon": "cloud",
+        "createdAt": 0,
+        "lastSeenAt": null,
+        "online": false
+      }
+    ]
+  },
   "account:listDevices": {
     "success": []
   },

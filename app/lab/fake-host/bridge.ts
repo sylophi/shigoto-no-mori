@@ -1950,6 +1950,7 @@ export function installFakeHostBridge(
   const clientHandlers: FixtureHandlers = {
     "account:status": accountStatus,
     "account:listDevices": () => registryDevices(),
+    "account:lastListedDevices": () => registryDevices(),
     "account:acceptsCommands": () => acceptsCommands,
     "account:setAcceptsCommands": (enabled) => {
       acceptsCommands = enabled;

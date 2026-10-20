@@ -248,17 +248,41 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   // the socket was down. This pass runs on the list as it stands, and
   // the refetch's landing runs the corrected one.
   if (reconnected) askListAgain();
+  // This machine is not a remote device to itself, so it is skipped.
+  const entries = (infos: readonly DeviceInfo[]) =>
+    infos
+      .filter((info) => info.deviceId !== localDeviceId)
+      .map((info) => buildEntry(info, current, online));
+  const cached = boundClient().getQueryData<readonly DeviceInfo[]>(
+    queryKeys.accountDevices(),
+  );
+  // What the shell last had from the hub, for the account it holds
+  // now. Its sessions outlive the window, so a live one reads connected.
+  const kept = () =>
+    pageApi()
+      .run(pageApi().account.lastListedDevices())
+      .catch(() => []);
+  // A window with nothing fetched (one loaded while the hub is away)
+  // draws the shell's list while its own read is out, which the
+  // client's retries keep out for seconds.
+  if (cached === undefined) {
+    setRemoteDevices(registry(), entries(await kept()));
+    if (newestStatus !== undefined && newestStatus !== current) {
+      applyCommandAccess(newestStatus);
+    }
+  }
   let list: readonly DeviceInfo[];
   try {
     list = await fetchDeviceList();
   } catch {
     // Offline or signed out mid-flight. react-query keeps the last
     // good data through a failed refetch, so the store keeps whatever
-    // we had, an empty list when nothing was ever fetched.
+    // we had. The shell's list is asked again, since the account can
+    // have changed during the read.
     list =
       boundClient().getQueryData<readonly DeviceInfo[]>(
         queryKeys.accountDevices(),
-      ) ?? [];
+      ) ?? (await kept());
   }
   const knownIds = new Set(list.map((info) => info.deviceId));
   // A presence roster naming a device the account list has never seen
@@ -281,10 +305,7 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
     (id) => id !== localDeviceId && !knownIds.has(id),
   );
   if ((hasUnknownOnline || someoneLeft) && hubDriven) askListAgain();
-  // This machine is not a remote device to itself, so it is skipped.
-  const others = list.filter((info) => info.deviceId !== localDeviceId);
-  const devices = others.map((info) => buildEntry(info, current, online));
-  setRemoteDevices(registry(), devices);
+  setRemoteDevices(registry(), entries(list));
   if (newestStatus !== undefined && newestStatus !== current) {
     applyCommandAccess(newestStatus);
   }

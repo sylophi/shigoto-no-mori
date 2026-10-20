@@ -754,6 +754,45 @@ it("handlers: both shells' calls show a signed-out device's remembered name, ask
   );
 });
 
+it("handlers: what the hub last listed is kept for the account it was listed for, and nothing for another or none", async () => {
+  const store = memoryStore();
+  const record = {
+    credential: "cred-1",
+    deviceKey: "device-key",
+    accountId: "user_abc",
+    deviceName: "d",
+  };
+  store.write(record);
+  const listing = ownRowListing("laptop");
+  const { service } = stubService(
+    () => json({ devices: listing }),
+    CONFIG.hubUrl,
+  );
+  const handlers = makeAccountHandlers({
+    config: () => CONFIG,
+    store: () => store,
+    service: () => service,
+    deviceId: async () => "device-uuid",
+    defaultName: async () => ({ name: "d", provisional: false }),
+    detectedIcon: async () => "laptop",
+    platform: "darwin",
+    sharedSignIn: () => false,
+    changed: () => {},
+    transitions: Semaphore.makeUnsafe(1),
+    devicesListed: () => {},
+    acceptsCommands: () => false,
+    setAcceptsCommands: () => {},
+  });
+  const last = handlers.lastListedDevices as () => Promise<DeviceInfo[]>;
+  assert.deepEqual(await last(), [], "kept before the hub ever answered");
+  await (handlers.listDevices as () => Promise<DeviceInfo[]>)();
+  assert.deepEqual(await last(), listing);
+  store.write({ ...record, accountId: "user_other" });
+  assert.deepEqual(await last(), [], "another account's");
+  store.clear();
+  assert.deepEqual(await last(), [], "signed out");
+});
+
 // A device signed in to user_abc with control on, re-enrolling under a
 // hub that holds the enrollment's answer until `release`, through the
 // handlers with the desktop's switch rules: off at once ahead of a

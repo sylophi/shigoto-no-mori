@@ -41,6 +41,10 @@ export const accountContract = defineContract(
   invoke("revokeDevice", DeviceIdSchema, VoidSchema),
   // Empty when signed out or unconfigured.
   invoke("listDevices", VoidSchema, Schema.Array(DeviceInfoSchema)),
+  // What listDevices last answered this shell for the account signed in
+  // now, without asking the hub: a window loaded while the hub is away
+  // lists its peers from it. Empty before the first answer.
+  invoke("lastListedDevices", VoidSchema, Schema.Array(DeviceInfoSchema)),
   // Any device of the account, online or not: the hub holds the name.
   invoke(
     "setDeviceName",
