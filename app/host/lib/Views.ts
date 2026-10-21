@@ -165,18 +165,18 @@ export type Signal =
   | { readonly kind: "store"; readonly tables: ReadonlySet<Table> }
   | { readonly kind: "push"; readonly push: HostPushes.Push };
 
-// Re-reads `read` on every signal `when` keeps, and on a tick when
-// something outside the store and the host moves the view (a file
-// edited in the worktree, a server coming up on a port). Emits only
-// what differs from the last value. Signals that arrive during a read
-// make one more read, not one each. `key` names the view and its input
-// (`worktrees:watch:<projectId>`): subscribers with the same key share
-// the read.
+// Re-reads `read` on every signal `when` keeps, on each of `also`'s (a
+// host-only one, as the git watcher's index writes), and on a tick when
+// something no signal says moves the view (a server coming up on a
+// port). Emits only what differs from the last value. Signals that
+// arrive during a read make one more read, not one each. `key` names
+// the view and its input (`worktrees:watch:<projectId>`): subscribers
+// with the same key share the read.
 export const view = <A, R = never>(
   key: string,
   read: () => Effect.Effect<A, unknown, R>,
   when: (signal: Signal) => boolean,
-  options: { readonly every?: Duration.Input } = {},
+  options: Options = {},
 ): Stream.Stream<A, unknown, Services | R> =>
   Stream.unwrap(
     Effect.gen(function* () {
@@ -191,17 +191,24 @@ export const view = <A, R = never>(
     }),
   );
 
+type Options = {
+  // Subscribed with the view's own signals, before the first read.
+  readonly also?: Effect.Effect<Stream.Stream<unknown>, never, Scope.Scope>;
+  readonly every?: Duration.Input;
+};
+
 const reading = <A, R>(
   read: () => Effect.Effect<A, unknown, R>,
   when: (signal: Signal) => boolean,
   hear: Effect.Effect<Heard, never, Scope.Scope>,
-  options: { readonly every?: Duration.Input },
+  options: Options,
 ): Stream.Stream<A, unknown, Services | R> =>
   Stream.unwrap(
     Effect.gen(function* () {
       // Subscribed before the first read, so nothing between is lost.
       const store = yield* (yield* StoreChanges.StoreChanges).subscribe;
       const pushes = yield* (yield* HostPushes.HostPushes).subscribe;
+      const also = yield* options.also ?? Effect.succeed(Stream.empty);
       const { asked, landing } = yield* hear;
       const signals = Stream.merge(
         Stream.merge(
@@ -210,7 +217,7 @@ const reading = <A, R>(
           ),
           pushes.pipe(Stream.map((push): Signal => ({ kind: "push", push }))),
         ).pipe(Stream.filter(when)),
-        asked,
+        Stream.merge(also, asked),
       );
       const ticks =
         options.every === undefined
