@@ -1,15 +1,14 @@
 // Fails on a component or hook the React Compiler bails out of. The
 // compiler skips such a function without a word, and the function then
 // runs unmemoized: a callback ref or a row's props that were stable
-// become new on every render. That is how the commit diff page lost
-// its virtualized rows (V3.md, the alpha.4 diff rows record).
+// become new on every render.
 //
 // It runs the compiler as the builds do (vite.reactCompiler.ts's preset
-// and options) over app/renderer and packages/ui/src, and
-// holds each bailout to react-compiler-bailouts.json: the ones that
-// were there when this check came, each with its reason, to be fixed
-// and taken off. A new one fails with its file, function and reason,
-// and so does a listed one that compiles now, so the list only shrinks.
+// and options) over app/renderer and packages/ui/src, and holds each
+// bailout to react-compiler-bailouts.json: the known ones, each with its
+// reason, to be fixed and taken off. A new one fails with its file,
+// function and reason, and so does a listed one that compiles now, so
+// the list only shrinks.
 //
 //   node scripts/react-compiler-check.mts           check
 //   node scripts/react-compiler-check.mts --write   rewrite the list

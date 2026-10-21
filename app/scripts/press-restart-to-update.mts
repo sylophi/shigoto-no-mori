@@ -2,7 +2,7 @@
 // Settings' "Restart to update", from outside the window: dials the
 // running app's loopback as its windows do (the port and token
 // loopback.json holds) and makes the same call the button's mutation
-// makes, `updater:install`. A packaged build takes no debugger, so this
+// makes, `updater:install`. A signed build takes no debugger, so this
 // is how a script presses the button of a signed one
 // (scripts/smoke-app.mts). Its hello carries this checkout's
 // PROTOCOL_VERSION, which an app at another protocol refuses. Prints

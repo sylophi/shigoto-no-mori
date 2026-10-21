@@ -8,9 +8,9 @@
 // never imported from the renderer.
 import { join } from "node:path";
 
-// The Clerk bridge's token store in userData, minus the .json the SDK
-// appends (main/electron/clerk.ts names it, the dev launchers copy it
-// between instances to clone a sign-in).
+// The Clerk bridge's token store in userData, minus its .json
+// (main/electron/ClerkTokens.ts names the file, the dev launchers copy
+// it between instances to clone a sign-in).
 export const CLERK_TOKEN_STORE = "clerk-tokens";
 
 // Profiles: a second, third, ... instance of a dev run or a test

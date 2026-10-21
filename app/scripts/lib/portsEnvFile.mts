@@ -11,8 +11,8 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { appRoot } from "./appRoot.mts";
 
-// The web client and the two fake host flavors had fixed ports before
-// port-pool covered them, and still fall back to those.
+// The web client's and the two fake host flavors' ports when port-pool
+// provisioned none.
 const FALLBACK_PORTS = {
   WEB_PORT: 5190,
   FAKE_HOST_PORT: 5191,

@@ -52,7 +52,7 @@ const catalog = (names: Names) => {
       [
         "nuke --yes [--keep-app]",
         "Take everything of this build off the machine",
-        "What Settings' Danger zone does, with no window, so a test build is cleaned up from a script: the app in this command's bundle is quit, then started to remove its worktrees, this command's links, the shell and agent hooks, this device from your account and its login item, then its data folder, its own folder, logs, preferences and keychain item. Then the bundle itself (--keep-app keeps it). Runs only from a packaged build's command. Exits non-zero when something stayed, saying what.",
+        "What Settings' Danger zone does, with no window: the app in this command's bundle is quit, then started to remove its worktrees, this command's links, the shell and agent hooks, this device from your account and its login item, then its data folder, its own folder, logs, preferences and keychain item. Then the bundle itself (--keep-app keeps it). Runs only from a packaged build's command. Exits non-zero when something stayed, saying what.",
       ],
       [
         "help [<command>] [--all]",

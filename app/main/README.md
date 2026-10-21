@@ -1,9 +1,11 @@
 # main
 
-The shell: Electron's main process. It keeps what decision 6 leaves in
-Electron (the windows, the menu, dialogs, the keychain, the
-updater) and runs the host as a utility process of its own (V3.md,
-decisions 6 and 9).
+The shell: Electron's main process. It keeps what needs Electron (the
+windows, the menu, dialogs, the keychain, the updater) and runs the
+host as a utility process of its own (`host/README.md`, "A process
+of its own"). A window reaches its host over the loopback like any
+other device; its shell serves only the calls that belong to the
+machine the window runs on.
 
 - `index.ts`: the shell's start, the composition root. It builds the
   shell's runtime over `shellLayer.ts`, its layer graph, and quits with
@@ -29,21 +31,18 @@ decisions 6 and 9).
   nuke's live half, the log file.
 - Adding a menu item (`electron/menu.ts`): one a window handles is a
   push to the focused window, `clickBroadcast(<contract>, "<push>",
-  <payload>)`,
-  with the push declared in the client module (`nav`, `window`) and
-  heard in the renderer; one the shell handles itself is a plain
-  `click`. Labels are title case, as macOS's own are ("Add Project…",
-  "New Window"), with an ellipsis when the item asks for more first.
+  <payload>)`, with the push declared in the client module (`nav`,
+  `window`) and heard in the renderer; one the shell handles itself is
+  a plain `click`. Labels are title case, as macOS's own are ("Add
+  Project…", "New Window"), with an ellipsis when the item asks for
+  more first.
 - `core/`: the shell's logic that runs without Electron, so a proof
-  drives it under plain node: the account's credential store and default
-  device name and icon, the guide, the keychain reset, liveness's rate limits, the hold on
-  its host (`host/`: the watchdog, the restart ledger, the busy asks),
-  the start after a nuke, and the shell's own JSON files (`files/`: the ones it
-  writes on the way out, synchronously, and the rest on `FileSystem`).
-
-A window reaches its host over the loopback like any other device; its
-shell serves only the calls that belong to the machine the window runs
-on.
+  drives it under plain node: the account's credential store and
+  default device name and icon, the guide, the keychain reset,
+  liveness's rate limits, the hold on its host (`host/`: the watchdog,
+  the restart ledger, the busy asks), the start after a nuke, and the
+  shell's own JSON files (`files/`: the ones it writes on the way out,
+  synchronously, and the rest on `FileSystem`).
 
 The shell reads the data dir: `index.ts` finds it (`initDataDir`)
 before it builds the menu or forks the host, and modules here read it
