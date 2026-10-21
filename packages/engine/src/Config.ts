@@ -23,7 +23,7 @@ import {
   docDelete,
   launcherIdProblem,
   launcherProblem,
-  mergeConfigDoc,
+  savedConfigDoc,
   settingKeys,
 } from "./configDoc.ts";
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
@@ -235,9 +235,9 @@ export class Config extends Context.Service<
       patch: ProjectSettingsPatch,
     ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
     // `config edit`'s whole-document save, only over `ifStoredIs`, the
-    // settings as they were read: a modeled key the payload omits is
-    // removed, a null removes its key, objects merge field by field, and
-    // a key this build doesn't model survives.
+    // settings as they were read: stored as saved, a null deleting its
+    // key. The edit shows every stored key, so one the save leaves out
+    // was deleted, modeled or not.
     readonly write: (
       scope: ConfigScope,
       payload: ConfigDoc,
@@ -685,7 +685,8 @@ const make = Effect.gen(function* () {
         stale = true;
         return false;
       }
-      mergeConfigDoc(keysOf(scope), doc, payload);
+      for (const key of Object.keys(doc)) delete doc[key];
+      Object.assign(doc, savedConfigDoc(payload));
     });
     if (stale) return yield* new ConfigChangedMeanwhile();
   });
