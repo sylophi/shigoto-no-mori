@@ -13,10 +13,12 @@
   `pnpm -C packages/<package> exec vitest run <file>` one package
   test file. `pnpm typecheck` also prints the Effect language
   service's suggestions (`suggestion TS377…`), which don't fail it.
+  Run the checks a change touches and leave the repo-wide suite to CI.
 - To check a change by running it (a screen in some state, a
   screenshot, the real app on several devices), start at
   `app/lab/README.md`. Pages and windows are driven with weblab.
-- UI changes follow `app/DESIGN.md`.
+- UI changes follow `app/DESIGN.md`, and come with before and after
+  shots from the lab, in both themes.
 - Effect code follows `EFFECT.md`, which starts by sending you to
   Effect's own guidance for the pinned version: read it before writing
   Effect code. While the `release/v3` branch lives, `V3.md`
@@ -28,4 +30,18 @@
 - Docs state what is and why it is so. A comparison with another
   product or codebase goes in a report, a PR body or a thread, not a
   doc.
+- A comment stays only when it says what the code can't: a quirk, a
+  workaround and what it works around, an invariant or an ordering a
+  reader could break, a why that isn't obvious. A doc comment on an
+  exported API keeps the one line that says what it is for when its
+  name doesn't. The READMEs are not comments.
+- A fix names the defect's class, the earlier failures of that class,
+  the search made for its siblings and that search's scope, and what
+  became of each sibling: fixed with it, its own PR, or left, with the
+  reason in the PR's description.
+- Path identity and host identity are boundary policies every
+  consumer shares. After a failure of either, check every consumer:
+  linked data folders, project and custom paths, a second volume,
+  denied folders, public and Enterprise GitHub hosts, and more than
+  one machine.
 - `skills/` is for people using `sm`, not instructions for this repo.
