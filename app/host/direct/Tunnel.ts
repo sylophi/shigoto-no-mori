@@ -76,16 +76,17 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // rung) for as long as the child lives: a live connector that is not
 // routable yet is waiting on DNS, not broken, and the child exiting is
 // the one failure signal (a dead token makes cloudflared exit). The
-// first attempt waits out CNAME propagation on purpose. Probing a
-// brand-new hostname within a second of provisioning it earns an
-// NXDOMAIN that the OS resolver then caches for the zone's negative
-// TTL (30 minutes on Cloudflare), during which no probe from this
-// machine can succeed and every restart would re-provision for
-// nothing. A child that merely survives a spawn says nothing about
-// routability, and a web client whose ONLY candidate is the tunnel
-// would burn its keeper's backoff rungs against a not-yet-routable
-// advertisement (a transient failure, so it retries forever -- but
-// each wasted rung pushes the next attempt further out).
+// first attempt waits out CNAME propagation: a probe that comes first
+// reaches the tunnel zone's wildcard record (hub/README.md), whose
+// address the edge can't reach, and only times out. The wildcard is
+// why that costs only the attempt: without it the name would answer
+// NXDOMAIN, which the OS resolver caches for the zone's negative TTL
+// (30 minutes on Cloudflare), during which no probe from this machine
+// could succeed. A child that merely survives a spawn says nothing
+// about routability, and a web client whose ONLY candidate is the
+// tunnel would burn its keeper's backoff rungs against a
+// not-yet-routable advertisement (a transient failure, so it retries
+// forever -- but each wasted rung pushes the next attempt further out).
 export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
   5_000, 8_000,
 ];
@@ -102,10 +103,9 @@ export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
 // Past this, one warning names the hostname that is still not
 // routable, so a stuck tunnel is visible in the log without the
 // runner giving up on a healthy child, and the probe slows to the
-// rung below: a hostname that stays unroutable (a negative DNS answer
-// cached for the zone's TTL, a deleted record) costs one edge request
-// a minute, not one every eight seconds, for as long as the child
-// lives.
+// rung below: a hostname that stays unroutable (a slow propagation, a
+// deleted record) costs one edge request a minute, not one every eight
+// seconds, for as long as the child lives.
 export const TUNNEL_PROBE_WARN_MS = 60_000;
 export const TUNNEL_PROBE_SLOW_MS = 60_000;
 // Past the deadline, the child is treated exactly like one that died:
@@ -113,10 +113,10 @@ export const TUNNEL_PROBE_SLOW_MS = 60_000;
 // reached readiness the restart re-provisions rather than reusing its
 // possibly-dead token. Two deadlines, chosen by what the Worker said:
 // a tunnel it just CREATED (dnsCreated) has a brand-new DNS record
-// that may take a while to resolve, so it gets one long enough to
-// outlast a cached negative answer. A reused tunnel resolved before,
-// so a probe that keeps failing means a deleted record or a stale
-// ingress, and the re-provision is what repairs those.
+// that may take a while to route, so it gets a long one. A reused
+// tunnel resolved before, so a probe that keeps failing means a
+// deleted record or a stale ingress, and the re-provision is what
+// repairs those.
 export const TUNNEL_PROBE_DEADLINE_MS = 60_000;
 export { TUNNEL_PROBE_DEADLINE_FRESH_MS };
 
