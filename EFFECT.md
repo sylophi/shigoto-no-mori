@@ -11,8 +11,8 @@ Effect is pinned to one exact version, the latest stable release (the
 workspace catalog), and a bump is a PR of its own. Effect itself is
 never patched; a gap is wrapped on our side. Read Effect's own
 guidance for that version before writing Effect code: `AGENTS.md` in
-the installed package
-(`node_modules/effect` in any package of the workspace, such as
+the installed package (`node_modules/effect` in any package of the
+workspace, such as
 `app/node_modules/effect/AGENTS.md`), the `ai-docs/` examples beside it
 that it links, and for Schema, `SCHEMA.md` at the pinned tag
 (`https://github.com/Effect-TS/effect/blob/effect@4.0.2/packages/effect/SCHEMA.md`,
@@ -245,22 +245,21 @@ export const layer = Layer.effect(Registry, make);
   `Effect.repeat`. No timer ladders, no counters.
 - Timeouts are `Effect.timeout` and its variants. No `Promise.race`
   against a sleep.
-- **A path back from every failure.** Every failed or parked state
-  names its way out. A transient failure (the network, a timeout, DNS,
-  a deploy, configuration, a child that won't start) gets a retry with
-  a cap, owned by a scope, or a retry the user sees and presses. Only a
-  fact about identity, version, deletion or the user's intent parks for
-  good: a revoked or superseded device, a build the hub turns away. A
-  wake, the network coming back and a session landing each reach the
-  owner that waits on them.
-- **A deadline bounds a wait, not an outcome.** An operation that
-  commits elsewhere (a GitHub merge, a transfer, an update) has one
-  elapsed budget through all its phases, in monotonic time or in
-  polls, so a sleep or a clock step spends none of it. A poll that
-  fails is asked again within the budget, and past it the real result
-  is read before anything is reported: a merge that landed while its
-  poll timed out reads as merged. Nothing replays a create, merge,
-  send, install or delete to cure a timeout.
+- Every failed or parked state names its way out. A transient failure
+  (the network, a timeout, DNS, a deploy, configuration, a child that
+  won't start) gets a retry with capped backoff, owned by a scope, or a
+  retry the user sees and presses. Only a fact about identity, version,
+  deletion or the user's intent parks for good: a revoked or superseded
+  device, a build the hub turns away. A wake, the network coming back
+  and a session landing each reach the owner that waits on them.
+- A deadline bounds a wait, not an outcome. An operation that commits
+  elsewhere (a GitHub merge, a transfer, an update) has one elapsed
+  budget through all its phases, in monotonic time or in polls, so a
+  sleep or a clock step spends none of it. A poll that fails is asked
+  again within the budget, and past it the real result is read before
+  anything is reported: a merge that landed while its poll timed out
+  reads as merged. Nothing replays a create, merge, send, install or
+  delete to cure a timeout.
 - A sequence of values over time is a `Stream`. A watcher is the
   `FileSystem` service's `watch` plus `Stream.debounce`; a fan-out is a
   `PubSub` read as a Stream; a bounded buffer is a `Queue`.
@@ -285,19 +284,20 @@ export const layer = Layer.effect(Registry, make);
   contracts reads `Date.now()` or `new Date()` (`no-wall-clock`); code
   there that is not Effect takes `now` as a parameter, as
   `host/direct/tickets.ts` does, and measures with `performance.now()`.
-- **Time.** Every time decision names its meaning, its owner and its
-  clock. An instant (a date shown to a person, a persisted record, file
-  metadata, an authority's token expiry, a time compared with another
-  device's) is `Clock.currentTimeMillis` or `DateTime.now`, and dates
-  are parsed, formatted and computed with `DateTime`, not `Date`.
-  Elapsed time (a deadline, a timeout, a rate) is
-  `Clock.monotonicTimeNanos`, `Effect.timed` or a relative timer
-  (`Effect.sleep`, `Effect.timeout`), never the difference of two
-  instants. In this version `currentTimeMillis` and `currentTimeNanos`
-  are both the wall clock, which a clock step moves, and so is what
-  Effect's RPC pinger, `Schedule`'s elapsed limits and `Cache`'s TTLs
-  read. The `Clock` is never replaced wholesale with a monotonic one,
-  which would corrupt every instant.
+- Every time decision names its meaning, its owner and its clock. An
+  instant (a date shown to a person, a persisted record, file metadata,
+  an authority's token expiry, a time compared with another device's)
+  is `Clock.currentTimeMillis` or `DateTime.now`, and dates are parsed,
+  formatted and computed with `DateTime`, not `Date`. Elapsed time (a
+  deadline, a timeout, a rate) is `Clock.monotonicTimeNanos`,
+  `Effect.timed` or a relative timer (`Effect.sleep`, `Effect.timeout`),
+  never the difference of two instants; a gap on the wall clock only
+  shows that this end didn't run, as `engine/liveness.ts` reads it. In
+  this version `currentTimeMillis` and `currentTimeNanos` are both the
+  wall clock, which a clock step moves, and so is what Effect's RPC
+  pinger, `Schedule`'s elapsed limits and `Cache`'s TTLs read. The
+  `Clock` is never replaced wholesale with a monotonic one, which would
+  corrupt every instant.
 - Every elapsed policy says what a sleep or a stopped process does to
   it: it counts time awake, or time including the sleep, or it is an
   absolute deadline. A Mac's monotonic clock stands still in a sleep
@@ -334,42 +334,42 @@ export const layer = Layer.effect(Registry, make);
   client that needs a view subscribes and stops asking what changed.
 - Cancellation is RPC interruption. No cancel registries, no
   `AbortSignal` threading.
-- **A link on this machine has a lifecycle, not a heartbeat.** The
-  shell's ports to its windows and its host, and the loopback dials of
-  a window, the shell and the terminal `sm` to their own host, close
-  when the port or the process at either end goes, or the operation is
+- A link on this machine has a lifecycle, not a heartbeat. The shell's
+  ports to its windows and its host, and the loopback dials of a
+  window, the shell and the terminal `sm` to their own host, close when
+  the port or the process at either end goes, or the operation is
   cancelled. No end judges the other by pings, and the loopback
   listener cuts none of them for silence. The shell's watchdog
   (`main/core/host/watchdog.ts`) is the one judge of whether the host
   still answers: it kills a silent host and starts another, and the
   links dial that one. A window's timer never decides on its own that
   its shell or its host is gone.
-- **A frame a server can't read** is logged with its size and the
-  parse error, never its bytes, which can carry a token
+- A frame a server can't read is logged with its size and the parse
+  error, never its bytes, which can carry a token
   (`shared/remote/rpcServer.ts`). A socket is read as a stream, and a
   parser that failed can't find the next frame, so the connection
-  closes and its owner dials again. A port keeps its messages whole,
-  so the one message is dropped, its calls unanswered, and the port
-  stays up (`pnpm test shell-link`).
-- **One owner retries a link, and one authority reports its
-  liveness.** A transport dials once (`quietProtocol` in
-  `engine/rpcClient.ts`), under an owner that dials again (the direct
-  keeper, `hostLink`). The host's cut of a silent
-  peer frees its slot; it isn't a second verdict on the peer. A link
-  is torn down once and tells its owner once.
-- **No overdue timer is evidence** that the other side had a chance
-  to answer. A link to another machine (a device's, the hub socket)
-  is judged only on a fresh probe that was out for its whole window
-  while this end ran (`engine/liveness.ts`): a probe past its timeout
-  is the cue for a fresh one, a turn that comes late by either clock
-  (a hidden page's throttled timers, a sleep, a stopped process) asks
-  again, and any frame after the probe answers it. A question asked
-  once follows the same rule (`answerWithin`): one whose limit came
-  late asks again rather than give up. The host's cut of a silent
-  remote peer counts silence in monotonic time
-  (`host/socket/DeviceLink.ts`). Effect's RPC pinger judges a link by
-  its last frame's age on the wall clock, so it judges nothing here;
-  its pings only keep the far end's slot.
+  closes and its owner dials again. A port keeps its messages whole, so
+  the one message is dropped, its calls unanswered, and the port stays
+  up (`pnpm test shell-link`).
+- One owner retries a link, and one authority reports its liveness. A
+  transport dials once (`quietProtocol` in `engine/rpcClient.ts`); a
+  link that is dialed again has one owner that does it, the direct
+  keeper (`shared/hub/directKeeper.ts`) for a peer's and
+  `shared/remote/hostLink.ts` for this machine's host's. The host's cut
+  of a silent peer frees its slot; it isn't a second verdict on the
+  peer. A link is torn down once and tells its owner once.
+- No overdue timer is evidence that the other side had a chance to
+  answer. A link to another machine (a device's, the hub socket) is
+  judged only on a fresh probe that was out for its whole window while
+  this end ran (`engine/liveness.ts`): a probe past its timeout is the
+  cue for a fresh one, a turn that comes late by either clock (a hidden
+  page's throttled timers, a sleep, a stopped process) asks again, and
+  any frame after the probe answers it. A question asked once follows
+  the same rule (`answerWithin`): one whose limit came late asks again
+  rather than give up. The host's cut of a silent remote peer counts
+  silence in monotonic time (`host/socket/DeviceLink.ts`). Effect's RPC
+  pinger judges a link by its last frame's age on the wall clock, so it
+  judges nothing here; its pings only keep the far end's slot.
 - An adapter keeps the transport's status and the peer's identity in
   what it raises, and a link logs its lifecycle transitions, inbound
   and outbound.
@@ -387,6 +387,15 @@ export const layer = Layer.effect(Registry, make);
   timeout to pass is wrong. A proof gets one from `testClock()`
   (`app/test/lib/checkKit.mts`) and waits on a condition with
   `waitFor`, never on a fixed delay.
+- A proof of a time decision moves the clocks apart, as a machine
+  does: a sleep (the wall clock runs on while monotonic time and every
+  timer stand still) or a stopped process (both clocks run on and no
+  timer runs), carried past the timeouts in play, and the epoch
+  stepped forward and back with monotonic time still (`sleepingClock`
+  in `app/test/lib/checkKit.mts`, `pnpm test clock-steps`). A
+  `TestClock` jump alone is not a sleeping laptop. The proof checks
+  that the user sees the thing recover and that no committed action
+  ran twice.
 - Tests are plain vitest cases that run their effects on the runtime
   of the thing under test: the engine sandbox's `box.engine(effect)`,
   the proofs' `runHost(effect)`. Effect's guidance uses `it.effect`
@@ -400,15 +409,6 @@ export const layer = Layer.effect(Registry, make);
   between each pair of its external steps and by a recovery that
   itself fails, and its cleanup is proved after a refusal and after a
   kill, not only after success.
-- A proof of a time decision moves the clocks apart, as a machine
-  does: a sleep (the wall clock runs on while monotonic time and every
-  timer stand still) and a stopped process (both clocks run on and no
-  timer runs), each carried past the timeouts in play, and the epoch
-  stepped forward and back with monotonic time still (`sleepingClock`
-  in `app/test/lib/checkKit.mts`, `pnpm test clock-steps`). A
-  `TestClock` jump alone is not a sleeping laptop. The proof checks
-  that the user sees the thing recover and that no committed action
-  ran twice.
 - A burst of pushes is proved by a bounded call count and no
   cancellations.
 
@@ -424,10 +424,11 @@ is a call that reads the view now and answers once that read landed
 (`Views.refresh` in `app/host/lib/Views.ts`), so a spinner bound to it
 ends on time. A request (a value computed when asked, or an action) is
 a React Query query or mutation; a push never feeds a reactivity key.
-Requests don't go through `effect/reactivity`'s AtomRpc: it keeps the
-push-to-key mapping under another name and rebuilds what React Query
+Requests don't go through `effect/reactivity`'s AtomRpc: its
+reactivity keys would be the push-to-key mapping
+(`renderer/lib/hostWatch.ts`) under another name, and what React Query
 gives a request (its error toasts, focus refetch, staleness, abort on
-unmount).
+unmount) would have to be built again.
 
 Each fact the renderer shows has one owner, a view or a request. A
 bridge that keeps two representations of one fact in agreement says
