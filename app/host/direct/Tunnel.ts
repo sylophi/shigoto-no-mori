@@ -76,17 +76,18 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // rung) for as long as the child lives: a live connector that is not
 // routable yet is waiting on DNS, not broken, and the child exiting is
 // the one failure signal (a dead token makes cloudflared exit). The
-// first attempt waits out CNAME propagation: a probe that comes before
-// it reaches the tunnel zone's wildcard record (hub/README.md), whose
-// address the edge can't reach, and only times out. The wildcard is
-// why that costs only the attempt: without it the name would answer
-// NXDOMAIN, which the OS resolver caches for the zone's negative TTL
-// (30 minutes on Cloudflare), during which no probe from this machine
-// could succeed. A child that merely survives a spawn says nothing
-// about routability, and a web client whose ONLY candidate is the
-// tunnel would burn its keeper's backoff rungs against a
-// not-yet-routable advertisement (a transient failure, so it retries
-// forever -- but each wasted rung pushes the next attempt further out).
+// first attempt waits 5 s for CNAME propagation. A probe earlier than
+// the CNAME reaches the tunnel zone's wildcard record (hub/README.md),
+// whose address the edge can't reach, and only times out. The
+// wildcard is why that costs only the attempt: without it the name
+// would answer NXDOMAIN, which the OS resolver caches for the zone's
+// negative TTL (30 minutes on Cloudflare), during which no probe from
+// this machine could succeed. A child that merely survives a spawn
+// says nothing about routability, and a web client whose ONLY
+// candidate is the tunnel would burn its keeper's backoff rungs
+// against a not-yet-routable advertisement (a transient failure, so it
+// retries forever -- but each wasted rung pushes the next attempt
+// further out).
 export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
   5_000, 8_000,
 ];
@@ -113,7 +114,7 @@ export const TUNNEL_PROBE_SLOW_MS = 60_000;
 // reached readiness the restart re-provisions rather than reusing its
 // possibly-dead token. Two deadlines, chosen by what the Worker said:
 // a tunnel it just CREATED (dnsCreated) has a brand-new DNS record,
-// which has taken minutes to route, so it gets a long one. A reused
+// which can take minutes to route, so it gets a long one. A reused
 // tunnel resolved before, so a probe that keeps failing means a
 // deleted record or a stale ingress, and the re-provision is what
 // repairs those.
