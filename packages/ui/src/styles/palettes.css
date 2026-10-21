@@ -173,7 +173,7 @@
    so it reads as brown and not as cream's yellow or a peach, lighter
    cards on it, chocolate text, and the rail, the action and the
    positive status a matcha green, greyed toward olive to sit on the
-   brown. Its hidden variants (shared/themes.ts) share this block and
+   brown. Its hidden variants (lib/themes.ts) share this block and
    move only their greens below: sage, a cooler grey-green, and mocha,
    a brown rail with a sage action. */
 [data-theme-scope].doubutsu:is(
@@ -372,11 +372,9 @@
 }
 
 /* --- Wood ---
-   The dark palette the app shipped with: the cream layers darkened
-   into warm wood tints (hue 70 to 85 at low chroma), a dim mint rail,
-   and milk-tea outline buttons. Kept as a pick for anyone who settled
-   in with it. The popover sits a step above the card, as the others
-   do now. Every other value is the original. */
+   The cream layers darkened into warm wood tints (hue 70 to 85 at
+   low chroma), a dim mint rail, and milk-tea outline buttons. The
+   popover sits a step above the card. */
 [data-theme-scope].doubutsu.dark[data-palette="wood"] {
   --background: oklch(0.219 0.008 84.6);
   --foreground: oklch(0.942 0.011 76.6);

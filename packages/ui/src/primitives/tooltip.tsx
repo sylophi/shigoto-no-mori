@@ -94,7 +94,7 @@ type TooltipChild = ReactElement<
 // React drops mouse handlers on a disabled element, and Base UI opens
 // on mousemove, but a wrapper's still run, and the span adds no box.
 // (So a child that turns disabled is remounted into the span.)
-// Newlines in string tips are preserved like multiline titles were.
+// A string tip's newlines break its lines, as in a `title`.
 // `delay` overrides the 500ms opening delay for this trigger.
 // `whenTruncated` is for a tip that only repeats text on screen in
 // full: it opens only while that text is cut off. `lazy` is for such a
@@ -166,8 +166,8 @@ function SimpleTooltip({
       >
         {/* One wrapper span keeps a mixed text/element tip a single
             flex item: TooltipContent is inline-flex with a gap, which
-            would otherwise space out every text run. pre-line preserves
-            \n like the native titles this replaces. */}
+            would otherwise space out every text run. pre-line keeps a
+            tip's \n, as a native `title` does. */}
         <span className="whitespace-pre-line">{tip}</span>
       </TooltipContent>
     </Tooltip>

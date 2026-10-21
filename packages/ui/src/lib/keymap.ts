@@ -1,27 +1,26 @@
 // The app's keymap: every key it answers, as a named action with its
-// words, its default chord and the scope it acts in (V3.md, "The
-// keymap"). The menu's accelerators, the palette's verbs, the rows'
-// hints and the window's listener all read this table, through the
-// device's bindings (`keybindings` in the client config). A control's
-// own keys (Enter in a field, the arrows in a list, Escape out of a
-// dialog) are the control's and stay out, and so are the switches for
-// what is still an experiment: the dev builds' theme keys and the
-// palettes' hidden variants (usePaletteVariantHotkey).
+// words, its default chord and the scope it acts in. The menu's
+// accelerators, the palette's verbs, the rows' hints and the window's
+// listener all read this table, through the device's bindings
+// (`keybindings` in the client config). A control's own keys (Enter in
+// a field, the arrows in a list, Escape out of a dialog) are the
+// control's and stay out, and so are the switches for what is still an
+// experiment: the dev builds' theme keys and the palettes' hidden
+// variants (usePaletteVariantHotkey).
 //
 // A chord is written once: `Mod` is ⌘ on macOS and Ctrl elsewhere. A
-// letter or a digit is the one the key types, whichever key types it, as
-// the app's shortcuts always were: ⌘K on Dvorak or Colemak is the key
-// that types K, ⌘M on AZERTY the key that types M. With Alt held (⌥
-// composing a symbol, AltGr typing a layout's third character), or
-// where the layout types no Latin letter or digit (Cyrillic, Greek),
-// it is the physical key, named as on a US keyboard
-// (`KeyboardEvent.code`), as macOS's own ⌘ shortcuts fall back. Every
-// other key is the physical one: the terminal's Ctrl+` names the key
-// left of 1, which many layouts type no backtick on. A ⌘ chord also
-// answers extra modifiers (bindingOf). On macOS the palette's, the
-// commit's, the palette's changes' and an edit's save also answer Ctrl
-// in place of ⌘, as they always did (⌃K is ⌘K, ⌃↩ is ⌘↩); no other
-// chord has a Ctrl twin.
+// letter or a digit is the one the key types, whichever key types it:
+// ⌘K on Dvorak or Colemak is the key that types K, ⌘M on AZERTY the key
+// that types M. With Alt held (⌥ composing a symbol, AltGr typing a
+// layout's third character), or where the layout types no Latin letter
+// or digit (Cyrillic, Greek), it is the physical key, named as on a US
+// keyboard (`KeyboardEvent.code`), as macOS's own ⌘ shortcuts fall
+// back. Every other key is the physical one: the terminal's Ctrl+`
+// names the key left of 1, which many layouts type no backtick on. A ⌘
+// chord also answers extra modifiers (bindingOf). On macOS the
+// palette's, the commit's, the palette's changes' and an edit's save
+// also answer Ctrl in place of ⌘ (⌃K is ⌘K, ⌃↩ is ⌘↩); no other chord
+// has a Ctrl twin.
 
 // Where an action acts. The window is every page; a page or a dialog
 // is only itself, so two of them can share a chord.
@@ -425,10 +424,9 @@ export function bindingOf(
         return !taken.some((other) => samePressed(other, held));
       }
       // A ⌘ chord also answers the same press with Shift, Alt or Ctrl
-      // held as well, as the app's ⌘K and ⌘↩ always did, unless another
-      // binding in reach takes that press (⇧⌘N is Add project, not New
-      // window). Ctrl and Alt together off a Mac are AltGr typing a
-      // character, never a chord's extra.
+      // held as well, unless another binding in reach takes that press
+      // (⇧⌘N is Add project, not New window). Ctrl and Alt together off
+      // a Mac are AltGr typing a character, never a chord's extra.
       return (
         chord.mod &&
         held.key === keys.key &&

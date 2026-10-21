@@ -1,4 +1,4 @@
-// The home with no project, a fresh install's first screen: v2's
+// The home with no project, a fresh install's first screen: an
 // orientation, the way to the first project, and what it leads to.
 import type { ReactNode } from "react";
 import { TreeDeciduous } from "lucide-react";

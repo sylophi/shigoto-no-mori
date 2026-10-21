@@ -15,8 +15,7 @@ interface ArrangeScriptRowProps {
   name: string;
   // What the cell reads: the name within its file's group.
   label: string;
-  // Undefined when the host predates pinning, which hides the toggle.
-  pinned: boolean | undefined;
+  pinned: boolean;
   onPin: (onRow: boolean) => void;
 }
 
@@ -64,20 +63,18 @@ export function ArrangeScriptRowView({
       >
         <ScriptCellContent label={label} />
       </div>
-      {pinned !== undefined && (
-        <button
-          type="button"
-          onClick={() => onPin(!pinned)}
-          aria-label={pinLabel}
-          aria-pressed={pinned}
-          className={cn(
-            PIN,
-            "transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
-          )}
-        >
-          <PinIcon pinned={pinned} />
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => onPin(!pinned)}
+        aria-label={pinLabel}
+        aria-pressed={pinned}
+        className={cn(
+          PIN,
+          "transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:outline-none",
+        )}
+      >
+        <PinIcon pinned={pinned} />
+      </button>
     </div>
   );
 }
@@ -87,7 +84,7 @@ export function ScriptDragPreviewView({
   pinned,
 }: {
   label: string;
-  pinned: boolean | undefined;
+  pinned: boolean;
 }) {
   return (
     <div
@@ -99,11 +96,9 @@ export function ScriptDragPreviewView({
       <div className={HANDLE}>
         <ScriptCellContent label={label} />
       </div>
-      {pinned !== undefined && (
-        <span className={PIN}>
-          <PinIcon pinned={pinned} />
-        </span>
-      )}
+      <span className={PIN}>
+        <PinIcon pinned={pinned} />
+      </span>
     </div>
   );
 }
