@@ -66,8 +66,7 @@ export class Terrier extends Context.Service<
   }
 >()("sm/engine/Terrier") {}
 
-// Why `terrier ls --json` couldn't be read, in the Go sm's words where
-// they are its own.
+// Why `terrier ls --json` couldn't be read.
 class TerrierUnreadable extends Schema.TaggedError<TerrierUnreadable>()(
   "TerrierUnreadable",
   { reason: Schema.String },
@@ -83,7 +82,8 @@ const parseListing = (
   try {
     doc = JSON.parse(stdout);
   } catch (error) {
-    // Go's words for the commonest case, output that isn't JSON at all.
+    // Go's encoding/json words for the commonest case, output that isn't
+    // JSON at all.
     const first = stdout.trimStart()[0];
     return Effect.fail(
       new TerrierUnreadable({

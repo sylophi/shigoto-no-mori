@@ -250,10 +250,10 @@ const make = (binary: string) =>
     const worktrees = yield* Worktrees.Worktrees;
     const open = yield* Open.Open;
     const launchers = yield* Launchers.Launchers;
-    // By its real path, as Go's sm named itself, so the app (its bundled
-    // copy) and a terminal (through the linked command) write the same
-    // entry and agree on whether it is current. One not built yet (a dev
-    // run) keeps the path given.
+    // By its real path, so the app (its bundled copy) and a terminal
+    // (through the linked command) write the same entry and agree on
+    // whether it is current. One not built yet (a dev run) keeps the
+    // path given.
     const sm = yield* fs
       .realPath(binary)
       .pipe(Effect.orElseSucceed(() => binary));

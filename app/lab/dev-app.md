@@ -57,10 +57,10 @@ A device is made of two folders:
   it). The device id is created per data dir, so one data dir is one
   device. A v2 data dir's `registry.json`, `state.json`, `config.json`
   and `projects/` are imported into the store once and left as they
-  were, and its `worktrees/` move to `wt/`. A pre-2.0 `~/shigomori`
-  (`~/shigomori-dev`) that still holds state is adopted in place until
-  `~/.sm` (`~/.smd`) holds state; Settings > Data location offers to
-  rename it, and `sm doctor` warns.
+  were, and its `worktrees/` move to `wt/`. Prod adopts a pre-2.0
+  `~/shigomori` that still holds state in place until `~/.sm` holds
+  state; Settings > Data location offers to rename it, and `sm doctor`
+  warns.
 - **userData.** The app instance: `account.json` (hub credential and
   the accept-commands switch), `clientConfig.json` (theme,
   keep reachable, keybindings), `clerk-tokens.json` (Clerk session),
@@ -200,10 +200,6 @@ each other over the LAN.
 ~/.smd-profiles/<name>/repos   test repos for the profile
 <dev userData>/profiles/<name>          userData
 ```
-
-Profiles made before 2.0 lived under `~/shigomori-dev-profiles/<name>/`
-and are not migrated: revoke their devices, delete that folder, and
-start them again with `--fresh`.
 
 Profile names are lowercase letters, digits and dashes, up to 32
 characters. `scripts/lib/devProfile.mts` owns the layout.

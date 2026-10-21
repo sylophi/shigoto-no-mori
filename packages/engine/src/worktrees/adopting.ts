@@ -77,8 +77,7 @@ export const makeAdopting = ({
           // ref the replacement holds: just before the removal its HEAD
           // must still be the replacement's, or both checkouts stay, the
           // commits held either way, and the adopt is refused. (A commit
-          // in the moments between this read and the removal is left:
-          // V3.md, Commit points.)
+          // made between this read and the removal isn't caught.)
           const [original, replacement] = yield* Effect.all([
             git.verifyRev(worktree.path, "HEAD").pipe(Effect.option),
             git.verifyRev(added.made.path, "HEAD").pipe(Effect.option),

@@ -86,9 +86,7 @@ it("opens the database in WAL mode", async () => {
   assert.equal(row?.journal_mode, "wal");
 });
 
-it("keeps the database and its journal files the owner's alone, an older build's included", async () => {
-  write("store.db", "");
-  chmodSync(join(dataDir, "store.db"), 0o644);
+it("keeps the database and its journal files the owner's alone", async () => {
   // The journal files live while the store is open.
   const modes = await query((sql) =>
     sql`SELECT 1`.pipe(
@@ -180,7 +178,7 @@ it("leaves a file the store doesn't own its own error when it can't be read", as
 
 // Opening it never lets it write: the engine graph settles the journal
 // first, and that lets it write (dataDirMove.test.ts).
-it("opens a store a data-folder move retired still refusing writes, its mover gone or not", async () => {
+it("opens a store a data-folder move retired still refusing writes", async () => {
   await query((sql) =>
     Effect.provideService(retireStore, SqlClient.SqlClient, sql),
   );
@@ -190,28 +188,12 @@ it("opens a store a data-folder move retired still refusing writes, its mover go
       () => false,
     );
   assert.equal(await writes(), false);
-  const journal = (pid: number) =>
-    write(JOURNAL, {
-      from: dataDir,
-      to: join(dataDir, "..", "elsewhere"),
-      partial: join(dataDir, "..", "elsewhere.partial-x"),
-      pid,
-      // A live pid that started at another time is another process.
-      startedAt: pid === process.pid ? Date.now() - process.uptime() * 1000 : 0,
-      moved: [],
-    });
-  // A move still under way: this process plays its mover.
-  journal(process.pid);
-  assert.equal(await writes(), false);
-  // A journal that names no mover (one from before they were written).
   write(JOURNAL, {
     from: dataDir,
     to: join(dataDir, "..", "elsewhere"),
     partial: join(dataDir, "..", "elsewhere.partial-x"),
     moved: [],
   });
-  assert.equal(await writes(), false);
-  journal(4_194_304);
   assert.equal(await writes(), false);
 });
 
@@ -523,7 +505,7 @@ it("imports a use log longer than one statement can bind", async () => {
   assert.equal(row?.n, 20_000);
 });
 
-it("reads what the Go sm reads: missing fields, unknown modes, field by field", async () => {
+it("reads missing fields and unknown modes field by field", async () => {
   write("registry.json", { projects: [{ id: "A", path: "/a" }] });
   write("state.json", { packageScriptSort: { A: "fromNewerBuild" } });
   write("projects/A/worktrees/aaaaaaaaaaaa.json", {

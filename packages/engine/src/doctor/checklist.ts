@@ -75,7 +75,7 @@ export const makeChecklist = ({
 
     // Every check. With `files`, the store's services read the 2.x files
     // (`Store.fromFiles`), and the lines that judge those files come from
-    // reading them as Go did.
+    // reading them leniently.
     const checkAll = (input: RunInput, files: Option.Option<FileReads>) =>
       Effect.gen(function* () {
         const terrier = yield* Terrier.Terrier;

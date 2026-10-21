@@ -55,8 +55,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
 
     // By rm, not FileSystem.remove: in the app, Electron's fs takes the
     // app.asar inside a bundle for a folder, so a recursive remove of an
-    // .app fails on it, leaving a husk a rename onto then refuses
-    // (v3.0.0-alpha.4 to alpha.6 never staged an update).
+    // .app fails on it, leaving a husk a rename onto then refuses.
     const removeAll = (target: string) =>
       run("rm", ["-rf", "--", target]).pipe(
         Effect.flatMap((ran) =>
@@ -88,7 +87,7 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
         Effect.orElseSucceed(() => Option.none<A>()),
       );
 
-    // Written whole through a temporary file beside it, as the Go sm wrote.
+    // Written whole through a temporary file beside it.
     const writeShared = Effect.fn("Updater.writeShared")(function* (
       file: string,
       text: string,

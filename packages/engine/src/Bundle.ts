@@ -101,8 +101,7 @@ export class Bundle extends Context.Service<
   }
 >()("sm/engine/Bundle") {}
 
-// Git's words for a failed run, as Go said them: the command, then
-// its stderr.
+// Git's words for a failed run: the command, then its stderr.
 const said = (args: ReadonlyArray<string>) => (error: Git.GitError) =>
   `git ${args.join(" ")}: ${error instanceof Git.GitCommandError ? Git.stderrOf(error) : error.message}`;
 

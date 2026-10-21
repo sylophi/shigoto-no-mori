@@ -295,8 +295,8 @@ const deviceKeys = settingKeys(
     hiddenLaunchers: { entryProblem: launcherIdProblem },
   },
 );
-// The Go sm named the terminals by id (terminalIDs), where Settings
-// lists them in its own order. The editor names a catalog tool marked
+// `sm config` lists the terminals by id, sorted, where Settings lists
+// them in its own order. The editor names a catalog tool marked
 // editor, which the contract's string can't say. `set` holds it to
 // those, and a stored id the catalog no longer lists still reads and
 // writes back.
