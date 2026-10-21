@@ -13,8 +13,8 @@ interface ProjectHeaderProps {
   icon: React.ReactNode;
   // The merged tree's device badge cluster, rendered after the name of
   // the open (or inline, an unfolded) project only: the list's rows are
-  // names alone, since every row wearing them made the list a wall of
-  // icons.
+  // names alone, since badges on every row would make the list a wall
+  // of icons.
   badges?: React.ReactNode;
   // Some checkout in the header's group is terrier-sourced and Mark
   // terrier projects is on (useSidebarMarks), which puts the paw after

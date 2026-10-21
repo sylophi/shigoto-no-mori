@@ -1,10 +1,9 @@
 // The conflict list behind the mirror's conflict chip. A path both
 // devices changed since they last agreed is held still by the engine:
 // neither copy is overwritten, while everything else keeps moving.
-// Those paths used to live in the chip's `title`, capped at five and
-// out of reach of a keyboard or a touch screen, so they sit in a menu
-// the chip opens instead, with what each side did to them and the one
-// sentence that clears them.
+// Those paths sit in a menu the chip opens, with what each side did to
+// them and the one sentence that clears them, not in the chip's
+// `title`, which a keyboard or a touch screen can't reach.
 import { capitalized } from "@shigomori/contracts/words";
 import { FolderOpen, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";

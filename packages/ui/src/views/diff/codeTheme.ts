@@ -6,9 +6,9 @@ export const CODE_THEME = {
   // per-row backgrounds (buffer, context, separator) derive from
   // `--diffs-bg` via color-mix, so overriding the one variable
   // cascades through the whole surface. Without this the code reads as
-  // a pitch-black slab against the lifted neutral-900 main pane that
-  // PR #59 introduced. `unsafeCSS` is the documented path for CSS
-  // overrides. See https://diffs.com/docs (Hunk Separators).
+  // a pitch-black slab against the lifted main pane (index.css).
+  // `unsafeCSS` is the documented path for CSS overrides. See
+  // https://diffs.com/docs (Hunk Separators).
   // The code blocks take the app's native scrollbar (index.css), so
   // they scroll only when they overflow and reserve no gutter: where
   // the platform draws classic bars, the library's always-on scroll and

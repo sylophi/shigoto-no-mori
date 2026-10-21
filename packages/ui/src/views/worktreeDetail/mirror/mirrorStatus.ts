@@ -88,7 +88,7 @@ const HALT_DETAIL: Record<string, string> = {
 // What the surface knows beside the session: the runner's reach (a
 // peer runner with no session up leaves only its last list, cached),
 // and its engine's state (a restarting engine lists its last sessions,
-// host/ipc/modules/mirror.ts mirrorListOf).
+// host/mirror/sessions.ts mirrorList).
 type MirrorContext = {
   runnerAway?: string;
   engine?: MirrorDaemonStatus;

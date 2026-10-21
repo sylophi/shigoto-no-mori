@@ -35,12 +35,7 @@ export function CliSectionView({
   // is installed and on PATH.
   shell: ReactNode;
 }) {
-  const { name, state, onPath } = status;
-  // Older stored statuses may predate foreignPaths; the worst link is
-  // always a truthful fallback.
-  const foreignPaths = status.foreignPaths?.length
-    ? status.foreignPaths
-    : [status.linkPath];
+  const { name, state, onPath, foreignPaths } = status;
   const pathLine = `export PATH="${home && status.binDir.startsWith(home) ? `$HOME${status.binDir.slice(home.length)}` : status.binDir}:$PATH"`;
 
   return (

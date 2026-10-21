@@ -117,12 +117,12 @@
 /* Outside the inline block below on purpose: inlined values leave no
    variable to remap. The type steps under Tailwind's text-xs are named
    tokens so they sit on the scale the phone layout remaps (phone.css):
-   a `text-[11px]` literal would stay 11px on a phone. They carry no
-   line-height, as the literals they replace never did. The sans stack
-   is doubutsu's to swap for Zen Maru, so `font-sans` and the body
-   read the variable rather than a Geist stack baked in. The terminal's
-   stack falls back to the Nerd Font symbols, for the icons a prompt
-   like Starship draws. */
+   a `text-[11px]` literal would stay 11px on a phone. Like such a
+   literal, they carry no line-height. The sans stack is doubutsu's to
+   swap for Zen Maru, so `font-sans` and the body read the variable
+   rather than a Geist stack baked in. The terminal's stack falls back
+   to the Nerd Font symbols, for the icons a prompt like Starship
+   draws. */
 @theme {
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
@@ -330,14 +330,15 @@
 }
 
 /*
- * The tile a project without a logo wears (shared/ProjectIcon.tsx): an
- * initial in --project-tile-ink on a cheerful shape (a rounded square,
- * or doubutsu's leaf), which paints in currentColor. The component sets
- * only --project-hue, drawn from the name. The fill's lightness and
- * chroma are tokens here, so a theme can move them. The color is set
- * on every shape, outside any layer, on purpose: menus recolor every
- * descendant on focus (dropdown-menu's `focus:**:text-accent-foreground`),
- * and that utility would otherwise repaint the tile.
+ * The tile a project without a logo wears
+ * (views/shared/ProjectIconView.tsx): an initial in --project-tile-ink
+ * on a cheerful shape (a rounded square, or doubutsu's leaf), which
+ * paints in currentColor. The component sets only --project-hue, drawn
+ * from the name. The fill's lightness and chroma are tokens here, so a
+ * theme can move them. The color is set on every shape, outside any
+ * layer, on purpose: menus recolor every descendant on focus
+ * (dropdown-menu's `focus:**:text-accent-foreground`), and that utility
+ * would otherwise repaint the tile.
  */
 [data-theme-scope] {
   --project-tile-fill: 0.72 0.13;
@@ -357,13 +358,13 @@
 }
 
 /*
- * The villager moments' motion (components/villagers). A rare one's
+ * The villager moments' motion (views/villagers). A rare one's
  * dialogue box bobs its arrow once the line is out. A legendary one's
  * letter arrives as a scene, once the toast has slid in: the flap opens
  * (.4s), the stamp drops (.6s), the letter rises (.7s), the postmark
- * presses and the sparkles pop (1.05s), then the words write and the name signs itself,
- * over stationery drifting a tile at a time. Every part rests in its
- * final state, so reduced motion just skips to it.
+ * presses and the sparkles pop (1.05s), then the words write and the
+ * name signs itself, over stationery drifting a tile at a time. Every
+ * part rests in its final state, so reduced motion just skips to it.
  */
 @keyframes villager-bob {
   0%,
@@ -393,9 +394,9 @@
   animation: villager-wipe 0.3s ease-out 1.05s both;
 }
 
-/* Village news a later move joins (lib/villagers/moves.ts): the
-   newcomer's face pops in at the front of the group, and the title
-   ticks over to name them. */
+/* Village news a later move joins
+   (app/renderer/lib/villagers/moves.ts): the newcomer's face pops in at
+   the front of the group, and the title ticks over to name them. */
 @keyframes villager-join {
   from {
     opacity: 0;
@@ -590,7 +591,7 @@
     villager-balloon-sway 2.4s ease-in-out infinite;
 }
 
-/* The Visitors album (components/visitors): each sticker pops into its
+/* The Visitors album (views/visitors): each sticker pops into its
    slot with a little overshoot, the progress fills from empty, the best
    friend's stamp drops onto the guest book and the totals press on
    after it, like the letter's postmark. */

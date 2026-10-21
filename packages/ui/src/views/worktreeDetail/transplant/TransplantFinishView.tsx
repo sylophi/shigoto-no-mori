@@ -1,10 +1,10 @@
-// Step 3 of the transplant, drawn (TransplantFinish.tsx binds it): proof it landed, then the one decision the
-// old one-shot transplant made for the user -- what happens to the
-// copy still on the source device. Keep leaves it, shelve hides it
-// (the peer's ordinary setShelved, files kept), tear down runs the
-// same guarded teardown the one-shot orchestrator did
-// (sync:teardownSource). Tear down is preselected: the work is here
-// now, and a transplant is a move, not a copy.
+// Step 3 of the transplant, drawn (TransplantFinish.tsx binds it):
+// proof it landed, then the one decision left to the user, what
+// happens to the copy still on the source device. Keep leaves it,
+// shelve hides it (the peer's ordinary setShelved, files kept), tear
+// down runs the guarded teardown (sync:teardownSource). Tear down is
+// preselected: the work is here now, and a transplant is a move, not
+// a copy.
 // A transplant to a peer ends on the same step with the two machines
 // swapped: the copy landed there and the source is this device's own
 // worktree, so its words say "there" and its teardown is the local one
