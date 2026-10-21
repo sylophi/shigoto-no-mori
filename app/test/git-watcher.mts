@@ -4,18 +4,20 @@
 // a branch deleted from the main checkout each surface as exactly one
 // project-scoped change, while the churn the allowlist exists to
 // ignore (`git status` refreshing the index, objects written, lock
-// files, a file edit in the working tree) surfaces as none. The
-// watcher's loop-safety rests on that allowlist (the app's own
-// `git status` must never feed a refetch that feeds a `git status`),
-// so this is where it is pinned. Also covered: refsDirOf resolving a
-// linked worktree's `.git` file to the repository's common dir, the
-// reconcile dropping a project that left the registry, and the working
-// trees' watch: an edit in the main checkout or a linked worktree
-// lands as one files change, `.git` churn as none, and a worktree
-// added or removed is followed. And the backstop: with the git
-// directory's events lost on purpose, a commit and a checkout are still
-// signalled, once each, a working tree whose watch ended is watched
-// again, and the mirror's index watch fires for a stage it never heard.
+// files, a file edit in the working tree, the app's own refs)
+// surfaces as none. The watcher's loop-safety rests on that allowlist
+// (the app's own `git status` must never feed a refetch that feeds a
+// `git status`), so this is where it is pinned. Also covered:
+// refsDirOf resolving a linked worktree's `.git` file to the
+// repository's common dir, the reconcile dropping a project that left
+// the registry, and the working trees' watch: an edit in the main
+// checkout or a linked worktree lands as one files change, `.git`
+// churn as none, and a worktree added or removed is followed. And the
+// backstop: with the git directory's events lost on purpose, a commit
+// and a checkout are still signalled, once each, an own ref and a ref
+// directory's churn not at all, a working tree whose watch ended is
+// watched again, and the mirror's index watch fires for a stage it
+// never heard.
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
@@ -81,7 +83,7 @@ async function caughtUp(gitDir: string): Promise<void> {
   }
 }
 
-it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operation's markers count, while objects, logs, index, FETCH_HEAD and lock files do not", async () => {
+it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operation's markers count, while objects, logs, index, FETCH_HEAD, lock files and the app's own refs do not", async () => {
   for (const path of [
     "HEAD",
     "ORIG_HEAD",
@@ -116,6 +118,11 @@ it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operatio
     "worktrees/feat/COMMIT_EDITMSG",
     "rebase-merge/done",
     "worktrees/feat/rebase-merge/msgnum",
+    "refs/shigomori",
+    "refs/shigomori/dirty/0123456789ab",
+    "refs/shigomori/incoming/feat",
+    "refs/shigomori/index/0123456789ab",
+    "refs\\shigomori\\discards\\1",
   ]) {
     assert.ok(!isRelevantGitPath(path), `${path} must not count`);
   }
@@ -233,6 +240,12 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   await delay(350);
   assert.deepEqual(changes, ["p1", "p1", "p1"]);
 
+  // The app's own refs, written and deleted, are no change.
+  git(repo, "update-ref", "refs/shigomori/dirty/0123456789ab", "HEAD");
+  git(repo, "update-ref", "-d", "refs/shigomori/dirty/0123456789ab");
+  await delay(700);
+  assert.deepEqual(changes, ["p1", "p1", "p1"], "an own ref must not ping");
+
   // Edits in either working tree land as files changes, and `.git`
   // churn (status refreshing the main checkout's index) as none.
   edits.length = 0;
@@ -338,6 +351,16 @@ it("backstop: a commit whose events were all lost is still signalled, once, and 
   await waitFor(() => changes.length >= 1, "the lost commit to be found");
   await delay(600);
   assert.deepEqual(changes, ["p1"], "one signal per move, not per tick");
+  git(repo, "update-ref", "refs/shigomori/index/0123456789ab", "HEAD");
+  await delay(600);
+  assert.deepEqual(changes, ["p1"], "an own ref is no move");
+  // A lock made and removed in a ref directory, as a fetch that moves
+  // nothing leaves it, moves only the directory's mtime.
+  const lock = join(repo, ".git", "refs", "heads", "main.lock");
+  writeFileSync(lock, "");
+  rmSync(lock);
+  await delay(600);
+  assert.deepEqual(changes, ["p1"], "a ref directory's churn is no move");
   git(repo, "checkout", "-q", "-b", "other");
   await waitFor(() => changes.length >= 2, "the lost checkout to be found");
 });
