@@ -4,9 +4,8 @@
 // runs. They live in each device's own data file, and the pair set
 // last (describedAt) is the one both keep.
 //
-// Never fatal to what carries it: the worktree is real either way,
-// and a peer from before the field answers the write with an unknown
-// channel. The callers log a failure and move on.
+// Never fatal to what carries it: the worktree is real either way. The
+// callers log a failure and move on.
 import type {
   ShigomoriWorktreeData,
   WorktreeDescription,

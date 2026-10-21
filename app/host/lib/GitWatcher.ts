@@ -14,10 +14,12 @@
 // packed-refs, refs/**, a worktree's HEAD, a worktree entry appearing
 // or vanishing), not "anything under .git": objects/ churns on every
 // commit, logs/ mirrors every ref update, FETCH_HEAD is rewritten by
-// the app's own minute sweep, and `index` is refreshed by the very
-// `git status` the app runs to list a worktree, which would loop a
-// refetch into another refetch. Uncommitted file edits are not seen
-// there: they live in the working trees.
+// the app's own minute sweep, and `index` is rewritten by every stage
+// and by another program's `git status` or `git diff` (a person's, a
+// prompt's dirty check), while a stage moves no ref: the open changes
+// page reads it on its own poll, and a mirror watches it itself
+// (mirror/gitState.ts). Uncommitted file edits are not seen there: they
+// live in the working trees.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
@@ -302,7 +304,7 @@ const make = (deps: GitWatcherDeps) =>
     // watch has heard a change not yet signalled (its debounce running),
     // by the beat it first heard one in, which the backstop leaves to it
     // for a beat. And the projects whose files didn't answer in time (a
-    // volume that hangs an open, #932), skipped until a later beat on a
+    // volume that hangs an open), skipped until a later beat on a
     // doubling wait.
     const states = new Map<string, string>();
     const hearing = new Map<string, number>();

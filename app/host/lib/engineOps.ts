@@ -5,7 +5,7 @@
 // and every read of what the engine owns (worktree rows and identities,
 // the project list and icons, the stored config, the launcher row,
 // package scripts). The app and a terminal run the same services, and
-// each function answers in the shape `sm --json` printed, decoded
+// each function answers in the shape `sm --json` prints, decoded
 // against the shared schemas, so drift fails loudly here instead of
 // surfacing as undefined-flavored breakage in the renderer.
 import * as NodeServices from "@effect/platform-node/NodeServices";

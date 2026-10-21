@@ -410,8 +410,8 @@ function makeFollower(
 ) {
   const records = new Map<string, FollowRecord>();
   const copyGoneAt = new Map<string, number>();
-  // Sessions whose title carry has failed, so a peer that can't take it
-  // (an older build) is reported once, not on every sweep.
+  // Sessions whose title carry has failed, so a carry that keeps
+  // failing is reported once, not on every sweep.
   const descriptionFailed = new Set<string>();
   const warn = deps.log ?? ((message: string) => log.warn(message));
   // The scope the reconciles run in, and what they reach, once the
