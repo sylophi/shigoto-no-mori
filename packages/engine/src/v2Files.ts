@@ -16,7 +16,7 @@ const AT_THE_TOP = [
   "registry.json",
   "config.json",
   "state.json",
-  // Read by nothing now, deleted with the rest.
+  // Not imported; deleted with the rest.
   "running-scripts.json",
   "file-sync/git-follow.json",
   "file-sync/mirror-history.json",

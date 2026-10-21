@@ -59,8 +59,8 @@ export const makeStaging = ({
     const { removeAll, prune, run, readShared, writeShared } = files;
     const { send, queryFeed } = feeds;
     const { verify } = signatures;
-    // The stager's pidfile for the rest of the run, its folder's failure
-    // in Go's words.
+    // The stager's pidfile for the rest of the run. A failure other than
+    // the lock's own reads as its folder's.
     const lock = acquireStagingLock(lockPath).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),

@@ -16,7 +16,7 @@
 //
 // The terminal's `sm doctor` must answer when the store can't open
 // (`standalone`): the checks that read only files and programs still
-// run, and the file the store refused is named as Go named it.
+// run, and the file the store refused is named.
 import { pluralize } from "@shigomori/contracts/words";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
@@ -146,7 +146,7 @@ const migrated = (imported: boolean) =>
 // needs it. `store` provides the store's services and is built inside
 // each run, and `files` the same services over the 2.x files
 // (`Store.fromFiles`). An import the store refused reads the files
-// instead, as Go did. Any other failure to open, or no data dir to
+// leniently instead. Any other failure to open, or no data dir to
 // open one in (which building it would create), runs only the checks
 // that need no state. A 2.x data dir the app has yet to migrate
 // (`owed`) is read from its files too, and the fix migrates it first,
