@@ -9,14 +9,16 @@ import { join } from "node:path";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { callOf, channelOf } from "@shigomori/contracts/contract";
-import type { Project } from "@shigomori/contracts/schemas";
+import type { ChangedFile, Project } from "@shigomori/contracts/schemas";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -35,6 +37,7 @@ import {
   worktreesViews,
 } from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
+import { GitWatcher } from "../host/lib/GitWatcher.ts";
 import * as HostPushes from "../host/lib/HostPushes.ts";
 import * as Views from "../host/lib/Views.ts";
 import * as Sharing from "../host/lib/Sharing.ts";
@@ -86,6 +89,20 @@ afterAll(async () => {
 
 type Services = Views.Services | HostServices;
 
+// The git watcher's index writes, as the checks below make them.
+const indexWrites = Effect.runSync(PubSub.unbounded<string>());
+const indexWritten = (projectId: string) =>
+  PubSub.publish(indexWrites, projectId);
+const gitWatcherLayer = Layer.succeed(
+  GitWatcher,
+  GitWatcher.of({
+    reconcile: Effect.void,
+    indexWritten: PubSub.subscribe(indexWrites).pipe(
+      Effect.map(Stream.fromSubscription),
+    ),
+  }),
+);
+
 // A view watched: `next` is its next value, `push` makes a host push as
 // the broadcast seam would, `tick` moves the clock past the store's
 // backstop look (or a view's poll), and `quiet` says nothing more came.
@@ -125,7 +142,12 @@ const watch = <A,>(
       // the body moves.
       // The host's services beneath, the proof file's own.
       Effect.provide(
-        Layer.mergeAll(StoreChanges.layer, HostPushes.layer, Views.layer).pipe(
+        Layer.mergeAll(
+          StoreChanges.layer,
+          HostPushes.layer,
+          Views.layer,
+          gitWatcherLayer,
+        ).pipe(
           Layer.provideMerge(TestClock.layer()),
           Layer.provideMerge(Layer.effectContext(Effect.promise(hostContext))),
         ),
@@ -139,6 +161,9 @@ const channel = <M extends Parameters<typeof callOf>[0]>(
 ) => channelOf(callOf(module, key));
 
 const refused = () => Effect.die(new Error("not in this check"));
+
+const stagedOf = (files: ReadonlyArray<ChangedFile>) =>
+  files.map((file) => [file.path, file.staged]);
 
 let project: Project;
 let projectId: string;
@@ -178,30 +203,42 @@ it("worktrees: an auto-pull mark set through the engine shows on its row", async
   );
 });
 
-it("a worktree's changes: an edit shows on the next poll, a commit on the project's git ping", async () => {
+it("a worktree's changes: an edit shows on the files push, a stage on its project's index written, a commit on the project's git ping, and nothing on the clock", async () => {
   const worktreeId = await primaryId();
   await watch(
     worktreesViews.watchChangeStatus({ projectId, worktreeId }),
-    ({ first, next, tick }) =>
+    ({ first, next, tick, quiet }) =>
       Effect.gen(function* () {
+        const pushes = yield* HostPushes.HostPushes;
         assert.deepEqual(first, []);
         writeFileSync(join(repo, "b.txt"), "b\n");
-        yield* tick("2 seconds");
-        const edited = yield* next;
-        assert.deepEqual(
-          edited.map((file) => file.path),
-          ["b.txt"],
-        );
+        // No poll: the edit waits for a watch to say so.
+        yield* tick("10 seconds");
+        yield* quiet;
+        // The working tree's watch, as the app's broadcast makes it.
+        yield* pushes.publish({
+          channel: channel(worktreesContract, "filesChanged"),
+          payload: { projectId },
+          remote: true,
+        });
+        assert.deepEqual(stagedOf(yield* next), [["b.txt", "none"]]);
+        git(repo, "add", "b.txt");
+        yield* indexWritten(projectId);
+        assert.deepEqual(stagedOf(yield* next), [["b.txt", "all"]]);
+        // Another project's index says nothing of this one's.
+        git(repo, "reset", "-q", "b.txt");
+        yield* indexWritten("another");
+        yield* quiet;
+        yield* indexWritten(projectId);
+        assert.deepEqual(stagedOf(yield* next), [["b.txt", "none"]]);
         git(repo, "add", "b.txt");
         git(repo, "commit", "-q", "-m", "b");
         // The git watcher's ping, as the app's broadcast makes it.
-        yield* Effect.flatMap(HostPushes.HostPushes, (pushes) =>
-          pushes.publish({
-            channel: "git:projectChanged",
-            payload: { projectId },
-            remote: true,
-          }),
-        );
+        yield* pushes.publish({
+          channel: "git:projectChanged",
+          payload: { projectId },
+          remote: true,
+        });
         assert.deepEqual(yield* next, []);
       }),
   );
@@ -220,8 +257,7 @@ it("a worktree's changes: a refresh reads now and answers once that read landed,
     ({ first, next, quiet }) =>
       Effect.gen(function* () {
         assert.deepEqual(first, []);
-        // An edit no watch reported and no poll has read yet (the clock
-        // stands still): the refresh reads it.
+        // An edit no watch reported: the refresh reads it.
         writeFileSync(join(repo, "c.txt"), "c\n");
         yield* worktreesHandlers.refreshChangeStatus(input);
         assert.deepEqual(
@@ -250,8 +286,8 @@ it("a worktree's tree: one refresh reads the file's diff and hunks and the opera
     ({ first, next }) =>
       Effect.gen(function* () {
         assert.match(first, /\+more/);
-        // An edit no watch reported and no poll will read: the refresh
-        // of the tree reads the diff too.
+        // An edit no watch reported: the refresh of the tree reads the
+        // diff too.
         writeFileSync(join(repo, "a.txt"), "a\nmore\nstill\n");
         yield* worktreesHandlers.refreshChangeStatus(input);
         assert.match(yield* next, /\+still/);
@@ -282,6 +318,36 @@ it("a worktree's stashes: a stash made outside the app shows on the project's gi
       const [stash] = yield* next;
       assert.equal(stash?.message, "kept");
       git(repo, "stash", "drop");
+    }),
+  );
+});
+
+it("a worktree's operation: a conflict resolved by a stage outside the app shows on its project's index written", async () => {
+  const merging = join(tempDir("sm-views-merge-", track), "repo");
+  mkdirSync(merging);
+  git(merging, "init", "-q", "-b", "main");
+  writeFileSync(join(merging, "a.txt"), "a\n");
+  git(merging, "add", "a.txt");
+  git(merging, "commit", "-q", "-m", "a");
+  git(merging, "checkout", "-q", "-b", "side");
+  writeFileSync(join(merging, "a.txt"), "side\n");
+  git(merging, "commit", "-q", "-am", "side");
+  git(merging, "checkout", "-q", "main");
+  writeFileSync(join(merging, "a.txt"), "main\n");
+  git(merging, "commit", "-q", "-am", "main");
+  assert.throws(() => git(merging, "merge", "-q", "side"));
+  const merged = await runHost(addProject(merging));
+  const [primary] = await runHost(listWorktrees(merged.id));
+  assert.ok(primary !== undefined);
+  const input = { projectId: merged.id, worktreeId: primary.id };
+  await watch(worktreesViews.watchOperation(input), ({ first, next }) =>
+    Effect.gen(function* () {
+      assert.deepEqual([first.operation, first.conflicted], ["merge", 1]);
+      writeFileSync(join(merging, "a.txt"), "both\n");
+      git(merging, "add", "a.txt");
+      yield* indexWritten(merged.id);
+      const resolved = yield* next;
+      assert.deepEqual([resolved.operation, resolved.conflicted], ["merge", 0]);
     }),
   );
 });
