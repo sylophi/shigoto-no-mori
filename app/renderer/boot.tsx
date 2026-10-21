@@ -16,11 +16,7 @@
 // what it starts, and mountWindow puts it in the window's context.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  focusManager,
-  type QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { RouterHistory } from "@tanstack/react-router";
 import { RegistryContext } from "@effect/atom-react";
 import { windowContract } from "@shigomori/contracts/modules/window";
@@ -59,7 +55,7 @@ import { startAgentWatch } from "./lib/agentWatch";
 import { remoteDeviceById } from "./lib/remote/devices";
 import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { openExternalUrl, revealInFolder } from "./lib/openExternal";
-import { documentFocused } from "./lib/focus";
+import { documentFocused, onWindowFocus, setWindowFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
 import { startThemeRotation } from "./lib/themeRotation";
 import { toast } from "./lib/toast";
@@ -142,7 +138,7 @@ export function startApp({
     registry.update(accountsLeftAtom, (count) => count + 1);
   });
 
-  followFocus(api);
+  followFocus(api, queryClient);
   if (api.isElectron) startLocalHost(api, queryClient, registry, page.signal);
 
   // The shared settings exchange: this device's copy follows its peers'
@@ -234,13 +230,11 @@ export function mountWindow(
   // Mirror focus onto the root so CSS can pause the infinite animations
   // (the doubutsu wallpaper drift, the spinners) while nobody is
   // looking: a running animation asks the compositor for a frame every
-  // vsync, and those frames are most of the app's idle energy. Rides
-  // React Query's focus signal (window focus/blur, visibilitychange,
-  // plus the desktop's IPC channel, wired in followFocus).
+  // vsync, and those frames are most of the app's idle energy.
   const syncFocusClass = (focused: boolean) =>
     element.classList.toggle("unfocused", !focused);
   syncFocusClass(documentFocused());
-  focusManager.subscribe(syncFocusClass);
+  onWindowFocus(syncFocusClass);
 
   // What a view opens outside the app goes through the host.
   const outside = {
@@ -330,34 +324,31 @@ function startLocalHost(
   window.addEventListener("offline", () => networkChanged(api), { signal });
 }
 
-// Whether someone is looking at the page, for React Query's focus
-// refetches, the animations `.unfocused` pauses and the hosts' sweeps.
-// React Query's own listener follows `visibilitychange` alone, so a tab
-// behind another app's window would count as looked at and draw the
-// wallpaper's drift every frame; the window's focus and blur say it. In
-// Electron they don't fire on every focus transition (notably ⌘Tab back
-// into the app, where focus arrives at the BrowserWindow level rather
-// than the document), so the window's IPC channel comes on top.
-function followFocus(api: RendererApi): void {
-  focusManager.setEventListener((handleFocus) => {
-    const onFocus = () => handleFocus(true);
-    const onBlur = () => handleFocus(false);
-    const onVisibility = () =>
-      handleFocus(document.visibilityState === "visible");
-    window.addEventListener("focus", onFocus);
-    window.addEventListener("blur", onBlur);
-    document.addEventListener("visibilitychange", onVisibility);
-    const unsubscribes = api.isElectron
-      ? [
-          api.listen(api.pushes(windowContract, "focused"), onFocus),
-          api.listen(api.pushes(windowContract, "blurred"), onBlur),
-        ]
-      : [];
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("blur", onBlur);
-      document.removeEventListener("visibilitychange", onVisibility);
-      for (const unsubscribe of unsubscribes) unsubscribe();
-    };
+// Whether someone is looking at the window (lib/focus.ts). The page's
+// visibility alone would count a window behind another app's as looked
+// at and draw the wallpaper's drift every frame; the window's focus and
+// blur say it. In Electron they don't fire on every focus transition
+// (notably ⌘Tab back into the app, where focus arrives at the
+// BrowserWindow level rather than the document), so the window's IPC
+// channel comes on top. React Query keeps its own signal, the page's
+// visibility, since it also holds a failed read's retry until the page
+// reads focused: a window left in view behind another keeps retrying,
+// and only its focus refetches come from here.
+function followFocus(api: RendererApi, queryClient: QueryClient): void {
+  window.addEventListener("focus", () => setWindowFocused(true));
+  window.addEventListener("blur", () => setWindowFocused(false));
+  document.addEventListener("visibilitychange", () =>
+    setWindowFocused(document.visibilityState === "visible"),
+  );
+  if (api.isElectron) {
+    api.listen(api.pushes(windowContract, "focused"), () =>
+      setWindowFocused(true),
+    );
+    api.listen(api.pushes(windowContract, "blurred"), () =>
+      setWindowFocused(false),
+    );
+  }
+  onWindowFocus((focused) => {
+    if (focused) queryClient.getQueryCache().onFocus();
   });
 }
