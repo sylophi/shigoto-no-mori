@@ -520,9 +520,9 @@ export const layer = Layer.effectDiscard(
     yield* Effect.forkScoped(
       Effect.gen(function* () {
         // Seed from disk before any network work: an update staged
-        // earlier (a previous run, or `sm update --stage` in a
-        // terminal) is ready immediately, before any check. The first
-        // check still runs, in case a newer release has shipped since.
+        // earlier (by a previous run, or by `sm update` in a terminal)
+        // is ready immediately, before any check. The first check still
+        // runs, in case a newer release has shipped since.
         const staged = yield* installableStaged;
         if (staged !== null) setState(readyStateFrom(staged));
         // The last install's failure, which its installer left as it

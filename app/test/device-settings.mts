@@ -30,7 +30,7 @@ it("a device setting the terminal writes reaches what follows the settings", asy
           ),
         );
         yield* Effect.promise(() =>
-          sm("config", "write", "--data", '{"directConnections":false}'),
+          sm("config", "set", "launchScripts", "false"),
         );
         yield* Effect.promise(() =>
           waitFor(() => followed > 0, "the settings followed"),

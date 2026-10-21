@@ -1,5 +1,5 @@
-// sm [worktrees] <list|path|destination>: the worktrees, and where one
-// is or would go.
+// sm [worktrees] <list|path|link>: the worktrees, where one is, and a
+// link that opens one in the app.
 import { worktreePage } from "@shigomori/contracts/worktreePage";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { flavorNames } from "@shigomori/engine/flavor";
@@ -13,15 +13,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
-import {
-  given,
-  here,
-  projectFlags,
-  resolveProject,
-  resolveWorktree,
-  rest,
-  worktreeFlags,
-} from "../here.ts";
+import { given, here, resolveWorktree, rest, worktreeFlags } from "../here.ts";
 import {
   emit,
   note,
@@ -32,7 +24,7 @@ import {
   type Styles,
 } from "../output.ts";
 import { changesCell, flagsCell, syncCell, titleCell } from "./cells.ts";
-import { adopt, create, move, rekey, rename, rm, setup } from "./changes.ts";
+import { adopt, create, move, rename, rm, setup } from "./changes.ts";
 import { describe } from "./describe.ts";
 import { done, land, merge, pr } from "./landing.ts";
 import { edit, open } from "./open.ts";
@@ -312,39 +304,8 @@ export const link = Command.make(
   Command.withDescription("Print a link that opens the worktree in the app"),
 );
 
-const destination = Command.make(
-  "destination",
-  {
-    ...projectFlags,
-    name: Flag.String("name").pipe(Flag.optional),
-    rest,
-  },
-  (input) =>
-    Effect.gen(function* () {
-      const { binaryName, json, stdoutColor } = yield* Effect.service(Output);
-      if (input.rest.length > 0) {
-        return yield* new UsageError({
-          problem: `Usage: ${binaryName} worktrees destination [-p <project>] [--name <name>]`,
-        });
-      }
-      const project = yield* resolveProject(input);
-      const worktrees = yield* Worktrees.Worktrees;
-      const dest = yield* worktrees.destination(
-        project,
-        Option.getOrElse(input.name, () => ""),
-      );
-      yield* json
-        ? emit({ ok: true, ...dest })
-        : out(
-            dest.taken
-              ? `${dest.path}${styles(stdoutColor).dim(" (taken)")}`
-              : dest.path,
-          );
-    }),
-).pipe(Command.withDescription("Where a new worktree would go"));
-
 // The verbs stand at the top level and under `sm worktrees`.
-export { destination, list, path };
+export { list, path };
 
 export const worktreesCommand = Command.make("worktrees").pipe(
   Command.withDescription("Worktree commands (the prefix is optional)"),
@@ -352,7 +313,6 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     list,
     path,
     link,
-    destination,
     status,
     describe,
     shelve,
@@ -364,7 +324,6 @@ export const worktreesCommand = Command.make("worktrees").pipe(
     rename,
     adopt,
     setup,
-    rekey,
     cdCommand,
     switchCommand,
     pr,

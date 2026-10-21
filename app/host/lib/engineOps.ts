@@ -1095,7 +1095,7 @@ export const bundleCreate = Effect.fnUntraced(function* (
   refs: string[],
   haves: string[],
 ) {
-  const made = yield* asCall(
+  return yield* asCall(
     Effect.gen(function* () {
       return yield* (yield* Bundle.Bundle).create(
         project.path,
@@ -1106,7 +1106,6 @@ export const bundleCreate = Effect.fnUntraced(function* (
     }),
     { projectId: project.id },
   );
-  return { bytes: made.bytes, refs: made.refs };
 });
 
 // Into a registered project, or into a repository by path: the clone

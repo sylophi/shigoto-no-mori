@@ -24,14 +24,14 @@
 // git follower pushing). So the device asked always holds the grant,
 // and neither end ever needs the other's.
 //
-// Bundles are built and unpacked by the CLI (`sm bundle create` and
-// `sm bundle unpack`), refs landing only under refs/shigomori/, in a
-// temp dir (mkdtemp, 0700) of their own that the ask removes whatever
-// happens. The channel is the flow control end to end: the sender
-// waits once its queue is full, and the receiver takes a piece only
-// once the bytes are on disk. A link whose other end goes away (a
-// reset, a revoked grant, the device link dropping) fails whatever is
-// waiting on it.
+// Bundles are built and unpacked by the engine's Bundle (engineOps'
+// bundleCreate and bundleUnpack), refs landing only under
+// refs/shigomori/, in a temp dir (mkdtemp, 0700) of their own that the
+// ask removes whatever happens. The channel is the flow control end to
+// end: the sender waits once its queue is full, and the receiver takes
+// a piece only once the bytes are on disk. A link whose other end goes
+// away (a reset, a revoked grant, the device link dropping) fails
+// whatever is waiting on it.
 import { mkdtemp, open as openFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -370,8 +370,9 @@ const decodeCloneFacts = Schema.decodeUnknownSync(CloneFactsSchema);
 // Where a fetched ref lands: capture and index refs keep their name,
 // branch refs land under refs/shigomori/incoming/<branch>, and a
 // remote-tracking ref under refs/shigomori/incoming/remotes/<remote>/<branch>.
-// Never a local branch: `sm bundle unpack` enforces the refs/shigomori/
-// destination fail-closed, this mapping just picks the names.
+// Never a local branch: the engine's Bundle.unpack enforces the
+// refs/shigomori/ destination fail-closed, this mapping just picks the
+// names.
 export function landingRefOf(ref: string): string {
   if (ref.startsWith("refs/shigomori/")) return ref;
   return incomingRef(
