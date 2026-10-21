@@ -73,9 +73,8 @@ export function VersionSectionView({
   const ready = state?.kind === "ready" ? state : null;
   const busy = kind === "checking" || kind === "downloading";
   const blockedTip = canCommand ? undefined : peerReadOnlyNote(deviceLabel);
-  // No state to show: the first read failed. Over a wire that is
-  // still dialing it fails with nothing more to say, so say only what
-  // is known and offer a retry.
+  // No state to show: the first read failed (most often over a wire
+  // still dialing), so say only what is known and offer a retry.
   const unavailable = state === null && isError;
 
   return (

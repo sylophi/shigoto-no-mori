@@ -36,7 +36,7 @@ function sortKey(mode: WorktreeSortMode): (worktree: Worktree) => number {
     case "recent":
       return worktreeLastActivityAt;
     case "created":
-      // Unknown (a peer on a build older than the field) sorts last.
+      // Unknown (the host couldn't read when it was added) sorts last.
       return (worktree) => worktree.createdAt ?? 0;
     default:
       return assertNever(mode);

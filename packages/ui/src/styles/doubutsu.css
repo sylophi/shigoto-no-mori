@@ -46,13 +46,13 @@
  *    but live in its runtime-loaded UI bundle, so theme-contract cannot
  *    grep them -- re-verify by eye when the Clerk packages move.
  *
- * 5. One consumer outside the app's pages: scripts/dmg-background.html,
- *    the dmg installer artwork, which links this file and renders
- *    against the leaf-wallpaper ::before, the header/footer band rule and the
- *    --doubutsu-* tokens. It is a committed png, so a broken hook there
- *    is invisible until someone opens a release. `pnpm test theme-contract`
- *    verifies it, and `pnpm test dmg-art` catches art that predates a
- *    palette edit.
+ * 5. One consumer links this file on its own:
+ *    scripts/dmg-background.html, the dmg installer artwork, which
+ *    renders against the leaf-wallpaper ::before, the header/footer
+ *    band rule and the --doubutsu-* tokens. It is a committed png, so a
+ *    broken hook there is invisible until someone opens a release.
+ *    `pnpm test theme-contract` verifies it, and `pnpm test dmg-art`
+ *    catches art that predates a palette edit.
  *
  * 6. Tailwind utility names (stable public API, checked loosely):
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/

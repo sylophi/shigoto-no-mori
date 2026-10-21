@@ -166,8 +166,8 @@ function SimpleTooltip({
       >
         {/* One wrapper span keeps a mixed text/element tip a single
             flex item: TooltipContent is inline-flex with a gap, which
-            would otherwise space out every text run. pre-line preserves
-            \n like the native titles this replaces. */}
+            would otherwise space out every text run. pre-line keeps a
+            tip's \n, as a native `title` does. */}
         <span className="whitespace-pre-line">{tip}</span>
       </TooltipContent>
     </Tooltip>

@@ -72,10 +72,9 @@
    without a specificity fight and still lets a wrapping label grow.
    Hooked on data-size alone, which primitives/button.tsx sets (and a
    project header's bare pair borrows, below): a Button rendered as a
-   menu trigger has its data-slot overwritten by the
-   trigger's, and must not fall out of these rules for it. The size
-   ladder is written once, as --control, and an icon button is that
-   square. */
+   menu trigger has its data-slot overwritten by the trigger's, and
+   must not fall out of these rules for it. The size ladder is written
+   once, as --control, and an icon button is that square. */
   [data-shell] [data-size] {
     --control: var(--touch-target);
     min-height: var(--control);

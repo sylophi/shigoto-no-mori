@@ -117,12 +117,12 @@
 /* Outside the inline block below on purpose: inlined values leave no
    variable to remap. The type steps under Tailwind's text-xs are named
    tokens so they sit on the scale the phone layout remaps (phone.css):
-   a `text-[11px]` literal would stay 11px on a phone. They carry no
-   line-height. The sans stack is doubutsu's to swap for Zen Maru, so
-   `font-sans` and the body read the variable rather than a Geist stack
-   baked in. The terminal's
-   stack falls back to the Nerd Font symbols, for the icons a prompt
-   like Starship draws. */
+   a `text-[11px]` literal would stay 11px on a phone. Like such a
+   literal, they carry no line-height. The sans stack is doubutsu's to
+   swap for Zen Maru, so `font-sans` and the body read the variable
+   rather than a Geist stack baked in. The terminal's stack falls back
+   to the Nerd Font symbols, for the icons a prompt like Starship
+   draws. */
 @theme {
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
