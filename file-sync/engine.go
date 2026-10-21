@@ -30,7 +30,7 @@ package main
 //     dead app never leaves a headless daemon behind. Sessions persist
 //     under the data directory the host names and resume on the next
 //     daemon start. A session v2 persisted has its labels rewritten
-//     into v3's mode on load (relabelV2Sessions).
+//     into the mode label on load (relabelV2Sessions).
 //
 // The host owns the lifecycle, fully. Nothing here starts on its own:
 // the host spawns both roles, and each one stops the moment the host
@@ -110,9 +110,9 @@ const (
 // relative gitdir names a layout only this machine has.
 const mirrorGitPointerIgnore = ".git"
 
-// The root-anchored pattern sessions made before the unanchored one
-// carry. Still left out of the ignores a session reports, since it was
-// never the user's choice either.
+// The root-anchored pattern some v2 sessions carry. Left out of the
+// ignores a session reports, since it was never the user's choice
+// either.
 const mirrorLegacyGitPointerIgnore = "/.git"
 
 // How long the gateway may take to open the peer-side stream before
@@ -451,8 +451,8 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	case ended = <-stateDone:
 		// Ending on its own, the stream would leave a daemon whose state
 		// no longer moves (Mutagen's tracker terminated, which it does
-		// only at shutdown today): the daemon ends instead, and the
-		// host's restart ladder brings up one that moves.
+		// only at shutdown): the daemon ends instead, and the host's
+		// restart ladder brings up one that moves.
 		stateEnded = true
 		if ended != nil {
 			ended = fmt.Errorf("mirror state: %w", ended)
@@ -470,8 +470,8 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 	return ended
 }
 
-// v2 said what a session is in three labels (copySide, mirrorBranch,
-// transfer), and v3 says it in one, mode (the host's mirror registry).
+// A v2 session names its kind in three labels (copySide, mirrorBranch,
+// transfer); this daemon reads one, mode (the host's mirror registry).
 // Mutagen keeps a session's labels for its life, so the persisted
 // sessions are rewritten once, before the manager loads them: a mirror
 // takes its mode, and a transfer takes a token no transfer holds, so
@@ -512,9 +512,9 @@ func relabelV2Sessions(dataDir string, logOut io.Writer) {
 	}
 }
 
-// A session made before the unanchored .git pointer rule ignores the
-// root's pointer alone, so a nested one (a submodule's) was tracked:
-// served sessions hide the peer's now, and the guard refuses the
+// A session carrying the root-anchored .git pointer rule ignores the
+// root's pointer alone, so a nested one (a submodule's) would be
+// tracked: served sessions hide the peer's, and the guard refuses the
 // deletion that would follow, every cycle. True when it rewrote one.
 func unanchorGitPointer(configuration *synchronization.Configuration) bool {
 	if configuration == nil {

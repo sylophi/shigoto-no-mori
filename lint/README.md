@@ -13,15 +13,14 @@ its cases through oxlint's `RuleTester`.
 | `no-runtime-in-service` | A service module never builds a `ManagedRuntime` or calls `run*`. |
 | `no-node-builtins-in-service` | A service module never imports `node:fs`, `node:child_process`, `node:os` or `node:path`. |
 | `no-env-in-service` | A service module reads the environment through `Config`, never `process.env`. |
-| `no-wall-clock` | The time comes through `Clock` or `DateTime`, never `Date.now()` or `new Date()`: in a service module anywhere, and in every module of `app/shared`, `app/host`, `app/main`, `packages/engine` and `packages/contracts` but their tests. |
+| `no-wall-clock` | The time comes through `Clock` or `DateTime`, never `Date.now()` or `new Date()`: in a service module anywhere, and in every module of `app/shared`, `app/host`, `app/main`, `packages/engine`, `packages/contracts` and `packages/cli` but their tests. |
 | `effect-fn-service-methods` | A method a service module's tag types as returning an `Effect.Effect` is `Effect.fn("Service.method")`, not a plain function. |
 
 `pnpm run lint` also runs `app/scripts/react-compiler-check.mts`,
 which fails on a component or hook in `app/renderer` or
 `packages/ui/src` that the React Compiler skips, printing the file,
-the function and the compiler's reason. The ones it skipped when the
-check came are listed in `app/scripts/react-compiler-bailouts.json`,
-to be fixed and taken off.
+the function and the compiler's reason. The known ones are listed in
+`app/scripts/react-compiler-bailouts.json`, to be fixed and taken off.
 
 ## Service modules
 
@@ -32,17 +31,6 @@ Wherever it lives, that name is what makes the service rules apply
 and every lowercase module (a helper, a layer graph, an adapter at the
 edge) are not service modules, so they may run effects and touch the
 platform directly.
-
-## Wall-clock reads left to the time hardening
-
-`.oxlintrc.json` turns `no-wall-clock` off for the files whose
-`Date.now()` the time-and-liveness hardening is replacing, each taken
-off the list by the pull request that changes it:
-
-- Durable facts and process identity: `app/main/hostProcess.ts`,
-  `packages/engine/src/worktrees/moving.ts`.
-- In-memory TTLs and small gates: `app/main/electron/liveness.ts`,
-  `app/main/electron/notifications.ts`.
 
 ## Adding a rule
 

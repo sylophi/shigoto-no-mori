@@ -493,11 +493,8 @@ export const make = (
         });
         // Enforced from the first ping on purpose (no "seen a pong yet"
         // latch): a socket that dies right after the accept must still
-        // be found, and the cost of that is only that a Worker
-        // predating the pair (which drops pings as malformed envelopes)
-        // is redialed once a minute until it is redeployed, so the
-        // Worker deploys first (hub/README.md). A ping the wire refused
-        // is left to the close that follows.
+        // be found. A ping the wire refused is left to the close that
+        // follows.
         const liveness = yield* watchLiveness({
           ping: Effect.try(() => socket.send(HUB_PING)).pipe(
             Effect.andThen(Effect.never),

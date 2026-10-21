@@ -744,11 +744,9 @@ it("liveness: a device pings the device hub, and a hub that stops answering (or 
     3_000,
   );
 
-  // No latch on this side: a hub that NEVER answers (a Worker
-  // predating the pair) is redialed too, so a socket that dies
-  // before its first pong is still found. That is the deploy order
-  // hub/README.md states, and the cost of getting it wrong is a
-  // redial per timeout, not a dead device.
+  // No latch on this side: a socket that dies before its first pong is
+  // still found; against a hub that NEVER answers, that costs a redial
+  // per timeout, not a dead device.
   stub.setAnswerPings(false);
   const b = await bootDevice(stub, "B", { ping }, trackTest);
   await waitFor(

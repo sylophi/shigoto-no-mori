@@ -99,17 +99,17 @@ overrides:
   "semver@<7.7.2": "^7.7.2"
   # Force sharp >= 0.35.5 to patch the bundled libheif (GHSA-g89c-p67h-r497,
   # GHSA-2jg2-4ch7-h545) and GHSA-wq5f-xc86-pv6w. miniflare (under the
-  # hub's wrangler) pins sharp to an exact version, and even the newest
-  # @cloudflare/vitest-pool-workers still pins a miniflare on 0.35.2. Drop
-  # this once wrangler and vitest-pool-workers ship past it.
+  # hub's wrangler) pins sharp to an exact version, and
+  # @cloudflare/vitest-pool-workers pins a miniflare on 0.35.2. Drop this
+  # once wrangler and vitest-pool-workers ship past it.
   "sharp@<0.35.5": "^0.35.5"
   # Force undici >= 7.29.1 to patch GHSA-w293-vg96-wgc3 and five lesser
   # advisories. miniflare pins 7.29.0 exactly. Drop this once it ships
   # past it.
   "undici@>=7.0.0 <7.29.1": "7.29.1"
 
-# The versions the packages share, or will once code moves into
-# packages/, pinned once. A package depends on one as "catalog:".
+# The versions the packages share, pinned once. A package depends on
+# one as "catalog:".
 # marketing keeps TypeScript 6 on its own (marketing/README.md has why),
 # and the hub vitest 4.1 (hub/README.md has why).
 catalog:

@@ -59,8 +59,8 @@ export function ownTestTemp(family: string): string {
   process.env["TMPDIR"] = run;
   // The config folder too, where the engine keeps the data dir's pointer
   // and the data-folder lock beside it (Paths, DataDirLock): the
-  // machine's own were one lock for every run here and the plain dev
-  // app, so a run's move or settle stalled another's changes.
+  // machine's own would be one lock for every run here and the plain
+  // dev app, so one run's move or settle would stall another's changes.
   const config = join(run, "config");
   mkdirSync(config, { recursive: true });
   linkPackageManagers(config, userConfig);

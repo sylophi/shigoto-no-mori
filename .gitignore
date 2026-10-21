@@ -59,9 +59,6 @@ macfs/macfs
 
 # The scene comparison's report (app/lab/scene-compare)
 app/lab/scene-compare/report/
-# Where a failed walk's root was kept before SM_WALK_FAILURES alone
-# held them (app/lab/walks), still in older checkouts.
-app/lab/walks/failures/
 # The reliability harness's report (app/lab/reliability)
 app/lab/reliability/report/
 # The guide's how-tos' report (app/lab/guide-eval)
