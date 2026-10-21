@@ -35,12 +35,12 @@
   reader could break, a why that isn't obvious. A doc comment on an
   exported API keeps the one line that says what it is for when its
   name doesn't. The READMEs aren't held to this.
-- A fix's PR description names the defect's class, the earlier
+- A fix's `## Description` also names the defect's class, the earlier
   failures of that class, the search made for its siblings and that
   search's scope, and what became of each sibling: fixed with it, its
   own PR, or left, and why.
-- Path identity and host identity are boundary policies every
-  consumer shares. After a failure of either, find every consumer and
+- Path identity and a GitHub host's identity are boundary policies
+  every consumer shares. After a failure of either, find every consumer and
   check each across linked data folders, project and custom paths, a
   second volume, denied folders, public and Enterprise GitHub hosts,
   and more than one machine.

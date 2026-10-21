@@ -12,9 +12,8 @@ workspace catalog), and a bump is a PR of its own. Effect itself is
 never patched; a gap is wrapped on our side. Read Effect's own
 guidance for that version before writing Effect code: `AGENTS.md` in
 the installed package (`node_modules/effect` in any package of the
-workspace, such as
-`app/node_modules/effect/AGENTS.md`), the `ai-docs/` examples beside it
-that it links, and for Schema, `SCHEMA.md` at the pinned tag
+workspace, such as `app/node_modules/effect/AGENTS.md`), the `ai-docs/`
+examples beside it that it links, and for Schema, `SCHEMA.md` at the pinned tag
 (`https://github.com/Effect-TS/effect/blob/effect@4.0.2/packages/effect/SCHEMA.md`,
 a long guide to read in chunks; its tag moves with the catalog). This
 file adds what the repo decides beyond it, and says why wherever it
@@ -236,8 +235,8 @@ export const layer = Layer.effect(Registry, make);
   step after which it counts as done, and what a failure or an
   interrupt at each step leaves: what is undone, and what is finished
   after it, at the next start or by `sm doctor --fix`. Each operation
-  takes the simplest of completion, rollback or recovery; there is no
-  general transaction framework.
+  takes the simplest of completion, rollback (the finalizers above) or
+  recovery; there is no general transaction framework.
 
 ## 6. Concurrency
 
@@ -291,8 +290,10 @@ export const layer = Layer.effect(Registry, make);
   formatted and computed with `DateTime`, not `Date`. Elapsed time (a
   deadline, a timeout, a rate) is `Clock.monotonicTimeNanos`,
   `Effect.timed` or a relative timer (`Effect.sleep`, `Effect.timeout`),
-  never the difference of two instants; a gap on the wall clock only
-  shows that this end didn't run, as `engine/liveness.ts` reads it. In
+  never the difference of two instants alone: a gap on the wall clock
+  is read only beside the monotonic one, by whichever is longer, so a
+  sleep the monotonic clock skips still counts (`ageOf` in
+  `host/lib/util/kept.ts`, a late turn in `engine/liveness.ts`). In
   this version `currentTimeMillis` and `currentTimeNanos` are both the
   wall clock, which a clock step moves, and so is what Effect's RPC
   pinger, `Schedule`'s elapsed limits and `Cache`'s TTLs read. The
@@ -349,12 +350,13 @@ export const layer = Layer.effect(Registry, make);
   (`shared/remote/rpcServer.ts`). A socket is read as a stream, and a
   parser that failed can't find the next frame, so the connection
   closes and its owner dials again. A port keeps its messages whole, so
-  the one message is dropped, its calls unanswered, and the port stays
-  up (`pnpm test shell-link`).
+  only the message it can't read is dropped, its calls unanswered, and
+  the port stays up (`pnpm test shell-link`).
 - One owner retries a link, and one authority reports its liveness. A
   transport dials once (`quietProtocol` in `engine/rpcClient.ts`); a
-  link that is dialed again has one owner that does it, the direct
-  keeper (`shared/hub/directKeeper.ts`) for a peer's and
+  link that is dialed again has one owner that does it: the direct
+  keeper (`shared/hub/directKeeper.ts`) for a peer's, the supervisor
+  (`shared/remote/supervisor.ts`) for the hub socket's, and
   `shared/remote/hostLink.ts` for this machine's host's. The host's cut
   of a silent peer frees its slot; it isn't a second verdict on the
   peer. A link is torn down once and tells its owner once.
@@ -368,8 +370,9 @@ export const layer = Layer.effect(Registry, make);
   the same rule (`answerWithin`): one whose limit came late asks again
   rather than give up. The host's cut of a silent remote peer counts
   silence in monotonic time (`host/socket/DeviceLink.ts`). Effect's RPC
-  pinger judges a link by its last frame's age on the wall clock, so it
-  judges nothing here; its pings only keep the far end's slot.
+  pinger judges a link by its last frame's age on the wall clock, so
+  `quietProtocol` gives it no timeout; its pings only keep the far end's
+  slot.
 - An adapter keeps the transport's status and the peer's identity in
   what it raises, and a link logs its lifecycle transitions, inbound
   and outbound.
@@ -409,8 +412,8 @@ export const layer = Layer.effect(Registry, make);
   between each pair of its external steps and by a recovery that
   itself fails, and its cleanup is proved after a refusal and after a
   kill, not only after success.
-- A burst of pushes is proved by a bounded call count and no
-  cancellations.
+- A burst of pushes is proved to cost a bounded number of calls, none
+  cancelled.
 
 ## 10. Views and containers
 

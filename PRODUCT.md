@@ -12,7 +12,7 @@ Context when using: at whichever machine is in front of them, or in a browser ta
 
 The job to be done: manage a forest of git worktrees, on every machine you own, with the ease a CLI power-user expects from a tool like worktrunk, but with a GUI, persistent across sessions, one-click launching of per-worktree commands, and no networking homework. Sign in, add a machine, and it works.
 
-sm has users beyond its author, and a new one learns it from the guide: their own agent showing them in the app. There is no onboarding: a fresh install opens on the home, which with no project shows the way to the first one, and nothing stands between a person and it. What a first run could offer lives where it does anyway, in Settings and the account page. Simplicity is a feature, and the author dogfooding every path is the QA strategy. The product is sized for one person to hold in their head. Many-user machinery is not built.
+sm has users beyond its author, and a new one learns it from the guide: their own agent showing them in the app. There is no onboarding: nothing stands between a fresh install and the home, which with no project shows the way to the first one. What a first run could offer lives where it does anyway, in Settings and the account page. Simplicity is a feature, and the author dogfooding every path is the QA strategy. The product is sized for one person to hold in their head. Many-user machinery is not built.
 
 ## Product Purpose
 
