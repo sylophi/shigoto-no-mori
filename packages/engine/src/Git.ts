@@ -94,6 +94,36 @@ export type {
   UpstreamSync,
 } from "./git/documents.ts";
 
+// A project's common git directory, read off its files with no git:
+// `.git` itself for an ordinary checkout, or the common dir behind a
+// `.git` FILE (the project path is itself a linked worktree, or a
+// submodule). Null when the path has no `.git` (missing, not a repo,
+// a bare repo).
+export const commonDirOf = (projectPath: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const dotGit = path.join(projectPath, ".git");
+    const stat = yield* fs.stat(dotGit).pipe(Effect.option);
+    if (Option.isNone(stat)) return null;
+    if (stat.value.type === "Directory") return dotGit;
+    if (stat.value.type !== "File") return null;
+    const text = yield* fs.readFileString(dotGit).pipe(Effect.option);
+    if (Option.isNone(text)) return null;
+    const pointed = /^gitdir:\s*(.+)$/m.exec(text.value)?.[1]?.trim();
+    if (pointed === undefined) return null;
+    const gitDir = path.isAbsolute(pointed)
+      ? pointed
+      : path.resolve(projectPath, pointed);
+    // A linked worktree's git dir names its repository's common dir.
+    const common = yield* fs
+      .readFileString(path.join(gitDir, "commondir"))
+      .pipe(Effect.option);
+    if (Option.isNone(common)) return gitDir;
+    const dir = common.value.trim();
+    return path.isAbsolute(dir) ? dir : path.resolve(gitDir, dir);
+  });
+
 export class Git extends Context.Service<
   Git,
   {

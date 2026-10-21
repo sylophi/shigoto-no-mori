@@ -99,8 +99,10 @@ export type {
 export class Worktrees extends Context.Service<
   Worktrees,
   {
-    // The project's checkouts in git's order. Not memoized: the host
-    // lives long, and a checkout git adds behind its back must show.
+    // The project's checkouts in git's order. git's answer stands while
+    // the files it reads it from do, and the call after any change to
+    // them asks git again: the host lives long, and a checkout git adds
+    // behind its back must show.
     readonly identities: (
       project: RegisteredProject,
     ) => Effect.Effect<ReadonlyArray<WorktreeIdentity>, Git.GitError>;

@@ -10,19 +10,20 @@
 // there too, so one recursive watch per project covers every worktree
 // of it.
 //
-// What counts as a change is an ALLOWLIST of git-dir paths (HEAD,
-// packed-refs, refs/** but the app's own refs/shigomori/**, a
-// worktree's HEAD, a worktree entry appearing or vanishing), not
-// "anything under .git": objects/ churns on every commit, logs/
-// mirrors every ref update, FETCH_HEAD is rewritten by the app's own
-// minute sweep, and `index` is rewritten by every stage and by another
-// program's `git status` or `git diff` (a person's, a prompt's dirty
-// check), while a stage moves no ref: the open changes page reads it
-// on its own poll, and a mirror watches it itself (mirror/gitState.ts).
-// refs/shigomori/ holds the app's own bookkeeping (dirty captures, a
-// transfer's landing refs, the mirror's staged-tree commits, discard
-// undos), which no view reads. Uncommitted file edits are not seen in
-// the git directory: they live in the working trees.
+// What counts as a change is an ALLOWLIST of git-dir paths (HEAD and
+// ORIG_HEAD, packed-refs, refs/** but the app's own refs/shigomori/**,
+// a worktree's HEAD and ORIG_HEAD, a worktree entry appearing or
+// vanishing, a stopped operation's markers), not "anything under .git":
+// objects/ churns on every commit, logs/ mirrors every ref update,
+// FETCH_HEAD is rewritten by the app's own minute sweep, and `index` is
+// rewritten by every stage and by another program's `git status` or
+// `git diff` (a person's, a prompt's dirty check), while a stage moves
+// no ref: the open changes page reads it on its own poll, and a mirror
+// watches it itself (mirror/gitState.ts). refs/shigomori/ holds the
+// app's own bookkeeping (dirty captures, a transfer's landing refs, the
+// mirror's staged-tree commits, discard undos), which no view reads.
+// Uncommitted file edits are not seen in the git directory: they live
+// in the working trees.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
@@ -57,6 +58,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import type { Project } from "@shigomori/contracts/schemas";
+import * as Git from "@shigomori/engine/Git";
 import { loadProjects } from "@host/lib/projects";
 import { watchPath } from "@host/lib/watchPath";
 
@@ -103,36 +105,6 @@ export function isRelevantGitPath(file: string): boolean {
   if (OWN_REFS.test(normalized)) return false;
   return RELEVANT.some((pattern) => pattern.test(normalized));
 }
-
-// The directory holding a project's refs: `.git` itself for an
-// ordinary checkout, or the common dir behind a `.git` FILE (the
-// project path is itself a linked worktree, or a submodule). Null
-// when the path has no git directory (missing, or not a repo).
-export const refsDirOf = (projectPath: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const path = yield* Path.Path;
-    const dotGit = path.join(projectPath, ".git");
-    const stat = yield* fs.stat(dotGit).pipe(Effect.option);
-    if (Option.isNone(stat)) return null;
-    if (stat.value.type === "Directory") return dotGit;
-    if (stat.value.type !== "File") return null;
-    const text = yield* fs.readFileString(dotGit).pipe(Effect.option);
-    if (Option.isNone(text)) return null;
-    const pointed = /^gitdir:\s*(.+)$/m.exec(text.value)?.[1]?.trim();
-    if (pointed === undefined) return null;
-    const gitDir = path.isAbsolute(pointed)
-      ? pointed
-      : path.resolve(projectPath, pointed);
-    // A linked worktree's git dir names its repository's common dir,
-    // which is where the refs live.
-    const common = yield* fs
-      .readFileString(path.join(gitDir, "commondir"))
-      .pipe(Effect.option);
-    if (Option.isNone(common)) return gitDir;
-    const dir = common.value.trim();
-    return path.isAbsolute(dir) ? dir : path.resolve(gitDir, dir);
-  });
 
 // The working trees of a project: its own folder when it is a checkout,
 // and every linked worktree its git directory lists, by the `.git` path
@@ -186,14 +158,14 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
   });
 
 // What a project's git directory says about the state its rows show,
-// read with no git: HEAD and each worktree's HEAD, packed-refs, every
-// loose ref the allowlist counts (a ref is written by a rename into
-// place, so a new inode), and which stopped-operation markers exist.
-// Two equal readings mean nothing the allowlist above cares about
-// moved between them. A file that isn't there reads as absent; any
-// other failure (a directory git removed mid-walk, a volume that
-// stalls) fails the reading, which the caller skips rather than read
-// as a change.
+// read with no git: HEAD and ORIG_HEAD and each worktree's,
+// packed-refs, every loose ref the allowlist counts (a ref is written
+// by a rename into place, so a new inode), and the stopped-operation
+// markers (a directory by being there). Two equal readings mean nothing
+// the allowlist above cares about moved between them. A file that isn't
+// there reads as absent; any other failure (a directory git removed
+// mid-walk, a volume that stalls) fails the reading, which the caller
+// skips rather than read as a change.
 const isNotFound = (error: PlatformError.PlatformError) =>
   Predicate.isTagged(error.reason, "NotFound");
 
@@ -354,7 +326,7 @@ const make = (deps: GitWatcherDeps) =>
     // that failed, which says nothing about a change).
     const readProject = (projectPath: string) =>
       Effect.gen(function* () {
-        const gitDir = yield* refsDirOf(projectPath);
+        const gitDir = yield* Git.commonDirOf(projectPath);
         if (gitDir === null) return { gitDir, trees: new Set<string>() };
         const found = yield* workingTreesOf(projectPath, gitDir);
         const state = yield* (
