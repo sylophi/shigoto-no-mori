@@ -72,7 +72,7 @@ export function ownTestTemp(family: string): string {
 
 // Removes the run's folder unless another process still holds it, then
 // sweeps: what a run does as it exits, for a process a signal ends,
-// which runs no exit handler (../testProcesses.mts ends it with the
+// which runs no exit handler (testProcesses.mts ends it with the
 // signal it got).
 export function leaveTestTemp(): void {
   if (owned === undefined) return;

@@ -356,7 +356,6 @@ async function update(identity: string) {
   // of ours, found by their executable.
   const opened = new Set<number>();
   const noteOpened = (pid: number) => opened.add(own(pid));
-  const forgetChmod = onRunEnd(() => chmodSync(installedDir, 0o755));
   const fail: (message: string) => never = (message) => {
     printLogs(dataDir);
     throw new Error(`the update: ${message}`);
@@ -503,7 +502,6 @@ async function update(identity: string) {
       `the update: ${version} swapped for ${next} and opened again (pid ${relaunched})`,
     );
   } finally {
-    forgetChmod();
     chmodSync(installedDir, 0o755);
     if (!exited && child.pid !== undefined) await stop(child.pid, () => exited);
     await Promise.all(

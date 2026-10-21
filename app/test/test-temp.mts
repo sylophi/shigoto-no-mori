@@ -20,6 +20,7 @@ import { existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { it } from "vitest";
+import { SYNC_SPAWN } from "../../testProcesses.mts";
 import { repoRoot, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
@@ -166,7 +167,11 @@ it("a killed run's folder is kept while a process that joined it lives", async (
 
 it("a run a signal ends removes its folder when its run end leaves the run", () => {
   const root = tempDir("sm-test-temp-", trackTest);
-  const { stdout, signal } = spawnSync(...launch(root, "signalLeaving"));
+  const [command, args, options] = launch(root, "signalLeaving");
+  const { stdout, signal } = spawnSync(command, args, {
+    ...options,
+    ...SYNC_SPAWN,
+  });
   assert.equal(signal, "SIGTERM");
   const [run = ""] = stdout.trim().split("\n");
   assert.ok(run.startsWith(join(root, "proof")));
