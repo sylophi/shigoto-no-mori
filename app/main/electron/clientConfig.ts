@@ -97,8 +97,7 @@ export function readClientConfigSync(): ClientConfig {
 export const clientConfigChanges: Stream.Stream<ClientConfig> =
   SubscriptionRef.changes(memo);
 
-// Merge-on-write, matching the downgrade-safety rule the device store
-// documents: read the on-disk doc loosely, drop only the keys this
+// Merge-on-write: read the on-disk doc loosely, drop only the keys this
 // build models, overlay the incoming ones, write atomically.
 // A full replace would erase keys a newer build wrote. Omission of a
 // modeled key still clears it (the omit-on-default serialization).

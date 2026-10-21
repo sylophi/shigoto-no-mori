@@ -822,7 +822,7 @@ describe(
       assert.equal((await runAt(box.home, "--json", "config", "edit")).code, 2);
     });
 
-    it("removes the key of a line the edit deleted, one only the terminal sets too", async () => {
+    it("removes the key of a line the edit deleted, one `config set` refuses too", async () => {
       box.write("registry.json", { projects: [] });
       await box.migrate("cli");
       const stored = async () =>

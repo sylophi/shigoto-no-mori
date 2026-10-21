@@ -82,8 +82,7 @@ export const WorktreeLayoutSchema = Schema.Literals([
 ]);
 export type WorktreeLayout = typeof WorktreeLayoutSchema.Type;
 
-// Strips keys it does not model: it is also the write input, so a key a
-// client invents is dropped at the boundary. Reads use the Stored variant.
+// Strips keys it does not model. Reads use the Stored variant.
 export const ShigomoriConfigSchema = Schema.Struct({
   scripts: Schema.optional(
     Schema.Struct({
