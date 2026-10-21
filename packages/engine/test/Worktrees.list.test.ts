@@ -140,8 +140,9 @@ it("lists a project's worktrees with git once while its files say the same, and 
     [named(read, "fox")?.detached, named(read, "fox")?.branch],
     [false, "fox3"],
   );
-  // A lock git reads, released after it answered: no lock either side
-  // of the next read's files, which git's answer isn't kept for.
+  // A lock taken as git reads: in git's answer, not in the files read
+  // before it, which read the same again once it's released, so the
+  // answer isn't kept.
   writeFileSync(beforeGit, `"${realGit}" -C "${repo}" worktree lock "${fox}"`);
   read = await change("a lock while git reads", () => {
     box.git(fox, "checkout", "-q", "-b", "fox4");

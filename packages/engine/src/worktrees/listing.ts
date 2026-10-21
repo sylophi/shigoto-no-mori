@@ -105,8 +105,9 @@ export const makeListing = Effect.gen(function* () {
   // git renames a new HEAD, config or table list into place and
   // rewrites a gitdir in place, with a later mtime. And the names by
   // their directory's mtime too, which moves with one added and removed
-  // between two reads. None when one can't be read, or the common dir
-  // isn't found this way.
+  // between two reads beside another (git drops the directory with its
+  // last). None when one can't be read, or the common dir isn't found
+  // this way.
   const worktreeFilesOf = (projectPath: string) =>
     Effect.gen(function* () {
       const common = yield* Git.commonDirOf(projectPath);
