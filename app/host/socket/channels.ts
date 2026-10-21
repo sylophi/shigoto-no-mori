@@ -39,8 +39,8 @@ const ATTACH_WAIT_MS = 60_000;
 
 // Ids gone with no channel left to say so: the ones this side dropped,
 // and the ones the caller reset before anything attached them, kept for
-// the one attach that may follow so it comes back closed. Bounded: a
-// caller cannot grow it without opening channels too.
+// the one attach that may follow so it comes back closed. Bounded, the
+// oldest going first.
 const MAX_TOMBSTONES = 64;
 
 type Failure = typeof CallFailureSchema.Type;
@@ -130,15 +130,15 @@ export type HostChannels = LinkChannels & {
 export function makeHostChannels(): HostChannels {
   const channels = new Map<string, Channel>();
   const waiting = new Map<string, Deferred.Deferred<Channel, Failure>>();
-  const gone = new Set<string>();
+  const tombstones = new Set<string>();
   let dead = false;
 
   function tombstone(channelId: string): void {
-    if (gone.size >= MAX_TOMBSTONES) {
-      const oldest = gone.values().next().value;
-      if (oldest !== undefined) gone.delete(oldest);
+    if (tombstones.size >= MAX_TOMBSTONES) {
+      const oldest = tombstones.values().next().value;
+      if (oldest !== undefined) tombstones.delete(oldest);
     }
-    gone.add(channelId);
+    tombstones.add(channelId);
   }
 
   function remove(channelId: string, channel: Channel): void {
@@ -198,7 +198,7 @@ export function makeHostChannels(): HostChannels {
     Effect.suspend(() => {
       const channel = channels.get(channelId);
       if (channel !== undefined) return Effect.succeed(channel);
-      if (dead || gone.has(channelId)) {
+      if (dead || tombstones.has(channelId)) {
         return Effect.fail(refused(`channel ${channelId} is gone`));
       }
       let deferred = waiting.get(channelId);
@@ -262,7 +262,7 @@ export function makeHostChannels(): HostChannels {
           drop(channelId, channel);
         },
       };
-      if (gone.delete(channelId)) {
+      if (tombstones.delete(channelId)) {
         // An id gone already (most often the caller's reset, come before
         // this end attached): a closed handle, and the endpoint hears it
         // the way it would have live.

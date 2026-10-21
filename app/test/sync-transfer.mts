@@ -854,7 +854,8 @@ describe("serving past the call", () => {
       const header = Schema.decodeUnknownSync(BundleAnswerSchema)(
         await Effect.runPromise(link.read),
       );
-      // The bundle's first byte here, the rest left untaken.
+      // The bundle's first byte here and the rest left untaken, so the
+      // reset lands behind bytes this end holds.
       await Effect.runPromise(link.readBytes(1, () => Effect.void));
       assert.equal(syncTempDirs(tmp).length, 1, "the source holds no bundle");
       // The serve reads as the peer bringing from here, not as a move.
