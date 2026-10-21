@@ -1909,8 +1909,9 @@ it("unreachable is typed: a failed direct dial rejects the invoke with the dial 
   );
 });
 
-// Sockets that fail as the platform would, each with the errno its
-// kind dies of here: no route on the LAN, no name for the tunnel.
+// Sockets that fail as the platform would, each with an errno its
+// kind can die of: no route on the LAN, and for the tunnel a name the
+// dialer's resolver can't answer.
 function failingSocket(url: string) {
   const ws = new WsClient("ws://127.0.0.1:1");
   const emit = ws.emit.bind(ws);
