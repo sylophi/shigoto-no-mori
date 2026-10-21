@@ -160,9 +160,10 @@ export const makeListing = Effect.gen(function* () {
 
   // git's last `worktree list` of each project and the files it was read
   // from, answered again while they say the same. Kept only when they
-  // read the same before git ran and after, so the answer is theirs and
-  // not that of a change made while git ran, which they could read as
-  // undone later.
+  // read the same before git ran and after: a change git saw as it ran,
+  // which they could read as undone later, is asked of git again. One
+  // that comes and goes within the run and leaves them as they were (a
+  // lock, a project's only linked worktree) goes unseen.
   const lastListed = new Map<
     string,
     { readonly files: string; readonly entries: ReadonlyArray<WorktreeEntry> }

@@ -4,7 +4,8 @@
 // each change an identity shows (a branch, a detach, a lock, the
 // primary's checkout, a worktree added, moved, removed or pruned) is in
 // the very next read, a change made while git runs included, undone by
-// the time it answers or after (real git on a sandbox data dir).
+// the time it answers or after, as far as the files show it (real git
+// on a sandbox data dir).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
