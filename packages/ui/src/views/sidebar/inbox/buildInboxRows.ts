@@ -5,7 +5,7 @@ import {
 import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
 import type { ProjectShigomoriConfigQueries } from "../../../lib/forest.ts";
 import { showPrimaryInInbox } from "../../../lib/showPrimaryInInbox.ts";
-import type { MirrorLink } from "../../../lib/forest.ts";
+import type { LocalSide, MirrorLink } from "../../../lib/forest.ts";
 import type { ProjectPullRequestQueries } from "../../../lib/forest.ts";
 import type { RemoteForestItem } from "../../../lib/forest.ts";
 import type { ProjectWorktreeQueries } from "../../../lib/forest.ts";
@@ -46,6 +46,7 @@ interface BuildInboxRowsArgs {
   remote: RemoteForestItem[];
   // See buildSidebarRows: a mirrored pair files once, as the local row.
   mirrors: readonly MirrorLink[];
+  localSides?: ReadonlyMap<string, LocalSide>;
   // Every peer's badge off the device registry (see buildSidebarRows).
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   // Which shelves are open. Absence means shut, so both shelves start
@@ -110,6 +111,7 @@ export function buildInboxRows({
   configQueries,
   remote,
   mirrors,
+  localSides = new Map(),
   deviceBadges,
   openShelves,
   hiddenPrefixes,
@@ -200,16 +202,24 @@ export function buildInboxRows({
   });
   // A peer's row folds only into a local entry filed in the same box:
   // a local copy on a shelf would take the peer's live worktree off
-  // the list with it. The local row a folded peer's reveal lands on,
-  // by the peer's key.
+  // the list with it. Where this machine's project isn't listed, its
+  // side of the pair is filed in the peer's place (localSides). The
+  // local row a folded peer's reveal lands on, by the peer's key.
   const foldedPeers = new Map<string, string>();
   for (const item of remote) {
+    const standIns: LocalSide[] = [];
     file(
       item.project,
       item.worktrees.filter((worktree) => {
         const key = remoteWorktreeKey(item.deviceId, worktree.id);
         const local = peerRowsFolded.get(key);
         if (local === undefined) return true;
+        const side = localSides.get(local);
+        if (side !== undefined) {
+          standIns.push(side);
+          foldedPeers.set(key, local);
+          return false;
+        }
         const pr = item.pullRequests[worktree.branch];
         if (
           localShelf.get(local) !==
@@ -224,6 +234,15 @@ export function buildInboxRows({
       item.showPrimaryInInbox,
       deviceBadges.get(item.deviceId) ?? deviceBadgeOf(item),
     );
+    for (const side of standIns) {
+      file(
+        side.project,
+        [side.worktree],
+        item.pullRequests,
+        item.showPrimaryInInbox,
+        undefined,
+      );
+    }
   }
 
   const total = Object.values(shelves).reduce(

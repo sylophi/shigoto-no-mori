@@ -13,7 +13,7 @@ import {
   isHiddenByPrefix,
 } from "@shigomori/contracts/sharedSettings";
 import type { RemoteForestItem } from "../../lib/forest.ts";
-import type { MirrorLink } from "../../lib/forest.ts";
+import type { LocalSide, MirrorLink } from "../../lib/forest.ts";
 import type { ProjectWorktreeQueries } from "../../lib/forest.ts";
 import type { ProjectPullRequestQueries } from "../../lib/forest.ts";
 import type {
@@ -91,6 +91,11 @@ export interface BuildSidebarRowsArgs {
   // worktree on two machines, so the peer's row folds into the local
   // row (see mirrorPairsOf).
   mirrors: readonly MirrorLink[];
+  // This device's sides of pairs whose own projects the build doesn't
+  // list (localSidesWith), by worktree id: each stands in for its
+  // peer's row, so a pair's row is this device's under any device
+  // filter.
+  localSides?: ReadonlyMap<string, LocalSide>;
   // Every peer's badge off the device registry (useDeviceBadges),
   // whether or not its rows are in `remote`: the device filter narrows
   // the rows, and a local row's mirror still names its peer while the
@@ -199,6 +204,7 @@ export function buildSidebarRows({
   byOwner,
   remote,
   mirrors,
+  localSides = new Map(),
   deviceBadges,
 }: BuildSidebarRowsArgs): SidebarViewModel {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
@@ -361,6 +367,12 @@ export function buildSidebarRows({
     // client) can still reach them.
     const remoteVisible: RemoteRow[] = [];
     const remoteShelves = emptyShelves<RemoteRow>();
+    const localVisible: Worktree[] = [];
+    const localShelves = emptyShelves<Worktree>();
+    const fileLocal = (worktree: Worktree) => {
+      const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
+      (shelf === null ? localVisible : localShelves[shelf]).push(worktree);
+    };
     const folded = (peerKey: string, shelf: GroupShelf | null) =>
       foldedInto(peerKey, shelf, groupId);
     for (const item of group.remote) {
@@ -372,12 +384,16 @@ export function buildSidebarRows({
         folded,
       );
       for (const row of peerRows) {
+        const local = peerRowsFolded.get(row.key);
+        const side = local === undefined ? undefined : localSides.get(local);
+        if (side !== undefined) {
+          fileLocal(side.worktree);
+          continue;
+        }
         const { shelf } = row;
         (shelf === null ? remoteVisible : remoteShelves[shelf]).push(row);
       }
     }
-    const localVisible: Worktree[] = [];
-    const localShelves = emptyShelves<Worktree>();
     const unlisted = query?.isLoading
       ? "worktree-skeleton"
       : query?.error
@@ -385,8 +401,7 @@ export function buildSidebarRows({
         : null;
     if (query && unlisted === null) {
       for (const worktree of (query.data ?? []) as readonly Worktree[]) {
-        const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
-        (shelf === null ? localVisible : localShelves[shelf]).push(worktree);
+        fileLocal(worktree);
       }
     }
     const missing = project.pathExists === false;

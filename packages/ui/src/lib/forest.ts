@@ -66,3 +66,37 @@ export type MirrorLink = {
   peerWorktreeId: string;
   localWorktreeId: string;
 };
+
+// This device's worktree in a mirrored pair, in its project.
+export interface LocalSide {
+  worktree: Worktree;
+  project: Project;
+}
+
+// This device's sides of its pairs with a peer, by worktree id, for the
+// device filter narrowed to that peer. A pair is one worktree on two
+// machines, so it is on either one's filter, and its row is this
+// device's under any of them, standing in for the peer's. A listing not
+// in yet, or failed, holds none.
+export function localSidesWith(
+  peerDeviceId: string,
+  mirrors: readonly MirrorLink[],
+  projects: readonly Project[],
+  worktreeQueries: ProjectWorktreeQueries,
+): Map<string, LocalSide> {
+  const paired = new Set(
+    mirrors
+      .filter((link) => link.peerDeviceId === peerDeviceId)
+      .map((link) => link.localWorktreeId),
+  );
+  const sides = new Map<string, LocalSide>();
+  projects.forEach((project, i) => {
+    const query = worktreeQueries[i];
+    if (project.pathExists === false || query?.error) return;
+    for (const worktree of query?.data ?? []) {
+      if (paired.has(worktree.id))
+        sides.set(worktree.id, { worktree, project });
+    }
+  });
+  return sides;
+}
