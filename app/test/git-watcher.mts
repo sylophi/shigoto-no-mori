@@ -8,7 +8,7 @@
 // surfaces as none. The watcher's loop-safety rests on that allowlist
 // (the app's own `git status` must never feed a refetch that feeds a
 // `git status`), so this is where it is pinned. Also covered:
-// refsDirOf resolving a linked worktree's `.git` file to the
+// commonDirOf resolving a linked worktree's `.git` file to the
 // repository's common dir, the reconcile dropping a project that left
 // the registry, and the working trees' watch: an edit in the main
 // checkout or a linked worktree lands as one files change, `.git`
@@ -30,10 +30,10 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
 import { mkdirSync, realpathSync, rmSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Git from "@shigomori/engine/Git";
 import {
   isRelevantGitPath,
   isWorkingTreeChange,
-  refsDirOf,
   GitWatcher,
   layer as gitWatcherLayer,
 } from "../host/lib/GitWatcher.ts";
@@ -153,8 +153,10 @@ it("working trees: a file anywhere counts, and anything under a .git does not", 
   }
 });
 
-const refsDir = (path: string) =>
-  Effect.runPromise(refsDirOf(path).pipe(Effect.provide(NodeServices.layer)));
+const commonDir = (path: string) =>
+  Effect.runPromise(
+    Git.commonDirOf(path).pipe(Effect.provide(NodeServices.layer)),
+  );
 
 it("real repository: a commit, a checkout and a branch delete each land as one project change, while status, objects and working-tree edits land as none, and a project leaving the registry stops its watch", async () => {
   // realpath: macOS puts tmpdir behind a symlink and git records the real
@@ -170,12 +172,12 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   git(repo, "worktree", "add", "-q", "-b", "feat", worktree);
 
   assert.equal(
-    await refsDir(worktree),
+    await commonDir(worktree),
     join(repo, ".git"),
     "a linked worktree's .git file must resolve to the common dir",
   );
-  assert.equal(await refsDir(repo), join(repo, ".git"));
-  assert.equal(await refsDir(join(root, "nowhere")), null);
+  assert.equal(await commonDir(repo), join(repo, ".git"));
+  assert.equal(await commonDir(join(root, "nowhere")), null);
 
   const changes: string[] = [];
   const edits: string[] = [];
@@ -367,7 +369,8 @@ it("backstop: a commit whose events were all lost is signalled once, a ref direc
   await delay(600);
   assert.deepEqual(changes, ["p1"], "a ref directory's churn is no move");
   // A ref directory appearing and going, HEAD unmoved: a namespace
-  // under refs/heads, a remote's, and one with no ref in it.
+  // under refs/heads, a remote's (and its ref moving inside it), and one
+  // with no ref in it.
   git(repo, "branch", "feature/x");
   await waitFor(() => changes.length >= 2, "the lost branch to be found");
   git(repo, "branch", "-D", "feature/x");

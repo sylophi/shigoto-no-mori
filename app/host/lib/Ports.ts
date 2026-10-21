@@ -41,10 +41,10 @@ export class Ports extends Context.Service<
 >()("sm/host/Ports") {}
 
 const INSTALLED_TTL = Duration.seconds(30);
-// Resolving an id to its checkout forks `git worktree list`, and the
-// list polls. A worktree's path is fixed for its id (the id IS a hash of
-// the path, relocation mints a new one), so it is safe to hold: a
-// deleted worktree's page is gone before the entry matters.
+// Resolving an id to its checkout reads the project's worktree list,
+// and the list polls. A worktree's path is fixed for its id (the id IS
+// a hash of the path, relocation mints a new one), so it is safe to
+// hold: a deleted worktree's page is gone before the entry matters.
 const IDENTITY_TTL = Duration.minutes(1);
 // A worktree's port list polls every few seconds while shown (its page,
 // the Ports dialog, a Live card): its config and env files are read once
