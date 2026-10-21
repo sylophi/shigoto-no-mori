@@ -20,9 +20,9 @@ export type ReleaseInfo = {
 };
 
 // The feeds are read as Go's encoding/json reads them into structs: a
-// missing or null field is its zero value ("", false, none), and only a value of
-// the wrong type fails. GitHub sends null for an empty body or an
-// unpublished date.
+// missing or null field is its zero value ("", false, none), and only a
+// value of the wrong type fails. GitHub sends null for an empty body or
+// an unpublished date.
 const Text = Schema.optional(Schema.NullOr(Schema.String));
 const Flag = Schema.optional(Schema.NullOr(Schema.Boolean));
 

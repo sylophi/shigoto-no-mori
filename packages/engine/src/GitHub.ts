@@ -375,7 +375,7 @@ const rollupChecks = (nodes: ReadonlyArray<CheckNode>): PullRequestChecks => {
   return checks;
 };
 
-// A `gh pr list` or `gh pr view` row, read as Go read it (goJson.ts).
+// A `gh pr list` or `gh pr view` row, read as goJson.ts reads it.
 const Row = Schema.Struct({
   number: GoJson.count,
   title: GoJson.text,

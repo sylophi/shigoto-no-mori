@@ -135,8 +135,6 @@ it("finds a data dir a rename landed before its pointer moved, from two processe
       from: join(home, ".sm"),
       to: moved,
       partial: null,
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [],
     }),
   );
@@ -166,8 +164,6 @@ it("refuses to resolve a data dir a rename landed whose pointer can't be written
       from: join(home, ".sm"),
       to: moved,
       partial: null,
-      pid: 4_194_304,
-      startedAt: 0,
       moved: [],
     }),
   );

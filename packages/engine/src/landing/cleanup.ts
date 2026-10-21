@@ -236,7 +236,6 @@ export const makeCleanup = ({
                   }),
                 )
               : Exit.void;
-            // Both failures are said, the checkout's first.
             // Both failures said, the checkout's first, as one error, since
             // a report shows a cause's first; an interrupt stays one.
             if (Exit.isFailure(checkedOut)) {
