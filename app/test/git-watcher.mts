@@ -8,7 +8,7 @@
 // surfaces as none. The watcher's loop-safety rests on that allowlist
 // (the app's own `git status` must never feed a refetch that feeds a
 // `git status`), so this is where it is pinned. Also covered:
-// refsDirOf resolving a linked worktree's `.git` file to the
+// commonDirOf resolving a linked worktree's `.git` file to the
 // repository's common dir, the reconcile dropping a project that left
 // the registry, and the working trees' watch: an edit in the main
 // checkout or a linked worktree lands as one files change, `.git`
@@ -30,10 +30,10 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
 import { mkdirSync, realpathSync, rmSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Git from "@shigomori/engine/Git";
 import {
   isRelevantGitPath,
   isWorkingTreeChange,
-  refsDirOf,
   GitWatcher,
   layer as gitWatcherLayer,
 } from "../host/lib/GitWatcher.ts";
@@ -154,7 +154,9 @@ it("working trees: a file anywhere counts, and anything under a .git does not", 
 });
 
 const refsDir = (path: string) =>
-  Effect.runPromise(refsDirOf(path).pipe(Effect.provide(NodeServices.layer)));
+  Effect.runPromise(
+    Git.commonDirOf(path).pipe(Effect.provide(NodeServices.layer)),
+  );
 
 it("real repository: a commit, a checkout and a branch delete each land as one project change, while status, objects and working-tree edits land as none, and a project leaving the registry stops its watch", async () => {
   // realpath: macOS puts tmpdir behind a symlink and git records the real

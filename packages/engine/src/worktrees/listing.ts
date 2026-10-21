@@ -10,8 +10,13 @@ import * as Result from "effect/Result";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Config from "../Config.ts";
 import * as Git from "../Git.ts";
-import { shortRefName, splitRemoteRef } from "../gitParse.ts";
+import {
+  shortRefName,
+  splitRemoteRef,
+  type WorktreeEntry,
+} from "../gitParse.ts";
 import * as Layout from "../Layout.ts";
+import { isNotFound } from "../platformErrors.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import {
@@ -80,6 +85,7 @@ export const makeListing = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   const deviceFlag = config.device;
 
   // The project's settings and its default branch, which count only
@@ -89,10 +95,72 @@ export const makeListing = Effect.gen(function* () {
       .read({ kind: "project", projectId: project.id, path: project.path })
       .pipe(Effect.map(Config.projectSettingsOf));
 
+  // What `git worktree list` reads, read with no git: where the common
+  // dir really is, its HEAD and config, and each linked worktree's
+  // gitdir, HEAD and lock, with the reftable stacks a repository in that
+  // format keeps HEAD in. A branch's commit isn't among them, and no
+  // identity carries one (a detached one's is its HEAD). None when one
+  // can't be read, or the common dir isn't found this way.
+  const worktreeFilesOf = (projectPath: string) =>
+    Effect.gen(function* () {
+      const common = yield* Git.commonDirOf(projectPath);
+      if (common === null) return Option.none<string>();
+      const names = yield* fs
+        .readDirectory(path.join(common, "worktrees"))
+        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed<string[]>([])));
+      const files = [
+        "HEAD",
+        "config",
+        "reftable/tables.list",
+        ...names
+          .toSorted()
+          .flatMap((name) =>
+            ["gitdir", "HEAD", "locked", "reftable/tables.list"].map(
+              (file) => `worktrees/${name}/${file}`,
+            ),
+          ),
+      ];
+      const contents = yield* Effect.forEach(
+        files,
+        (file) =>
+          fs
+            .readFileString(path.join(common, file))
+            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(null))),
+        { concurrency: "unbounded" },
+      );
+      const real = yield* fs.realPath(common);
+      return Option.some(JSON.stringify([real, files, contents]));
+    }).pipe(
+      Effect.provide(platform),
+      Effect.orElseSucceed(() => Option.none<string>()),
+    );
+
+  // git's last `worktree list` of each project and the files it was read
+  // from, answered again while they say the same.
+  const lastListed = new Map<
+    string,
+    { readonly files: string; readonly entries: ReadonlyArray<WorktreeEntry> }
+  >();
+  const listWorktrees = Effect.fn(function* (projectPath: string) {
+    // Read before git runs, so a write in between differs next time.
+    const files = yield* worktreeFilesOf(projectPath);
+    const last = lastListed.get(projectPath);
+    if (Option.isSome(files) && last?.files === files.value) {
+      return last.entries;
+    }
+    const entries = yield* git.listWorktrees(projectPath);
+    if (Option.isSome(files)) {
+      lastListed.set(projectPath, { files: files.value, entries });
+    } else {
+      lastListed.delete(projectPath);
+    }
+    return entries;
+  });
+
   const identities = Effect.fn("Worktrees.identities")(function* (
     project: RegisteredProject,
   ) {
-    const entries = yield* git.listWorktrees(project.path);
+    const entries = yield* listWorktrees(project.path);
     const bases = yield* layout.managedBases(project);
     const codexNames = yield* Effect.cached(deviceFlag("codexWorktreeNames"));
     const primaryPath = primaryCheckoutPath(entries, project.path);
