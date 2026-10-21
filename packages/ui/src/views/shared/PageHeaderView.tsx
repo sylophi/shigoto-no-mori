@@ -10,10 +10,9 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 
 // One padding for both shells: the desktop pages sit under the window
 // chrome, and the web shell's pages have the same open canvas above
-// them.
-// The header's padding on its own, for the pages that draw a header of
-// their own shape (the diff pages, the worktree detail) and still want
-// to sit at the same inset, phone layout included.
+// them. The header's padding on its own, for the pages that draw a
+// header of their own shape (the diff pages, the worktree detail) and
+// still want to sit at the same inset, phone layout included.
 export const PAGE_HEADER_PADDING =
   "px-6 pt-7 pb-4 phone:px-4 phone:pt-4 phone:pb-3";
 

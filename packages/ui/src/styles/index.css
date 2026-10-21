@@ -330,10 +330,11 @@
 }
 
 /*
- * The tile a project without a logo wears (shared/ProjectIcon.tsx): an
- * initial in --project-tile-ink on a cheerful shape (a rounded square,
- * or doubutsu's leaf), which paints in currentColor. The component sets
- * only --project-hue, drawn from the name. The fill's lightness and
+ * The tile a project without a logo wears
+ * (views/shared/ProjectIconView.tsx): an initial in --project-tile-ink
+ * on a cheerful shape (a rounded square, or doubutsu's leaf), which
+ * paints in currentColor. The component sets only --project-hue, drawn
+ * from the name. The fill's lightness and
  * chroma are tokens here, so a theme can move them. The color is set
  * on every shape, outside any layer, on purpose: menus recolor every
  * descendant on focus (dropdown-menu's `focus:**:text-accent-foreground`),
@@ -357,7 +358,7 @@
 }
 
 /*
- * The villager moments' motion (components/villagers). A rare one's
+ * The villager moments' motion (views/villagers). A rare one's
  * dialogue box bobs its arrow once the line is out. A legendary one's
  * letter arrives as a scene, once the toast has slid in: the flap opens
  * (.4s), the stamp drops (.6s), the letter rises (.7s), the postmark
@@ -590,7 +591,7 @@
     villager-balloon-sway 2.4s ease-in-out infinite;
 }
 
-/* The Visitors album (components/visitors): each sticker pops into its
+/* The Visitors album (views/visitors): each sticker pops into its
    slot with a little overshoot, the progress fills from empty, the best
    friend's stamp drops onto the guest book and the totals press on
    after it, like the letter's postmark. */
