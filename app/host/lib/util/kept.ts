@@ -1,6 +1,6 @@
 // An answer kept a while in the host's memory, to spare repeating a
-// slow read: it ages on both clocks, and a failure is never one of
-// them.
+// slow read: it ages on both clocks, and a failure is kept only when
+// asked, never for the answer's life.
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";

@@ -14,15 +14,14 @@
 // SOCKETS open concurrently, each sealed with its own ticket to the key
 // the hub's roster names for the peer (shared/remote/sealedSocket.ts),
 // so whoever answers a candidate address, only the peer completes the
-// handshake. The HELLOS are serialized:
-// at most one hello is in flight, the next candidate's hello goes out
-// only after the previous handshake failed, and losers whose hello
-// was never sent are closed pre-auth. Serialization is what makes a
-// multi-candidate dial safe against the host's
-// one-authed-socket-per-device supersede rule: with concurrent hellos
-// the SLOWER candidate's hello would land after the winner was cached
-// and supersede-kill the fresh session, so the first invoke on it
-// would reject. An abandoned pre-auth socket costs the host only its
+// handshake. The HELLOS are serialized: at most one hello is in flight,
+// the next candidate's hello goes out only after the previous handshake
+// failed, and losers whose hello was never sent are closed pre-auth.
+// Serialization is what makes a multi-candidate dial safe against the
+// host's one-authed-socket-per-device supersede rule: with concurrent
+// hellos the SLOWER candidate's hello would land after the winner was
+// cached and supersede-kill the fresh session, so the first invoke on
+// it would reject. An abandoned pre-auth socket costs the host only its
 // own candidate's ticket and supersedes nothing, so a junk candidate
 // opening first (Docker bridges, VPN interfaces) costs only its own
 // open, never the race.
