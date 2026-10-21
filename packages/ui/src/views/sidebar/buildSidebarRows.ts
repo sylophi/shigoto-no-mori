@@ -92,9 +92,10 @@ export interface BuildSidebarRowsArgs {
   // row (see mirrorPairsOf).
   mirrors: readonly MirrorLink[];
   // This device's sides of pairs whose own projects the build doesn't
-  // list (localSidesWith), by worktree id: each stands in for its
-  // peer's row, so a pair's row is this device's under any device
-  // filter.
+  // list (localSidesWith), by worktree id: each is listed among its
+  // peer's rows, and the peer's row folds into it as into a listed
+  // local row, so a pair reads under the peer's filter as it does
+  // under every device.
   localSides?: ReadonlyMap<string, LocalSide>;
   // Every peer's badge off the device registry (useDeviceBadges),
   // whether or not its rows are in `remote`: the device filter narrows
@@ -372,10 +373,26 @@ export function buildSidebarRows({
     const fileLocal = (worktree: Worktree) => {
       const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
       (shelf === null ? localVisible : localShelves[shelf]).push(worktree);
+      return shelf;
     };
     const folded = (peerKey: string, shelf: GroupShelf | null) =>
       foldedInto(peerKey, shelf, groupId);
     for (const item of group.remote) {
+      // This device's side of a pair with the peer, filed among the
+      // group's local rows and listed for the peer's row to fold into.
+      for (const worktree of item.worktrees) {
+        const local = peerRowsFolded.get(
+          remoteWorktreeKey(item.deviceId, worktree.id),
+        );
+        const side = local === undefined ? undefined : localSides.get(local);
+        if (side === undefined) continue;
+        const shelf = fileLocal(side.worktree);
+        listedLocal.set(side.worktree.id, {
+          groupId,
+          shelf,
+          shown: shelf === null || openShelves[shelf].has(groupId),
+        });
+      }
       const peerRows = remoteWorktreeRows(
         item,
         groupId,
@@ -384,12 +401,6 @@ export function buildSidebarRows({
         folded,
       );
       for (const row of peerRows) {
-        const local = peerRowsFolded.get(row.key);
-        const side = local === undefined ? undefined : localSides.get(local);
-        if (side !== undefined) {
-          fileLocal(side.worktree);
-          continue;
-        }
         const { shelf } = row;
         (shelf === null ? remoteVisible : remoteShelves[shelf]).push(row);
       }

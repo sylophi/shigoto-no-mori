@@ -46,6 +46,8 @@ interface BuildInboxRowsArgs {
   remote: RemoteForestItem[];
   // See buildSidebarRows: a mirrored pair files once, as the local row.
   mirrors: readonly MirrorLink[];
+  // See buildSidebarRows: this device's sides of pairs whose projects
+  // `projects` leaves out, filed as this machine's own.
   localSides?: ReadonlyMap<string, LocalSide>;
   // Every peer's badge off the device registry (see buildSidebarRows).
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
@@ -145,6 +147,8 @@ export function buildInboxRows({
   // Where each of this machine's entries filed, for the peers' rows to
   // fold into.
   const localShelf = new Map<string, InboxShelf | null>();
+  // Every entry filed, by row key, for revealKey.
+  const filed = new Set<string>();
   const file = (
     project: Project,
     trees: readonly Worktree[],
@@ -152,8 +156,9 @@ export function buildInboxRows({
     // Undefined while the project's config is unread.
     showPrimary: boolean | undefined,
     device: SidebarDeviceBadge | undefined,
+    // The stack's trunk, off the project's listing.
+    trunk = trunkOf(trees),
   ) => {
-    const trunk = trunkOf(trees);
     for (const worktree of trees) {
       if (worktree.isPrimary && showPrimary !== true) {
         if (showPrimary === false) {
@@ -182,6 +187,7 @@ export function buildInboxRows({
         shelf,
       };
       if (device === undefined) localShelf.set(worktree.id, shelf);
+      filed.add(worktreeRowKey(device?.deviceId, worktree.id));
       if (shelf === null) {
         live.push(entry);
       } else {
@@ -202,47 +208,41 @@ export function buildInboxRows({
   });
   // A peer's row folds only into a local entry filed in the same box:
   // a local copy on a shelf would take the peer's live worktree off
-  // the list with it. Where this machine's project isn't listed, its
-  // side of the pair is filed in the peer's place (localSides). The
-  // local row a folded peer's reveal lands on, by the peer's key.
-  const foldedPeers = new Map<string, string>();
+  // the list with it. Where `projects` leaves this machine's project
+  // out, its side of a pair with the peer (localSides) files first, as
+  // this machine's own: its own primary opt-in, and the repo's pull
+  // requests and trunk off the peer's listing.
   for (const item of remote) {
-    const standIns: LocalSide[] = [];
+    const localOf = (worktree: Worktree) =>
+      peerRowsFolded.get(remoteWorktreeKey(item.deviceId, worktree.id));
+    for (const worktree of item.worktrees) {
+      const local = localOf(worktree);
+      const side = local === undefined ? undefined : localSides.get(local);
+      if (side === undefined) continue;
+      file(
+        side.project,
+        [side.worktree],
+        item.pullRequests,
+        side.showPrimaryInInbox,
+        undefined,
+        trunkOf(item.worktrees),
+      );
+    }
     file(
       item.project,
       item.worktrees.filter((worktree) => {
-        const key = remoteWorktreeKey(item.deviceId, worktree.id);
-        const local = peerRowsFolded.get(key);
+        const local = localOf(worktree);
         if (local === undefined) return true;
-        const side = localSides.get(local);
-        if (side !== undefined) {
-          standIns.push(side);
-          foldedPeers.set(key, local);
-          return false;
-        }
         const pr = item.pullRequests[worktree.branch];
-        if (
+        return (
           localShelf.get(local) !==
           worktreeShelfOf(worktree, pr, hiddenPrefixes, allowAgentWorking)
-        ) {
-          return true;
-        }
-        foldedPeers.set(key, local);
-        return false;
+        );
       }),
       item.pullRequests,
       item.showPrimaryInInbox,
       deviceBadges.get(item.deviceId) ?? deviceBadgeOf(item),
     );
-    for (const side of standIns) {
-      file(
-        side.project,
-        [side.worktree],
-        item.pullRequests,
-        item.showPrimaryInInbox,
-        undefined,
-      );
-    }
   }
 
   const total = Object.values(shelves).reduce(
@@ -316,9 +316,12 @@ export function buildInboxRows({
     leftOut: (worktreeId, deviceId) =>
       leftOut.has(worktreeRowKey(deviceId, worktreeId)),
     revealKey: (_projectId, worktreeId, deviceId) => {
-      // A peer's worktree folded into its local mirror: reveal that.
+      // A peer's worktree with no entry of its own, folded into its
+      // local mirror or left out by the device filter: reveal that.
       const peerKey = worktreeRowKey(deviceId, worktreeId);
-      const local = foldedPeers.get(peerKey);
+      const local = filed.has(peerKey)
+        ? undefined
+        : peerRowsFolded.get(peerKey);
       const key =
         local === undefined ? peerKey : worktreeRowKey(undefined, local);
       const shelf = shelfOf.get(key);

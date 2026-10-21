@@ -19,7 +19,7 @@ import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
 import { projectListSections } from "../sidebar/projectListSections.ts";
 import type { ProjectSection } from "../sidebar/sidebarRow.ts";
 import type { ProjectPullRequestQueries } from "../../lib/forest.ts";
-import type { MirrorLink } from "../../lib/forest.ts";
+import type { LocalSide, MirrorLink } from "../../lib/forest.ts";
 import type { RemoteForestItem } from "../../lib/forest.ts";
 import type { ProjectWorktreeQueries } from "../../lib/forest.ts";
 
@@ -35,6 +35,8 @@ export interface GridInput {
   byOwner: boolean;
   remote: RemoteForestItem[];
   mirrors: readonly MirrorLink[];
+  // The tree's (buildSidebarRows), so a tile counts what its header does.
+  localSides?: ReadonlyMap<string, LocalSide>;
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   // recordWorktreeVisit's record by row key.
   visits: Record<string, number>;

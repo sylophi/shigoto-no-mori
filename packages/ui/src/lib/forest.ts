@@ -9,6 +9,7 @@ import type {
   Worktree,
 } from "@shigomori/contracts/schemas";
 import type { StatusTone } from "../primitives/status-dot.tsx";
+import { showPrimaryInInbox } from "./showPrimaryInInbox.ts";
 
 // One read per project, positionally aligned with the projects it was
 // asked for (the app's useAllProject… fan-outs).
@@ -67,22 +68,26 @@ export type MirrorLink = {
   localWorktreeId: string;
 };
 
-// This device's worktree in a mirrored pair, in its project.
+// This device's worktree in a mirrored pair, in its project, with the
+// project's primary opt-in (showPrimaryInInbox), undefined while unread.
 export interface LocalSide {
   worktree: Worktree;
   project: Project;
+  showPrimaryInInbox: boolean | undefined;
 }
 
 // This device's sides of its pairs with a peer, by worktree id, for the
 // device filter narrowed to that peer. A pair is one worktree on two
-// machines, so it is on either one's filter, and its row is this
-// device's under any of them, standing in for the peer's. A listing not
-// in yet, or failed, holds none.
+// machines, so it is on either one's filter: the builders list this
+// device's side among the peer's rows as they do under every device,
+// and the peer's row folds into it by the same rule. A listing not in
+// yet, or failed, holds none.
 export function localSidesWith(
   peerDeviceId: string,
   mirrors: readonly MirrorLink[],
   projects: readonly Project[],
   worktreeQueries: ProjectWorktreeQueries,
+  configQueries: ProjectShigomoriConfigQueries,
 ): Map<string, LocalSide> {
   const paired = new Set(
     mirrors
@@ -94,8 +99,12 @@ export function localSidesWith(
     const query = worktreeQueries[i];
     if (project.pathExists === false || query?.error) return;
     for (const worktree of query?.data ?? []) {
-      if (paired.has(worktree.id))
-        sides.set(worktree.id, { worktree, project });
+      if (!paired.has(worktree.id)) continue;
+      sides.set(worktree.id, {
+        worktree,
+        project,
+        showPrimaryInInbox: showPrimaryInInbox(configQueries[i]?.data),
+      });
     }
   });
   return sides;

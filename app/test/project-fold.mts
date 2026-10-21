@@ -10,8 +10,9 @@
 // over the rows rather than among them, and its rows and no other's,
 // and an open project the build lacks reads as the list. A worktree reveals nothing from the list or from inside another
 // project, and its own row once its project is open. Narrowed to a
-// peer, a pair's row is this machine's, standing in for the peer's,
-// under the peer's header. Inside a project
+// peer, a pair reads as on every device: this machine's side among the
+// peer's rows, under the peer's header, the peer's row folded into it
+// by the same rule. Inside a project
 // the worktrees follow its sort, every device's together, primaries
 // first. Inline, the list draws every project's rows under its header,
 // each in its own sort, and a folded project's header stands in for
@@ -256,10 +257,10 @@ it("a worktree reveals only inside its project", () => {
   );
 });
 
-it("narrowed to the peer, a pair's row is this machine's", () => {
+it("narrowed to the peer, a pair reads as on every device", () => {
   // The device filter on the peer (forestSources.ts): no local
   // project, and this machine's side of each pair with it.
-  const narrowed = (open: Project | null) =>
+  const narrowed = (open: Project | null, local = listings) =>
     build(
       open,
       "name",
@@ -269,11 +270,9 @@ it("narrowed to the peer, a pair's row is this machine's", () => {
         projects: [],
         worktreeQueries: [],
         pullRequestQueries: [],
-        localSides: localSidesWith(PEER, mirrors, projects, listings),
+        localSides: localSidesWith(PEER, mirrors, projects, local, []),
       },
     );
-  // The pair counts once.
-  assert.deepEqual(narrowed(null).rows.map(line), ["> port-pool 2"]);
   const inside = narrowed(portPool);
   assert.deepEqual(inside.rows.map(line), ["main", "lease-ttl", "quiet-quail"]);
   const pair = worktreeRowKey(undefined, "port-pool-lease-ttl");
@@ -292,9 +291,30 @@ it("narrowed to the peer, a pair's row is this machine's", () => {
     pair,
   );
   // The header stays the peer's, where its create goes.
+  assert.equal(inside.pinned?.kind, "project");
   assert.equal(inside.pinned?.kind === "project" && inside.pinned.local, false);
+  // This machine's side shelved, the peer's live row stays its own, as
+  // on every device, and the side waits behind the group's fold.
+  const shelved = listings.map((read, i) =>
+    i === projects.indexOf(portPool)
+      ? listed([
+          worktree(portPool, "main", { isPrimary: true }),
+          worktree(portPool, "lease-ttl", { shelved: true }),
+        ])
+      : read,
+  );
+  assert.deepEqual(narrowed(portPool, shelved).rows.map(line), [
+    "main",
+    "lease-ttl-copy",
+    "quiet-quail",
+    "group-shelf",
+  ]);
+  assert.deepEqual(narrowed(null, shelved).rows.map(line), ["> port-pool 2"]);
   // Another peer's filter has none of this one's pairs.
-  assert.equal(localSidesWith("other", mirrors, projects, listings).size, 0);
+  assert.equal(
+    localSidesWith("other", mirrors, projects, listings, []).size,
+    0,
+  );
 });
 
 it("inside a project: a prefix's rows under its header", () => {

@@ -91,7 +91,7 @@ export function useForestSources({
         configQueries: [],
       };
   // Narrowed to a peer, this device's sides of its pairs with it, which
-  // stand in for the peer's rows.
+  // the builders list among the peer's rows.
   const localSides =
     activeFilter === null || showLocal
       ? new Map<string, LocalSide>()
@@ -100,6 +100,7 @@ export function useForestSources({
           mirrors,
           orderedProjects,
           worktreeQueries,
+          configQueries,
         );
   const shownRemote =
     activeFilter === null
