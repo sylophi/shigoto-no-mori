@@ -33,11 +33,12 @@
 //
 // A checkout's `index` written (the main checkout's or a worktree's)
 // is a third, host only (indexWritten), for the views of what it holds:
-// the changes page's list, staged or not. A burst of writes (an
-// agent's `git status`, `git add` and `git diff` in a row) is one,
-// after the debounce. The app's own reads never write the index (the
-// engine's git runner), so a read it brings brings no other. A mirror
-// watches its worktree's index itself (mirror/gitState.ts).
+// the changes page's list, staged or not, and an operation's conflicts
+// and squash. A burst of writes (an agent's `git status`, `git add` and
+// `git diff` in a row) is one, after the debounce. The app's own reads
+// never write the index (the engine's git runner), so a read it brings
+// brings no other. A mirror watches its worktree's index itself
+// (mirror/gitState.ts).
 //
 // The signal is project scoped (git:projectChanged) rather than the
 // broad externalChange sweep: a commit in one repo says nothing about
@@ -360,9 +361,11 @@ const make = (deps: GitWatcherDeps) =>
     // Each watched project's git state as last seen. The projects whose
     // watch has heard a change not yet signalled (its debounce running),
     // by the beat it first heard one in, which the backstop leaves to it
-    // for a beat, and those of them that heard more than an index. And
-    // the projects whose files didn't answer in time (a volume that
-    // hangs an open), skipped until a later beat on a doubling wait.
+    // for a beat, and those of them owed a git signal: their watch heard
+    // more than an index, or a beat found the git state moved while it
+    // left them be. And the projects whose files didn't answer in time
+    // (a volume that hangs an open), skipped until a later beat on a
+    // doubling wait.
     const states = new Map<string, GitState>();
     const hearing = new Map<string, number>();
     const hearingGit = new Set<string>();
@@ -627,7 +630,14 @@ const make = (deps: GitWatcherDeps) =>
         stalled.delete(project.id);
         const quiet = (hearing.get(project.id) ?? -2) < beats - 1;
         const moved = yield* apply(project.id, project.path, read);
-        if (quiet) yield* signal(project.id, moved);
+        // Owed even while the watch is heard: its fire reads past it.
+        if (moved === "git") hearingGit.add(project.id);
+        if (quiet) {
+          yield* signal(
+            project.id,
+            hearingGit.delete(project.id) ? "git" : moved,
+          );
+        }
       }
     }).pipe(passes.withPermits(1));
     const reconcile = reconcileNow.pipe(

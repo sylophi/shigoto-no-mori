@@ -322,6 +322,36 @@ it("a worktree's stashes: a stash made outside the app shows on the project's gi
   );
 });
 
+it("a worktree's operation: a conflict resolved by a stage outside the app shows on its project's index written", async () => {
+  const merging = join(tempDir("sm-views-merge-", track), "repo");
+  mkdirSync(merging);
+  git(merging, "init", "-q", "-b", "main");
+  writeFileSync(join(merging, "a.txt"), "a\n");
+  git(merging, "add", "a.txt");
+  git(merging, "commit", "-q", "-m", "a");
+  git(merging, "checkout", "-q", "-b", "side");
+  writeFileSync(join(merging, "a.txt"), "side\n");
+  git(merging, "commit", "-q", "-am", "side");
+  git(merging, "checkout", "-q", "main");
+  writeFileSync(join(merging, "a.txt"), "main\n");
+  git(merging, "commit", "-q", "-am", "main");
+  assert.throws(() => git(merging, "merge", "-q", "side"));
+  const merged = await runHost(addProject(merging));
+  const [primary] = await runHost(listWorktrees(merged.id));
+  assert.ok(primary !== undefined);
+  const input = { projectId: merged.id, worktreeId: primary.id };
+  await watch(worktreesViews.watchOperation(input), ({ first, next }) =>
+    Effect.gen(function* () {
+      assert.deepEqual([first.operation, first.conflicted], ["merge", 1]);
+      writeFileSync(join(merging, "a.txt"), "both\n");
+      git(merging, "add", "a.txt");
+      yield* indexWritten(merged.id);
+      const resolved = yield* next;
+      assert.deepEqual([resolved.operation, resolved.conflicted], ["merge", 0]);
+    }),
+  );
+});
+
 it("a refresh waiting on a read ends when the view's last reader goes", async () => {
   await runHost(
     Effect.gen(function* () {

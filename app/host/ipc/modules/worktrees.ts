@@ -41,9 +41,9 @@ const treeViews = (input: { projectId: string; worktreeId: string }) =>
 // One of the changes page's views of a worktree (`part` its name and
 // input), read again as the tree moves: its project's git, an edit in
 // its files (or a window looking again), a mirror staging into it. A
-// view of what the index holds (`index`: the changes, staged or not)
-// also follows its project's indexes written, as a stage in a terminal
-// writes one. A view of refs alone (`refsOnly`: the branch's history,
+// view of what the index holds (`index`: the changes, staged or not,
+// and an operation's conflicts and squash) also follows its project's
+// indexes written, as a stage in a terminal writes one. A view of refs alone (`refsOnly`: the branch's history,
 // the stashes) follows its project's git only: an edit, a window
 // looking again and a mirror's index rewrite can't move it, and the
 // first and last come as often as a mirror or an agent writes. A read
@@ -184,8 +184,11 @@ export const worktreesViews: ViewHandlers<
       { refsOnly: true },
     ),
   watchOperation: (input) =>
-    treeView(input, "operation", () =>
-      atPath(input, (path) => withGit((git) => git.readOperation(path))),
+    treeView(
+      input,
+      "operation",
+      () => atPath(input, (path) => withGit((git) => git.readOperation(path))),
+      { index: true },
     ),
 };
 

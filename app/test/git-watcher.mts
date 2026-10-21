@@ -434,7 +434,6 @@ it("backstop: a commit whose events were all lost is signalled once, a ref direc
   await waitFor(() => changes.length >= 1, "the lost commit to be found");
   await delay(600);
   assert.deepEqual(changes, ["p1"], "one signal per move, not per tick");
-  assert.deepEqual(indexed, ["p1"], "a commit's index is in its change");
   git(repo, "update-ref", "refs/shigomori/index/0123456789ab", "HEAD");
   await delay(600);
   git(repo, "update-ref", "-d", "refs/shigomori/index/0123456789ab");
@@ -492,16 +491,17 @@ it("index: a burst of index writes is one index signal and no project change, an
   trackTest(() => runtime.dispose());
   await runtime.context();
   const indexed = await indexSignals(runtime);
-  const burst = (paths: readonly string[]) =>
-    Effect.runSync(
-      Queue.offerAll(
-        events,
-        paths.map((path) => ({ _tag: "Update" as const, path })),
-      ),
-    );
+  // Each path a moment after the last, the whole longer than the
+  // debounce.
+  const burst = async (paths: readonly string[]) => {
+    for (const path of paths) {
+      Effect.runSync(Queue.offer(events, { _tag: "Update", path }));
+      await delay(20);
+    }
+  };
   // An agent's `git status`, `git add` and `git diff` in a row, in the
   // main checkout and a worktree, each rewriting an index.
-  burst(
+  await burst(
     Array.from({ length: 20 }, (_, at) =>
       at % 2 === 0 ? "index" : "worktrees/feat/index",
     ),
@@ -511,11 +511,56 @@ it("index: a burst of index writes is one index signal and no project change, an
   assert.deepEqual(indexed, ["p1"], "one signal per burst");
   assert.deepEqual(changes, [], "an index written is no project change");
   // A commit: its index and its ref in one burst.
-  burst(["index", "refs/heads/main", "index"]);
+  await burst(["index", "refs/heads/main", "index"]);
   await waitFor(() => changes.length >= 1, "the commit to signal");
   await delay(700);
   assert.deepEqual(changes, ["p1"]);
   assert.deepEqual(indexed, ["p1"], "a commit's index is in its change");
+});
+
+it("backstop: a reading where the refs and an index both moved is the project change alone, an index alone is the index signal, and a ref move a beat finds while the watch hears an index is still said", async () => {
+  const root = tempDir("sm-gitwatch-moved-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  // The git state as the check sets it, and the git directory's events
+  // as it writes them.
+  let state = { refs: "a", indexes: "x" };
+  const events = Effect.runSync(Queue.unbounded<FileSystem.WatchEvent>());
+  const changes: string[] = [];
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: (projectId) => changes.push(projectId),
+      onFilesChanged: () => {},
+      projects: () => [{ id: "p1", name: "repo", path: repo }],
+      watch: (path) =>
+        path.endsWith(".git") ? Stream.fromQueue(events) : Stream.never,
+      gitState: () => Effect.sync(() => state),
+      backstop: "100 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  const indexed = await indexSignals(runtime);
+  await delay(300);
+  assert.deepEqual([changes, indexed], [[], []], "a beat with nothing moved");
+  // A commit, its events lost: its refs and its index.
+  state = { refs: "b", indexes: "y" };
+  await waitFor(() => changes.length >= 1, "the commit to be found");
+  await delay(300);
+  assert.deepEqual([changes, indexed], [["p1"], []]);
+  // A stage, its events lost: its index alone.
+  state = { refs: "b", indexes: "z" };
+  await waitFor(() => indexed.length >= 1, "the stage to be found");
+  await delay(300);
+  assert.deepEqual([changes, indexed], [["p1"], ["p1"]]);
+  // A ref whose event was lost moving as the watch hears an index: the
+  // beat that finds it leaves the project to the watch for a beat, and
+  // the move is still said.
+  Effect.runSync(Queue.offer(events, { _tag: "Update", path: "index" }));
+  state = { refs: "c", indexes: "z" };
+  await waitFor(() => changes.length >= 2, "the lost ref to be said");
+  await delay(600);
+  assert.deepEqual(changes, ["p1", "p1"]);
 });
 
 it("the mirror's index watch: a stage whose event was lost still fires, once", async () => {
