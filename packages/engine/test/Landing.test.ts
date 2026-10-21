@@ -147,7 +147,7 @@ async function landFixture() {
         { name: "fox", skipSetup: true },
         { report: () => Effect.void, color: false },
       );
-      return yield* worktrees.resolve(yield* worktrees.here("/"), {
+      return yield* worktrees.resolve(yield* worktrees.nowhere, {
         projectId: project.id,
         worktreeId: worktree.id,
       });
@@ -437,7 +437,7 @@ esac`,
         { name: "fox", skipSetup: true },
         { report: () => Effect.void, color: false },
       );
-      const located = yield* worktrees.resolve(yield* worktrees.here("/"), {
+      const located = yield* worktrees.resolve(yield* worktrees.nowhere, {
         projectId: project.id,
         worktreeId: worktree.id,
       });

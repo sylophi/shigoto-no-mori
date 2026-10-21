@@ -125,7 +125,7 @@ const sessionsOf = (worktreeId: string) =>
 const located = (at: Project, worktreeId: string) =>
   Effect.gen(function* () {
     const service = yield* worktrees;
-    return yield* service.resolve(yield* service.here("/"), {
+    return yield* service.resolve(yield* service.nowhere, {
       projectId: at.project.id,
       worktreeId,
     });
