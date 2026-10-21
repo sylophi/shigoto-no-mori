@@ -153,7 +153,7 @@ it("working trees: a file anywhere counts, and anything under a .git does not", 
   }
 });
 
-const refsDir = (path: string) =>
+const commonDir = (path: string) =>
   Effect.runPromise(
     Git.commonDirOf(path).pipe(Effect.provide(NodeServices.layer)),
   );
@@ -172,12 +172,12 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   git(repo, "worktree", "add", "-q", "-b", "feat", worktree);
 
   assert.equal(
-    await refsDir(worktree),
+    await commonDir(worktree),
     join(repo, ".git"),
     "a linked worktree's .git file must resolve to the common dir",
   );
-  assert.equal(await refsDir(repo), join(repo, ".git"));
-  assert.equal(await refsDir(join(root, "nowhere")), null);
+  assert.equal(await commonDir(repo), join(repo, ".git"));
+  assert.equal(await commonDir(join(root, "nowhere")), null);
 
   const changes: string[] = [];
   const edits: string[] = [];

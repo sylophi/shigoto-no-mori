@@ -2,11 +2,12 @@
 // the files it reads say the same, so reads with nothing changed run no
 // git, a commit (which moves no identity) runs none, and each change an
 // identity shows (a branch, a detach, a lock, the primary's checkout, a
-// worktree added, moved or removed) is in the very next read (real git
-// on a sandbox data dir).
+// worktree added, moved or removed) is in the very next read, a change
+// made while git runs included, and one undone by then (real git on a
+// sandbox data dir).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
@@ -32,14 +33,26 @@ it("lists a project's worktrees with git once while its files say the same, and 
   const repo = box.repo("proj", { "README.md": "hi\n" });
   const fox = join(box.home, "elsewhere", "fox");
   box.git(repo, "worktree", "add", "-q", "-b", "fox", fox);
-  // Every `git worktree list` from here on, counted.
+  // Every `git worktree list` from here on, counted, with a command run
+  // once just before git reads and once just after, when one is set.
   const realGit = execFileSync("sh", ["-c", "command -v git"], {
     encoding: "utf8",
   }).trim();
   const log = join(box.home, "worktree-lists.log");
+  const beforeGit = join(box.home, "before.sh");
+  const afterGit = join(box.home, "after.sh");
   box.fakeBin(
     "git",
-    `case " $* " in *" worktree list "*) echo >> "${log}" ;; esac\nexec "${realGit}" "$@"`,
+    [
+      `case " $* " in *" worktree list "*)`,
+      `  echo >> "${log}"`,
+      `  if [ -f "${beforeGit}" ]; then sh "${beforeGit}"; rm "${beforeGit}"; fi`,
+      `  "${realGit}" "$@"; code=$?`,
+      `  if [ -f "${afterGit}" ]; then sh "${afterGit}"; rm "${afterGit}"; fi`,
+      `  exit $code ;;`,
+      `esac`,
+      `exec "${realGit}" "$@"`,
+    ].join("\n"),
   );
   const lists = () => (existsSync(log) ? readFileSync(log, "utf8").length : 0);
   const project = (await box.engine(
@@ -103,6 +116,30 @@ it("lists a project's worktrees with git once while its files say the same, and 
     box.git(repo, "worktree", "unlock", fox),
   );
   assert.equal(named(read, "fox")?.locked, false);
+  // A switch just after git read: the files were read before it.
+  writeFileSync(afterGit, `"${realGit}" -C "${fox}" checkout -q -b fox3`);
+  read = await change("a lock, with a switch after git", () =>
+    box.git(repo, "worktree", "lock", fox),
+  );
+  assert.equal(named(read, "fox")?.detached, true);
+  read = await change("the switch", () => {});
+  assert.deepEqual(
+    [named(read, "fox")?.detached, named(read, "fox")?.branch],
+    [false, "fox3"],
+  );
+  // A detach that git reads and that is undone by the time it answers:
+  // HEAD says what it said, but in a new file.
+  writeFileSync(beforeGit, `"${realGit}" -C "${fox}" checkout -q --detach`);
+  writeFileSync(afterGit, `"${realGit}" -C "${fox}" checkout -q fox3`);
+  read = await change("an unlock, with a detach and back around git", () =>
+    box.git(repo, "worktree", "unlock", fox),
+  );
+  assert.equal(named(read, "fox")?.detached, true);
+  read = await change("the detach undone", () => {});
+  assert.deepEqual(
+    [named(read, "fox")?.detached, named(read, "fox")?.branch],
+    [false, "fox3"],
+  );
   read = await change("the primary's checkout", () =>
     box.git(repo, "checkout", "-q", "-b", "other"),
   );

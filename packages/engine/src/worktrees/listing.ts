@@ -16,7 +16,7 @@ import {
   type WorktreeEntry,
 } from "../gitParse.ts";
 import * as Layout from "../Layout.ts";
-import { isNotFound } from "../platformErrors.ts";
+import { isAbsent } from "../platformErrors.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import {
@@ -99,15 +99,18 @@ export const makeListing = Effect.gen(function* () {
   // dir really is, its HEAD and config, and each linked worktree's
   // gitdir, HEAD and lock, with the reftable stacks a repository in that
   // format keeps HEAD in. A branch's commit isn't among them, and no
-  // identity carries one (a detached one's is its HEAD). None when one
-  // can't be read, or the common dir isn't found this way.
+  // identity carries one (a detached one's is its HEAD). Each by its
+  // content, inode and mtime: git writes by a rename into place, so a
+  // change undone (a rebase back on its branch, a checkout and back)
+  // reads the same but is a new file. None when one can't be read, or
+  // the common dir isn't found this way.
   const worktreeFilesOf = (projectPath: string) =>
     Effect.gen(function* () {
       const common = yield* Git.commonDirOf(projectPath);
       if (common === null) return Option.none<string>();
       const names = yield* fs
         .readDirectory(path.join(common, "worktrees"))
-        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed<string[]>([])));
+        .pipe(Effect.catchIf(isAbsent, () => Effect.succeed<string[]>([])));
       const files = [
         "HEAD",
         "config",
@@ -120,16 +123,25 @@ export const makeListing = Effect.gen(function* () {
             ),
           ),
       ];
-      const contents = yield* Effect.forEach(
+      const seen = yield* Effect.forEach(
         files,
-        (file) =>
-          fs
-            .readFileString(path.join(common, file))
-            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(null))),
+        (file) => {
+          const at = path.join(common, file);
+          return Effect.all([fs.stat(at), fs.readFileString(at)]).pipe(
+            Effect.map(([info, text]) => [
+              Option.getOrNull(info.ino),
+              Option.getOrNull(
+                Option.map(info.mtime, (date) => date.getTime()),
+              ),
+              text,
+            ]),
+            Effect.catchIf(isAbsent, () => Effect.succeed(null)),
+          );
+        },
         { concurrency: "unbounded" },
       );
       const real = yield* fs.realPath(common);
-      return Option.some(JSON.stringify([real, files, contents]));
+      return Option.some(JSON.stringify([real, files, seen]));
     }).pipe(
       Effect.provide(platform),
       Effect.orElseSucceed(() => Option.none<string>()),
@@ -142,7 +154,7 @@ export const makeListing = Effect.gen(function* () {
     { readonly files: string; readonly entries: ReadonlyArray<WorktreeEntry> }
   >();
   const listWorktrees = Effect.fn(function* (projectPath: string) {
-    // Read before git runs, so a write in between differs next time.
+    // Read before git runs: a write while it runs differs next time.
     const files = yield* worktreeFilesOf(projectPath);
     const last = lastListed.get(projectPath);
     if (Option.isSome(files) && last?.files === files.value) {
