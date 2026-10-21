@@ -12,26 +12,36 @@
 // repository's common dir, the reconcile dropping a project that left
 // the registry, and the working trees' watch: an edit in the main
 // checkout or a linked worktree lands as one files change, `.git`
-// churn as none, and a worktree added or removed is followed. And the
-// backstop: with the git directory's events lost on purpose, a commit
-// is still signalled, once, a ref directory appearing or going (a
-// namespace, a remote, one with no ref), a ref moving inside one and a
-// checkout are signalled, an own ref and a ref directory's churn not at
-// all, a working tree whose watch ended is watched again, and the
-// mirror's index watch fires for a stage it never heard.
+// churn as none, and a worktree added or removed is followed. A
+// checkout's index written is a signal of its own: a burst of writes is
+// one, a burst with a ref in it is the project change alone, and the
+// app's own reads of the changes and the operation write none. And the
+// backstop: with the git directory's events lost on purpose, a stage is
+// found as its index alone, a ref and an index moved together are the
+// project change alone, a ref move a beat finds while the watch hears
+// an index is still said, a commit is still signalled, once, a ref
+// directory appearing or going (a namespace, a remote, one with no
+// ref), a ref moving inside one and a checkout are signalled, an own
+// ref and a ref directory's churn not at all, a working tree whose
+// watch ended is watched again, and the mirror's index watch fires for
+// a stage it never heard.
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import type * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { mkdirSync, realpathSync, rmSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Git from "@shigomori/engine/Git";
 import {
+  isIndexPath,
   isRelevantGitPath,
   isWorkingTreeChange,
   GitWatcher,
@@ -84,7 +94,7 @@ async function caughtUp(gitDir: string): Promise<void> {
   }
 }
 
-it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operation's markers count, while objects, logs, index, FETCH_HEAD, lock files and the app's own refs do not", async () => {
+it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operation's markers count, while objects, logs, index, FETCH_HEAD, lock files and the app's own refs do not, and a checkout's index is its own signal", async () => {
   for (const path of [
     "HEAD",
     "ORIG_HEAD",
@@ -129,6 +139,25 @@ it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operatio
   ]) {
     assert.ok(!isRelevantGitPath(path), `${path} must not count`);
   }
+  // A checkout's index is a signal of its own.
+  for (const path of [
+    "index",
+    "worktrees/feat/index",
+    "worktrees\\feat\\index",
+  ]) {
+    assert.ok(isIndexPath(path), `${path} is an index`);
+  }
+  for (const path of [
+    "index.lock",
+    "worktrees/feat/index.lock",
+    "sharedindex.0123",
+    "logs/index",
+    "refs/heads/index",
+    "worktrees/index",
+    "worktrees/feat/sub/index",
+  ]) {
+    assert.ok(!isIndexPath(path), `${path} is no index`);
+  }
 });
 
 it("working trees: a file anywhere counts, and anything under a .git does not", () => {
@@ -157,6 +186,29 @@ const commonDir = (path: string) =>
   Effect.runPromise(
     Git.commonDirOf(path).pipe(Effect.provide(NodeServices.layer)),
   );
+
+// Every index signal the watcher gives from now on, while it runs.
+const indexSignals = async (
+  runtime: ManagedRuntime.ManagedRuntime<GitWatcher, never>,
+) => {
+  const heard: string[] = [];
+  const subscribed = Effect.runSync(Deferred.make<void>());
+  runtime.runFork(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const written = yield* (yield* GitWatcher).indexWritten;
+        yield* Deferred.succeed(subscribed, undefined);
+        yield* Stream.runForEach(written, (projectId) =>
+          Effect.sync(() => {
+            heard.push(projectId);
+          }),
+        );
+      }),
+    ),
+  );
+  await Effect.runPromise(Deferred.await(subscribed));
+  return heard;
+};
 
 it("real repository: a commit, a checkout and a branch delete each land as one project change, while status, objects and working-tree edits land as none, and a project leaving the registry stops its watch", async () => {
   // realpath: macOS puts tmpdir behind a symlink and git records the real
@@ -210,9 +262,11 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   };
   trackTest(stop);
   await restart();
+  const indexed = await indexSignals(running());
 
   // Noise first: status refreshes, a working-tree edit, and the
-  // objects a `git add` writes, none of which may ping.
+  // objects a `git add` writes, none of which may ping. The stage
+  // writes the worktree's index, which is its own signal.
   git(worktree, "status", "--porcelain");
   writeFileSync(join(worktree, "b.txt"), "two\n");
   git(worktree, "status", "--porcelain");
@@ -223,9 +277,30 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
     [],
     "status, an edit and a staged add must not ping (they would loop)",
   );
+  await waitFor(() => indexed.length >= 1, "the stage to signal its index");
+  assert.ok(indexed.every((projectId) => projectId === "p1"));
   await waitFor(() => edits.length >= 1, "the edit to land");
   await delay(1200);
   assert.deepEqual(edits, ["p1"], "the edit lands as one files change");
+
+  // The changes and the operation views' reads, which an index signal
+  // brings, write no index, so they bring no other: a file saved
+  // unchanged, which a plain `git status` refreshes into the index.
+  writeFileSync(join(worktree, "a.txt"), "one\n");
+  await delay(1200);
+  const heard = indexed.length;
+  await runHost(
+    Effect.flatMap(Git.Git, (reads) =>
+      Effect.andThen(reads.changes(worktree), reads.readOperation(worktree)),
+    ),
+  );
+  await delay(700);
+  assert.equal(indexed.length, heard, "the app's own reads wrote the index");
+  git(worktree, "status", "--porcelain");
+  await waitFor(
+    () => indexed.length > heard,
+    "a plain status to write the index (else the line above proves nothing)",
+  );
 
   // A commit in the linked worktree moves refs/heads/feat.
   git(worktree, "commit", "-q", "-m", "two");
@@ -347,11 +422,20 @@ it("backstop: a commit whose events were all lost is signalled once, a ref direc
   );
   trackTest(() => runtime.dispose());
   await runtime.context();
+  const indexed = await indexSignals(runtime);
   await waitFor(() => edits.length >= 1, "the ended tree watch to be noticed");
   assert.ok(treeWatches >= 2, "the ended tree watch was not started again");
   assert.deepEqual(edits, ["p1"]);
   await delay(600);
   assert.deepEqual(changes, [], "a tick with nothing moved signalled");
+  assert.deepEqual(indexed, [], "a tick with nothing moved signalled");
+  // A stage moves the index alone.
+  writeFileSync(join(repo, "b.txt"), "two\n");
+  git(repo, "add", "b.txt");
+  await waitFor(() => indexed.length >= 1, "the lost stage to be found");
+  await delay(600);
+  assert.deepEqual(indexed, ["p1"], "one signal per move, not per tick");
+  assert.deepEqual(changes, [], "a stage is no project change");
   git(repo, "commit", "-q", "--allow-empty", "-m", "two");
   await waitFor(() => changes.length >= 1, "the lost commit to be found");
   await delay(600);
@@ -388,6 +472,101 @@ it("backstop: a commit whose events were all lost is signalled once, a ref direc
   await waitFor(() => changes.length >= 8, "its going to be found");
   git(repo, "checkout", "-q", "-b", "other");
   await waitFor(() => changes.length >= 9, "the lost checkout to be found");
+});
+
+it("index: a burst of index writes is one index signal and no project change, and a burst with a ref in it one project change alone", async () => {
+  const root = tempDir("sm-gitwatch-index-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "one\n");
+  git(repo, "add", "a.txt");
+  git(repo, "commit", "-q", "-m", "one");
+  const events = Effect.runSync(Queue.unbounded<FileSystem.WatchEvent>());
+  const changes: string[] = [];
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: (projectId) => changes.push(projectId),
+      onFilesChanged: () => {},
+      projects: () => [{ id: "p1", name: "repo", path: repo }],
+      // The git directory's events as the check writes them.
+      watch: (path) =>
+        path.endsWith(".git") ? Stream.fromQueue(events) : Stream.never,
+      backstop: "1 hour",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  const indexed = await indexSignals(runtime);
+  // Each path a moment after the last, the whole longer than the
+  // debounce.
+  const burst = async (paths: readonly string[]) => {
+    for (const path of paths) {
+      Effect.runSync(Queue.offer(events, { _tag: "Update", path }));
+      await delay(20);
+    }
+  };
+  // An agent's `git status`, `git add` and `git diff` in a row, in the
+  // main checkout and a worktree, each rewriting an index.
+  await burst(
+    Array.from({ length: 20 }, (_, at) =>
+      at % 2 === 0 ? "index" : "worktrees/feat/index",
+    ),
+  );
+  await waitFor(() => indexed.length >= 1, "the burst to signal");
+  await delay(700);
+  assert.deepEqual(indexed, ["p1"], "one signal per burst");
+  assert.deepEqual(changes, [], "an index written is no project change");
+  // A commit: its index and its ref in one burst.
+  await burst(["index", "refs/heads/main", "index"]);
+  await waitFor(() => changes.length >= 1, "the commit to signal");
+  await delay(700);
+  assert.deepEqual(changes, ["p1"]);
+  assert.deepEqual(indexed, ["p1"], "a commit's index is in its change");
+});
+
+it("backstop: a reading where the refs and an index both moved is the project change alone, an index alone is the index signal, and a ref move a beat finds while the watch hears an index is still said", async () => {
+  const root = tempDir("sm-gitwatch-moved-", trackTest);
+  const repo = join(root, "repo");
+  git(root, "init", "-q", "-b", "main", repo);
+  // The git state as the check sets it, and the git directory's events
+  // as it writes them.
+  let state = { refs: "a", indexes: "x" };
+  const events = Effect.runSync(Queue.unbounded<FileSystem.WatchEvent>());
+  const changes: string[] = [];
+  const runtime = ManagedRuntime.make(
+    gitWatcherLayer({
+      onChange: (projectId) => changes.push(projectId),
+      onFilesChanged: () => {},
+      projects: () => [{ id: "p1", name: "repo", path: repo }],
+      watch: (path) =>
+        path.endsWith(".git") ? Stream.fromQueue(events) : Stream.never,
+      gitState: () => Effect.sync(() => state),
+      backstop: "100 millis",
+    }).pipe(Layer.provide(NodeServices.layer)),
+  );
+  trackTest(() => runtime.dispose());
+  await runtime.context();
+  const indexed = await indexSignals(runtime);
+  await delay(300);
+  assert.deepEqual([changes, indexed], [[], []], "a beat with nothing moved");
+  // A commit, its events lost: its refs and its index.
+  state = { refs: "b", indexes: "y" };
+  await waitFor(() => changes.length >= 1, "the commit to be found");
+  await delay(300);
+  assert.deepEqual([changes, indexed], [["p1"], []]);
+  // A stage, its events lost: its index alone.
+  state = { refs: "b", indexes: "z" };
+  await waitFor(() => indexed.length >= 1, "the stage to be found");
+  await delay(300);
+  assert.deepEqual([changes, indexed], [["p1"], ["p1"]]);
+  // A ref whose event was lost moving as the watch hears an index: the
+  // beat that finds it leaves the project to the watch for a beat, and
+  // the move is still said.
+  Effect.runSync(Queue.offer(events, { _tag: "Update", path: "index" }));
+  state = { refs: "c", indexes: "z" };
+  await waitFor(() => changes.length >= 2, "the lost ref to be said");
+  await delay(600);
+  assert.deepEqual(changes, ["p1", "p1"]);
 });
 
 it("the mirror's index watch: a stage whose event was lost still fires, once", async () => {

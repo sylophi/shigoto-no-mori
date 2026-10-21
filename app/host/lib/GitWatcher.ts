@@ -18,12 +18,11 @@
 // FETCH_HEAD is rewritten by the app's own minute sweep, and `index` is
 // rewritten by every stage and by another program's `git status` or
 // `git diff` (a person's, a prompt's dirty check), while a stage moves
-// no ref: the open changes page reads it on its own poll, and a mirror
-// watches it itself (mirror/gitState.ts). refs/shigomori/ holds the
-// app's own bookkeeping (dirty captures, a transfer's landing refs, the
-// mirror's staged-tree commits, discard undos), which no view reads.
-// Uncommitted file edits are not seen in the git directory: they live
-// in the working trees.
+// no ref (its own signal, below). refs/shigomori/ holds the app's own
+// bookkeeping (dirty captures, a transfer's landing refs, the mirror's
+// staged-tree commits, discard undos), which no view reads. Uncommitted
+// file edits are not seen in the git directory: they live in the
+// working trees.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
@@ -31,6 +30,15 @@
 // worktree's changed files), and nothing else moves. Which working
 // trees a project has is read off its git directory (the main checkout,
 // and each `worktrees/<name>/gitdir`), again whenever that changes.
+//
+// A checkout's `index` written (the main checkout's or a worktree's)
+// is a third, host only (indexWritten), for the views of what it holds:
+// the changes page's list, staged or not, and an operation's conflicts
+// and squash. A burst of writes (an agent's `git status`, `git add` and
+// `git diff` in a row) is one, after the debounce. The app's own reads
+// never write the index (the engine's git runner), so a read it brings
+// brings no other. A mirror watches its worktree's index itself
+// (mirror/gitState.ts).
 //
 // The signal is project scoped (git:projectChanged) rather than the
 // broad externalChange sweep: a commit in one repo says nothing about
@@ -40,9 +48,9 @@
 // The events are a fast hint, not the record: a platform watch can drop
 // one, or end. So every BACKSTOP the watcher reconciles anyway (as the
 // store's changes do, engine StoreChanges): it starts again any watch
-// that ended, signals a project whose git state moved since it last
-// looked (gitStateOf, read with no git), and a project whose working
-// tree's watch had ended, whose edits meanwhile went unseen.
+// that ended, signals a project whose git state or index moved since it
+// last looked (gitStateOf, read with no git), and a project whose
+// working tree's watch had ended, whose edits meanwhile went unseen.
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -54,6 +62,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import * as PubSub from "effect/PubSub";
+import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
@@ -83,6 +93,8 @@ const RELEVANT = [
 ];
 // The app's own refs: under refs/, yet none of them counts.
 const OWN_REFS = /^refs\/shigomori(\/|$)/;
+// A checkout's index, the main checkout's or a worktree's.
+const INDEX = /^(worktrees\/[^/]+\/)?index$/;
 
 // Any `.git` in a working tree (the main checkout's directory, a linked
 // worktree's file, a submodule's) churns with every git command the
@@ -104,6 +116,12 @@ export function isRelevantGitPath(file: string): boolean {
   const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
   if (OWN_REFS.test(normalized)) return false;
   return RELEVANT.some((pattern) => pattern.test(normalized));
+}
+
+// Exported for the git-watcher check, as the allowlist is.
+export function isIndexPath(file: string): boolean {
+  const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
+  return INDEX.test(normalized);
 }
 
 // The working trees of a project: its own folder when it is a checkout,
@@ -162,12 +180,16 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
 // packed-refs, every loose ref the allowlist counts (a ref is written
 // by a rename into place, so a new inode), and the stopped-operation
 // markers (a directory by being there). Two equal readings mean nothing
-// the allowlist above cares about moved between them. A file that isn't
-// there reads as absent; any other failure (a directory git removed
-// mid-walk, a volume that stalls) fails the reading, which the caller
-// skips rather than read as a change.
+// the allowlist above cares about moved between them. And apart, each
+// checkout's index by its stamp (written by a rename into place too),
+// for the index's own signal. A file that isn't there reads as absent;
+// any other failure (a directory git removed mid-walk, a volume that
+// stalls) fails the reading, which the caller skips rather than read as
+// a change.
 const isNotFound = (error: PlatformError.PlatformError) =>
   Predicate.isTagged(error.reason, "NotFound");
+
+type GitState = { readonly refs: string; readonly indexes: string };
 
 const gitStateOf = (gitDir: string) =>
   Effect.gen(function* () {
@@ -213,6 +235,7 @@ const gitStateOf = (gitDir: string) =>
     const worktrees = (yield* listed("worktrees", false)).toSorted();
     const dirs = ["", ...worktrees.map((name) => `worktrees/${name}/`)];
     const parts = [yield* stamp("packed-refs")];
+    const indexes: string[] = [];
     for (const dir of dirs) {
       parts.push(
         dir,
@@ -222,6 +245,7 @@ const gitStateOf = (gitDir: string) =>
       for (const marker of OPERATION_MARKERS) {
         parts.push(yield* stamp(`${dir}${marker}`));
       }
+      indexes.push(yield* stamp(`${dir}index`));
     }
     for (const ref of (yield* listed("refs", true)).toSorted()) {
       const relative = path.join("refs", ref);
@@ -230,7 +254,10 @@ const gitStateOf = (gitDir: string) =>
       const seen = yield* stampIfThere(relative);
       if (seen !== undefined) parts.push(seen);
     }
-    return parts.join("\n");
+    return {
+      refs: parts.join("\n"),
+      indexes: indexes.join("\n"),
+    } satisfies GitState;
   });
 
 const OPERATION_MARKERS = [
@@ -262,7 +289,7 @@ export type GitWatcherDeps = {
   gitState?: (
     gitDir: string,
   ) =>
-    | Effect.Effect<string, unknown, FileSystem.FileSystem | Path.Path>
+    | Effect.Effect<GitState, unknown, FileSystem.FileSystem | Path.Path>
     | undefined;
 };
 
@@ -277,8 +304,36 @@ export class GitWatcher extends Context.Service<
     // cover every way a project is added, removed or relocated, and every
     // BACKSTOP.
     readonly reconcile: Effect.Effect<void>;
+    // The projects whose index git wrote (a stage, an unstage, another
+    // program's refresh of it), from the moment this returns and for
+    // the scope's length: a view subscribes before it reads, so a write
+    // in between isn't lost. Host only, never a push.
+    readonly indexWritten: Effect.Effect<
+      Stream.Stream<string>,
+      never,
+      Scope.Scope
+    >;
   }
 >()("sm/host/GitWatcher") {}
+
+// One project's index writes, for a view's `also` (Views.view): none
+// where the watcher didn't start.
+export const indexWrittenIn = (projectId: string) =>
+  Effect.flatMap(
+    Effect.serviceOption(GitWatcher),
+    Option.match({
+      onNone: () => Effect.succeed(Stream.empty),
+      onSome: (watcher) =>
+        Effect.map(
+          watcher.indexWritten,
+          Stream.filter((written) => written === projectId),
+        ),
+    }),
+  );
+
+// What a project's reading found moved since the last: its git state
+// (or its git directory), or only an index.
+type Moved = "git" | "index" | undefined;
 
 const make = (deps: GitWatcherDeps) =>
   Effect.gen(function* () {
@@ -297,16 +352,23 @@ const make = (deps: GitWatcherDeps) =>
       { readonly gitDir: string; readonly projectPath: string }
     >();
     const serial = yield* Semaphore.make(1);
+    const indexWrites = yield* Effect.acquireRelease(
+      PubSub.unbounded<string>(),
+      PubSub.shutdown,
+    );
     const watchOf = (path: string) =>
       deps.watch?.(path) ?? watchPath(fs, path, { recursive: true });
     // Each watched project's git state as last seen. The projects whose
     // watch has heard a change not yet signalled (its debounce running),
     // by the beat it first heard one in, which the backstop leaves to it
-    // for a beat. And the projects whose files didn't answer in time (a
-    // volume that hangs an open), skipped until a later beat on a
+    // for a beat, and those of them owed a git signal: their watch heard
+    // more than an index, or a beat found the git state moved while it
+    // left them be. And the projects whose files didn't answer in time
+    // (a volume that hangs an open), skipped until a later beat on a
     // doubling wait.
-    const states = new Map<string, string>();
+    const states = new Map<string, GitState>();
     const hearing = new Map<string, number>();
+    const hearingGit = new Set<string>();
     const stalled = new Map<
       string,
       { readonly until: number; readonly tries: number }
@@ -419,22 +481,38 @@ const make = (deps: GitWatcherDeps) =>
         trees.delete(projectId);
       });
 
-    // One project's pings: its git directory's relevant changes,
-    // debounced, its state and working trees read again with each.
+    // What moved, said: the git state on every wire, an index to the
+    // views that read it.
+    const signal = (projectId: string, moved: Moved) => {
+      if (moved === "git") return Effect.sync(() => deps.onChange(projectId));
+      if (moved === "index") return PubSub.publish(indexWrites, projectId);
+      return Effect.void;
+    };
+
+    // One project's pings: its git directory's relevant changes and its
+    // indexes written, debounced, its state and working trees read again
+    // with each. A burst that wrote nothing but an index says so alone,
+    // unless the git state moved too, by its read or a beat's (an event
+    // lost).
     const watch = (
       projectId: string,
       entry: { readonly gitDir: string; readonly projectPath: string },
     ) =>
       watchOf(entry.gitDir).pipe(
-        Stream.filter((event) => isRelevantGitPath(event.path)),
-        Stream.tap(() =>
+        Stream.filter(
+          (event) => isRelevantGitPath(event.path) || isIndexPath(event.path),
+        ),
+        Stream.tap((event) =>
           Effect.sync(() => {
             if (!hearing.has(projectId)) hearing.set(projectId, beats);
+            if (!isIndexPath(event.path)) hearingGit.add(projectId);
           }),
         ),
         Stream.debounce(DEBOUNCE_MS),
         Stream.runForEach(() =>
           Effect.gen(function* () {
+            // Taken now: one heard while this reads is the next burst's.
+            const heardGit = hearingGit.delete(projectId);
             // A stalled project's files wait for its beat.
             const read = stalled.has(projectId)
               ? ("busy" as const)
@@ -442,18 +520,23 @@ const make = (deps: GitWatcherDeps) =>
             if (read === "late") stall(projectId);
             // A moved or missing git directory is the reconcile's: its
             // apply ends this very watch.
-            if (typeof read !== "string" && read.gitDir === entry.gitDir) {
-              yield* apply(projectId, entry.projectPath, read, false);
-            }
+            const moved =
+              typeof read !== "string" && read.gitDir === entry.gitDir
+                ? yield* apply(projectId, entry.projectPath, read)
+                : undefined;
             hearing.delete(projectId);
-            deps.onChange(projectId);
+            yield* signal(
+              projectId,
+              heardGit || moved === "git" ? "git" : "index",
+            );
           }),
         ),
         // The repository went away (deleted, unmounted), or is not
         // watchable right now: the watch drops, and a later reconcile
         // re-adds it if it comes back.
         Effect.ignore,
-        // Only its own entry: a reconcile may have replaced it already.
+        // Only its own entry: a reconcile may have replaced it already. A
+        // git signal still owed is the next beat's to say.
         Effect.ensuring(
           Effect.sync(() => {
             hearing.delete(projectId);
@@ -465,24 +548,28 @@ const make = (deps: GitWatcherDeps) =>
     // A project brought in line with what its files said, under `serial`
     // and with no file read of its own: its git directory watched (a new
     // one, or one that moved or whose watch ended), its working trees
-    // followed, and with `signal`, what moved that no event said
-    // signalled (a watch that dropped an event, or ended).
+    // followed. Says what moved since the last reading, for the caller
+    // to signal what no event did (a watch that dropped an event, or
+    // ended).
     function apply(
       projectId: string,
       projectPath: string,
       read: ProjectRead,
-      signal: boolean,
-    ): Effect.Effect<void> {
+    ): Effect.Effect<Moved> {
       return Effect.gen(function* () {
+        let moved: Moved;
         const held = gitDirs.get(projectId);
         if (held !== undefined && held.gitDir !== read.gitDir) {
           gitDirs.delete(projectId);
           states.delete(projectId);
           yield* FiberMap.remove(watches, projectId);
           // The repository moved or went: its rows say otherwise.
-          if (signal) deps.onChange(projectId);
+          moved = "git";
         }
-        if (read.gitDir === null) return yield* dropTrees(projectId);
+        if (read.gitDir === null) {
+          yield* dropTrees(projectId);
+          return moved;
+        }
         // A worktree moved by `sm` writes the store, which reconciles.
         yield* followTrees(projectId, read.trees);
         if (!gitDirs.has(projectId)) {
@@ -490,12 +577,13 @@ const make = (deps: GitWatcherDeps) =>
           gitDirs.set(projectId, entry);
           yield* FiberMap.run(watches, projectId, watch(projectId, entry));
         }
-        if (!("state" in read) || Option.isNone(read.state)) return;
+        if (!("state" in read) || Option.isNone(read.state)) return moved;
         const last = states.get(projectId);
-        states.set(projectId, read.state.value);
-        if (signal && last !== undefined && last !== read.state.value) {
-          deps.onChange(projectId);
-        }
+        const now = read.state.value;
+        states.set(projectId, now);
+        if (last === undefined) return moved;
+        if (last.refs !== now.refs) return "git";
+        return last.indexes === now.indexes ? undefined : "index";
       }).pipe(serial.withPermits(1));
     }
 
@@ -505,6 +593,7 @@ const make = (deps: GitWatcherDeps) =>
         gitDirs.delete(projectId);
         states.delete(projectId);
         hearing.delete(projectId);
+        hearingGit.delete(projectId);
         stalled.delete(projectId);
         yield* dropTrees(projectId);
       }).pipe(serial.withPermits(1));
@@ -541,7 +630,15 @@ const make = (deps: GitWatcherDeps) =>
         }
         stalled.delete(project.id);
         const quiet = (hearing.get(project.id) ?? -2) < beats - 1;
-        yield* apply(project.id, project.path, read, quiet);
+        const moved = yield* apply(project.id, project.path, read);
+        // Owed even while the watch is heard: its fire reads past it.
+        if (moved === "git") hearingGit.add(project.id);
+        if (quiet) {
+          yield* signal(
+            project.id,
+            hearingGit.delete(project.id) ? "git" : moved,
+          );
+        }
       }
     }).pipe(passes.withPermits(1));
     const reconcile = reconcileNow.pipe(
@@ -562,7 +659,12 @@ const make = (deps: GitWatcherDeps) =>
         Effect.forever,
       ),
     );
-    return GitWatcher.of({ reconcile });
+    return GitWatcher.of({
+      reconcile,
+      indexWritten: PubSub.subscribe(indexWrites).pipe(
+        Effect.map(Stream.fromSubscription),
+      ),
+    });
   });
 
 export const layer = (deps: GitWatcherDeps) =>
