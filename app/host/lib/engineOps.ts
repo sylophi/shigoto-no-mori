@@ -46,7 +46,6 @@ import {
   LauncherEntrySchema,
   type MergeOutcome,
   MergeOutcomeSchema,
-  modeledKeyPaths,
   PackageScriptsDocSchema,
   type Project,
   ProjectIconSchema,
@@ -56,7 +55,6 @@ import {
   type CustomPort,
   type ProjectSettingsPatch,
   type ShigomoriConfig,
-  ShigomoriConfigSchema,
   type ShigomoriWorktreeData,
   StoredGlobalConfigSchema,
   StoredShigomoriConfigSchema,
@@ -406,25 +404,6 @@ export const patchGlobalConfig = Effect.fnUntraced(function* (
   );
 });
 
-// The proofs hand the whole project document and clear a field by
-// leaving it out, so every field the schema models goes in the payload,
-// nested objects field by field, as null where the document has none.
-// Fields the schema doesn't model stay out, and the merge keeps them.
-const PROJECT_KEY_PATHS = modeledKeyPaths(ShigomoriConfigSchema);
-function withModeledFields(config: ShigomoriConfig): Record<string, unknown> {
-  const payload: Record<string, unknown> = {};
-  for (const path of PROJECT_KEY_PATHS) {
-    let from: unknown = config;
-    let into = payload;
-    path.forEach((key, depth) => {
-      from = (from as Record<string, unknown> | undefined)?.[key];
-      if (depth === path.length - 1) into[key] = from ?? null;
-      else into = (into[key] ??= {}) as Record<string, unknown>;
-    });
-  }
-  return payload;
-}
-
 // A project's settings scope.
 const projectScope = (projectId: string) =>
   Effect.map(projectById(projectId), (project) => ({
@@ -457,7 +436,7 @@ export const writeProjectConfig = Effect.fnUntraced(function* (
       const engineConfig = yield* EngineConfig.Config;
       yield* engineConfig.write(
         scope,
-        withModeledFields(config),
+        config,
         (yield* engineConfig.read(scope)) ?? {},
       );
     }),

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   DeviceSettingsPatchSchema,
-  modeledKeyPaths,
+  modeledKeyFields,
   ShigomoriConfigSchema,
 } from "@shigomori/contracts/schemas/config";
 import * as Effect from "effect/Effect";
@@ -36,8 +36,8 @@ it("models exactly the schemas' keys", async () => {
   );
   assert.deepEqual(
     await listed({ kind: "project", projectId: "P", path: "/nowhere" }),
-    modeledKeyPaths(ShigomoriConfigSchema)
-      .map((path) => path.join("."))
+    modeledKeyFields(ShigomoriConfigSchema)
+      .map(({ path }) => path.join("."))
       .toSorted(),
   );
 });
