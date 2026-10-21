@@ -26,10 +26,21 @@ export const ROUTE_FLAG = "--sm-route=";
 export const DEV_BUILD_FLAG = "--sm-dev-build";
 
 // A presence flag, passed on to each window when the app itself was
-// started with it: the window then hands the lab's tools its api
-// (renderer/lib/runtime/labHandle.ts), as a dev build's always does,
-// and the app relaunches on SIGUSR2 (lab/relaunch.mts, main/index.ts).
+// started for the lab (startedForLab): the window then hands the lab's
+// tools its api (renderer/lib/runtime/labHandle.ts), as a dev build's
+// always does, and the app relaunches on SIGUSR2 (lab/relaunch.mts,
+// main/index.ts).
 export const LAB_FLAG = "--sm-lab";
+
+// Started with LAB_FLAG, as a build the lab drives: a dev run or a test
+// flavor (the flavor table's debuggable). A shipped build ignores the
+// flag.
+export function startedForLab(
+  argv: readonly string[],
+  build: { readonly packaged: boolean; readonly debuggable: boolean },
+): boolean {
+  return (!build.packaged || build.debuggable) && argv.includes(LAB_FLAG);
+}
 
 // Reads a required value flag off process.argv in the preload. A
 // missing or empty value means main and preload disagree on the flag,

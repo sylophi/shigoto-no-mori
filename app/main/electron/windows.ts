@@ -34,7 +34,9 @@ import {
   DEV_BUILD_FLAG,
   LAB_FLAG,
   ROUTE_FLAG,
+  startedForLab,
 } from "../argFlags";
+import { names } from "../flavor";
 import { noteWindowFocused, noteWindowGainedFocus } from "../hostProcess";
 import { clerkPublishableKey } from "./account";
 import { broadcast } from "../ipc/register";
@@ -209,7 +211,12 @@ function create(
         // The page the window opens on.
         `${ROUTE_FLAG}${route}`,
         ...(app.isPackaged ? [] : [DEV_BUILD_FLAG]),
-        ...(process.argv.includes(LAB_FLAG) ? [LAB_FLAG] : []),
+        ...(startedForLab(process.argv, {
+          packaged: app.isPackaged,
+          debuggable: names.debuggable,
+        })
+          ? [LAB_FLAG]
+          : []),
       ],
     },
   });

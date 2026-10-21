@@ -1,9 +1,8 @@
 // The React Compiler pass, one definition for every build that mounts
 // the renderer tree (the desktop renderer, the web client, the fake host).
-// @vitejs/plugin-react v6 dropped its inline babel option (it switched
-// to Oxc for Fast Refresh), so the compiler ships via
-// @rolldown/plugin-babel using the canonical preset exported by the
-// react plugin itself.
+// @vitejs/plugin-react has no babel option (it runs Oxc), so the
+// compiler runs through @rolldown/plugin-babel with the react plugin's
+// own preset.
 import { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 

@@ -1,6 +1,6 @@
-// Renders the dmg installer window's background art to PNG, in both
-// flavors: the stable one, and the prerelease one carrying the app's
-// dev-build tell (leaf-green wordmark plus a sticker on the card).
+// Renders the dmg installer window's background art to PNG: the stable
+// art, and the prerelease art carrying the app's dev-build tell
+// (leaf-green wordmark plus a sticker on the card), each at 1x and 2x.
 //
 //   pnpm dmg:background
 //
@@ -8,8 +8,9 @@
 // links the app's own doubutsu.css (packages/ui/src/styles), so the
 // leaf wallpaper, the palette tokens, the sticker and stripe recipes
 // and Zen Maru Gothic in the artwork are the rules the app ships rather
-// than copies that can drift. Re-run this after a doubutsu palette change. `pnpm test dmg-art`
-// (lefthook pre-commit) fails when the committed art predates one.
+// than copies that can drift. Re-run this after a doubutsu palette
+// change. `pnpm test dmg-art` (lefthook pre-commit) fails when the
+// committed art predates one.
 //
 // Window and icon geometry, and the file names, come from
 // shared/packaging/dmgLayout.mts, which forge.config.ts reads too.
@@ -60,7 +61,7 @@ app.commandLine.appendSwitch("force-device-scale-factor", "1");
 // to settle before the capture.
 //
 // One window renders all four images. The art is authored at 1x and
-// the page scales itself, so a capture is: resize, restate the flavor
+// the page scales itself, so a capture is: resize, restate which art
 // and the scale, let it paint. (A second BrowserWindow in the same run
 // fails to load at all, so reuse is also the only thing that works.)
 async function render(
@@ -138,8 +139,9 @@ app
       writeFileSync(file, await render(win, layout, prerelease, scale));
       console.log(`wrote ${file}`);
     };
-    // Both flavors every run, so a design change can't land on one and
-    // miss the other. appdmg finds each @2x twin itself, by name.
+    // The stable and the prerelease art every run, so a design change
+    // can't land on one and miss the other. appdmg finds each @2x twin
+    // itself, by name.
     await write(false, 1);
     await write(false, 2);
     await write(true, 1);

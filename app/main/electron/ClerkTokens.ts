@@ -1,9 +1,9 @@
 // The Clerk bridge's session tokens, kept in userData and encrypted at
-// rest with safeStorage. The file and its values are the ones the
-// Clerk SDK's electron-store adapter wrote, so a sign-in survives the
-// upgrade and the dev launchers can still clone it
-// (scripts/lib/devProfile.mts): one JSON object, tab-indented, each
-// value `enc:` and the base64 ciphertext. When the OS offers no
+// rest with safeStorage. The file and its values are in the format of
+// the Clerk SDK's electron-store adapter, as a 2.x install's are, so its
+// sign-in carries over: one JSON object, tab-indented, each value `enc:`
+// and the base64 ciphertext. The dev launchers clone a sign-in by
+// copying the file (scripts/lib/devProfile.mts). When the OS offers no
 // encryption a token is not persisted, and the user signs in again on
 // the next launch.
 import * as Context from "effect/Context";

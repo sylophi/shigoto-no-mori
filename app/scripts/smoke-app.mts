@@ -3,8 +3,8 @@
 // the app's own host does (node:sqlite in Electron, not the terminal's
 // Bun). Twice, each on a data folder of its own: one that does not
 // exist yet, and one holding the empty store.db a launch that could not
-// open it left (v3.0.0-alpha.2). The store is open once SQLite has made
-// its write-ahead log and the host its loopback file.
+// open it can leave. The store is open once SQLite has made its
+// write-ahead log and the host its loopback file.
 //
 // Then, with APPLE_SIGNING_IDENTITY set (the updater installs only a
 // bundle signed by the installed app's team), the update an installed
@@ -215,7 +215,7 @@ const versionOf = (app: string) =>
   ).trim();
 
 // A version above `version` on the same line: a prerelease gains a
-// field (3.0.0-alpha.7 to 3.0.0-alpha.7.1), a full release a patch.
+// field (3.1.0-beta.1 to 3.1.0-beta.1.1), a full release a patch.
 function newerThan(version: string): string {
   if (version.includes("-")) return `${version}.1`;
   const [major, minor, patch] = version.split(".").map(Number);

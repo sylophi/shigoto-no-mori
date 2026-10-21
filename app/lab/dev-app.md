@@ -369,12 +369,11 @@ removed one the next time they read the registry. A relaunch after
   (`main/electron/debugSwitches.ts`). Read and drive its window
   through macOS accessibility instead, asking the app for its page's
   tree by setting `AXManualAccessibility` once the page is up
-  (`lab/relaunch.mts`), and read `main.log`. Started with `--sm-lab`,
-  it relaunches on `SIGUSR2`. `node scripts/smoke-app.mts <the .app>`
-  launches it on fresh data folders and waits for its store to open,
-  as the release job does. With `APPLE_SIGNING_IDENTITY` set and the
-  build signed by it, it then has the app update itself into a copy
-  signed again under a newer version, as the release job does too.
-  Its launches write the build's userData and logs folder, and a build
-  of a flavor whose app is running on this machine quits at its
-  single-instance lock.
+  (`lab/relaunch.mts`), and read `main.log`. It ignores `--sm-lab`.
+  `node scripts/smoke-app.mts <the .app>` launches it on fresh data
+  folders and waits for its store to open, as the release job does.
+  With `APPLE_SIGNING_IDENTITY` set and the build signed by it, it then
+  has the app update itself into a copy signed again under a newer
+  version, as the release job does too. Its launches write the build's
+  userData and logs folder, and a build of a flavor whose app is
+  running on this machine quits at its single-instance lock.

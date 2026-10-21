@@ -1,13 +1,13 @@
-// sm nuke: everything of this build off the machine, with no window,
-// so a test build is cleaned up from a script. The app in this
-// command's bundle runs "Nuke everything" itself (--sm-nuke, the
-// Danger zone's two halves and the start that deletes the files), as
-// only it can revoke the device and turn its login item off. Then what
-// a start can't take, as something of the app's is still running
-// through it: the app's own folder, its logs and preferences, the
-// config folder once empty, and the bundle (--keep-app keeps it). A kept
-// app whose start couldn't delete a file keeps its own folder too, the
-// nuke's marker in it, for its next start to finish.
+// sm nuke: everything of this build off the machine, Settings' Danger
+// zone with no window. The app in this command's bundle runs "Nuke
+// everything" itself (--sm-nuke, the Danger zone's two halves and the
+// start that deletes the files), as only it can revoke the device and
+// turn its login item off. Then what a start can't take, as something
+// of the app's is still running through it: the app's own folder, its
+// logs and preferences, the config folder once empty, and the bundle
+// (--keep-app keeps it). A kept app whose start couldn't delete a file
+// keeps its own folder too, the nuke's marker in it, for its next start
+// to finish.
 import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, realpathSync, rmdirSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";

@@ -1,14 +1,14 @@
 // The tab's local registrar: what a browser serves itself, in the page.
-// A web client is a device with no host: every
-// host it shows is a peer, reached over the device link through the
-// hub (shared/hub/directPlane.ts). What stays in the page are the
-// client modules (the account, the client config, the hub bridge, the
-// shell, the releases) and the browser's own copy of the shared
-// settings, registered (shared/ipc/served.ts) like every binding's, and
-// called through the runtime's Api like every window's.
+// A web client is a device with no host: every host it shows is a peer,
+// reached over the device link through the hub
+// (shared/hub/directPlane.ts). What stays in the page are the client
+// modules (the account, the client config, the hub bridge, the shell,
+// the releases) and the browser's own copy of the shared settings,
+// registered (shared/ipc/served.ts) like every binding's, and called
+// through the runtime's Api like every window's.
 //
 // A host call nothing here serves is the renderer asking a local host
-// the browser does not have, which it still does in a few places. Those
+// the browser does not have, which it does in a few places. Those
 // are answered FAIL-CLOSED: a read (`gated: false`) or a channel on
 // STUB_ALLOWED below gets the empty answer its output schema allows
 // (stubDefaults.ts), so a shared component renders an empty state, and
