@@ -5,7 +5,7 @@
 // configure per peer: every device on the account is the same
 // person's, so the only question is whether this one takes orders at
 // all. Off, the machine is still browsable from everywhere, since
-// reads were never gated.
+// reads aren't gated.
 //
 // It is the loudest switch in the app (a peer holding it can edit the
 // setup script and then run it, which is any command as the user, over

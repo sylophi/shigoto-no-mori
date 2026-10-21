@@ -14,7 +14,7 @@ type TitlePullRequest = Pick<
 // own: one from this repository (isFromThisRepository), and not on the
 // primary branch, which is never the checkout's own. A fork's PR the
 // branch was checked out from doesn't count either, as for `sm
-// describe` (#487). The worktree's own PR names it in any state
+// describe`. The worktree's own PR names it in any state
 // (worktreeTitle).
 export function isOwnPullRequest<
   P extends Pick<PullRequest, "isCrossRepository">,

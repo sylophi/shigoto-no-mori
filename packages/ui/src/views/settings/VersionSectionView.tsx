@@ -74,8 +74,8 @@ export function VersionSectionView({
   const busy = kind === "checking" || kind === "downloading";
   const blockedTip = canCommand ? undefined : peerReadOnlyNote(deviceLabel);
   // No state to show: the first read failed. Over a wire that is
-  // still dialing, or on a peer build without the channel, the error
-  // looks the same, so say only what is known and offer a retry.
+  // still dialing it fails with nothing more to say, so say only what
+  // is known and offer a retry.
   const unavailable = state === null && isError;
 
   return (

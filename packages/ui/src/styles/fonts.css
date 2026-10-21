@@ -5,7 +5,7 @@
    subset, so Japanese text keeps the face), which is most of the bytes
    of the stylesheet the first paint would otherwise wait on. Every
    block is font-display: swap, so text paints in the fallback face and
-   swaps exactly as it did when these lived in index.css. */
+   swaps once the face loads. */
 @import "@fontsource/zen-maru-gothic/400.css";
 @import "@fontsource/zen-maru-gothic/500.css";
 @import "@fontsource/zen-maru-gothic/700.css";

@@ -39,7 +39,7 @@ export function ReviewsPopoverView({
   pr: PullRequestDetail;
   compact?: boolean;
 }) {
-  // Absent from a host on an older build.
+  // Absent when the host couldn't read the reviews.
   if (!pr.reviews) return null;
   const { reviewers } = pr.reviews;
   const summary = describeReviews(pr.reviews);

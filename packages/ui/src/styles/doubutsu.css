@@ -3,13 +3,12 @@
  * via Settings -> Appearance, which restores the plain v1 look.
  * Activated by adding `.doubutsu` to the theme root (via usePalette).
  * Orthogonal to .dark;
- * .doubutsu and .doubutsu.dark each remap the same shadcn-style tokens
- * the rest of the app already consumes, so existing components inherit
- * the bolder palette/radii/font without any per-component changes.
+ * .doubutsu and .doubutsu.dark each remap the shadcn-style tokens every
+ * component reads, so components take the palette, radii and font with
+ * no rule of their own.
  *
- * Design language taken from the animal-crossing-demo branch and
- * tightened per the impeccable shape brief: no borders, no gradients,
- * no soft shadows. Color-blocking and fill contrast carry hierarchy.
+ * The design language: no borders, no gradients, no soft shadows.
+ * Color-blocking and fill contrast carry hierarchy.
  *
  * ============================= CONTRACT =============================
  * Everything this file hooks into, so refactors can't silently strip
@@ -24,57 +23,16 @@
  *    --doubutsu-* of its own, including the composed
  *    --doubutsu-sticker-shadow / --doubutsu-stripe-image recipes.
  *
- * 2. data-slot attributes set by our components, the preferred hook.
- *    When building new UI that doubutsu must restyle, add a slot here
- *    rather than targeting utility classes:
- *      button (+ data-variant)   primitives/button.tsx
- *      input, textarea           primitives/input.tsx, primitives/textarea.tsx
- *      checkbox (+ data-variant) primitives/checkbox.tsx
- *      switch                    primitives/switch.tsx
- *      chip                      primitives/chip-button.tsx
- *      segmented-control         primitives/segmented-control.tsx
- *      combobox-trigger/-popup   shared/BranchCombobox.tsx
- *      modal-shell               primitives/modal-shell.tsx
- *      palette-verbs             palette/WorktreePalette.tsx
- *      search-row, footer-row    popup search strips and footers: the
- *                                palette, the pickers, addProject/,
- *                                BranchCombobox, the diff file list's filter
- *      diff-view                 diff/DiffPageView.tsx
- *      diff-index                diff/DiffFileIndexView.tsx
- *      diff-index-row, diff-index-jump   diff/DiffFileIndexView.tsx
- *      file-tree                 files/FileTree.tsx
- *      file-view                 files/FileViewer.tsx
- *      live-card                 live/LiveCard.tsx
- *      accept-commands-panel     remote/AcceptCommandsToggle.tsx
- *      sheet-content             primitives/sheet.tsx
- *      dropdown-menu-content/-item/-separator   primitives/dropdown-menu.tsx
- *      dropdown-menu-sub-trigger (+ data-variant)   primitives/dropdown-menu.tsx
- *      popover-content           primitives/popover.tsx
- *      guide-callout-box, guide-ring   guide/GuideView.tsx
- *      sidebar-project-row       sidebar/ProjectRow.tsx
- *      sidebar-project-pick      sidebar/ProjectHeaderView.tsx
- *      terminal-tab, terminal-tab-pick   terminal/TerminalTabsView.tsx
- *      project-tile              shared/ProjectIcon.tsx
- *      sidebar-inbox-create      sidebar/Sidebar.tsx
- *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
- *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
- *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
- *      villager-dialogue-box, villager-nameplate,
- *        villager-letter-paper, villager-photo
- *                                villagers/VillagerDialogueView.tsx,
- *                                villagers/VillagerLetterView.tsx
- *      visitor-guest-book, visitor-sticker, visitor-sticker-button
- *                                visitors/GuestBook.tsx,
- *                                visitors/VisitorStickerView.tsx
+ * 2. data-slot attributes set by our components (with data-variant
+ *    beside some), the preferred hook. New UI that doubutsu must
+ *    restyle gets a slot of its own, which the rules below select,
+ *    rather than a rule on its utility classes.
  *
- * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
- *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy|devices|
- *    forest|visitors" picking the canvas wallpaper (settings/Settings,
- *    tidy/TidyForest, remote/DevicesPage, ForestPage,
- *    Settings' Visitors section), the
- *    `doubutsu-only` / `v1-only` classes
- *    (per-theme markup shipped side by side), li[data-row-idx]
- *    (shared/PickerRowView.tsx).
+ * 3. App-level markers: data-doubutsu-zone="main|sidebar",
+ *    data-doubutsu-page="settings|tidy|devices|forest|visitors"
+ *    picking the canvas wallpaper, the `doubutsu-only` / `v1-only`
+ *    classes (per-theme markup shipped side by side), and the pickers'
+ *    li[data-row-idx].
  *
  * 4. Upstream library attributes (re-verify on upgrades; theme-contract
  *    greps the packages): Base UI's data-highlighted / data-disabled /
@@ -88,9 +46,9 @@
  *    but live in its runtime-loaded UI bundle, so theme-contract cannot
  *    grep them -- re-verify by eye when the Clerk packages move.
  *
- * 5. One consumer outside renderer/: scripts/dmg-background.html, the
- *    dmg installer artwork, which links this file and renders against
- *    the leaf-wallpaper ::before, the header/footer band rule and the
+ * 5. One consumer outside the app's pages: scripts/dmg-background.html,
+ *    the dmg installer artwork, which links this file and renders
+ *    against the leaf-wallpaper ::before, the header/footer band rule and the
  *    --doubutsu-* tokens. It is a committed png, so a broken hook there
  *    is invisible until someone opens a release. `pnpm test theme-contract`
  *    verifies it, and `pnpm test dmg-art` catches art that predates a
@@ -217,11 +175,12 @@
      Emerald is the positive status (online, connected, passed), and it
      wears the palette's accent: these are the cream steps, and each
      other palette declares its own beside its --primary. -600 is the
-     status word's step in light (TONE_TEXT in ui/status-dot.tsx), -400
-     its step in dark. What is literally green (a diff's additions,
-     Nook's leaf) rides green instead, which no palette moves: -500 is
-     the leaf, matching the diff viewer's own addition hue, and the
-     decorative steps are stock emerald's. */
+     status word's step in light (TONE_TEXT in
+     primitives/status-dot.tsx), -400 its step in dark. What is
+     literally green (a diff's additions, Nook's leaf) rides green
+     instead, which no palette moves: -500 is the leaf, matching the
+     diff viewer's own addition hue, and the decorative steps are stock
+     emerald's. */
   --color-emerald-500: oklch(0.6 0.15 155);
   --color-emerald-600: oklch(0.53 0.14 155);
   --color-green-300: oklch(0.845 0.143 165);
@@ -356,8 +315,8 @@
    keeps these rules off Clerk's runtime-loaded UI, whose edges and
    shadows come from clerkAppearance tokens instead of data-slot rules
    -- stripped, its card and buttons lose every affordance. :where()
-   keeps the carve-out at zero specificity so both rules keep losing
-   to the data-slot rules exactly as before. */
+   keeps the carve-out at zero specificity so both rules still lose to
+   the data-slot rules. */
 .doubutsu
   *:not(
     :where(.cl-rootBox, .cl-rootBox *, .cl-modalBackdrop, .cl-modalBackdrop *)
@@ -414,10 +373,11 @@
 }
 
 /* --- Dropdown / menu separator ---
-   The Tailwind `bg-border` separator went transparent when we zeroed
-   --border. AC's equivalent is a chunky tinted bar, not a hairline, so
-   bump to --muted as a soft 1px-tall band. Same fix for the diff hunk
-   separator which lives in pierre's shadow DOM but inherits the var. */
+   doubutsu zeroes --border, which leaves the Tailwind `bg-border`
+   separator transparent. AC's equivalent is a chunky tinted bar, not
+   a hairline, so bump to --muted as a soft 1px-tall band. Same fix for
+   the diff hunk separator which lives in pierre's shadow DOM but
+   inherits the var. */
 .doubutsu [data-slot="dropdown-menu-separator"] {
   background-color: var(--muted);
 }
@@ -529,7 +489,7 @@
   }
 
   /* The action (Undo, Redo) is the app's own loud button: the primary
-     fill at the small button's size (ui/button.tsx's sm). */
+     fill at the small button's size (primitives/button.tsx's sm). */
   & [data-button] {
     height: calc(var(--spacing) * 7);
     padding-inline: calc(var(--spacing) * 2.5);
@@ -827,9 +787,9 @@
 }
 /* The pierre diff viewer renders inside shadow DOM, where the class
    selectors above can't reach, but the body's 700 still gets in via
-   inheritance, so diff code rendered fat. Pin the mono treatment on
-   the wrapper; font-weight is inherited, so it carries across the
-   shadow boundary. */
+   inheritance, so diff code would render at 700. Pin the mono
+   treatment on the wrapper; font-weight is inherited, so it carries
+   across the shadow boundary. */
 .doubutsu :is([data-slot="diff-view"], [data-slot="file-view"]) {
   font-weight: 550;
 }
@@ -948,9 +908,9 @@
    Stacking: each host isolates its own context so the ::before can sit
    at z-index -1, above the host's background paint and below every
    in-flow child. This deliberately avoids touching the children's
-   `position` (an earlier `> * { position: relative }` lift silently
-   converted the absolutely-positioned title-bar drag strip into a 28px
-   flex row and pushed every page down).
+   `position` (`> * { position: relative }` would turn the
+   absolutely-positioned title-bar drag strip into a 28px flex row and
+   push every page down).
 
    One recipe, six wallpapers. A host declares six --doubutsu-wallpaper
    / -drift values and nothing else. The shared ::before below turns

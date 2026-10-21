@@ -160,7 +160,7 @@ export function resolveFolderIcon(
 // matters for packaged Electron: electron-forge's Vite plugin builds with
 // `base: './'` so the renderer works under file://, and a leading-slash
 // path would resolve to the filesystem root instead. In dev BASE_URL is
-// "/" so the URL is "/material-icons/<name>.svg" as before.
+// "/".
 export function iconUrl(name: string): string {
   return `${import.meta.env.BASE_URL}material-icons/${name}.svg`;
 }

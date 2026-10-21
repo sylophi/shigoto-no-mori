@@ -207,8 +207,6 @@ function ListMenuView({
           </button>
         }
       />
-      {/* Anchored under the trigger now that it sits at the top of the
-          sidebar rather than the bottom. */}
       <DropdownMenuContent align="end" side="bottom" sideOffset={2}>
         {children}
       </DropdownMenuContent>
