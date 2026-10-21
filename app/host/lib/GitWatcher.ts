@@ -11,15 +11,18 @@
 // of it.
 //
 // What counts as a change is an ALLOWLIST of git-dir paths (HEAD,
-// packed-refs, refs/**, a worktree's HEAD, a worktree entry appearing
-// or vanishing), not "anything under .git": objects/ churns on every
-// commit, logs/ mirrors every ref update, FETCH_HEAD is rewritten by
-// the app's own minute sweep, and `index` is rewritten by every stage
-// and by another program's `git status` or `git diff` (a person's, a
-// prompt's dirty check), while a stage moves no ref: the open changes
-// page reads it on its own poll, and a mirror watches it itself
-// (mirror/gitState.ts). Uncommitted file edits are not seen there: they
-// live in the working trees.
+// packed-refs, refs/** but the app's own refs/shigomori/**, a
+// worktree's HEAD, a worktree entry appearing or vanishing), not
+// "anything under .git": objects/ churns on every commit, logs/
+// mirrors every ref update, FETCH_HEAD is rewritten by the app's own
+// minute sweep, and `index` is rewritten by every stage and by another
+// program's `git status` or `git diff` (a person's, a prompt's dirty
+// check), while a stage moves no ref: the open changes page reads it
+// on its own poll, and a mirror watches it itself (mirror/gitState.ts).
+// refs/shigomori/ holds the app's own bookkeeping (dirty captures, a
+// transfer's landing refs, the mirror's staged-tree commits, discard
+// undos), which no view reads. Uncommitted file edits are not seen in
+// the git directory: they live in the working trees.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
@@ -76,6 +79,8 @@ const RELEVANT = [
   // own appearing and going, not their contents' churn.
   /^(worktrees\/[^/]+\/)?(MERGE_HEAD|CHERRY_PICK_HEAD|REVERT_HEAD|SQUASH_MSG|BISECT_LOG|sequencer|rebase-merge|rebase-apply)$/,
 ];
+// The app's own refs: under refs/, yet none of them counts.
+const OWN_REFS = /^refs\/shigomori(\/|$)/;
 
 // Any `.git` in a working tree (the main checkout's directory, a linked
 // worktree's file, a submodule's) churns with every git command the
@@ -95,6 +100,7 @@ export function isRelevantGitPath(file: string): boolean {
   // the lock itself is noise.
   if (file.endsWith(".lock")) return false;
   const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
+  if (OWN_REFS.test(normalized)) return false;
   return RELEVANT.some((pattern) => pattern.test(normalized));
 }
 
@@ -181,12 +187,13 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
 
 // What a project's git directory says about the state its rows show,
 // read with no git: HEAD and each worktree's HEAD, packed-refs, every
-// loose ref but a lock (a ref is written by a rename into place, so a
-// new inode), and which stopped-operation markers exist. Two equal
-// readings mean nothing the allowlist above cares about moved between
-// them. A file that isn't there reads as absent; any other failure (a
-// directory git removed mid-walk, a volume that stalls) fails the
-// reading, which the caller skips rather than read as a change.
+// loose ref the allowlist counts (a ref is written by a rename into
+// place, so a new inode), and which stopped-operation markers exist.
+// Two equal readings mean nothing the allowlist above cares about
+// moved between them. A file that isn't there reads as absent; any
+// other failure (a directory git removed mid-walk, a volume that
+// stalls) fails the reading, which the caller skips rather than read
+// as a change.
 const isNotFound = (error: PlatformError.PlatformError) =>
   Predicate.isTagged(error.reason, "NotFound");
 
@@ -194,9 +201,14 @@ const gitStateOf = (gitDir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const stamp = (relative: string) =>
+    // Undefined for a file that isn't there.
+    const stampIfThere = (relative: string) =>
       fs.stat(path.join(gitDir, relative)).pipe(
         Effect.map((info) => {
+          // A directory counts by being there: its mtime moves with any
+          // lock file made and removed inside it, as a fetch that moves
+          // nothing does in refs/remotes/<remote>.
+          if (info.type === "Directory") return `${relative}@dir`;
           const ino = Option.getOrElse(info.ino, () => 0);
           const mtime = Option.match(info.mtime, {
             onNone: () => 0,
@@ -204,16 +216,28 @@ const gitStateOf = (gitDir: string) =>
           });
           return `${relative}@${ino}:${mtime}:${info.size}`;
         }),
-        Effect.catchIf(isNotFound, () => Effect.succeed(`${relative}@-`)),
+        Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
       );
+    const stamp = (relative: string) =>
+      Effect.map(stampIfThere(relative), (seen) => seen ?? `${relative}@-`);
     const read = (relative: string) =>
       fs
         .readFileString(path.join(gitDir, relative))
         .pipe(Effect.catchIf(isNotFound, () => Effect.succeed("")));
-    const listed = (relative: string, recursive: boolean) =>
-      fs
-        .readDirectory(path.join(gitDir, relative), { recursive })
-        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed<string[]>([])));
+    // A recursive listing fails NotFound for a directory gone below it
+    // as well as for its own.
+    const listed = (relative: string, recursive: boolean) => {
+      const dir = path.join(gitDir, relative);
+      return fs
+        .readDirectory(dir, { recursive })
+        .pipe(
+          Effect.catchIf(isNotFound, (error) =>
+            Effect.flatMap(fs.exists(dir), (there) =>
+              there ? Effect.fail(error) : Effect.succeed<string[]>([]),
+            ),
+          ),
+        );
+    };
     const worktrees = (yield* listed("worktrees", false)).toSorted();
     const dirs = ["", ...worktrees.map((name) => `worktrees/${name}/`)];
     const parts = [yield* stamp("packed-refs")];
@@ -228,8 +252,11 @@ const gitStateOf = (gitDir: string) =>
       }
     }
     for (const ref of (yield* listed("refs", true)).toSorted()) {
-      if (ref.endsWith(".lock")) continue;
-      parts.push(yield* stamp(path.join("refs", ref)));
+      const relative = path.join("refs", ref);
+      if (!isRelevantGitPath(relative)) continue;
+      // One gone since the listing reads as the next listing will.
+      const seen = yield* stampIfThere(relative);
+      if (seen !== undefined) parts.push(seen);
     }
     return parts.join("\n");
   });
