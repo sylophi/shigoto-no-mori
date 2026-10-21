@@ -140,9 +140,8 @@ export class DevApp {
     );
     if (!this.options.needsTunnel) return;
     // A new device's tunnel has a new hostname, which can take minutes
-    // to route: the host allows it long enough to outlast a cached
-    // negative DNS answer (host/direct/Tunnel.ts). A kept device's
-    // routes in seconds.
+    // to route: it is waited on up to the host's own fresh deadline
+    // (host/direct/Tunnel.ts). A kept device's routes in seconds.
     const started = Date.now();
     let told = started;
     await waitFor(
