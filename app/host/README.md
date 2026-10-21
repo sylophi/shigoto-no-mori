@@ -61,10 +61,10 @@ commits it (`EFFECT.md`, section 5); the engine's are in
   `sm-clone-pending` file in its `.git`, written before the rename and
   removed after the register, lets the next clone of that repo into
   the folder register a clone a crash left between the two.
-- **A landing** (`lib/sync/landing.ts`): it commits as it answers
-  (`keep`). Until then a failure or a cancel undoes its create
-  (`Worktrees.createHeld`), and after it a cancel of the move's later
-  steps does.
+- **A landing** (`lib/sync/landing.ts`): the caller's run of the
+  `keep` it answers with commits it, once the move has nothing left to
+  fail. Until then a failure or a cancel at any step of the move undoes
+  its create (`Worktrees.createHeld`).
 - **The data-folder move** (`lib/dataDirMove.ts`): the pointer commits
   it. Its journal, kept in the data folder, is written before the
   re-key: a start that finds it at the source undoes the move, one that
@@ -76,11 +76,11 @@ commits it (`EFFECT.md`, section 5); the engine's are in
   journal names the folder that left
   (`packages/engine/src/dataDirMoveJournal.ts`); a process that can't
   write the pointer refuses to resolve, naming both folders. A copy to
-  another volume holds the store's write lock for its length, so
-  nothing writes into what it copies. The recovery keeps the journal until every step it owes is
-  done, and one it can't read stays, for a look. The steps and the undo
-  are in the module's header; the lock that makes the move the one
-  change under way is the engine's.
+  another volume holds the store's write lock for its length, so no
+  store write tears the copy. The recovery keeps the journal until
+  every step it owes is done, and one it can't read stays, for a look.
+  The steps and the undo are in the module's header; the lock that
+  makes the move the one change under way is the engine's.
 - **Nuke** (`lib/nuke.ts`, then the shell's `main/electron/nuke.ts`):
   the marker the shell writes in userData commits it. The start that
   finds it deletes what it names and userData, the marker last, and

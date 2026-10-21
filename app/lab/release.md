@@ -1,6 +1,6 @@
 # Cutting a prerelease
 
-The `Release` workflow (`.github/workflows/release.yml`) builds, signs,
+The `Release` workflow (`../.github/workflows/release.yml`) builds, signs,
 notarizes and smokes a release once it is published. These gates come
 first, on the machine that cuts, at the tip about to be tagged and in
 this order. A failure at any of them stops the cut.
@@ -68,8 +68,9 @@ export APPLE_SIGNING_IDENTITY="<the Developer ID Application identity>"
    Run it from the tip, unless `PROTOCOL_VERSION`
    (`../packages/contracts/src/protocol.ts`) differs between the tip
    and the installed version. Then run it from a checkout at
-   `v<installed>` on the same candidate: the smoke's press carries its
-   checkout's protocol, and the installed app refuses any but its own.
+   `v<installed>`, its dependencies installed, on the same candidate:
+   the smoke's press carries its checkout's protocol, and the installed
+   app refuses any but its own.
 
 The smoke refuses before the app's first check, since `updater.json`
 names the running app only from then, and leaves nothing behind. It
@@ -81,5 +82,5 @@ on the new version, by its bundle and by its own word in
 `updater.json`, and the bundle's own `sm` answers `devices` signed in.
 However it ends, the app is opened again on the real feed.
 
-Then put the version back (`git checkout package.json`), tag and
-publish. The release job's own smoke checks the signed bundle.
+Then put the version back (`git checkout package.json`), tag the tip
+and publish its release as a prerelease.
