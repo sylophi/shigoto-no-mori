@@ -94,11 +94,12 @@ import * as Fiber from "effect/Fiber";
 import * as Scope from "effect/Scope";
 import { hostContext, runHost, type Services } from "./lib/hostRuntime.mts";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
-import { EngineChanges } from "@host/lib/Engine";
+import { EngineCallError, EngineChanges } from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import * as Scripts from "@host/lib/Scripts";
 import * as Moves from "@host/lib/sync/Moves";
 import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
+import { codeOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
 import { followDescription as followDescriptionOn } from "@host/lib/sync/worktreeDescription";
 import {
@@ -205,7 +206,7 @@ const tracer = Tracer.make({
 });
 
 const fixture = cliSandbox("sm-sync-check-");
-const { sandbox, git, gitBytes, gitOut, runCli, sm } = fixture;
+const { sandbox, git, gitBytes, gitOut, sm } = fixture;
 const { commitFile, addWorktree } = fixture;
 
 async function refExists(repo: string, ref: string) {
@@ -886,23 +887,19 @@ describe("serving past the call", () => {
 });
 
 it('corrupted bundle: unpack fails with the coded "bad-bundle" error', async () => {
-  // (5) A corrupted bundle refuses with the coded kind, straight from
-  // the CLI's json error document.
+  // (5) A corrupted bundle refuses with the coded kind, through the
+  // unpack the source link runs (Ops.bundleUnpack).
   const corrupt = join(sandbox, "corrupt.bundle");
   writeFileSync(corrupt, randomBytes(4096));
-  const result = await runCli([
-    "bundle",
-    "unpack",
-    "--project-id",
-    targetProjectId,
-    "--in",
-    corrupt,
-    "--refspec",
-    "refs/heads/feature:refs/shigomori/incoming/feature",
-  ]);
-  assert.notEqual(result.code, 0);
-  const errorDoc = result.docs.find((doc) => doc.ok === false);
-  assert.equal(errorDoc?.code, "bad-bundle");
+  const failure = await runHost(
+    Effect.flip(
+      Ops.bundleUnpack(targetProject, corrupt, [
+        "refs/heads/feature:refs/shigomori/incoming/feature",
+      ]),
+    ),
+  );
+  assert.ok(failure instanceof EngineCallError, String(failure));
+  assert.equal(codeOf(failure.cause), "bad-bundle");
 });
 
 it("push: a >2.5 MB bundle crosses on a link the pusher opened and lands under refs/shigomori/ on the peer", async () => {
@@ -2080,7 +2077,7 @@ describe("cancelMove", () => {
     });
     // Branches kept on removal, so the rollback has to take the one
     // the move made itself, or a retry would meet it.
-    await sm("config", "write", "--data", '{"deleteBranchOnRemove":false}');
+    await sm("config", "set", "deleteBranchOnRemove", "false");
   });
 
   afterAll(async () => {
@@ -2088,7 +2085,7 @@ describe("cancelMove", () => {
       targetProjectId,
       targetConfigBefore ?? { defaultBranch: "main" },
     );
-    await sm("config", "write", "--data", '{"deleteBranchOnRemove":true}');
+    await sm("config", "set", "deleteBranchOnRemove", "true");
   });
 
   it("cancelMove (pull): the hung setup script dies, the worktree, branch and incoming ref are gone, the source survives, a second cancel finds nothing, and a retry lands", async () => {

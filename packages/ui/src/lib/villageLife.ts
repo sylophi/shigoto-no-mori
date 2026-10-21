@@ -5,8 +5,9 @@
 // before it defaulted on has, so an upgrade never changes its names. A
 // fresh install is seeded with it on instead (the store's first open,
 // the engine's migrations/importJson.ts). It picks worktree names from
-// the Animal Crossing pool, in the engine (names.ts, the same default), at create time and for the New Worktree form's
-// pre-pick (`sm worktrees destination`).
+// the Animal Crossing pool, in the engine (names.ts, the same default),
+// at create time and for the New Worktree form's pre-pick (Worktrees'
+// `destination`).
 //
 // villageLife is a client setting (ClientConfig): the purely visual
 // villager extras on every worktree named after a character, whichever

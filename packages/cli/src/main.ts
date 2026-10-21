@@ -19,19 +19,9 @@ import { projectsCommand } from "./commands/projects.ts";
 import { flavor, version } from "./build.ts";
 import { doctorCommand } from "./commands/doctor.ts";
 import { runCommand } from "./commands/run.ts";
-import {
-  adopt,
-  create,
-  move,
-  rekey,
-  rename,
-  rm,
-  setup,
-} from "./commands/changes.ts";
+import { adopt, create, move, rename, rm, setup } from "./commands/changes.ts";
 import { done, land, merge, pr } from "./commands/landing.ts";
 import { dirty } from "./commands/dirty.ts";
-import { bundle } from "./commands/bundle.ts";
-import { diskUsage } from "./commands/diskUsage.ts";
 import { app, edit, open } from "./commands/open.ts";
 import { update } from "./commands/update.ts";
 import { nuke } from "./commands/nuke.ts";
@@ -44,13 +34,7 @@ import {
   unmirror,
 } from "./commands/transfer.ts";
 import { cdCommand, shellCommand, switchCommand } from "./commands/shell.ts";
-import {
-  destination,
-  link,
-  list,
-  path,
-  worktreesCommand,
-} from "./commands/worktrees.ts";
+import { link, list, path, worktreesCommand } from "./commands/worktrees.ts";
 import { describe } from "./commands/describe.ts";
 import { autopull, shelve, unshelve } from "./commands/marks.ts";
 import { agentsCommand } from "./commands/agents.ts";
@@ -142,7 +126,6 @@ const sm = Command.make("sm").pipe(
     loaded(list),
     loaded(path),
     loaded(link),
-    loaded(destination),
     loaded(status),
     loaded(describe),
     loaded(shelve),
@@ -155,14 +138,11 @@ const sm = Command.make("sm").pipe(
     loaded(rename),
     loaded(adopt),
     loaded(setup),
-    loaded(rekey),
     loaded(pr),
     loaded(merge),
     loaded(land),
     loaded(done),
     loaded(dirty),
-    loaded(bundle),
-    diskUsage.pipe(Command.provide(services)),
     loaded(open),
     loaded(edit),
     app.pipe(Command.provide(services)),

@@ -1895,8 +1895,9 @@ describe("how a command line is read", () => {
   });
 
   it("names a mistyped verb, flags or not", async () => {
+    const { alpha } = await fixture();
     const projects =
-      "Usage: smd projects <list|icon|add|remove|relocate|reorder|config> [args]";
+      "Usage: smd projects <list|icon|add|remove|relocate|config> [args]";
     const refusals: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
       [["projects", "ad", "--all"], `Unknown subcommand "ad". ${projects}`],
       [
@@ -1908,8 +1909,8 @@ describe("how a command line is read", () => {
         'Unknown subcommand "--harness". Usage: smd agents <install|uninstall|status|bind|unbind|idle|resume|event> [args]',
       ],
       [
-        ["config", "lst", "--data", "x"],
-        'Unknown subcommand "lst". Usage: smd config <list|read|get|set|unset|launcher|edit> [args]',
+        ["projects", "config", "lst", "--setup", "x"],
+        'Unknown subcommand "lst". Usage: smd projects config <list|get|set|unset|edit|read|launcher|carryover> [args]',
       ],
       [
         ["projects", "config", "lst"],
@@ -1927,18 +1928,26 @@ describe("how a command line is read", () => {
       assert.equal(run.stderr, `smd: ${said}\n`, args.join(" "));
     });
     // So a config verb's flag may come before the verb.
-    box.write("registry.json", { projects: [] });
-    await box.migrate("cli");
-    const written = await runAt(
-      box.home,
+    const added = await runAt(
+      alpha,
+      "projects",
       "config",
-      "--data",
-      '{"launchScripts": false}',
-      "write",
+      "--copy",
+      "carryover",
+      "add",
+      ".env",
     );
-    assert.equal(written.code, 0, written.stderr);
-    const got = await runAt(box.home, "config", "get", "launchScripts");
-    assert.equal(got.stdout, "false\n");
+    assert.equal(added.code, 0, added.stderr);
+    const listed = await runAt(
+      alpha,
+      "--json",
+      "projects",
+      "config",
+      "carryover",
+    );
+    assert.deepEqual((listed.doc as { carryOver: unknown }).carryOver, [
+      { path: ".env", mode: "copy" },
+    ]);
   });
 
   it("hands `wt` a flag before the name, as switch's", async () => {
@@ -2005,7 +2014,7 @@ describe("how a command line is read", () => {
 
   it("binds the calling session on every command that reads where it runs", async () => {
     const { fox } = await fixture();
-    for (const verb of ["mirrors", "bundle"]) {
+    for (const verb of ["mirrors", "path"]) {
       const session = `session-${verb}`;
       await start(fox, [verb], { CLAUDE_CODE_SESSION_ID: session }).ended;
       const unbound = await start(fox, [
@@ -2145,46 +2154,6 @@ esac`,
     );
     writeFileSync(mode, "remote");
     assert.equal((await own()).title, "Signed out");
-  });
-});
-
-describe("disk-usage", () => {
-  it("measures a folder, stepping over what --exclude names", async () => {
-    const dir = join(box.home, "measured");
-    mkdirSync(join(dir, "nested"), { recursive: true });
-    writeFileSync(join(dir, "a.txt"), "x".repeat(100_000));
-    writeFileSync(join(dir, "nested", "b.txt"), "y".repeat(100_000));
-    const whole = await runAt(box.home, "--json", "disk-usage", dir);
-    assert.equal(whole.code, 0, whole.stderr);
-    const doc = whole.doc as Record<string, unknown>;
-    assert.deepEqual(Object.keys(doc), [
-      "bytes",
-      "reclaimableBytes",
-      "lastActivityAt",
-      "partial",
-    ]);
-    assert.equal(doc["partial"], false);
-    assert.equal(typeof doc["lastActivityAt"], "number");
-    const part = await runAt(
-      box.home,
-      "--json",
-      "disk-usage",
-      "measured",
-      "--exclude",
-      "measured/nested",
-    );
-    assert.ok(
-      (part.doc as { bytes: number }).bytes < (doc["bytes"] as number),
-      part.stdout,
-    );
-    const person = await runAt(box.home, "disk-usage", dir);
-    assert.match(person.stdout, /^\d+ bytes on disk, \d+ reclaimable\n$/);
-    const usage = await runAt(box.home, "disk-usage");
-    assert.equal(usage.code, 2);
-    assert.equal(
-      usage.stderr,
-      "smd: Usage: smd disk-usage <path> [--exclude <path>...]\n",
-    );
   });
 });
 
