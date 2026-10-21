@@ -3,8 +3,8 @@
 // listings, worktrees/carryOver.ts), and the creates, moves and removals
 // that hold host state around the engine's commit: the create mark and
 // the lifecycle scripts booked, the running work they refuse, the
-// tombstone, the removal announcements and the mirrors (V3.md, decision
-// 20; worktrees/creating.ts, moving.ts, removing.ts).
+// tombstone, the removal announcements and the mirrors
+// (worktrees/creating.ts, moving.ts, removing.ts).
 import type {
   UnknownProjectError,
   UnknownWorktreeError,

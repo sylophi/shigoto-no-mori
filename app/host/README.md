@@ -18,9 +18,8 @@ in-process (`lib/Engine.ts`, `lib/engineOps.ts`).
 - `lib/`: the services and what they use. A service module is named
   for its service (`VillagerData.ts`, `GitWatcher.ts`), so the lint
   rules for services read it (`lint/README.md`); lowercase modules are
-  helpers, Promise code not converted yet, and the engine calls. A few
-  services still sit in lowercase modules (V3.md, step 7, Leftover
-  mechanisms).
+  helpers, Promise code and the engine calls, and `lib/cli/shell.ts`
+  holds the one service among them, `HookShell`.
 - `socket/`: the device link's server and its byte channels, and the
   loopback the windows dial. `direct/`, `hub/`: reaching peers.
   `mirror/`, `fileSync/`, `portForward/`: the remote mechanisms.

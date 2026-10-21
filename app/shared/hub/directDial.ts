@@ -9,10 +9,9 @@
 //
 // DIAL STRATEGY: a deadline for each of the attempt's two legs, the
 // ask and then the candidate race, so a wedged peer that never answers
-// cannot hold the bridge's dial forever, and an answer that
-// came late (a peer just woken) leaves the race its whole budget: a
-// handshake across the tunnel after a slow answer used to run out and
-// win on the next rung instead. All candidate SOCKETS open concurrently, each sealed with its own ticket
+// cannot hold the bridge's dial forever, and an answer that came late
+// (a peer just woken) leaves the race its whole budget. All candidate
+// SOCKETS open concurrently, each sealed with its own ticket
 // to the key the hub's roster names for the peer (shared/remote/
 // sealedSocket.ts), so whoever answers a candidate address, only the
 // peer completes the handshake. The HELLOS are serialized:

@@ -155,8 +155,9 @@ export const mirrorSessions = (
 // that was rejected after the engine had made the session, and a
 // terminate that failed. It never covers a transfer still running,
 // even on the snapshot that names the session before the create's own
-// reply lands, because the token is live first. A label from before
-// the tokens (a plain "1") matches none.
+// reply lands, because the token is live first. A 2.x transfer, which
+// the daemon relabels `transfer-1` (file-sync/engine.go, v2Mode),
+// matches none.
 const liveTransfers = new Set<string>();
 
 export function beginTransfer(): string {

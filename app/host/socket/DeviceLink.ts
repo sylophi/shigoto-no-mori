@@ -1146,9 +1146,9 @@ export const make = (options: {
         // A peer silent past the timeout is cut, as if the roster had
         // dropped it. Never a process on this machine: one that dies
         // closes its socket, and a wall clock that jumped over a sleep
-        // would cut the app's own windows at every wake (V3.md, "Local
-        // links and liveness"). Silence is monotonic elapsed time, which
-        // stands still while the machine sleeps.
+        // would cut the app's own windows at every wake. Silence is
+        // monotonic elapsed time, which stands still while the machine
+        // sleeps.
         const livenessMs = opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
         const sweepMs = Math.max(50, Math.floor(livenessMs / 4));
         if (!local)

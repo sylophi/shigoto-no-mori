@@ -143,7 +143,7 @@ export function cloudflaredArgs(): string[] {
   //
   // --ha-connections: the default four edge connections are for
   // redundancy, not throughput (a stream rides one and dies with it
-  // either way), and their idle keepalives were most of the app's
+  // either way), and four's idle keepalives would be most of the app's
   // energy floor. One carries everything this tunnel does. If it
   // drops, cloudflared reconnects and a peer's connect attempt in
   // that window fails once and retries. A `tunnel` flag, so it goes

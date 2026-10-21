@@ -2,18 +2,18 @@
 // watches with a plain open(2) on the calling thread (libuv's
 // uv_fs_event_start), so a path whose open does not return stops the
 // host's whole loop with it: no call answered, no link, and a host
-// restarted onto the same path stuck again as it starts (V3.md, "A
-// watch that froze the host"). The one seen: a worktree on an external
-// disk, whose first read macOS holds for the Files and Folders prompt
-// until someone answers it. A FIFO does the same. So the path is opened
-// first on the thread pool, without blocking and within a deadline, and
-// watched only once that open came back on a folder or a file. One that
-// did not is tried again on an interval, and watched once it opens, so
-// the watch is late rather than lost. A held open keeps one of the
-// pool's four threads until it returns, and every file read and write
-// the host makes goes through that pool too: a retry waits on its
-// path's open rather than starting another, and no more than two opens
-// are under way at once, so held ones never take the whole pool.
+// restarted onto the same path stuck again as it starts. One such path:
+// a worktree on an external disk, whose first read macOS holds for the
+// Files and Folders prompt until someone answers it. A FIFO does the
+// same. So the path is opened first on the thread pool, without
+// blocking and within a deadline, and watched only once that open came
+// back on a folder or a file. One that did not is tried again on an
+// interval, and watched once it opens, so the watch is late rather than
+// lost. A held open keeps one of the pool's four threads until it
+// returns, and every file read and write the host makes goes through
+// that pool too: a retry waits on its path's open rather than starting
+// another, and no more than two opens are under way at once, so held
+// ones never take the whole pool.
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import * as Duration from "effect/Duration";
