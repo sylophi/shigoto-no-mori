@@ -1,7 +1,9 @@
-// How a failed command reports and exits, the Go sm's way: a usage
-// error exits 2, anything else 1. Under --json the failure is the
-// engine's error document with `ok: false`. A person gets `sm: <message>`
-// on stderr.
+// How a failed command reports and exits: a usage error exits 2, an
+// `ExitCode` its own code, a program handed the terminal that a signal
+// killed 128+n, and anything else 1. `ExitCode` and a killed program
+// say nothing more; any other failure is, under --json, the engine's
+// error document with `ok: false`, and to a person `sm: <message>` on
+// stderr.
 import { constants } from "node:os";
 import {
   type ErrorDocument,
@@ -92,8 +94,8 @@ export const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
     "agents <install|uninstall|status|bind|unbind|idle|resume|event> [args]",
 };
 
-// A word that names no command where one was due, in the Go sm's
-// words. `path` is the namespace's names after the binary's.
+// A word that names no command where one was due. `path` is the
+// namespace's names after the binary's.
 export const unknownCommand = (
   path: ReadonlyArray<string>,
   word: string,
@@ -120,7 +122,6 @@ export const report = (
     const { json, stderrColor, binaryName } = yield* Effect.service(Output);
     const path =
       error instanceof CliError.ShowHelp ? error.commandPath.slice(1) : [];
-    // The first problem, as Go's parser stopped at it.
     const [problem] = problems;
     const document: ErrorDocument =
       problem !== undefined

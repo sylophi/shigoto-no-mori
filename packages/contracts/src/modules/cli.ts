@@ -31,7 +31,9 @@ const ShellIntegrationStatusSchema = Schema.Struct({
 });
 export type ShellIntegrationStatus = typeof ShellIntegrationStatusSchema.Type;
 
-// The CLI owns every word; only the fields the app reads are declared.
+// The engine's doctor owns every word (`sm doctor --json` prints the
+// same run with more fields); only the fields the app reads are
+// declared.
 const DoctorFindingSchema = Schema.Struct({
   group: Schema.String,
   id: Schema.String,

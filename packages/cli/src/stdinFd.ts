@@ -1,19 +1,18 @@
 // The fd number stdin's reader gets in Bun. Bun's process.stdin dups
 // fd 0 when a reader first attaches, as the menu shows, and keeps that
 // fd for every later reader; the dup takes the lowest free number.
-// Under load the menu's dup took a number the git children the command
-// had just run were giving back (the fd table showed their sockets
-// closing as the menu attached), and that fd was closed under the
-// reader: Bun's "EBADF: bad file descriptor, fstat" as the reader
-// started, or a reader that never woke while the key sat in the
-// terminal's queue (V3.md, Robustness). A late second close of the
-// reused number is the likely cause; which close it is wasn't caught.
+// Under load the menu's dup can take a number the git children the
+// command just ran are giving back, and that fd is then closed under
+// the reader: Bun's "EBADF: bad file descriptor, fstat" as the reader
+// starts, or a reader that never wakes while the key sits in the
+// terminal's queue. A late second close of the reused number is the
+// likely cause; which close it is isn't known.
 // So the binary holds a number from its start, before any child runs,
 // and gives it back just as the menu attaches: the lowest free number
 // is then one no child's pipe can have had, and the dup takes it.
 // Nothing reads stdin before a menu shows, so typeahead stays the
-// shell's. A workaround for Bun: a Bun bump runs `pnpm -C packages/cli
-// under-load` before it lands (README.md).
+// shell's. A workaround for Bun: a Bun bump runs
+// `pnpm -C packages/cli under-load` before it lands (README.md).
 import { closeSync, openSync } from "node:fs";
 
 let held: number | null = null;

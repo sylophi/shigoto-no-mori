@@ -10,10 +10,7 @@ import {
 } from "../schemas/index.ts";
 
 // Tagged host: launch executes where the project files live, which is
-// the host by design. Which launcher kinds make sense against a remote
-// host is deliberately unresolved until the remote-actions step, since
-// stream or port-carried output can travel but a GUI app opens on the
-// host machine.
+// the host by design, and a GUI app it starts opens on that machine.
 export const launchersContract = defineContract(
   "launchers",
   "host",

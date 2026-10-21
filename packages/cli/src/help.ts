@@ -1,8 +1,7 @@
-// The help, as the Go sm wrote it: a catalog of usage lines, each with a
-// one-line description and a dim elaboration, laid out in one aligned
-// column. Every worktree command also takes -p <project>, said once in
-// the prose instead of on every usage line. Help is data; layout and
-// color are computed.
+// The help: a catalog of usage lines, each with a one-line description
+// and a dim elaboration, laid out in one aligned column. Every worktree
+// command also takes -p <project>, said once in the prose instead of on
+// every usage line. Help is data; layout and color are computed.
 import type { flavorNames } from "@shigomori/engine/flavor";
 import { commandName, projectVerb } from "./aliases.ts";
 import { splitAtDashes } from "./argv.ts";
@@ -194,13 +193,13 @@ const catalog = (names: Names) => {
         "worktrees open [<tool>] [<name>]",
         "Launch a launcher-row tool in a worktree",
         "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
-          "App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher.",
+          "--project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher.",
       ],
       [
         "worktrees edit <file> [<name>]",
         "Open a worktree's file in your editor",
         "The editor set in config (editor), or the file's default app while it's unset. A relative <file> reads from cwd in the worktree you're in, and from the root of one you name. " +
-          "App plumbing: --project-id <id> --worktree-id <id> address the worktree exactly, with the file after --. --json prints {ok, path}, and a file that isn't there fails with code missing-file.",
+          "--project-id <id> --worktree-id <id> address the worktree exactly, with the file after --. --json prints {ok, path}, and a file that isn't there fails with code missing-file.",
       ],
       [
         "worktrees link [<name>]",
@@ -256,7 +255,7 @@ const catalog = (names: Names) => {
           " projects config list`. Structured lists get element verbs: launcher add " +
           "<label> <command> / rm <label-or-id>, and carryover add <path> [--copy|--symlink] " +
           "/ rm <path> (add upserts, so re-adding switches the mode). The flags --setup <cmd>, " +
-          `--teardown <cmd>, and --default-branch <ref> remain as shorthands: "" clears a ` +
+          `--teardown <cmd>, and --default-branch <ref> are shorthands: "" clears a ` +
           "script, and default-branch can't be cleared.",
       ],
     ],
@@ -699,10 +698,10 @@ export const helpPages = (look: HelpLook) => {
     return undefined;
   };
 
-  // What a command line asks of the help, as Go's dispatcher read it:
-  // the help before the command, bare `sm` or `help [<command>]`, or a
-  // command with -h or --help before any `--`. Undefined when it asks
-  // none. Bare `sm` is a usage error, and exits 2.
+  // What a command line asks of the help: the help before the command,
+  // bare `sm` or `help [<command>]`, or a command with -h or --help
+  // before any `--`. Undefined when it asks none. Bare `sm` is a usage
+  // error, and exits 2.
   const asked = (
     args: ReadonlyArray<string>,
   ): { readonly text: string; readonly code: number } | undefined => {

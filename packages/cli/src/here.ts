@@ -27,7 +27,7 @@ const warning = Effect.gen(function* () {
   );
 });
 
-// A folder removed under the shell has no cwd, which reads as Go's ".".
+// A folder removed under the shell has no cwd, which reads as ".".
 export const cwd = Effect.try(() => process.cwd()).pipe(
   Effect.orElseSucceed(() => "."),
 );
@@ -65,8 +65,8 @@ export const here = Effect.flatMap(Effect.service(Here), ({ at, warned }) =>
 
 // An agent session's shell running sm inside a managed worktree binds
 // the session there (Agents.autoBind), before any command that reads
-// where it runs, as Go did: all but `agents`, which change bindings
-// themselves, and the ones that need no projects (main.ts).
+// where it runs: all but `agents`, which change bindings themselves,
+// and the ones that need no projects (main.ts).
 export const bindCaller = Effect.gen(function* () {
   const agents = yield* Agents.Agents;
   if (Option.isNone(yield* agents.caller)) return;
@@ -79,18 +79,16 @@ export const projectFlags = {
   projectId: Flag.String("project-id").pipe(Flag.optional),
 };
 
-// The positionals past the ones a command reads, let be as the Go sm
-// did.
+// The positionals past the ones a command reads, let be.
 export const rest = Argument.String("args").pipe(Argument.variadic());
 
-// A flag given a value. An empty one is no flag, as in Go.
+// A flag given a value. An empty one is no flag.
 export const given = (flag: Option.Option<string>) =>
   Option.filter(flag, (value) => value !== "");
 
-// The project a command names: --project-id as the app addresses it,
-// else -p or a positional, else the one at the cwd (the engine's
-// `resolveProjectRef`). Outside every project, a person at a terminal
-// picks one.
+// The project a command names: --project-id, else -p or a positional,
+// else the one at the cwd (the engine's `resolveProjectRef`). Outside
+// every project, a person at a terminal picks one.
 export const resolveProject = (ref: {
   readonly projectId: Option.Option<string>;
   readonly project: Option.Option<string>;
@@ -138,7 +136,8 @@ const pickedProject = (at: Worktrees.Here, refused: Worktrees.TargetError) =>
   });
 
 // How a command names its worktree: a name, <project>/<name> or a path
-// as the positional, -p to narrow the names, or the app's ids.
+// as the positional, -p to narrow the names, or the ids (--project-id,
+// --worktree-id).
 export const worktreeFlags = {
   ...projectFlags,
   worktreeId: Flag.String("worktree-id").pipe(Flag.optional),
@@ -146,10 +145,10 @@ export const worktreeFlags = {
 
 // The worktree a command names, else the one at the cwd, and where the
 // command runs. Named by nothing, a person at a terminal picks from a
-// menu where the Go sm offered one: in place of the engine's refusal
-// (outside every worktree, or with -p naming a project the cwd isn't
-// in), and in the primary checkout. `primaryOk` is off for the commands
-// that refuse the primary checkout.
+// menu: in place of the engine's refusal (outside every worktree, or
+// with -p naming a project the cwd isn't in), and in the primary
+// checkout. `primaryOk` is off for the commands that refuse the primary
+// checkout.
 export const resolveWorktree = (
   ref: {
     readonly ref?: Option.Option<string>;
@@ -209,9 +208,9 @@ export const resolveWorktree = (
     return { at, located };
   });
 
-// A typed path, home-expanded and made absolute against the cwd, as
-// Go's toAbsolute: an absolute path stays as typed, and without a cwd
-// the path stays relative.
+// A typed path, home-expanded and made absolute against the cwd: an
+// absolute path stays as typed, and without a cwd the path stays
+// relative.
 export const absolute = (raw: string) =>
   Effect.map(Effect.service(Paths.Paths), ({ expandHome }) => {
     const expanded = expandHome(raw);
@@ -224,9 +223,9 @@ export const absolute = (raw: string) =>
   });
 
 // Whether the command runs at or below `path`: the shell a removal or a
-// move leaves standing in a folder that is gone.
-// The shell's own $PWD counts, as Go's Getwd preferred it: through a
-// symlinked folder it names the path the shell sees.
+// move leaves standing in a folder that is gone. The shell's own $PWD
+// counts too: through a symlinked folder it names the path the shell
+// sees.
 export const cwdInside = (path: string) => {
   const pwd = process.env.PWD ?? "";
   if (pwd !== "" && isSameOrInside(pwd, path)) return true;

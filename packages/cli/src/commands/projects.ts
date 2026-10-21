@@ -113,9 +113,9 @@ const settingsFor = (flags: Parameters<typeof resolveProject>[0]) =>
     return { settings, project };
   });
 
-// The flags that set the scripts and the default branch, as Go long
-// had them: before any verb, and not together with one.
-const legacyFlags = {
+// The shorthand flags that set the scripts and the default branch:
+// before any verb, and not together with one.
+const shorthandFlags = {
   setup: Flag.String("setup").pipe(
     Flag.withDescription("Set the setup script ('' clears it)"),
     Flag.optional,
@@ -141,7 +141,7 @@ const script = (flag: Option.Option<string>) =>
 // The project settings' parent. -p and --project-id go before or after
 // the verb. With no verb it prints the settings as stored, or with the
 // flags sets them.
-const settingsOf = Command.make("config", legacyFlags, (input) =>
+const settingsOf = Command.make("config", shorthandFlags, (input) =>
   Effect.gen(function* () {
     // The shared flags reach the parent's handler too, untyped there.
     const { settings, project } = yield* settingsFor(
