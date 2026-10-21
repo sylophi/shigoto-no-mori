@@ -5,7 +5,8 @@
 // reach it through the link's serving (server.ts). The caller starts
 // reading as it attaches its own end, which can be before the open has
 // attached this one, so a call naming an id not attached yet waits for
-// it, briefly.
+// it, briefly. A call naming one this side dropped fails at once: the
+// caller hears a drop only through its calls.
 //
 // Both directions are numbered calls the caller keeps in flight, as
 // many as fill the link (shared/remote/channels.ts sizes them): a read
@@ -36,9 +37,10 @@ import { MAX_CHANNELS_PER_LINK } from "@shared/remote/link";
 // open that dials a port or spawns a serve child answers well within.
 const ATTACH_WAIT_MS = 60_000;
 
-// Ids the caller reset before anything attached them, kept for the one
-// attach that may follow so it comes back closed. Bounded: a caller
-// cannot grow it without opening channels too.
+// Ids gone with no channel left to say so: the ones this side dropped,
+// and the ones the caller reset before anything attached them, kept for
+// the one attach that may follow so it comes back closed. Bounded, the
+// oldest going first.
 const MAX_TOMBSTONES = 64;
 
 type Failure = typeof CallFailureSchema.Type;
@@ -128,8 +130,16 @@ export type HostChannels = LinkChannels & {
 export function makeHostChannels(): HostChannels {
   const channels = new Map<string, Channel>();
   const waiting = new Map<string, Deferred.Deferred<Channel, Failure>>();
-  const resetBeforeAttach = new Set<string>();
+  const tombstones = new Set<string>();
   let dead = false;
+
+  function tombstone(channelId: string): void {
+    if (tombstones.size >= MAX_TOMBSTONES) {
+      const oldest = tombstones.values().next().value;
+      if (oldest !== undefined) tombstones.delete(oldest);
+    }
+    tombstones.add(channelId);
+  }
 
   function remove(channelId: string, channel: Channel): void {
     channel.gone = true;
@@ -142,10 +152,12 @@ export function makeHostChannels(): HostChannels {
     channel.endpoint.onComplete?.();
   }
 
-  // Gone from this side: the caller's reads fail, which is its reset.
+  // Gone from this side: the caller's reads fail, which is its reset,
+  // the ones waiting here and the ones still on their way.
   function drop(channelId: string, channel: Channel): void {
     if (channel.gone) return;
     remove(channelId, channel);
+    tombstone(channelId);
     channel.outbound.length = 0;
     const failed = Effect.fail(refused(`channel ${channelId} was reset`));
     for (const answer of channel.reads.values()) answer(failed);
@@ -186,7 +198,7 @@ export function makeHostChannels(): HostChannels {
     Effect.suspend(() => {
       const channel = channels.get(channelId);
       if (channel !== undefined) return Effect.succeed(channel);
-      if (dead || resetBeforeAttach.has(channelId)) {
+      if (dead || tombstones.has(channelId)) {
         return Effect.fail(refused(`channel ${channelId} is gone`));
       }
       let deferred = waiting.get(channelId);
@@ -250,9 +262,10 @@ export function makeHostChannels(): HostChannels {
           drop(channelId, channel);
         },
       };
-      if (resetBeforeAttach.delete(channelId)) {
-        // The caller reset it before this end attached: a closed
-        // handle, and the endpoint hears it the way it would have live.
+      if (tombstones.delete(channelId)) {
+        // An id gone already (most often the caller's reset, come before
+        // this end attached): a closed handle, and the endpoint hears it
+        // the way it would have live.
         channel.gone = true;
         queueMicrotask(() => endpoint.onReset());
         return handle;
@@ -351,11 +364,7 @@ export function makeHostChannels(): HostChannels {
             Effect.fail(refused(`channel ${channelId} was reset`)),
           );
         }
-        if (resetBeforeAttach.size >= MAX_TOMBSTONES) {
-          const oldest = resetBeforeAttach.values().next().value;
-          if (oldest !== undefined) resetBeforeAttach.delete(oldest);
-        }
-        resetBeforeAttach.add(channelId);
+        tombstone(channelId);
       }),
 
     dropUninvited() {
