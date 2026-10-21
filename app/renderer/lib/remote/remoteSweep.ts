@@ -5,9 +5,8 @@
 // first reads come from its caches, as old as the last time anyone
 // looked), then renewed within the lease the host hands back, for as
 // long as this window stays focused. Boot-scoped like the device sync.
-import { focusManager } from "@tanstack/react-query";
 import { isPeerRefusal } from "@shigomori/contracts/errors";
-import { documentFocused } from "@/lib/focus";
+import { documentFocused, onWindowFocus } from "@/lib/focus";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { remoteDevicesAtom } from "./devices";
 import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
@@ -108,7 +107,7 @@ export function startRemoteSweepRequests(
     },
     documentFocused(),
   );
-  const unfocus = focusManager.subscribe((focused) =>
+  const unfocus = onWindowFocus((focused) =>
     renewals.attend(focused, connectedDevices()),
   );
   signal.addEventListener(
