@@ -9,7 +9,10 @@
 // loading. Inside a project the tree is that project's header, held
 // over the rows rather than among them, and its rows and no other's,
 // and an open project the build lacks reads as the list. A worktree reveals nothing from the list or from inside another
-// project, and its own row once its project is open. Inside a project
+// project, and its own row once its project is open. Narrowed to a
+// peer, a pair reads as on every device: this machine's side among the
+// peer's rows, under the peer's header, the peer's row folded into it
+// by the same rule. Inside a project
 // the worktrees follow its sort, every device's together, primaries
 // first. Inline, the list draws every project's rows under its header,
 // each in its own sort, and a folded project's header stands in for
@@ -25,7 +28,10 @@ import {
   worktreeRowKey,
 } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import type { SidebarRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
-import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
+import {
+  localSidesWith,
+  type RemoteForestItem,
+} from "@shigomori/ui/lib/forest.ts";
 import type {
   Project,
   PullRequest,
@@ -100,6 +106,31 @@ const remote: RemoteForestItem[] = [
   },
 ];
 
+// This machine's listings, in `projects`' order.
+const listings = [
+  listed([
+    worktree(lichen, "main", { isPrimary: true }),
+    worktree(lichen, "brave-badger"),
+    worktree(lichen, "old", { shelved: true }),
+    worktree(lichen, "exp/try"),
+  ]),
+  listed([
+    worktree(portPool, "main", { isPrimary: true }),
+    worktree(portPool, "zebra"),
+    worktree(portPool, "lease-ttl", { createdAt: 200, lastChangeAt: 200 }),
+  ]),
+  // Still loading.
+  listed(undefined),
+];
+
+const mirrors = [
+  {
+    peerDeviceId: PEER,
+    peerWorktreeId: "port-pool-lease-ttl-copy",
+    localWorktreeId: "port-pool-lease-ttl",
+  },
+];
+
 const build = (
   open: Project | null,
   worktreeSort: WorktreeSortMode = "name",
@@ -109,21 +140,7 @@ const build = (
 ) =>
   buildSidebarRows({
     projects,
-    worktreeQueries: [
-      listed([
-        worktree(lichen, "main", { isPrimary: true }),
-        worktree(lichen, "brave-badger"),
-        worktree(lichen, "old", { shelved: true }),
-        worktree(lichen, "exp/try"),
-      ]),
-      listed([
-        worktree(portPool, "main", { isPrimary: true }),
-        worktree(portPool, "zebra"),
-        worktree(portPool, "lease-ttl", { createdAt: 200, lastChangeAt: 200 }),
-      ]),
-      // Still loading.
-      listed(undefined),
-    ],
+    worktreeQueries: listings,
     pullRequestQueries: projects.map(() => ({
       data: pullRequests,
       isLoading: false,
@@ -150,13 +167,7 @@ const build = (
     arrangeMode: false,
     byOwner: null,
     remote,
-    mirrors: [
-      {
-        peerDeviceId: PEER,
-        peerWorktreeId: "port-pool-lease-ttl-copy",
-        localWorktreeId: "port-pool-lease-ttl",
-      },
-    ],
+    mirrors,
     deviceBadges: new Map(),
     ...args,
   });
@@ -243,6 +254,66 @@ it("a worktree reveals only inside its project", () => {
   assert.equal(
     build(portPool).revealKey(portPool.id, peers, PEER),
     remoteWorktreeKey(PEER, peers),
+  );
+});
+
+it("narrowed to the peer, a pair reads as on every device", () => {
+  // The device filter on the peer (forestSources.ts): no local
+  // project, and this machine's side of each pair with it.
+  const narrowed = (open: Project | null, local = listings) =>
+    build(
+      open,
+      "name",
+      null,
+      {},
+      {
+        projects: [],
+        worktreeQueries: [],
+        pullRequestQueries: [],
+        localSides: localSidesWith(PEER, mirrors, projects, local, []),
+      },
+    );
+  const inside = narrowed(portPool);
+  assert.deepEqual(inside.rows.map(line), ["main", "lease-ttl", "quiet-quail"]);
+  const pair = worktreeRowKey(undefined, "port-pool-lease-ttl");
+  assert.ok(
+    inside.rows.some(
+      (row) =>
+        row.kind === "worktree" &&
+        row.key === pair &&
+        row.mirrorWorktreeId === "port-pool-lease-ttl-copy",
+    ),
+  );
+  // Either side on screen reveals it.
+  assert.equal(inside.revealKey(portPool.id, "port-pool-lease-ttl"), pair);
+  assert.equal(
+    inside.revealKey(portPool.id, "port-pool-lease-ttl-copy", PEER),
+    pair,
+  );
+  // The header stays the peer's, where its create goes.
+  assert.equal(inside.pinned?.kind, "project");
+  assert.equal(inside.pinned?.kind === "project" && inside.pinned.local, false);
+  // This machine's side shelved, the peer's live row stays its own, as
+  // on every device, and the side waits behind the group's fold.
+  const shelved = listings.map((read, i) =>
+    i === projects.indexOf(portPool)
+      ? listed([
+          worktree(portPool, "main", { isPrimary: true }),
+          worktree(portPool, "lease-ttl", { shelved: true }),
+        ])
+      : read,
+  );
+  assert.deepEqual(narrowed(portPool, shelved).rows.map(line), [
+    "main",
+    "lease-ttl-copy",
+    "quiet-quail",
+    "group-shelf",
+  ]);
+  assert.deepEqual(narrowed(null, shelved).rows.map(line), ["> port-pool 2"]);
+  // Another peer's filter has none of this one's pairs.
+  assert.equal(
+    localSidesWith("other", mirrors, projects, listings, []).size,
+    0,
   );
 });
 

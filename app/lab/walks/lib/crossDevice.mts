@@ -127,8 +127,7 @@ export const openPeerWorktree = (page: Page, device: string, name: string) =>
 export const openOwnWorktree = (page: Page, name: string) =>
   openWorktree(page, /This device/, new RegExp(`^${name} ${name}`), name);
 
-// A mirrored pair's one row, under every device: the filter for one
-// device doesn't show a pair that another device runs.
+// A mirrored pair's one row, under every device.
 export const openMirroredPair = (page: Page, name: string) =>
   openWorktree(page, /Every device/, new RegExp(`^${name} ${name}`), name);
 

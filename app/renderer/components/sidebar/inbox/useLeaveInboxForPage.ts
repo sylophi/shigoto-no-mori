@@ -13,21 +13,18 @@ import { useApi } from "@/lib/runtime/pageApi";
 //
 // Only for a worktree the inbox has listed and left out on purpose
 // (`leftOut`): one not listed yet, or that can't be listed at all, is
-// no reason to leave. Only while the device filter shows the page's
-// device (`shownDevice`, null for every device), since the tree would
-// leave a filtered row out just the same. And once per page, counting
-// a page that lands with the tree already showing, so a flip back to
-// the inbox while the page stays up is not undone.
+// no reason to leave, and neither is one the device filter hides,
+// which the tree would leave out just the same. And once per page,
+// counting a page that lands with the tree already showing, so a flip
+// back to the inbox while the page stays up is not undone.
 export function useLeaveInboxForPage({
   inbox,
   settled,
-  shownDevice,
   leftOut,
 }: {
   inbox: boolean;
   // The view is the saved one rather than the default standing in.
   settled: boolean;
-  shownDevice: string | null;
   leftOut: SidebarViewModel["leftOut"];
 }): void {
   const { mutate: setView } = useSetSidebarView();
@@ -50,7 +47,6 @@ export function useLeaveInboxForPage({
       checkedRef.current = page;
       return;
     }
-    if (shownDevice !== null && shownDevice !== deviceId) return;
     if (leftOut?.(worktreeId, rowDeviceId(localDeviceId, deviceId))) {
       checkedRef.current = page;
       setView("projects");
