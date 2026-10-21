@@ -41,15 +41,15 @@ export const DMG_APPS_ICON = { x: 504, y: DMG_ICON_Y } as const;
 // Where the rendered art lives, app-relative.
 export const DMG_ART_DIR = "assets/dmg";
 
-// Both flavors of the art are committed, which keeps `make` free of a
-// render step. appdmg finds the @2x twin itself, by name, so only the
-// 1x path is ever handed to the maker.
+// The stable and the prerelease art are both committed, which keeps
+// `make` free of a render step. appdmg finds the @2x twin itself, by
+// name, so only the 1x path is ever handed to the maker.
 export function dmgBackgroundName(prerelease: boolean, scale: 1 | 2): string {
   return `background${prerelease ? "-prerelease" : ""}${scale === 2 ? "@2x" : ""}.png`;
 }
 
 // A semver prerelease is anything carrying a tag (0.4.0-beta.1). Those
-// ship the flavor with the app's dev-build tell (leaf-green wordmark
+// ship the art with the app's dev-build tell (leaf-green wordmark
 // and a sticker on the card), so a beta window never looks like the
 // real thing sitting in someone's Downloads.
 export function dmgBackgroundFor(version: string): string {

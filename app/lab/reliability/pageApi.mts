@@ -1,6 +1,6 @@
 // The page's api, reached from outside the page (the harness, the
-// guide eval): what a dev build, the fake host or an app started with
-// --sm-lab hands over as window.__smLab
+// guide eval): what a dev build, the fake host or a test flavor started
+// with --sm-lab hands over as window.__smLab
 // (renderer/lib/runtime/labHandle.ts).
 import type { JSHandle, Page } from "playwright-core";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";

@@ -54,7 +54,7 @@ import * as ClientConfig from "./electron/clientConfig";
 import { confirmBusyAction } from "./electron/busyPrompt";
 import { isQuittingAfterFailedMove } from "./electron/moveFailed";
 import { isRelaunching, relaunchApp } from "./electron/relaunch";
-import { LAB_FLAG } from "./argFlags";
+import { startedForLab } from "./argFlags";
 import {
   rememberVisibilityAtShutdown,
   rememberVisibilityForRestart,
@@ -278,11 +278,15 @@ app.on("open-url", (event, url) => {
   openDeepLink(route);
 });
 
-// Started for the lab (argFlags.ts LAB_FLAG): SIGUSR2 relaunches the
-// app as a window's own relaunch does. lab/relaunch.mts sends it, since
-// a packaged build takes no debugger to ask its window with
-// (electron/debugSwitches.ts).
-if (process.argv.includes(LAB_FLAG)) {
+// Started for the lab (argFlags.ts startedForLab): SIGUSR2 relaunches
+// the app as a window's own relaunch does, which lab/relaunch.mts asks
+// for from outside the page.
+if (
+  startedForLab(process.argv, {
+    packaged: app.isPackaged,
+    debuggable: names.debuggable,
+  })
+) {
   process.on("SIGUSR2", () => relaunchApp());
 }
 

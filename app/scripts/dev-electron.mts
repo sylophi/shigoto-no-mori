@@ -8,13 +8,13 @@
 // node_modules/electron/index.js computes the executable path once at
 // first require, and forge's tooling requires it before any hook
 // runs, so the override has to be in the environment when the forge
-// process starts. The hook variant was tried and silently launched
-// the stock Electron.app - the app boots identically, deep links just
-// never arrive and every keychain read prompts (verified 2026-08).
+// process starts. A hook would launch the stock Electron.app: it boots
+// identically, but deep links never arrive and every keychain read
+// prompts.
 //
 // `pnpm start --profile <name> [--fresh] [--clone-login]`
 // runs the app as a dev profile (scripts/lib/devProfile.mts). The
-// other flags go to forge as before.
+// other flags go to forge.
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -62,8 +62,8 @@ if (process.platform === "darwin") {
   try {
     process.env.ELECTRON_OVERRIDE_DIST_PATH = ensureDevBundle();
   } catch (error) {
-    // A broken bundle build should degrade to the unbundled dev of
-    // old (dev runs, social sign-in doesn't), not block dev.
+    // A broken bundle build degrades to the stock Electron binary (dev
+    // runs, social sign-in doesn't) rather than blocking dev.
     console.warn(
       `[dev-electron] dev app bundle failed, launching unbundled: ${error}`,
     );

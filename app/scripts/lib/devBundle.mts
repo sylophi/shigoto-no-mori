@@ -253,7 +253,7 @@ function processRunningFrom(bundle: string): boolean {
 // failure pnpm should report.
 // `relaunch`, when given, is asked on every plain exit: a child it
 // returns takes the first one's place (the app asked to be restarted),
-// none ends the wrapper as before.
+// none ends the wrapper with it.
 export function superviseChild(
   first: ChildProcess,
   label: string,

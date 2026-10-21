@@ -41,13 +41,13 @@ export default defineConfig({
   },
   define: {
     __SM_ACCOUNT_BAKED_ENV__: JSON.stringify(bakedAccountEnv()),
+    // The flavor a packaged build runs as (main/flavor.ts). A dev run
+    // is dev whatever this says.
+    __SM_PACKAGED_FLAVOR__: JSON.stringify(buildFlavor(process.env)),
     // Whether forge signs this build with a Developer ID (the same
     // reading forge.config.ts makes). main/index.ts gives only such a
     // build the real macOS keychain: an ad-hoc bundle on it is one
     // login-password prompt per read (main/core/keychain/reset.ts).
-    // The flavor a packaged build runs as (main/flavor.ts). A dev run
-    // is dev whatever this says.
-    __SM_PACKAGED_FLAVOR__: JSON.stringify(buildFlavor(process.env)),
     __SM_SIGNED_MAC_BUILD__: JSON.stringify(
       macSigningIdentity(process.env) !== null,
     ),
@@ -58,9 +58,9 @@ export default defineConfig({
       // relative to its own package, so it has to stay a real
       // node_modules require (forge.config.ts ships that directory).
       // Every `node:` import is Electron's own. Forge marks only the
-      // building Node's builtinModules external, which on Node 22 leave
-      // out `node:sqlite`, and Vite bundled that as an empty stub: the
-      // host's store driver had no SQLite (v3.0.0-alpha.2).
+      // building Node's builtinModules external, and on Node 22 those
+      // leave out `node:sqlite`, which Vite would bundle as an empty
+      // stub, leaving the host's store with no SQLite.
       external: ["node-pty", /^node:/],
     },
   },

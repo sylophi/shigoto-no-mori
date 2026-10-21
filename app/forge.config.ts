@@ -162,7 +162,8 @@ const config: ForgeConfig = {
       // it), so remote access needs nothing installed.
       `${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
       // The file-sync engine (continuous worktree mirroring), compiled
-      // by the prePackage hook and spawned only by main.
+      // by the prePackage hook and spawned by the host
+      // (host/fileSync/runner.ts).
       `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
       // The darwin helper (the filesystem calls Node lacks), compiled by
       // the prePackage hook the same way.
@@ -285,7 +286,7 @@ const config: ForgeConfig = {
     // module the artwork is drawn from, so the icons land on their
     // painted tiles.
     //
-    // Which flavor a prerelease gets, and both file names, are
+    // Which art a prerelease gets, and both file names, are
     // dmgLayout's call. See dmgBackgroundFor.
     new MakerDMG(
       {
@@ -315,11 +316,8 @@ const config: ForgeConfig = {
   ],
   plugins: [
     new VitePlugin({
-      // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
-      // If you are familiar with Vite configuration, it will look really familiar.
       build: [
         {
-          // `entry` is just an alias for `build.lib.entry` in the corresponding file of `config`.
           entry: "main/index.ts",
           config: "vite.node.config.ts",
           target: "main",
@@ -344,8 +342,6 @@ const config: ForgeConfig = {
         },
       ],
     }),
-    // Fuses are used to enable/disable various Electron functionality
-    // at package time, before code signing the application
     new FusesPlugin({
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,

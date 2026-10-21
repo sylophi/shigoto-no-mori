@@ -36,8 +36,8 @@ const devRelaunchMarker = envSetting(DEV_RELAUNCH_FILE_ENV);
 // app quits, loginwindow terminates its subordinates (unless
 // Background Task Management says it may run in the background) a
 // second or so later. Every child of the new instance (its window's
-// renderer, the GPU, the host) was killed with them, which left a dead
-// window after the migration's restart, a data-folder move or a nuke.
+// renderer, the GPU, the host) would be killed with them, leaving a
+// dead window after a restart.
 function relaunchThroughLaunchServices(): void {
   // <bundle>/Contents/MacOS/<executable>
   const bundle = dirname(dirname(dirname(app.getPath("exe"))));

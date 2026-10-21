@@ -1,19 +1,17 @@
 // A packaged build's relaunch must leave a live window: opens the app
-// for the lab, has it relaunch (what the migration, a data-folder move
-// and a nuke end with), waits past the second or so after which macOS
-// terminates a quit app's subordinate processes (main/electron/
-// relaunch.ts), and reads the new window again. Fails, naming what it
-// saw, when the new instance never came, its window drew nothing, or a
-// child process was killed.
+// for the lab, has it relaunch (what a data-folder move and a nuke end
+// with), waits past the second or so after which macOS terminates a
+// quit app's subordinate processes (main/electron/relaunch.ts), and
+// reads the new window again. Fails, naming what it saw, when the new
+// instance never came, its window drew nothing, or a child process was
+// killed.
 //
-// A packaged prod or v3 build takes no debugging port (main/electron/
-// debugSwitches.ts), so the lab asks and looks from outside, as it can
-// on any flavor: started with --sm-lab, the app relaunches on SIGUSR2
-// (main/index.ts); the window is read through macOS accessibility,
-// which a page whose renderer died has nothing in (as the flavors
-// thread drove its window); and main.log says which child process
-// was killed. Accessibility needs the terminal running this to be
-// allowed in System Settings > Privacy & Security > Accessibility.
+// It asks and looks from outside the page: started with --sm-lab, a
+// test flavor's app relaunches on SIGUSR2 (main/index.ts); the window
+// is read through macOS accessibility, which a page whose renderer
+// died has nothing in; and main.log says which child process was
+// killed. Accessibility needs the terminal running this to be allowed
+// in System Settings > Privacy & Security > Accessibility.
 //
 // Run it on a test flavor's build, which shares nothing with the
 // installed apps (lab/dev-app.md, "Packaged build, as a test flavor"),
@@ -22,7 +20,7 @@
 //   SM_FLAVOR=lab pnpm package
 //   node lab/relaunch.mts "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app"
 //   "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app/Contents/Resources/smlab" nuke --yes --keep-app
-// A prod or v3 build opens on the installed app's data. The script
+// A shipped build ignores --sm-lab (main/argFlags.ts). The script
 // quits the app at the end, by SIGKILL (a window whose renderer was
 // killed ignores a quit), whether it passed or not.
 import { execFileSync } from "node:child_process";

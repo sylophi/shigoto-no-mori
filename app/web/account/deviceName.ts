@@ -11,8 +11,8 @@
 // "Chrome": Edge, Brave, Opera and the rest all enroll as Chrome from
 // the string alone. navigator.userAgentData.brands is the one place a
 // fork states its own name (not all do: Arc and Vivaldi keep quiet and
-// stay "Chrome"), and Brave, which used to ship no brand entry, is
-// caught by the navigator.brave object only it defines.
+// stay "Chrome"), and Brave, whose brands may not name it, is caught
+// by the navigator.brave object only it defines.
 
 export type BrowserHints = {
   // navigator.userAgentData.brands, brand strings only. Chromium only,

@@ -39,9 +39,8 @@
 // presence is the whole message. It has no content.
 export const SAFE_STORAGE_OWNED_MARKER = "safe-storage.owned";
 
-// Electron's naming of the item, derived from app.name. Matches what a
-// packaged build actually creates (verified against a login keychain
-// dump). A drift here would delete nothing and cure nothing.
+// Electron's naming of the item, derived from app.name, as a packaged
+// build creates it. A drift here would delete nothing and cure nothing.
 export function safeStorageItemNames(appName: string): {
   service: string;
   account: string;

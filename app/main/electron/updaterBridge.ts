@@ -1,14 +1,14 @@
-// The updater's on-disk bridge to the CLI. `sm update` has no IPC
-// channel into the app's updater, so the two talk through the data
-// dir: the app publishes its updater state to updater.json ({ pid,
-// appVersion, state, handoff }) on boot and on every state change, and
-// takes the install request in updater-request.json ({ action, id,
-// appPid, requesterPid }) the CLI writes, saying what became of it in
-// `handoff`. The request is looked for every second from boot on, not
-// watched for: the data dir holds the worktrees, and under their churn
-// macOS's FSEvents drops events, which Node's fs.watch passes over in
-// silence. A failed publish degrades `sm update`, never the updater
-// itself.
+// The updater's on-disk bridge to the CLI. `sm update` reaches the
+// shell's updater through the data dir rather than the host's
+// loopback, so it works while the host is down too: the app publishes
+// its updater state to updater.json ({ pid, appVersion, state,
+// handoff }) on boot and on every state change, and takes the install
+// request in updater-request.json ({ action, id, appPid, requesterPid })
+// the CLI writes, saying what became of it in `handoff`. The request is
+// looked for every second from boot on, not watched for: the data dir
+// holds the worktrees, and under their churn macOS's FSEvents drops
+// events, which Node's fs.watch passes over in silence. A failed
+// publish degrades `sm update`, never the updater itself.
 import path from "node:path";
 import { app } from "electron";
 import * as Effect from "effect/Effect";

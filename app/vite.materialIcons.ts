@@ -9,8 +9,7 @@
 // missing fails, where skipping would ship every icon broken. The
 // `web:build` script stages the icons itself first rather than trusting
 // the postinstall to have run: a deploy that restores its install from
-// a build cache (Vercel's) skips lifecycle scripts, which is how v2.10.0's
-// web client first failed to deploy.
+// a build cache (Vercel's) skips lifecycle scripts.
 import { cpSync, createReadStream, existsSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
