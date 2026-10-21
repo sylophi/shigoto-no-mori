@@ -1,9 +1,9 @@
-// The finish line, over the engine's Landing: pr opens a worktree's pull
-// request, merge merges it (arming auto-merge, or letting a queue take
-// it, and waiting for GitHub to merge it), land merges and cleans up,
-// done puts a checkout back on the primary branch, and rm --stack cleans
-// up a landed stack. The engine answers each with the --json document,
-// which a person's lines are read from.
+// The finish line, over the engine's Landing: pr opens a worktree's
+// pull request, merge merges it (arming auto-merge, or letting a queue
+// take it, and waiting for GitHub to merge it), land merges and cleans
+// up, done puts a checkout back on the primary branch, and rm --stack
+// cleans up a landed stack. The engine answers each with the --json
+// document, which a person's lines are read from.
 import { cdHintFor, cdNote, removeFlags } from "../removal.ts";
 import {
   type MergeMethod,
@@ -116,8 +116,8 @@ const docOutcome = (doc: Doc) => ({
 });
 
 // The landing reporter: the worktree events as the other verbs report
-// them, each layer of a stack as it merges, the wait for GitHub to merge
-// a PR that didn't on the spot (said under --json too), and a
+// them, each layer of a stack as it merges, the wait for GitHub to
+// merge a PR that didn't on the spot (said under --json too), and a
 // land's cleanup as it goes.
 const landingReporter = Effect.gen(function* () {
   const base = yield* reporter();

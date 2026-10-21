@@ -86,10 +86,9 @@ export const rest = Argument.String("args").pipe(Argument.variadic());
 export const given = (flag: Option.Option<string>) =>
   Option.filter(flag, (value) => value !== "");
 
-// The project a command names: --project-id as the app addresses it,
-// else -p or a positional, else the one at the cwd (the engine's
-// `resolveProjectRef`). Outside every project, a person at a terminal
-// picks one.
+// The project a command names: --project-id, else -p or a positional,
+// else the one at the cwd (the engine's `resolveProjectRef`). Outside
+// every project, a person at a terminal picks one.
 export const resolveProject = (ref: {
   readonly projectId: Option.Option<string>;
   readonly project: Option.Option<string>;
@@ -137,7 +136,8 @@ const pickedProject = (at: Worktrees.Here, refused: Worktrees.TargetError) =>
   });
 
 // How a command names its worktree: a name, <project>/<name> or a path
-// as the positional, -p to narrow the names, or the app's ids.
+// as the positional, -p to narrow the names, or the ids (--project-id,
+// --worktree-id).
 export const worktreeFlags = {
   ...projectFlags,
   worktreeId: Flag.String("worktree-id").pipe(Flag.optional),
@@ -223,9 +223,9 @@ export const absolute = (raw: string) =>
   });
 
 // Whether the command runs at or below `path`: the shell a removal or a
-// move leaves standing in a folder that is gone.
-// The shell's own $PWD counts too: through a symlinked folder it
-// names the path the shell sees.
+// move leaves standing in a folder that is gone. The shell's own $PWD
+// counts too: through a symlinked folder it names the path the shell
+// sees.
 export const cwdInside = (path: string) => {
   const pwd = process.env.PWD ?? "";
   if (pwd !== "" && isSameOrInside(pwd, path)) return true;

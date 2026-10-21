@@ -183,8 +183,8 @@ const program = commandLine(sm, canonical(rest, worktreesCommand)).pipe(
   Effect.flatMap(Command.runWith(sm, { version, renderErrors: false })),
   // None of effect/cli's built-in flags: the help is the catalog's
   // (help.ts), answered before parsing, and a command line the parser
-  // refuses reports with the catalog's usage line, without the parser's
-  // help page.
+  // refuses reports with the catalog's usage line where it has one,
+  // without the parser's help page.
   Effect.provide(
     Layer.mergeAll(
       verbose

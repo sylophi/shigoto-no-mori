@@ -8,8 +8,8 @@ import {
 export const globalConfigContract = defineContract(
   "globalConfig",
   "host",
-  // The stored document, loose so keys this build doesn't model (an
-  // imported 2.x document's, a newer build's) pass through.
+  // The stored document, loose so keys it doesn't model (an imported
+  // 2.x document's client keys, a newer build's) pass through.
   // It carries no secret, so every wire serves it ungated.
   invoke("read", VoidSchema, StoredGlobalConfigSchema, {
     remote: true,

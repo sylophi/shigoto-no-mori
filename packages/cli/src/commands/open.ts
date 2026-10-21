@@ -17,8 +17,8 @@ import { interactive } from "../prompt.ts";
 import { emit, out, Output } from "../output.ts";
 
 // The worktree `open` and `edit` act on, from their shared addressing:
-// --project-id and --worktree-id exactly (the app), a name after the
-// command's first positional, the worktree containing cwd, or menus.
+// --project-id and --worktree-id exactly, a name after the command's
+// first positional, the worktree containing cwd, or menus.
 // fromCwd says it was cwd's, which is when a relative path argument
 // reads from cwd. usage is the command and its first positional, for
 // the error that asks for a name.

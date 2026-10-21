@@ -33,8 +33,8 @@ export const reporter = (
     const slots = new Map<string, string>();
     const marker = (runId: string) => dim(`[${slots.get(runId) ?? ""}]`);
 
-    // How the files were cloned. A failed clone is said on stderr
-    // under --json too.
+    // How the files were cloned. A failed clone is said on stderr under
+    // --json too.
     const cloned = ({ from, outcome }: Worktrees.Cloned) =>
       Result.isFailure(outcome)
         ? note(

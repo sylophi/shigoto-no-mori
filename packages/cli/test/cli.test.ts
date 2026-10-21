@@ -1522,8 +1522,8 @@ describe("worktrees edit", () => {
       "lazygit",
     );
     assert.equal(refused.code, 2);
-    // Stored anyway (a v2 config.json, an editor the catalog doesn't have),
-    // the file opens with its default app.
+    // Stored anyway (as an imported 2.x config.json can hold it), the
+    // file opens with its default app.
     const store = new DatabaseSync(join(box.side("cli"), "store.db"));
     store
       .prepare("INSERT INTO device_config (key, value) VALUES (?, ?)")
