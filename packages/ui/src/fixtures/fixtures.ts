@@ -1,7 +1,7 @@
-// The fake host's fixture world: one account, four devices, forests shaped
-// after the owner's v2 flow mockups: Studio Mac local, Thinkpad online
-// with a direct session, Mini and Work PC offline. Pure data, served
-// over fixture transports by the bridge (bridge.ts).
+// The fixture world: one account and its four devices (Studio Mac
+// local, Thinkpad online with a direct session, Mini and Work PC
+// offline). Pure data, which the scenes draw and the lab's fake host
+// serves over fixture wires (app/lab/fake-host/bridge.ts).
 import type * as Types from "effect/Types";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type {

@@ -257,9 +257,8 @@ export function describeMergeVerdict(
 }
 
 // The PR a worktree page's lookup answered, or none when it isn't the
-// branch's own (isBranchsPullRequest). A peer's host on an older build
-// still answers with a stranger's fork PR, and the page merges and
-// drafts by its number.
+// branch's own (isBranchsPullRequest): the page merges and drafts by
+// its number.
 export function ownBranchPullRequest(
   pr: PullRequestDetail | null,
 ): PullRequestDetail | null {
@@ -267,9 +266,7 @@ export function ownBranchPullRequest(
 }
 
 // A device's branch to PR map, without the PRs that aren't their
-// branch's own, which a peer's host on an older build still lists.
-// Every reader of the map (sidebar, inbox, stacks, palette) gets it
-// through here.
+// branch's own.
 export function ownBranchPullRequests(
   prs: Record<string, PullRequest>,
 ): Record<string, PullRequest> {
