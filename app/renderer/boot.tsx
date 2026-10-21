@@ -147,7 +147,7 @@ export function startApp({
 
   // The shared settings exchange: this device's copy follows its peers'
   // and theirs follow it.
-  startSharedSettingsSync(api, registry);
+  startSharedSettingsSync(api);
 
   // Remote devices: the remote device registry, rebuilt from the
   // account's device list plus the hub bridge status, on boot and on
@@ -234,9 +234,9 @@ export function mountWindow(
   // Mirror focus onto the root so CSS can pause the infinite animations
   // (the doubutsu wallpaper drift, the spinners) while nobody is
   // looking: a running animation asks the compositor for a frame every
-  // vsync, which was ~88% of the app's idle energy. Rides React Query's
-  // focus signal (window focus/blur, visibilitychange, plus the
-  // desktop's IPC channel, wired in followFocus).
+  // vsync, and those frames are most of the app's idle energy. Rides
+  // React Query's focus signal (window focus/blur, visibilitychange,
+  // plus the desktop's IPC channel, wired in followFocus).
   const syncFocusClass = (focused: boolean) =>
     element.classList.toggle("unfocused", !focused);
   syncFocusClass(documentFocused());

@@ -3,13 +3,13 @@
 // token), and where it lapsed a sign-in first, which ClerkAccountSync
 // turns into the enrollment.
 //
-// The sign-in button runs it, and so does the move to v3's device key
-// step: a device enrolled before device keys reads as signed out until
-// it enrolls again, which makes its key pair and registers the public
-// half (shared/account/enroll.ts). `needsDeviceKey` says that step is
-// due; the migration screen reads `step` and calls `run`, and adds no
-// enrollment of its own. Mount it under the ClerkProvider (ClerkGate),
-// like every Clerk hook.
+// The sign-in button runs it, and so does the migration's device-key
+// step: a device whose credential holds no device key (a 2.x one) reads
+// as signed out until it enrolls again, which makes its key pair and
+// registers the public half (shared/account/enroll.ts). `needsDeviceKey`
+// says that step is due; the migration screen reads `step` and calls
+// `run`, and adds no enrollment of its own. Mount it under the
+// ClerkProvider (ClerkGate), like every Clerk hook.
 //
 // The sign-in is one click where it can be: an instance whose only way
 // in is one social provider (GitHub, today) starts its OAuth at once,

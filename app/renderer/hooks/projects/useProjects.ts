@@ -58,8 +58,8 @@ export function useDeviceProjects(
   );
 }
 
-// This machine's failure is a toast, as v2's was; a peer's list reads
-// empty with its device's status beside it.
+// This machine's failure is a toast; a peer's list reads empty with its
+// device's status beside it.
 export function useProjects(): LiveViewState<readonly Project[]> {
   const { deviceId, hasHost } = useHostScope();
   const state = useDeviceProjects(deviceId, hasHost);

@@ -22,10 +22,10 @@
 // - Clerk session ended: sign the account layer out too, but only for
 //   a session this process actually observed (sawSession). "No session
 //   at boot" is NOT a sign-out: the stored credential is long-lived and
-//   independent of Clerk (a pre-Clerk upgrade, a cleared Clerk token
-//   store), and revoking it plus the command-access switch on a hunch would
-//   destroy real state. Such a mismatch instead resolves the moment the
-//   user acts (signs in → mismatch/enroll branch handle it).
+//   independent of Clerk (a cleared Clerk token store), and revoking it
+//   plus the command-access switch on a hunch would destroy real state.
+//   Such a mismatch instead resolves the moment the user acts (signs in
+//   → mismatch/enroll branch handle it).
 // - The hub closes this device's socket as revoked: it was removed
 //   from the account on another device. There is nothing left to keep,
 //   so the device signs out in full, Clerk session included, and lands

@@ -3,12 +3,13 @@
 // a peer's worktree here, a send takes one of this device's to a peer,
 // and the host lands it the same way either way round (the landing
 // runs on the destination). A mirror's "pull" is the peer's send
-// towards this device, since the original's device runs every mirror. Capture, transfer, create, and dirty apply
-// ride a single pending state. The move's running commentary streams
-// separately (usePullProgress). The host re-verifies the identity
-// match, so the gate at the call sites is UX, not the wall. Refusals
-// surface centrally, and the outcome is the caller's to report: the
-// dialog's last step is the report.
+// towards this device, since the original's device runs every mirror.
+// Capture, transfer, create, and dirty apply ride a single pending
+// state. The move's running commentary streams separately
+// (usePullProgress). The host re-verifies the identity match, so the
+// gate at the call sites is UX, not the wall. Refusals surface
+// centrally, and the outcome is the caller's to report: the dialog's
+// last step is the report.
 import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {
   type QueryClient,
@@ -183,8 +184,8 @@ export function useMoveWorktree(move: Move) {
 // instead of throwing (the worktree simply exists on both devices), so
 // the caller reads sourceRemoved and speaks for it. Only a call that
 // never got that far rejects. What it removed refreshes: the peer's
-// whole cached view (the sweep its own resolved-mutation ping runs),
-// or this machine's forest.
+// cached requests (the external-change sweep), or this machine's
+// forest.
 export function useTeardownSource(move: Move) {
   const api = useApi();
   const { deviceId } = useHostScope();

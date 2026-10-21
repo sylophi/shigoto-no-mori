@@ -1,9 +1,9 @@
-// This window's keymap (V3.md, "The keymap"): the table in
-// @shigomori/ui's lib/keymap.ts under the device's bindings, and the one
-// listener that runs an action when its keys are pressed. A component
-// says what an action does with useKeymapAction while it is on screen,
-// and shows its keys with useBinding. The menu's actions are the
-// shell's: their keys go to its menu (useMenuChords), which runs them.
+// This window's keymap: the table in @shigomori/ui's lib/keymap.ts
+// under the device's bindings, and the one listener that runs an action
+// when its keys are pressed. A component says what an action does with
+// useKeymapAction while it is on screen, and shows its keys with
+// useBinding. The menu's actions are the shell's: their keys go to its
+// menu (useMenuChords), which runs them.
 import { useEffect, useEffectEvent } from "react";
 import {
   createExternalStore,

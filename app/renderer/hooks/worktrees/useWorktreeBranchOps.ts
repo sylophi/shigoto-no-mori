@@ -42,8 +42,7 @@ interface SwitchToPrimaryInput {
 // operation on purpose: the switch flips the root's branch to the primary,
 // which unmounts the cleanup box, and React Query drops a `mutate()`
 // callback once its component has unmounted, so chaining the delete in
-// the renderer would silently lose it (which is exactly the bug this
-// replaced).
+// the renderer would silently lose it.
 // Errors surface via a global toast so they survive the box unmounting.
 export function useSwitchToPrimaryAndDeleteBranch() {
   return useBranchMutation<SwitchToPrimaryInput, Worktree>(

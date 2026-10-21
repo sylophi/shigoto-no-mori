@@ -131,8 +131,7 @@ const liveRoute = createRoute({
   ),
 });
 
-// The account page's old path, still in links and bookmarks from
-// before it moved (a hostless client's home was here).
+// `/devices` alone is the account page.
 const devicesRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/devices",
@@ -206,15 +205,14 @@ function validateDetailSearch(search: Record<string, unknown>): {
 // and every peer alike, under /devices/$deviceId. withDeviceScope
 // resolves the device (this machine's id to the page's api, a peer's to its
 // session) and scopes the page to it, so the page itself never knows
-// which it is showing (v2: remote feels local). Local-only affordances
-// inside them gate on useHostScope().remote.
+// which it is showing. Local-only affordances inside them gate on
+// useHostScope().remote.
 //
 // remountDeps on the detail and project pages: the router keeps one
 // component instance across a params change and just re-renders it, so
 // without this a route would keep showing the previous entity's data
 // until its queries happened to refetch. The router keys the match on
-// this value, which is what the hand-written `key={projectId}` wrappers
-// used to do.
+// this value.
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.detail,
