@@ -13,8 +13,9 @@ export function sanitizeBranchForPath(branch: string): string {
   const slashed = branch
     .replace(PATH_SEPARATOR, "-")
     .replace(CONTROL_CHARS, "");
-  // Tab, newline, form feed, return and space, not JS's Unicode `\s`:
-  // a branch keeps the folder name its existing worktrees have.
+  // The space, not JS's `\s`, which would trim Unicode spaces too (the
+  // control characters are gone already): a branch keeps the folder
+  // name its existing worktrees have.
   const trimmed = slashed.replace(/^[.\t\n\f\r -]+|[.\t\n\f\r -]+$/g, "");
   if (!trimmed || RESERVED_NAMES.has(trimmed.toLowerCase())) return "";
   return trimmed;

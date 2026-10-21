@@ -224,7 +224,7 @@ export const absolute = (raw: string) =>
 
 // Whether the command runs at or below `path`: the shell a removal or a
 // move leaves standing in a folder that is gone.
-// The shell's own $PWD counts first: through a symlinked folder it
+// The shell's own $PWD counts too: through a symlinked folder it
 // names the path the shell sees.
 export const cwdInside = (path: string) => {
   const pwd = process.env.PWD ?? "";
