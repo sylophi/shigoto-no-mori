@@ -43,12 +43,13 @@ const treeViews = (input: { projectId: string; worktreeId: string }) =>
 // its files (or a window looking again), a mirror staging into it. A
 // view of what the index holds (`index`: the changes, staged or not,
 // and an operation's conflicts and squash) also follows its project's
-// indexes written, as a stage in a terminal writes one. A view of refs alone (`refsOnly`: the branch's history,
-// the stashes) follows its project's git only: an edit, a window
-// looking again and a mirror's index rewrite can't move it, and the
-// first and last come as often as a mirror or an agent writes. A read
-// git refuses for a moment (a lock held) is tried again three times, a
-// second apart and doubling, before the view fails.
+// index writes, as a stage in a terminal makes one. A view of refs
+// alone (`refsOnly`: the branch's history, the stashes) follows its
+// project's git only: an edit, a window looking again and a mirror's
+// index rewrite can't move it, and the first and last come as often as
+// a mirror or an agent writes. A read git refuses for a moment (a lock
+// held) is tried again three times, a second apart and doubling,
+// before the view fails.
 const treeView = <A, R>(
   input: { projectId: string; worktreeId: string },
   part: string,

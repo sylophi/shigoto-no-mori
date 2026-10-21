@@ -492,7 +492,8 @@ const make = (deps: GitWatcherDeps) =>
     // One project's pings: its git directory's relevant changes and its
     // indexes written, debounced, its state and working trees read again
     // with each. A burst that wrote nothing but an index says so alone,
-    // unless the read finds the git state moved too (an event lost).
+    // unless the git state moved too, by its read or a beat's (an event
+    // lost).
     const watch = (
       projectId: string,
       entry: { readonly gitDir: string; readonly projectPath: string },
@@ -534,11 +535,11 @@ const make = (deps: GitWatcherDeps) =>
         // watchable right now: the watch drops, and a later reconcile
         // re-adds it if it comes back.
         Effect.ignore,
-        // Only its own entry: a reconcile may have replaced it already.
+        // Only its own entry: a reconcile may have replaced it already. A
+        // git signal still owed is the next beat's to say.
         Effect.ensuring(
           Effect.sync(() => {
             hearing.delete(projectId);
-            hearingGit.delete(projectId);
             if (gitDirs.get(projectId) === entry) gitDirs.delete(projectId);
           }),
         ),

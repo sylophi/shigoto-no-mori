@@ -15,14 +15,16 @@
 // churn as none, and a worktree added or removed is followed. A
 // checkout's index written is a signal of its own: a burst of writes is
 // one, a burst with a ref in it is the project change alone, and the
-// app's own read of the changes writes none. And the backstop: with the
-// git directory's events lost on purpose, a stage is found as its
-// index alone, a commit is still signalled, once, a ref directory
-// appearing or going (a namespace, a remote, one with no ref), a ref
-// moving inside one and a checkout are signalled, an own ref and a ref
-// directory's churn not at all, a working tree whose watch ended is
-// watched again, and the mirror's index watch fires for a stage it
-// never heard.
+// app's own reads of the changes and the operation write none. And the
+// backstop: with the git directory's events lost on purpose, a stage is
+// found as its index alone, a ref and an index moved together are the
+// project change alone, a ref move a beat finds while the watch hears
+// an index is still said, a commit is still signalled, once, a ref
+// directory appearing or going (a namespace, a remote, one with no
+// ref), a ref moving inside one and a checkout are signalled, an own
+// ref and a ref directory's churn not at all, a working tree whose
+// watch ended is watched again, and the mirror's index watch fires for
+// a stage it never heard.
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
@@ -281,15 +283,19 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   await delay(1200);
   assert.deepEqual(edits, ["p1"], "the edit lands as one files change");
 
-  // The changes view's read, which an index signal brings, writes no
-  // index, so it brings no other: a file saved unchanged, which a
-  // plain `git status` refreshes into the index.
+  // The changes and the operation views' reads, which an index signal
+  // brings, write no index, so they bring no other: a file saved
+  // unchanged, which a plain `git status` refreshes into the index.
   writeFileSync(join(worktree, "a.txt"), "one\n");
   await delay(1200);
   const heard = indexed.length;
-  await runHost(Effect.flatMap(Git.Git, (reads) => reads.changes(worktree)));
+  await runHost(
+    Effect.flatMap(Git.Git, (reads) =>
+      Effect.andThen(reads.changes(worktree), reads.readOperation(worktree)),
+    ),
+  );
   await delay(700);
-  assert.equal(indexed.length, heard, "the app's changes read wrote the index");
+  assert.equal(indexed.length, heard, "the app's own reads wrote the index");
   git(worktree, "status", "--porcelain");
   await waitFor(
     () => indexed.length > heard,
