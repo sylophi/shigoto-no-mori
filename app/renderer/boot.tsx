@@ -332,8 +332,8 @@ function startLocalHost(
 // BrowserWindow level rather than the document), so the window's IPC
 // channel comes on top. React Query keeps its own signal, the page's
 // visibility, since it also holds a failed read's retry until the page
-// reads focused: a window left in view behind another keeps retrying,
-// and only its focus refetches come from here.
+// reads focused: a window left in view behind another keeps retrying.
+// From here it takes only the focus refetches.
 function followFocus(api: RendererApi, queryClient: QueryClient): void {
   window.addEventListener("focus", () => setWindowFocused(true));
   window.addEventListener("blur", () => setWindowFocused(false));
