@@ -3,8 +3,8 @@
 // git, a commit on a branch (which moves no identity) runs none, and
 // each change an identity shows (a branch, a detach, a lock, the
 // primary's checkout, a worktree added, moved, removed or pruned) is in
-// the very next read, a change made while git runs included, and one
-// undone by then (real git on a sandbox data dir).
+// the very next read, a change made while git runs included, undone by
+// the time it answers or after (real git on a sandbox data dir).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -140,6 +140,31 @@ it("lists a project's worktrees with git once while its files say the same, and 
     [named(read, "fox")?.detached, named(read, "fox")?.branch],
     [false, "fox3"],
   );
+  // A lock git reads, released after it answered: no lock either side
+  // of the next read's files, which git's answer isn't kept for.
+  writeFileSync(beforeGit, `"${realGit}" -C "${repo}" worktree lock "${fox}"`);
+  read = await change("a lock while git reads", () => {
+    box.git(fox, "checkout", "-q", "-b", "fox4");
+  });
+  assert.equal(named(read, "fox")?.locked, true);
+  read = await change("the lock released", () =>
+    box.git(repo, "worktree", "unlock", fox),
+  );
+  assert.equal(named(read, "fox")?.locked, false);
+  // A worktree git reads that is gone by the time it answers: its
+  // folder's name came and went.
+  const ant = join(box.home, "elsewhere", "ant");
+  writeFileSync(
+    beforeGit,
+    `"${realGit}" -C "${repo}" worktree add -q -b ant "${ant}"`,
+  );
+  writeFileSync(afterGit, `"${realGit}" -C "${repo}" worktree remove "${ant}"`);
+  read = await change("a worktree there only while git reads", () => {
+    box.git(fox, "checkout", "-q", "-b", "fox5");
+  });
+  assert.equal(named(read, "ant")?.path, ant);
+  read = await change("the worktree gone", () => {});
+  assert.equal(named(read, "ant"), undefined);
   read = await change("the primary's checkout", () =>
     box.git(repo, "checkout", "-q", "-b", "other"),
   );

@@ -96,21 +96,31 @@ export const makeListing = Effect.gen(function* () {
       .pipe(Effect.map(Config.projectSettingsOf));
 
   // What `git worktree list` reads, read with no git: where the common
-  // dir really is, its HEAD and config, and each linked worktree's
-  // gitdir, HEAD and lock, with the reftable stacks a repository in that
-  // format keeps HEAD in. A branch's commit isn't among them, and no
-  // identity carries one (a detached one's is its HEAD). Each by its
-  // content, inode and mtime: a change undone (a rebase back on its
-  // branch, a checkout and back) reads the same, but git renames a new
-  // HEAD or config into place and writes a gitdir or lock later. None
-  // when one can't be read, or the common dir isn't found this way.
+  // dir really is, its HEAD and config, the names under `worktrees/`,
+  // and each linked worktree's gitdir, HEAD and lock, with the reftable
+  // stacks a repository in that format keeps HEAD in. A branch's commit
+  // isn't among them, and no identity carries one (a detached one's is
+  // its HEAD). Each by its content, inode and mtime: a change undone (a
+  // rebase back on its branch, a checkout and back) reads the same, but
+  // git renames a new HEAD, config or table list into place and
+  // rewrites a gitdir in place, with a later mtime. And the names by
+  // their directory's mtime too, which moves with one added and removed
+  // between two reads. None when one can't be read, or the common dir
+  // isn't found this way.
   const worktreeFilesOf = (projectPath: string) =>
     Effect.gen(function* () {
       const common = yield* Git.commonDirOf(projectPath);
       if (common === null) return Option.none<string>();
+      const worktrees = path.join(common, "worktrees");
       const names = yield* fs
-        .readDirectory(path.join(common, "worktrees"))
+        .readDirectory(worktrees)
         .pipe(Effect.catchIf(isAbsent, () => Effect.succeed<string[]>([])));
+      const named = yield* fs.stat(worktrees).pipe(
+        Effect.map((info) =>
+          Option.getOrNull(Option.map(info.mtime, (date) => date.getTime())),
+        ),
+        Effect.catchIf(isAbsent, () => Effect.succeed(null)),
+      );
       const files = [
         "HEAD",
         "config",
@@ -141,27 +151,34 @@ export const makeListing = Effect.gen(function* () {
         { concurrency: "unbounded" },
       );
       const real = yield* fs.realPath(common);
-      return Option.some(JSON.stringify([real, files, seen]));
+      return Option.some(JSON.stringify([real, named, files, seen]));
     }).pipe(
       Effect.provide(platform),
       Effect.orElseSucceed(() => Option.none<string>()),
     );
 
   // git's last `worktree list` of each project and the files it was read
-  // from, answered again while they say the same.
+  // from, answered again while they say the same. Kept only when they
+  // read the same before git ran and after, so the answer is theirs and
+  // not that of a change made while git ran, which they could read as
+  // undone later.
   const lastListed = new Map<
     string,
     { readonly files: string; readonly entries: ReadonlyArray<WorktreeEntry> }
   >();
   const listWorktrees = Effect.fn(function* (projectPath: string) {
-    // Read before git runs: a write while it runs differs next time.
     const files = yield* worktreeFilesOf(projectPath);
     const last = lastListed.get(projectPath);
     if (Option.isSome(files) && last?.files === files.value) {
       return last.entries;
     }
     const entries = yield* git.listWorktrees(projectPath);
-    if (Option.isSome(files)) {
+    const after = yield* worktreeFilesOf(projectPath);
+    if (
+      Option.isSome(files) &&
+      Option.isSome(after) &&
+      after.value === files.value
+    ) {
       lastListed.set(projectPath, { files: files.value, entries });
     } else {
       lastListed.delete(projectPath);
