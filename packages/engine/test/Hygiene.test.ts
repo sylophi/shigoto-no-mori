@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   linkSync,
   mkdirSync,
   symlinkSync,
@@ -8,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import type { WorktreeDiskUsage } from "@shigomori/contracts/schemas/hygiene";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it } from "vitest";
@@ -35,8 +37,9 @@ const seedProject = (files: Record<string, string>) => {
   return { repo, tree };
 };
 
-it("measures a tree: blocks once per inode, what removing it frees, and the newest real edit", async () => {
-  const root = join(box.home, "tree");
+it("sizes a worktree: blocks once per inode, what removing it frees, the newest real edit, and a folder it can't read", async () => {
+  const { repo, tree } = seedProject({ "a.txt": "a\n" });
+  const root = tree("fox");
   const old = new Date("2020-01-02T03:04:05Z");
   for (const [file, size] of [
     ["src/a.txt", 5000],
@@ -64,20 +67,39 @@ it("measures a tree: blocks once per inode, what removing it frees, and the newe
     join(root, "src/clone.bin"),
   ]);
   symlinkSync("a.txt", join(root, "src", "link"));
-  const usage = (await box.engine(
-    Effect.flatMap(Effect.service(Hygiene.Hygiene), (hygiene) =>
-      hygiene.measure(root, []),
-    ),
-  )) as Hygiene.DiskUsage;
+  // The checkout's own file, the links and the clone, as old as the rest.
+  for (const file of [
+    "a.txt",
+    "src/linked-out.bin",
+    "src/pair.bin",
+    "src/clone.bin",
+  ]) {
+    utimesSync(join(root, file), old, old);
+  }
+  const locked = tree("locked");
+  const shut = join(locked, "shut");
+  mkdirSync(shut);
+  chmodSync(shut, 0o000);
+  const project = { id: "P1", name: "repo", path: repo };
+  const [usage, unread] = (await box
+    .engine(
+      Effect.flatMap(Effect.service(Hygiene.Hygiene), (hygiene) =>
+        Effect.all([
+          hygiene.diskUsage(project, worktreeIdFromPath(root)),
+          hygiene.diskUsage(project, worktreeIdFromPath(locked)),
+        ]),
+      ),
+    )
+    .finally(() => chmodSync(shut, 0o755))) as [
+    WorktreeDiskUsage,
+    WorktreeDiskUsage,
+  ];
   // The link out of the tree and the clone hold blocks nothing frees.
   assert.ok(usage.reclaimableBytes > 0);
   assert.ok(usage.bytes - usage.reclaimableBytes >= 64 * 1024 + 70_000);
-  const missing = (await box.engine(
-    Effect.flatMap(Effect.service(Hygiene.Hygiene), (hygiene) =>
-      hygiene.measure(join(box.home, "missing"), []),
-    ),
-  )) as Hygiene.DiskUsage;
-  assert.equal(missing.partial, true);
+  assert.equal(usage.lastActivityAt, old.getTime());
+  assert.equal(usage.partial, false);
+  assert.equal(unread.partial, true);
 });
 
 it("tells merged, squash-merged, unique, detached and primary work apart", async () => {

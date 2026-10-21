@@ -406,7 +406,7 @@ export const patchGlobalConfig = Effect.fnUntraced(function* (
   );
 });
 
-// The renderer hands the whole project document and clears a field by
+// The proofs hand the whole project document and clear a field by
 // leaving it out, so every field the schema models goes in the payload,
 // nested objects field by field, as null where the document has none.
 // Fields the schema doesn't model stay out, and the merge keeps them.
@@ -454,9 +454,11 @@ export const writeProjectConfig = Effect.fnUntraced(function* (
   yield* asChange(
     Effect.gen(function* () {
       const scope = yield* projectScope(projectId);
-      yield* (yield* EngineConfig.Config).write(
+      const engineConfig = yield* EngineConfig.Config;
+      yield* engineConfig.write(
         scope,
         withModeledFields(config),
+        (yield* engineConfig.read(scope)) ?? {},
       );
     }),
     { projectId },
@@ -692,44 +694,6 @@ export const renameWorktree = Effect.fnUntraced(function* (
     "move",
   );
   return decodeWorktree(renamed.worktree);
-});
-
-// The re-key half of a move, for the data folder move, which relocates
-// the checkouts itself (one rename of the whole data dir). Answers
-// with the id the worktree has at `toPath`.
-export const rekeyWorktree = Effect.fnUntraced(function* (
-  projectId: string,
-  fromId: string,
-  toPath: string,
-  options: { readonly expect?: string | null; readonly back?: boolean } = {},
-) {
-  return yield* asChange(
-    Effect.gen(function* () {
-      const project = yield* projectById(projectId);
-      return yield* (yield* Worktrees.Worktrees).rekey(
-        project,
-        fromId,
-        toPath,
-        options,
-      );
-    }),
-    { projectId },
-  );
-});
-
-// Whether anything is kept under the id `worktreeId`, for the data
-// folder move's check that a destination holds nothing of its own.
-export const keptUnder = Effect.fnUntraced(function* (
-  projectId: string,
-  worktreeId: string,
-) {
-  return yield* asCall(
-    Effect.gen(function* () {
-      const project = yield* projectById(projectId);
-      return yield* (yield* Worktrees.Worktrees).keptUnder(project, worktreeId);
-    }),
-    { projectId },
-  );
 });
 
 export const storeProjectOrder = Effect.fnUntraced(function* (ids: string[]) {

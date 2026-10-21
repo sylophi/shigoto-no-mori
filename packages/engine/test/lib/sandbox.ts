@@ -23,7 +23,6 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Stream from "effect/Stream";
 import * as Agents from "../../src/Agents.ts";
-import * as Bundle from "../../src/Bundle.ts";
 import * as CarryOver from "../../src/CarryOver.ts";
 import * as Config from "../../src/Config.ts";
 import * as Control from "../../src/Control.ts";
@@ -68,7 +67,6 @@ export { macfs };
 // The services a harness case calls.
 export type Engine =
   | Agents.Agents
-  | Bundle.Bundle
   | CarryOver.CarryOver
   | Config.Config
   | DataDirLock.DataDirLock

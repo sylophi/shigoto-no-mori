@@ -32,7 +32,7 @@ import * as Worktrees from "./Worktrees.ts";
 // node_modules shares its blocks with copies outside the worktree. A
 // hard-linked inode counts only when every link is inside, and each
 // inode only its private blocks.
-export type DiskUsage = Omit<WorktreeDiskUsage, "worktreeId">;
+type DiskUsage = Omit<WorktreeDiskUsage, "worktreeId">;
 
 export class Hygiene extends Context.Service<
   Hygiene,
@@ -51,12 +51,6 @@ export class Hygiene extends Context.Service<
       WorktreeDiskUsage,
       Worktrees.UnknownWorktree | Git.GitError
     >;
-    // A folder measured, `exclude` (absolute paths) stepped over whole.
-    // Never fails: what can't be read makes the result partial.
-    readonly measure: (
-      root: string,
-      exclude: ReadonlyArray<string>,
-    ) => Effect.Effect<DiskUsage>;
   }
 >()("sm/engine/Hygiene") {}
 
@@ -309,6 +303,8 @@ const make = Effect.gen(function* () {
 
   // --- disk usage ---
 
+  // A folder measured, `exclude` (absolute paths) stepped over whole.
+  // Never fails: what can't be read makes the result partial.
   const measure = Effect.fn("Hygiene.measure")(function* (
     root: string,
     exclude: ReadonlyArray<string>,
@@ -431,7 +427,7 @@ const make = Effect.gen(function* () {
     return { worktreeId, ...usage };
   });
 
-  return Hygiene.of({ facts, diskUsage, measure });
+  return Hygiene.of({ facts, diskUsage });
 });
 
 export const layer = Layer.effect(Hygiene, make);

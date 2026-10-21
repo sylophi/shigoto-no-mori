@@ -258,9 +258,9 @@ it("a removal whose git was killed mid-delete is finished by a forced one", asyn
       const located = { project, worktree: fox };
       yield* worktrees.setAutoPull(fox, true);
       yield* data.describe(project.id, fox.id, { title: "the fox" });
-      yield* (yield* Config.Config).write(
+      yield* (yield* Config.Config).patchProject(
         { kind: "project", projectId: project.id, path: repo },
-        { defaultBranch: "main", scripts: { teardown: "exit 1" } },
+        { defaultBranch: "main", "scripts.teardown": "exit 1" },
       );
       const real = box.git(repo, "--exec-path").trim();
       box.fakeBin(
