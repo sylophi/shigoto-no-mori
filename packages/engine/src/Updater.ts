@@ -84,8 +84,8 @@ export class Updater extends Context.Service<
       UpdatesUnavailable | QueryError
     >;
     // Check, download and verify into updates/staged, short of
-    // installing. The app's periodic check runs this and `update` runs it
-    // first, so the app and the terminal share one pipeline.
+    // installing. The app's periodic check runs this, and `update` stages
+    // the same way first, so the app and the terminal share one pipeline.
     readonly stage: (
       input: UpdateInput,
     ) => Effect.Effect<UpToDate | Staged, UpdatesUnavailable | StageError>;

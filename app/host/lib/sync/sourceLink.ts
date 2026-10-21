@@ -27,11 +27,11 @@
 // Bundles are built and unpacked by the engine's Bundle (engineOps'
 // bundleCreate and bundleUnpack), refs landing only under
 // refs/shigomori/, in a temp dir (mkdtemp, 0700) of their own that the
-// ask removes whatever happens. The channel is the flow control end to end: the sender
-// waits once its queue is full, and the receiver takes a piece only
-// once the bytes are on disk. A link whose other end goes away (a
-// reset, a revoked grant, the device link dropping) fails whatever is
-// waiting on it.
+// ask removes whatever happens. The channel is the flow control end to
+// end: the sender waits once its queue is full, and the receiver takes
+// a piece only once the bytes are on disk. A link whose other end goes
+// away (a reset, a revoked grant, the device link dropping) fails
+// whatever is waiting on it.
 import { mkdtemp, open as openFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

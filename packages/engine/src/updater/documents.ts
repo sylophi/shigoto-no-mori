@@ -400,9 +400,9 @@ export type UpdateInput = {
   readonly progress?: ((progress: Progress) => Effect.Effect<void>) | undefined;
 };
 
-// The documents `sm update --json` prints, field for field: the stage
-// results the app reads (UpdateStageResultSchema) and the two documents
-// only the terminal prints.
+// The updater's documents, field for field: the stage results the app
+// reads (UpdateStageResultSchema), whose up-to-date `sm update --json`
+// prints too, and the two only the terminal prints.
 type StageResult = typeof UpdateStageResultSchema.Type;
 
 export type UpToDate = { readonly ok: true } & Extract<
