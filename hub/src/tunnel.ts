@@ -174,11 +174,11 @@ const ingressServiceOf = (held: CfTunnelConfig | null, hostname: string) =>
   held?.config?.ingress?.find((rule) => rule.hostname === hostname)?.service ??
   null;
 
-// Writes the ingress and reads it back: a rewrite that answered success
-// while the connector kept the first port it was given has been seen
-// (V3.md, step 7, the reliability pass), so the provision holds only
-// when the configuration CF holds names this port. Written again once,
-// then the provision fails, logging what each side said.
+// Writes the ingress and reads it back: CF can answer a rewrite with
+// success while the connector keeps the first port it was given, so
+// the provision holds only when the configuration CF holds names this
+// port. Written again once, then the provision fails, logging what
+// each side said.
 async function writeIngress(
   api: CfApi,
   path: string,

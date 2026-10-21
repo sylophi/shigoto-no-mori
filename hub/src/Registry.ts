@@ -29,7 +29,7 @@ export interface DeviceRow {
   // (hub/migrations/0004_device_kind_required.sql).
   icon: string;
   // The device's static X25519 public key, base64url, sent with every
-  // enrollment. NULL on a row enrolled before keys
+  // enrollment. NULL on a row a v2 build enrolled
   // (hub/migrations/0006_device_public_key.sql).
   public_key: string | null;
   credential_hash: string;

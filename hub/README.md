@@ -21,8 +21,10 @@ is admitted the object reads the row and tags the socket with the
 key, and the presence roster names every online device with its key.
 That roster is how a device knows its peers' keys: the hub is the
 trust root for them, as it is for which devices exist. A row without
-a key (enrolled before keys) has its socket refused, and the app
-enrolls again to make one.
+a key (a v2 enrollment) has its socket refused. The device's own v2
+credential holds no key either, so the app reads as signed out and
+enrolls again to make one: on its own where its Clerk session lives,
+after a sign-in where it lapsed.
 
 What a device relays to another is the connectInfo ask or its answer
 sealed as a Noise handshake message to the addressed device's key
@@ -50,7 +52,7 @@ the repo root, and run its scripts from `hub/`.
 
 ## Domains (production)
 
-Two zones on the one Cloudflare account, both required at launch.
+Two zones on the one Cloudflare account, both required in production.
 Dev needs only the `shigomori.com` zone for its own Worker and web
 hosts (`hub-dev` and `app-dev`, below); dev tunnels share the tunnel
 zone below.
@@ -147,31 +149,17 @@ the Worker. A device reading a frame over its bound closes the socket,
 so a Worker still forwarding at the old size must never meet a device
 that already enforces the new one.
 
-Deploy order for device keys (`0006_device_public_key.sql`, protocol
-6): apply the migration, then deploy the Worker, whose floor of 6
-turns away every older build at once, then ship the app builds. A
-device whose row has no key enrolls again on its first start, on its
-own where its Clerk session lives.
-
-Deploy order for the device icon rename (`0005_device_icon.sql`, which
-renames the `devices.kind` column and the wire field to `icon`): apply
-the migration and deploy the Worker back to back, then ship the app
-builds. There is no compatibility path. Between the two steps the old
-Worker's queries name a column that no longer exists, so every
-credentialed route fails until the new Worker is live, and rolling the
-Worker back needs the column renamed back too. Apps built before the
-rename cannot enroll or read the device list against the new Worker
-(and the reverse), and two devices on either side of it cannot change
-each other's icon.
+Deploy order for a D1 migration: apply it, then deploy the Worker
+that reads it, since that Worker's queries name what the migration
+makes. A rename breaks the running Worker's queries until the new one
+is live, so those two go back to back. A Worker that raises the floor
+also waits until the app release at its protocol has reached the
+devices ("The version floor", below).
 
 Devices heartbeat their hub socket with a bare `ping` text that the
 Durable Object answers `pong` through the hibernation runtime's
 auto-response (`packages/contracts/src/hubProtocol.ts`), so a socket a NAT or a sleep
-killed is found and redialed within seconds. Deploy the Worker BEFORE
-shipping devices that heartbeat: an old Worker drops the ping as a
-malformed envelope, so a new device sees no pong and redials it once a
-minute until the Worker is redeployed (it keeps working meanwhile, just
-noisily).
+killed is found and redialed within seconds.
 
 The pings are also the hub's word on a device: a socket that has sent
 neither one nor any other message for more than 90 s (`SILENT_AFTER_MS` in `src/hubObject.ts`) is
@@ -180,7 +168,7 @@ A laptop that sleeps leaves its socket open, and Cloudflare reports no
 close for it. It is judged when the object runs anyway (an ask relayed
 to the socket's device, a read or an announce of the roster), never on
 an alarm, which would bill a request and wake the object each time.
-Every build above the floor pings; one that did not would be closed
+Every build the floor admits pings; one that did not would be closed
 every 90 s.
 
 The Worker serves any browser origin (`Access-Control-Allow-Origin:
@@ -364,7 +352,7 @@ curl -s https://api.clerk.com/v1/instance \
 curl -X PATCH https://api.clerk.com/v1/instance \
   -H "Authorization: Bearer <CLERK_SECRET_KEY>" \
   -H "Content-type: application/json" \
-  -d '{"allowed_origins": ["shigomori://app", "shigomori-dev://app", "shigomori-v3://app"]}'
+  -d '{"allowed_origins": ["shigomori-dev://app", "shigomori-v3://app"]}'
 ```
 
 The second call's list is the first call's answer plus the new origin;
@@ -387,9 +375,6 @@ curl -X POST https://api.clerk.com/v1/redirect_urls \
   -H "Content-type: application/json" \
   -d '{"url": "shigomori://app/"}'
 ```
-
-For macOS passkey support later, the dashboard's Native applications
-page must also have the Native API enabled.
 
 Social (browser-redirect) sign-in works in `pnpm start` on macOS: the
 dev launcher (scripts/lib/devBundle.mts) clones Electron.app into a

@@ -23,8 +23,8 @@ follows the system's light or dark until its toggle is used
 (`theme.js`); a browser's emulated color scheme, or the toggle, shows
 the other.
 
-TypeScript stays on 6.x for now: `astro check` needs its programmatic
-API, which the native TypeScript 7 compiler doesn't ship yet.
+This package pins TypeScript 6: `astro check` needs its programmatic
+API, which the native TypeScript 7 compiler lacks.
 
 It deploys as its own Vercel project with the Root Directory set to
 `marketing`, and the install uses the workspace's lockfile at the
