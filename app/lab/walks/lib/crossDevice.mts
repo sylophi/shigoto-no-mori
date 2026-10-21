@@ -181,14 +181,15 @@ export const settle = async (page: Page, success: string, failure: string) => {
   }
 };
 
-// The page a live mirror to `device` leaves on: the copy's, there.
+// The page a live mirror to `device` leaves on: the copy's, there,
+// once this device has read the copy's listing off `device`.
 export const onCopy = (page: Page, device: string) =>
   main(page)
     .getByRole("tab", {
       name: new RegExp(`\\[walk-${device}\\].*copy`),
       selected: true,
     })
-    .waitFor();
+    .waitFor({ timeout: 30_000 });
 
 // Mirror from the worktree's own page, to `device`, or from a peer's
 // page, here.

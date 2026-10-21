@@ -1341,7 +1341,7 @@ function setMirrorPaused(session: string, paused: boolean) {
 }
 
 // A posed mirror, run by the forest holding the original: the send
-// lands the copy on the local forest, then a session opens on top and
+// lands the copy on the target's forest, then a session opens on top and
 // settles. Afterwards a cycle runs every few seconds so the status is
 // seen moving, and the thread gets a conflict once, for the history
 // to have more than its start.
@@ -1536,7 +1536,7 @@ async function fakeSyncPull(
   const name = input.worktreeName ?? sourceWorktree?.name ?? "tender-tanuki";
   const landed = worktreeFixture({
     ...sourceWorktree,
-    // One per source and forest, so two landings are two worktrees.
+    // One per source and forest, so two sources land as two worktrees.
     id: worktreeIdOf(`${local.deviceId} ${input.sourceWorktreeId}`),
     projectId: project.id,
     name,
