@@ -5,7 +5,7 @@ import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { config as loadEnv } from "dotenv";
@@ -248,6 +248,25 @@ const config: ForgeConfig = {
           accessSync(full, mode);
         } catch {
           throw new Error(`node-pty is not packaged correctly: ${full}`);
+        }
+      }
+    },
+    // osx-sign's failure is only a warning, which forge's quiet packager
+    // never prints, so an identity codesign can't use would leave the
+    // bundle ad hoc signed and the step passing.
+    postPackage: async (_config, { platform, outputPaths }) => {
+      if (!shouldSignMac || platform !== "darwin") return;
+      for (const out of outputPaths) {
+        const app = path.join(out, `${names.appName}.app`);
+        const shown = spawnSync("codesign", ["-dvv", app], {
+          encoding: "utf8",
+        });
+        if (!/^Authority=/m.test(shown.stderr)) {
+          throw new Error(
+            `${app} isn't signed by APPLE_SIGNING_IDENTITY ("${signingIdentity}"): ` +
+              "the signing identity's keychain may be locked, or no keychain " +
+              "on the search list holds it (security find-identity -v -p codesigning).",
+          );
         }
       }
     },
