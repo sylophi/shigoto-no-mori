@@ -2,9 +2,8 @@
 
 What a machine serves: its projects, worktrees, scripts, mirrors, port
 forwards and device link, run as the app's utility process (below).
-Its data model is the engine's
-(`packages/engine`), which it runs in-process (`lib/Engine.ts`,
-`lib/engineOps.ts`).
+Its data model is the engine's (`packages/engine`), which it runs
+in-process (`lib/Engine.ts`, `lib/engineOps.ts`).
 
 - `process/`: the composition root. `layer.ts` is the host's layer
   graph, `services.ts` names the services the handlers answer on
@@ -32,14 +31,14 @@ The host runs apart from the shell so that its work never stalls a
 window and a crash of it is a reconnect. The shell forks it at launch
 (`main/hostProcess.ts`) and reaches it over RPC as every client does:
 a window, the shell and the terminal `sm` on the loopback, the web
-client and the other devices over the device link. The shell owns the account (Clerk, the
-keychain) and tells the host the account's facts, which bring its hub
-socket up, as the host comes up and at every change. The device
-identity is the host's, in its store, reported to the shell as the
-host comes up. A quit is the shell asking the host whether it is
-busy, then closing its scope. It lives in `app/` rather than a
-package of its own because it ships only inside the app, built by the
-app's Vite config beside the shell and the renderer it serves.
+client and the other devices over the device link. The shell owns the
+account (Clerk, the keychain) and tells the host the account's facts,
+which bring its hub socket up, as the host comes up and at every
+change. The device identity is the host's, in its store, reported to
+the shell as the host comes up. A quit is the shell asking the host
+whether it is busy, then closing its scope. It lives in `app/` rather
+than a package of its own because it ships only inside the app, built
+by the app's Vite config beside the shell and the renderer it serves.
 
 ## Commit points
 
@@ -60,11 +59,12 @@ commits it (`EFFECT.md`, section 5); the engine's are in
   sibling held in a scope, so a failure or a cancel removes it, and a
   dead process's is swept by the next clone of that name. A
   `sm-clone-pending` file in its `.git`, written before the rename and
-  removed after the register, lets the next clone of the folder
-  register a clone a crash left between the two. The landing after it
-  commits as it answers: until then a failure or a cancel undoes its
-  create (`Worktrees.createHeld`), and after it a cancel of the move's
-  later steps does.
+  removed after the register, lets the next clone of that repo into
+  the folder register a clone a crash left between the two.
+- **A landing** (`lib/sync/landing.ts`): it commits as it answers
+  (`keep`). Until then a failure or a cancel undoes its create
+  (`Worktrees.createHeld`), and after it a cancel of the move's later
+  steps does.
 - **The data-folder move** (`lib/dataDirMove.ts`): the pointer commits
   it. Its journal, kept in the data folder, is written before the
   re-key: a start that finds it at the source undoes the move, one that
@@ -76,10 +76,8 @@ commits it (`EFFECT.md`, section 5); the engine's are in
   journal names the folder that left
   (`packages/engine/src/dataDirMoveJournal.ts`); a process that can't
   write the pointer refuses to resolve, naming both folders. A copy to
-  another volume holds the store's write lock for its length and,
-  before letting go, makes the store it leaves refuse every write, so
-  a write that waited fails rather than land in a store about to be
-  retired. The recovery keeps the journal until every step it owes is
+  another volume holds the store's write lock for its length, so
+  nothing writes into what it copies. The recovery keeps the journal until every step it owes is
   done, and one it can't read stays, for a look. The steps and the undo
   are in the module's header; the lock that makes the move the one
   change under way is the engine's.
