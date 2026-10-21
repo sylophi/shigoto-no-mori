@@ -2,12 +2,12 @@
 // the files it reads say the same, so reads with nothing changed run no
 // git, a commit (which moves no identity) runs none, and each change an
 // identity shows (a branch, a detach, a lock, the primary's checkout, a
-// worktree added, moved or removed) is in the very next read, a change
-// made while git runs included, and one undone by then (real git on a
-// sandbox data dir).
+// worktree added, moved, removed or pruned) is in the very next read, a
+// change made while git runs included, and one undone by then (real git
+// on a sandbox data dir).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
@@ -161,5 +161,15 @@ it("lists a project's worktrees with git once while its files say the same, and 
     box.git(repo, "worktree", "remove", kit),
   );
   assert.equal(named(read, "kit"), undefined);
+  // A worktree's folder deleted by hand stays listed, by git too, until
+  // a prune drops its entry.
+  const elk = join(box.home, "elsewhere", "elk");
+  read = await change("another worktree added", () =>
+    box.git(repo, "worktree", "add", "-q", "-b", "elk", elk),
+  );
+  rmSync(elk, { recursive: true, force: true });
+  assert.deepEqual(await next(), { read, listed: 0 }, "its folder deleted");
+  read = await change("a prune", () => box.git(repo, "worktree", "prune"));
+  assert.equal(named(read, "elk"), undefined);
   assert.equal((await next()).listed, 0, "no change after");
 });

@@ -369,7 +369,8 @@ it("backstop: a commit whose events were all lost is signalled once, a ref direc
   await delay(600);
   assert.deepEqual(changes, ["p1"], "a ref directory's churn is no move");
   // A ref directory appearing and going, HEAD unmoved: a namespace
-  // under refs/heads, a remote's, and one with no ref in it.
+  // under refs/heads, a remote's (and its ref moving inside it), and one
+  // with no ref in it.
   git(repo, "branch", "feature/x");
   await waitFor(() => changes.length >= 2, "the lost branch to be found");
   git(repo, "branch", "-D", "feature/x");

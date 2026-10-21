@@ -10,19 +10,20 @@
 // there too, so one recursive watch per project covers every worktree
 // of it.
 //
-// What counts as a change is an ALLOWLIST of git-dir paths (HEAD,
-// packed-refs, refs/** but the app's own refs/shigomori/**, a
-// worktree's HEAD, a worktree entry appearing or vanishing), not
-// "anything under .git": objects/ churns on every commit, logs/
-// mirrors every ref update, FETCH_HEAD is rewritten by the app's own
-// minute sweep, and `index` is rewritten by every stage and by another
-// program's `git status` or `git diff` (a person's, a prompt's dirty
-// check), while a stage moves no ref: the open changes page reads it
-// on its own poll, and a mirror watches it itself (mirror/gitState.ts).
-// refs/shigomori/ holds the app's own bookkeeping (dirty captures, a
-// transfer's landing refs, the mirror's staged-tree commits, discard
-// undos), which no view reads. Uncommitted file edits are not seen in
-// the git directory: they live in the working trees.
+// What counts as a change is an ALLOWLIST of git-dir paths (HEAD and
+// ORIG_HEAD, packed-refs, refs/** but the app's own refs/shigomori/**,
+// a worktree's HEAD and ORIG_HEAD, a worktree entry appearing or
+// vanishing, a stopped operation's markers), not "anything under .git":
+// objects/ churns on every commit, logs/ mirrors every ref update,
+// FETCH_HEAD is rewritten by the app's own minute sweep, and `index` is
+// rewritten by every stage and by another program's `git status` or
+// `git diff` (a person's, a prompt's dirty check), while a stage moves
+// no ref: the open changes page reads it on its own poll, and a mirror
+// watches it itself (mirror/gitState.ts). refs/shigomori/ holds the
+// app's own bookkeeping (dirty captures, a transfer's landing refs, the
+// mirror's staged-tree commits, discard undos), which no view reads.
+// Uncommitted file edits are not seen in the git directory: they live
+// in the working trees.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
@@ -157,14 +158,14 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
   });
 
 // What a project's git directory says about the state its rows show,
-// read with no git: HEAD and each worktree's HEAD, packed-refs, every
-// loose ref the allowlist counts (a ref is written by a rename into
-// place, so a new inode), and which stopped-operation markers exist.
-// Two equal readings mean nothing the allowlist above cares about
-// moved between them. A file that isn't there reads as absent; any
-// other failure (a directory git removed mid-walk, a volume that
-// stalls) fails the reading, which the caller skips rather than read
-// as a change.
+// read with no git: HEAD and ORIG_HEAD and each worktree's,
+// packed-refs, every loose ref the allowlist counts (a ref is written
+// by a rename into place, so a new inode), and which stopped-operation
+// markers exist. Two equal readings mean nothing the allowlist above
+// cares about moved between them. A file that isn't there reads as
+// absent; any other failure (a directory git removed mid-walk, a volume
+// that stalls) fails the reading, which the caller skips rather than
+// read as a change.
 const isNotFound = (error: PlatformError.PlatformError) =>
   Predicate.isTagged(error.reason, "NotFound");
 
