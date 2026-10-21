@@ -1913,8 +1913,8 @@ describe("how a command line is read", () => {
         'Unknown subcommand "lst". Usage: smd projects config <list|get|set|unset|edit|read|launcher|carryover> [args]',
       ],
       [
-        ["projects", "config", "lst"],
-        'Unknown subcommand "lst". Usage: smd projects config <list|get|set|unset|edit|read|launcher|carryover> [args]',
+        ["config", "lst"],
+        'Unknown subcommand "lst". Usage: smd config <list|read|get|set|unset|launcher|edit> [args]',
       ],
       // The config namespaces parsed every flag first.
       [["config", "lst", "--bogus"], 'Unknown option "--bogus".'],
