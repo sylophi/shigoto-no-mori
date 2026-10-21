@@ -46,7 +46,7 @@ const treeViews = (input: { projectId: string; worktreeId: string }) =>
 // a mirror's index rewrite can't move it, and the first and last come
 // as often as a mirror or an agent writes. A read git refuses for a
 // moment (a lock held) is tried again three times, a second apart and
-// doubling, as a request was, before the view fails.
+// doubling, before the view fails.
 const treeView = <A, R>(
   input: { projectId: string; worktreeId: string },
   part: string,
@@ -204,8 +204,6 @@ export const worktreesHandlers = {
       ),
     ),
 
-  // A renderer from before the field sends none and expects the force
-  // it always got, so only an explicit false runs unforced.
   convertExternal: ({ projectId, worktreeId, force }, ctx) =>
     Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
       worktrees.adopt(

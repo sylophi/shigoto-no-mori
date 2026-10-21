@@ -78,9 +78,9 @@ export async function enrollDevice(
   if (!isConfigured(deps.config)) {
     throw new Error("the device hub is not configured on this build");
   }
-  // A record from before device keys counts as the one this enrollment
-  // replaces: the same device, keeping its name, its pick and (read
-  // when the enrollment is stored) its command-access switch.
+  // A 2.x record, which has no device key, counts as the one this
+  // enrollment replaces: the same device, keeping its name, its pick
+  // and (read when the enrollment is stored) its command-access switch.
   const stored = deps.store.read() ?? deps.store.readWithoutKey();
   const deviceName =
     stored?.deviceName ??
@@ -267,12 +267,6 @@ export async function updateDevice(
 //   improved with an upgrade (it has no pick, so it wears what it
 //   detects now). The hub copy is stale and gets this device's value,
 //   best-effort, recorded as the hub's once it lands.
-// A record from before these fields existed has no answer, so each
-// field takes the likelier one. A name only ever changed on this
-// device before, so a hub name that differs is a peer's rename and is
-// adopted. An icon differs most likely by a detection that improved
-// since the enrollment, so the listing is taken as where the hub was
-// and this device's icon corrects it rather than being pinned.
 // `listedUnder` is the record the listing was fetched under: a change
 // here that raced the read wins over it (keepFields). Resolves true
 // when the name or icon this device wears changed.
