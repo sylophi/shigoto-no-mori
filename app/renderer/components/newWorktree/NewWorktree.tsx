@@ -54,9 +54,9 @@ export function NewWorktree() {
         <NewWorktreeBodyView>
           <NewWorktreeForm
             project={scoped}
-            // Undefined with no choice of device: the form keeps the
-            // copy it has always had rather than naming a machine
-            // nobody chose.
+            // Undefined with no choice of device: the form keeps its
+            // device-less copy rather than naming a machine nobody
+            // chose.
             deviceLabel={tab?.label}
           />
         </NewWorktreeBodyView>

@@ -8,9 +8,9 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { ProjectGrid } from "./home/ProjectGrid";
 
 // "/" and a fresh window land here: the projects as a grid, waiting for
-// a pick, or with none (a fresh install) v2's orientation. No worktree
-// opens on its own, since the sidebar would follow it into its project
-// (openProject.ts) and skip the list of projects.
+// a pick, or with none (a fresh install) the first-run orientation. No
+// worktree opens on its own, since the sidebar would follow it into its
+// project (openProject.ts) and skip the list of projects.
 export function EmptyState() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { openAddProject } = useOverlays();
@@ -19,8 +19,8 @@ export function EmptyState() {
 
   if (projectsLoading) return null;
   if (projects.length === 0) {
-    // Named once this build's data dir is known (a v2 install, v3, the
-    // dev app's each have their own).
+    // Named once this build's data dir is known (it differs by build,
+    // and can be moved).
     return (
       <FirstRunView
         worktreesDir={

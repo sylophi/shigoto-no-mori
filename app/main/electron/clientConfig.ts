@@ -42,10 +42,9 @@ function clientConfigPath(): string {
 // until the next writeClientConfig in this process updates it.
 const memo = Effect.runSync(SubscriptionRef.make<ClientConfig>({}));
 
-// A store that
-// stays broken is hit on every boot and every save, so warn once per
-// file per run instead of never (a silent catch turns corruption into
-// a default reset with nothing in the console).
+// A store that stays broken is hit on every boot and every save, so
+// warn once per file per run instead of never (a silent catch turns
+// corruption into a default reset with nothing in the console).
 const corruptStoreNoted = new Set<string>();
 
 function noteCorruptStore(file: string, error: unknown): void {
@@ -54,9 +53,8 @@ function noteCorruptStore(file: string, error: unknown): void {
   log.warn(`[clientConfig] ${file} unreadable, falling back:`, error);
 }
 
-// Corrupt or unreadable content reads as empty defaults (not as an
-// absent file), so a broken store can never block startup and never
-// gets silently reseeded over by the migration's absence probe.
+// Corrupt or unreadable content reads as empty defaults, as an absent
+// file does, so a broken store never blocks startup.
 const readStoredDoc = Effect.suspend(() =>
   readJson(clientConfigPath(), StoredClientConfigSchema),
 ).pipe(

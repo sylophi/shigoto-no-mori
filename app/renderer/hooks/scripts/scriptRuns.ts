@@ -10,7 +10,7 @@
 // React reads them through hooks/scripts/useScriptRuns.ts, which
 // resolves the device from the host scope, and the state a row draws
 // is the controller's `state` atom. They survive navigation but not a
-// renderer reload, matching the user-confirmed "in-memory only" scope.
+// renderer reload (in memory only).
 //
 // The state is immutable: every transition replaces the record with a
 // new object, and the maps holding them, since a reader picks its

@@ -100,8 +100,8 @@ export interface RemoteProjectPair {
 // fan-outs the forests add on top. The forests compose this, so the
 // two can never list different projects.
 // A peer away keeps the projects it last had, for every caller (the
-// sidebar's rows, a project's device tabs, the pickers), as v2's cache
-// did: what a sleeping machine holds still exists.
+// sidebar's rows, a project's device tabs, the pickers): what a
+// sleeping machine holds still exists.
 export function useRemoteProjects(): {
   pairs: RemoteProjectPair[];
   loading: boolean;

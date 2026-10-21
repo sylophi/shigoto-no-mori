@@ -4,11 +4,12 @@
 // in that device's cache. The boot calls it for this machine
 // (renderer/boot.tsx) and remoteDeviceSync for each peer the moment it
 // builds the peer's api. A bridge kept while these families are
-// requests (decision 20): a project's git reads (its branches, a
-// commit's or a stash's diff), a worktree's own (its data, files and
-// changes), a project's settings and the launch tools, and, on its refs
-// moving, an open page's pull request, none of which the host serves as
-// a view. A family the host comes to serve as a view leaves it.
+// requests (EFFECT.md, section 10): a project's git reads (its
+// branches, a commit's or a stash's diff), a worktree's own (its data,
+// files and changes), a project's settings and the launch tools, and,
+// on its refs moving, an open page's pull request, none of which the
+// host serves as a view. A family the host comes to serve as a view
+// leaves it.
 //
 // No reachability gate on purpose: a push from a device IS that
 // device's session speaking, and invalidating a device nothing caches

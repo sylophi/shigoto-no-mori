@@ -1,5 +1,4 @@
-// The transplant flow, shaped after the owner's remote-ops mockups and
-// honest to the backend: three steps on one rail. Review lists what
+// The transplant flow: three steps on one rail. Review lists what
 // travels and where it lands. Transplant is the pull with its progress
 // frames read into four named steps. Finish up source shows the landed
 // worktree and asks what happens to the copy on the source device

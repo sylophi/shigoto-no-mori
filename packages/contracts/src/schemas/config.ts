@@ -433,11 +433,6 @@ export const ClientConfigSchema = Schema.Struct({
   forwardLocalPorts: Schema.optional(
     Schema.Record(Schema.String, PortNumberSchema),
   ),
-  // Legacy, read only by the one-time move into the shared settings
-  // (quickCreateDevice), which clears it.
-  quickCreateDevices: Schema.optional(
-    Schema.Record(Schema.String, Schema.String),
-  ),
   sidebarView: Schema.optional(SidebarViewSchema),
   projectsSort: Schema.optional(ProjectSortModeSchema),
   groupProjectsByOwner: Schema.optional(Schema.Boolean),
@@ -460,7 +455,6 @@ export const peerProjectKey = (deviceId: string, projectId: string) =>
 export function withoutPeerState(config: ClientConfig): ClientConfig {
   const {
     forwardLocalPorts: _forwardLocalPorts,
-    quickCreateDevices: _quickCreateDevices,
     collapsedProjects: _collapsedProjects,
     ...rest
   } = config;

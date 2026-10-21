@@ -287,9 +287,9 @@ export function queryKeysFor(deviceId: string): QueryKeyRegistry {
 
 // The "state on this device moved, refetch what you're showing" sweep,
 // for every device's externalChange broadcast (lib/hostWatch.ts, with
-// the pinging device's id). Deliberately broad
-// within its scope (the host debounces the signal and only active
-// queries actually refetch), but some domains sit it out:
+// the pinging device's id). Deliberately broad within its scope (the
+// host debounces the signal and only active queries actually
+// refetch), but some domains sit it out:
 //
 // - githubCli for scope AND cost: a disk change says nothing about
 //   GitHub, and refetching PR lists here turns every ping into a burst
@@ -299,11 +299,7 @@ export function queryKeysFor(deviceId: string): QueryKeyRegistry {
 //   invalidation ignores staleTime. Focus, mount and the removal flow
 //   still cover them.
 // - runtime: static per-host facts. No git-state change touches them.
-// - fs for loop-safety as well as relevance: a git-state ping says
-//   nothing about a directory listing, and because fs reads are tagged
-//   mutating (gated on the command-access switch), a ping-driven fs refetch on
-//   a remote scope would itself trigger the host's resolved-mutation
-//   ping, refetching forever.
+// - fs: a git-state ping says nothing about a directory listing.
 const externalChangeExempt = new Set([
   // CLI links and rc hooks are not forest state, so a git-state ping
   // never re-asks.
@@ -343,11 +339,11 @@ function hostKeyProjectId(queryKey: readonly unknown[]): unknown {
 // queries cache under its own id in the same host families, so a
 // device-blind sweep would invalidate a peer's worktrees on a purely
 // local change (and vice versa). Client-scoped keys are this app
-// instance's, which no device's state moving touches. The
-// exemptions above are the whole point of this entry: "state on that
-// device moved" says nothing about GitHub or hygiene, so those sit
-// the ping out. See invalidateDeviceSession for
-// the sibling that must NOT sit them out.
+// instance's, which no device's state moving touches. The exemptions
+// above are the whole point of this entry: "state on that device
+// moved" says nothing about GitHub or hygiene, so those sit the ping
+// out. See invalidateDeviceSession for the sibling that must NOT sit
+// them out.
 export function invalidateHostDevice(
   queryClient: QueryClient,
   deviceId: string,
@@ -399,12 +395,12 @@ export function invalidateHostProject(
 // everything host-scoped for it is fetchable now and none of it was a
 // moment ago. Same device-id scoping as invalidateHostDevice and
 // deliberately NO domain exemption, because the exempt list is tuned
-// for "that host's git state moved" and is exactly wrong here: runtime,
-// githubCli, fs, worktreeHygiene and worktreeDiskUsage are the queries that hard-failed with "no direct
-// connection" while the keeper was still dialing, so exempting them
-// would skip precisely what needs refetching. Client-scoped keys are
-// left alone in the other direction: they belong to this app instance,
-// never to the peer, so a peer's session says nothing about them.
+// for "that host's git state moved" and is exactly wrong here: every
+// query of the device fails with "no direct connection" until the
+// keeper lands, the exempt domains included, so exempting them would
+// leave those broken. Client-scoped keys are left alone in the other
+// direction: they belong to this app instance, never to the peer, so a
+// peer's session says nothing about them.
 export function invalidateDeviceSession(
   queryClient: QueryClient,
   deviceId: string,

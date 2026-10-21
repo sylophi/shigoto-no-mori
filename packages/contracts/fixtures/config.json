@@ -722,9 +722,6 @@
         "forwardLocalPorts": {
           "dev_1c94b0da:5173": 15173
         },
-        "quickCreateDevices": {
-          "remote:github.com/alex/notes": "dev_1c94b0da"
-        },
         "sidebarView": "inbox",
         "projectsSort": "recent",
         "groupProjectsByOwner": false,
@@ -843,9 +840,6 @@
         "forwardLocalPorts": {
           "dev_1c94b0da:5173": 15173
         },
-        "quickCreateDevices": {
-          "remote:github.com/alex/notes": "dev_1c94b0da"
-        },
         "sidebarView": "inbox",
         "projectsSort": "recent",
         "groupProjectsByOwner": false,
@@ -888,9 +882,6 @@
           "keepReachable": false,
           "forwardLocalPorts": {
             "dev_1c94b0da:5173": 15173
-          },
-          "quickCreateDevices": {
-            "remote:github.com/alex/notes": "dev_1c94b0da"
           },
           "sidebarView": "inbox",
           "projectsSort": "recent",

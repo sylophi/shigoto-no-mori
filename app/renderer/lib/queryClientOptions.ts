@@ -1,8 +1,7 @@
 // One QueryClient configuration for both shells, built by the shared
-// boot (renderer/boot.tsx). The default query behavior, the global error toasts, and the command-refusal
-// branch that must run ahead of the silentError opt-out are platform
-// independent, and hand-copying them is exactly how the web boot once
-// dropped the refusal branch, so both boots build their client here.
+// boot (renderer/boot.tsx): the default query behavior, the global
+// error toasts, and the command-refusal branch that must run ahead of
+// the silentError opt-out.
 import { UNNAMED_DEVICE } from "@shigomori/ui/lib/deviceRoster.ts";
 import {
   isCancelledError,
