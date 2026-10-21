@@ -13,7 +13,8 @@ export function sanitizeBranchForPath(branch: string): string {
   const slashed = branch
     .replace(PATH_SEPARATOR, "-")
     .replace(CONTROL_CHARS, "");
-  // The v2 Go sm's \s, so a name comes out as it did.
+  // Tab, newline, form feed, return and space, not JS's Unicode `\s`:
+  // a branch keeps the folder name its existing worktrees have.
   const trimmed = slashed.replace(/^[.\t\n\f\r -]+|[.\t\n\f\r -]+$/g, "");
   if (!trimmed || RESERVED_NAMES.has(trimmed.toLowerCase())) return "";
   return trimmed;

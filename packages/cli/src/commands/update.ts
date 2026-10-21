@@ -15,9 +15,10 @@ import { UsageError } from "../errors.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
 import { spinner } from "../spinner.ts";
 
-// The variables the stand-in flags replaced, refused so one still
-// exported can't send a test build to the real feeds.
-const REPLACED: ReadonlyArray<readonly [string, string]> = [
+// The app's update stand-ins, which this command takes as flags. Set in
+// its environment they are refused, so one exported for the app doesn't
+// leave a test build's `update` on the real feeds unawares.
+const STAND_INS: ReadonlyArray<readonly [string, string]> = [
   [RELAUNCH_ENV.feedUrl, "--feed-url"],
   [RELAUNCH_ENV.releasesUrl, "--releases-url"],
 ];
@@ -78,10 +79,10 @@ export const update = Command.make(
   },
   (flags) =>
     Effect.gen(function* () {
-      for (const [name, flag] of REPLACED) {
+      for (const [name, flag] of STAND_INS) {
         if ((process.env[name] ?? "") !== "") {
           return yield* new UsageError({
-            problem: `${name} is no longer read. Pass ${flag} instead.`,
+            problem: `update doesn't read ${name}. Pass ${flag} instead.`,
           });
         }
       }

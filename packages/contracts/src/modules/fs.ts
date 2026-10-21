@@ -5,8 +5,8 @@ import { DirectoryListingSchema, PathPayloadSchema } from "../schemas/index.ts";
 // Every fs call is remote:true, gated:true.
 // They are reads, but the `gated` axis is enforced as "gated on the
 // command-access switch", and these handlers disclose ARBITRARY
-// absolute paths. So instead of waiting for remote path confinement
-// they sit behind that switch: while this host does not accept
+// absolute paths. So they sit behind that switch: while this host
+// does not accept
 // commands from its other devices, a peer is refused exactly as for a
 // mutation.
 export const fsContract = defineContract(

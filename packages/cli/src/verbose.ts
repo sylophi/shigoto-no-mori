@@ -1,6 +1,6 @@
-// --verbose: a line on stderr for every git and gh a command runs, the
-// trace Go's vlog printed. The engine's services take the spawner from
-// the platform layer, so wrapping it there reaches all of them.
+// --verbose: a line on stderr for every git and gh a command runs. The
+// engine's services take the spawner from the platform layer, so
+// wrapping it there reaches all of them.
 import { basename } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

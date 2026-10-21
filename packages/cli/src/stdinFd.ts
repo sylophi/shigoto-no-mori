@@ -6,8 +6,8 @@
 // closing as the menu attached), and that fd was closed under the
 // reader: Bun's "EBADF: bad file descriptor, fstat" as the reader
 // started, or a reader that never woke while the key sat in the
-// terminal's queue (V3.md, Robustness). A late second close of the
-// reused number is the likely cause; which close it is wasn't caught.
+// terminal's queue. A late second close of the reused number is the
+// likely cause; which close it is wasn't caught.
 // So the binary holds a number from its start, before any child runs,
 // and gives it back just as the menu attaches: the lowest free number
 // is then one no child's pipe can have had, and the dup takes it.

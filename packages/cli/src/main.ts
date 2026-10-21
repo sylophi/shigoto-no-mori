@@ -59,7 +59,7 @@ import { status } from "./commands/status.ts";
 import { changingWithFix, doctor, engine } from "./engine.ts";
 import { canonical } from "./aliases.ts";
 import * as Here from "./here.ts";
-import { goArgs, splitAtDashes } from "./argv.ts";
+import { commandLine, splitAtDashes } from "./argv.ts";
 import { holdStdinFd } from "./stdinFd.ts";
 import { verboseSpawner } from "./verbose.ts";
 import { helpPages } from "./help.ts";
@@ -73,7 +73,7 @@ import {
 } from "./output.ts";
 
 // --json, --verbose and --version are global wherever they sit, up to
-// a `--`, past which everything is the command's, as in Go.
+// a `--`, past which everything is the command's.
 function globalFlags(args: ReadonlyArray<string>) {
   const { own, past } = splitAtDashes(args);
   return {
@@ -113,7 +113,7 @@ const help = helpPages({
 
 // Provided per command group, so help and usage errors open no store.
 const services = engine(flavor);
-// A command that reads where it runs, as Go loaded its context.
+// A command that reads where it runs.
 const loaded = <Name extends string, Input, E, R>(
   command: Command.Command<Name, Input, {}, E, R>,
 ) =>
@@ -179,11 +179,12 @@ const sm = Command.make("sm").pipe(
   ]),
 );
 
-const program = goArgs(sm, canonical(rest, worktreesCommand)).pipe(
+const program = commandLine(sm, canonical(rest, worktreesCommand)).pipe(
   Effect.flatMap(Command.runWith(sm, { version, renderErrors: false })),
   // None of effect/cli's built-in flags: the help is the catalog's
   // (help.ts), answered before parsing, and a command line the parser
-  // refuses reports as Go's did, without the parser's help page.
+  // refuses reports with the catalog's usage line, without the parser's
+  // help page.
   Effect.provide(
     Layer.mergeAll(
       verbose

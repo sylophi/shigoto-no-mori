@@ -34,7 +34,7 @@ export const reporter = (
     const marker = (runId: string) => dim(`[${slots.get(runId) ?? ""}]`);
 
     // How the files were cloned. A failed clone is said on stderr
-    // under --json too, as the Go sm did.
+    // under --json too.
     const cloned = ({ from, outcome }: Worktrees.Cloned) =>
       Result.isFailure(outcome)
         ? note(

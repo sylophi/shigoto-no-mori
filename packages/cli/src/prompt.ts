@@ -1,5 +1,5 @@
-// Questions to a person at a terminal, the Go sm's way: asked on
-// stderr, answered on stdin, never under --json.
+// Questions to a person at a terminal: asked on stderr, answered on
+// stdin, never under --json.
 import { createInterface } from "node:readline";
 import * as Effect from "effect/Effect";
 import { note, Output } from "./output.ts";
@@ -17,8 +17,8 @@ export const confirm = (question: string) =>
     const answer = yield* Effect.callback<string | undefined>((resume) => {
       // Stdin's first reader, as a menu's is (stdinFd.ts).
       attachStdin();
-      // A plain line, as the Go sm read it: the terminal stays cooked, so
-      // Ctrl-C stops the command rather than answering no.
+      // A plain line: the terminal stays cooked, so Ctrl-C stops the
+      // command rather than answering no.
       const lines = createInterface({
         input: process.stdin,
         output: process.stderr,

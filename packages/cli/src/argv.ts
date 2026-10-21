@@ -1,12 +1,12 @@
-// The Go sm's parsing, in front of effect/cli's: flags and positionals
-// interleave, any number of leading dashes name a flag (`-no-cd`), a
-// valued flag takes the next argument whatever it is, the last of a
-// repeated flag wins (a list flag keeps each), a boolean takes no value,
-// and `--` makes the rest positional. The command line comes out in the
-// one form effect/cli reads the same way: the command's names, each flag
-// as `--name=value` (a boolean as `=true`, so no positional after it
-// reads as its value), then the positionals. Each command's flags are
-// read from its own definition.
+// The command line's parsing, in front of effect/cli's: flags and
+// positionals interleave, any number of leading dashes name a flag
+// (`-no-cd`), a valued flag takes the next argument whatever it is, the
+// last of a repeated flag wins (a list flag keeps each), a boolean
+// takes no value, and `--` makes the rest positional. The command line
+// comes out in the one form effect/cli reads the same way: the
+// command's names, each flag as `--name=value` (a boolean as `=true`,
+// so no positional after it reads as its value), then the positionals.
+// Each command's flags are read from its own definition.
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import type * as Command from "effect/cli/Command";
@@ -80,7 +80,7 @@ const flagsOf = (chain: ReadonlyArray<Command.Command.Any>): Flags =>
   );
 
 // Every flag a namespace and the commands under it read: the one spec
-// Go's dispatcher parsed them all with.
+// they are all parsed with.
 const namespaceFlags = (chain: ReadonlyArray<Command.Command.Any>): Flags => {
   const into = new Map(flagsOf(chain));
   const under = (command: Command.Command.Any): void => {
@@ -98,9 +98,9 @@ const namespaceFlags = (chain: ReadonlyArray<Command.Command.Any>): Flags => {
   return into;
 };
 
-// The namespaces whose Go dispatcher parsed the flags first and took its
-// verb from the first positional (cmdConfigGlobal, cmdConfig). Every
-// other took it from the first argument, a flag included.
+// The namespaces that parse the flags first and take the verb from the
+// first positional. Every other takes it from the first argument, a
+// flag included.
 const FLAGS_FIRST = new Set(["config", "projects config"]);
 
 const subcommand = (command: Command.Command.Any, word: string) =>
@@ -130,8 +130,7 @@ export const splitAtDashes = (args: ReadonlyArray<string>) => {
 
 const refuse = (problem: string) => Effect.fail(new UsageError({ problem }));
 
-// Go's parseCmdArgs: the flags `tokens` give, by name, and the
-// positionals between them.
+// The flags `tokens` give, by name, and the positionals between them.
 const parse = (tokens: ReadonlyArray<string>, flags: Flags) =>
   Effect.suspend(() => {
     const values = new Map<string, string[] | true>();
@@ -175,8 +174,8 @@ const parse = (tokens: ReadonlyArray<string>, flags: Flags) =>
   });
 
 // The command line under `root` (its words after the binary's) as
-// effect/cli is to read it, or the Go sm's refusal.
-export const goArgs = (
+// effect/cli is to read it, or its refusal.
+export const commandLine = (
   root: Command.Command.Any,
   args: ReadonlyArray<string>,
 ) =>
