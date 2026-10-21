@@ -1115,9 +1115,9 @@ function hostHandlersFor(
       mirrorChanged();
       return { session: entry.session };
     },
-    // The forest holding the original runs the start and sends the copy
-    // on: "Mirror to…" from this device's worktree, or "Mirror here" on
-    // a peer's, which the peer sends to the local forest.
+    // "Mirror to…" from this forest's own worktree: it runs the start
+    // and sends the copy to the peer. ("Mirror here" is the local
+    // forest's mirror:startFrom, below.)
     "mirror:startTo": (input) => fakeMirrorStartTo(forest, input),
     // The cancel, on every forest: the local one for a pull or a send,
     // a peer for the mirror it runs towards here. The posed pull reads
@@ -1368,16 +1368,21 @@ async function fakeMirrorStartTo(
   // The rule is the session's, not the send's: a mirror start brings
   // the files through its own session, so the landing poses no files
   // step. A primary's copy lands on its mirror branch and folder.
-  const landed = await fakeSyncPull(target, emit, {
-    sourceDeviceId: runner.deviceId,
-    sourceProjectId: input.projectId,
-    sourceWorktreeId: input.worktreeId,
-    sourceIdentity: project.identity,
-    branch: sourceWorktree.branch,
-    landBranch: pullLandingBranch(sourceWorktree),
-    worktreeName: pullWorktreeName(sourceWorktree),
-    runSetup: input.runSetup,
-  });
+  const landed = await fakeSyncPull(
+    target,
+    emit,
+    {
+      sourceDeviceId: runner.deviceId,
+      sourceProjectId: input.projectId,
+      sourceWorktreeId: input.worktreeId,
+      sourceIdentity: project.identity,
+      branch: sourceWorktree.branch,
+      landBranch: pullLandingBranch(sourceWorktree),
+      worktreeName: pullWorktreeName(sourceWorktree),
+      runSetup: input.runSetup,
+    },
+    mirrorWires.get(LOCAL_DEVICE_ID),
+  );
   const tip = sourceWorktree.recentCommits[0]?.hash.slice(0, 7) ?? "58c21fe";
   const session: FakeMirrorSession = {
     session: `sync_${fakeSessionSerial++}`,
@@ -1464,12 +1469,16 @@ async function fakeSyncPull(
     runSetup?: boolean;
     ignoreMode?: MirrorSession["ignoreMode"];
   },
+  // The wire of the device running the dialog, which hears the
+  // progress (the real host relays a send's): the landing's own unless
+  // the landing is on a peer.
+  report: FixtureWire["emit"] = emit,
 ) {
   // A posed pull: each step lingers long enough to be seen, and the
   // transfer counts up in chunks like the real one. A cancel lands
   // between two of its waits, and the pull fails as the real one does.
   const progress = (frame: Record<string, unknown>) =>
-    emit("sync:pullProgress", {
+    report("sync:pullProgress", {
       sourceWorktreeId: input.sourceWorktreeId,
       ...frame,
     });
@@ -1527,8 +1536,8 @@ async function fakeSyncPull(
   const name = input.worktreeName ?? sourceWorktree?.name ?? "tender-tanuki";
   const landed = worktreeFixture({
     ...sourceWorktree,
-    // One per source, so two landings on one forest are two worktrees.
-    id: `fedcba${input.sourceWorktreeId.slice(-6)}`,
+    // One per source and forest, so two landings are two worktrees.
+    id: worktreeIdOf(`${local.deviceId} ${input.sourceWorktreeId}`),
     projectId: project.id,
     name,
     branch: input.landBranch ?? input.branch,
