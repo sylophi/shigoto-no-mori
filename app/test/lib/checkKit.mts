@@ -355,7 +355,7 @@ export function handlerCtx(
   };
 }
 
-// The SHIGOMORI_* branch values a check's script run carries.
+// The SHIGOMORI_* values a check's script run is given.
 export const scriptEnv = {
   projectBranch: "main",
   defaultBranch: "main",
