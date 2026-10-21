@@ -1,8 +1,8 @@
 // Durable proof for what the changes page says about the working tree
-// (renderer/lib/changesState.ts). In the lab, a worktree whose index
-// git could no longer read kept its last read on the page, "No changes",
-// while the tree had an edit, and an edit made with the window focused
-// left the page's list behind the row's count. Asserts:
+// (renderer/lib/changesState.ts): a worktree whose index git can't read
+// must not keep its last read ("No changes") while the tree has an
+// edit, and an edit made with the window focused must not leave the
+// page's list behind the row's count. Asserts:
 //   - the row's count stands in until the page's read arrives;
 //   - a read that fails, first or after one that answered, is the
 //     failed state with no count, never the last answer standing;

@@ -1,8 +1,8 @@
 // Durable proof that a mirror into this device outlives the v3
-// migration's move of its copy into wt/ (packages/engine/src/WtFolder.ts),
-// as a v2 mirror outlived an app update. A worktree's id is a hash of
-// its path, so the move gives the copy a new one while the device
-// running the mirror still names it by its v2 id. Starts from a v2 data
+// migration's move of its copy into wt/
+// (packages/engine/src/WtFolder.ts). A worktree's id is a hash of its
+// path, so the move gives the copy a new one while the device running
+// the mirror still names it by its v2 id. Starts from a v2 data
 // dir: a project with the copy under the v2 `worktrees/` root, and the
 // copy's landed invitation in file-sync/mirror-invites.json naming the
 // v2 id. The engine comes up on it as a first v3 start does (the
@@ -23,7 +23,7 @@
 //
 // The runner's copy-gone check (sessions.ts copyIsGone) still reads the
 // peer's list, which names the copy by its new id only; the follower
-// above no longer asks it, since its reads resolve.
+// above doesn't ask it, since its reads resolve.
 //
 // Run: pnpm test mirror-wt-move.
 import assert from "node:assert/strict";

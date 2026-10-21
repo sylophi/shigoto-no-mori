@@ -1611,13 +1611,10 @@ it("tracing: the host's span for a call continues the caller's trace", async () 
 });
 
 it("contract invariant: every host invoke classifies itself, and every remote gated one names its consent line, as grants.ts lists", async () => {
-  // Derive the host modules from the authoritative registry rather
-  // than a hand-maintained list, so a newly added host contract module
-  // is covered here automatically. A module that forgot to tag a call
-  // remote can no longer skip this check by never appearing in a list.
+  // Every host module, from the registry, so a new one is covered and
+  // none can skip the check.
   const hostModules = allContractModules.filter((m) => scopeOf(m) === "host");
-  // The known host-module count at authoring time. The derived set must
-  // cover every host module: an empty or shrunken set means the
+  // A floor under the count: an empty or shrunken set means the
   // registry import or the scope filter drifted and the invariant
   // quietly stopped running over some modules.
   const KNOWN_HOST_MODULE_COUNT = 16;

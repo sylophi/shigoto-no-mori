@@ -6,7 +6,7 @@
 // push to every window reaches each, a push to one window reaches that
 // one alone, a port that closes aborts its calls' connection, and a
 // link that heard nothing for an hour, then slept, still answers, the
-// window's and the host's alike (V3.md, "Local links and liveness").
+// window's and the host's alike (EFFECT.md, section 8).
 //
 // Run: pnpm test shell-link.
 import assert from "node:assert/strict";

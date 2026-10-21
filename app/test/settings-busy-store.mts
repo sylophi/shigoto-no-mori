@@ -1,8 +1,8 @@
 // Durable proof that the shared settings' writer
 // (host/lib/sharedSettings/store.ts) outlives a write the store refused.
 // The writer stores each change behind the copy, one at a time, and a
-// failed write used to end it: every change after it was announced to
-// the windows and peers and never stored. Asserts, with the store's
+// failed write must not end it, or every change after it is announced
+// to the windows and peers and never stored. Asserts, with the store's
 // write lock held elsewhere past the driver's wait, that the change
 // refused then and the one made after it both land once the lock is
 // let go, in order.

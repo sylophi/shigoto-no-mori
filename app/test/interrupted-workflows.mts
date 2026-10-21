@@ -1,9 +1,10 @@
 // Durable proof that a worktree move or removal killed at any step is
-// finished or undone by the next start (decision 20's commit points,
-// packages/engine/src/worktrees/moving.ts and removing.ts). The terminal
-// sm runs each workflow, held at one step by wrappers over git, cp and
-// rmdir (packages/engine/test/lib/stopAt.ts) and killed there with
-// SIGKILL, as a crash would. Then:
+// finished or undone by the next start (the commit points in
+// packages/engine/README.md, and the engine's src/worktrees/moving.ts
+// and removing.ts). The terminal sm runs each workflow, held at one
+// step by wrappers over git, cp and rmdir
+// (packages/engine/test/lib/stopAt.ts) and killed there with SIGKILL,
+// as a crash would. Then:
 //   - the app's start (the host's engine, whose start resumes the moves)
 //     on one data dir, and `sm doctor --fix` on another, leave each moved
 //     worktree where git lists it, whole, with its auto-pull mark and

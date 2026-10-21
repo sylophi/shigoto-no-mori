@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // Proof that the two ways into the guide reach it through the window's
-// own components (#950), mounted in a DOM over a fake page api: the
+// own components, mounted in a DOM over a fake page api: the
 // sidebar footer's guide menu (SidebarFooter) lists this machine's
 // agents and its item asks the shell's guide:start for the agent picked,
 // and the Help menu's push (nav:showAround, which GuideMenu hears) asks

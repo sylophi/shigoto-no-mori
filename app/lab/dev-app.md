@@ -52,15 +52,15 @@ A device is made of two folders:
 
 - **Data dir.** Projects and worktrees: `store.db` (the SQLite store:
   projects, the device id, settings, marks and state), `wt/` (the
-  managed worktrees), `file-sync/`, and while the app
-  runs `loopback.json` (how the terminal's cross-device verbs find
-  it). The device id is created per data dir, so one data dir is one
-  device. A v2 data dir's `registry.json`, `state.json`, `config.json`
-  and `projects/` are imported into the store once and left as they
-  were, and its `worktrees/` move to `wt/`. Prod adopts a pre-2.0
-  `~/shigomori` that still holds state in place until `~/.sm` holds
-  state; Settings > Data location offers to rename it, and `sm doctor`
-  warns.
+  managed worktrees), `file-sync/`, and while the app runs
+  `loopback.json` (how the terminal's cross-device verbs find it). The
+  device id is created per data dir, so one data dir is one device. A
+  v2 data dir's `registry.json`, `state.json`, `config.json` and
+  `projects/` are imported into the store once and deleted once the
+  store is verified to hold them; its `worktrees/` move to `wt/`. Prod
+  adopts a pre-2.0 `~/shigomori` that still holds state in place until
+  `~/.sm` holds state; Settings > Data location offers to rename it,
+  and `sm doctor` warns.
 - **userData.** The app instance: `account.json` (hub credential and
   the accept-commands switch), `clientConfig.json` (theme,
   keep reachable, keybindings), `clerk-tokens.json` (Clerk session),
@@ -126,10 +126,10 @@ done
 3. Allocates this worktree's dev server ports with port-pool (into
    `.env.ports`): the renderer's `RENDERER_PORT`, plus `WEB_PORT`,
    `FAKE_HOST_PORT` and `FAKE_HOST_WEB_PORT` for `pnpm web:dev`,
-   `pnpm fake-host` and `pnpm fake-host:web`, which run the same step. A
-   checkout allocated before the pool gained or renamed a port is
-   released and allocated afresh, which can move its ports. A line the
-   pool no longer writes stays in `.env.ports`, unread.
+   `pnpm fake-host` and `pnpm fake-host:web`, which run the same step.
+   When the pool's port names change, a checkout's ports are
+   allocated afresh, which can move them; a line the pool doesn't
+   write stays in `.env.ports`, unread.
 4. On macOS, clones Electron into a per-worktree bundle under
    `.electron-dev/` and launches from it, so GitHub sign-in can
    deep-link back. The most recently launched worktree owns the
@@ -226,8 +226,7 @@ decrypts to nothing and the profile boots signed out.
 Without `--clone-login`, sign in from the profile's own window using a
 method that stays in the window. GitHub sign-in uses a deep link, and
 with two windows from the same bundle the OS picks which one receives
-it. The Clerk dev instance currently offers GitHub only, which is why
-cloning exists.
+it. The Clerk dev instance offers GitHub only, hence cloning.
 
 ## Rules
 
@@ -248,8 +247,8 @@ cloning exists.
   too. Stop the window, remove `node_modules/.vite` and start it again.
   `ui` is also prebundled (`optimizeDeps` excludes only `contracts`
   and `effect`); excluding it serves it as source but changes nothing
-  else, and neither does un-ignoring the links in `server.watch.ignored`.
-  The fix lies in how vite resolves the links, still open.
+  else, and neither does un-ignoring the links in
+  `server.watch.ignored`: the cause is in how vite resolves the links.
 - **The host is a process of its own** (`main/hostProcess.ts` forks
   `host/process/host.ts`), and its log lines come prefixed `[host]`.
   Killing it is a crash the shell recovers from: it forks the host
@@ -274,10 +273,6 @@ cloning exists.
   the hub answers its dead credential with a typed "device revoked"
   (a tombstone, `hub/migrations/0002_revoked_credentials.sql`), and
   the app signs out exactly as if it had been online for the revoke.
-  Apply the migration before deploying the Worker. Against a hub
-  without it a revoke still lands (without its tombstone), and the
-  offline device instead sits "blocked: refused" with the raw
-  credential error, signed in, until signed out by hand.
 - **Both profiles use the owner's real dev account.** Each enrolls on
   the dev hub and provisions a tunnel. This is intended: the hub,
   Clerk and tunnel provisioning are exercised for real.

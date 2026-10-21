@@ -666,12 +666,12 @@ it("interrupted over the hop: a call a window or a tab drops cancels the listene
   );
 });
 
-it("concurrent race: a junk candidate enumerating first no longer defeats a reachable one, and per-candidate tickets keep every candidate authable", async () => {
+it("concurrent race: a junk candidate enumerating first doesn't defeat a reachable one, and per-candidate tickets keep every candidate authable", async () => {
   const listener = await startDirectListener(trackTest);
-  // The junk candidate FIRST, exactly the ordering that made the
-  // sequential walk fail deterministically on multi-interface
-  // machines. Both candidates dial at once, so the reachable one
-  // wins without waiting out the blackhole.
+  // The junk candidate FIRST: on a multi-interface machine, a
+  // sequential walk would spend its deadline on it. Both candidates
+  // dial at once, so the reachable one wins without waiting out the
+  // blackhole.
   const { bridge } = await bridgeTo(trackTest, listener, {
     candidateAddresses: () => [BLACKHOLE, "127.0.0.1"],
     deadlineMs: 4000,
@@ -2208,7 +2208,8 @@ it("a host just restarted: an ask only its tunnel could answer waits for the tun
     up.candidates.map(({ kind, url }) => ({ kind, url })),
     [{ kind: "tunnel", url: tunnel }],
   );
-  // A tunnel that does not come up in time: nothing, as before.
+  // A tunnel that does not come up in time: the ask answers
+  // unavailable.
   tunnel = null;
   const late = connectInfo(DIALER, tunnelOnly);
   await waitFor(() => waits === 2, "the second ask to wait");

@@ -118,10 +118,11 @@ Poses ride the URL:
   state (`MIGRATION_POSES` in the fixtures' `stepsFixtures.ts`),
   for its page (`?to=/migration`). Without it there is nothing to
   migrate, and the page opens the app.
-- `?deviceKey=due|lapsed`: the desktop enrolled before device keys,
-  which reads signed out until it enrolls again, with its Clerk session
-  live (the enrollment goes by itself, in a second and a half) or
-  lapsed (the sign-in waits on its button). Pairs with `?migration=`.
+- `?deviceKey=due|lapsed`: the desktop on a 2.x enrollment (no device
+  key), which reads signed out until it enrolls again, with its Clerk
+  session live (the enrollment goes by itself, in a second and a half)
+  or lapsed (the sign-in waits on its button). Pairs with
+  `?migration=`.
 - `?fresh=1`: Studio Mac a fresh install with no project, for the
   home a fresh install opens on.
 - `?notSharing=tp,mini`: the devices with sharing off, by the same

@@ -23,7 +23,7 @@ Shigoto no Mori is a lightweight desktop app, with a matching website, for manag
 - Show enough git context per worktree (branch, ahead/behind, diff summary, status) to act without leaving the app.
 - Make the machine a worktree lives on stop mattering: see every project and worktree on every device, reach remote work through port forwarding, continuous syncing, or a one-time transfer (see below), change any device's settings from anywhere.
 
-It owns the shell for the work done in it, in a worktree or anywhere else, since more of the way from a branch to a landed change now happens inside it. It deliberately does not own the editor, the agent, or the dev server. Those tools already exist and are good. An agent runs in the app's terminal, and the app still does not own it. The app's job is the worktree, the shell, the launcher, and the at-a-glance status, wherever the worktree lives.
+It owns the shell for the work done in it, in a worktree or anywhere else, since much of the way from a branch to a landed change happens there. It deliberately does not own the editor, the agent, or the dev server. Those tools already exist and are good. An agent runs in the app's terminal, and the app does not own it. The app's job is the worktree, the shell, the launcher, and the at-a-glance status, wherever the worktree lives.
 
 The product succeeds when a developer can run 3 to 10 parallel worktrees, spread across their machines, with agents or experiments and feel calm, not chaotic. For the multi-device half, the bar is not "remote access works". The bar is that you stop noticing which machine a worktree lives on.
 
@@ -84,7 +84,7 @@ t3 code is the comparison product for the multi-device half: a real account, a r
 
 ## Accessibility & Inclusion
 
-No formal WCAG target yet. Defaults to honor:
+No formal WCAG target. Defaults to honor:
 
 - Keyboard navigation for the core loop (worktree list, create, switch, launch).
 - Reasonable contrast across surfaces, with light and dark themes both readable at small text sizes in both visual systems.
