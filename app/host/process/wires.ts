@@ -496,7 +496,7 @@ export async function refreshDirectHost(): Promise<void> {
         listener.listening && listener.port !== null
           ? { port: devFrontPort(listener.port, hostFacts().packaged) }
           : null;
-      // A reconcile that fails is the tunnel's to report, as before.
+      // A reconcile that fails is the tunnel's to report.
       return onTunnel((tunnel) => tunnel.reconcile(wanted)).pipe(Effect.ignore);
     }).pipe(
       Effect.ignoreCause({ log: "Warn", message: "[tunnel] reconcile failed" }),

@@ -66,7 +66,8 @@ import {
 } from "./lib/checkKit.mts";
 import { launchTerminals, openSavedTerminals } from "./lib/terminalsApp.mts";
 
-// What a restored row replays, from its history alone.
+// What a save keeps of a history, the alternate screen read from the
+// history alone.
 const replayed = (history: string) =>
   Terminals.replayable(history, Terminals.alternateScreen(history).on);
 

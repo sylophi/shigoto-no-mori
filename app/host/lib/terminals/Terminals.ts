@@ -537,13 +537,7 @@ const make = <R, E>(options: {
           incarnation: yield* mintHex(4),
           history: makeHistory(
             first,
-            // A row an earlier build saved holds the history as it was.
-            restored === undefined
-              ? ""
-              : replayable(
-                  restored.history,
-                  alternateScreen(restored.history).on,
-                ) + RESTORED_TAIL,
+            restored === undefined ? "" : restored.history + RESTORED_TAIL,
           ),
           events: yield* PubSub.bounded<TerminalEvent>(CLIENT_BACKLOG),
           scope,
