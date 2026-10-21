@@ -1,10 +1,10 @@
-// What makes a data-folder move the one change under way (V3.md, Commit
-// points): a database of its own beside the pointer file, where every
-// process of the flavor finds it wherever the data dir is. A change that
-// writes holds it shared for its run (`guard`), at the engine's entry
-// points; a move, and the recovery of one, holds it alone. SQLite's
-// locks are the kernel's, so a hold goes with its process, however that
-// ends, and nothing reads a pid to tell.
+// What makes a data-folder move the one change under way (the engine's
+// README, Commit points): a database of its own beside the pointer file,
+// where every process of the flavor finds it wherever the data dir is.
+// A change that writes holds it shared for its run (`guard`), at the
+// engine's entry points; a move, and the recovery of one, holds it
+// alone. SQLite's locks are the kernel's, so a hold goes with its
+// process, however that ends, and nothing reads a pid to tell.
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";

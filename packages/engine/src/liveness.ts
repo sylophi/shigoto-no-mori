@@ -1,12 +1,12 @@
 // Whether a link to another machine still answers, judged only from a
 // probe the far end had its whole window to answer while this end ran
-// (V3.md, "Time"). One observation for the device links and the hub
-// socket, and one rule for a question asked once (the terminal's
+// (EFFECT.md, section 8). One observation for the device links and the
+// hub socket, and one rule for a question asked once (the terminal's
 // handshake with the app, the shell's watchdog, a host at a quit).
-// Effect's pinger judged the age of the last frame before it sent a
+// Effect's pinger judges the age of the last frame before it sends a
 // ping, on the wall clock: a hidden page whose timers run once a minute
-// cut a quiet, healthy peer on its next turn, and a wake cut whatever
-// was asked before the sleep.
+// would cut a quiet, healthy peer on its next turn, and a wake would
+// cut whatever was asked before the sleep.
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

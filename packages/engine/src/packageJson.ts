@@ -1,8 +1,8 @@
-// package.json's scripts in manifest order, as the Go sm read them:
-// only string-valued entries count, a duplicated name is listed twice,
-// and a missing or non-object scripts block means none. JSON.parse
-// would put integer-like names first and keep one of each duplicate,
-// so after it vouches for the text, the members are walked in order.
+// package.json's scripts in manifest order: only string-valued entries
+// count, a duplicated name is listed twice, and a missing or non-object
+// scripts block means none. JSON.parse would put integer-like names
+// first and keep one of each duplicate, so after it vouches for the
+// text, the members are walked in order.
 
 type PackageScript = { readonly name: string; readonly command: string };
 

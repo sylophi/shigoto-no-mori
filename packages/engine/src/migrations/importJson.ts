@@ -38,10 +38,11 @@ export const SKIPPED = "Skipped what the store could not import";
 export const skip = (file: string, what: string) =>
   Effect.logWarning(SKIPPED).pipe(Effect.annotateLogs({ path: file, what }));
 
-// The keys a 2.x registry.json and state.json may hold that v3 leaves
-// out on purpose: the files' version, the agent-working marks the agent
-// sessions replaced, and the sidebar view an older 2.x kept here before
-// the client config. Any other key the schemas don't name is a doubt.
+// The keys a 2.x registry.json and state.json may hold that the import
+// leaves out on purpose: the files' version, the agent-working marks
+// (the store tells agent work by its sessions), and the sidebar view an
+// older 2.x kept here before the client config. Any other key the
+// schemas don't name is a doubt.
 const LEFT_OUT = new Set([
   "schemaVersion",
   "agentWorkingWorktrees",
@@ -106,13 +107,12 @@ const configRows = (doc: Record<string, unknown>) =>
 const FRESH_INSTALL = { doubutsuNames: true };
 
 // The 2.x data dir's JSON files, copied into the store's tables. The
-// files stay where they are. What the Go sm refused to run without fails
-// the import: a registry, config or project file that can't be read,
-// and a project list that doesn't parse. What it reads as a hint (use
-// logs, marks, a worktree's title) is skipped with a warning when it
-// doesn't parse. `lenient` refuses nothing: what can't be read strictly
-// is skipped, as the Go sm read around a file it can't use, which is
-// how the doctor reads a data dir the store refused.
+// files stay where they are. What sm can't run without fails the
+// import: a registry, config or project file that can't be read, and a
+// project list that doesn't parse. What it reads as a hint (use logs,
+// marks, a worktree's title) is skipped with a warning when it doesn't
+// parse. `lenient` refuses nothing: what can't be read strictly is
+// skipped, which is how the doctor reads a data dir the store refused.
 export const importFiles = (lenient: boolean) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;

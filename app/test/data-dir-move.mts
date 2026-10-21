@@ -260,7 +260,13 @@ it("a journal naming this folder with a trailing slash finishes the move, never 
     to: `${engineDataDir}/`,
     partial: `${engineDataDir}.partial-x`,
     moved: [
-      { projectId, oldPath: join(old, "wt", "repo", "fox"), newPath: fox },
+      {
+        projectId,
+        oldPath: join(old, "wt", "repo", "fox"),
+        newPath: fox,
+        capture: null,
+        state: "rekeyed",
+      },
     ],
   });
   writeFileSync(join(old, JOURNAL), journal);
@@ -286,6 +292,8 @@ it("a finished move whose worktree links couldn't be repaired keeps its journal 
           projectId,
           oldPath: join(old, "wt", "repo", "gone"),
           newPath: join(elsewhere, "not-a-worktree"),
+          capture: null,
+          state: "rekeyed",
         },
       ],
     }),
@@ -311,6 +319,8 @@ it("a kept journal of a copied move never deletes a folder made at the old place
           projectId,
           oldPath: join(old, "wt", "repo", "gone"),
           newPath: join(elsewhere, "not-a-worktree"),
+          capture: null,
+          state: "rekeyed",
         },
       ],
     }),

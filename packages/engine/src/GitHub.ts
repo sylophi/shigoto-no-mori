@@ -91,7 +91,8 @@ export type PullRequestCard = PullRequestSummary & {
 };
 
 // The open pull request that holds a worktree's title and description.
-// `isCrossRepository` is always false, and printed: the document is Go's.
+// `isCrossRepository` is always false, and printed: the `--json`
+// document keeps it.
 export type OwningPullRequest = {
   readonly number: number;
   readonly url: string;
@@ -374,7 +375,7 @@ const rollupChecks = (nodes: ReadonlyArray<CheckNode>): PullRequestChecks => {
   return checks;
 };
 
-// A `gh pr list` or `gh pr view` row, read as Go read it (goJson.ts).
+// A `gh pr list` or `gh pr view` row, read as goJson.ts reads it.
 const Row = Schema.Struct({
   number: GoJson.count,
   title: GoJson.text,
@@ -538,7 +539,7 @@ const make = Effect.gen(function* () {
         if (code !== 0) {
           return yield* new GitHubCliError({
             reason: reasonOfStderr(stderr),
-            // Go's wording when gh said nothing.
+            // `exit status N` when gh said nothing.
             cause: new Error(stderr.trim() || `exit status ${code}`),
           });
         }
