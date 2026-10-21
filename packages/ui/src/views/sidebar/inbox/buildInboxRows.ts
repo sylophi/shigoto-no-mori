@@ -299,6 +299,14 @@ export function buildInboxRows({
     if (!expanded) continue;
     rows.push(...entries.toSorted(byInboxRank).map(worktreeRow));
   }
+  // The entry a worktree's page stands at: its own, or for a peer's
+  // with none of its own (folded into its local mirror, or left out by
+  // the device filter) its local mirror's.
+  const pageKeyOf = (worktreeId: string, deviceId: string | undefined) => {
+    const key = worktreeRowKey(deviceId, worktreeId);
+    const local = filed.has(key) ? undefined : peerRowsFolded.get(key);
+    return local === undefined ? key : worktreeRowKey(undefined, local);
+  };
 
   return {
     rows,
@@ -314,16 +322,9 @@ export function buildInboxRows({
         ? "No worktrees yet."
         : null,
     leftOut: (worktreeId, deviceId) =>
-      leftOut.has(worktreeRowKey(deviceId, worktreeId)),
+      leftOut.has(pageKeyOf(worktreeId, deviceId)),
     revealKey: (_projectId, worktreeId, deviceId) => {
-      // A peer's worktree with no entry of its own, folded into its
-      // local mirror or left out by the device filter: reveal that.
-      const peerKey = worktreeRowKey(deviceId, worktreeId);
-      const local = filed.has(peerKey)
-        ? undefined
-        : peerRowsFolded.get(peerKey);
-      const key =
-        local === undefined ? peerKey : worktreeRowKey(undefined, local);
+      const key = pageKeyOf(worktreeId, deviceId);
       const shelf = shelfOf.get(key);
       if (shelf && !openShelves.has(shelf)) return `shelf:${shelf}`;
       const group = groupOf.get(key);
