@@ -14,10 +14,11 @@
 // checkout or a linked worktree lands as one files change, `.git`
 // churn as none, and a worktree added or removed is followed. And the
 // backstop: with the git directory's events lost on purpose, a commit
-// is still signalled, once, and so are a branch made and deleted and a
-// checkout, an own ref and a ref directory's churn not at all, a working
-// tree whose watch ended is watched again, and the mirror's index watch
-// fires for a stage it never heard.
+// is still signalled, once, and so are a ref directory appearing or
+// going (a namespace, a remote, one with no ref) and a checkout, an own
+// ref and a ref directory's churn not at all, a working tree whose watch
+// ended is watched again, and the mirror's index watch fires for a stage
+// it never heard.
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
@@ -316,7 +317,7 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   assert.deepEqual(edits, [], "nor report its edits");
 });
 
-it("backstop: a commit whose events were all lost is signalled once, and a branch made and deleted and a checkout are signalled, an own ref and a ref directory's churn not at all, and a working tree whose watch ended is watched again and its edits said unseen", async () => {
+it("backstop: a commit whose events were all lost is signalled once, a ref directory appearing or going and a checkout are signalled, an own ref and a ref directory's churn are not, and a working tree whose watch ended is watched again and its edits said unseen", async () => {
   const root = tempDir("sm-gitwatch-backstop-", trackTest);
   const repo = join(root, "repo");
   git(root, "init", "-q", "-b", "main", repo);
@@ -363,13 +364,23 @@ it("backstop: a commit whose events were all lost is signalled once, and a branc
   rmSync(lock);
   await delay(600);
   assert.deepEqual(changes, ["p1"], "a ref directory's churn is no move");
-  // A branch in a directory of its own, then its delete, HEAD unmoved.
-  git(repo, "branch", "feat/x");
+  // A ref directory appearing and going, HEAD unmoved: a namespace
+  // under refs/heads, a remote's, and one with no ref in it.
+  git(repo, "branch", "feature/x");
   await waitFor(() => changes.length >= 2, "the lost branch to be found");
-  git(repo, "branch", "-D", "feat/x");
+  git(repo, "branch", "-D", "feature/x");
   await waitFor(() => changes.length >= 3, "the lost delete to be found");
+  git(repo, "update-ref", "refs/remotes/upstream/main", "HEAD");
+  await waitFor(() => changes.length >= 4, "the lost remote to be found");
+  git(repo, "update-ref", "-d", "refs/remotes/upstream/main");
+  await waitFor(() => changes.length >= 5, "the remote's going to be found");
+  const empty = join(repo, ".git", "refs", "heads", "empty");
+  mkdirSync(empty);
+  await waitFor(() => changes.length >= 6, "the bare directory to be found");
+  rmSync(empty, { recursive: true });
+  await waitFor(() => changes.length >= 7, "its going to be found");
   git(repo, "checkout", "-q", "-b", "other");
-  await waitFor(() => changes.length >= 4, "the lost checkout to be found");
+  await waitFor(() => changes.length >= 8, "the lost checkout to be found");
 });
 
 it("the mirror's index watch: a stage whose event was lost still fires, once", async () => {
