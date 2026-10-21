@@ -177,11 +177,10 @@ const make = Effect.gen(function* () {
         if (busy !== undefined) return yield* failed(fromPath, busy);
       }
       if (from === undefined) {
-        // Listed at its wt/ path with no record to say it is this one
-        // (git moved it before a crash, under a build that kept none): it
-        // stays stuck, never carried by path alone. Listed nowhere, it is
-        // a stray folder, which stays where it is, unless another process
-        // has made the move meanwhile.
+        // Listed at its wt/ path with no `moving` record to say it is this
+        // one: it stays stuck, never carried by path alone. Listed nowhere,
+        // it is a stray folder, which stays where it is, unless another
+        // process has made the move meanwhile.
         if ((yield* at(row.to_path)) !== undefined) {
           return yield* failed(
             fromPath,

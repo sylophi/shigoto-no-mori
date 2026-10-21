@@ -881,7 +881,7 @@ describe("the release list", () => {
     assert.equal(other.seen.length, 1);
   });
 
-  it("answers from a copy the Go sm wrote", async () => {
+  it("answers from a copy a 2.x sm wrote", async () => {
     const box = newBox();
     mkdirSync(box.updates, { recursive: true });
     const fetched = new Date(Date.now() - 60_000);

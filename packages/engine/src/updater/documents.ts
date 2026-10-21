@@ -37,9 +37,6 @@ export const causeText = (cause: unknown): string => {
 
 // --- errors ------------------------------------------------------------------
 
-// The messages are the Go sm's, what failed underneath included where Go
-// included it.
-
 export class UpdatesUnavailable extends Schema.TaggedError<UpdatesUnavailable>()(
   "UpdatesUnavailable",
   {},
@@ -559,8 +556,8 @@ export const within = <A, E, R>(
 export const isBadUrl = (error: HttpClientError.HttpClientError) =>
   Predicate.isTagged(error.reason, "InvalidUrlError");
 
-// An answer that won't be read, let go of as Go closed every body: a
-// first chunk at most, then the stream is cancelled.
+// An answer that won't be read, let go of: a first chunk at most, then
+// the stream is cancelled.
 export const discard = (
   response: HttpClientResponse.HttpClientResponse,
   deadline: number,

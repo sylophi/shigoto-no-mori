@@ -12,7 +12,7 @@ import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 
 // A document `sm --json` prints for a landing verb: the fields the
-// terminal and the host read by name, typed, beside the rest Go printed.
+// terminal and the host read by name, typed, beside the rest it prints.
 export type Document = Readonly<Record<string, unknown>> & {
   readonly ok?: boolean;
   readonly error?: string;

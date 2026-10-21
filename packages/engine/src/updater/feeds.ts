@@ -77,8 +77,8 @@ export const makeFeeds = ({
     const releaseListPath = files.at.releaseList;
     const { readShared, writeShared } = files;
     // A request's answer, or why there is none: `unreachable` for anything
-    // but a URL no request can be made to. It carries the headers Go's sm sent
-    // and no trace ids, since it leaves for GitHub.
+    // but a URL no request can be made to. It carries feedRequest's
+    // headers and no trace ids, since it leaves for GitHub.
     const send = <E>(
       request: HttpClientRequest.HttpClientRequest,
       deadline: number,

@@ -23,14 +23,10 @@ export const Journal = Schema.Struct({
       oldPath: Schema.String,
       newPath: Schema.String,
       // The commit of the worktree's dirty capture before the re-key,
-      // null for none: an undo carries back that one alone. A journal
-      // from before it was written has none, and carries none back.
-      capture: Schema.optional(Schema.NullOr(Schema.String)),
-      // How far the entry got (V3.md, Commit points): absent is
-      // `planned`, as an older journal's entries read.
-      state: Schema.optional(
-        Schema.Literals(["planned", "rekeyed", "returned"]),
-      ),
+      // null for none: an undo carries back that one alone.
+      capture: Schema.NullOr(Schema.String),
+      // How far the entry got.
+      state: Schema.Literals(["planned", "rekeyed", "returned"]),
     }),
   ),
 });
@@ -188,8 +184,8 @@ const tablesOf = (sql: SqlClient.SqlClient) =>
     (rows) => rows.map(({ name }) => name),
   );
 
-// The store made to refuse every write but its owner's (V3.md, Commit
-// points).
+// The store made to refuse every write but its owner's, while a move's
+// journal is here (dataDirMove.ts).
 export const retireStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   for (const table of yield* tablesOf(sql)) {

@@ -43,7 +43,7 @@ export class HookFileError extends Schema.TaggedError<HookFileError>()(
       "left",
     ]),
     path: Schema.String,
-    // The flavor's command and alias, which Go's words name.
+    // The flavor's command and alias, which the messages name.
     binary: Schema.String,
     alias: Schema.String,
     cause: Schema.optional(Schema.Defect()),

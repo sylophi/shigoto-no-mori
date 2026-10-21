@@ -42,7 +42,7 @@ export const makeFileReads = ({
     } = dataDirChecks;
     const stateFile = path.join(dataDir, "state.json");
 
-    // A JSON file the store imports, read as Go read it.
+    // A JSON file the store imports.
     const readJsonFile = (file: string) =>
       Effect.gen(function* () {
         const text = yield* Effect.result(fs.readFileString(file));
@@ -85,8 +85,8 @@ export const makeFileReads = ({
       }
     });
 
-    // A registry document's line and projects, as Go judged registry.json:
-    // the projects list, then the manual order, then each entry.
+    // A registry document's line and projects, judged in order: the
+    // projects list, then the manual order, then each entry.
     const judgeRegistry = (doc: ConfigDoc, file: string) => {
       const projects = Schema.decodeUnknownOption(RegistryProjects)(
         doc["projects"],

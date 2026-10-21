@@ -107,14 +107,13 @@ const githubPage = (remoteUrl: string) => {
     : `https://${host}/${owner}/${repo}`;
 };
 
-// A JSON field Go read into a string: absent, null or text.
+// A JSON field read as a string: absent, null or text.
 const text = (value: unknown) =>
   value === undefined || value === null || typeof value === "string";
 
 // A settings document's custom launchers, each field as stored, and its
-// hidden ids, as the Go sm decoded them: a missing field reads as empty,
-// and a document holding one of the wrong type reads as the defaults
-// (none of either).
+// hidden ids: a missing field reads as empty, and a document holding
+// one of the wrong type reads as the defaults (none of either).
 export const decodedLaunchers = (
   doc: Readonly<Record<string, unknown>> | null,
 ): {

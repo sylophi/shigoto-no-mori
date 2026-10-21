@@ -16,8 +16,7 @@ export const isAbsent = (error: PlatformError.PlatformError) =>
   (Predicate.hasProperty(error.cause, "code") &&
     error.cause.code === "ENOTDIR");
 
-// The words Go's syscall errors use for the common errnos, so a message
-// reads as the Go sm's did.
+// The words Go's syscall errors use for the common errnos.
 const ERRNO_TEXT: Record<string, string> = {
   ENOENT: "no such file or directory",
   EACCES: "permission denied",
