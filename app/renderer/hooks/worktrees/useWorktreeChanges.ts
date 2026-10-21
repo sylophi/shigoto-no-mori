@@ -1,4 +1,4 @@
-import { focusManager, queryOptions, useMutation } from "@tanstack/react-query";
+import { queryOptions, useMutation } from "@tanstack/react-query";
 import type {
   ChangedFile,
   CommitChangesResult,
@@ -22,6 +22,7 @@ import {
   type HostScope,
 } from "@/hooks/remote/useHostScope";
 import { clearCommitDraft } from "@/lib/commitDraft";
+import { onWindowFocus } from "@/lib/focus";
 import {
   type LiveViewState,
   useRegistry,
@@ -91,13 +92,13 @@ export function useTreeView<A>(
   const state = useView(atom);
   useViewErrorToast(state, failed);
   // A view whose reads kept failing ends: the window coming back asks
-  // again, as a query's focus refetch did, once however many readers
+  // again, as a query's focus refetch does, once however many readers
   // the view has.
   const ended = state.error !== null;
   useEffect(
     () =>
       ended && atom !== null
-        ? focusManager.subscribe((focused) => {
+        ? onWindowFocus((focused) => {
             // Read only on focus: a page going hides it after its
             // registry is disposed.
             if (!focused) return;

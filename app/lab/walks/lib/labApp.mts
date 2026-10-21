@@ -292,6 +292,23 @@ function inCheckout(path: string): boolean {
   }
 }
 
+// An app's start, from its spawn to its window's first draw, which
+// waits on the host's start (the shell gives a starting host as long
+// as its loop beats, main/hostProcess.ts). A relaunch after an
+// update has longer, from the old app's quit: it waits on the
+// installer as well.
+const START_MS = 60_000;
+const RELAUNCH_MS = 90_000;
+
+// The window's first draw, by `by` (epoch ms).
+const firstDraw = (page: Page, by: number) =>
+  page.waitForFunction(
+    () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
+    undefined,
+    // 0 would be no limit at all.
+    { timeout: Math.max(by - Date.now(), 1) },
+  );
+
 export async function bootLab(options: LabOptions): Promise<Lab> {
   refuseRunningLab();
   return launchLab(options);
@@ -414,6 +431,7 @@ async function launch(
 
   const start = async (atStart?: (pid: number) => Promise<void>) => {
     const port = await freeLoopbackPort();
+    const by = Date.now() + START_MS;
     // --sm-lab hands the page api to the walks (labHandle.ts).
     const child = spawn(executable, ["--sm-lab"], {
       env: {
@@ -462,15 +480,13 @@ async function launch(
           return targets.some((t) => t.type === "page");
         },
         "the lab app's window",
-        60_000,
+        by - Date.now(),
       );
       run.browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
       const page = run.browser.contexts()[0]?.pages()[0];
       if (page === undefined) throw new Error("the lab app has no window");
       page.setDefaultTimeout(10_000);
-      await page.waitForFunction(
-        () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
-      );
+      await firstDraw(page, by);
       return { run, page, stop, port };
     } catch (cause) {
       await stop();
@@ -592,6 +608,7 @@ async function launch(
       };
       current = { ...current, stop };
       await waitFor(() => current.run.exited, "the lab app to quit", 60_000);
+      const by = Date.now() + RELAUNCH_MS;
       await waitFor(
         async () => {
           const targets = await fetch(`http://127.0.0.1:${port}/json`)
@@ -600,7 +617,7 @@ async function launch(
           return targets.some((t) => t.type === "page");
         },
         "the relaunched app's window",
-        90_000,
+        by - Date.now(),
       );
       relaunched = labListenerOn(port);
       if (relaunched !== undefined) started.add(relaunched);
@@ -609,9 +626,7 @@ async function launch(
       if (page === undefined)
         throw new Error("the relaunched app has no window");
       page.setDefaultTimeout(10_000);
-      await page.waitForFunction(
-        () => (document.querySelector("#root")?.childElementCount ?? 0) > 0,
-      );
+      await firstDraw(page, by);
       current = { ...current, run: { ...current.run, browser }, page, stop };
       return page;
     },

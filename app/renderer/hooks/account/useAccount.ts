@@ -120,6 +120,9 @@ export const accountDevicesQueryOptions = (api: RendererApi) =>
         throw error;
       }
     },
+    // Kept while no page reads it, for the device sync's reconciles to
+    // answer from (remoteDeviceSync.ts). Leaving the account removes it.
+    gcTime: Infinity,
     // The registry renders the failure inline (DeviceRegistry), so no
     // toast on top.
     meta: { silentError: true },

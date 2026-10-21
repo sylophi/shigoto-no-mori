@@ -8,10 +8,10 @@
 //
 // Run: pnpm test page-lifetime.
 import assert from "node:assert/strict";
-import { focusManager } from "@tanstack/react-query";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { afterAll, it, vi } from "vitest";
 import { startAgentWatch } from "@/lib/agentWatch";
+import { setWindowFocused } from "@/lib/focus";
 import { startRemoteSweepRequests } from "@/lib/remote/remoteSweep";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { noteWorktreeList } from "@/lib/viewFeed";
@@ -27,12 +27,11 @@ it("the sweep's focus listener ends before the registry it reads is disposed", (
   const registry = AtomRegistry.make();
   const page = new AbortController();
   startRemoteSweepRequests(registry, page.signal);
-  focusManager.setFocused(true);
+  setWindowFocused(true);
 
   page.abort();
   registry.dispose();
-  assert.doesNotThrow(() => focusManager.setFocused(false));
-  focusManager.setFocused(undefined);
+  assert.doesNotThrow(() => setWindowFocused(false));
 });
 
 it("the agent watch stops hearing the lists before the registry it writes is disposed", () => {
