@@ -270,13 +270,15 @@ Prerequisites: a DNS zone on the same Cloudflare account that holds
 nothing but tunnels (`shigomori.link`, with the per-device CNAMEs at its
 apex so they stay one level deep, which is all Universal SSL covers),
 and an API token with Cloudflare Tunnel edit on the account and DNS
-edit on that one zone. The zone also holds one proxied wildcard record
-(type A, name `*`, IPv4 `192.0.2.1`, an address the edge can't reach),
-so a device's new hostname resolves to the edge before its own CNAME
-is visible: an NXDOMAIN there would be cached for the zone's negative
-TTL (30 minutes on Cloudflare) and fail the device's readiness probe
-that long. A name with no record of its own must answer no status
-below 500, which the probe reads as not routable yet:
+edit on that one zone. For the tunnels, the zone also holds one
+wildcard record: type A, name `*`, IPv4 `192.0.2.1` (an address the
+edge can't reach), proxied, so a device's new hostname resolves to
+the edge before its own CNAME is visible, and the edge routes that
+record once it lands. Without it the name would answer NXDOMAIN,
+which resolvers cache for the zone's negative TTL (30 minutes on
+Cloudflare), failing the device's readiness probe that long. A name
+with no record of its own must answer no status below 500, which the
+probe reads as not routable yet:
 `curl -m 10 https://<any-name>.shigomori.link` times out or answers
 5xx. One zone serves both environments: device names hash the Clerk
 user id, which differs per Clerk instance. Devices need nothing

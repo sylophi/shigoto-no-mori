@@ -76,8 +76,8 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // rung) for as long as the child lives: a live connector that is not
 // routable yet is waiting on DNS, not broken, and the child exiting is
 // the one failure signal (a dead token makes cloudflared exit). The
-// first attempt waits out CNAME propagation: a probe that comes first
-// reaches the tunnel zone's wildcard record (hub/README.md), whose
+// first attempt waits out CNAME propagation: a probe that comes before
+// it reaches the tunnel zone's wildcard record (hub/README.md), whose
 // address the edge can't reach, and only times out. The wildcard is
 // why that costs only the attempt: without it the name would answer
 // NXDOMAIN, which the OS resolver caches for the zone's negative TTL
@@ -92,8 +92,8 @@ export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
 ];
 // The ladder for a tunnel the Worker REUSED, which is every launch
 // after a device's first. Its hostname resolved before, so there is no
-// propagation to wait out and no negative answer to earn: all a probe
-// waits on is the connector registering at the edge, a second or two.
+// propagation to wait out: all a probe waits on is the connector
+// registering at the edge, a second or two.
 // Until it passes the device advertises no tunnel candidate, so on the
 // ladder above a web client (whose only candidate is the tunnel) could
 // not reach a freshly launched device for its first five seconds.
@@ -112,8 +112,8 @@ export const TUNNEL_PROBE_SLOW_MS = 60_000;
 // killed and rescheduled on the backoff ladder, and since it never
 // reached readiness the restart re-provisions rather than reusing its
 // possibly-dead token. Two deadlines, chosen by what the Worker said:
-// a tunnel it just CREATED (dnsCreated) has a brand-new DNS record
-// that may take a while to route, so it gets a long one. A reused
+// a tunnel it just CREATED (dnsCreated) has a brand-new DNS record,
+// which has taken minutes to route, so it gets a long one. A reused
 // tunnel resolved before, so a probe that keeps failing means a
 // deleted record or a stale ingress, and the re-provision is what
 // repairs those.
@@ -493,7 +493,7 @@ const make = (options: Options) =>
           yield* Effect.logWarning(
             `[tunnel] ${hostname} is still not routable after ` +
               `${Math.round(TUNNEL_PROBE_WARN_MS / 1000)}s, probing on ` +
-              "(a fresh hostname resolves once DNS catches up)",
+              "(a fresh hostname routes once the edge has its record)",
           );
         }
         return yield* probeOnce(hostname);
