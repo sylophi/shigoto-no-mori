@@ -664,8 +664,8 @@ export const mirrorContract = defineContract(
   push("changed", Schema.UndefinedOr(MirrorListResultSchema), {
     remote: true,
   }),
-  // A served worktree's index was rewritten, the one git fact the git
-  // watcher ignores on purpose.
+  // A served worktree's index was rewritten, which the git watcher
+  // tells only the host's own views.
   push("gitChanged", MirrorWorktreePayloadSchema, {
     remote: true,
   }),

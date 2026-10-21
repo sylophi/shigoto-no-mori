@@ -116,8 +116,8 @@ export function useTreeView<A>(
 // Every changed file: what it is, how much of it is staged, and its
 // +/- counts. The changes page draws its whole list from this and
 // fetches a diff only for the picked file. It is the host's view
-// (worktrees:watchChangeStatus), read again as the worktree's files or
-// its git move and every few seconds for an edit no watch saw.
+// (worktrees:watchChangeStatus), read again as the worktree's files,
+// its git or its index move.
 export function useWorktreeChanges(projectId: string, worktreeId: string) {
   return useTreeView<readonly ChangedFile[]>(
     "watchChangeStatus",

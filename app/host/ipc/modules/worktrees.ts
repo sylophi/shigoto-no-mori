@@ -1,7 +1,7 @@
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as GitWatcher from "@host/lib/GitWatcher";
 import * as HostPushes from "@host/lib/HostPushes";
 import type { ScriptChanges } from "@host/lib/scripts/ScriptChanges";
 import type { PeerReach } from "@host/ipc/PeerReach";
@@ -41,17 +41,20 @@ const treeViews = (input: { projectId: string; worktreeId: string }) =>
 // One of the changes page's views of a worktree (`part` its name and
 // input), read again as the tree moves: its project's git, an edit in
 // its files (or a window looking again), a mirror staging into it. A
-// view of refs alone (`refsOnly`: the branch's history, the stashes)
-// follows its project's git only: an edit, a window looking again and
-// a mirror's index rewrite can't move it, and the first and last come
-// as often as a mirror or an agent writes. A read git refuses for a
-// moment (a lock held) is tried again three times, a second apart and
-// doubling, before the view fails.
+// view of what the index holds (`index`: the changes, staged or not,
+// and an operation's conflicts and squash) also follows its project's
+// index writes, as a stage in a terminal makes one. A view of refs
+// alone (`refsOnly`: the branch's history, the stashes) follows its
+// project's git only: an edit, a window looking again and a mirror's
+// index rewrite can't move it, and the first and last come as often as
+// a mirror or an agent writes. A read git refuses for a moment (a lock
+// held) is tried again three times, a second apart and doubling,
+// before the view fails.
 const treeView = <A, R>(
   input: { projectId: string; worktreeId: string },
   part: string,
   read: () => Effect.Effect<A, unknown, R>,
-  options?: { readonly every?: Duration.Input; readonly refsOnly?: boolean },
+  options?: { readonly index?: boolean; readonly refsOnly?: boolean },
 ) =>
   Views.view(
     `${treeViews(input)}${part}`,
@@ -72,7 +75,9 @@ const treeView = <A, R>(
             return staged.worktreeId === input.worktreeId;
           }),
         ),
-    options?.every === undefined ? undefined : { every: options.every },
+    options?.index === true
+      ? { also: GitWatcher.indexWrittenIn(input.projectId) }
+      : undefined,
   );
 
 const gitMoved = (projectId: string) =>
@@ -115,14 +120,12 @@ export const worktreesViews: ViewHandlers<
         filesChanged(projectId),
       ),
     ),
-  // The open page's changes: also read again every few seconds, for an
-  // edit no watch saw.
   watchChangeStatus: (input) =>
     treeView(
       input,
       "changes",
       () => atPath(input, (path) => withGit((git) => git.changes(path))),
-      { every: "2 seconds" },
+      { index: true },
     ),
   watchFileDiff: (input) =>
     treeView(
@@ -182,8 +185,11 @@ export const worktreesViews: ViewHandlers<
       { refsOnly: true },
     ),
   watchOperation: (input) =>
-    treeView(input, "operation", () =>
-      atPath(input, (path) => withGit((git) => git.readOperation(path))),
+    treeView(
+      input,
+      "operation",
+      () => atPath(input, (path) => withGit((git) => git.readOperation(path))),
+      { index: true },
     ),
 };
 
