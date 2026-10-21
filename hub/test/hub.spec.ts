@@ -88,7 +88,7 @@ describe("GET /connect", () => {
     await a.socket.untilPresence(["dev-keys-a", "dev-keys-b"]);
   });
 
-  it("refuses the socket of a device enrolled before keys", async () => {
+  it("refuses the socket of a device whose row has no key", async () => {
     const { credential } = await enroll("acct-keyless", "dev-keyless");
     await env.DB.prepare(
       "UPDATE devices SET public_key = NULL WHERE device_id = ?",

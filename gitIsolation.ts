@@ -5,19 +5,19 @@
 // can reach this repository however it runs git.
 //
 // The pre-commit hook exports GIT_DIR and GIT_INDEX_FILE for the
-// repository being committed. A test that inherited them ran its
-// sandbox's git against the real repository (its config, its branch),
-// three times: the third, a Go test's `git init`, set the shared
-// config's core.bare under every worktree. So every GIT_* variable from
-// outside goes, and GIT_CEILING_DIRECTORIES stops git from finding the
-// repository by walking up from a folder inside it. A git started at
-// the repository's root still finds it, which the proof reading the
+// repository being committed. A test that inherited them would run its
+// sandbox's git against the real repository (its config, its branch):
+// a `git init` there sets the shared config's core.bare under every
+// worktree. So every GIT_* variable from outside goes, and
+// GIT_CEILING_DIRECTORIES stops git from finding the repository by
+// walking up from a folder inside it. A git started at the
+// repository's root still finds it, which the proof reading the
 // tracked files (proof-selection) does on purpose.
 //
 // Nor does a test's git read the machine's own config (its global and
-// system files): a signing key there signed a fixture's commit with the
-// owner's key, which can raise a password manager's prompt, and its
-// hooks path, templates or aliases would run as well.
+// system files): a signing key there would sign a fixture's commit
+// with the owner's key, which can raise a password manager's prompt,
+// and its hooks path, templates or aliases would run as well.
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 

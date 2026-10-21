@@ -262,7 +262,8 @@ export class DeviceHub extends DurableObject<Env> {
               // It holds the admission permit, so an enrollment's
               // rotation lands before it or after the socket is
               // accepted, which the rotation then closes. A row with no
-              // key predates keys: its device enrolls again first.
+              // key (a v2 enrollment) is refused: its device enrolls
+              // again first.
               const device = yield* registry.byId(holder.deviceId);
               return device?.credential_hash === holder.credentialHash &&
                 device.public_key !== null

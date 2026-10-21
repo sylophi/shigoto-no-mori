@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release-mac:
-    # Apple Silicon runner; matches the only arch we ship right now.
+    # Apple Silicon runner; matches the one arch we ship.
     runs-on: macos-latest
     # The Electron app lives in app/, so every shell step runs from there.
     defaults:
@@ -82,9 +82,8 @@ jobs:
       # with the placeholder 0.0.0 version makes the publisher create a
       # v0.0.0 release instead of populating the tagged one. Before the
       # install: a manifest changed after it makes the next `pnpm exec`
-      # install the workspace again, which met the hoisted tree it had
-      # already laid ("Directory not empty") on alpha.2's and alpha.3's
-      # first attempts.
+      # install the workspace again, which can fail on the hoisted tree
+      # it already laid ("Directory not empty").
       - name: Sync package.json version with tag
         env:
           TAG: ${{ github.event.release.tag_name }}
@@ -192,7 +191,7 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        # The account service config baked into the bundle (#238) comes
+        # The account service config baked into the bundle comes
         # from the flavor step: a packaged app only sees build-time env,
         # so a build without it ships with remote features unconfigured.
         # They are repository Actions variables (they are not secrets).

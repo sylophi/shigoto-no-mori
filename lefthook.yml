@@ -10,9 +10,9 @@ pre-commit:
       stage_fixed: true
     # Every job that runs tests starts without the repository git hands
     # a hook (GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE): a test's git that
-    # inherited them ran against this repository. The runners scrub
-    # every GIT_* as well (gitIsolation.ts), so a runner added here
-    # without that is still covered.
+    # inherited them would run against this repository. The runners
+    # scrub every GIT_* as well (gitIsolation.ts), so a runner added
+    # here without that is still covered.
     - name: checks
       group:
         parallel: true
