@@ -60,10 +60,37 @@ jobs:
           SM_WALK_LOGS: ${{ runner.temp }}/walk-logs
           SM_WALK_FAILURES: ${{ runner.temp }}/walk-logs/failures
 
+      # The failed walks' roots in one archive, without the bulk the
+      # pinned commits give back: a checkout of over a thousand files (the
+      # real repository's) keeps only its .git, the few files a walk adds
+      # to it left out too, and packed objects (that repository's history)
+      # are left out everywhere. Whole, the roots are tens of thousands of
+      # files, which the upload can't finish inside the job's limit.
+      - name: Pack the failed walks' roots
+        if: failure()
+        run: |
+          cd "$RUNNER_TEMP/walk-logs/failures" 2>/dev/null || exit 0
+          big=()
+          while IFS= read -r git; do
+            checkout=${git%/.git}
+            files=$(find "$checkout" -path "$git" -prune -o -type f -print | head -n 1001 | wc -l)
+            if [ "$files" -gt 1000 ]; then big+=("$checkout"); fi
+          done < <(find . -name .git)
+          prune=()
+          for checkout in "${big[@]}"; do prune+=(-path "$checkout" -prune -o); done
+          {
+            find . "${prune[@]}" \( -type f -o -type l \) ! -path '*/objects/pack/*' -print || true
+            for checkout in "${big[@]}"; do
+              find "$checkout/.git" \( -type f -o -type l \) ! -path '*/objects/pack/*' -print || true
+            done
+          } | tar -czf ../failures.tar.gz -T -
+
       - name: Keep the app's logs of a failed walk
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: walk-logs
-          path: ${{ runner.temp }}/walk-logs
+          path: |
+            ${{ runner.temp }}/walk-logs
+            !${{ runner.temp }}/walk-logs/failures
           if-no-files-found: ignore
