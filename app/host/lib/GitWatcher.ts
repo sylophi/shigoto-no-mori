@@ -22,9 +22,7 @@
 // (mirror/gitState.ts). Uncommitted file edits are not seen there: they
 // live in the working trees. refs/shigomori/ holds the app's own
 // bookkeeping (dirty captures, a transfer's landing refs, the mirror's
-// staged-tree commits, discard undos), which no view reads, and what
-// comes with each write is a change of its own (a worktree appearing or
-// going, a file edit, a mirror's push).
+// staged-tree commits, discard undos), which no view reads.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
@@ -71,7 +69,6 @@ const STEP_TIMEOUT = Duration.seconds(5);
 // Git-dir relative paths whose change means the project's git state
 // moved. Paths arrive with the platform separator and are normalized
 // to `/` before matching.
-const OWN_REFS = /^refs\/shigomori(\/|$)/;
 const RELEVANT = [
   /^(HEAD|ORIG_HEAD|packed-refs)$/,
   /^refs(\/|$)/,
@@ -82,6 +79,8 @@ const RELEVANT = [
   // own appearing and going, not their contents' churn.
   /^(worktrees\/[^/]+\/)?(MERGE_HEAD|CHERRY_PICK_HEAD|REVERT_HEAD|SQUASH_MSG|BISECT_LOG|sequencer|rebase-merge|rebase-apply)$/,
 ];
+// The app's own refs: under refs/, yet none of them counts.
+const OWN_REFS = /^refs\/shigomori(\/|$)/;
 
 // Any `.git` in a working tree (the main checkout's directory, a linked
 // worktree's file, a submodule's) churns with every git command the
@@ -222,10 +221,20 @@ const gitStateOf = (gitDir: string) =>
       fs
         .readFileString(path.join(gitDir, relative))
         .pipe(Effect.catchIf(isNotFound, () => Effect.succeed("")));
-    const listed = (relative: string, recursive: boolean) =>
-      fs
-        .readDirectory(path.join(gitDir, relative), { recursive })
-        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed<string[]>([])));
+    // A recursive listing fails NotFound for a directory gone below it
+    // as well as for its own.
+    const listed = (relative: string, recursive: boolean) => {
+      const dir = path.join(gitDir, relative);
+      return fs
+        .readDirectory(dir, { recursive })
+        .pipe(
+          Effect.catchIf(isNotFound, (error) =>
+            Effect.flatMap(fs.exists(dir), (there) =>
+              there ? Effect.fail(error) : Effect.succeed<string[]>([]),
+            ),
+          ),
+        );
+    };
     const worktrees = (yield* listed("worktrees", false)).toSorted();
     const dirs = ["", ...worktrees.map((name) => `worktrees/${name}/`)];
     const parts = [yield* stamp("packed-refs")];

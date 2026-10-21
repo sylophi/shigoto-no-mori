@@ -13,11 +13,11 @@
 // the registry, and the working trees' watch: an edit in the main
 // checkout or a linked worktree lands as one files change, `.git`
 // churn as none, and a worktree added or removed is followed. And the
-// backstop: with the git directory's events lost on purpose, a commit
-// and a checkout are still signalled, once each, an own ref and a ref
-// directory's churn not at all, a working tree whose watch ended is
-// watched again, and the mirror's index watch fires for a stage it
-// never heard.
+// backstop: with the git directory's events lost on purpose, a commit,
+// a branch made and deleted, and a checkout are still signalled, once
+// each, an own ref and a ref directory's churn not at all, a working
+// tree whose watch ended is watched again, and the mirror's index watch
+// fires for a stage it never heard.
 //
 // Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
@@ -91,6 +91,8 @@ it("allowlist: refs, HEAD, packed-refs, a worktree's HEAD and a stopped operatio
     "refs",
     "refs/heads/main",
     "refs/remotes/origin/main",
+    "refs/shigomori-feat/x",
+    "refs/shigomorix",
     "worktrees/feat",
     "worktrees/feat/HEAD",
     "worktrees\\feat\\HEAD",
@@ -314,7 +316,7 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   assert.deepEqual(edits, [], "nor report its edits");
 });
 
-it("backstop: a commit whose events were all lost is still signalled, once, and a working tree whose watch ended is watched again and its edits said unseen", async () => {
+it("backstop: a commit, a branch made and deleted, and a checkout whose events were all lost are each signalled once, an own ref and a ref directory's churn not at all, and a working tree whose watch ended is watched again and its edits said unseen", async () => {
   const root = tempDir("sm-gitwatch-backstop-", trackTest);
   const repo = join(root, "repo");
   git(root, "init", "-q", "-b", "main", repo);
@@ -361,8 +363,13 @@ it("backstop: a commit whose events were all lost is still signalled, once, and 
   rmSync(lock);
   await delay(600);
   assert.deepEqual(changes, ["p1"], "a ref directory's churn is no move");
+  // A branch in a directory of its own, then its delete, HEAD unmoved.
+  git(repo, "branch", "feat/x");
+  await waitFor(() => changes.length >= 2, "the lost branch to be found");
+  git(repo, "branch", "-D", "feat/x");
+  await waitFor(() => changes.length >= 3, "the lost delete to be found");
   git(repo, "checkout", "-q", "-b", "other");
-  await waitFor(() => changes.length >= 2, "the lost checkout to be found");
+  await waitFor(() => changes.length >= 4, "the lost checkout to be found");
 });
 
 it("the mirror's index watch: a stage whose event was lost still fires, once", async () => {

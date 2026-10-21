@@ -295,8 +295,8 @@ function teardownStep(what: string, run: () => unknown): Promise<void> {
 // refetch that project's rows), and the mirror's git follower
 // re-looking at every session in the project (a commit or checkout
 // here must reach the peer). Sent by the git-directory watcher for
-// every ref move, and by the app-run git commands that tell it at once
-// rather than wait out the watcher's debounce.
+// every ref move but the app's own, and by the app-run git commands
+// that tell it at once rather than wait out the watcher's debounce.
 export function announceProjectChanged(projectId: string): void {
   broadcastAll(gitContract, "projectChanged", { projectId });
   toMirrorEngine((engine) => engine.localProjectChanged(projectId));
