@@ -266,7 +266,7 @@ const config: ForgeConfig = {
             `${app} isn't signed by APPLE_SIGNING_IDENTITY ("${signingIdentity}"): ` +
               "the signing identity's keychain may be locked, or no keychain " +
               "on the search list holds it (security find-identity -v -p codesigning). " +
-              "DEBUG=electron-osx-sign prints codesign's own error.",
+              "For a locked keychain, DEBUG=electron-osx-sign prints codesign's own error.",
           );
         }
       }

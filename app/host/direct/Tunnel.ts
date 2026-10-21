@@ -79,13 +79,13 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // first attempt waits out CNAME propagation on purpose. Probing a
 // brand-new hostname within a second of provisioning it earns an
 // NXDOMAIN that the OS resolver then caches for the zone's negative
-// TTL (30 minutes on Cloudflare), during which no probe from this
-// machine can succeed and every restart would re-provision for
-// nothing. A child that merely survives a spawn says nothing about
-// routability, and a web client whose ONLY candidate is the tunnel
-// would burn its keeper's backoff rungs against a not-yet-routable
-// advertisement (a transient failure, so it retries forever -- but
-// each wasted rung pushes the next attempt further out).
+// TTL (its SOA minimum, 60 s on the tunnel zone: hub/README.md),
+// during which no probe from this machine can succeed and every
+// restart would re-provision for nothing. A child that merely survives
+// a spawn says nothing about routability, and a web client whose ONLY
+// candidate is the tunnel would burn its keeper's backoff rungs against
+// a not-yet-routable advertisement (a transient failure, so it retries
+// forever -- but each wasted rung pushes the next attempt further out).
 export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
   5_000, 8_000,
 ];

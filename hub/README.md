@@ -270,8 +270,11 @@ Prerequisites: a DNS zone on the same Cloudflare account that holds
 nothing but tunnels (`shigomori.link`, with the per-device CNAMEs at its
 apex so they stay one level deep, which is all Universal SSL covers),
 and an API token with Cloudflare Tunnel edit on the account and DNS
-edit on that one zone. One zone serves both environments: device
-names hash the Clerk user id, which differs per Clerk instance. Devices need
+edit on that one zone. The zone's SOA minimum TTL (Cloudflare: DNS →
+Settings) is 60 s, so a device probing its new hostname before the
+CNAME is visible gets a fresh answer within a minute, not half an hour.
+One zone serves both environments: device names hash the Clerk user
+id, which differs per Clerk instance. Devices need
 nothing installed: the app bundles a pinned `cloudflared`
 (`shared/packaging/cloudflaredDist.mts`, fetched at package time and by
 `pnpm start`). The `cloudflaredPath` device config key overrides it,
