@@ -11,11 +11,6 @@ import * as Git from "./Git.ts";
 
 export type RefTip = { readonly ref: string; readonly commit: string };
 
-export type BundleMade = {
-  readonly bytes: number;
-  readonly refs: ReadonlyArray<RefTip>;
-};
-
 // A ref, a have, a refspec or a bundle that won't do. `subject` is what
 // was given, and `said` git's words where git refused.
 export class BundleRefused extends Schema.TaggedError<BundleRefused>()(
@@ -80,13 +75,13 @@ export class Bundle extends Context.Service<
   Bundle,
   {
     // `refs` bundled at `out` (git's path, from the repository), less
-    // what the `haves` reach.
+    // what the `haves` reach. Answers the bundle's size in bytes.
     readonly create: (
       repo: string,
       out: string,
       refs: ReadonlyArray<string>,
       haves: ReadonlyArray<string>,
-    ) => Effect.Effect<BundleMade, BundleRefused | Git.GitError>;
+    ) => Effect.Effect<number, BundleRefused | Git.GitError>;
     // Each `<src>:<dst>` refspec fetched from the bundle at `bundle`,
     // forced, into a ref under refs/shigomori/.
     readonly unpack: (
@@ -157,19 +152,7 @@ const make = Effect.gen(function* () {
       ...refs,
     ]);
     const { size } = yield* fs.stat(path.resolve(repo, out)).pipe(Effect.orDie);
-    // What the bundle holds: git leaves out a ref a have already has.
-    const heads = new Set(
-      (yield* git.run(repo, ["bundle", "list-heads", "--end-of-options", out]))
-        .split("\n")
-        .map((line) => line.slice(line.indexOf(" ") + 1)),
-    );
-    return {
-      bytes: Number(size),
-      refs: yield* tips(
-        repo,
-        refs.filter((ref) => heads.has(ref)),
-      ),
-    };
+    return Number(size);
   });
 
   const unpack = Effect.fn("Bundle.unpack")(function* (

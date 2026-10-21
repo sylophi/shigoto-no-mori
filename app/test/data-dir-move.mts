@@ -46,7 +46,11 @@ import * as FileSystem from "effect/FileSystem";
 import * as PlatformError from "effect/PlatformError";
 import { afterAll, beforeAll, it } from "vitest";
 import { holdingStore, moveDataDir } from "../host/lib/dataDirMove.ts";
-import { resumeDataDirMove } from "@shigomori/engine/dataDirMove";
+import {
+  keptUnderNewId,
+  rekeyForward,
+  resumeDataDirMove,
+} from "@shigomori/engine/dataDirMove";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Paths from "@shigomori/engine/Paths";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
@@ -389,32 +393,37 @@ it("an undo reverses a planned entry its re-key reached, and never a returned on
   ).find((row) => row.path === fox);
   assert.ok(identity !== undefined);
   const newPath = join(elsewhere, "marks", "wt", "repo", "fox");
-  const newId = worktreeIdFromPath(newPath);
-  const journalAt = (state: string) =>
+  const entry = (state: "planned" | "returned") => ({
+    projectId,
+    oldPath: fox,
+    newPath,
+    capture: null,
+    state,
+  });
+  const journalAt = (state: "planned" | "returned") =>
     writeFileSync(
       join(engineDataDir, JOURNAL),
       JSON.stringify({
         from: engineDataDir,
         to: join(elsewhere, "marks-never-landed"),
         partial: null,
-        moved: [{ projectId, oldPath: fox, newPath, capture: null, state }],
+        moved: [entry(state)],
       }),
     );
-  await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
-  assert.equal(await titleOf(identity.id), undefined, "the re-key ran");
   journalAt("planned");
+  await runHost(rekeyForward(entry("planned")));
+  assert.equal(await titleOf(identity.id), undefined, "the re-key ran");
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), "Fox", "a planned re-key reversed");
   assert.equal(journalLeft(), false);
 
-  await runHost(Ops.rekeyWorktree(projectId, identity.id, newPath));
   journalAt("returned");
+  await runHost(rekeyForward(entry("returned")));
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), undefined, "a returned entry left");
-  assert.equal(await runHost(Ops.keptUnder(projectId, newId)), true);
-  await runHost(
-    Ops.rekeyWorktree(projectId, newId, fox, { expect: null, back: true }),
-  );
+  assert.equal(await runHost(keptUnderNewId(entry("returned"))), true);
+  journalAt("planned");
+  await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(await titleOf(identity.id), "Fox");
 });
 

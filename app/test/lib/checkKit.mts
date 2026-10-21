@@ -355,6 +355,14 @@ export function handlerCtx(
   };
 }
 
+// The SHIGOMORI_* values a check's script run is given.
+export const scriptEnv = {
+  projectBranch: "main",
+  defaultBranch: "main",
+  title: "",
+  description: "",
+};
+
 // A fake Clerk session JWT whose payload carries the given sub,
 // unsigned on purpose: deriveAccountId (shared/account/token.ts) never
 // verifies, it only reads the account id. The device hub is the sole

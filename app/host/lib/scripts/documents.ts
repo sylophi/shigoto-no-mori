@@ -60,9 +60,7 @@ export interface RunArgs {
     readonly path: string;
   };
   readonly project: Pick<Project, "id" | "path" | "name">;
-  // The branch values of the SHIGOMORI_* env contract, for a command
-  // that doesn't set that env itself. Absent for `sm run`, which does.
-  readonly scriptEnv?: ScriptEnvValues;
+  readonly scriptEnv: ScriptEnvValues;
   readonly notify: NotifyScriptEvent;
 }
 

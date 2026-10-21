@@ -325,8 +325,7 @@ export const makeRuns = ({
       }
       const runId = randomUUID();
 
-      // Inherits the app's environment plus the SHIGOMORI_* contract vars
-      // (unless the command is `sm run`, which sets them itself),
+      // Inherits the app's environment plus the SHIGOMORI_* contract vars,
       // and deliberately adds no data dir pin: a script's whole process
       // tree inherits this, so naming a data dir here would follow the user's
       // command into anything it starts (see initDataDir). COLORTERM
@@ -335,15 +334,14 @@ export const makeRuns = ({
         ...baseEnv(),
         ...UNATTENDED_ENV,
         COLORTERM: "truecolor",
-        ...(args.scriptEnv &&
-          scriptEnvOf(
-            {
-              worktree: args.worktree,
-              project: args.project,
-              ...args.scriptEnv,
-            },
-            runScriptName(args.slot),
-          )),
+        ...scriptEnvOf(
+          {
+            worktree: args.worktree,
+            project: args.project,
+            ...args.scriptEnv,
+          },
+          runScriptName(args.slot),
+        ),
       };
 
       const { pty, close } = yield* scriptRuns

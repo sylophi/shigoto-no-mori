@@ -13,6 +13,7 @@ import * as Effect from "effect/Effect";
 import { afterAll, beforeAll, it } from "vitest";
 import { runHost } from "./lib/hostRuntime.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
+import { scriptEnv } from "./lib/checkKit.mts";
 
 const fixture = cliSandbox("sm-rename-");
 beforeAll(async () => {
@@ -45,12 +46,7 @@ it("refuses while a script runs there, then renames under a new id", async () =>
         slot: { kind: "package", name: "sleep" },
         worktree: { id: row.id, name: "fox", branch: "fox", path: worktree },
         project: { id: projectId, path: project, name: "project" },
-        scriptEnv: {
-          projectBranch: "main",
-          defaultBranch: "main",
-          title: "",
-          description: "",
-        },
+        scriptEnv,
         notify: () => {},
       }),
     ),
@@ -156,6 +152,7 @@ it("relocating the primary is the engine's refusal, whatever runs there", async 
           path: project,
         },
         project: { id: projectId, path: project, name: "primary" },
+        scriptEnv,
         notify: () => {},
       }),
     ),
