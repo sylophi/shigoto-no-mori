@@ -851,11 +851,12 @@ describe("serving past the call", () => {
           haves: [baseSha],
         }),
       );
-      await Effect.runPromise(link.read);
-      await waitFor(
-        () => syncTempDirs(tmp).length === 1,
-        "the source to hold its bundle while it sends",
+      const header = Schema.decodeUnknownSync(BundleAnswerSchema)(
+        await Effect.runPromise(link.read),
       );
+      // The bundle's first byte here, the rest left untaken.
+      await Effect.runPromise(link.readBytes(1, () => Effect.void));
+      assert.equal(syncTempDirs(tmp).length, 1, "the source holds no bundle");
       // The serve reads as the peer bringing from here, not as a move.
       const underWay = await Effect.runPromise(
         Effect.flatMap(Moves.Moves, (held) => held.underWay).pipe(
@@ -864,12 +865,19 @@ describe("serving past the call", () => {
       );
       assert.equal(underWay.moving, false);
       assert.equal(underWay.bringing.length, 1);
+      // The close waits for the serving to end.
       await Effect.runPromise(Scope.close(scope, Exit.void));
-      await waitFor(
-        () => syncTempDirs(tmp).length === 0 && !mux.has(channelId),
-        "the serving to end with the moves that held it",
-        10_000,
+      assert.equal(syncTempDirs(tmp).length, 0, "the bundle's temp dir stayed");
+      // This end hears the reset only once it has taken the bytes that
+      // came ahead of it.
+      await assert.rejects(
+        () =>
+          Effect.runPromise(
+            link.readBytes(header.bundle.bytes - 1, () => Effect.void),
+          ),
+        new RegExp(LINK_GONE),
       );
+      assert.equal(mux.has(channelId), false);
     } finally {
       link.reset();
     }
