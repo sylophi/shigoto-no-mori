@@ -21,8 +21,17 @@ whose typecheck would read its copy of the repo. It holds the
 shell's `main.log` and trace under `home/Library/Logs`, and the host's
 trace beside it in `host-logs`, which every walk of the run appends to.
 A worktree a walk made in it still names the removed root in its `.git`
-file: `git worktree repair` from the kept repo links it again. CI keeps every walk's logs (`SM_WALK_LOGS`) and a failed walk's root,
-and uploads them when one fails.
+file: `git worktree repair` from the kept repo links it again.
+
+CI keeps every walk's logs (`SM_WALK_LOGS`) and uploads them when one
+fails, as the `walk-logs` artifact, with the failed roots packed in
+`failures.tar.gz`. In the archive, a checkout of the real repository
+keeps only its `.git`, without its working files (the carried ones and
+the walk's edits included), and packed objects (that repository's
+history) are left out. To read an extracted clone's history, add the
+path `git rev-parse --path-format=absolute --git-path objects` prints
+in a checkout of this repository to the clone's
+`.git/objects/info/alternates`.
 
 The root holds a home with a git identity, a fake `gh`
 first on the login shell's PATH, and none of the user's shell hooks
