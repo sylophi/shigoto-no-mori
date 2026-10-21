@@ -371,7 +371,7 @@ it("sharing: set from the account page, then by a terminal's write, the switch m
       assert.equal(stored?.["shareWithDevices"], false);
       yield* sharing.set(false);
       // The key dropped by a store write that isn't the switch's, as
-      // `sm config edit` does when the key is set to null.
+      // `sm config edit` does when its line is deleted.
       yield* config.change({ kind: "device" }, (doc) => {
         const { shareWithDevices: _, ...rest } = doc;
         return rest;

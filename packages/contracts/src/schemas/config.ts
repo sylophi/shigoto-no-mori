@@ -166,10 +166,6 @@ export function keyDescriptions(schema: Schema.Top): Record<string, string> {
   );
 }
 
-export function modeledKeyPaths(schema: Schema.Top): string[][] {
-  return modeledKeyFields(schema).map(({ path }) => path);
-}
-
 function walkKeyFields(
   fields: ReadonlyArray<SchemaAST.PropertySignature>,
   prefix: string[],
@@ -181,9 +177,9 @@ function walkKeyFields(
   });
 }
 
-// Loose, so a key a newer build left in the store isn't stripped. A write
-// needn't carry it back: the engine merges a write into the stored
-// document.
+// Loose, so a key a newer build left in the store isn't stripped. A save
+// needn't carry it back: the app's saves are patches, which keep the
+// keys they don't name.
 export const StoredShigomoriConfigSchema = loose(ShigomoriConfigSchema);
 
 // The repo's .worktreeinclude (Claude Code's convention: gitignore-syntax
