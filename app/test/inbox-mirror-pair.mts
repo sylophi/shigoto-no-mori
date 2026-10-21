@@ -7,8 +7,7 @@
 // primary opt-in, and the peer's row folds into it only from the same
 // box, so a primary left out keeps its copy's row and a side on a
 // shelf keeps the peer's live one. Narrowed to this machine, the
-// copy's page reveals this machine's side, or leaves for the tree
-// where that side is a primary the inbox leaves out.
+// copy's page reveals this machine's side.
 //
 // Run: pnpm test inbox-mirror-pair.
 import assert from "node:assert/strict";
@@ -144,8 +143,4 @@ it("narrowed to this machine, the copy's page reveals its side", () => {
   );
   // The side on a shut shelf: the shelf opens for it.
   assert.equal(view.revealKey(project.id, "old-copy", PEER), "shelf:shelved");
-  // The side a primary the inbox leaves out: the page leaves for the
-  // tree, as the primary's own does.
-  assert.equal(view.leftOut?.("main-copy", PEER), true);
-  assert.equal(inbox("all").leftOut?.("main-copy", PEER), false);
 });
