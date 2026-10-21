@@ -1,7 +1,7 @@
-// The scripts this machine runs and what is under way in its worktrees
-// (V3.md, decision 20): the PTY runs and the engine's lifecycle runs,
-// the marks that refuse a run or a second mutation, the busy count a
-// quit asks, and the reap of a worktree removed behind the app's back.
+// The scripts this machine runs and what is under way in its worktrees:
+// the PTY runs and the engine's lifecycle runs, the marks that refuse a
+// run or a second mutation, the busy count a quit asks, and the reap of
+// a worktree removed behind the app's back.
 // The layer's close is the quit's stop of every run.
 import type { WorktreeSettingUpError } from "@shigomori/contracts/errors";
 import type { RunningScript } from "@shigomori/contracts/schemas";

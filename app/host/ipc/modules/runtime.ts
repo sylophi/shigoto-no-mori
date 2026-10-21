@@ -116,9 +116,8 @@ export const runtimeHandlers = {
       const shell = yield* Shell.Shell;
       const holders = yield* DataDirHolders;
       const scripts = yield* Scripts.Scripts;
-      // One move at a time, now that the local window is no longer the
-      // only caller: two would share the staged pointer file and undo
-      // each other's re-key.
+      // One move at a time, whoever asks (a peer can too): two would
+      // share the staged pointer file and undo each other's re-key.
       if (moveInFlight) {
         return yield* new MoveRefusedError({
           reason: "The data folder is already being moved.",

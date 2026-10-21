@@ -1,13 +1,11 @@
 // The shared hub connection lifecycle: one outbound socket from this
 // device to its account's Durable Object, driving the hub link. The
-// node desktop connection (host/hub/HubConnection.ts) and the browser
-// connection (web/hub/connection.ts) were a near-verbatim fork of
-// this machine and had already begun to drift, so the dial settle
-// logic, the supervisor wiring, the socket's liveness and the
-// refresh/status lifecycle live here exactly once, behind a small
-// socket adapter each platform implements over its own WebSocket. The
-// connection lives as long as the scope it is made in, whose close
-// takes the socket down.
+// desktop connection (host/hub/connection.ts) and the browser's
+// (web/hub/connection.ts) share the dial settle logic, the supervisor
+// wiring, the socket's liveness and the refresh/status lifecycle here,
+// each through a small adapter over its own WebSocket. The connection
+// lives as long as the scope it is made in, whose close takes the
+// socket down.
 //
 // This file must stay electron-free and node-builtin-free (pnpm test
 // host-boundary): everything platform specific lives in the injected

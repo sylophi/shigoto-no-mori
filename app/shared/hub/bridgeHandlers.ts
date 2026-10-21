@@ -211,9 +211,8 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // Close and drop every cached direct session, for the quit path:
   // without it the remote host keeps a dead socket in its per-device
   // slot and relaunch lands on the supersede path instead of a clean
-  // reconnect. Owners do NOT call this -- the plane's scope owns
-  // teardown, keeper latch first -- but it stays exported because the
-  // direct-plane check tears its bare bridges down with it.
+  // reconnect. The plane's close calls it once the keeper is latched
+  // (directPlane.ts).
   closeDirectPeers(): void;
 };
 
