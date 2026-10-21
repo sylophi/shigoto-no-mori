@@ -1,13 +1,13 @@
 // The host's view of the registered projects. The engine owns the list
 // (its registry, terrier's repos merged in, each decorated with its
 // path check, repo identity, use stats and icon), so the host reads it
-// as `sm projects list` does and keeps the last answer as a snapshot:
-// the handful of sync callers (the git watcher, the fetch sweep) read
-// the snapshot, and every async lookup that misses it refreshes once
-// before calling the id unknown. The sidebar's projects:list refreshes
-// on every call, and nothing learns a project id except from that list
-// or a CLI verb that just wrote it, so the snapshot is never behind a
-// caller that holds an id.
+// as `sm projects list` does and keeps the last answer's projects as a
+// snapshot: the handful of sync callers (the git watcher, the fetch
+// sweep) read the snapshot, and every async lookup that misses it
+// refreshes once before calling the id unknown. The sidebar's
+// projects:list refreshes on every call, and nothing learns a project
+// id except from that list or a CLI verb that just wrote it, so the
+// snapshot is never behind a caller that holds an id.
 import {
   UnknownProjectError,
   UnknownWorktreeError,
@@ -22,8 +22,11 @@ import * as Git from "@shigomori/engine/Git";
 import { handedRemotes, pickCloneUrl } from "@shared/cloneUrl";
 import { dataDir, toAbsolute } from "@shared/paths";
 
-let snapshot: readonly ProjectRow[] = [];
-// The first list of a session re-scans projects the icon cache
+let snapshot: readonly Project[] = [];
+// The last read's rows, which the callers that asked before it began
+// share.
+let lastRows: readonly ProjectRow[] = [];
+// The first refresh of a session re-scans projects the icon cache
 // remembers as icon-less, so an icon added while the app was closed
 // shows up.
 let iconsRescanned = false;
@@ -40,18 +43,26 @@ let answered = 0;
 export const refresh = Effect.suspend(() => {
   const ask = ++asked;
   return Effect.suspend(() => {
-    if (answered >= ask) return Effect.succeed(snapshot);
+    if (answered >= ask) return Effect.succeed(lastRows);
     const covers = asked;
     return Ops.listProjects({ refreshIcons: !iconsRescanned }).pipe(
       Effect.tap((rows) =>
         Effect.sync(() => {
           iconsRescanned = true;
-          snapshot = rows;
+          lastRows = rows;
+          snapshot = rows.map(toProject);
           answered = covers;
         }),
       ),
     );
   }).pipe(reads.withPermits(1));
+});
+
+// The boot's read, of the registry alone: the sync callers need only
+// the projects, and the rows' git probes (each repo's identity and
+// icon) would hold the app's start on every project.
+export const firstList = Effect.map(Ops.listedProjects, (listed) => {
+  snapshot = listed.map(toProject);
 });
 
 // Registers a repo with the engine (`sm projects add`), then re-reads
@@ -64,7 +75,7 @@ export const addProject = Effect.fnUntraced(function* (path: string) {
 });
 
 // The fields a lookup needs, without the list's decorations.
-function toProject(row: ProjectRow): Project {
+function toProject(row: Project): Project {
   return {
     id: row.id,
     name: row.name,
@@ -84,10 +95,10 @@ export const relocateProject = Effect.fnUntraced(function* (
   return project;
 });
 
-// The last-read list, for the sync callers. Empty until the first
-// refresh (the host's graph awaits one at boot, process/layer.ts).
+// The last-read list, for the sync callers. Empty until the boot's
+// first list (process/layer.ts).
 export function loadProjects(): readonly Project[] {
-  return snapshot.map(toProject);
+  return snapshot;
 }
 
 // A freshly read list, for the flows that act on every project (nuke,
@@ -190,7 +201,7 @@ export function findProjectInsideDataDir(
 // The project `projectId` names, or the entity-gone error.
 export const findProject = Effect.fnUntraced(function* (projectId: string) {
   const known = snapshot.find((p) => p.id === projectId);
-  if (known !== undefined) return toProject(known);
+  if (known !== undefined) return known;
   const fresh = (yield* refresh).find((p) => p.id === projectId);
   if (fresh === undefined) return yield* new UnknownProjectError({ projectId });
   return toProject(fresh);

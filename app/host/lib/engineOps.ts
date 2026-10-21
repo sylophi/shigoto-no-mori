@@ -828,9 +828,6 @@ const decodeProjectIcon = Schema.decodeUnknownSync(
   Schema.NullOr(ProjectIconSchema),
 );
 
-// Every registered project, terrier's merged in, decorated for the
-// sidebar. `refreshIcons` re-scans projects the icon cache remembers
-// as icon-less (the first list of a session).
 // The repo's identity (what makes the same project on two devices the
 // same repo), or null.
 export const repoIdentity = (projectPath: string) =>
@@ -838,6 +835,16 @@ export const repoIdentity = (projectPath: string) =>
     Effect.map(identity.of(projectPath), (repo) => repo.identity),
   );
 
+// Every listed project as the registry holds it, none of the rows'
+// probes run.
+export const listedProjects = Effect.flatMap(
+  Registry.Registry,
+  (registry) => registry.listed,
+);
+
+// Every registered project, terrier's merged in, decorated for the
+// sidebar. `refreshIcons` re-scans projects the icon cache remembers
+// as icon-less (the first list of a session).
 export const listProjects = Effect.fnUntraced(function* (
   opts: { refreshIcons?: boolean } = {},
 ) {
