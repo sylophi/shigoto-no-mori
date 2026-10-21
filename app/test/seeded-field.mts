@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Proof that a value arriving in a field the person is in doesn't merge
-// with what they type (the walks after #1014: New worktree's branch name
-// came out "sylviawalk-branch"). The picked animal name lands after the
+// with what they type (so New worktree's branch name never comes out
+// "sylviawalk-branch"). The picked animal name lands after the
 // page opens with the field focused, so a typing gesture that began on
 // the empty field (its selection taken, its text not yet in) must replace
 // it. And a rename being typed keeps what is typed when the stored name

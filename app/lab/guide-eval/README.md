@@ -1,8 +1,8 @@
 # The guide's how-tos
 
-`pnpm guide-eval` asks the guide (`V3.md`, "The guide") twenty questions
-a new user would, through Claude Code and Codex, and reports how it did.
-It needs both CLIs installed and signed in, and it spends their tokens.
+`pnpm guide-eval` asks the guide twenty questions a new user would,
+through Claude Code and Codex, and reports how it did. It needs both
+CLIs installed and signed in, and it spends their tokens.
 
 ```sh
 pnpm guide-eval                      # every how-to, both agents

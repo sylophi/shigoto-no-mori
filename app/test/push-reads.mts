@@ -1,7 +1,7 @@
 // Durable proof that a burst of pushes is a bounded number of reads and
 // cancels none: each read a page shows goes one at a time, joined by
 // whatever asks while it is out and followed by one more read
-// (lib/askAgain.ts), as the device list's re-reads do since #947. And
+// (lib/askAgain.ts), as the device list's re-reads do. And
 // that a read outside React joins a cancelled fetch a bounded number of
 // times. And that a device's externalChange reads that device's own
 // requests again, never this window's own (the releases, the account)

@@ -3,8 +3,9 @@
 // pushedState: the updater's state, the guide's, the migration's, the
 // command switch's):
 //   - the read seeds it, and a push is the newer word: a read answered
-//     after a push landed during it is dropped, where a push written
-//     into a request's cache was put back by the older read still out,
+//     after a push landed during it is dropped (written into a
+//     request's cache, a push would be put back by an older read still
+//     out),
 //   - a read that fails fails the stream, and a peer's answer this
 //     build does not read ends it.
 //

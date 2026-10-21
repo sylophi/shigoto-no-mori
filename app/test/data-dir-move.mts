@@ -362,8 +362,8 @@ it("a copied move whose old tree couldn't be removed keeps its journal, and the 
   assert.equal(journalLeft(), false);
 });
 
-// Sol's round 4: an old tree whose journal can't be read can't be told
-// for this move's, so the finish keeps its own until it can.
+// An old tree whose journal can't be read can't be told for this
+// move's, so the finish keeps its own until it can.
 it("a finish that can't read the old tree's journal keeps its own, and finishes once it can", async () => {
   const old = join(elsewhere, "old-data-unread");
   mkdirSync(old);
@@ -384,9 +384,9 @@ it("a finish that can't read the old tree's journal keeps its own, and finishes 
   assert.equal(journalLeft(), false);
 });
 
-// Sol's round 4: an undo reverses by each entry's mark. A `planned` entry
-// whose re-key ran before a crash took its mark is reversed; a
-// `returned` one never again, whatever is under its new id since.
+// An undo reverses by each entry's mark. A `planned` entry whose
+// re-key ran before a crash took its mark is reversed; a `returned`
+// one never again, whatever is under its new id since.
 it("an undo reverses a planned entry its re-key reached, and never a returned one", async () => {
   const identity = (
     await runHost(Ops.listWorktreeIdentities({ projectId }))
@@ -822,8 +822,8 @@ it.each([
   git(repo, "update-ref", "-d", ref(own ? identity.id : newId));
 });
 
-// Sol's round 3: a capture made while the scripts are killed, before the
-// journal, is the one the move carries and an undo brings back.
+// A capture made while the scripts are killed, before the journal,
+// is the one the move carries and an undo brings back.
 it("a capture made while a move kills the scripts comes back with its undo", async () => {
   const repo = join(elsewhere, "repo");
   const identity = (
@@ -863,7 +863,7 @@ it("a capture made while a move kills the scripts comes back with its undo", asy
   git(repo, "update-ref", "-d", ref(identity.id));
 });
 
-// Sol's round 3: a move never writes its journal over one still owed.
+// A move never writes its journal over one still owed.
 it("a move settles an earlier move's journal first, and waits while it can't", async () => {
   const journal = join(engineDataDir, JOURNAL);
   const place = (name: string) => ({

@@ -151,11 +151,12 @@ in `dev-app.md`, "When a device is removed".
   possible and is fine on the owner's machine.
 - **A packaged build asks for the login keychain password.** The
   "Shigoto no Mori Safe Storage" item in the login keychain was
-  created by a binary with a different code signature (a dev run
-  before the mock keychain, an older ad-hoc package), so macOS gates
+  created by a binary with a different code signature, so macOS gates
   every read behind a dialog. A signed build replaces the item once
   on its first launch (main/core/keychain/reset.ts) and logs
-  `[keychain]`. If the dialogs persist, delete the item by hand
+  `[keychain]`, then writes `safe-storage.owned` to its userData so it
+  never does again. If the dialogs persist (a bundle whose signing
+  failed, opened from `app/out` after the package step stopped on it,
+  wrote that marker before making its item), delete the item by hand
   (`security delete-generic-password -s "Shigoto no Mori Safe
-  Storage"`), remove `safe-storage.owned` from the app's userData and
-  relaunch. Either way the next launch is signed out once.
+  Storage"`), remove `safe-storage.owned` and relaunch. Either way the next launch is signed out once.

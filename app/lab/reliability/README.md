@@ -4,7 +4,7 @@
 app, a device on the tunnel, the terminal) through what breaks
 connections in real use, against the dev hub, and reports whether each
 recovered on its own, how long it took, and the trace it left. Looped
-for hours it is the soak (step 7 of `V3.md`, the reliability pass).
+for hours it is the soak.
 
 ```sh
 pnpm reliability                            # every scenario once, every client

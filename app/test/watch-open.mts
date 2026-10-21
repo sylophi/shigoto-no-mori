@@ -1,11 +1,10 @@
 // Durable proof that a watched path whose open does not return can't
-// stop the host (host/lib/watchPath.ts; V3.md, "A watch that froze the
-// host"). `fs.watch` opens its path on the calling thread, so before
-// the bounded open a project with such a working tree froze the host's
-// loop as GitWatcher started (and every host after it). macOS's held
-// open (the Files and Folders prompt for an external disk) can't be
-// made on demand, so a FIFO stands in: its open blocks the same way
-// until a writer comes. Asserts:
+// stop the host (host/lib/watchPath.ts). `fs.watch` opens its path on
+// the calling thread, so an unbounded open of such a working tree
+// freezes the host's loop as GitWatcher starts (and every host after
+// it). macOS's held open (the Files and Folders prompt for an external
+// disk) can't be made on demand, so a FIFO stands in: its open blocks
+// the same way until a writer comes. Asserts:
 //   - the real GitWatcher over a repository whose worktrees include a
 //     FIFO keeps the loop turning, and still follows the other trees;
 //   - a path that can't be watched yet is watched once it can be,
