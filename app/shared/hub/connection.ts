@@ -3,9 +3,9 @@
 // desktop connection (host/hub/connection.ts) and the browser's
 // (web/hub/connection.ts) share the dial settle logic, the supervisor
 // wiring, the socket's liveness and the refresh/status lifecycle here,
-// each over a small socket adapter of its own on its WebSocket. The
-// connection lives as long as the scope it is made in, whose close
-// takes the socket down.
+// each through a small adapter over its own WebSocket. The connection
+// lives as long as the scope it is made in, whose close takes the
+// socket down.
 //
 // This file must stay electron-free and node-builtin-free (pnpm test
 // host-boundary): everything platform specific lives in the injected

@@ -1,5 +1,6 @@
-// An answer kept a while in the host's memory: performance policy, so
-// it ages on both clocks and a failure is never one of them.
+// An answer kept a while in the host's memory, to spare repeating a
+// slow read: it ages on both clocks, and a failure is never one of
+// them.
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";

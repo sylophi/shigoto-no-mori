@@ -11,10 +11,10 @@
 // ask and then the candidate race, so a wedged peer that never answers
 // cannot hold the bridge's dial forever, and an answer that came late
 // (a peer just woken) leaves the race its whole budget. All candidate
-// SOCKETS open concurrently, each sealed with its own ticket
-// to the key the hub's roster names for the peer (shared/remote/
-// sealedSocket.ts), so whoever answers a candidate address, only the
-// peer completes the handshake. The HELLOS are serialized:
+// SOCKETS open concurrently, each sealed with its own ticket to the key
+// the hub's roster names for the peer (shared/remote/sealedSocket.ts),
+// so whoever answers a candidate address, only the peer completes the
+// handshake. The HELLOS are serialized:
 // at most one hello is in flight, the next candidate's hello goes out
 // only after the previous handshake failed, and losers whose hello
 // was never sent are closed pre-auth. Serialization is what makes a

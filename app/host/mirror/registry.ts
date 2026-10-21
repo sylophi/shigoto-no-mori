@@ -146,18 +146,16 @@ export const mirrorSessions = (
   );
 
 // Which transfer a session is, written into its mode
-// ("transfer-<token>"): one token per transfer, live from before its create is sent until
-// its pull has ended it. A transfer session whose token is not live
-// here has nobody waiting on it, and the host ends it on sight, since no
-// mirror surface would ever show it. That covers every way one gets
+// ("transfer-<token>"): one token per transfer, live from before its
+// create is sent until its pull has ended it. A transfer session whose
+// token is not live here has nobody waiting on it, and the host ends it
+// on sight, since no mirror surface would ever show it. That covers every way one gets
 // left behind: a quit or a crash mid-transfer (the engine persists its
 // sessions, and the next launch knows none of their tokens), a create
 // that was rejected after the engine had made the session, and a
 // terminate that failed. It never covers a transfer still running,
 // even on the snapshot that names the session before the create's own
-// reply lands, because the token is live first. A 2.x transfer, which
-// the daemon relabels `transfer-1` (file-sync/engine.go, v2Mode),
-// matches none.
+// reply lands, because the token is live first.
 const liveTransfers = new Set<string>();
 
 export function beginTransfer(): string {

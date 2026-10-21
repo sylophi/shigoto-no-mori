@@ -122,12 +122,12 @@ const decodeDoc = Schema.decodeUnknownOption(
 type ReadDoc = Option.Option.Value<ReturnType<typeof decodeDoc>>;
 
 export type AccountStore = {
-  // Null for a record with no device key, one enrolled before keys,
-  // which reads as signed out so the device enrolls again: on its own
-  // where the Clerk session lives (ClerkAccountSync), once the user
-  // signs in where it does not.
+  // Null for a record with no device key (a 2.x one), which reads as
+  // signed out so the device enrolls again: on its own where the Clerk
+  // session lives (ClerkAccountSync), once the user signs in where it
+  // does not.
   read(): StoredAccount | null;
-  // The record enrolled before device keys, the one read() refuses,
+  // The record with no device key (a 2.x one), the one read() refuses,
   // or null: the device enrolls again to make its key, and keeps what
   // the record held (enroll.ts).
   readWithoutKey(): Omit<StoredAccount, "deviceKey"> | null;
@@ -161,7 +161,7 @@ type AccountStorage = {
 // The picked icon on a document of either shape, or undefined when
 // none was picked (or the field holds something this build does not
 // know, which reads as unpicked rather than crashing the store). A
-// document written before the field was renamed holds the pick under
+// document a 2.x older than 2.3.0 wrote holds the pick under
 // deviceKind, read here so an upgrade keeps it. Every write rebuilds
 // the document, so the next one stores it as deviceIcon.
 function iconOf(doc: ReadDoc): DeviceIcon | undefined {
