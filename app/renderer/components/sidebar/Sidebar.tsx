@@ -156,6 +156,7 @@ function Forest({
     devicesFailed,
     order,
     local,
+    localSides,
     shownRemote,
     mirrors,
     deviceBadges,
@@ -289,6 +290,7 @@ function Forest({
         ...local,
         remote: shownRemote,
         mirrors,
+        localSides,
         deviceBadges,
         openShelves,
         hiddenPrefixes,
@@ -315,6 +317,7 @@ function Forest({
         byOwner: groupByOwner ? { shut: shutOwners } : null,
         remote: shownRemote,
         mirrors,
+        localSides,
         deviceBadges,
       });
   const { rows, pinned, level } = view;
@@ -323,7 +326,6 @@ function Forest({
   useLeaveInboxForPage({
     inbox: pageInbox,
     settled: viewSettled,
-    shownDevice: activeFilter?.deviceId ?? null,
     leftOut: view.leftOut,
   });
   // For leaving a page (a delete) to land in this list.

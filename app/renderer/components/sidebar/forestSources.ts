@@ -16,6 +16,7 @@ import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { usePinnedProjects } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { type LocalSide, localSidesWith } from "@shigomori/ui/lib/forest.ts";
 import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
 import { projectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { useDeviceBadges } from "./deviceBadges";
@@ -89,6 +90,18 @@ export function useForestSources({
         pullRequestQueries: [],
         configQueries: [],
       };
+  // Narrowed to a peer, this device's sides of its pairs with it, which
+  // the builders list among the peer's rows.
+  const localSides =
+    activeFilter === null || showLocal
+      ? new Map<string, LocalSide>()
+      : localSidesWith(
+          activeFilter.deviceId,
+          mirrors,
+          orderedProjects,
+          worktreeQueries,
+          configQueries,
+        );
   const shownRemote =
     activeFilter === null
       ? remoteItems
@@ -112,6 +125,7 @@ export function useForestSources({
       pinned,
     }),
     local,
+    localSides,
     shownRemote,
     mirrors,
     deviceBadges,

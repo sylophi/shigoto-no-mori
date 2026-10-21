@@ -5,7 +5,7 @@ import {
 import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
 import type { ProjectShigomoriConfigQueries } from "../../../lib/forest.ts";
 import { showPrimaryInInbox } from "../../../lib/showPrimaryInInbox.ts";
-import type { MirrorLink } from "../../../lib/forest.ts";
+import type { LocalSide, MirrorLink } from "../../../lib/forest.ts";
 import type { ProjectPullRequestQueries } from "../../../lib/forest.ts";
 import type { RemoteForestItem } from "../../../lib/forest.ts";
 import type { ProjectWorktreeQueries } from "../../../lib/forest.ts";
@@ -46,6 +46,9 @@ interface BuildInboxRowsArgs {
   remote: RemoteForestItem[];
   // See buildSidebarRows: a mirrored pair files once, as the local row.
   mirrors: readonly MirrorLink[];
+  // See buildSidebarRows: this device's sides of pairs whose projects
+  // `projects` leaves out, filed as this machine's own.
+  localSides?: ReadonlyMap<string, LocalSide>;
   // Every peer's badge off the device registry (see buildSidebarRows).
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   // Which shelves are open. Absence means shut, so both shelves start
@@ -110,6 +113,7 @@ export function buildInboxRows({
   configQueries,
   remote,
   mirrors,
+  localSides = new Map(),
   deviceBadges,
   openShelves,
   hiddenPrefixes,
@@ -143,6 +147,8 @@ export function buildInboxRows({
   // Where each of this machine's entries filed, for the peers' rows to
   // fold into.
   const localShelf = new Map<string, InboxShelf | null>();
+  // Every entry filed, by row key, for revealKey.
+  const filed = new Set<string>();
   const file = (
     project: Project,
     trees: readonly Worktree[],
@@ -150,8 +156,9 @@ export function buildInboxRows({
     // Undefined while the project's config is unread.
     showPrimary: boolean | undefined,
     device: SidebarDeviceBadge | undefined,
+    // The stack's trunk, off the project's listing.
+    trunk = trunkOf(trees),
   ) => {
-    const trunk = trunkOf(trees);
     for (const worktree of trees) {
       if (worktree.isPrimary && showPrimary !== true) {
         if (showPrimary === false) {
@@ -180,6 +187,7 @@ export function buildInboxRows({
         shelf,
       };
       if (device === undefined) localShelf.set(worktree.id, shelf);
+      filed.add(worktreeRowKey(device?.deviceId, worktree.id));
       if (shelf === null) {
         live.push(entry);
       } else {
@@ -200,25 +208,36 @@ export function buildInboxRows({
   });
   // A peer's row folds only into a local entry filed in the same box:
   // a local copy on a shelf would take the peer's live worktree off
-  // the list with it. The local row a folded peer's reveal lands on,
-  // by the peer's key.
-  const foldedPeers = new Map<string, string>();
+  // the list with it. Where `projects` leaves this machine's project
+  // out, its side of a pair with the peer (localSides) files first, as
+  // this machine's own: its own primary opt-in, and the repo's pull
+  // requests and trunk off the peer's listing.
   for (const item of remote) {
+    const localOf = (worktree: Worktree) =>
+      peerRowsFolded.get(remoteWorktreeKey(item.deviceId, worktree.id));
+    for (const worktree of item.worktrees) {
+      const local = localOf(worktree);
+      const side = local === undefined ? undefined : localSides.get(local);
+      if (side === undefined) continue;
+      file(
+        side.project,
+        [side.worktree],
+        item.pullRequests,
+        side.showPrimaryInInbox,
+        undefined,
+        trunkOf(item.worktrees),
+      );
+    }
     file(
       item.project,
       item.worktrees.filter((worktree) => {
-        const key = remoteWorktreeKey(item.deviceId, worktree.id);
-        const local = peerRowsFolded.get(key);
+        const local = localOf(worktree);
         if (local === undefined) return true;
         const pr = item.pullRequests[worktree.branch];
-        if (
+        return (
           localShelf.get(local) !==
           worktreeShelfOf(worktree, pr, hiddenPrefixes, allowAgentWorking)
-        ) {
-          return true;
-        }
-        foldedPeers.set(key, local);
-        return false;
+        );
       }),
       item.pullRequests,
       item.showPrimaryInInbox,
@@ -294,12 +313,18 @@ export function buildInboxRows({
       total === 0 && loadingCount === 0 && failedCount === 0
         ? "No worktrees yet."
         : null,
+    // A page's own entry only: a peer's worktree with none may just be
+    // unlisted yet, which a device the filter hides looks the same as.
     leftOut: (worktreeId, deviceId) =>
       leftOut.has(worktreeRowKey(deviceId, worktreeId)),
     revealKey: (_projectId, worktreeId, deviceId) => {
-      // A peer's worktree folded into its local mirror: reveal that.
+      // A peer's worktree with no entry of its own (folded into its
+      // local mirror, its device hidden by the filter, or not listed
+      // yet): reveal its local mirror, the pair's row.
       const peerKey = worktreeRowKey(deviceId, worktreeId);
-      const local = foldedPeers.get(peerKey);
+      const local = filed.has(peerKey)
+        ? undefined
+        : peerRowsFolded.get(peerKey);
       const key =
         local === undefined ? peerKey : worktreeRowKey(undefined, local);
       const shelf = shelfOf.get(key);
