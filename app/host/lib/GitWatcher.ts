@@ -160,12 +160,12 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
 // What a project's git directory says about the state its rows show,
 // read with no git: HEAD and ORIG_HEAD and each worktree's,
 // packed-refs, every loose ref the allowlist counts (a ref is written
-// by a rename into place, so a new inode), and which stopped-operation
-// markers exist. Two equal readings mean nothing the allowlist above
-// cares about moved between them. A file that isn't there reads as
-// absent; any other failure (a directory git removed mid-walk, a volume
-// that stalls) fails the reading, which the caller skips rather than
-// read as a change.
+// by a rename into place, so a new inode), and the stopped-operation
+// markers (a directory by being there). Two equal readings mean nothing
+// the allowlist above cares about moved between them. A file that isn't
+// there reads as absent; any other failure (a directory git removed
+// mid-walk, a volume that stalls) fails the reading, which the caller
+// skips rather than read as a change.
 const isNotFound = (error: PlatformError.PlatformError) =>
   Predicate.isTagged(error.reason, "NotFound");
 

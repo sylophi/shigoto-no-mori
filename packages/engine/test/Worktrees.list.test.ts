@@ -1,10 +1,10 @@
 // A project's worktree list: git's `worktree list` answered again while
 // the files it reads say the same, so reads with nothing changed run no
-// git, a commit (which moves no identity) runs none, and each change an
-// identity shows (a branch, a detach, a lock, the primary's checkout, a
-// worktree added, moved, removed or pruned) is in the very next read, a
-// change made while git runs included, and one undone by then (real git
-// on a sandbox data dir).
+// git, a commit on a branch (which moves no identity) runs none, and
+// each change an identity shows (a branch, a detach, a lock, the
+// primary's checkout, a worktree added, moved, removed or pruned) is in
+// the very next read, a change made while git runs included, and one
+// undone by then (real git on a sandbox data dir).
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";

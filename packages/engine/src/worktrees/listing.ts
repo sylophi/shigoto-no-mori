@@ -100,10 +100,10 @@ export const makeListing = Effect.gen(function* () {
   // gitdir, HEAD and lock, with the reftable stacks a repository in that
   // format keeps HEAD in. A branch's commit isn't among them, and no
   // identity carries one (a detached one's is its HEAD). Each by its
-  // content, inode and mtime: git writes by a rename into place, so a
-  // change undone (a rebase back on its branch, a checkout and back)
-  // reads the same but is a new file. None when one can't be read, or
-  // the common dir isn't found this way.
+  // content, inode and mtime: a change undone (a rebase back on its
+  // branch, a checkout and back) reads the same, but git renames a new
+  // HEAD or config into place and writes a gitdir or lock later. None
+  // when one can't be read, or the common dir isn't found this way.
   const worktreeFilesOf = (projectPath: string) =>
     Effect.gen(function* () {
       const common = yield* Git.commonDirOf(projectPath);
