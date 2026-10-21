@@ -1,9 +1,9 @@
 # Shigoto no Mori: design notes
 
 Rules for the app's visual layer. They apply to every component in
-`renderer/` and in `@shigomori/ui` (`packages/ui`, the primitives and,
-as step 6 of `V3.md` moves them, the views), which the desktop window
-and the web client (`web/`) both render.
+`renderer/` and in `@shigomori/ui` (`packages/ui`, the primitives and
+the views), which the desktop window and the web client (`web/`) both
+render.
 
 ## Theming: two visual systems, one component tree
 
@@ -167,17 +167,16 @@ that reaches for the runtime fails the commit.
   lays out by the window's width, a container query (`@min-[48rem]:`),
   never the viewport's (`md:`). The host API comes through the runtime,
   not `window.api`. `@shigomori/ui`'s boundary proof holds all three.
-- A container's data is one of two kinds (V3.md, decision 18). A
-  **host view**, state the host holds and keeps current (the `watch`
-  views: change status, file diffs and hunks, branch history, stashes,
-  operations, the project's pull requests, `terminals:list`), is an
-  atom (`@effect/atom-react`) on the client's runtime
-  (`renderer/lib/runtime/atoms.ts`): it is live, so nothing
-  invalidates it. So is the state kept from a push stream (a device's
-  script runs, its worktree lifecycle, the hub's status). A
-  **request**, a value the host computes once when asked and does not
-  hold (a pull request's detail from GitHub, a git blob, a file's
-  contents, branches, the account, launchers, villagers, the
+- A container's data is one of two kinds. A **host view**, state the
+  host holds and keeps current (the `watch` views: change status, file
+  diffs and hunks, branch history, stashes, operations, the project's
+  pull requests, `terminals:list`), is an atom (`@effect/atom-react`)
+  on the client's runtime (`renderer/lib/runtime/atoms.ts`): it is
+  live, so nothing invalidates it. So is the state kept from a push
+  stream (a device's script runs, its worktree lifecycle, the hub's
+  status). A **request**, a value the host computes once when asked
+  and does not hold (a pull request's detail from GitHub, a git blob,
+  a file's contents, branches, the account, launchers, villagers, the
   updater's check), is a React Query query, and so is an action. A
   family becomes a view once the host holds it as state and serves a
   view of it; a one-off read stays a query. A push never feeds a

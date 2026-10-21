@@ -4,10 +4,10 @@
 // the host's own commitDiff, drawn by the real renderer (the lab's fake
 // host, in Chrome), and scrolled from top to bottom. At every stop each
 // row on screen has its lines drawn inside its own box, with no stretch
-// of it left blank. alpha.4 drew the first file and left every other
-// row an empty box of the right height: the virtualizer's ref was new
-// on each render, and React's call of the old one with null
-// disconnected every row.
+// of it left blank. With a virtualizer ref made anew on each render,
+// the first file draws and every other row is an empty box of the
+// right height: React's call of the old ref with null disconnects
+// every row.
 //
 // Run: pnpm test commit-diff-rows.
 // covers: app/lab/fake-host/**
@@ -47,9 +47,8 @@ const cppLines = (count: number, tag: string) =>
       `int ${tag}_${i}(int amount) { return amount * ${i} + ${tag.length}; }\n`,
   ).join("");
 
-// A commit shaped like the one alpha.4 drew wrong: a file rewritten
-// over more than a screen, then files with a line or two changed and
-// one with lines added, in path order.
+// The commit: a file rewritten over more than a screen, then files
+// with a line or two changed and one with lines added, in path order.
 function seedRepo(): { repo: string; head: string } {
   const repo = tempDir("sm-commit-diff-rows-", trackTest);
   const write = (path: string, text: string) => {

@@ -21,7 +21,7 @@ import type { Lab } from "./labApp.mts";
 
 const REPOSITORY = join(import.meta.dirname, "..", "..", "..", "..");
 
-// release/v3 at the walks' start, and two of its ancestors as the
+// A pinned commit of this repository, and two of its ancestors as the
 // remote's other branches.
 const BRANCHES = {
   main: "ae8982c174d5f1d6efaf722256772cd485f2c885",

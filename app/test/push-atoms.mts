@@ -37,6 +37,7 @@ import { it, vi } from "vitest";
 import type { Link } from "@shared/ipc/transport";
 import { pushFanOut } from "@shared/remote/rpcTransport";
 import { gitFetchingAtom } from "@/hooks/git/useProjectGitFetching";
+import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { readsRunsOf } from "@/hooks/live/useLiveActivity";
 import { activityOf, scriptRunsOf } from "@/hooks/scripts/scriptRuns";
@@ -407,6 +408,21 @@ const studio: DeviceInfo = {
   online: true,
 };
 
+// Reads the proof holds until it lets each go, so what lands while one
+// is out doesn't hang on the machine's speed.
+const heldReads = () => {
+  const held: (() => void)[] = [];
+  return {
+    hold: Effect.promise(
+      () => new Promise<void>((resolve) => held.push(resolve)),
+    ),
+    letGo: async () => {
+      await waitFor(() => held.length > 0, "a read held");
+      held.shift()?.();
+    },
+  };
+};
+
 it("hub status and remote devices: from the hub's pushes and the device list", async () => {
   // The seed answers after a push has landed, so it is stale.
   let answerSeed: ((value: HubStatus) => void) | undefined;
@@ -568,9 +584,9 @@ it("remote devices: a window loaded while the hub is away lists the peers the sh
 
 it("remote devices: a burst of hub pushes naming a device the list lacks reads the list one at a time, once more after the read out, and cancels none", async () => {
   const { registry, queryClient, hubPush } = page();
-  queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
   let asked = 0;
   let cancelled = 0;
+  const { hold, letGo } = heldReads();
   const account: Pick<
     RendererApi["account"],
     "status" | "listDevices" | "lastListedDevices"
@@ -581,7 +597,7 @@ it("remote devices: a burst of hub pushes naming a device the list lacks reads t
       Effect.sync(() => {
         asked += 1;
       }).pipe(
-        Effect.andThen(Effect.sleep("100 millis")),
+        Effect.andThen(hold),
         Effect.as([studio]),
         Effect.onInterrupt(() =>
           Effect.sync(() => {
@@ -598,11 +614,19 @@ it("remote devices: a burst of hub pushes naming a device the list lacks reads t
   };
   const api = {
     ...runtime,
+    // React Query's signal interrupts the read, as the client's does.
+    run: (effect, options) => Effect.runPromise(effect, options),
     deviceId: LOCAL,
     account,
     hub: hubCalls,
     peerApi: noPeerApi,
   } as RendererApi;
+  // The list as a page's read leaves it, with the queryFn the sync's
+  // asks run again (setQueryData alone makes a query with none).
+  queryClient.setQueryDefaults(queryKeys.accountDevices(), {
+    queryFn: accountDevicesQueryOptions(api).queryFn,
+  });
+  queryClient.setQueryData(queryKeys.accountDevices(), [studio]);
   startRemoteDeviceSync(
     api,
     queryClient,
@@ -610,22 +634,50 @@ it("remote devices: a burst of hub pushes naming a device the list lacks reads t
     () => () => {},
     new AbortController().signal,
   );
-  for (let push = 0; push < 25; push++) {
-    await hubPush(ghostly);
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  // A push the sync has taken, its pass run: the status atom holds it
+  // once the sync has, and the pass's rest is microtasks. Each names
+  // its own peer version, so the wait can tell it from the push before.
+  let pushes = 0;
+  const push = async () => {
+    pushes += 1;
+    const version = `3.0.${pushes}`;
+    await hubPush({ ...ghostly, peerAppVersions: { [PEER]: version } });
+    await waitFor(() => {
+      const heard = registry.get(hubStatusAtom);
+      return (
+        AsyncResult.isSuccess(heard) &&
+        heard.value.peerAppVersions[PEER] === version
+      );
+    }, "the push taken");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  const settled = async () => {
+    await waitFor(() => queryClient.isFetching() === 0, "the reads settled");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  await push();
+  await waitFor(() => asked > 0, "the first read");
+  for (let next = 2; next <= 25; next++) await push();
+  assert.equal(asked, 1, "a read sent while one was out");
   assert.equal(cancelled, 0, "a read cancelled by the next");
-  // 25 pushes over about 150 ms, each read 100 ms: the first, and one
-  // after each read a change came during.
-  assert.ok(asked >= 2 && asked <= 3, `the hub was asked ${asked} times`);
+  // One more after the read the pushes came during, and none after it.
+  await letGo();
+  await waitFor(() => asked > 1, "the read after the burst");
+  await letGo();
+  await settled();
+  assert.equal(asked, 2, "a read with no change during the one before");
+  assert.equal(cancelled, 0);
   // A read someone else sent (the account page's) is out as the roster
   // changes: it may predate the change, so one more follows it.
-  const before = asked;
   void queryClient.refetchQueries({ queryKey: queryKeys.accountDevices() });
-  await hubPush(ghostly);
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  assert.equal(asked - before, 2, "the read out, then one after it");
+  await waitFor(() => asked > 2, "the account page's read");
+  await push();
+  assert.equal(asked, 3, "a read sent beside the account page's");
+  await letGo();
+  await waitFor(() => asked > 3, "the read after the account page's");
+  await letGo();
+  await settled();
+  assert.equal(asked, 4, "the read out, then one after it");
   assert.equal(cancelled, 0);
   registry.dispose();
 });
@@ -635,6 +687,7 @@ it("remote devices: an account change during the list's first read, which no pag
   // Each push the sync listens to, by its key, to deliver by hand.
   const handlers = new Map<string, (value: unknown) => void>();
   let asked = 0;
+  const { hold, letGo } = heldReads();
   const account: Pick<
     RendererApi["account"],
     "status" | "listDevices" | "lastListedDevices"
@@ -644,7 +697,7 @@ it("remote devices: an account change during the list's first read, which no pag
     listDevices: () =>
       Effect.sync(() => {
         asked += 1;
-      }).pipe(Effect.andThen(Effect.sleep("100 millis")), Effect.as([studio])),
+      }).pipe(Effect.andThen(hold), Effect.as([studio])),
   };
   const ghostly = status({ onlineDeviceIds: [PEER, "ghost"] });
   const hubCalls: Pick<RendererApi["hub"], "status"> = {
@@ -674,8 +727,14 @@ it("remote devices: an account change during the list's first read, which no pag
   );
   await waitFor(() => asked === 1, "the first read");
   handlers.get("changed")?.({ accountId: "account" });
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  assert.equal(asked, 2, `the first read, then one after it: ${asked}`);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(asked, 1, "a read sent while the first was out");
+  await letGo();
+  await waitFor(() => asked > 1, "the read after the first");
+  await letGo();
+  await waitFor(() => queryClient.isFetching() === 0, "the reads settled");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(asked, 2, "the first read, then one after it");
   registry.dispose();
 });
 

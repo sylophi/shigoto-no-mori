@@ -30,9 +30,9 @@ modules from memory; read the source first.
   (`engine/worktrees`, `host/mirror`, ...). Extend the service that
   owns the domain; add a new one only when none does.
 - Transports stay thin: an RPC handler, a terminal command, a shell
-  bridge method, an MCP tool later. Each decodes its input, calls one
-  service method, and maps the service's typed errors to the
-  transport's. Filesystem, git, process or store work, multi-step
+  bridge method, an MCP tool (`sm guide mcp`). Each decodes its input,
+  calls one service method, and maps the service's typed errors to
+  the transport's. Filesystem, git, process or store work, multi-step
   dispatch, retries and rollback belong in the service.
 - The reason is reach. The app, the terminal `sm`, a peer device and a
   test all reach the same method. Logic written into one handler is

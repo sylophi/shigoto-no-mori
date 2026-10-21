@@ -86,7 +86,7 @@ export const quickCreate = async (
     .toBe(name);
   await main(lab.page).getByText("No uncommitted changes").waitFor();
   // History's first answer is eight git runs queued for the host's
-  // spawn slots, slow on a CI runner beside two more apps (V3.md).
+  // spawn slots, slow on a CI runner beside two more apps.
   await main(lab.page).getByText("No commits yet").waitFor({ timeout: 30_000 });
   const sawBaseTip = await lab.page.evaluate(
     `window.smWalkBaseTipWatch.disconnect(), window.smWalkBaseTipTitles.has(${JSON.stringify(name)})`,

@@ -69,13 +69,13 @@ on CI they never skip.
 
 The cross-device walks (`cross-device.walk.mts`) run the lab build as
 several devices of one account, on a real project with the owner's
-settings, because the flows between devices broke on what a
-generated repo and default settings never have (V3.md, the clone of a
-remote-tracking default branch). `peer-away.walk.mts` uses the same
-devices for what a window keeps when another device stops answering
-or taking commands: a device tab switched to one never reached, a
-terminal when control goes off, a mirror whose runner quits. What a
-person does in both is in `lib/crossDevice.mts`.
+settings, because flows between devices depend on what a generated
+repo and default settings lack: a clone of a remote-tracking default
+branch, carried files, a setup script. `peer-away.walk.mts` uses the
+same devices for what a window keeps when another device stops
+answering or taking commands: a device tab switched to one never
+reached, a terminal when control goes off, a mirror whose runner
+quits. What a person does in both is in `lib/crossDevice.mts`.
 
 - **The devices** (`lib/devices.mts`): each is the lab build launched
   as a profile (`SHIGOMORI_PROFILE`, which a test flavor takes and a
@@ -129,22 +129,19 @@ it("does what the person did", async () => {
 });
 ```
 
-- `lib/labApp.mts` starts the build (`bootLab`). It hands back the
-  page, `git` for the walk's repos and `sm` for the bundle's
-  terminal command. `gh` takes a script, or a function of the root
-  that makes one. `linkedDataDir` puts the data folder behind a
-  symlink. `debugPort` is the window's debugging port, for a weblab
-  session attached to a walk held at a breakpoint.
 - `lib/labApp.mts` starts the build (`bootLab`, with `--sm-lab`, so
   the page's api is there for a walk that needs it). It hands back
   the page, `git` for the walk's repos, `sm` for the bundle's
   terminal command, `restart`, which quits the app as the menu's
   Quit does and starts it again on the same root, `followWindow`,
-  the window drawn after the shell put up a new one, and
+  the window drawn after the shell put up a new one,
   `followRelaunch`, the app an installer opened again on the same
-  debugging port. `gh` takes a script, or a function of the root that
-  makes one; `env` adds to the app's environment (the update stand-ins)
-  and `prepare` fills the data folder before its first start.
+  debugging port, and `debugPort`, the window's debugging port, for a
+  weblab session attached to a walk held at a breakpoint. `gh` takes
+  a script, or a function of the root that makes one; `env` adds to
+  the app's environment (the update stand-ins), `prepare` fills the
+  data folder before its first start, and `linkedDataDir` puts it
+  behind a symlink.
 - `lib/demoRepo.mts` is the repo most walks start from: a history
   with a long file and media, a bare origin, a branch with a commit
   of its own, a stash, and uncommitted changes of every kind. A walk

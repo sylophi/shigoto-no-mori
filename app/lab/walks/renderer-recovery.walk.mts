@@ -1,8 +1,7 @@
 // A window whose renderer is killed from outside the app comes back, in
 // the packaged build: a SIGTERM and a SIGKILL of its renderer, and a
-// SIGTERM of every process under it at once (as a `pkill` aimed at
-// something else took them on 2026-10-17), the host and its children
-// included.
+// SIGTERM of every process under it at once (as a stray `pkill`
+// does), the host and its children included.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";

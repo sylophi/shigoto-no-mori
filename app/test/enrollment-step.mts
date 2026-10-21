@@ -2,8 +2,8 @@
 // enrollmentStep), which the sign-in button and the migration screen
 // read: the button in the account page's banners, shown while the
 // device reads enrolled (its Clerk session lapsed, or the hub refused
-// its credential), decides on the session alone, as v2's did: Sign in
-// where it lapsed, Retry enrollment where it lives.
+// its credential), decides on the session alone: Sign in where it
+// lapsed, Retry enrollment where it lives.
 //
 // Run: pnpm test enrollment-step.
 import assert from "node:assert/strict";

@@ -1546,7 +1546,7 @@ it("an app silent past one ping but short of the limit still answers the termina
 it("a call the terminal stopped for longer than any ping limit, as a sleep stops it, still answers", async () => {
   // ---- (8d) The app answers while the terminal's process is stopped
   // (SIGSTOP) for 20 s: on resuming, its overdue timers are no word
-  // that the app went (V3.md, "Local links and liveness").
+  // that the app went (EFFECT.md, section 8).
   registryWaits = Effect.sleep("22 seconds");
   let pid: number | undefined;
   const resumed = (async () => {

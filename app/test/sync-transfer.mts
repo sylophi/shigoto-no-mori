@@ -382,9 +382,9 @@ beforeAll(async () => {
     "second feature",
   );
   feature2Tip = await gitOut(worktree2Path, "rev-parse", "HEAD");
-  // The real app derivation (the engine's worktreeLayout.ts), imported straight from its home now that
-  // tsAliasLoader handles the transitive JSON import. The capture ref
-  // must land at refs/shigomori/dirty/<this id>, asserted below.
+  // The real app derivation (the engine's worktreeLayout.ts). The
+  // capture ref must land at refs/shigomori/dirty/<this id>, asserted
+  // below.
   worktreeId = worktreeIdFromPath(worktreePath);
 
   await fixture.useCli();

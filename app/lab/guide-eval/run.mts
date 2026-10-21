@@ -1,9 +1,9 @@
-// The guide's how-tos (V3.md, "The guide"): twenty questions a new user
-// asks, each run headless through Claude Code and Codex against a dev
-// app on this machine, on a session the app launched the way its Help
-// menu's item does, the question typed as the person would. A tour
-// passes when the window shows the guide pointing at the control that
-// answers the question. README.md has what it reports.
+// The guide's how-tos: twenty questions a new user asks, each run
+// headless through Claude Code and Codex against a dev app on this
+// machine, on a session the app launched the way its Help menu's item
+// does, the question typed as the person would. A tour passes when
+// the window shows the guide pointing at the control that answers the
+// question. README.md has what it reports.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import {
   closeSync,

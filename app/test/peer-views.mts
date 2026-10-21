@@ -3,7 +3,7 @@
 // link whose peer has no session:
 //   - a peer that never showed a value gives up after its tries with no
 //     session to it (about eight seconds), so the sidebar reads it empty
-//     and says so, as v2's queries did, rather than loading for good,
+//     and says so rather than loading for good,
 //   - a peer that showed rows and then lost its session keeps them, and
 //     goes on asking,
 //   - a peer that refuses (its sharing off) is asked again for good, since

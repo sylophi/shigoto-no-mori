@@ -317,9 +317,9 @@ it("stubs: read-classified channels answer structural defaults, the previewTheme
 it("fail-closed: mutation-shaped and unclassified channels reject on the web instead of reporting stub success", async () => {
   const bridge = createWebBridge(makeDeps());
   const refused = /not available in the browser/;
-  // The review's live findings: each of these previously resolved a
-  // success-shaped stub ({ok:true}, a blank Worktree, undefined, a
-  // blank project, a blank runId).
+  // Each of these would otherwise resolve a success-shaped stub
+  // ({ok:true}, a blank Worktree, undefined, a blank project, a blank
+  // runId).
   await assert.rejects(
     bridge.api.run(
       bridge.api.worktrees.delete({ projectId: "p", worktreeId: "w" }),

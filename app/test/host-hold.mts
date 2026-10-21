@@ -18,13 +18,13 @@
 //     (host/socket/Loopback.ts), with the shell's token.
 //   - the link outlives a sleep: neither the window's end nor the
 //     host's judges it by a wall clock the sleep moved, so a wake
-//     drops nothing (V3.md, "Local links and liveness"). Over a
-//     browser's socket, which Effect still sets to read frames as
-//     bytes through the link's wrapper.
+//     drops nothing (EFFECT.md, section 8). Over a browser's socket,
+//     which Effect still sets to read frames as bytes through the
+//     link's wrapper.
 //   - a host that is starting is watched by its loop's beats: a real
-//     process whose loop is stuck in a watch's open (the stall V3.md's
-//     "A watch that froze the host" records) is called silent within
-//     the start limit, and one that beats is left alone.
+//     process whose loop is stuck in a watch's open
+//     (host/lib/watchPath.ts) is called silent within the start limit,
+//     and one that beats is left alone.
 //
 // Run: pnpm test host-hold.
 import { LOOPBACK_FILE } from "@shigomori/engine/Control";
@@ -314,7 +314,8 @@ it("the link to the host outlives a sleep at either end", async () => {
     assert.equal(sockets[0]?.binaryType, "arraybuffer");
     // A night's sleep after the window's first ping, then the host's
     // liveness round and the window's pinger, in that order, at the
-    // wake: either end, before the fix, cut the link there.
+    // wake: either end judging by the wall clock would cut the link
+    // there.
     await clock.advance(15_000);
     sleep(8 * 60 * 60_000);
     for (let round = 0; round < 3; round++) await clock.advance(15_000);

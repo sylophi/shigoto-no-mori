@@ -1172,7 +1172,7 @@ it("device update: updateDevice writes the hub first and keeps the change for th
   );
 });
 
-it("store: a record enrolled before device keys reads as signed out, keeping its name for the next enrollment", () => {
+it("store: a 2.x record, with no device key, reads as signed out, keeping its name for the next enrollment", () => {
   const keyless = memoryStore(
     JSON.stringify({
       v: 1,
@@ -1186,7 +1186,7 @@ it("store: a record enrolled before device keys reads as signed out, keeping its
   assert.equal(keyless.rememberedDeviceName(), "Kept");
 });
 
-it("enroll flow: a device enrolled before keys enrolls again with a key and keeps its command-access switch", async () => {
+it("enroll flow: a device with a 2.x record enrolls again with a key and keeps its command-access switch", async () => {
   const store = memoryStore(
     JSON.stringify({
       v: 1,
