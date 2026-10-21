@@ -7,7 +7,7 @@
 // (renderer/lib/hostWatch.ts) keeps its cache live, so the sidebar
 // rows and these pages refresh the same way. The wrapped page
 // component is the SAME for every device: remoteness stays in the
-// scope, never in the page (v2's core bet).
+// scope, never in the page.
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";

@@ -1,10 +1,10 @@
 // The one way a push, a session landing or an action asks the requests
 // (React Query) to read again. A read already out is never cancelled:
-// cancelling it sent the next, and its caller (throughCancel) asked
-// again, so a burst of pushes was a burst of reads, which the hub
-// answered with 429 for the device list (#947). The read out may
-// predate what asked, so one more follows it as it settles, however
-// many asked meanwhile: one read at a time per query.
+// cancelling it makes its caller (throughCancel) ask again, so a burst
+// of pushes would be a burst of reads, and a burst of device-list reads
+// draws the hub's 429. The read out may predate what asked, so one more
+// follows it as it settles, however many asked meanwhile: one read at a
+// time per query.
 import {
   type Query,
   type QueryClient,

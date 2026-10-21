@@ -160,7 +160,8 @@ export function DiffPage({
   // commit that touches hundreds of files, or a lockfile on its own,
   // otherwise puts every row in the DOM up front and holds the window
   // for seconds. The file wrappers keep their full height, so the
-  // scrollbar, the index's jumps and the scroll spy work as before.
+  // scrollbar, the index's jumps and the scroll spy work as with every
+  // row drawn.
   //
   // The list's ref arms it, on the list rather than the scroll area: the
   // list is what grows, and it only exists once there is a patch to

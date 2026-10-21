@@ -17,11 +17,11 @@
 //     "connected" with the appVersion the session's welcome confirmed
 //     and the command access the peer reports (peerAcceptsCommands),
 //     WHATEVER the hub socket is doing. Data is direct or nothing, so
-//     an established direct session is the only
-//     thing "connected" may mean, and it is also sufficient: the
-//     device hub is orchestration only, and a live session survives
-//     our own hub outage by design (shared/hub/directPresence.ts), so
-//     a hub blip must not grey out a peer whose data wire is fine.
+//     an established direct session is the only thing "connected" may
+//     mean, and it is also sufficient: the device hub is orchestration
+//     only, and a live session survives our own hub outage by design
+//     (shared/hub/directPresence.ts), so a hub blip must not grey out a
+//     peer whose data wire is fine.
 //   - no session and the hub socket not connected: mirror the socket's
 //     supervisor phase (connecting, backoff, blocked and so on),
 //     because nothing can be dialed while the socket is down and the
@@ -290,7 +290,7 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   // stay invisible until a restart. Only a hub-driven pass asks
   // (status came in), never the pass a refetch's own landing queues:
   // a roster ghost the list will never explain would otherwise refetch
-  // forever, while this way it re-asks once per hub event, as before.
+  // forever, while this way it re-asks once per hub event.
   // A device that left the roster may have left the account (a
   // sign-out, a revoke on another device), which only the list can
   // say, and which the host's own peer-side teardown (a mirror with that
@@ -320,14 +320,13 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
 // cached view is stale in ways nothing else will ping. The status
 // snapshot IS the signal, and this module is its single reader, so the
 // refetch belongs here and NOWHERE else: a per-call-site retry would be
-// a second retry driver racing the keeper's ladder, which is exactly
-// what supervision replaced. Scoped to the device that just landed,
-// through invalidateDeviceSession and NOT the externalChange sweep: a
-// session coming up is not a "that host's state moved" ping, and the
-// sweep's exemptions (runtime, githubCli, fs, the two worktree cost
-// domains) name exactly the queries that
-// hard-failed during the dial window, so sweeping through them would
-// refetch everything except what is broken.
+// a second retry driver racing the keeper's ladder. Scoped to the
+// device that just landed, through invalidateDeviceSession and NOT the
+// externalChange sweep: a session coming up is not a "that host's
+// state moved" ping, and the sweep's exempt domains
+// (externalChangeExempt) fail like every other query of the device
+// while the keeper dials, so the sweep would refetch everything but
+// them.
 //
 // A peer's sharing switch is another thing only the snapshot says. A
 // session whose peer isn't sharing is not a live one here: what the

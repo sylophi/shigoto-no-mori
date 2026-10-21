@@ -114,8 +114,7 @@ const REDIAL = Schedule.exponential("250 millis", 2).pipe(
 // How many asks a peer's view that never showed a value makes with no
 // session to the peer before it gives up (redialing): about eight
 // seconds on REDIAL's ladder (250 ms doubling to 2 s), room for a session
-// still dialing at boot, as v2's three retries a second, two and four
-// apart gave.
+// still dialing at boot.
 const PEER_TRIES = 7;
 
 // One device's host modules: this machine's over its own link, a peer's
@@ -331,11 +330,11 @@ export function valueNow<A>(
 // A view's stream (or pushed state's) asked again on REDIAL while
 // anything reads it, ended by the device's own failure (endsView). A
 // peer's that has never shown a value gives up after a few asks that
-// found no way to it, as v2's queries did, so a peer listed and never
-// reached reads empty and says so; a new session to it starts it again.
-// One that has shown a value keeps it and redials. This machine's is
-// asked for good. `memory` lives as long as the atom: a new session
-// starts its stream again, not its history.
+// found no way to it, so a peer listed and never reached reads empty
+// and says so; a new session to it starts it again. One that has shown
+// a value keeps it and redials. This machine's is asked for good.
+// `memory` lives as long as the atom: a new session starts its stream
+// again, not its history.
 function redialing<A, R>(
   values: Stream.Stream<A, unknown, R>,
   options: { readonly peer: boolean; readonly memory: { seen: boolean } },

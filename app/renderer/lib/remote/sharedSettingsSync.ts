@@ -1,19 +1,19 @@
 // Keeps this device's copy of the shared settings
-// (packages/contracts/src/schemas/sharedSettings.ts) level with its peers', boot-scoped
-// like the other remote subscriptions. No server holds the settings:
-// every device keeps a full copy, and the copies converge by merging
-// (contracts' sharedSettings.ts), which is order-free and idempotent, so
-// the exchange needs no sessions, acks or retries. A device that was
-// away catches up the next time any session with it lands.
+// (packages/contracts/src/schemas/sharedSettings.ts) level with its
+// peers', boot-scoped like the other remote subscriptions. No server
+// holds the settings: every device keeps a full copy, and the copies
+// converge by merging (contracts' sharedSettings.ts), which is
+// order-free and idempotent, so the exchange needs no sessions, acks or
+// retries. A device that was away catches up the next time any session
+// with it lands.
 //
 // Three moves, all through the local copy:
 //
 //   - A peer's copy moved (its sharedSettings:changed push, carrying
 //     the copy whole, followed from its first session landing): merge
-//     it into the local copy. A merge that
-//     learns something makes the local host announce in turn, one that
-//     learns nothing announces nothing, and that is what ends the
-//     round.
+//     it into the local copy. A merge that learns something makes the
+//     local host announce in turn, one that learns nothing announces
+//     nothing, and that is what ends the round.
 //   - A session landed: read the peer's copy and merge it, covering
 //     every push missed while the session was down, then offer back
 //     whatever the local copy holds that the peer's lacks.
@@ -25,22 +25,15 @@
 // accepts commands, so it is best-effort and silent. It exists for the
 // one copy nobody can pull from: a browser serves no calls, so its
 // picks travel only by being offered. (A desktop always has a window
-// to do its pulling: the app quits with its last one.) The window reads
-// the local copy as its view streams it
+// to do its pulling: the app quits with its last one.) The window
+// reads the local copy as its view streams it
 // (hooks/sharedSettings/useSharedSettings.ts).
 import type {
   SharedSettingsDoc,
   SharedSettingValue,
 } from "@shigomori/contracts/schemas";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
-import {
-  exchangeSharedSettings,
-  sharedSettingKeys,
-} from "@shigomori/contracts/sharedSettings";
-import {
-  clientConfigOnce,
-  patchClientConfig,
-} from "@/hooks/config/useClientConfig";
+import { exchangeSharedSettings } from "@shigomori/contracts/sharedSettings";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -90,39 +83,8 @@ function mergePeerSharedSettings(
   api.run(api.sharedSettings.merge({ doc })).catch(() => undefined);
 }
 
-// The create-device picks lived in client config before they were
-// shared (clientConfig.quickCreateDevices). Moved across once: each
-// becomes an entry with the lowest stamp there is, so a pick made
-// through the shared path on any device outranks every migrated one,
-// and then the old key is cleared. Two devices that had picked
-// differently settle on one of the two by device id: they were never
-// one setting, and nothing recorded which pick was the later.
-async function migrateQuickCreateDevices(
-  api: RendererApi,
-  registry: AtomRegistry.AtomRegistry,
-): Promise<void> {
-  const legacy = (await clientConfigOnce(registry))?.quickCreateDevices;
-  if (legacy === undefined) return;
-  const entries: SharedSettingsDoc["entries"] = {};
-  for (const [identity, deviceId] of Object.entries(legacy)) {
-    entries[sharedSettingKeys.quickCreateDevice(identity)] = {
-      value: deviceId,
-      at: 0,
-      by: api.deviceId,
-    };
-  }
-  await api.run(api.sharedSettings.merge({ doc: { entries } }));
-  // Offered like any pick: a browser's copy reaches its peers no other
-  // way, and the sessions may have landed while this was reading.
-  offerToPeers(registry, { entries });
-  await patchClientConfig(api, registry, { quickCreateDevices: undefined });
-}
-
 // Boot wiring, never unsubscribed.
-export function startSharedSettingsSync(
-  api: RendererApi,
-  registry: AtomRegistry.AtomRegistry,
-): void {
+export function startSharedSettingsSync(api: RendererApi): void {
   // Each peer's pushes are followed from its first landing on, which
   // is also the first moment it can push at all, and the exchange that
   // runs on every landing covers whatever it sent while unfollowed.
@@ -148,8 +110,5 @@ export function startSharedSettingsSync(
         merge: (input) => peer.run(peer.sharedSettings.merge(input)),
       },
     ).catch(() => undefined);
-  });
-  migrateQuickCreateDevices(api, registry).catch((error: unknown) => {
-    console.warn("[sharedSettings] create-device migration failed", error);
   });
 }

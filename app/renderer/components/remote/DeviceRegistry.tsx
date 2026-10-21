@@ -59,9 +59,9 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   const hubById = new Map(
     hubDevices.map((device) => [device.deviceId, device] as const),
   );
-  // THIS device's tunnel endpoint state, as the
-  // derived primitive off the shared hub status store: the registry
-  // re-renders when the tunnel flips, not on every roster transition.
+  // THIS device's tunnel endpoint state, as the derived primitive off
+  // the shared hub status store: the registry re-renders when the
+  // tunnel flips, not on every roster transition.
   const tunnel = useTunnelState();
   // This device's own row reads its whole socket. The banner reads the
   // narrower block selector so it does not re-render on roster news.
@@ -217,14 +217,14 @@ function AccountIdentity({ accountId }: { accountId: string }) {
 
 // The Clerk session is gone while the device credential, independent
 // of it, still holds the device on the account: the sign-in expired
-// while the app was closed, or its token store went (a keychain reset,
-// a pre-Clerk upgrade), which ClerkAccountSync leaves alone on purpose.
-// The copy claims only what is known, not which. The way back is a
-// sign-in (as the same person: another account would re-enroll the
-// device under it), and the sign-out in the caption still works
-// without a session. A leaf, so Clerk's churn stays out of the
-// registry. Quiet while a sign-out runs: Clerk drops its session
-// before the hub revoke lands, and that gap is not this state.
+// while the app was closed, or its token store went, which
+// ClerkAccountSync leaves alone on purpose. The copy claims only what
+// is known, not which. The way back is a sign-in (as the same person:
+// another account would re-enroll the device under it), and the
+// sign-out in the caption still works without a session. A leaf, so
+// Clerk's churn stays out of the registry. Quiet while a sign-out
+// runs: Clerk drops its session before the hub revoke lands, and that
+// gap is not this state.
 function SessionMissingBanner() {
   const sessionMissing = useClerkSessionMissing();
   const signingOut = useIsMutating({ mutationKey: CLERK_SIGN_OUT_KEY }) > 0;
