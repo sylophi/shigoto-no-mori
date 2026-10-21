@@ -160,9 +160,9 @@ type AccountStorage = {
 // The picked icon on a document of either shape, or undefined when
 // none was picked (or the field holds something this build does not
 // know, which reads as unpicked rather than crashing the store). A
-// document a 2.x before 2.5.1 wrote holds the pick under
-// deviceKind, read here so an upgrade keeps it. Every write rebuilds
-// the document, so the next one stores it as deviceIcon.
+// document a 2.x before 2.5.1 wrote holds the pick under deviceKind,
+// read here so an upgrade keeps it. Every write rebuilds the
+// document, so the next one stores it as deviceIcon.
 function iconOf(doc: ReadDoc): DeviceIcon | undefined {
   const picked = doc.deviceIcon ?? doc.deviceKind;
   return isDeviceIcon(picked) ? picked : undefined;
