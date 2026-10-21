@@ -82,7 +82,7 @@ export const update = Command.make(
       for (const [name, flag] of STAND_INS) {
         if ((process.env[name] ?? "") !== "") {
           return yield* new UsageError({
-            problem: `${name} is no longer read. Pass ${flag} instead.`,
+            problem: `update doesn't read ${name}. Pass ${flag} instead.`,
           });
         }
       }
