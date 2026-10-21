@@ -249,7 +249,7 @@ describe("a command line", () => {
     assert.equal(((await get()).doc as { set: boolean }).set, false);
   });
 
-  it("refuses a command line in the Go sm's words, with no help page", async () => {
+  it("refuses a command line in sm's words, with no help page", async () => {
     const refusals: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
       [["nosuch"], 'Unknown command "nosuch". Run `smd --help`.'],
       [["list", "--bogus"], 'Unknown option "--bogus".'],
@@ -333,7 +333,7 @@ describe("a command line", () => {
     }
   });
 
-  it("refuses the variables the stand-in flags replaced", async () => {
+  it("refuses the app's update stand-in variables", async () => {
     for (const name of [
       "SHIGOMORI_UPDATE_FEED_URL",
       "SHIGOMORI_UPDATE_RELEASES_URL",
@@ -352,8 +352,7 @@ const lastDoc = (stdout: string) =>
 
 // The agent verbs as a harness and an agent's shell reach them: the
 // hooks installed into a harness's own file, a create from an agent's
-// shell binding its session, a hook's event moving it, all as Go's sm
-// printed them.
+// shell binding its session, a hook's event moving it.
 describe("agents", () => {
   // A run with `input` on stdin, the way a hook hands an event over.
   it("installs the hooks, binds the shell's session and follows its events", async () => {
@@ -501,7 +500,7 @@ describe("transfer", () => {
     assert.deepStrictEqual(app.received(), []);
   });
 
-  it("asks the app over the loopback, printing and exiting as Go did", async () => {
+  it("asks the app over the loopback, printing and exiting", async () => {
     const notRunning = await runAt(box.home, "devices");
     assert.equal(notRunning.code, 1);
     assert.match(
@@ -769,7 +768,7 @@ describe(
       );
     });
 
-    it("colors a terminal's lines with NO_COLOR set but empty, as Go did", async () => {
+    it("colors a terminal's lines with NO_COLOR set but empty", async () => {
       const shown = await inTerminal(["path", "nosuch"], [], { NO_COLOR: "" });
       assert.ok(
         shown.endsWith(
@@ -1523,8 +1522,8 @@ describe("worktrees edit", () => {
       "lazygit",
     );
     assert.equal(refused.code, 2);
-    // Stored anyway (a v2 config.json, a catalog entry since dropped),
-    // the file opens with its default app.
+    // With it stored anyway (as an imported 2.x config.json can hold
+    // it), the file opens with its default app.
     const store = new DatabaseSync(join(box.side("cli"), "store.db"));
     store
       .prepare("INSERT INTO device_config (key, value) VALUES (?, ?)")
@@ -1579,7 +1578,7 @@ describe("worktrees link", () => {
 });
 
 describe("projects relocate", () => {
-  it("points a project at its moved repo, as the Go sm did", async () => {
+  it("points a project at its moved repo", async () => {
     const alpha = box.repo("alpha");
     const beta = box.repo("beta");
     box.write("registry.json", {
@@ -1782,8 +1781,7 @@ describe("worktrees rename", () => {
   });
 });
 
-// The Go sm's parser (cli/args.go), ahead of effect/cli's.
-describe("the Go sm's command line", () => {
+describe("how a command line is read", () => {
   // Projects alpha and beta, alpha with a managed worktree fox.
   const fixture = async () => {
     const alpha = box.repo("alpha");
@@ -1896,7 +1894,7 @@ describe("the Go sm's command line", () => {
     assert.equal((all.doc as ReadonlyArray<unknown>).length, 3);
   });
 
-  it("names a mistyped verb as Go's dispatchers did, flags or not", async () => {
+  it("names a mistyped verb, flags or not", async () => {
     const projects =
       "Usage: smd projects <list|icon|add|remove|relocate|reorder|config> [args]";
     const refusals: ReadonlyArray<readonly [ReadonlyArray<string>, string]> = [
@@ -1954,7 +1952,7 @@ describe("the Go sm's command line", () => {
     assert.equal(readFileSync(cdFile, "utf8"), `${fox}\n`);
   });
 
-  it("lets be the positionals a verb doesn't read, where Go did", async () => {
+  it("lets be the positionals a verb doesn't read", async () => {
     const { alpha, fox } = await fixture();
     const gamma = box.repo("gamma");
     const cdFile = join(box.home, "cd");
@@ -1980,7 +1978,7 @@ describe("the Go sm's command line", () => {
       const run = await runAt(alpha, ...args);
       assert.equal(run.code, 0, `${args.join(" ")}: ${run.stderr}`);
     }
-    // Go refused these.
+    // These are refused.
     assert.equal((await runAt(alpha, "config", "get", "a", "b")).code, 2);
     assert.equal((await runAt(alpha, "mirrors", "extra")).code, 2);
   });

@@ -13,7 +13,7 @@ import { ExitCode, UsageError } from "../errors.ts";
 import { given, here, projectFlags, rest, worktreeFlags } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 
-// A flag as Go read it: absent, or given (blank included).
+// A flag: absent, or given (blank included).
 const raw = (flag: Option.Option<string>) => Option.getOrUndefined(flag);
 
 const target = (input: {
@@ -31,7 +31,7 @@ const target = (input: {
 const transferFlags = {
   ...worktreeFlags,
   ref: Argument.String("worktree").pipe(Argument.optional),
-  // The first positional is read and the rest let be, as the Go sm did.
+  // The first positional is read and the rest let be.
   rest,
   to: Flag.String("to").pipe(
     Flag.withDescription("The device it goes to"),

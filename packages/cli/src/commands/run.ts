@@ -2,9 +2,7 @@
 // in (its package.json scripts, justfile recipes and Makefile targets),
 // listed, or one of them run, with the SHIGOMORI_* variables, from the
 // worktree's root: a package.json script by the manager its lockfile
-// picks, a recipe by just, a target by make. The app's scripts panel
-// runs scripts the same way, by the ids it holds (--project-id,
-// --worktree-id), and reads the list's --json.
+// picks, a recipe by just, a target by make.
 //
 // The script gets the terminal to itself (handOver.ts).
 import * as Scripts from "@shigomori/engine/Scripts";

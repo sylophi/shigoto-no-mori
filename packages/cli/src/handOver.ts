@@ -11,8 +11,8 @@ import * as Schema from "effect/Schema";
 import { ExitCode, Killed } from "./errors.ts";
 import { releaseStdin } from "./stdinFd.ts";
 
-// A program sm couldn't start: a script's manager (`exec`, Go's words
-// for the exec it did) or a subshell. `reason` is the errno's words.
+// A program sm couldn't start: a script's manager (`exec`) or a
+// subshell. `reason` is the errno's words.
 class StartFailed extends Schema.TaggedError<StartFailed>()("StartFailed", {
   kind: Schema.Literals(["exec", "shell"]),
   program: Schema.String,

@@ -1,6 +1,6 @@
 import type * as Command from "effect/cli/Command";
 
-// Go's aliases, folded before parsing, since effect/cli takes one per
+// The aliases, folded before parsing, since effect/cli takes one per
 // command: a namespace's, a worktree verb's (at the top level and after
 // `worktrees`), and a project verb's, which differ: `rm` alone removes
 // a worktree, after `projects` a project.

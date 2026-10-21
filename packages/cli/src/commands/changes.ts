@@ -1,5 +1,5 @@
 // The worktree verbs that change things: create, adopt and setup (each
-// waits for the lifecycle scripts), rm, move, and rekey for the app.
+// waits for the lifecycle scripts), rm, move, and rekey.
 import { cdHintFor, cdNote, removeFlags } from "../removal.ts";
 import { isAbsolute } from "node:path";
 import { envVar } from "@shigomori/engine/environment";
@@ -272,7 +272,7 @@ export const rm = Command.make(
           yield* reporter(),
         )
         .pipe(
-          // The app reads which cleanup step failed from the document.
+          // The document names which cleanup step failed.
           Effect.catchTag(
             "CleanupFailed",
             (

@@ -181,7 +181,7 @@ export const status = Command.make(
   {
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
-    // The first is read and the rest let be, as the Go sm did.
+    // The first is read and the rest let be.
     rest,
     noPr: Flag.Boolean("no-pr").pipe(
       Flag.withDescription("Skip the pull request lookup"),

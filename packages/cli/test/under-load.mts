@@ -1,6 +1,6 @@
 // The at-a-terminal cases (cli.test.ts), each repeated, with busy
 // loops beside them, round after round: what a Bun bump runs before it
-// lands, since the menu's first key once went missing only under load
+// lands, since Bun can lose a menu's first key under load
 // (../src/stdinFd.ts).
 //   node test/under-load.mts [--rounds 8] [--repeats 60] [--busy 6]
 import { type ChildProcess, spawn } from "node:child_process";

@@ -115,7 +115,7 @@ const list = Command.make(
       Flag.withDefault(false),
     ),
     from: Flag.String("from").pipe(Flag.optional),
-    // Positionals are let be, as the Go sm did.
+    // Positionals are let be.
     rest,
   },
   (input) =>
@@ -131,8 +131,7 @@ const list = Command.make(
       const paint = styles(stdoutColor);
       const options = { primaryRef: input.primaryRef };
 
-      // One worktree, as the app asks after changing it. Its full row
-      // has no marker column, as in Go.
+      // One worktree, by its ids. Its full row has no marker column.
       if (Option.isSome(given(input.worktreeId))) {
         const { at, located } = yield* resolveWorktree(input);
         if (input.identities) {
@@ -265,7 +264,7 @@ const path = Command.make(
   {
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
-    // The first is read and the rest let be, as the Go sm did.
+    // The first is read and the rest let be.
     rest,
   },
   (input) =>

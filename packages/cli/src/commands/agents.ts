@@ -68,7 +68,7 @@ const bind = Command.make(
   { ...worktreeArgs, ...sessionFlags },
   (input) =>
     Effect.gen(function* () {
-      // The worktree first, as Go did: outside one, that is the error.
+      // The worktree first: outside one, that is the error.
       const { located } = yield* resolveWorktree(input);
       const ref = yield* sessionOf(input, "bind");
       yield* (yield* Agents.Agents).bind(located.worktree, ref);

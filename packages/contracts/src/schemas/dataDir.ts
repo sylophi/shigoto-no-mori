@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 // The JSON documents a 2.x data dir keeps at its top level, which the
 // engine's store imports once (packages/engine/src/migrations). Each
 // key is decoded on its own, since a key one build can't read must not
-// cost the others. Each is as lenient as the v2 Go sm's read of it.
+// cost the others. Each is as lenient as 2.x's own read of it.
 
 // registry.json: the projects, the manual order and the worktree marks.
 export const RegistryFileSchema = Schema.Struct({
