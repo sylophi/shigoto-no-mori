@@ -54,6 +54,7 @@ import {
 import {
   makeTracker,
   sandboxGit,
+  scriptEnv,
   scrubProcessGitEnv,
   tempDir,
 } from "./lib/checkKit.mts";
@@ -418,12 +419,7 @@ it("script runs: a run started shows, on scripts:changed", async () => {
               slot: { kind: "package", name: "views" },
               worktree: { id: "wt", name: "wt", branch: "main", path: repo },
               project: { id: "p", path: repo, name: "p" },
-              scriptEnv: {
-                projectBranch: "main",
-                defaultBranch: "main",
-                title: "",
-                description: "",
-              },
+              scriptEnv,
               notify: () => {},
             }),
           ),

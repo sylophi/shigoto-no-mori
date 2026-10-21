@@ -28,6 +28,7 @@ import { afterAll, beforeAll, it } from "vitest";
 import {
   makeTracker,
   processAlive,
+  scriptEnv,
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
@@ -62,12 +63,7 @@ async function run(
         slot: { kind: "package", name: "proof" },
         worktree: { id: "wt", name: "wt", branch: "main", path: root },
         project: { id: "p", path: root, name: "p" },
-        scriptEnv: {
-          projectBranch: "main",
-          defaultBranch: "main",
-          title: "",
-          description: "",
-        },
+        scriptEnv,
         notify: (event) => events.push(event),
       });
       if (record !== undefined) {

@@ -406,7 +406,7 @@ export const patchGlobalConfig = Effect.fnUntraced(function* (
   );
 });
 
-// The renderer hands the whole project document and clears a field by
+// The proofs hand the whole project document and clear a field by
 // leaving it out, so every field the schema models goes in the payload,
 // nested objects field by field, as null where the document has none.
 // Fields the schema doesn't model stay out, and the merge keeps them.

@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import type { WorktreeDiskUsage } from "@shigomori/contracts/schemas/hygiene";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { afterEach, beforeEach, it } from "vitest";
@@ -89,13 +90,10 @@ it("sizes a worktree: blocks once per inode, what removing it frees, the newest 
         ]),
       ),
     )
-    .finally(() => chmodSync(shut, 0o755))) as ReadonlyArray<{
-    bytes: number;
-    reclaimableBytes: number;
-    lastActivityAt: number | null;
-    partial: boolean;
-  }>;
-  assert.ok(usage !== undefined && unread !== undefined);
+    .finally(() => chmodSync(shut, 0o755))) as [
+    WorktreeDiskUsage,
+    WorktreeDiskUsage,
+  ];
   // The link out of the tree and the clone hold blocks nothing frees.
   assert.ok(usage.reclaimableBytes > 0);
   assert.ok(usage.bytes - usage.reclaimableBytes >= 64 * 1024 + 70_000);

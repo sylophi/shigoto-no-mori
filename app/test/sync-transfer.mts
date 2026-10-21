@@ -119,6 +119,7 @@ import {
   handlerCtx,
   makeTracker,
   processAlive,
+  scriptEnv,
   sleepingClock,
   testClock,
   waitFor,
@@ -1382,12 +1383,7 @@ it("transplant (scripts running): the teardown refuses, saying the scripts still
       slot: { kind: "package", name: "sleep" },
       worktree: { id: wt5Id, name: "wt5", branch: "feature5", path: wt5Path },
       project: { id: sourceProjectId, path: sourceRepo, name: "source" },
-      scriptEnv: {
-        projectBranch: "main",
-        defaultBranch: "main",
-        title: "",
-        description: "",
-      },
+      scriptEnv,
       notify: () => {},
     }),
   );
