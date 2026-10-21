@@ -57,8 +57,8 @@ import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isolateGit } from "../../gitIsolation.ts";
-import { endsWithRun, onRunEnd, own } from "../../testProcesses.mts";
-import { ownTestTemp } from "../../testTemp.mts";
+import { endAll, onRunEnd, own } from "../../testProcesses.mts";
+import { leaveTestTemp, ownTestTemp } from "../../testTemp.mts";
 
 const OPEN_WITHIN_MS = 60_000;
 const QUIT_WITHIN_MS = 20_000;
@@ -93,10 +93,14 @@ const bundle: string = argument;
 // repository and this machine's config (../../gitIsolation.ts).
 ownTestTemp("smoke");
 isolateGit();
-// A signal, a crash or a failure ends every app the smoke started, those
-// the installer opened through LaunchServices too (`own`), where only
-// the `finally` blocks did (../../testProcesses.mts).
-endsWithRun();
+// However the smoke ends (a signal, a crash, a failure), every app it
+// started ends, those the installer opened through LaunchServices too
+// (`own`, ../../testProcesses.mts), and then the run's folder goes: a
+// signal ends the smoke with no exit handlers, ownTestTemp's among them.
+onRunEnd(() => {
+  endAll();
+  leaveTestTemp();
+});
 const appName = basename(bundle, ".app");
 const executableIn = (app: string) => join(app, "Contents", "MacOS", appName);
 const logs = join(homedir(), "Library", "Logs", appName);
@@ -352,7 +356,6 @@ async function update(identity: string) {
   // of ours, found by their executable.
   const opened = new Set<number>();
   const noteOpened = (pid: number) => opened.add(own(pid));
-  const forgetChmod = onRunEnd(() => chmodSync(installedDir, 0o755));
   const fail: (message: string) => never = (message) => {
     printLogs(dataDir);
     throw new Error(`the update: ${message}`);
@@ -499,7 +502,6 @@ async function update(identity: string) {
       `the update: ${version} swapped for ${next} and opened again (pid ${relaunched})`,
     );
   } finally {
-    forgetChmod();
     chmodSync(installedDir, 0o755);
     if (!exited && child.pid !== undefined) await stop(child.pid, () => exited);
     await Promise.all(
@@ -699,7 +701,8 @@ async function serve(port: string) {
   child.once("exit", () => {
     exited = true;
   });
-  // Until stopped: a signal ends the app with the run (endsWithRun).
+  // Until stopped: a signal ends the app, and the run's folder, with the
+  // run (the run end above).
   const stopped = new Promise<void>((resolve) =>
     child.once("exit", () => resolve()),
   );

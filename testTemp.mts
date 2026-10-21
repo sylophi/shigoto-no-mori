@@ -37,6 +37,9 @@ const ROOT = "SM_TEST_ROOT";
 // made.
 const UNCLAIMED_MS = 2 * 60 * 60_000;
 
+// The run this process took, which it leaves as it exits.
+let owned: { root: string; run: string } | undefined;
+
 // Takes a run folder for `family` and points this process's TMPDIR and
 // XDG_CONFIG_HOME at it. Inside a run already (a runner that spawns vitest, whose config
 // calls this too), joins that run instead, so the run is held while
@@ -62,11 +65,19 @@ export function ownTestTemp(family: string): string {
   mkdirSync(config, { recursive: true });
   linkPackageManagers(config, userConfig);
   process.env["XDG_CONFIG_HOME"] = config;
-  process.on("exit", () => {
-    if (!heldByOthers(run)) remove(run);
-    sweep(root);
-  });
+  owned = { root, run };
+  process.on("exit", leaveTestTemp);
   return run;
+}
+
+// Removes the run's folder unless another process still holds it, then
+// sweeps: what a run does as it exits, for a process a signal ends,
+// which runs no exit handler (testProcesses.mts ends it with the
+// signal it got).
+export function leaveTestTemp(): void {
+  if (owned === undefined) return;
+  if (!heldByOthers(owned.run)) remove(owned.run);
+  sweep(owned.root);
 }
 
 // pnpm and Bun read their global settings (the release cooldown,

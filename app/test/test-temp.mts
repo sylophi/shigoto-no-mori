@@ -6,7 +6,9 @@
 //     only folders in it included,
 //   - a live run's folder is not, until its process is gone,
 //   - nor is a killed run's that a live process joined,
-//   - a process joining a run that was swept takes a run of its own.
+//   - a process joining a run that was swept takes a run of its own,
+//   - a run a signal ends removes its folder when its run end leaves
+//     the run (leaveTestTemp).
 //
 // Run: pnpm test test-temp.
 //
@@ -18,10 +20,12 @@ import { existsSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { it } from "vitest";
+import { SYNC_SPAWN } from "../../testProcesses.mts";
 import { repoRoot, tempDir } from "./lib/checkKit.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
 const owner = pathToFileURL(join(repoRoot, "testTemp.mts")).href;
+const processes = pathToFileURL(join(repoRoot, "testProcesses.mts")).href;
 
 // How each run ends, once it has printed its folder and its TMPDIR.
 const ENDS = {
@@ -34,6 +38,13 @@ chmodSync(join(tmpdir(), "locked", "sealed"), 0o000);
 chmodSync(join(tmpdir(), "locked"), 0o555);
 process.kill(process.pid, "SIGKILL");`,
   hold: "setInterval(() => {}, 1000);",
+  // A signal, which ../../testProcesses.mts ends it with once its run
+  // end has left the run.
+  signalLeaving: `
+const { onRunEnd } = await import(${JSON.stringify(processes)});
+onRunEnd(leaveTestTemp);
+process.kill(process.pid, "SIGTERM");
+setInterval(() => {}, 1000);`,
 };
 
 // A run of its own on `root`, not inside this proof's run.
@@ -42,7 +53,7 @@ function launch(root: string, end: keyof typeof ENDS, joining?: string) {
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ownTestTemp } from ${JSON.stringify(owner)};
+import { leaveTestTemp, ownTestTemp } from ${JSON.stringify(owner)};
 const run = ownTestTemp("proof");
 writeFileSync(join(tmpdir(), "left"), "");
 console.log(run + "\\n" + tmpdir() + "\\n" + process.env.XDG_CONFIG_HOME);
@@ -152,6 +163,20 @@ it("a killed run's folder is kept while a process that joined it lives", async (
   await joined.kill();
   runTo(root, "exit");
   assert.equal(existsSync(runner.run), false);
+});
+
+it("a run a signal ends removes its folder when its run end leaves the run", () => {
+  const root = tempDir("sm-test-temp-", trackTest);
+  const [command, args, options] = launch(root, "signalLeaving");
+  const { stdout, signal } = spawnSync(command, args, {
+    ...options,
+    ...SYNC_SPAWN,
+  });
+  assert.equal(signal, "SIGTERM");
+  const [run = ""] = stdout.trim().split("\n");
+  assert.ok(run.startsWith(join(root, "proof")));
+  assert.equal(existsSync(run), false);
+  assert.equal(existsSync(root), false);
 });
 
 it("a process joining a run that was swept takes a run of its own", () => {
