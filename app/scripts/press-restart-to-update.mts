@@ -4,8 +4,10 @@
 // loopback.json holds) and makes the same call the button's mutation
 // makes, `updater:install`. A packaged build takes no debugger, so this
 // is how a script presses the button of a signed one
-// (scripts/smoke-app.mts). Prints the call's outcome as one JSON line:
-// {"answer": ...} or {"failed": "<message>"}.
+// (scripts/smoke-app.mts). Its hello carries this checkout's
+// PROTOCOL_VERSION, which an app at another protocol refuses. Prints
+// the call's outcome as one JSON line: {"answer": ...} or
+// {"failed": "<message>"}.
 //
 //   bun scripts/press-restart-to-update.mts <data dir>
 import { readFileSync } from "node:fs";
