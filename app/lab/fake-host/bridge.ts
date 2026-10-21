@@ -1115,13 +1115,10 @@ function hostHandlersFor(
       mirrorChanged();
       return { session: entry.session };
     },
-    // "Mirror here" on a peer's worktree: the peer, which holds the
-    // original, runs the start and sends the copy to the local forest.
-    ...(forest.deviceId === LOCAL_DEVICE_ID
-      ? {}
-      : {
-          "mirror:startTo": (input) => fakeMirrorStartTo(forest, input),
-        }),
+    // The forest holding the original runs the start and sends the copy
+    // on: "Mirror to…" from this device's worktree, or "Mirror here" on
+    // a peer's, which the peer sends to the local forest.
+    "mirror:startTo": (input) => fakeMirrorStartTo(forest, input),
     // The cancel, on every forest: the local one for a pull or a send,
     // a peer for the mirror it runs towards here. The posed pull reads
     // the mark between its steps.
@@ -1530,7 +1527,8 @@ async function fakeSyncPull(
   const name = input.worktreeName ?? sourceWorktree?.name ?? "tender-tanuki";
   const landed = worktreeFixture({
     ...sourceWorktree,
-    id: "fedcba987654",
+    // One per source, so two landings on one forest are two worktrees.
+    id: `fedcba${input.sourceWorktreeId.slice(-6)}`,
     projectId: project.id,
     name,
     branch: input.landBranch ?? input.branch,

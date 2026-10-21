@@ -119,7 +119,7 @@ export function MirrorLiveView({
           </div>
         </section>
       </FlowBodyView>
-      {/* One way out, to this device's half of the pair (finish). */}
+      {/* One way out, to the copy's page (finish). */}
       <FlowFooterView>
         <Button size="sm" onClick={onDone}>
           Done
