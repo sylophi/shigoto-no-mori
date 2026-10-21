@@ -35,7 +35,7 @@ class RetiredRootVariable extends Schema.TaggedError<RetiredRootVariable>()(
   {},
 ) {
   override get message(): string {
-    return "SHIGOMORI_ROOT is no longer read. Set SHIGOMORI_DATA_DIR instead.";
+    return "SHIGOMORI_ROOT isn't read. Set SHIGOMORI_DATA_DIR instead.";
   }
 }
 
@@ -98,7 +98,7 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const names = flavorNames(flavor);
-  // Unset reads as the working directory, as it did for the Go sm.
+  // Unset reads as the working directory.
   const home = yield* Config.String("HOME").pipe(Config.withDefault("."));
   const expandHome = (target: string) => expandHomeIn(home, target);
 

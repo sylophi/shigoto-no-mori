@@ -18,10 +18,10 @@ const V2SessionSchema = Schema.Struct({
 });
 const decodeSession = Schema.decodeUnknownOption(V2SessionSchema);
 
-// The agent sessions bound to worktrees (Agents.ts), in place of the
-// agent-working mark: a worktree's working session is what the shelf
-// takes now. A session is bound to one worktree at a time, and a
-// worktree lists its sessions in the order they were bound (rowid).
+// The agent sessions bound to worktrees (Agents.ts). A worktree's
+// working session is what the shelf counts as agent work. A session is
+// bound to one worktree at a time, and a worktree lists its sessions in
+// the order they were bound (rowid).
 // `waits` is the JSON array of the permission prompts it waits on. A
 // 2.x registry.json keeps them under `agentSessions`, by the worktree's
 // id, taken from it here: an entry that doesn't parse is skipped, and a
@@ -42,7 +42,6 @@ export const agentSessions = Effect.gen(function* () {
     message TEXT,
     PRIMARY KEY (harness, session)
   ) STRICT`;
-  yield* sql`DELETE FROM worktree_marks WHERE mark = 'agentWorking'`;
   const bound = yield* registryHint("agentSessions", {});
   const seen = new Set<string>();
   for (const [worktree_id, list] of Object.entries(bound)) {

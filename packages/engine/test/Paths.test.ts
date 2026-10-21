@@ -109,7 +109,7 @@ it("reads a pre-2.0 path that is a file as holding nothing", async () => {
   assert.equal((await resolve()).dataDirSource, "default");
 });
 
-it("reads an unset HOME as the working directory, as the Go sm does", async () => {
+it("reads an unset HOME as the working directory", async () => {
   assert.equal((await resolve({}, false)).dataDir, ".sm");
 });
 

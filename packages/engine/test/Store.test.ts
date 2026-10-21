@@ -86,9 +86,7 @@ it("opens the database in WAL mode", async () => {
   assert.equal(row?.journal_mode, "wal");
 });
 
-it("keeps the database and its journal files the owner's alone, an older build's included", async () => {
-  write("store.db", "");
-  chmodSync(join(dataDir, "store.db"), 0o644);
+it("keeps the database and its journal files the owner's alone", async () => {
   // The journal files live while the store is open.
   const modes = await query((sql) =>
     sql`SELECT 1`.pipe(

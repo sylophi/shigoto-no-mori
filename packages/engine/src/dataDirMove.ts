@@ -1,8 +1,8 @@
-// The data-folder move's recovery and the steps of it the engine owns
-// (V3.md, Commit points): while a move's journal is in the data dir the
-// store refuses every write but the move's own, and every process that
-// comes up settles the journal first, holding the data-folder lock alone
-// (`DataDirLock`), or keeps refusing. The move itself is the app's
+// The data-folder move's recovery and the steps of it the engine owns:
+// while a move's journal is in the data dir the store refuses every
+// write but the move's own, and every process that comes up settles the
+// journal first, holding the data-folder lock alone (`DataDirLock`), or
+// keeps refusing. The move itself is the app's
 // (app/host/lib/dataDirMove.ts); the journal and the store's refusal are
 // `dataDirMoveJournal.ts`'s.
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
@@ -65,7 +65,7 @@ export const rekeyForward = (entry: Entry) =>
         project,
         worktreeIdFromPath(entry.oldPath),
         entry.newPath,
-        { expect: entry.capture ?? null, fromPath: entry.oldPath },
+        { expect: entry.capture, fromPath: entry.oldPath },
       ),
     );
   });
@@ -78,7 +78,7 @@ const rekeyBack = (entry: Entry) =>
         project,
         worktreeIdFromPath(entry.newPath),
         entry.oldPath,
-        { expect: entry.capture ?? null, back: true, fromPath: entry.newPath },
+        { expect: entry.capture, back: true, fromPath: entry.newPath },
       ),
     );
   });
@@ -301,7 +301,7 @@ export const undoMove = (journal: Journal, at: string, file: string) =>
     const entries: Array<Entry> = journal.moved.map((entry) => ({ ...entry }));
     let rekeyed = true;
     for (const entry of entries.toReversed()) {
-      const state = entry.state ?? "planned";
+      const state = entry.state;
       if (state === "returned") continue;
       const back = Effect.gen(function* () {
         // A `planned` entry's re-key may have run before a crash took its

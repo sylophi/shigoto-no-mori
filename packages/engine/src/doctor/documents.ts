@@ -150,7 +150,7 @@ export type StoreServices =
 
 export const isStoreImportError = Schema.is(StoreImportError);
 
-// The lines that judge the 2.x files, read as Go read them, while the
+// The lines that judge the 2.x files, read leniently, while the
 // store can't import them: config.json's, registry.json's, state.json's
 // when there is one, the store's own for a refused file none of them
 // names, and each registered project's project.json by project id.
@@ -240,8 +240,8 @@ export const JsonObjectText = Schema.fromJsonString(
   Schema.Record(Schema.String, Schema.Unknown),
 );
 
-// A JSON file as Go read it: absent, unreadable, not a JSON object, or
-// the object.
+// A JSON file as the doctor reads it: absent, unreadable, not a JSON
+// object, or the object.
 export type JsonFile =
   | { readonly state: "absent" }
   | { readonly state: "unreadable"; readonly why: string }
@@ -249,7 +249,7 @@ export type JsonFile =
   | { readonly state: "parsed"; readonly doc: ConfigDoc };
 
 // The registry's projects as the store imports them, and its manual
-// order as Go read it.
+// order.
 export const RegistryProjects = Schema.UndefinedOr(
   RegistryFileSchema.fields.projects,
 );

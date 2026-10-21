@@ -261,15 +261,11 @@ export const layer = (
         // The store holds what the machine's other accounts must not
         // read, a terminal's saved history among it, so it is the
         // owner's alone. SQLite gives the journal files it makes the
-        // database's mode, and those an older build made are put right
-        // (a drive with no modes, or a file not there, has none to fix).
+        // database's mode.
         yield* fs.writeFile(store, new Uint8Array(), {
           flag: "a",
           mode: 0o600,
         });
-        for (const file of [store, `${store}-wal`, `${store}-shm`]) {
-          yield* fs.chmod(file, 0o600).pipe(Effect.ignore);
-        }
         // While a data-folder move's journal is here the store refuses
         // writes, until the engine graph settles it (dataDirMove.ts).
         const client = yield* open(store);
@@ -336,11 +332,11 @@ export const layer = (
   ).pipe(Layer.provide(Reactivity.layer));
 
 // The data dir's 2.x files in a database in memory, `lenient` or not
-// (importJson.ts): leniently, what the store would refuse is skipped, as
-// the Go sm read around it. Every write is refused (UNMIGRATED), since
-// it would go nowhere. The doctor reads them this way while the store
-// can't import them or the app has yet to, and the terminal while the
-// app has yet to migrate them (`unmigrated`).
+// (importJson.ts): leniently, what the store would refuse is skipped.
+// Every write is refused (UNMIGRATED), since it would go nowhere. The
+// doctor reads them this way while the store can't import them or the
+// app has yet to, and the terminal while the app has yet to migrate
+// them (`unmigrated`).
 export const fromFiles = (
   open: OpenDatabase,
   lenient: boolean,

@@ -1,9 +1,8 @@
 // The data-folder move's recovery as every engine process runs it, and
-// the lock that makes a move the one change under way (V3.md, Commit
-// points): while a move's journal is in the data dir the store refuses
-// every process's writes, and the next engine graph to come up, the
-// terminal's as much as the app's, settles it first, holding the lock
-// alone.
+// the lock that makes a move the one change under way: while a move's
+// journal is in the data dir the store refuses every process's writes,
+// and the next engine graph to come up, the terminal's as much as the
+// app's, settles it first, holding the lock alone.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
