@@ -21,8 +21,8 @@
 // on its own poll, and a mirror watches it itself (mirror/gitState.ts).
 // refs/shigomori/ holds the app's own bookkeeping (dirty captures, a
 // transfer's landing refs, the mirror's staged-tree commits, discard
-// undos), which no view reads. Uncommitted file edits are not seen
-// there: they live in the working trees.
+// undos), which no view reads. Uncommitted file edits are not seen in
+// the git directory: they live in the working trees.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
