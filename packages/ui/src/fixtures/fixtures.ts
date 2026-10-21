@@ -1,7 +1,7 @@
-// The fixture world: one account and four devices, Studio Mac local,
-// Thinkpad online with a direct session, Mini and Work PC offline. Pure
-// data, which the scenes draw and the lab's fake host serves over
-// fixture wires (app/lab/fake-host/bridge.ts).
+// The fixture world: one account and its four devices (Studio Mac
+// local, Thinkpad online with a direct session, Mini and Work PC
+// offline). Pure data, which the scenes draw and the lab's fake host
+// serves over fixture wires (app/lab/fake-host/bridge.ts).
 import type * as Types from "effect/Types";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import type {

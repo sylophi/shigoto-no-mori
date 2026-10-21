@@ -3,9 +3,9 @@
    stylesheet rather than inside index.css: the four weights declare 488
    @font-face blocks (one per unicode-range subset, so Japanese text
    keeps the face), which is most of the bytes of the stylesheet the
-   first paint would otherwise wait on. Every
-   block is font-display: swap, so text paints in the fallback face and
-   swaps once the face loads. */
+   first paint would otherwise wait on. Every block is font-display:
+   swap, so text paints in the fallback face and swaps once the face
+   loads. */
 @import "@fontsource/zen-maru-gothic/400.css";
 @import "@fontsource/zen-maru-gothic/500.css";
 @import "@fontsource/zen-maru-gothic/700.css";
