@@ -1,7 +1,6 @@
 // The worktree verbs that change things: create, adopt and setup (each
-// waits for the lifecycle scripts), rm, move, and rekey.
+// waits for the lifecycle scripts), rm, move and rename.
 import { cdHintFor, cdNote, removeFlags } from "../removal.ts";
-import { isAbsolute } from "node:path";
 import { envVar } from "@shigomori/engine/environment";
 import type * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
@@ -24,7 +23,6 @@ import {
   absolute,
   cwdInside,
   given,
-  here,
   projectFlags,
   resolveProject,
   resolveWorktree,
@@ -386,52 +384,6 @@ export const rename = Command.make(
     }),
 ).pipe(
   Command.withDescription("Rename a worktree's folder"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
-
-// The app's plumbing for a folder about to move: what is kept under one
-// id carried to the id the new path will have.
-export const rekey = Command.make(
-  "rekey",
-  {
-    projectId: projectFlags.projectId,
-    fromId: Flag.String("from-id").pipe(Flag.optional),
-    toPath: Flag.String("to-path").pipe(Flag.optional),
-    rest,
-  },
-  (input) =>
-    Effect.gen(function* () {
-      const { binaryName } = yield* Effect.service(Output);
-      const projectId = given(input.projectId);
-      const fromId = given(input.fromId);
-      const toPath = given(input.toPath);
-      if (
-        Option.isNone(projectId) ||
-        Option.isNone(fromId) ||
-        Option.isNone(toPath) ||
-        input.rest.length > 0
-      ) {
-        return yield* new UsageError({
-          problem: `Usage: ${binaryName} worktrees rekey --project-id <id> --from-id <id> --to-path <path>`,
-        });
-      }
-      if (!isAbsolute(toPath.value)) {
-        return yield* new UsageError({
-          problem: `--to-path must be absolute: ${toPath.value}`,
-        });
-      }
-      const worktrees = yield* Worktrees.Worktrees;
-      const project = yield* worktrees.resolveProjectById(
-        yield* here,
-        projectId.value,
-      );
-      const id = yield* worktrees.rekey(project, fromId.value, toPath.value);
-      const { json } = yield* Effect.service(Output);
-      yield* json ? emit({ ok: true, id }) : out(id);
-    }),
-).pipe(
-  Command.withDescription("Carry a worktree's data to its next path"),
   Command.provideEffectDiscard(refuseUnmigrated),
   changing,
 );

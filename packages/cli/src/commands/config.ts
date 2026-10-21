@@ -10,11 +10,9 @@ import {
 } from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
-import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
 import { childEnv } from "@shigomori/engine/processes";
 import { rest } from "../here.ts";
@@ -176,30 +174,6 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       }),
   ).pipe(Command.withDescription("Reset a setting to its default"));
 
-  const write = Command.make(
-    "write",
-    { data: Flag.String("data").pipe(Flag.optional), rest },
-    ({ data }) =>
-      Effect.gen(function* () {
-        const settings = yield* resolve;
-        if (Option.isNone(data) || data.value === "") {
-          return yield* new UsageError({
-            problem: "write requires --data '<json>'.",
-          });
-        }
-        const payload = yield* Schema.decodeEffect(
-          Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
-        )(data.value).pipe(
-          Effect.mapError(
-            () => new UsageError({ problem: "--data must be a JSON object." }),
-          ),
-        );
-        const config = yield* Config.Config;
-        yield* config.write(settings.scope, payload);
-        yield* emit({ ok: true });
-      }),
-  ).pipe(Command.withDescription("Write the whole document (app plumbing)"));
-
   // The whole document in $VISUAL or $EDITOR, written back as one save
   // once the editor quits. The store holds the settings, so the editor
   // gets a copy in a file of its own.
@@ -274,16 +248,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
     }),
   ).pipe(Command.withDescription("Edit the settings in $VISUAL or $EDITOR"));
 
-  return [
-    list,
-    get,
-    read,
-    set,
-    unset,
-    write,
-    edit,
-    launcherVerb(resolve),
-  ] as const;
+  return [list, get, read, set, unset, edit, launcherVerb(resolve)] as const;
 }
 
 const device: Settings = {

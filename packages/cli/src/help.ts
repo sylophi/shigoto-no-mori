@@ -113,11 +113,6 @@ const catalog = (names: Names) => {
           "--stack lands the PR with every open PR under it in its stack (merge --stack), then removes every worktree whose branch landed, the lower layers' included. A PR that sits on another open PR is refused without it. The removal guards cover all of them before anything merges.",
       ],
       [
-        "worktrees destination [--name <name>]",
-        "Preview where a new worktree would go",
-        "App plumbing for the create dialog. Nothing is created. The name is --name, or a fresh pick (the one create makes without a name, skipping worktree and local branch names). The path is that folder under the project's worktree layout. --json prints {ok, name, path, taken}, taken meaning the name matches one of the project's worktrees (case-insensitively) or something already exists at the path.",
-      ],
-      [
         "worktrees adopt [<name-or-path>] [-f]",
         "Convert an external worktree to managed",
         "Moves it into the layout and runs the lifecycle. Refuses dirty worktrees without -f.",
@@ -185,11 +180,6 @@ const catalog = (names: Names) => {
         "A move to the same parent under <new-name>, which is checked as create checks a custom name: a valid folder name, not a reserved one, not one another worktree of the project has. Everything a move carries comes along, and as with any move the worktree gets a new id and new port-pool ports, and a bound agent session's transcript stays with the old folder. Refuses the primary, and while the running app has scripts or terminals open there. Prints the new path; --json prints {ok, worktree: <row>, previousId}.",
       ],
       [
-        "worktrees rekey --project-id <id> --from-id <id> --to-path <path>",
-        "Re-key a worktree ahead of a move",
-        "App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf and auto-pull marks, the bound agent sessions, the worktree's stored data and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}.",
-      ],
-      [
         "worktrees open [<tool>] [<name>]",
         "Launch a launcher-row tool in a worktree",
         "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
@@ -214,7 +204,7 @@ const catalog = (names: Names) => {
       [
         "projects list [--refresh-icons]",
         "List registered projects",
-        "Registry entries and, when that integration is on, terrier-registered repos, in the sidebar's manual order (`projects reorder`). --json prints one array of rows: id, name, path, source (\"terrier\" or absent), pathExists, identity (the cross-device repo key, or null), lastUsed and recentCount (the app's project use log), icon ({path, mime}, or null) and hue (always null). Icons resolve through the shared icon cache; --refresh-icons re-scans projects it remembers as icon-less.",
+        "Registry entries and, when that integration is on, terrier-registered repos, in the sidebar's manual order. --json prints one array of rows: id, name, path, source (\"terrier\" or absent), pathExists, identity (the cross-device repo key, or null), lastUsed and recentCount (the app's project use log), icon ({path, mime}, or null) and hue (always null). Icons resolve through the shared icon cache; --refresh-icons re-scans projects it remembers as icon-less.",
       ],
       [
         "projects icon [<name>]",
@@ -240,11 +230,6 @@ const catalog = (names: Names) => {
           "and its worktrees are reconnected to the repo (`git worktree repair`), including any that moved with it. " +
           "After a rename, managed worktrees move to the folder named after the new one. " +
           "--json prints {ok, project}, project being a `projects list` row.",
-      ],
-      [
-        "projects reorder --ids <id1,id2,...>",
-        "Reorder projects",
-        "App plumbing for the sidebar's drag-to-reorder: the listed ids move to the front in that order, the rest keep their order after them. Terrier-only projects reorder like any other. Stale ids are ignored, and an unchanged order writes nothing. --json prints {ok}.",
       ],
       [
         "projects config [<command>] [args]",

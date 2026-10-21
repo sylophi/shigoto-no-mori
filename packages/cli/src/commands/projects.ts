@@ -1,4 +1,4 @@
-// sm projects <list|icon|add|remove|relocate|reorder|config>: the registered
+// sm projects <list|icon|add|remove|relocate|config>: the registered
 // projects, terrier's included, and each one's settings.
 import { basename } from "node:path";
 import {
@@ -367,39 +367,7 @@ const relocate = Command.make(
     }),
 ).pipe(Command.withDescription("Point a project at its moved repo"), changing);
 
-const reorder = Command.make(
-  "reorder",
-  { ids: Flag.String("ids").pipe(Flag.optional) },
-  ({ ids }) =>
-    Effect.gen(function* () {
-      const { json, binaryName } = yield* Effect.service(Output);
-      if (Option.isNone(ids)) {
-        return yield* new UsageError({
-          problem: `Usage: ${binaryName} projects reorder --ids <id1,id2,...>`,
-        });
-      }
-      yield* warnTerrier;
-      const registry = yield* Registry.Registry;
-      yield* registry.reorder(
-        yield* registry.listed,
-        ids.value
-          .split(",")
-          .map((id) => id.trim())
-          .filter((id) => id !== ""),
-      );
-      yield* json ? emit({ ok: true }) : out("reordered projects");
-    }),
-).pipe(Command.withDescription("Put projects first in the given order"));
-
 export const projectsCommand = Command.make("projects").pipe(
   Command.withDescription("Project commands"),
-  Command.withSubcommands([
-    list,
-    add,
-    remove,
-    relocate,
-    reorder,
-    icon,
-    projectConfig,
-  ]),
+  Command.withSubcommands([list, add, remove, relocate, icon, projectConfig]),
 );

@@ -1,7 +1,7 @@
 // sm update: the app (and with it this command, which lives in its
 // bundle) brought up to date from the terminal, over the engine's
-// Updater. --check only asks, --stage downloads and verifies, and the
-// app spawns --finish-install --pid as it quits to restart.
+// Updater. --check only asks, and the app spawns --finish-install --pid
+// as it quits to restart.
 import * as Updater from "@shigomori/engine/Updater";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -63,12 +63,6 @@ export const update = Command.make(
       Flag.withDescription("Only say whether there is an update"),
       Flag.withDefault(false),
     ),
-    stage: Flag.Boolean("stage").pipe(
-      Flag.withDescription(
-        "Download and verify the update, short of installing",
-      ),
-      Flag.withDefault(false),
-    ),
     finishInstall: Flag.Boolean("finish-install").pipe(
       Flag.withDescription("Install once the app has quit (the app's)"),
       Flag.withDefault(false),
@@ -127,9 +121,7 @@ export const update = Command.make(
       };
       const result = flags.check
         ? yield* updater.check(input)
-        : flags.stage
-          ? yield* updater.stage(input)
-          : yield* updater.update(input);
+        : yield* updater.update(input);
       yield* progress.stop;
       if (json) return yield* emit(result);
       const hint = note(
@@ -141,11 +133,6 @@ export const update = Command.make(
         case "update-available":
           yield* out(
             `${green("update available: ")}${cyan(result.version)}${dim(` (installed ${result.installed})`)}`,
-          );
-          return yield* hint;
-        case "staged":
-          yield* out(
-            `${green("update staged: ")}${cyan(result.version)}${dim(` (installed ${result.installed})`)}`,
           );
           return yield* hint;
         case "updated":

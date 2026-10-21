@@ -13,8 +13,8 @@
 // ids are hashes of the worktree's absolute path, so everything the
 // engine keys by the id of every managed worktree under the data dir
 // (marks, the worktree's data, a pending dirty capture) is re-keyed
-// (the engine's rekey, `sm worktrees rekey`), and git's own worktree links are
-// re-pointed by `git worktree repair`.
+// (the engine's rekey), and git's own worktree links are re-pointed by
+// `git worktree repair`.
 //
 // The move is the one change under way: it holds the data-folder lock
 // alone from its first step to its last (`DataDirLock`). A move a crash

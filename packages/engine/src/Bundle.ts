@@ -12,12 +12,8 @@ import * as Git from "./Git.ts";
 export type RefTip = { readonly ref: string; readonly commit: string };
 
 export type BundleMade = {
-  readonly path: string;
   readonly bytes: number;
   readonly refs: ReadonlyArray<RefTip>;
-  // The haves this repository doesn't know, which the bundle can't
-  // leave out.
-  readonly skippedHaves: ReadonlyArray<string> | null;
 };
 
 // A ref, a have, a refspec or a bundle that won't do. `subject` is what
@@ -152,7 +148,6 @@ const make = Effect.gen(function* () {
     const known = haves.filter(
       (_, index) => answers[index]?.trim().split(/\s+/)[1] === "commit",
     );
-    const skipped = haves.filter((have) => !known.includes(have));
     yield* git.run(repo, [
       "bundle",
       "create",
@@ -169,13 +164,11 @@ const make = Effect.gen(function* () {
         .map((line) => line.slice(line.indexOf(" ") + 1)),
     );
     return {
-      path: out,
       bytes: Number(size),
       refs: yield* tips(
         repo,
         refs.filter((ref) => heads.has(ref)),
       ),
-      skippedHaves: skipped.length === 0 ? null : skipped,
     };
   });
 
