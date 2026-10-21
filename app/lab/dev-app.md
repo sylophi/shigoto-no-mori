@@ -201,10 +201,6 @@ each other over the LAN.
 <dev userData>/profiles/<name>          userData
 ```
 
-Profiles made before 2.0 lived under `~/shigomori-dev-profiles/<name>/`
-and are not migrated: revoke their devices, delete that folder, and
-start them again with `--fresh`.
-
 Profile names are lowercase letters, digits and dashes, up to 32
 characters. `scripts/lib/devProfile.mts` owns the layout.
 

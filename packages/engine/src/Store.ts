@@ -94,8 +94,8 @@ const platformOnly = Effect.map(
 );
 
 // The schema's history, in order, its imports of a 2.x data dir's files
-// `lenient` or not (importJson.ts). A released migration is never
-// edited. A change is a new one.
+// `lenient` or not (importJson.ts). A released migration never changes
+// what it makes of a store: a change is a new one.
 const history = (platform: Platform, lenient: boolean) => ({
   "1_tables": tables,
   "2_import_json": Effect.provideContext(importFiles(lenient), platform),

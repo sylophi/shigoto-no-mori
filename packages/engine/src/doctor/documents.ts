@@ -267,8 +267,8 @@ const textAt = (doc: Readonly<Record<string, unknown>> | null, key: string) => {
   return typeof value === "string" ? value : "";
 };
 
-// The carry-over entries' paths, every entry the settings list, as Go
-// checks them: one create would skip still fails the check.
+// The carry-over entries' paths, every entry the settings list: one a
+// create would skip still fails the check.
 export const carryOverPaths = (settings: ConfigDoc | null) => {
   const value = settings?.["carryOver"];
   return Array.isArray(value)

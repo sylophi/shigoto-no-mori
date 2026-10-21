@@ -19,8 +19,8 @@ export type ReleaseInfo = {
   readonly releaseDate: string;
 };
 
-// The feeds are read as Go read them into its structs: a missing or
-// null field is its zero value ("", false, none), and only a value of
+// The feeds are read as Go's encoding/json reads them into structs: a
+// missing or null field is its zero value ("", false, none), and only a value of
 // the wrong type fails. GitHub sends null for an empty body or an
 // unpublished date.
 const Text = Schema.optional(Schema.NullOr(Schema.String));
@@ -60,7 +60,7 @@ type GitHubRelease = typeof GitHubRelease.Type;
 export const ReleaseList = Schema.NullOr(Schema.Array(GitHubRelease));
 
 // The last release list the API served, kept as updates/release-list.json
-// in the shape the Go sm kept it.
+// in the shape a 2.x sm keeps it.
 export const ReleaseListCache = Schema.Struct({
   // The endpoint it came from: a stand-in's list never answers for the
   // real one, or the reverse.

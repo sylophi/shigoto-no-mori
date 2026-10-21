@@ -40,7 +40,7 @@ export class StagingLockUnavailable extends Schema.TaggedError<StagingLockUnavai
 // process the system handed the number to after a crash or a reboot:
 // the holder is gone. Both times are this machine's, read the same way,
 // so neither the file's own clock nor a skew between them counts. A
-// file with no start (v2's, or one written when this process's start
+// file with no start (v2's, or one written when its writer's start
 // couldn't be read) holds while its pid lives.
 export const stagingHolder = Effect.fn("stagingHolder")(function* (
   file: string,

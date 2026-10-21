@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import { dropsKeys, registryHint, skip } from "./importJson.ts";
 
-// One session as a 2.x registry.json keeps it (the Go sm's agents.go).
+// One session as a 2.x registry.json keeps it.
 const V2SessionSchema = Schema.Struct({
   harness: Schema.String,
   session: Schema.String,

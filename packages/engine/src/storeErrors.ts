@@ -1,9 +1,9 @@
 // The store's failures in words: a statement SQLite refused, sorted by
 // what a person can do about it. The services read the store as a given
-// (a failure there is a defect, which reaches the terminal and the app
-// as the driver's "Failed to execute statement"); the transports read
-// it back here (errorDocument.ts, the host's call failures), and the
-// store's open says it too.
+// (a failure there is a defect, in the driver's words "Failed to
+// execute statement"), so the transports read it back here
+// (errorDocument.ts, the host's call failures), and the store's open
+// says it too.
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 

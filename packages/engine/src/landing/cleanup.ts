@@ -187,9 +187,9 @@ export const makeCleanup = ({
     // refuses to delete one that is out. The branch landed on is never
     // deleted. The pull comes last and doesn't fail it: by then the merge
     // is in and the branch gone, and a pull that failed (offline, a
-    // primary that went its own way) is said beside them. Failing here
-    // would leave the branch for good: a land again looks up the
-    // primary's PR and a done finds nothing to delete.
+    // primary that went its own way) is said beside them. Before the
+    // delete, its failure would leave the branch for good: a land again
+    // looks up the primary's PR and a done finds nothing to delete.
     const execDone = (
       project: RegisteredProject,
       target: Worktrees.PrimaryTarget,

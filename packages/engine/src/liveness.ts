@@ -5,8 +5,8 @@
 // handshake with the app, the shell's watchdog, a host at a quit).
 // Effect's pinger judges the age of the last frame before it sends a
 // ping, on the wall clock: a hidden page whose timers run once a minute
-// would cut a quiet, healthy peer on its next turn, and a wake whatever
-// was asked before the sleep.
+// would cut a quiet, healthy peer on its next turn, and a wake would
+// cut whatever was asked before the sleep.
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";

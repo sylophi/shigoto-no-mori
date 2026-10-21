@@ -107,7 +107,7 @@ const githubPage = (remoteUrl: string) => {
     : `https://${host}/${owner}/${repo}`;
 };
 
-// A JSON field Go read into a string: absent, null or text.
+// A JSON field read as a string: absent, null or text.
 const text = (value: unknown) =>
   value === undefined || value === null || typeof value === "string";
 

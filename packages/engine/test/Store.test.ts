@@ -521,7 +521,7 @@ it("imports a use log longer than one statement can bind", async () => {
   assert.equal(row?.n, 20_000);
 });
 
-it("reads what the Go sm reads: missing fields, unknown modes, field by field", async () => {
+it("reads missing fields and unknown modes field by field", async () => {
   write("registry.json", { projects: [{ id: "A", path: "/a" }] });
   write("state.json", { packageScriptSort: { A: "fromNewerBuild" } });
   write("projects/A/worktrees/aaaaaaaaaaaa.json", {

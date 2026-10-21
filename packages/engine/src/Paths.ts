@@ -35,7 +35,7 @@ class RetiredRootVariable extends Schema.TaggedError<RetiredRootVariable>()(
   {},
 ) {
   override get message(): string {
-    return "SHIGOMORI_ROOT isn't read. Set SHIGOMORI_DATA_DIR instead.";
+    return "SHIGOMORI_ROOT is no longer read. Set SHIGOMORI_DATA_DIR instead.";
   }
 }
 
