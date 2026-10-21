@@ -87,6 +87,16 @@ export const makeResolving = ({ listing }: { readonly listing: ListingArea }) =>
       };
     });
 
+    const nowhere = Effect.map(
+      registry.listed,
+      (projects): Here => ({
+        cwd: "/",
+        projects,
+        current: undefined,
+        unregisteredRepo: undefined,
+      }),
+    ).pipe(Effect.withSpan("Worktrees.nowhere"));
+
     // A typed path made absolute against the command's cwd, ~ expanded.
     const absolute = (here: Here, ref: string) =>
       path.resolve(here.cwd, paths.expandHome(ref));
@@ -274,6 +284,7 @@ export const makeResolving = ({ listing }: { readonly listing: ListingArea }) =>
 
     return {
       locate,
+      nowhere,
       resolveProject,
       resolveProjectById,
       resolveProjectRef,
