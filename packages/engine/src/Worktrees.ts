@@ -142,6 +142,9 @@ export class Worktrees extends Context.Service<
 
     // Where `cwd` is among the registered projects.
     readonly here: (cwd: string) => Effect.Effect<Here>;
+    // The registered projects, at no checkout, read with no git: where a
+    // caller that names projects and worktrees by id stands.
+    readonly nowhere: Effect.Effect<Here>;
     // The project `ref` names (a name, an id, a path), or the one at the
     // cwd without one.
     readonly resolveProject: (
@@ -435,6 +438,7 @@ const make = Effect.gen(function* () {
   const { status, poolPorts } = statusCard;
   const {
     locate,
+    nowhere,
     resolveProject,
     resolveProjectById,
     resolveProjectRef,
@@ -458,6 +462,7 @@ const make = Effect.gen(function* () {
     poolPorts,
     portPoolActive,
     here: locate,
+    nowhere,
     resolveProject,
     resolveProjectById,
     resolveProjectRef,

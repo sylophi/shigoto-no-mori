@@ -748,7 +748,7 @@ export const listWorktreeIdentities = Effect.fnUntraced(function* (
   const rows = yield* asCall(
     Effect.gen(function* () {
       const worktrees = yield* Worktrees.Worktrees;
-      const at = yield* worktrees.here("/");
+      const at = yield* worktrees.nowhere;
       if (scope.worktreeId !== undefined) {
         const located = yield* worktrees.resolve(at, scope);
         return [yield* worktrees.identityRow(located, options)];

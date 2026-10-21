@@ -204,22 +204,22 @@ export const asChange = <A, E, R>(
   kind?: ChangeKind,
 ) => asCall(changing(effect, ids, kind), ids);
 
-// The engine's view of where the host stands: nowhere, since a host
-// call names its project and worktree by id.
-const nowhere = Effect.gen(function* () {
-  return yield* (yield* Worktrees.Worktrees).here("/");
-});
-
 // A registered project by id.
 export const projectById = (projectId: string) =>
   Effect.gen(function* () {
     const worktrees = yield* Worktrees.Worktrees;
-    return yield* worktrees.resolveProjectById(yield* nowhere, projectId);
+    return yield* worktrees.resolveProjectById(
+      yield* worktrees.nowhere,
+      projectId,
+    );
   });
 
 // A worktree by its project's id and its own.
 export const locate = (projectId: string, worktreeId: string) =>
   Effect.gen(function* () {
     const worktrees = yield* Worktrees.Worktrees;
-    return yield* worktrees.resolve(yield* nowhere, { projectId, worktreeId });
+    return yield* worktrees.resolve(yield* worktrees.nowhere, {
+      projectId,
+      worktreeId,
+    });
   });

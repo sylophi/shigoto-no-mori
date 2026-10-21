@@ -146,7 +146,7 @@ it("ports: the list and `sm worktrees status` read the env files port-pool wrote
     Effect.gen(function* () {
       const worktrees = yield* EngineWorktrees.Worktrees;
       const located = yield* worktrees.resolve(
-        yield* worktrees.here("/"),
+        yield* worktrees.nowhere,
         worktree,
       );
       return yield* worktrees.status(located, { pullRequest: false });

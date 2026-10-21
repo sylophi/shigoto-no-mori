@@ -75,7 +75,7 @@ it("a custom launcher's command keeps running once it is launched", async () => 
   await box.engine(
     Effect.gen(function* () {
       const worktrees = yield* Worktrees.Worktrees;
-      const located = yield* worktrees.resolve(yield* worktrees.here("/"), {
+      const located = yield* worktrees.resolve(yield* worktrees.nowhere, {
         projectId: "P",
         worktreeId: worktreeIdFromPath(repo),
       });
