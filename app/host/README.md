@@ -63,8 +63,9 @@ commits it (`EFFECT.md`, section 5); the engine's are in
   the folder register a clone a crash left between the two.
 - **A landing** (`lib/sync/landing.ts`): the caller's run of the
   `keep` it answers with commits it, once the move has nothing left to
-  fail. Until then a failure or a cancel at any step of the move undoes
-  its create (`Worktrees.createHeld`).
+  fail. Until then a failure or a cancel undoes its create
+  (`Worktrees.createHeld`); after it only a cancel does, at a later
+  step of the move (a pull's files step).
 - **The data-folder move** (`lib/dataDirMove.ts`): the pointer commits
   it. Its journal, kept in the data folder, is written before the
   re-key: a start that finds it at the source undoes the move, one that
