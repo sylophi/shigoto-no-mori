@@ -5,7 +5,8 @@
 // never closes on its own. A mirror's serve child is stopped and its
 // serving entry dropped from that callback (host/ipc/modules/mirror.ts).
 // Beneath it, a channel completes cleanly even when this side's end
-// waited behind bytes the far end had not taken yet.
+// waited behind bytes the far end had not taken yet, and the host's
+// reset reaches a dialer as soon as it takes the bytes ahead of it.
 //
 // Run: pnpm test channel-streams.
 import assert from "node:assert/strict";
@@ -13,7 +14,7 @@ import { Duplex } from "node:stream";
 import { it } from "vitest";
 import { mintHexId } from "@host/lib/hexId";
 import { attachFarEnd } from "@host/socket/channelStreams";
-import type { ChannelEndpoint } from "@shigomori/contracts/link";
+import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
 import { CHANNEL_WINDOW_BYTES } from "@shared/remote/channels";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { type Track, waitFor } from "./lib/checkKit.mts";
@@ -137,4 +138,39 @@ it("an end queued behind bytes the far end has not taken: the writer is told to 
   await waitFor(() => completed === 1, "the channel to complete");
   assert.equal(writable, 1);
   assert.equal(sender.open, false);
+});
+
+it("the host's reset behind bytes the dialer has not taken reaches it as soon as it takes them, with none of its reads left waiting at the host", async () => {
+  let hostEnd: ChannelHandle | undefined;
+  const { openChannel } = await linked(trackTest, (ctx, channelId) => {
+    const channels = ctx.channels;
+    assert.ok(channels !== undefined, "the link carries no channels");
+    hostEnd = channels.attach(channelId, {
+      onData: (_data, consumed) => consumed(),
+      onEnd: () => {},
+      onReset: () => {},
+      onWritable: () => {},
+    });
+  });
+  const held: (() => void)[] = [];
+  let reset = false;
+  await openChannel({
+    onData: (_data, consumed) => held.push(consumed),
+    onEnd: () => {},
+    onReset: () => {
+      reset = true;
+    },
+    onWritable: () => {},
+  });
+  assert.ok(hostEnd !== undefined, "the open attached nothing");
+  // More than the dialer ever reads ahead, so the host answers each read
+  // as it comes and the reset finds none waiting: the dialer hears it on
+  // a read it sends after.
+  hostEnd.write(new Uint8Array(CHANNEL_WINDOW_BYTES + 1));
+  await waitFor(() => held.length > 0, "the first piece to arrive");
+  hostEnd.reset();
+  await waitFor(() => {
+    for (const consumed of held.splice(0)) consumed();
+    return reset;
+  }, "the reset to reach the dialer once it took what came first");
 });
