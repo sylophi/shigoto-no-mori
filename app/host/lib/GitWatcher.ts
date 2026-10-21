@@ -15,14 +15,14 @@
 // worktree's HEAD, a worktree entry appearing or vanishing), not
 // "anything under .git": objects/ churns on every commit, logs/
 // mirrors every ref update, FETCH_HEAD is rewritten by the app's own
-// minute sweep, and `index` is rewritten by every stage
-// and by another program's `git status` or `git diff` (a person's, a
-// prompt's dirty check), while a stage moves no ref: the open changes
-// page reads it on its own poll, and a mirror watches it itself
-// (mirror/gitState.ts). Uncommitted file edits are not seen there: they
-// live in the working trees. refs/shigomori/ holds the app's own
-// bookkeeping (dirty captures, a transfer's landing refs, the mirror's
-// staged-tree commits, discard undos), which no view reads.
+// minute sweep, and `index` is rewritten by every stage and by another
+// program's `git status` or `git diff` (a person's, a prompt's dirty
+// check), while a stage moves no ref: the open changes page reads it
+// on its own poll, and a mirror watches it itself (mirror/gitState.ts).
+// refs/shigomori/ holds the app's own bookkeeping (dirty captures, a
+// transfer's landing refs, the mirror's staged-tree commits, discard
+// undos), which no view reads. Uncommitted file edits are not seen
+// there: they live in the working trees.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
@@ -201,7 +201,8 @@ const gitStateOf = (gitDir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const stamp = (relative: string) =>
+    // Undefined for a file that isn't there.
+    const stampIfThere = (relative: string) =>
       fs.stat(path.join(gitDir, relative)).pipe(
         Effect.map((info) => {
           // A directory counts by being there: its mtime moves with any
@@ -215,8 +216,10 @@ const gitStateOf = (gitDir: string) =>
           });
           return `${relative}@${ino}:${mtime}:${info.size}`;
         }),
-        Effect.catchIf(isNotFound, () => Effect.succeed(`${relative}@-`)),
+        Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
       );
+    const stamp = (relative: string) =>
+      Effect.map(stampIfThere(relative), (seen) => seen ?? `${relative}@-`);
     const read = (relative: string) =>
       fs
         .readFileString(path.join(gitDir, relative))
@@ -251,7 +254,9 @@ const gitStateOf = (gitDir: string) =>
     for (const ref of (yield* listed("refs", true)).toSorted()) {
       const relative = path.join("refs", ref);
       if (!isRelevantGitPath(relative)) continue;
-      parts.push(yield* stamp(relative));
+      // One gone since the listing reads as the next listing will.
+      const seen = yield* stampIfThere(relative);
+      if (seen !== undefined) parts.push(seen);
     }
     return parts.join("\n");
   });

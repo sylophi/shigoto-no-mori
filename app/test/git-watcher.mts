@@ -13,9 +13,9 @@
 // the registry, and the working trees' watch: an edit in the main
 // checkout or a linked worktree lands as one files change, `.git`
 // churn as none, and a worktree added or removed is followed. And the
-// backstop: with the git directory's events lost on purpose, a commit,
-// a branch made and deleted, and a checkout are still signalled, once
-// each, an own ref and a ref directory's churn not at all, a working
+// backstop: with the git directory's events lost on purpose, a commit
+// is still signalled, once, and so are a branch made and deleted and a
+// checkout, an own ref and a ref directory's churn not at all, a working
 // tree whose watch ended is watched again, and the mirror's index watch
 // fires for a stage it never heard.
 //
@@ -316,7 +316,7 @@ it("real repository: a commit, a checkout and a branch delete each land as one p
   assert.deepEqual(edits, [], "nor report its edits");
 });
 
-it("backstop: a commit, a branch made and deleted, and a checkout whose events were all lost are each signalled once, an own ref and a ref directory's churn not at all, and a working tree whose watch ended is watched again and its edits said unseen", async () => {
+it("backstop: a commit whose events were all lost is signalled once, and a branch made and deleted and a checkout are signalled, an own ref and a ref directory's churn not at all, and a working tree whose watch ended is watched again and its edits said unseen", async () => {
   const root = tempDir("sm-gitwatch-backstop-", trackTest);
   const repo = join(root, "repo");
   git(root, "init", "-q", "-b", "main", repo);
