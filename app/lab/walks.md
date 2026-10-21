@@ -47,7 +47,7 @@ else.
   It can also be started by hand (`workflow_dispatch`). A regression
   shows within the hour after a merge and before any cut.
 - **Before every prerelease cut**, as the packaged check
-  (`V3.md`, Process), on the build about to be cut.
+  (`release.md`, gate 2), on the build about to be cut.
 - **By hand**, with `pnpm walks`, for a change that touches a page.
 
 `stuck-nuke` and `update-button` read the app's native dialogs through

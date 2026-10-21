@@ -23,6 +23,75 @@
 // before its re-key to its end, and a copy to another volume goes into a
 // sibling of the destination, flushed to disk and renamed in only once
 // whole.
+//
+// The journal is written whole and flushed each time it changes. Each
+// worktree that moves is an entry (its project, old and new path, its
+// dirty capture's commit or null, and its mark: `planned`, `rekeyed` or
+// `returned`). A strict read is one whose error is an error, never taken
+// for absence: a capture ref git can't open or parse (`Git.readRef`), a
+// journal that can't be read or decoded. The steps, and what a crash
+// after each leaves:
+//  0. The lock alone, waiting 30 s for the changes under way (one still
+//     running refuses the move), then an earlier journal settled. Until
+//     it is, the move is refused and the store keeps refusing writes.
+//  1. Scripts killed, the pointer staged and flushed. A staged pointer
+//     naming a folder that never came, which Paths ignores: its rescue
+//     needs a journal.
+//  2. The store refusing, then the journal, with no entries. Before the
+//     journal, a refusing store with none, which the next settle lets
+//     write; after it, an undo with nothing to reverse.
+//  3. The plan: git's listing of each project's worktrees, made holding
+//     the lock alone, so no create, adopt or move can change it. A
+//     listing that fails refuses the move, unless the project's folder
+//     is gone. As 2.
+//  4. The preflight: nothing kept under any entry's new id (marks,
+//     sessions, shelf, data rows, a capture read strictly), or the move
+//     is refused. As 2.
+//  5. The snapshot: each entry's capture, read strictly, and every entry
+//     `planned`. An undo with nothing to reverse.
+//  6. Each entry re-keyed (its rows in one transaction, the capture only
+//     if it is the snapshot's, else the move fails), then marked
+//     `rekeyed`. One re-keyed but still `planned` is reversed by the
+//     undo, since only its re-key can have put anything under its new id
+//     (2 and 4).
+//  7. What holds the folder let go: the store's watcher, the updater's
+//     bridge, the loopback's address file. As 6.
+//  8. The folder moved and flushed: a rename, one step with its mark that
+//     a cancel can't cut, or a copy, `partial` set first, holding the
+//     store's write lock, every file and folder flushed past the drive's
+//     cache, then renamed in. Before it, an undo at the source; after
+//     it, the journal is at the destination with the pointer unmoved,
+//     which Paths' rescue commits (a rename) or the source's journal
+//     undoes (a copy).
+//  9. The pointer committed, renamed in (or removed, for the default
+//     place) and its folder flushed. Finished at the destination.
+// 10. The finish: git's repair here; then, by the first process to open
+//     the store at the new place, holding the lock alone (the engine's
+//     `finishMove`), a copy's old tree deleted while it holds this
+//     move's journal (read strictly, that journal last), git's repair of
+//     the entries and of every worktree listed under the old folder,
+//     their port-pool leases carried, then the journal gone and the
+//     store writing again. A crash leaves it to the next process there,
+//     and a copy's old tree takes its space until then.
+//
+// The undo (the engine's `undoMove`) goes from the last entry to the
+// first, each reversal the move's own write: `returned` is skipped,
+// `rekeyed` reversed, `planned` reversed only if something is kept under
+// its new id. A reversal moves the rows back in one transaction and the
+// capture only if it is the snapshot's commit, read strictly; any other
+// stays where it is, and one that can't be read fails the undo. Each
+// reversed entry is marked `returned` before the next, so a retried undo
+// never reverses one twice. Then a copy's partial folder goes, and its
+// landed one if the journal it carries is this move's (that journal
+// last), then the journal, and only then does the store write again.
+// A failure keeps the journal and the refusal for the next process, and
+// a journal that can't be read is never settled: it stays, for a look.
+//
+// Not covered: `SHIGOMORI_DATA_DIR` naming the folder a move moved still
+// names the old place; a write from outside sm into a copy's old tree
+// before the relaunch goes with the old tree; a copy can take a mirrored
+// file mid-write (the peer's next cycle sends it again); under reftable
+// a capture ref git can't open reads as absent.
 import { installingWords } from "@host/lib/Shell";
 import { cp, mkdir, open, readdir, rmdir } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";

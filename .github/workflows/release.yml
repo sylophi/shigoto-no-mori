@@ -1,3 +1,4 @@
+# The gates a prerelease passes before it is tagged: app/lab/release.md.
 name: Release
 
 on:

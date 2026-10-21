@@ -28,9 +28,9 @@
 // attach to as to the dev app, until this script is stopped.
 //
 // With --update-installed <installed .app> <its data dir>, the step
-// before a cut instead (V3.md, "Process"): the app installed on this
-// machine, running and signed in, takes the build through Restart to
-// update (updateInstalled, below).
+// before a cut instead (app/lab/release.md, gate 3): the app installed
+// on this machine, running and signed in, takes the build through
+// Restart to update (updateInstalled, below).
 //
 // It uses the build's own userData and logs folder, which a launch
 // creates, so run it where that build is not installed, and nuke a
@@ -523,8 +523,8 @@ function runningFrom(executable: string): number | null {
   return line === undefined ? null : Number.parseInt(line, 10);
 }
 
-// The step before a cut (V3.md, "Process"): the app installed on this
-// machine, signed in on its own data folder, takes the candidate
+// The step before a cut (app/lab/release.md, gate 3): the app installed
+// on this machine, signed in on its own data folder, takes the candidate
 // `bundle` through Settings' button and comes back on it, signed in. The
 // candidate is built as the next version up from the installed one, so
 // the release cut after it is still an update, and offered from a local
