@@ -181,6 +181,16 @@ export const settle = async (page: Page, success: string, failure: string) => {
   }
 };
 
+// The page a live mirror to `device` leaves on: the copy's, there,
+// once this device has read the copy's listing off `device`.
+export const onCopy = (page: Page, device: string) =>
+  main(page)
+    .getByRole("tab", {
+      name: new RegExp(`\\[walk-${device}\\].*copy`),
+      selected: true,
+    })
+    .waitFor({ timeout: 30_000 });
+
 // Mirror from the worktree's own page, to `device`, or from a peer's
 // page, here.
 export const mirror = async (lab: Lab, device?: string) => {
@@ -192,6 +202,7 @@ export const mirror = async (lab: Lab, device?: string) => {
   await dialog.getByRole("button", { name: "Start mirroring" }).click();
   await settle(lab.page, "Mirror live", "Mirror didn't start");
   await lab.page.keyboard.press("Escape");
+  if (device !== undefined) await onCopy(lab.page, device);
 };
 
 // Transplant from the worktree's own page, to `device`, or from a peer's

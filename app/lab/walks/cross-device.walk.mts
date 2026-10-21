@@ -14,6 +14,7 @@ import type { Lab } from "./lib/labApp.mts";
 import {
   confirmTwice,
   mirror,
+  onCopy,
   openOwnWorktree,
   openPeerWorktree,
   pickDevice,
@@ -191,6 +192,7 @@ it("mirrors a worktree to a device without the project: it clones the project as
   await dialog.getByRole("button", { name: "Start mirroring" }).click();
   await settle(a.page, "Mirror live", "Mirror didn't start");
   await a.page.keyboard.press("Escape");
+  await onCopy(a.page, "b");
   expectCloneOfRemote(b);
   await expectLanded(b, name);
 });
