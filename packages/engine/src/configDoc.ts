@@ -155,60 +155,24 @@ export function docDelete(doc: ConfigDoc, name: string): void {
   }
 }
 
-// docDelete for a whole-document write, which must not give up: a
-// parent holding a non-object is dropped whole, since a scalar, an array
-// or a null has no fields under it to keep.
-function docClear(doc: ConfigDoc, name: string): void {
-  const parts = name.split(".");
-  let current = doc;
-  for (const [index, part] of parts.slice(0, -1).entries()) {
-    if (!(part in current)) return;
-    const child = current[part];
-    if (!isObject(child)) {
-      docDelete(doc, parts.slice(0, index + 1).join("."));
-      return;
-    }
-    current = child;
-  }
-  docDelete(doc, name);
-}
-
-// A null deletes its key, an object merges into the stored object field
-// by field, anything else replaces what is there. An object the
-// payload's nulls empty is dropped. An empty object sent is kept.
-function mergeObjects(doc: ConfigDoc, payload: ConfigDoc): void {
-  for (const [name, value] of Object.entries(payload)) {
-    if (value === null) {
-      delete doc[name];
-    } else if (isObject(value)) {
-      const existing = isObject(doc[name]) ? (doc[name] as ConfigDoc) : {};
-      mergeObjects(existing, value);
-      if (
-        Object.keys(existing).length === 0 &&
-        Object.keys(value).length !== 0
-      ) {
-        delete doc[name];
-      } else {
-        doc[name] = existing;
-      }
-    } else {
+// What a whole-document save stores: the document as saved, a null
+// deleting its key. An object its nulls empty goes too; an empty object
+// saved stays.
+export function savedConfigDoc(saved: ConfigDoc): ConfigDoc {
+  const doc: ConfigDoc = {};
+  for (const [name, value] of Object.entries(saved)) {
+    if (value === null) continue;
+    if (!isObject(value)) {
       doc[name] = value;
+      continue;
     }
+    const kept = savedConfigDoc(value);
+    if (Object.keys(kept).length === 0 && Object.keys(value).length !== 0) {
+      continue;
+    }
+    doc[name] = kept;
   }
-}
-
-// What a whole-document write lands: a modeled key the payload omits is
-// removed, then the payload merges in. Keys only a newer build models
-// survive an older build's save.
-export function mergeConfigDoc(
-  keys: ReadonlyArray<ConfigKey>,
-  doc: ConfigDoc,
-  payload: ConfigDoc,
-): void {
-  for (const key of keys) {
-    if (!docGet(payload, key.name)[1]) docClear(doc, key.name);
-  }
-  mergeObjects(doc, payload);
+  return doc;
 }
 
 // What is wrong with a launcher, a hidden launcher id and a carry-over

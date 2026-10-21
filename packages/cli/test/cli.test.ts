@@ -822,6 +822,32 @@ describe(
       assert.equal((await runAt(box.home, "--json", "config", "edit")).code, 2);
     });
 
+    it("removes the key of a line the edit deleted, one only the terminal sets too", async () => {
+      box.write("registry.json", { projects: [] });
+      await box.migrate("cli");
+      const stored = async () =>
+        (
+          (await runAt(box.home, "--json", "config", "read")).doc as {
+            config: unknown;
+          }
+        ).config;
+      box.fakeBin(
+        "adding-editor",
+        `printf '{"deleteBranchOnRemove": false, "shareWithDevices": false}' > "$1"`,
+      );
+      await inTerminal(["config", "edit"], [], { EDITOR: "adding-editor" });
+      assert.deepEqual(await stored(), {
+        deleteBranchOnRemove: false,
+        shareWithDevices: false,
+      });
+      box.fakeBin(
+        "deleting-editor",
+        `grep -v -e deleteBranchOnRemove -e shareWithDevices "$1" > "$1.kept"; mv "$1.kept" "$1"`,
+      );
+      await inTerminal(["config", "edit"], [], { EDITOR: "deleting-editor" });
+      assert.deepEqual(await stored(), {});
+    });
+
     it("refuses an edit when the settings changed while the editor was open, and keeps the edit", async () => {
       box.write("registry.json", { projects: [] });
       await box.migrate("cli");
