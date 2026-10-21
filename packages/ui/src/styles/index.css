@@ -394,9 +394,9 @@
   animation: villager-wipe 0.3s ease-out 1.05s both;
 }
 
-/* Village news a later move joins (lib/villagers/moves.ts): the
-   newcomer's face pops in at the front of the group, and the title
-   ticks over to name them. */
+/* Village news a later move joins
+   (app/renderer/lib/villagers/moves.ts): the newcomer's face pops in at
+   the front of the group, and the title ticks over to name them. */
 @keyframes villager-join {
   from {
     opacity: 0;

@@ -388,8 +388,8 @@
    alone can't define an edge against the card cream. Every floating
    surface gets the AC sticker treatment instead: a hard, blur-less
    drop, and no outline. Only the toasts sonner draws: a custom one (a
-   villager's dialogue box or letter, views/villagers) draws its
-   own card, listed here by its slots. */
+   villager's dialogue box or letter, views/villagers) draws its own
+   card, listed here by its slots. */
 .doubutsu
   :is(
     [data-slot="dropdown-menu-content"],
@@ -445,7 +445,8 @@
    the card takes a wash of it, and its glyph sits on a pastel tile of
    the same hue, like an app on the phone's home screen. Only sonner's
    glyph: a villager's faces take the icon slot too
-   (villagers/toasts.tsx), and keep their own look.
+   (app/renderer/components/villagers/toasts.tsx), and keep their own
+   look.
 
    The toaster in the selector outranks sonner's own rules, which tie
    with these otherwise (its close button's hover) and come later. */
