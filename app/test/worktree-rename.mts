@@ -156,6 +156,12 @@ it("relocating the primary is the engine's refusal, whatever runs there", async 
           path: project,
         },
         project: { id: projectId, path: project, name: "primary" },
+        scriptEnv: {
+          projectBranch: "main",
+          defaultBranch: "main",
+          title: "",
+          description: "",
+        },
         notify: () => {},
       }),
     ),

@@ -369,7 +369,8 @@ it("sharing: set from the account page, then by a terminal's write, the switch m
       const stored = yield* config.read({ kind: "device" });
       assert.equal(stored?.["shareWithDevices"], false);
       yield* sharing.set(false);
-      // `sm config unset shareWithDevices`, as a terminal runs it.
+      // The key dropped by a store write that isn't the switch's, as
+      // `sm config edit` makes when it is set to null.
       yield* config.change({ kind: "device" }, (doc) => {
         const { shareWithDevices: _, ...rest } = doc;
         return rest;
@@ -417,6 +418,12 @@ it("script runs: a run started shows, on scripts:changed", async () => {
               slot: { kind: "package", name: "views" },
               worktree: { id: "wt", name: "wt", branch: "main", path: repo },
               project: { id: "p", path: repo, name: "p" },
+              scriptEnv: {
+                projectBranch: "main",
+                defaultBranch: "main",
+                title: "",
+                description: "",
+              },
               notify: () => {},
             }),
           ),

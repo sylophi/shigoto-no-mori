@@ -487,11 +487,7 @@ const sendBundle = (
   inTempDir("sm-sync-", (dir) =>
     Effect.gen(function* () {
       const path = join(dir, "transfer.bundle");
-      // Only the byte count travels back. The engine also reports the
-      // refs it resolved, but that list is computed against the repo
-      // AFTER `git bundle create` silently dropped any have-covered ref,
-      // so it can name refs the bundle lacks.
-      const { bytes } = yield* Ops.bundleCreate(
+      const bytes = yield* Ops.bundleCreate(
         project,
         path,
         [...refs],

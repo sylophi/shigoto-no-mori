@@ -234,14 +234,14 @@ export class Config extends Context.Service<
       scope: Extract<ConfigScope, { readonly kind: "project" }>,
       patch: ProjectSettingsPatch,
     ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
-    // The app's whole-document save: a modeled key the payload omits is
+    // `config edit`'s whole-document save, only over `ifStoredIs`, the
+    // settings as they were read: a modeled key the payload omits is
     // removed, a null removes its key, objects merge field by field, and
-    // a key this build doesn't model survives. With `ifStoredIs`, only
-    // over the settings as they were read.
+    // a key this build doesn't model survives.
     readonly write: (
       scope: ConfigScope,
       payload: ConfigDoc,
-      ifStoredIs?: ConfigDoc,
+      ifStoredIs: ConfigDoc,
     ) => Effect.Effect<
       void,
       InvalidConfigDocument | MissingDefaultBranch | ConfigChangedMeanwhile
@@ -671,7 +671,7 @@ const make = Effect.gen(function* () {
   const write = Effect.fn("Config.write")(function* (
     scope: ConfigScope,
     payload: ConfigDoc,
-    ifStoredIs?: ConfigDoc,
+    ifStoredIs: ConfigDoc,
   ) {
     const problem = documentProblem(keysOf(scope), payload);
     if (problem !== undefined) {
@@ -681,7 +681,7 @@ const make = Effect.gen(function* () {
     // read and the write isn't written away.
     let stale = false;
     yield* update(scope, (doc) => {
-      if (ifStoredIs !== undefined && !sameConfigDoc(doc, ifStoredIs)) {
+      if (!sameConfigDoc(doc, ifStoredIs)) {
         stale = true;
         return false;
       }

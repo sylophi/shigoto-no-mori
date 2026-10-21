@@ -510,6 +510,12 @@ it("a tombstone interrupted or dead leaves no mark behind", async () => {
         slot: { kind: "package", name: "after" },
         worktree,
         project: { id: project.id, path: repo, name: "repo" },
+        scriptEnv: {
+          projectBranch: "main",
+          defaultBranch: "main",
+          title: "",
+          description: "",
+        },
         notify: () => {},
       });
     }),
@@ -558,6 +564,12 @@ it("a move under its mark reads as a worktree being moved, and a run there is re
           slot: { kind: "package", name: "during" },
           worktree,
           project: { id: project.id, path: repo, name: "repo" },
+          scriptEnv: {
+            projectBranch: "main",
+            defaultBranch: "main",
+            title: "",
+            description: "",
+          },
           notify: () => {},
         }),
       );

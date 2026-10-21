@@ -62,6 +62,12 @@ async function run(
         slot: { kind: "package", name: "proof" },
         worktree: { id: "wt", name: "wt", branch: "main", path: root },
         project: { id: "p", path: root, name: "p" },
+        scriptEnv: {
+          projectBranch: "main",
+          defaultBranch: "main",
+          title: "",
+          description: "",
+        },
         notify: (event) => events.push(event),
       });
       if (record !== undefined) {
