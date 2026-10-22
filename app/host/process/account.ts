@@ -24,7 +24,6 @@ const account = (): Account =>
 export const setAccountFacts = (next: AccountFacts | null): Promise<Account> =>
   Graph.run(Effect.flatMap(HostAccount, (it) => it.set(next)));
 
-// Undefined until the shell's first report.
 export function accountSignedIn(): boolean | undefined {
   const { reported, facts } = account();
   return reported ? facts !== null : undefined;
