@@ -2,8 +2,8 @@ import * as Schema from "effect/Schema";
 
 export const RuntimeInfoSchema = Schema.Struct({
   dataDir: Schema.NonEmptyString,
-  // No host sends it and nothing reads it. The key stays because
-  // removing it is a protocol change.
+  // Nothing reads it. The key stays because removing it is a protocol
+  // change.
   dataDirReal: Schema.optional(Schema.NonEmptyString),
   // "legacy" is a pre-2.0 folder adopted in place.
   dataDirSource: Schema.Literals(["env", "pointer", "legacy", "default"]),
