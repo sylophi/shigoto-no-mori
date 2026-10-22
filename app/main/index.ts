@@ -430,8 +430,7 @@ app.on("before-quit", (event) => {
   }
   if (askingToQuit) return;
   askingToQuit = true;
-  void Effect.runPromise(hostBusy(true))
-    .then((busy) => confirmBusyAction("quit", busy))
+  void confirmBusyAction("quit", () => Effect.runPromise(hostBusy(true)))
     .catch((error: unknown) => {
       // The ask reads an unanswering host as idle, so what lands here
       // is a defect building the ask (the host's client, or its link)

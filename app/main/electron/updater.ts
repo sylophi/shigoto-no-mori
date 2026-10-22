@@ -338,9 +338,8 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
     if (refusal !== null) throw new Error(refusal);
   } else {
     if (
-      !(await confirmBusyAction(
-        "restart",
-        await Effect.runPromise(hostBusy(true)),
+      !(await confirmBusyAction("restart", () =>
+        Effect.runPromise(hostBusy(true)),
       ))
     )
       return "declined";

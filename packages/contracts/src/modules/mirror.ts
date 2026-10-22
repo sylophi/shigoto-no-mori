@@ -124,6 +124,8 @@ const MirrorConflictSchema = strict(
   }),
 );
 
+// A stage as a whole: the file it is on, the bytes it has taken in, and
+// what the other side holds beyond this one (file-sync's engine.go).
 const MirrorStagingSchema = strict(
   Schema.Struct({
     path: Schema.String,

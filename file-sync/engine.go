@@ -352,6 +352,9 @@ type mirrorProblem struct {
 	Error string `json:"error"`
 }
 
+// A stage as a whole: the file it is on, the bytes it has taken in, and
+// what the other side holds beyond this one, which is what a copy whose
+// shared files already agree (a move's) takes in.
 type mirrorStaging struct {
 	Path         string `json:"path"`
 	ReceivedSize uint64 `json:"receivedSize"`
@@ -820,8 +823,8 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 		SuccessfulCycles:  state.SuccessfulCycles,
 		Conflicts:         make([]mirrorConflict, 0, len(state.Conflicts)),
 		ExcludedConflicts: state.ExcludedConflicts,
-		Local:             mirrorEndpointStateOf(localState),
-		Remote:            mirrorEndpointStateOf(remoteState),
+		Local:             mirrorEndpointStateOf(localState, remoteState),
+		Remote:            mirrorEndpointStateOf(remoteState, localState),
 	}
 	for _, conflict := range state.Conflicts {
 		out.Conflicts = append(out.Conflicts, mirrorConflict{
@@ -833,7 +836,7 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 	return out
 }
 
-func mirrorEndpointStateOf(state *synchronization.EndpointState) mirrorEndpointState {
+func mirrorEndpointStateOf(state, other *synchronization.EndpointState) mirrorEndpointState {
 	if state == nil {
 		return mirrorEndpointState{Problems: []mirrorProblem{}}
 	}
@@ -851,10 +854,14 @@ func mirrorEndpointStateOf(state *synchronization.EndpointState) mirrorEndpointS
 		out.Problems = append(out.Problems, mirrorProblem{Path: problem.Path, Error: problem.Error})
 	}
 	if progress := state.StagingProgress; progress != nil {
+		var beyond uint64
+		if other != nil && other.TotalFileSize > state.TotalFileSize {
+			beyond = other.TotalFileSize - state.TotalFileSize
+		}
 		out.Staging = &mirrorStaging{
 			Path:         progress.Path,
-			ReceivedSize: progress.ReceivedSize,
-			ExpectedSize: progress.ExpectedSize,
+			ReceivedSize: progress.TotalReceivedSize,
+			ExpectedSize: max(beyond, progress.TotalReceivedSize),
 		}
 	}
 	return out
