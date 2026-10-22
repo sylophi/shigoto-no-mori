@@ -82,7 +82,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
       async (wt) => {
         // Unforced first, whatever the row's count showed: the engine's
         // guard also sees what the row can't (an edit since the list
-        // loaded, a status the row's read failed), and its refusal is
+        // loaded, a status the row couldn't read), and its refusal is
         // the one warning before a wipe.
         // A row forces only while that refusal is the status it shows,
         // which the next batch replaces.

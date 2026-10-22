@@ -234,8 +234,7 @@ export const SLOTTED_SUBCOMMANDS = new Set([
 ]);
 
 // Covers any log or ref output by a wide margin. A status of every new
-// file past it (an unignored folder of ~150k files) would make a changes
-// list past what one message to a window carries (LINK_MAX_FRAME_BYTES).
+// file passes it at an unignored folder of about 150k files.
 export const DEFAULT_MAX_OUTPUT = 10 * 1024 * 1024;
 
 // A patch is the one output whose size the user decides: one
