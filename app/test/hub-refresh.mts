@@ -13,7 +13,9 @@ import { it, vi } from "vitest";
 import type { AccountFacts } from "@shigomori/contracts/modules/session";
 
 const refreshed = vi.hoisted(() => ({ count: 0 }));
-const stored = vi.hoisted(() => ({ facts: null as unknown }));
+const stored = vi.hoisted(() => ({
+  account: { reported: false, facts: null as unknown, service: null },
+}));
 
 vi.mock("@host/process/wires", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -24,8 +26,8 @@ vi.mock("@host/process/wires", async (importOriginal) => ({
 vi.mock("@host/process/account", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   setAccountFacts: async (next: unknown) => {
-    const previous = stored.facts;
-    stored.facts = next;
+    const previous = stored.account;
+    stored.account = { reported: true, facts: next, service: null };
     return previous;
   },
 }));

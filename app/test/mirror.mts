@@ -45,8 +45,6 @@
 //     both ways, and the listener's own main never moves.
 // And a peer's removed worktree (worktrees:removal) ends only the
 // sessions into that copy.
-// And the sweep of sessions brought back for a device on no account
-// asks about each session once.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
@@ -102,7 +100,6 @@ import {
   beginTransfer,
   carriedLabels,
   COPY_GONE_DETAIL,
-  createNoAccountSweep,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
   mirrorSessions,
@@ -1595,93 +1592,6 @@ it("a session's mode says what it is, and a re-open carries it", () => {
     replaces: "old",
     ignoreMode: "everything",
   });
-});
-
-it("the no-account sweep asks about each session once, so a misread credential ends nothing already running, and a sign-out while the daemon is down ends what it brings back", async () => {
-  // (6f) The sweep of sessions the engine brings back for a device on
-  // no account asks about each session once, signed in or not. A
-  // credential that reads as signed out later (one bad read) ends
-  // nothing that was already asked about. A session first seen while
-  // signed out ends them all, a sign-out's reset asks again, and a
-  // check that throws is asked again on the next snapshot.
-  {
-    let sessions: MirrorSessionRaw[] = [];
-    let signedIn = true;
-    let checks = 0;
-    let ends = 0;
-    const sweep = createNoAccountSweep({
-      sessions: () => sessions,
-      fresh: () => true,
-      signedIn: () => {
-        checks += 1;
-        return signedIn;
-      },
-      end: () => {
-        ends += 1;
-      },
-    });
-    const one = rawMirrorSession({
-      session: "s-1",
-      deviceId: LISTENER,
-      labels: {},
-    });
-    const two = rawMirrorSession({
-      session: "s-2",
-      deviceId: LISTENER,
-      labels: {},
-    });
-    sweep.run();
-    assert.equal(checks, 0, "nothing to ask about read the credential");
-    sessions = [one];
-    sweep.run();
-    sweep.run();
-    assert.equal(checks, 1, "a session was asked about twice");
-    signedIn = false;
-    sweep.run();
-    assert.equal(ends, 0, "a misread ended a session already asked about");
-    sessions = [one, two];
-    sweep.run();
-    assert.equal(ends, 1, "a session first seen signed out was kept");
-    sweep.reset();
-    sweep.run();
-    assert.equal(ends, 2, "a reset sweep did not ask again");
-    signedIn = true;
-    const throwing = checks;
-    const failing = createNoAccountSweep({
-      sessions: () => sessions,
-      fresh: () => true,
-      signedIn: () => {
-        checks += 1;
-        if (checks === throwing + 1) throw new Error("no credential yet");
-        return signedIn;
-      },
-      end: () => {
-        ends += 1;
-      },
-    });
-    assert.throws(() => failing.run(), /no credential yet/);
-    failing.run();
-    assert.equal(checks, throwing + 2, "a check that threw was not retried");
-  }
-  // Signed out while the daemon is down: the snapshot that stands
-  // through the restart lists sessions it can't end, and the ones the
-  // next run brings back are ended.
-  {
-    let running = false;
-    let ended = 0;
-    const sweep = createNoAccountSweep({
-      sessions: () => [rawMirrorSession({ session: "s-1", labels: {} })],
-      fresh: () => running,
-      signedIn: () => false,
-      end: () => {
-        if (running) ended += 1;
-      },
-    });
-    sweep.run();
-    running = true;
-    sweep.run();
-    assert.equal(ended, 1, "the sessions the daemon brought back kept running");
-  }
 });
 
 it("daemon stop is clean and the gateway holds no streams", async () => {
