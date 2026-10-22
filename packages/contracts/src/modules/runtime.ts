@@ -17,8 +17,9 @@ import {
 // has no window module to acknowledge with (host/ipc/modules/runtime).
 // info rides the wire so a peer's pages spell this host's paths the
 // way the local ones do (its home as ~, where a worktree will land).
-// Ungated, under the sharing switch like the lists: their paths and
-// worktrees:relocationPlan already show the home and the data dir.
+// Ungated, under the sharing switch like the lists. Their paths show
+// the home wherever one sits under it, and worktrees:relocationPlan
+// names the data dir for any project with a managed worktree.
 export const runtimeContract = defineContract(
   "runtime",
   "host",
