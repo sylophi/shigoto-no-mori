@@ -356,7 +356,7 @@ function ProjectVerbs({
   if (lead) {
     verbs.push({
       key: "go",
-      label: `Open ${lead.worktree.branch}`,
+      label: `Open ${lead.worktree.rebasing ?? lead.worktree.branch}`,
       icon: iconOf(Folder),
       listKeys: "↩",
       run: () => actions.go(lead, "detail"),

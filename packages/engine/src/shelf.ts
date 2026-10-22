@@ -92,11 +92,11 @@ export type TouchedRow = {
 };
 
 // The newest touch the row shows (the app's worktreeLastActivityAt),
-// HEAD's last move (`headMovedAt`, the mtime of its
-// HEAD reflog), or the unshelve, epoch ms. 0 when nothing is known. A
-// commit's own date can be old (a rebase or a checkout keeps it), so
-// the reflog stands in for the move itself. Neither counts where HEAD
-// only follows its upstream.
+// HEAD's last move (`headMovedAt`, the mtime of its HEAD reflog), or
+// the unshelve, epoch ms. 0 when nothing is known. A commit's own date
+// can be old (a rebase or a checkout keeps it), so the reflog stands
+// in for the move itself. Neither counts where HEAD only follows its
+// upstream.
 export const lastTouchedAt = (
   row: TouchedRow,
   headMovedAt: number,

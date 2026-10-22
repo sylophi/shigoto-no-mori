@@ -168,7 +168,7 @@ export function LiveWorktreeHeaderView({
   );
   const label =
     heading !== "pending" && !("note" in heading)
-      ? (heading.title ?? heading.branch)
+      ? (heading.title ?? heading.rebasing ?? heading.branch)
       : "";
   return (
     <div className="flex min-w-0 items-center gap-1">

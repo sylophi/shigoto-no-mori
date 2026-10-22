@@ -13,8 +13,9 @@ interface BranchLabelProps {
 }
 
 // Renders a branch name with a muted "(detached)" suffix when HEAD is
-// detached, or "(rebasing)" when that's a rebase's. The parent owns the wrapping element, its classes, and any
-// tooltip. This component just keeps the detached affordance uniform.
+// detached, or the replayed branch with "(rebasing)" mid-rebase. The
+// parent owns the wrapping element, its classes, and any tooltip. This
+// component just keeps the detached affordance uniform.
 export function BranchLabel({
   branch,
   detached,
