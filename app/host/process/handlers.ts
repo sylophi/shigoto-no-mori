@@ -262,8 +262,9 @@ const endAllMirrors = () =>
     }),
   );
 // The sessions the engine brings back for a device on no account
-// (registry.ts createNoAccountSweep). The account fan-out's own sweep
-// covers a sign-out with the daemon up, and resets this one.
+// (registry.ts createNoAccountSweep), asked about on every snapshot and
+// at the shell's first report. The account fan-out's own sweep covers a
+// sign-out with the daemon up, and resets this one.
 const noAccountSweep = createNoAccountSweep({
   sessions: mirrorSessionsNow,
   fresh: () =>
@@ -307,16 +308,12 @@ export function announceProjectChanged(projectId: string): void {
 const toMirrorEngine = (tell: (engine: MirrorEngine["Service"]) => void) =>
   Graph.readNow(Effect.map(MirrorEngine, tell), () => undefined);
 
-// The account the peer-facing state was built under, so a change can
-// tell a rename or a switch flip (same account, nothing to tear down)
-// from a departure. Unknown until the shell's first report, at start,
-// which is the baseline: a device signed out at start has its resumed
-// mirrors swept by noAccountSweep instead.
-let started = false;
-let lastMembership = new Set<string>();
-
 // The account's facts as the shell reports them: at start and after
 // every sign-in, sign-out, rename, credential rotation or switch flip.
+// The first is the baseline, and the first time the sessions the
+// daemon brought back are asked about (noAccountSweep, which ends them
+// for a device signed out at start). A later report tells a rename or a
+// switch flip (same account, nothing to tear down) from a departure.
 // A departure (a sign-out, since the hub refuses a switch without one)
 // tears down what was the account's, in the order the pieces need: the
 // mirror sweep before the hub refresh (its terminates ride the sessions
@@ -327,11 +324,10 @@ let lastMembership = new Set<string>();
 export async function applyAccount(next: AccountFacts | null): Promise<void> {
   const previous = await setAccountFacts(next);
   const leaving =
-    started &&
-    previous !== null &&
-    (next === null || next.accountId !== previous.accountId);
-  const first = !started;
-  started = true;
+    previous.facts !== null &&
+    (next === null || next.accountId !== previous.facts.accountId);
+  const first = !previous.reported;
+  if (first) noAccountSweep.run();
   if (leaving) {
     clearDirectTickets();
     await stopPortForwardsTo(() => false);
@@ -344,7 +340,7 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
   // The switch as it now stands, to every connected peer, whose bridge
   // records it for its UI and CLI. An account switch also restarts the
   // listener, so peers learn it from their next dial either way.
-  if (!first && previous?.acceptsCommands !== next?.acceptsCommands) {
+  if (!first && previous.facts?.acceptsCommands !== next?.acceptsCommands) {
     broadcastCommandAccessChanged();
   }
   // Every report, as the socket's own inputs decide whether anything
@@ -359,6 +355,9 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
     );
   }
 }
+
+// The account's devices as the shell last reported them.
+let lastMembership = new Set<string>();
 
 // The account's registry as the hub last listed it, which the shell
 // reports on every read. It is the one place this device learns a peer

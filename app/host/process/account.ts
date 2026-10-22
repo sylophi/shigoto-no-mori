@@ -1,6 +1,7 @@
 // The account as the root's callbacks read it (HostAccount, in the
-// graph), synchronously: signed out until the graph is up and the
-// shell's first report lands.
+// graph), synchronously: unknown until the graph is up and the shell's
+// first report lands, which every reader but accountSignedIn takes as
+// no account.
 import type { HubAccount } from "@shared/account/hubConnect";
 import type { AccountFacts } from "@shigomori/contracts/modules/session";
 import type {
@@ -8,7 +9,7 @@ import type {
   TunnelProvisionResponse,
 } from "@shigomori/contracts/hubProtocol";
 import * as Effect from "effect/Effect";
-import { type Account, HostAccount } from "@host/lib/HostAccount";
+import { type Account, HostAccount, UNREPORTED } from "@host/lib/HostAccount";
 import * as Graph from "./graph";
 
 export type { AccountFacts };
@@ -16,17 +17,17 @@ export type { AccountFacts };
 const account = (): Account =>
   Graph.readNow(
     Effect.flatMap(HostAccount, (it) => it.current),
-    () => ({ facts: null, service: null }),
+    () => UNREPORTED,
   );
 
-// Replaces the facts, answering the ones they replaced.
-export const setAccountFacts = (
-  next: AccountFacts | null,
-): Promise<AccountFacts | null> =>
+// Replaces the facts, answering the account they replaced.
+export const setAccountFacts = (next: AccountFacts | null): Promise<Account> =>
   Graph.run(Effect.flatMap(HostAccount, (it) => it.set(next)));
 
-export function accountSignedIn(): boolean {
-  return account().facts !== null;
+// Undefined until the shell's first report.
+export function accountSignedIn(): boolean | undefined {
+  const { reported, facts } = account();
+  return reported ? facts !== null : undefined;
 }
 
 // The predicate the device link's gate consults live on every gated
