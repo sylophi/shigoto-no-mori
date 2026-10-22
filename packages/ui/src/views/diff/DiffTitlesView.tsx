@@ -29,15 +29,19 @@ export function WorktreeDiffSubtitleView({
 // The branch's changes: its commits since where it left the base.
 export function BranchDiffSubtitleView({
   commits,
+  more,
   base,
 }: {
   // Unknown until the history is read.
   commits: number | undefined;
+  // More commits than the history read returned.
+  more: boolean;
   base: string | undefined;
 }) {
   return (
     <>
-      {commits !== undefined && `${pluralize(commits, "commit")} since `}
+      {commits !== undefined &&
+        `${more ? `${commits}+ commits` : pluralize(commits, "commit")} since `}
       <span className="font-mono">{base}</span>
     </>
   );

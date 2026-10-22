@@ -15,10 +15,13 @@ import {
 } from "../views/diff/DiffFileIndexView.tsx";
 import {
   DiffFileRowView,
+  DiffFileSlotView,
   DiffFilesSheetView,
   DiffHeaderView,
   DiffPageView,
   DiffPaneView,
+  estimateFileHeight,
+  FILE_GAP,
 } from "../views/diff/DiffPageView.tsx";
 import {
   BranchDiffSubtitleView,
@@ -102,6 +105,37 @@ function diffPage({
   files: FileDiffMetadata[];
   singleFile: boolean;
 }) {
+  // Each file where the app's window places it before measuring it.
+  let start = FILE_GAP;
+  const slots = files.map((fileDiff, position) => {
+    const slot = (
+      <DiffFileSlotView
+        key={fileKey(fileDiff)}
+        index={position}
+        start={start}
+        measureRef={noop}
+      >
+        <DiffFileRowView
+          fileDiff={fileDiff}
+          fileId={fileKey(fileDiff)}
+          collapsed={false}
+          diffStyle="unified"
+          wrapLines={false}
+          themeType="light"
+          onToggle={singleFile ? undefined : noop}
+          hunks={singleFile ? HUNKS : undefined}
+          busy={false}
+          media={
+            isMediaBinary(fileDiff) && <SceneMediaDiff fileDiff={fileDiff} />
+          }
+        />
+      </DiffFileSlotView>
+    );
+    start +=
+      estimateFileHeight(fileDiff, { collapsed: false, diffStyle: "unified" }) +
+      FILE_GAP;
+    return slot;
+  });
   return (
     <SceneWindowFrame
       sidebar={
@@ -121,26 +155,13 @@ function diffPage({
         takeover={null}
         header={header}
         pane={
-          <DiffPaneView state="files" message={null} virtualizer={null}>
-            {files.map((fileDiff) => (
-              <DiffFileRowView
-                key={fileKey(fileDiff)}
-                fileDiff={fileDiff}
-                fileId={fileKey(fileDiff)}
-                collapsed={false}
-                diffStyle="unified"
-                wrapLines={false}
-                themeType="light"
-                onToggle={singleFile ? undefined : noop}
-                hunks={singleFile ? HUNKS : undefined}
-                busy={false}
-                media={
-                  isMediaBinary(fileDiff) && (
-                    <SceneMediaDiff fileDiff={fileDiff} />
-                  )
-                }
-              />
-            ))}
+          <DiffPaneView
+            state="files"
+            message={null}
+            virtualizer={null}
+            height={start}
+          >
+            {slots}
           </DiffPaneView>
         }
         sheet={null}
@@ -364,7 +385,11 @@ export function DiffPartsScene() {
           )}
           {pageHeader(
             "All branch changes",
-            <BranchDiffSubtitleView commits={4} base="origin/main" />,
+            <BranchDiffSubtitleView
+              commits={4}
+              more={false}
+              base="origin/main"
+            />,
           )}
           {pageHeader(
             "Commit",

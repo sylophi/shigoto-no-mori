@@ -29,6 +29,7 @@ export function BranchDiff() {
       subtitle={
         <BranchDiffSubtitleView
           commits={commits}
+          more={history?.more ?? false}
           base={history?.base?.ref ?? worktree.primaryRef}
         />
       }

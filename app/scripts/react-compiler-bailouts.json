@@ -6,6 +6,12 @@
     "reason": "Use of incompatible library"
   },
   {
+    "file": "app/renderer/components/diff/DiffPane.tsx",
+    "function": "DiffPane",
+    "category": "IncompatibleLibrary",
+    "reason": "Use of incompatible library"
+  },
+  {
     "file": "app/renderer/components/sidebar/SidebarList.tsx",
     "function": "SidebarList",
     "category": "IncompatibleLibrary",
