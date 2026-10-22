@@ -189,8 +189,9 @@ const make = Effect.gen(function* () {
     const parent = (yield* git
       .run(worktreePath, ["rev-parse", "HEAD"])
       .pipe(Effect.mapError((cause) => new NoHead({ cause })))).trim();
-    // A scratch copy of the index, so the worktree's own staging stays as
-    // it is: what is staged is its tree, and `add -A` then adds the rest.
+    // A scratch index, so the worktree's own staging stays as it is:
+    // what is staged is a copy of the real one's tree, and everything is
+    // HEAD's tree with `add -A` on top.
     const { tree, staged } = yield* Effect.scoped(
       Effect.gen(function* () {
         const failed = (cause: PlatformError.PlatformError) =>
@@ -207,25 +208,18 @@ const make = Effect.gen(function* () {
             Effect.catchIf(isNotFound, () => Effect.succeed(false)),
             Effect.mapError(failed),
           );
-        // A worktree git hasn't touched yet has no index: HEAD's tree.
-        if (!copied) {
-          yield* git.run(
-            worktreePath,
-            ["read-tree", "--end-of-options", parent],
-            options,
-          );
-        }
-        // An index holding a conflict has no tree, and nothing staged
-        // moves then.
-        const index = yield* git
-          .run(worktreePath, ["write-tree"], options)
-          .pipe(Effect.option);
-        // The copy's assume-unchanged marks would hide edits from
-        // `add -A`: a really-refresh clears them where the file changed.
-        // A conflict's entries are left for `add -A` to resolve.
+        // A worktree git hasn't touched yet has no index, and an index
+        // holding a conflict has no tree: nothing staged moves then.
+        const index = copied
+          ? yield* git
+              .run(worktreePath, ["write-tree"], options)
+              .pipe(Effect.option)
+          : Option.none();
+        // Read afresh, not the copy, whose marks (assume-unchanged,
+        // skip-worktree) would hide an edit from `add -A`.
         yield* git.run(
           worktreePath,
-          ["update-index", "-q", "--unmerged", "--really-refresh"],
+          ["read-tree", "--end-of-options", parent],
           options,
         );
         yield* git.run(worktreePath, ["add", "-A"], options);

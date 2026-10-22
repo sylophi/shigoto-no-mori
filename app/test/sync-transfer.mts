@@ -1338,10 +1338,16 @@ it("transplant (dirty): the capture lands applied with its index and force remov
     "fourth feature",
   );
   await commitFile(wt4Path, "gone.txt", "gone\n", "a file to delete");
-  // An edit the index is told to overlook still moves.
+  // Edits the index is told to overlook still move.
   await commitFile(wt4Path, "hidden.txt", "hidden\n", "a file to hide");
   await git(wt4Path, ["update-index", "--assume-unchanged", "hidden.txt"]);
   writeFileSync(join(wt4Path, "hidden.txt"), "hidden, then edited\n");
+  await commitFile(wt4Path, "skipped.txt", "skipped\n", "a file to skip");
+  await git(wt4Path, ["update-index", "--skip-worktree", "skipped.txt"]);
+  writeFileSync(join(wt4Path, "skipped.txt"), "skipped, then edited\n");
+  await commitFile(wt4Path, "dropped.txt", "dropped\n", "a file to drop");
+  await git(wt4Path, ["update-index", "--assume-unchanged", "dropped.txt"]);
+  rmSync(join(wt4Path, "dropped.txt"));
   writeFileSync(join(wt4Path, "staged.txt"), "staged\n");
   await git(wt4Path, ["add", "staged.txt"]);
   writeFileSync(join(wt4Path, "committed.txt"), "committed, then staged\n");
@@ -1366,6 +1372,7 @@ it("transplant (dirty): the capture lands applied with its index and force remov
     ["staged.txt", "staged\n"],
     ["committed.txt", "committed, then edited\n"],
     ["hidden.txt", "hidden, then edited\n"],
+    ["skipped.txt", "skipped, then edited\n"],
     ["untracked.txt", "untracked\n"],
   ] as const) {
     assert.equal(
@@ -1373,11 +1380,11 @@ it("transplant (dirty): the capture lands applied with its index and force remov
       content,
     );
   }
-  // Here the overlooked edit is an edit like any other.
+  // Here the overlooked edits are edits like any other.
   assert.equal(
     (
       await gitOut(dirtyTransplant.worktree.path, "status", "--porcelain")
-    ).replace(/^ M hidden\.txt\n/m, ""),
+    ).replace(/^ (M hidden|M skipped|D dropped)\.txt\n/gm, ""),
     status,
   );
   assert.equal(

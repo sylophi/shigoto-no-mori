@@ -26,6 +26,7 @@ import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { useDeviceProjects } from "@/hooks/projects/useProjects";
 import { useDestinationScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
+import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import { ensureTrailingSep, tildify } from "@shigomori/contracts/projectPaths";
 
 // The clone the flow would make, computed only while it is the
@@ -85,6 +86,12 @@ function useCloneDestination(
         { signal },
       ),
     enabled: enabled && submitted === undefined && destination.hasHost,
+    // A peer that hasn't granted browsing refuses it: the review then
+    // reads as before, and the landing still meets what is there.
+    meta: gatedHostReadMeta(
+      destination.remote,
+      "Couldn't check the clone's folder",
+    ),
   });
   return {
     projectName: sourceProject.name,
