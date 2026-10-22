@@ -205,7 +205,7 @@ export type LabOptions = {
   // next run.
   readonly keep: boolean;
   // Sign B out and delete its profile at the end too, which is kept
-  // otherwise: a new B's tunnel can take minutes to route.
+  // otherwise.
   readonly revokeHost: boolean;
   readonly clients: ReadonlySet<ClientKind>;
 };

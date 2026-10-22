@@ -7,7 +7,6 @@ import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, readFileSync, rmSync, type WriteStream } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shigomori/contracts/modules/hub";
 import { chromium, type Browser, type Page } from "playwright-core";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { pageApi, withPageApi } from "./pageApi.mts";
@@ -139,9 +138,8 @@ export class DevApp {
       1000,
     );
     if (!this.options.needsTunnel) return;
-    // A new device's tunnel has a new hostname, which can take minutes
-    // to route: it is waited on up to the host's own fresh deadline
-    // (host/direct/Tunnel.ts). A kept device's routes in seconds.
+    // Seconds as a rule, a new hostname's too. The bound leaves room
+    // for the host's own restarts (host/direct/Tunnel.ts).
     const started = Date.now();
     let told = started;
     await waitFor(
@@ -160,7 +158,7 @@ export class DevApp {
         }
         return up;
       },
-      fresh ? TUNNEL_PROBE_DEADLINE_FRESH_MS : 180_000,
+      180_000,
       1000,
     );
     this.options.note?.(

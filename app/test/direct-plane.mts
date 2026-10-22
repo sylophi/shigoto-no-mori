@@ -193,10 +193,7 @@ import {
   Tunnel,
   TunnelProvisionError,
   TUNNEL_BACKOFF_LADDER_MS,
-  TUNNEL_PROBE_DEADLINE_FRESH_MS,
   TUNNEL_PROBE_DEADLINE_MS,
-  TUNNEL_PROBE_SLOW_MS,
-  TUNNEL_PROBE_WARN_MS,
   TUNNEL_PROBE_DELAYS_MS,
   TUNNEL_PROBE_DELAYS_REUSED_MS,
   UNCONFIGURED_RETRY_MS,
@@ -2758,7 +2755,7 @@ it("cloudflared runner: a wake's recheck takes an up tunnel that no longer route
   assert.equal(tunnel.status().state, "starting");
   assert.equal(tunnel.spawned.length, 1);
   assert.equal(tunnel.spawned[0]?.killed, false);
-  await tunnel.advance(10_000 + TUNNEL_PROBE_SLOW_MS);
+  await tunnel.advance(10_000 + lastOf(TUNNEL_PROBE_DELAYS_REUSED_MS));
   assert.equal(
     tunnel.spawned[0]?.killed,
     true,
@@ -3044,7 +3041,7 @@ it("cloudflared runner: one killed by a signal from outside (another tool's pkil
   await runner.dispose();
 });
 
-it("cloudflared runner: a never-ready child's restart re-provisions (its token may be dead), a probed-ready child's crash reuses the cache, a stable run resets the ladder, and a not-yet-routable child of a FRESH record is kept and probed on until the long deadline, while a reused tunnel that never routes is killed and re-provisioned at the short one", async () => {
+it("cloudflared runner: a never-ready child's restart re-provisions (its token may be dead), a probed-ready child's crash reuses the cache, a stable run resets the ladder, and a not-yet-routable child is kept and probed on up to the deadline, where one that never routes, on a fresh record or a reused one, is killed and re-provisioned", async () => {
   let provisions = 0;
   let routable = false;
   const runner = await tunnelHarness({
@@ -3095,9 +3092,8 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   );
   await runner.reconcile(null);
 
-  // A child that is not routable for a long time (a fresh hostname
-  // waiting on DNS): the probe chain keeps walking its capped rung
-  // for as long as the child lives. It is never killed, nothing is
+  // A child that is not routable yet (a fresh hostname waiting on
+  // DNS): up to the deadline it is never killed, nothing is
   // re-provisioned, the status stays "starting", and the moment a
   // probe passes the tunnel is advertised on the same child.
   let lateProvisions = 0;
@@ -3115,15 +3111,7 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   });
   await notYetRoutable.reconcile({ port: 40100 });
   assert.equal(notYetRoutable.spawned.length, 1);
-  // Walk well past the warning threshold: the capped rung up to it,
-  // the slow rung after, where the child is still alive and probed.
-  const step = lastOf(TUNNEL_PROBE_DELAYS_MS);
-  for (let walked = 0; walked <= TUNNEL_PROBE_WARN_MS; walked += step) {
-    await notYetRoutable.advance(step);
-  }
-  for (let i = 0; i < 3; i += 1) {
-    await notYetRoutable.advance(TUNNEL_PROBE_SLOW_MS);
-  }
+  await notYetRoutable.advance(TUNNEL_PROBE_DEADLINE_MS / 2);
   assert.equal(notYetRoutable.status().state, "starting");
   assert.equal(notYetRoutable.tunnelUrl(), null);
   assert.equal(
@@ -3146,11 +3134,10 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   const givesUp = notYetRoutable.startingThenUp(1_000);
   await notYetRoutable.advance(1_000);
   assert.equal(await givesUp, false);
-  const comesUp = notYetRoutable.startingThenUp(10 * TUNNEL_PROBE_SLOW_MS);
-  // DNS catches up: the next (slow-rung) probe advertises the same
-  // child.
+  const comesUp = notYetRoutable.startingThenUp(TUNNEL_PROBE_DEADLINE_MS);
+  // DNS catches up: the next probe advertises the same child.
   lateRoutable = true;
-  await notYetRoutable.advance(TUNNEL_PROBE_SLOW_MS);
+  await notYetRoutable.advance(lastOf(TUNNEL_PROBE_DELAYS_MS));
   assert.equal(await comesUp, true);
   assert.equal(notYetRoutable.status().state, "up");
   // With none starting, at once.
@@ -3159,49 +3146,53 @@ it("cloudflared runner: a never-ready child's restart re-provisions (its token m
   assert.equal(notYetRoutable.spawned.length, 1);
   await notYetRoutable.dispose();
 
-  // A reused tunnel that NEVER becomes routable (a deleted record,
-  // a stale ingress): past the short deadline it is killed and the
-  // restart re-provisions, since it never reached readiness.
-  let deadProvisions = 0;
-  const neverRoutable = await tunnelHarness({
-    provision: async () => {
-      deadProvisions += 1;
-      return {
-        hostname: "h.example.test",
-        connectorToken: "t",
-        dnsCreated: false,
-      };
-    },
-    probe: () => false,
-  });
-  await neverRoutable.reconcile({ port: 40100 });
-  // A second at a time, so the walk stops at the kill and not past
-  // the restart one rung later.
-  for (
-    let walked = 0;
-    walked <= TUNNEL_PROBE_DEADLINE_MS + step &&
-    neverRoutable.status().state === "starting";
-    walked += 1_000
-  ) {
-    await neverRoutable.advance(1_000);
+  // A child that NEVER becomes routable (a deleted record, a stale
+  // ingress), on a fresh record or a reused one: past the deadline it
+  // is killed and the restart re-provisions, since it never reached
+  // readiness.
+  for (const dnsCreated of [true, false]) {
+    let deadProvisions = 0;
+    const neverRoutable = await tunnelHarness({
+      provision: async () => {
+        deadProvisions += 1;
+        return {
+          hostname: "h.example.test",
+          connectorToken: "t",
+          dnsCreated,
+        };
+      },
+      probe: () => false,
+    });
+    await neverRoutable.reconcile({ port: 40100 });
+    // A second at a time, so the walk stops at the kill and not past
+    // the restart one rung later.
+    for (
+      let walked = 0;
+      walked <= TUNNEL_PROBE_DEADLINE_MS + lastOf(TUNNEL_PROBE_DELAYS_MS) &&
+      neverRoutable.status().state === "starting";
+      walked += 1_000
+    ) {
+      await neverRoutable.advance(1_000);
+    }
+    assert.equal(neverRoutable.status().state, "error");
+    assert.equal(
+      neverRoutable.spawned[0]?.killed,
+      true,
+      "not killed at the deadline",
+    );
+    await neverRoutable.advance(lastOf(TUNNEL_BACKOFF_LADDER_MS));
+    assert.equal(
+      neverRoutable.spawned.length,
+      2,
+      "no respawn after the deadline",
+    );
+    assert.equal(
+      deadProvisions,
+      2,
+      "the deadline restart reused the provision",
+    );
+    await neverRoutable.dispose();
   }
-  assert.ok(
-    TUNNEL_PROBE_DEADLINE_FRESH_MS > TUNNEL_PROBE_DEADLINE_MS,
-    "a fresh record must get the longer deadline",
-  );
-  assert.equal(neverRoutable.status().state, "error");
-  assert.equal(
-    neverRoutable.spawned[0]?.killed,
-    true,
-    "not killed at the deadline",
-  );
-  await neverRoutable.advance(lastOf(TUNNEL_BACKOFF_LADDER_MS));
-  assert.equal(
-    neverRoutable.spawned.length,
-    2,
-    "no respawn after the deadline",
-  );
-  assert.equal(deadProvisions, 2, "the deadline restart reused the provision");
 });
 
 it("cloudflared runner: a denied provision (401/404) parks with NO scheduled retry, and the next reconcile trigger is its recovery path", async () => {
