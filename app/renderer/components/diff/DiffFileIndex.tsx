@@ -27,8 +27,8 @@ type Props = Omit<
 
 // The diff's file list with only the rows near its view in the DOM. A
 // changes list runs to tens of thousands of rows when a build folder or
-// a node_modules isn't ignored, and a checkbox, a tooltip and a menu
-// trigger for every one of them would hold the window for seconds and
+// a node_modules isn't ignored, and a checkbox, a tooltip and two
+// buttons for every one of them would hold the window for seconds and
 // take gigabytes.
 //
 // It holds the filter, since the window is over the rows the filter
