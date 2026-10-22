@@ -49,8 +49,8 @@ function presentationOf(status: RemoteDeviceStatus): {
     // alone reads as the dial it is: the keeper dials on presence and
     // redials forever, and success flips this to "Connected" on its
     // own. A peer whose tunnel is starting (or a browser waiting on
-    // one) sits here until it routes, which is why the label says what
-    // is being waited for rather than claiming presence. Amber, like
+    // one) can sit here until it routes, which is why the label says
+    // what is being waited for rather than claiming presence. Amber, like
     // reconnecting: both are a dial still in flight.
     case "online":
     case "connecting":
