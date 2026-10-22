@@ -12,8 +12,9 @@
 // its middle and its end, and so does a pull request's page of them
 // after a jump from its list to a file in the middle, which lands at the
 // top of the view, and after a scroll, where the list marks the file
-// the view reached. Every file mounted measures where it sits, one
-// forced layout after another, before the window can paint.
+// the view reached; a switch to split there keeps that file at the top.
+// Every file mounted measures where it sits, one forced layout after
+// another, before the window can paint.
 //
 // Run: pnpm test diff-at-scale.
 // covers: app/lab/fake-host/**
@@ -264,6 +265,17 @@ it(
       scrolled.mounted <= FILES_AT_MOST,
       `${scrolled.mounted} files mounted after a scroll`,
     );
+
+    // Split places every file anew, by sizes the files above haven't
+    // been drawn at, and the view stays on the file it was reading.
+    await page.getByLabel("Diff layout").getByText("Split").click();
+    await waitFor(
+      async () => (await paneState(page)).top === scrolled.top,
+      `${scrolled.top} still at the top after a switch to split`,
+      10_000,
+    );
+    await page.waitForTimeout(500);
+    assert.equal((await paneState(page)).top, scrolled.top);
 
     assert.deepEqual(errors, []);
   },

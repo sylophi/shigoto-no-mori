@@ -2,6 +2,7 @@ import {
   useEffect,
   useEffectEvent,
   useLayoutEffect,
+  useRef,
   type ComponentProps,
   type ReactNode,
   type RefObject,
@@ -108,6 +109,36 @@ export function DiffPane({
     _delta,
     instance,
   ) => item.end <= (instance.scrollOffset ?? 0);
+
+  // Where the reader is, kept as the view scrolls: the file being read
+  // and how far into it the view is. A new layout or fold places every
+  // file anew, by sizes the files above haven't been drawn at, and the
+  // view goes back to the same place in the same file.
+  const place = useRef<{ index: number; into: number }>(undefined);
+  useEffect(() => {
+    const view = scrollRef.current;
+    if (!view) return;
+    const keep = () => {
+      const item = fileWindow.getVirtualItemForOffset(
+        view.scrollTop + FILE_GAP + 1,
+      );
+      place.current = item && {
+        index: item.index,
+        into: view.scrollTop - item.start,
+      };
+    };
+    view.addEventListener("scroll", keep, { passive: true });
+    return () => view.removeEventListener("scroll", keep);
+  }, [scrollRef, fileWindow]);
+  const returnToPlace = useEffectEvent(() => {
+    const was = place.current;
+    const item = was && fileWindow.measurementsCache[was.index];
+    if (item)
+      fileWindow.scrollToOffset(item.start + Math.min(was.into, item.size));
+  });
+  useLayoutEffect(() => {
+    returnToPlace();
+  }, [layout, collapsedKeys]);
 
   // The files on screen are measured again for a new layout: one whose
   // size it didn't change gets no resize to be measured by, and would

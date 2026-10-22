@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
+import { useLocation } from "@tanstack/react-router";
 // parsePatchFiles lives in the root entry, not /react (the docs example
 // is slightly off: `@pierre/diffs/react` only re-exports the React
 // components and shared types). The two imports are friendly together.
@@ -32,6 +33,7 @@ import {
 } from "@shigomori/ui/lib/patchFiles.ts";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffPane } from "./DiffPane";
+import { HighlightWorkers } from "./HighlightWorkers";
 import { MediaDiff } from "./MediaDiff";
 import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import { readStored, writeStored } from "@/lib/localStorage";
@@ -64,39 +66,40 @@ const byName = (files: FileDiffMetadata[]) =>
 // highlights again.
 function usePatchFiles(
   patch: string | undefined,
+  // Which page the patch is for (one commit, the branch, one picked
+  // file), so one page never shows another's files.
+  page: string,
 ): FileDiffMetadata[] | undefined {
   // The patch, when it is a worker's to parse.
   const big =
     patch !== undefined && patch.length >= PARSE_IN_WORKER_FROM
       ? patch
       : undefined;
-  // The last parse, which stays up while a patch that changed under the
-  // page (a commit made while it's open) is parsed again, so the page
-  // keeps its place. A page between patches (another commit opening)
-  // or with a small one drops it.
+  // The page's last parse, which stays up while a patch that changed
+  // under it (a commit made while it's open) is parsed again, so the
+  // page keeps its place.
   const [parsed, setParsed] = useState<{
-    patch: string;
+    page: string;
     files: FileDiffMetadata[];
   }>();
-  if (big === undefined && parsed !== undefined) setParsed(undefined);
   useEffect(() => {
     if (big === undefined) return;
     const worker = new PatchFilesWorker();
     worker.addEventListener(
       "message",
       (event: MessageEvent<FileDiffMetadata[]>) => {
-        setParsed({ patch: big, files: byName(event.data) });
+        setParsed({ page, files: byName(event.data) });
         worker.terminate();
       },
     );
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- a worker's postMessage takes no origin
     worker.postMessage(big);
     return () => worker.terminate();
-  }, [big]);
+  }, [big, page]);
   if (patch === undefined) return NO_FILES;
   if (big === undefined)
     return byName(parsePatchFiles(patch).flatMap((p) => p.files));
-  return parsed?.files;
+  return parsed?.page === page ? parsed.files : undefined;
 }
 
 export function DiffPage({
@@ -199,7 +202,11 @@ export function DiffPage({
   const singleFile = changes !== undefined;
   const filesLabel = singleFile ? "Changed files" : "Files in this patch";
 
-  const parsedFiles = usePatchFiles(patch);
+  const { pathname } = useLocation();
+  const parsedFiles = usePatchFiles(
+    patch,
+    `${pathname}\n${changes?.selectedKey ?? ""}`,
+  );
   const allFiles = parsedFiles ?? NO_FILES;
   const filesKey = allFiles.map(fileKey).join("\n");
   // The file a combined read is on (DiffPane says as it scrolls), and
@@ -313,91 +320,93 @@ export function DiffPage({
   });
 
   return (
-    <DiffPageView
-      takeover={
-        <SidebarTakeover
-          back={{ label: backLabel, onClick: onBack }}
-          actions={sidebarActions}
-        >
-          {sidebarWith(
-            showIndex && (
-              <DiffFileIndex {...indexProps} onSelect={selectFile} />
-            ),
-          )}
-        </SidebarTakeover>
-      }
-      header={
-        <DiffHeaderView
-          title={title}
-          subtitle={subtitle}
-          back={phone ? { label: backLabel, onClick: onBack } : null}
-          files={
-            phone &&
-            (renderSidebar !== undefined ||
-              singleFile ||
-              allFiles.length >= SHEET_MIN_FILES)
-              ? {
-                  label: filesLabel,
-                  count: indexEntries.length,
-                  onOpen: () => setFileSheetOpen(true),
-                }
-              : null
-          }
-          wrapLines={wrapLines}
-          onToggleWrap={toggleWrap}
-          diffStyle={diffStyle}
-          onDiffStyle={setDiffStyle}
-          details={details}
-        />
-      }
-      pane={
-        <DiffPane
-          scrollRef={scrollRef}
-          listRef={listRef}
-          // Until the status list answers, or the patch is parsed, an
-          // empty pane would read as a clean tree.
-          state={
-            isLoading || changes?.loading || parsedFiles === undefined
-              ? "loading"
-              : // A pull request's patch asked again for its media keeps
-                // showing when that ask fails; any other page says so.
-                error && (patch === undefined || retryMedia === undefined)
-                ? "error"
-                : allFiles.length === 0
-                  ? "empty"
-                  : "files"
-          }
-          message={
-            // A picked file with no patch of its own (a mode change, or
-            // content git won't diff) is not a clean tree and mustn't
-            // borrow its wording.
-            singleFile && changes.files.length > 0
-              ? "No text changes to show for this file."
-              : emptyMessage
-          }
-          virtualizer={virtualizer}
-          files={allFiles}
-          rows={rows}
-          collapsedKeys={collapsedKeys}
-          diffStyle={diffStyle}
-          wrapLines={wrapLines}
-          jump={jump}
-          onRead={singleFile ? undefined : setActiveKey}
-        />
-      }
-      sheet={
-        phone && (
-          <DiffFilesSheetView
-            open={fileSheetOpen}
-            onOpenChange={setFileSheetOpen}
-            title={filesLabel}
+    <HighlightWorkers>
+      <DiffPageView
+        takeover={
+          <SidebarTakeover
+            back={{ label: backLabel, onClick: onBack }}
+            actions={sidebarActions}
           >
             {sidebarWith(
-              <DiffFileIndex {...indexProps} onSelect={selectFromSheet} />,
+              showIndex && (
+                <DiffFileIndex {...indexProps} onSelect={selectFile} />
+              ),
             )}
-          </DiffFilesSheetView>
-        )
-      }
-    />
+          </SidebarTakeover>
+        }
+        header={
+          <DiffHeaderView
+            title={title}
+            subtitle={subtitle}
+            back={phone ? { label: backLabel, onClick: onBack } : null}
+            files={
+              phone &&
+              (renderSidebar !== undefined ||
+                singleFile ||
+                allFiles.length >= SHEET_MIN_FILES)
+                ? {
+                    label: filesLabel,
+                    count: indexEntries.length,
+                    onOpen: () => setFileSheetOpen(true),
+                  }
+                : null
+            }
+            wrapLines={wrapLines}
+            onToggleWrap={toggleWrap}
+            diffStyle={diffStyle}
+            onDiffStyle={setDiffStyle}
+            details={details}
+          />
+        }
+        pane={
+          <DiffPane
+            scrollRef={scrollRef}
+            listRef={listRef}
+            // Until the status list answers, or the patch is parsed, an
+            // empty pane would read as a clean tree.
+            state={
+              isLoading || changes?.loading || parsedFiles === undefined
+                ? "loading"
+                : // A pull request's patch asked again for its media keeps
+                  // showing when that ask fails; any other page says so.
+                  error && (patch === undefined || retryMedia === undefined)
+                  ? "error"
+                  : allFiles.length === 0
+                    ? "empty"
+                    : "files"
+            }
+            message={
+              // A picked file with no patch of its own (a mode change, or
+              // content git won't diff) is not a clean tree and mustn't
+              // borrow its wording.
+              singleFile && changes.files.length > 0
+                ? "No text changes to show for this file."
+                : emptyMessage
+            }
+            virtualizer={virtualizer}
+            files={allFiles}
+            rows={rows}
+            collapsedKeys={collapsedKeys}
+            diffStyle={diffStyle}
+            wrapLines={wrapLines}
+            jump={jump}
+            onRead={singleFile ? undefined : setActiveKey}
+          />
+        }
+        sheet={
+          phone && (
+            <DiffFilesSheetView
+              open={fileSheetOpen}
+              onOpenChange={setFileSheetOpen}
+              title={filesLabel}
+            >
+              {sidebarWith(
+                <DiffFileIndex {...indexProps} onSelect={selectFromSheet} />,
+              )}
+            </DiffFilesSheetView>
+          )
+        }
+      />
+    </HighlightWorkers>
   );
 }
