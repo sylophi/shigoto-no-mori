@@ -200,3 +200,49 @@ it("lists a project's worktrees with git once while its files say the same, and 
   assert.equal(named(read, "elk"), undefined);
   assert.equal((await next()).listed, 0, "no change after");
 });
+
+it("a checkout stopped mid-rebase stays detached and its row names the branch it replays, the primary and a linked one alike", async () => {
+  const repo = box.repo("proj", { "README.md": "base\n" });
+  const fox = join(box.home, "elsewhere", "fox");
+  box.git(repo, "worktree", "add", "-q", "-b", "fox", fox);
+  // Both change the same line, so each rebase stops on it: the linked
+  // one's with git's default backend, the primary's with the other.
+  writeFileSync(join(fox, "README.md"), "fox\n");
+  box.git(fox, "commit", "-q", "-am", "fox");
+  box.git(repo, "checkout", "-q", "-b", "side");
+  writeFileSync(join(repo, "README.md"), "side\n");
+  box.git(repo, "commit", "-q", "-am", "side");
+  assert.throws(() => box.git(fox, "rebase", "side"));
+  assert.throws(() => box.git(repo, "rebase", "--apply", "fox"));
+  const project = (await box.engine(
+    Effect.flatMap(Registry.Registry, (registry) =>
+      registry.register({ name: "proj", path: repo }),
+    ),
+  )) as Registry.RegisteredProject;
+  const read = (await box.engine(
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.identities(project),
+    ),
+  )) as ReadonlyArray<Worktrees.WorktreeIdentity>;
+  const short = (at: string) =>
+    box.git(at, "rev-parse", "--short", "HEAD").trim();
+  assert.deepEqual(
+    read.map(({ name, branch, detached }) => ({ name, branch, detached })),
+    [
+      { name: "proj", branch: short(repo), detached: true },
+      { name: "fox", branch: short(fox), detached: true },
+    ],
+  );
+  const { rows } = (await box.engine(
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.list([project]),
+    ),
+  )) as { rows: ReadonlyArray<Worktrees.WorktreeRow> };
+  assert.deepEqual(
+    rows.map(({ name, rebasing }) => ({ name, rebasing })),
+    [
+      { name: "proj", rebasing: "side" },
+      { name: "fox", rebasing: "fox" },
+    ],
+  );
+});

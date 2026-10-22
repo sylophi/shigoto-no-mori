@@ -74,7 +74,8 @@ export const WorktreeSchema = Schema.Struct({
   // A local fast-forward merge doesn't count: its history is
   // indistinguishable from a worktree that never committed.
   mergedIntoPrimary: Schema.Boolean,
-  changedCount: Schema.Natural,
+  // Null when git status couldn't be read: not clean, and no count.
+  changedCount: Schema.NullOr(Schema.Natural),
   // Newest mtime of the uncommitted changes, epoch ms.
   lastChangeAt: Schema.optional(Schema.Natural),
   // Epoch ms. Absent for the primary checkout.
@@ -86,6 +87,9 @@ export const WorktreeSchema = Schema.Struct({
   isExternal: Schema.Boolean,
   // `branch` then holds the short commit hash.
   detached: Schema.Boolean,
+  // While detached to replay a rebase: the branch it replays, which
+  // names the checkout meanwhile.
+  rebasing: Schema.optional(Schema.String),
   shelved: Schema.Boolean,
   // Fast-forward onto the upstream after each background fetch, while
   // there are no local commits, changes or app-started processes.
@@ -182,14 +186,20 @@ export function canRewriteCommits(
   return count <= worktree.unpushedCount;
 }
 
-// Uncommitted edits and agent session changes count too. The engine's
-// idle shelf (shelf.ts lastTouchedAt) must read activity the same way.
+// Uncommitted edits, agent session changes and the worktree's creation
+// count too, so a copy made from an old branch (a mirror's, say) reads
+// as when it arrived. The engine's idle shelf (shelf.ts lastTouchedAt)
+// must read activity the same way.
 export function worktreeLastActivityAt(
-  worktree: Pick<Worktree, "lastChangeAt" | "recentCommits" | "agentSessions">,
+  worktree: Pick<
+    Worktree,
+    "lastChangeAt" | "createdAt" | "recentCommits" | "agentSessions"
+  >,
 ): number {
   const committed = Date.parse(worktree.recentCommits[0]?.date ?? "");
   return Math.max(
     worktree.lastChangeAt ?? 0,
+    worktree.createdAt ?? 0,
     Number.isNaN(committed) ? 0 : committed,
     ...(worktree.agentSessions ?? []).map((s) => s.at),
   );

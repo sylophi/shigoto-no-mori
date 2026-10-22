@@ -97,7 +97,7 @@ const remote: RemoteForestItem[] = [
     project: portPool,
     worktrees: [
       worktree(portPool, "main", { isPrimary: true }),
-      worktree(portPool, "quiet-quail", { createdAt: 300, lastChangeAt: 100 }),
+      worktree(portPool, "quiet-quail", { createdAt: 150, lastChangeAt: 160 }),
       worktree(portPool, "lease-ttl-copy"),
     ],
     pullRequests: {},
@@ -117,7 +117,7 @@ const listings = [
   listed([
     worktree(portPool, "main", { isPrimary: true }),
     worktree(portPool, "zebra"),
-    worktree(portPool, "lease-ttl", { createdAt: 200, lastChangeAt: 200 }),
+    worktree(portPool, "lease-ttl", { createdAt: 100, lastChangeAt: 200 }),
   ]),
   // Still loading.
   listed(undefined),

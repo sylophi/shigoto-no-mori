@@ -9,6 +9,7 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 interface WorktreeMoveDetailsProps {
   branch: string;
   detached: boolean;
+  rebasing?: string | undefined;
   // Paths are pre-tildified for display; the tip carries the full path
   // for hover, which the two flows compute differently.
   fromPath: string;
@@ -29,6 +30,7 @@ interface WorktreeMoveDetailsProps {
 export function WorktreeMoveDetailsView({
   branch,
   detached,
+  rebasing,
   fromPath,
   fromTip,
   toPath,
@@ -41,9 +43,13 @@ export function WorktreeMoveDetailsView({
     <>
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-center gap-2">
-          <SimpleTooltip whenTruncated tip={branch}>
+          <SimpleTooltip whenTruncated tip={rebasing ?? branch}>
             <span className="min-w-0 truncate font-mono select-text">
-              <BranchLabel branch={branch} detached={detached} />
+              <BranchLabel
+                branch={branch}
+                detached={detached}
+                rebasing={rebasing}
+              />
             </span>
           </SimpleTooltip>
           {branchAdornment}

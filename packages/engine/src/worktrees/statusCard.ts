@@ -48,7 +48,7 @@ export const makeStatusCard = ({
           }
           return counts;
         }),
-        Effect.orElseSucceed(() => NO_CHANGES),
+        Effect.orElseSucceed(() => ({ ...NO_CHANGES, changedCount: null })),
       );
 
     const stashCount = (worktree: string) =>

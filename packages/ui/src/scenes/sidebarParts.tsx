@@ -129,6 +129,9 @@ export function SidebarPartsScene() {
             <MirrorBadgeView mirror={badge} showBadge />
             <AgentWaitingMarkView worktree={worktreeNamed(SM, "quiet-quail")} />
             <StatusIndicatorView worktree={worktree} />
+            <StatusIndicatorView
+              worktree={{ ...worktree, changedCount: null }}
+            />
           </span>
         </Part>
         <Part label="Dragging">

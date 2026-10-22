@@ -282,6 +282,7 @@ function WorktreeHeader({
               title: workTitle,
               branch: worktree.branch,
               detached: worktree.detached,
+              rebasing: worktree.rebasing,
             }
           : pending
             ? "pending"

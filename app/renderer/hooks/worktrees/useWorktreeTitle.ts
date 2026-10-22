@@ -70,6 +70,8 @@ function useMappedPullRequest(worktree: Worktree) {
 // a back button costs no lookup of its own.
 export function useWorktreeName(worktree: Worktree): string {
   return (
-    worktreeTitle(worktree, useMappedPullRequest(worktree)) ?? worktree.branch
+    worktreeTitle(worktree, useMappedPullRequest(worktree)) ??
+    worktree.rebasing ??
+    worktree.branch
   );
 }

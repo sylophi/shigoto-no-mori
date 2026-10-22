@@ -148,7 +148,10 @@ export function WorktreeEntryView({
       {/* Weight is reserved for "this is the one you have open".
           Bolding every title spends the page's only emphasis on the
           thing every row has. */}
-      <SimpleTooltip whenTruncated tip={title ?? worktree.branch}>
+      <SimpleTooltip
+        whenTruncated
+        tip={title ?? worktree.rebasing ?? worktree.branch}
+      >
         <span
           className={cn(
             "truncate text-xs",
@@ -160,6 +163,7 @@ export function WorktreeEntryView({
             <BranchLabel
               branch={worktree.branch}
               detached={worktree.detached}
+              rebasing={worktree.rebasing}
             />
           )}
         </span>

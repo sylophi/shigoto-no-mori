@@ -207,7 +207,7 @@ export function ProjectTileView({
           missing
             ? `${project.name}, locate`
             : lead
-              ? `${project.name}, open ${lead.worktree.branch}`
+              ? `${project.name}, open ${lead.worktree.rebasing ?? lead.worktree.branch}`
               : `${project.name}, new worktree`
         }
         aria-describedby={!missing && description ? descriptionId : undefined}

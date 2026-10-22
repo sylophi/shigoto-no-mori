@@ -84,7 +84,11 @@ export function deriveHygieneVerdict(
   worktree: HygieneWorktreeFacts,
   hygiene: WorktreeHygiene | undefined,
 ): HygieneVerdict {
-  // Uncommitted work has no copy anywhere, so it beats everything.
+  // Uncommitted work has no copy anywhere, so it beats everything, and
+  // so does a tree whose changes couldn't be read.
+  if (worktree.changedCount === null) {
+    return verdict("dirty", "Couldn't read its changes, so any would be lost.");
+  }
   if (worktree.changedCount > 0) {
     return verdict(
       "dirty",

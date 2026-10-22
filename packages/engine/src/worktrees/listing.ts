@@ -312,14 +312,28 @@ export const makeListing = Effect.gen(function* () {
       );
     }).pipe(Effect.orElseSucceed(() => 0));
 
+  // The branch a rebase replays in a detached checkout, read off its
+  // files with no git: the primary's git dir is its .git, a linked
+  // one's the admin dir its .git names. Null when none is under way.
+  const rebasingOf = (worktree: WorktreeIdentity) =>
+    worktree.detached
+      ? git
+          .adminDirOf(worktree.path)
+          .pipe(
+            Effect.flatMap((admin) =>
+              git.rebasingBranch(
+                Option.getOrElse(admin, () => path.join(worktree.path, ".git")),
+              ),
+            ),
+          )
+      : Effect.succeed(null);
+
   const descriptionOf = (worktree: WorktreeIdentity) =>
     hasWorktreeData(worktree)
       ? data.description(worktree.projectId, worktree.id)
       : Effect.succeed(WorktreeData.NO_DESCRIPTION);
 
-  // A row, and what the shelf needs of its probes: when they started,
-  // and whether the status answered (a failed one shows as 0 changes,
-  // which the shelf must not compare).
+  // A row, and when its probes started, which the shelf compares at.
   const probe = (worktree: WorktreeIdentity, context: RowContext) =>
     Effect.gen(function* () {
       const at = yield* Clock.currentTimeMillis;
@@ -342,12 +356,13 @@ export const makeListing = Effect.gen(function* () {
           relation,
           unpushed: git.unpushedCount(worktree.path),
           createdAt: createdAtOf(worktree.path),
+          rebasing: rebasingOf(worktree),
           described: descriptionOf(worktree),
         },
         { concurrency: "unbounded" },
       );
       const changes = Result.getOrElse(probes.changes, () => ({
-        count: 0,
+        count: null,
         lastChangeAt: 0,
       }));
       const { title, description } = probes.described;
@@ -374,6 +389,7 @@ export const makeListing = Effect.gen(function* () {
         isPrimary: worktree.isPrimary,
         isExternal: worktree.isExternal,
         detached: worktree.detached,
+        ...nonEmpty("rebasing", probes.rebasing ?? ""),
         shelved: isShelved(worktree, context.shelved),
         // Unlike the shelf, any checkout can follow its upstream.
         autoPull: context.autoPull.has(worktree.id),
@@ -383,7 +399,7 @@ export const makeListing = Effect.gen(function* () {
         ...nonEmpty("description", description),
         projectName: context.project.name,
       };
-      return { row, at, statusOk: Result.isSuccess(probes.changes) };
+      return { row, at };
     });
   type Probed = Effect.Success<ReturnType<typeof probe>>;
 
@@ -428,8 +444,8 @@ export const makeListing = Effect.gen(function* () {
       const seeds: Array<[string, ShelfSnapshot]> = [];
       const retires: Array<[string, number]> = [];
       const shelves: Array<[string, ShelfSnapshot]> = [];
-      for (const { row, at, statusOk } of probed) {
-        if (!statusOk) continue;
+      for (const { row, at } of probed) {
+        if (row.changedCount === null) continue;
         const seen: ShelfObservation = {
           at,
           head: row.recentCommits[0]?.hash ?? "",

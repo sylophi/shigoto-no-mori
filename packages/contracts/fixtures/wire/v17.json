@@ -1240,6 +1240,7 @@
         "isPrimary": true,
         "isExternal": false,
         "detached": true,
+        "rebasing": "feat",
         "shelved": false,
         "autoPull": false
       },
@@ -1271,7 +1272,7 @@
         "behindPrimary": 3,
         "unpushedCount": 0,
         "mergedIntoPrimary": false,
-        "changedCount": 0,
+        "changedCount": null,
         "recentCommits": [
           {
             "hash": "2bdd",
