@@ -54,8 +54,6 @@ const HubStatusSchema = Schema.Struct({
   // Absent on the web client, which runs no cloudflared.
   tunnel: Schema.optional(TunnelStateSchema),
 });
-// A fresh DNS record may take this long to route.
-export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
 
 export type HubStatus = typeof HubStatusSchema.Type;
 
