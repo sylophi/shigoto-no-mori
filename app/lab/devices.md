@@ -129,8 +129,8 @@ in `dev-app.md`, "When a device is removed".
   lock unless it runs as a profile.
 - **Profile boots signed out after `--clone-login`.** The plain dev
   app's Clerk session may have expired, even while it still reads
-  signed in: its device credential outlives the Clerk
-  session, and a clone copies the empty session. Open the plain dev
+  signed in: its device credential outlives the Clerk session, and a
+  clone copies the empty session. Open the plain dev
   app in a weblab session on a free port named in all three places:
   `"start": "SHIGOMORI_DEBUG_PORT=9341 pnpm dev"`, with `attach` and
   `address` `127.0.0.1:9341`. Check
