@@ -11,8 +11,9 @@
 @import "@fontsource/zen-maru-gothic/700.css";
 @import "@fontsource/zen-maru-gothic/900.css";
 
-/* Its backtick has no width, so the backtick comes from Geist (the
-   face index.css loads): of faces alike but for unicode-range, the one
+/* Its backtick and six spacing accents are marked as combining marks,
+   which shaping draws with no width, so they come from Geist (the face
+   index.css loads): of faces alike but for unicode-range, the one
    declared last is tried first. */
 @font-face {
   font-family: "Zen Maru Gothic";
@@ -21,7 +22,7 @@
   font-weight: 400;
   src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
     format("woff2");
-  unicode-range: U+0060;
+  unicode-range: U+0060, U+00A8, U+00B4, U+00B8, U+02C6, U+02DA, U+02DC;
 }
 @font-face {
   font-family: "Zen Maru Gothic";
@@ -30,7 +31,7 @@
   font-weight: 500;
   src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
     format("woff2");
-  unicode-range: U+0060;
+  unicode-range: U+0060, U+00A8, U+00B4, U+00B8, U+02C6, U+02DA, U+02DC;
 }
 @font-face {
   font-family: "Zen Maru Gothic";
@@ -39,7 +40,7 @@
   font-weight: 700;
   src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
     format("woff2");
-  unicode-range: U+0060;
+  unicode-range: U+0060, U+00A8, U+00B4, U+00B8, U+02C6, U+02DA, U+02DC;
 }
 @font-face {
   font-family: "Zen Maru Gothic";
@@ -48,5 +49,5 @@
   font-weight: 900;
   src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
     format("woff2");
-  unicode-range: U+0060;
+  unicode-range: U+0060, U+00A8, U+00B4, U+00B8, U+02C6, U+02DA, U+02DC;
 }

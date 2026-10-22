@@ -200,8 +200,8 @@ interface Session {
   alternate: boolean;
   // A sequence the last read left unfinished, which the next finishes.
   carry: string;
-  // Closed by its user or with its worktree, so not saved for the next
-  // start.
+  // Closed by its user or with its worktree, or its shell ended, so not
+  // saved for the next start.
   forget: boolean;
 }
 
