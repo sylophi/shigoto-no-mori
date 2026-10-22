@@ -38,7 +38,7 @@
 //     "blocked" as a rose error (alarming for a machine that is simply
 //     switched off), so the slate "Off" is the least-lying option.
 import { departed } from "@shigomori/contracts/schemas/config";
-import { fetchAgain, refreshQueries } from "@/lib/askAgain";
+import { fetchAgain } from "@/lib/askAgain";
 import { throughCancel } from "@/lib/queryClientOptions";
 import { hashKey, type QueryClient } from "@tanstack/react-query";
 import { callOf } from "@shigomori/contracts/contract";
@@ -59,7 +59,6 @@ import {
   hostKeyDeviceId,
   invalidateDeviceSession,
   queryKeys,
-  queryKeysFor,
   removeDeviceCache,
 } from "@/lib/queryKeys";
 import {
@@ -151,10 +150,6 @@ function pageApi(): RendererApi {
 // read as "connected before, connected after" and its landing would
 // go unswept.
 let liveSessions: ReadonlySet<string> = new Set();
-
-// Each live session's command access in the last snapshot seen, so a
-// peer's switch flipping mid-session can be spotted (noteSessions).
-let lastAccess: Readonly<Record<string, boolean>> = {};
 
 // Each session's sharing switch in the last snapshot seen, so the one
 // that just went off is dropped from the cache once (noteSessions).
@@ -332,16 +327,6 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
 // session whose peer isn't sharing is not a live one here: what the
 // peer shared is dropped from the cache as the switch goes off, and
 // it lands like a new session when the switch comes back on.
-//
-// A peer's command access flipping on a session that stays up is the
-// last thing only the snapshot says. Runtime info is gated on it (a
-// peer refuses it to a device it will not take commands from), caches
-// forever and sits outside the state-moved sweep, so it is re-asked
-// here or the peer's paths stay raw until a focus. Either direction
-// re-asks: the read is silent, so an off flip costs one refused round
-// trip and no toast. The full session sweep is deliberately not used:
-// it would refetch every gated read, and on an off flip each of those
-// would toast a refusal.
 function noteSessions(status: HubStatus): void {
   const now = new Set(
     Object.keys(status.peerAppVersions).filter(
@@ -354,23 +339,13 @@ function noteSessions(status: HubStatus): void {
     }
   }
   for (const deviceId of now) {
-    if (liveSessions.has(deviceId)) {
-      const before = lastAccess[deviceId];
-      const after = status.peerAcceptsCommands[deviceId];
-      if (before !== undefined && before !== after && boundQueryClient) {
-        refreshQueries(boundQueryClient, {
-          queryKey: queryKeysFor(deviceId).runtimeInfo(),
-        });
-      }
-      continue;
-    }
+    if (liveSessions.has(deviceId)) continue;
     if (boundQueryClient !== null) {
       invalidateDeviceSession(boundQueryClient, deviceId);
     }
     for (const listener of sessionLandedListeners) listener(deviceId);
   }
   liveSessions = now;
-  lastAccess = status.peerAcceptsCommands;
   lastSharing = status.peerSharesData;
 }
 
@@ -404,7 +379,6 @@ function leaveAccount(queryClient: QueryClient): void {
   for (const { unwatch } of apis.values()) unwatch();
   apis.clear();
   liveSessions = new Set();
-  lastAccess = {};
   lastSharing = {};
   queryClient.removeQueries({
     queryKey: queryKeys.accountDevices(),

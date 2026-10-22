@@ -1059,6 +1059,37 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
   }, "the peer to hear the rest again");
 });
 
+it("runtime info: a peer without control is served this host's home and data folder, and with sharing off it is refused and never runs, like the lists", async () => {
+  const track = trackTest;
+  const facts = {
+    dataDir: "/Users/someone/.sm",
+    dataDirSource: "default",
+    atDefaultDataDir: true,
+    canonicalDataDirName: ".sm",
+    homedir: "/Users/someone",
+  };
+  let reads = 0;
+  const { listener } = await listen(track, {
+    registerHandlers: (binding) =>
+      binding.handle("runtime:info", async () => {
+        reads += 1;
+        return facts;
+      }),
+  });
+  const connection = await dialListener(track, listener);
+  assert.deepEqual(await invoke(connection, "runtime:info"), facts);
+  listener.setSharing(false);
+  assert.ok(
+    (await rejection(invoke(connection, "runtime:info"))) instanceof
+      NotSharingError,
+  );
+  assert.ok(
+    (await rejection(invoke(connection, "projects:list"))) instanceof
+      NotSharingError,
+  );
+  assert.equal(reads, 1, "runtime:info ran while not sharing");
+});
+
 it("sharing flipped under a linked peer: its calls and views under way end with NotSharingError, its handler's signal aborted, and it hears the switch both ways", async () => {
   const track = trackTest;
   const { listener, seen } = await listen(track, {
