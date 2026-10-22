@@ -175,7 +175,7 @@ async function defaultDeviceName(): Promise<DefaultDeviceName> {
 // What this machine looks like (defaultDeviceIcon.ts), the icon it
 // enrolls under until its owner picks one. Detected once per process:
 // the probes shell out, and the answer cannot change while the app
-// runs. It cannot reject (the detector falls back to the platform).
+// runs. It cannot reject (the detector lands on the fallback shape).
 let detectedIconInFlight: Promise<DeviceIcon> | null = null;
 function detectedDeviceIcon(): Promise<DeviceIcon> {
   detectedIconInFlight ??= detectDesktopDeviceShape();

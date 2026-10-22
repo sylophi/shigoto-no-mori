@@ -10,7 +10,6 @@
 // is out of scope.
 import { clientSetting } from "@shigomori/contracts/schemas/config";
 import { app, type BrowserWindow } from "electron";
-import { platform } from "node:os";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
@@ -61,15 +60,6 @@ export const setsLoginItem = (): boolean => app.isPackaged && !names.debuggable;
 // to take the app down.
 function reconcileLaunchAtLogin(): void {
   const keepReachable = keepReachableEnabled() && accountSignedIn();
-  // setLoginItemSettings is a no-op on Linux in Electron, so registering
-  // there would silently do nothing. Say so rather than pretend it took.
-  const os = platform();
-  if (os !== "darwin" && os !== "win32") {
-    log.info(
-      `[liveness] launch-at-login is unsupported on ${os}, skipping (keepReachable=${keepReachable})`,
-    );
-    return;
-  }
   if (!setsLoginItem()) {
     log.info(
       `[liveness] dev or test build, not touching the login item (keepReachable=${keepReachable})`,

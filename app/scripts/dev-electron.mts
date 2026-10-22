@@ -77,21 +77,12 @@ const relaunchMarker = join(tmpdir(), `shigomori-dev-relaunch-${process.pid}`);
 process.env[DEV_RELAUNCH_FILE_ENV] = relaunchMarker;
 process.on("exit", () => rmSync(relaunchMarker, { force: true }));
 
-// Windows cannot exec the extensionless .bin sh shim. Going through
-// the shell picks up electron-forge.cmd from the pnpm-provided PATH.
-const isWindows = process.platform === "win32";
 function launchForge(): ChildProcess {
-  return isWindows
-    ? spawn("electron-forge", ["start", ...forgeArgs], {
-        cwd: appRoot,
-        stdio: "inherit",
-        shell: true,
-      })
-    : spawn(
-        join(appRoot, "node_modules", ".bin", "electron-forge"),
-        ["start", ...forgeArgs],
-        { cwd: appRoot, stdio: "inherit" },
-      );
+  return spawn(
+    join(appRoot, "node_modules", ".bin", "electron-forge"),
+    ["start", ...forgeArgs],
+    { cwd: appRoot, stdio: "inherit" },
+  );
 }
 
 superviseChild(launchForge(), "electron-forge", () => {

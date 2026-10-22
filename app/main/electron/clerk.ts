@@ -66,14 +66,11 @@ function memoizedTokenStorage(): TokenStorage {
 // Must be called before app "ready" (createClerkBridge registers the
 // scheme's privileges, which Electron only accepts pre-ready) and after
 // the dev userData suffix is applied (token storage lives in userData).
-// The app owns the single-instance lock (main/index.ts), so the
-// bridge's own lock management is disabled, and its open-url and
-// second-instance listeners still receive the OAuth deep links.
+// Its open-url listener receives the OAuth deep links.
 export function createDesktopClerkBridge(): { cleanup: () => void } {
   return createClerkBridge({
     storage: memoizedTokenStorage(),
     renderer: { scheme: rendererScheme(), host: RENDERER_SCHEME_HOST },
-    manageSingleInstanceLock: false,
   });
 }
 
