@@ -2,10 +2,10 @@
 // in: a dev server, the terminals open there, the port forwarded to it
 // and the mirror keeping it in step are one worktree's news, so they
 // share its card, and so does an agent there waiting on you, which
-// leads it. Cards file under the
-// device holding the worktree, this machine first, the ones with an
-// agent waiting on you first. A forward switched on from the account
-// page names no worktree, and gets its device's card of loose ports.
+// leads it. Cards file under the device holding the worktree, this
+// machine first, the ones with an agent waiting on you first. A forward
+// switched on from the account page names no worktree, and gets its
+// device's card of loose ports.
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
 import type {
   AgentSession,

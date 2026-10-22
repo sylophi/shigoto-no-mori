@@ -31,7 +31,11 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { slotLabel } from "@/store/scriptSlot";
-import { terminalTabLabel } from "@/store/terminalDrawer";
+import {
+  drawerKey,
+  hideEmptyDrawer,
+  terminalTabLabel,
+} from "@/store/terminalDrawer";
 import {
   DeviceNameView,
   ForwardItemView,
@@ -99,16 +103,25 @@ export function TerminalItem({
   deviceId,
   terminal,
   index,
+  last,
 }: {
   deviceId: string;
   terminal: Terminal;
   index: number;
+  // Its worktree's only terminal.
+  last: boolean;
 }) {
   const { toTerminalOn } = useWorktreeNav();
   const { api } = useHostScope();
   const close = useMutation({
     mutationFn: () =>
       api.run(api.terminals.close({ terminalId: terminal.terminalId })),
+    onSuccess: () => {
+      if (last)
+        hideEmptyDrawer(
+          drawerKey(deviceId, terminal.projectId, terminal.worktreeId),
+        );
+    },
     meta: { errorTitle: "Couldn't close the terminal" },
   });
   return (

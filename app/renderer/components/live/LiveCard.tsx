@@ -118,6 +118,9 @@ function CardBody({
   // script running here: a card for a mirror or a forward alone has no
   // dev server of its own to point at.
   const scripts = card.items.some((item) => item.kind === "script");
+  const terminals = card.items.filter(
+    (item) => item.kind === "terminal",
+  ).length;
   // The worktree's page offers the console and the dialogs too, so a
   // card that cannot reach its device still leads there.
   return (
@@ -163,6 +166,7 @@ function CardBody({
             deviceId={card.deviceId}
             terminal={item.terminal}
             index={item.index}
+            last={terminals === 1}
           />
         ) : item.kind === "mirror" ? (
           <MirrorItem
