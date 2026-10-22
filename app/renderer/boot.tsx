@@ -228,7 +228,7 @@ export function mountWindow(
   });
 
   // Mirror focus onto the root so CSS can pause the infinite animations
-  // (the doubutsu wallpaper drift, the spinners) while nobody is
+  // (the doubutsu wallpaper drift and stripes, the spinners) while nobody is
   // looking: a running animation asks the compositor for a frame every
   // vsync, and those frames are most of the app's idle energy.
   const syncFocusClass = (focused: boolean) =>
