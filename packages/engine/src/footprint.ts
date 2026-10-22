@@ -17,15 +17,19 @@ export type FootprintPlace = {
   readonly binHome: string;
 };
 
+// The data-folder lock's file (DataDirLock.ts), beside the pointer.
+export const DATA_DIR_LOCK = "data-dir.lock";
+
 export type Footprint = {
   // Each a file or a folder of this flavor's alone, deleted whole, but
   // the config folder, which goes once empty: it may hold the owner's
-  // own files beside the pointer.
+  // own files beside the pointer and the lock.
   readonly paths: ReadonlyArray<{
     readonly id:
       | "data"
       | "userData"
       | "logs"
+      | "dataDirLock"
       | "config"
       | "preferences"
       | "command"
@@ -56,6 +60,9 @@ export const footprint = (flavor: Flavor, place: FootprintPlace): Footprint => {
         path: join(library, "Application Support", names.userDataDir),
       },
       { id: "logs", path: join(library, "Logs", names.appName) },
+      // Shared by every process of the flavor, whatever its data dir.
+      // Before the config folder, which goes once empty.
+      { id: "dataDirLock", path: join(config, DATA_DIR_LOCK) },
       { id: "config", path: config },
       {
         id: "preferences",
