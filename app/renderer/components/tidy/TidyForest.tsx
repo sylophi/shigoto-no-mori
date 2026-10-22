@@ -187,8 +187,6 @@ function TidyBody() {
         const result = await deleteWorktree.mutateAsync({
           projectId: entry.project.id,
           worktreeId: entry.worktree.id,
-          // Force only where the user acknowledged losing this
-          // worktree's work, and let the verdict decide what counts.
           force: forcedRemoval(entry, acknowledged),
         });
         // Deletion resolves either way: `ok: false` means a teardown

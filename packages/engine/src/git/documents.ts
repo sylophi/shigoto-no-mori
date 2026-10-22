@@ -160,8 +160,7 @@ export type RunOptions = {
   // A fetch from a file on this machine (a bundle), which no network can
   // stall, so it has no deadline however long its index takes.
   readonly local?: boolean | undefined;
-  // The output cap, over DEFAULT_MAX_OUTPUT. Only the reads whose size
-  // the user decides raise it: a patch, and a status of every new file.
+  // The output cap, over DEFAULT_MAX_OUTPUT.
   readonly maxOutputBytes?: number | undefined;
   // A write asked once, not again on a held index.lock, for a caller
   // that checks before each ask (a stash's finish).
@@ -234,13 +233,10 @@ export const SLOTTED_SUBCOMMANDS = new Set([
   "worktree list",
 ]);
 
-// Covers any log or ref output by a wide margin, and a status short of
-// a big unignored folder.
+// Covers any log or ref output by a wide margin. A status of every new
+// file past it (an unignored folder of ~150k files) would make a changes
+// list past what one message to a window carries (LINK_MAX_FRAME_BYTES).
 export const DEFAULT_MAX_OUTPUT = 10 * 1024 * 1024;
-
-// A status that lists each new file its own entry: an unignored
-// node_modules runs to hundreds of thousands of paths.
-export const FILE_STATUS_MAX_OUTPUT = 64 * 1024 * 1024;
 
 // A patch is the one output whose size the user decides: one
 // regenerated lockfile runs to tens of megabytes on its own.

@@ -9,7 +9,6 @@ import { parseNumstat, parseStatus } from "../gitParse.ts";
 import {
   BINARY_SNIFF_BYTES,
   CHANGE_MTIME_STATS,
-  FILE_STATUS_MAX_OUTPUT,
   UNTRACKED_COUNT_FILES,
   UNTRACKED_COUNT_LIMIT,
 } from "./documents.ts";
@@ -38,11 +37,12 @@ export const makeWorkingTree = ({
       worktree: string,
     ) {
       return parseStatus(
-        yield* run(
-          worktree,
-          ["status", "--porcelain=v2", "-z", "--untracked-files=all"],
-          { maxOutputBytes: FILE_STATUS_MAX_OUTPUT },
-        ),
+        yield* run(worktree, [
+          "status",
+          "--porcelain=v2",
+          "-z",
+          "--untracked-files=all",
+        ]),
       );
     });
 
