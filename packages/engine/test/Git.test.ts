@@ -302,7 +302,7 @@ it("a person's commits in a terminal are never refused by the app's reads beside
       // changes, an open diff and its hunks, each with what it answered.
       const reads = {
         status: g
-          .status(repo)
+          .changedFiles(repo)
           .pipe(Effect.map((files) => files.some((f) => f.path === "b.txt"))),
         changes: g
           .changes(repo)
@@ -404,7 +404,7 @@ it("a file saved unchanged doesn't stop an undo of a merge or an abort", async (
   savedUnchanged("b.txt");
   await withGit((g) =>
     Effect.gen(function* () {
-      assert.deepEqual(yield* g.status(repo), []);
+      assert.deepEqual(yield* g.changedFiles(repo), []);
       yield* g.resetSoft({ worktree: repo, target: first });
     }),
   );
@@ -417,7 +417,7 @@ it("a file saved unchanged doesn't stop an undo of a merge or an abort", async (
   savedUnchanged("b.txt");
   await withGit((g) =>
     Effect.gen(function* () {
-      yield* g.status(repo);
+      yield* g.changedFiles(repo);
       yield* g.abortOperation(repo);
     }),
   );

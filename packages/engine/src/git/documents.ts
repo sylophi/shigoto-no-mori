@@ -289,6 +289,8 @@ export const DISCARD_SNAPSHOTS_KEPT = 40;
 // reading the file for.
 export const BINARY_SNIFF_BYTES = 8000;
 export const UNTRACKED_COUNT_LIMIT = 4 * 1024 * 1024;
+// And only while there are this few of them.
+export const UNTRACKED_COUNT_FILES = 1000;
 
 export const encoder = new TextEncoder();
 // A byte order mark git prints first is the content's own (a blob that

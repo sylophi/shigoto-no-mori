@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { ChangedFile } from "@shigomori/contracts/schemas";
+import { isUntracked } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as TestClock from "effect/testing/TestClock";
@@ -21,6 +22,7 @@ import {
   GitCommandError,
   UndoRefusedError,
 } from "../src/Git.ts";
+import { UNTRACKED_COUNT_FILES } from "../src/git/documents.ts";
 import {
   failureAs,
   failureOf,
@@ -117,25 +119,40 @@ it("lists each kind of change with its counts, sorted by path", async () => {
   });
   assert.equal(rowOf(files, "new/sub dir.txt").counts?.additions, 1);
 
-  // The cheap form folds an untracked directory into one row, without
-  // counts, and the row probe counts and dates the same listing.
-  const cheap = await withGit((g) => g.status(repo));
-  assert.deepEqual(rowOf(cheap, "new/"), {
-    path: "new/",
-    kind: "added",
-    staged: "none",
-  });
-  assert.equal(rowOf(cheap, "a.txt").counts, undefined);
+  // The row's count is the list's, each file of the new folder its
+  // own, under git's default of folding the folder into one entry.
   const row = await withGit((g) => g.workingTreeChanges(repo));
-  assert.equal(row.count, cheap.length);
+  assert.equal(row.count, files.length);
+  assert.equal(await withGit((g) => g.changedCount(repo)), files.length);
   assert.ok(row.lastChangeAt > 0);
 });
 
-it("an untracked file the user's setting hides still counts for the guards", async () => {
+it("past a thousand new files they list without counts, and git's own keep theirs", async () => {
+  const repo = seedRepo();
+  write(repo, "a.txt", "one\n2\nthree\nfour\n");
+  for (let i = 0; i <= UNTRACKED_COUNT_FILES; i++) {
+    write(repo, `build/${i}.js`, "x\n");
+  }
+  const files = await changes(repo);
+  assert.equal(files.length, UNTRACKED_COUNT_FILES + 2);
+  assert.deepEqual(
+    files.filter((f) => isUntracked(f) && f.counts),
+    [],
+  );
+  assert.deepEqual(rowOf(files, "a.txt").counts, {
+    additions: 2,
+    deletions: 1,
+  });
+});
+
+it("an untracked file the user's setting hides still lists and counts", async () => {
   const repo = seedRepo();
   git(repo, "config", "status.showUntrackedFiles", "no");
   write(repo, "loose.txt", "x\n");
-  assert.equal((await withGit((g) => g.status(repo))).length, 0);
+  assert.deepEqual(
+    (await changes(repo)).map((f) => f.path),
+    ["loose.txt"],
+  );
   assert.equal(await withGit((g) => g.changedCount(repo)), 1);
 });
 

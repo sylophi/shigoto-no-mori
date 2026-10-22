@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode, type Ref } from "react";
 import {
   Archive,
   ArrowLeftToLine,
@@ -63,9 +63,17 @@ const FILTER_MIN_FILES = 8;
 // A double click on a row, or its menu, opens the file in the editor.
 //
 // Rows arrive built (patchFiles.ts). The caller decides whether they
-// come from the patch or from git status.
+// come from the patch or from git status, and holds the filter.
+//
+// A list can run to tens of thousands of rows (an unignored build
+// folder), so the app's caller draws only the rows near the view and
+// hands over where each sits (`rowWindow`). A scene draws them all.
 export function DiffFileIndexView({
   entries,
+  query,
+  onQueryChange,
+  listRef,
+  rowWindow,
   activeKey,
   collapsedKeys,
   onSelect,
@@ -77,6 +85,11 @@ export function DiffFileIndexView({
   className,
 }: {
   entries: IndexEntry[];
+  query: string;
+  onQueryChange: (query: string) => void;
+  // The list's scroll box, which the caller's window measures.
+  listRef?: Ref<HTMLDivElement>;
+  rowWindow?: IndexWindow;
   activeKey: string | null;
   collapsedKeys: ReadonlySet<string>;
   onSelect: (key: string) => void;
@@ -94,39 +107,11 @@ export function DiffFileIndexView({
   // viewport, the phone layout's bottom sheet otherwise.
   className?: string;
 }) {
-  const [query, setQuery] = useState("");
-  const listRef = useRef<HTMLDivElement>(null);
   // The changes list's moves, unless it only reads.
   const editable = changes && !changes.readOnly ? changes : undefined;
   // ...and the header's bulk ones, while there is something to act on.
   const bulk = editable && editable.files.length > 0 ? editable : undefined;
-  const needle = query.trim().toLowerCase();
-  const matches = needle
-    ? entries.filter(
-        (entry) =>
-          entry.path.toLowerCase().includes(needle) ||
-          entry.prevPath?.toLowerCase().includes(needle),
-      )
-    : entries;
-
-  // Keep the highlighted row on screen. Past ~24 files the list is taller
-  // than its own viewport, and a scroll-spy marker you can't see is no
-  // marker at all. `nearest` is the minimum scroll that reveals the row,
-  // so a row already in view doesn't move and reading down a patch
-  // doesn't jitter.
-  //
-  // The list's own scroll only, never its ancestors': nested in the Git
-  // page's timeline the list doesn't scroll at all, and the timeline
-  // keeps the place the reader left it at.
-  useEffect(() => {
-    const list = listRef.current;
-    const row = list?.querySelector("[data-active]");
-    if (!list || !row) return;
-    const box = list.getBoundingClientRect();
-    const at = row.getBoundingClientRect();
-    if (at.top < box.top) list.scrollTop -= box.top - at.top;
-    else if (at.bottom > box.bottom) list.scrollTop += at.bottom - box.bottom;
-  }, [activeKey]);
+  const matches = matchingEntries(entries, query);
 
   // Which discard is up for confirmation. Its paths are worked out when
   // it is confirmed, from the rows as they are then (discardFiles).
@@ -152,6 +137,27 @@ export function DiffFileIndexView({
     if (!menuOpenRef.current) onSelect(key);
   };
   const requestDiscard = (key: string) => setPendingDiscard({ key });
+  const drawRow = (entry: IndexEntry) => (
+    <IndexRow
+      key={entry.key}
+      entry={entry}
+      active={entry.key === activeKey}
+      collapsed={collapsedKeys.has(entry.key)}
+      menuOpen={menu?.open === true && menu.key === entry.key}
+      onSelect={selectRow}
+      busy={changes?.busy ?? false}
+      ticked={
+        // A conflict goes in by being resolved, from its menu, so it
+        // has no box.
+        editable && entry.row && !entry.row.conflicted
+          ? tickedOf(editable.picks, entry.row)
+          : undefined
+      }
+      onSetTicked={editable?.onSetTicked}
+      onDiscard={editable && requestDiscard}
+      onOpen={onOpen}
+    />
+  );
   // The header's ⋯, a right click on the header, and one on the list's
   // empty space all open these.
   const bulkItems = bulk && (
@@ -184,13 +190,13 @@ export function DiffFileIndexView({
           />
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Escape" && query) {
                 // Clear in place rather than letting Escape bubble out to
                 // whatever the route does with it.
                 e.stopPropagation();
-                setQuery("");
+                onQueryChange("");
               }
             }}
             placeholder="Filter files"
@@ -279,29 +285,30 @@ export function DiffFileIndexView({
             <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1" />
           }
         >
-          {matches.length === 0
-            ? emptyNote
-            : matches.map((entry) => (
-                <IndexRow
-                  key={entry.key}
-                  entry={entry}
-                  active={entry.key === activeKey}
-                  collapsed={collapsedKeys.has(entry.key)}
-                  menuOpen={menu?.open === true && menu.key === entry.key}
-                  onSelect={selectRow}
-                  busy={changes?.busy ?? false}
-                  ticked={
-                    // A conflict goes in by being resolved, from its
-                    // menu, so it has no box.
-                    editable && entry.row && !entry.row.conflicted
-                      ? tickedOf(editable.picks, entry.row)
-                      : undefined
-                  }
-                  onSetTicked={editable?.onSetTicked}
-                  onDiscard={editable && requestDiscard}
-                  onOpen={onOpen}
-                />
-              ))}
+          {matches.length === 0 ? (
+            emptyNote
+          ) : rowWindow ? (
+            <div className="relative" style={{ height: rowWindow.height }}>
+              {rowWindow.rows.map(({ index, start }) => {
+                const entry = matches[index];
+                return (
+                  entry && (
+                    <div
+                      key={entry.key}
+                      data-index={index}
+                      ref={rowWindow.measureRef}
+                      className="absolute inset-x-0 top-0"
+                      style={{ transform: `translateY(${start}px)` }}
+                    >
+                      {drawRow(entry)}
+                    </div>
+                  )
+                );
+              })}
+            </div>
+          ) : (
+            matches.map(drawRow)
+          )}
         </ContextMenuTrigger>
         {menuEntry ? (
           <FileMenu
@@ -316,7 +323,7 @@ export function DiffFileIndexView({
         )}
       </ContextMenu>
 
-      {needle && matches.length > 0 && (
+      {query.trim() && matches.length > 0 && (
         <p className="border-t border-border px-2.5 py-1 text-2xs text-muted-foreground">
           {matches.length} of {entries.length} files
         </p>
@@ -338,6 +345,32 @@ export function DiffFileIndexView({
       )}
     </div>
   );
+}
+
+// Where the drawn rows sit in a list too long to draw whole: the full
+// list's height, and each row near the view by its index in the filtered
+// list and its offset from the top.
+export interface IndexWindow {
+  height: number;
+  rows: readonly { index: number; start: number }[];
+  // Measures a drawn row, which the caller's window then places by.
+  measureRef: (node: Element | null) => void;
+}
+
+// The rows a filter leaves, in list order. Order is never re-ranked,
+// which is why the filter is a plain substring match (see above).
+export function matchingEntries(
+  entries: IndexEntry[],
+  query: string,
+): IndexEntry[] {
+  const needle = query.trim().toLowerCase();
+  return needle
+    ? entries.filter(
+        (entry) =>
+          entry.path.toLowerCase().includes(needle) ||
+          entry.prevPath?.toLowerCase().includes(needle),
+      )
+    : entries;
 }
 
 // Tri-state "everything" box. Reads from the status list rather than
@@ -558,16 +591,14 @@ function IndexRow({
     // A row is two controls side by side (tick, jump), so it can't be
     // one button. The wrapper takes the click so the whole pill lands on
     // the file, the tick stops it from bubbling, and the inner button is
-    // what the keyboard reaches. The wrapper also carries the active
-    // marker the scroll-into-view above looks for, the key the list's
-    // context menu finds it by, and it is what doubutsu paints its hover
-    // treatment on (see diff-index-jump there).
+    // what the keyboard reaches. The wrapper also carries the key the
+    // list's context menu finds it by, and it is what doubutsu paints its
+    // hover treatment on (see diff-index-jump there).
     <div
       role="presentation"
       data-slot="diff-index-row"
       data-row-key={entry.key}
       onClick={select}
-      data-active={active || undefined}
       className={cn(
         "flex w-full items-center gap-1.5 rounded-md px-2 transition-colors",
         active

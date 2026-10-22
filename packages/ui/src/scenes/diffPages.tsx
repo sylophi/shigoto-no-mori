@@ -217,6 +217,8 @@ export function ChangesPageScene() {
     index: (
       <DiffFileIndexView
         entries={changeEntries(FILES)}
+        query=""
+        onQueryChange={noop}
         activeKey={CONTROLS.selectedKey}
         collapsedKeys={new Set()}
         onSelect={noop}
@@ -280,6 +282,8 @@ export function CommitPageScene() {
     index: (
       <DiffFileIndexView
         entries={patchEntries(files)}
+        query=""
+        onQueryChange={noop}
         activeKey={files[0] ? fileKey(files[0]) : null}
         collapsedKeys={new Set()}
         onSelect={noop}

@@ -35,7 +35,7 @@ export const makeStatusCard = ({
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     const { deviceFlag, primaryRefOf, marks, descriptionOf } = listing;
     const changeCounts = (worktree: string) =>
-      git.status(worktree).pipe(
+      git.changedFiles(worktree).pipe(
         Effect.map((files) => {
           const counts = { ...NO_CHANGES, changedCount: files.length };
           for (const file of files) {

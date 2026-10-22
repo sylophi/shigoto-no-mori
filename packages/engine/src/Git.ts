@@ -220,27 +220,23 @@ export class Git extends Context.Service<
     ) => Effect.Effect<void>;
 
     // --- the working tree ---
-    // Every changed file. `untracked: "normal"` sees untracked files
-    // even where the user turned them off (`status.showUntrackedFiles
-    // no`), for the guards ahead of an overwrite or a removal. "all"
-    // lists each file of an untracked directory. Without it the user's
-    // setting holds, which keeps the display probes cheap.
-    readonly status: (
+    // The changed files, each file of an untracked directory its own
+    // entry whatever the user's setting: what every count of changes,
+    // the changes list and the guards against a dirty worktree read.
+    readonly changedFiles: (
       worktree: string,
-      untracked?: "normal" | "all",
     ) => Effect.Effect<ChangedFile[], GitError>;
-    // What the changes page lists: every file as its own row, with its
-    // line counts.
+    // The changed files with their line counts, for the changes list.
     readonly changes: (
       worktree: string,
     ) => Effect.Effect<ChangedFile[], GitError>;
-    // A row's change count and the newest mtime among the changes
+    // A row's count of changed files and the newest mtime among them
     // (epoch ms, 0 for none).
     readonly workingTreeChanges: (
       worktree: string,
     ) => Effect.Effect<{ count: number; lastChangeAt: number }, GitError>;
-    // Changed files, untracked ones always counted: the guard ahead of
-    // anything that deletes the folder.
+    // How many changed files: the guard ahead of anything that deletes
+    // the folder.
     readonly changedCount: (
       worktree: string,
     ) => Effect.Effect<number, GitError>;
@@ -888,7 +884,8 @@ const make = Effect.gen(function* () {
     removeWorktree,
     pruneWorktrees,
   } = worktreeVerbs;
-  const { status, changes, workingTreeChanges, changedCount } = workingTree;
+  const { changedFiles, changes, workingTreeChanges, changedCount } =
+    workingTree;
   const {
     aheadBehind,
     upstreamSync,
@@ -997,7 +994,7 @@ const make = Effect.gen(function* () {
     removeWorktree,
     pruneWorktrees,
     appendExcludes,
-    status,
+    changedFiles,
     changes,
     workingTreeChanges,
     changedCount,
