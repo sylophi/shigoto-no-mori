@@ -638,10 +638,11 @@ async function updateInstalled(
 }
 
 // The installed app started as the Dock starts it, on launchd's
-// environment alone. `open` hands the app the caller's environment, and
-// the app keeps it through every relaunch after, the installer's among
-// them: the smoke's TMPDIR, a folder of this run's, would outlive the
-// run there, and every temporary folder the app makes would fail.
+// environment and what `--env` adds. `open` hands the app its caller's
+// environment, and the app keeps launchd's variables of it, TMPDIR
+// among them, through every relaunch after, the installer's too: the
+// smoke's TMPDIR, a folder of this run's, would outlive the run there,
+// and every temporary folder the app makes would fail.
 function openInstalled(installed: string, ...args: string[]): void {
   execFileSync("/usr/bin/open", ["-a", installed, ...args], { env: {} });
 }

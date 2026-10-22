@@ -60,8 +60,8 @@ export const footprint = (flavor: Flavor, place: FootprintPlace): Footprint => {
         path: join(library, "Application Support", names.userDataDir),
       },
       { id: "logs", path: join(library, "Logs", names.appName) },
-      // Every process of the flavor's, whatever its data dir. Before the
-      // config folder, which goes once empty.
+      // Shared by every process of the flavor, whatever its data dir.
+      // Before the config folder, which goes once empty.
       { id: "dataDirLock", path: join(config, DATA_DIR_LOCK) },
       { id: "config", path: config },
       {
