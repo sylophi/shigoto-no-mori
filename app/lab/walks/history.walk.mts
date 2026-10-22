@@ -98,11 +98,11 @@ it("shows a branch's changes against its base", async () => {
 
 it("opens a searched commit from before the branch with its subject", async () => {
   const { page } = lab;
-  const search = sidebar(page).getByLabel("Search commit messages");
-  await search.fill("Add a long file");
+  await sidebar(page)
+    .getByLabel("Search commit messages")
+    .fill("Add a long file");
   await sidebar(page).getByText("Add a long file").click();
   await main(page).getByRole("heading", { name: "Add a long file" }).waitFor();
-  await search.fill("");
 });
 
 it("squashes a commit into the one below", async () => {
