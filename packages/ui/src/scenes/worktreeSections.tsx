@@ -518,7 +518,7 @@ export function WorktreeSectionsPartsScene({
           />
         </Part>
         <Part label="Stopped, in the Git page's narrowest sidebar">
-          <div className="w-56">
+          <div className="w-46">
             <OperationBannerView
               state={{
                 operation: "merge",

@@ -1,6 +1,7 @@
 // History on real git, in the packaged build: a commit's page with its
-// media playing and a long file drawn to its end, a branch's changes,
-// and the timeline's squash, hard reset and merge.
+// media playing and a long file drawn to its end, a branch's changes, a
+// searched commit's page, and the timeline's squash, hard reset and
+// merge.
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -93,6 +94,15 @@ it("shows a branch's changes against its base", async () => {
   await sidebar(page).getByText("featwt", { exact: true }).first().click();
   await main(page).getByText("All branch changes").click();
   await expect.poll(() => deepText(page)).toContain("feature.txt");
+});
+
+it("opens a searched commit from before the branch with its subject", async () => {
+  const { page } = lab;
+  const search = sidebar(page).getByLabel("Search commit messages");
+  await search.fill("Add a long file");
+  await sidebar(page).getByText("Add a long file").click();
+  await main(page).getByRole("heading", { name: "Add a long file" }).waitFor();
+  await search.fill("");
 });
 
 it("squashes a commit into the one below", async () => {
