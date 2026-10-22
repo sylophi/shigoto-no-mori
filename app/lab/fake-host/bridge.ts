@@ -173,9 +173,9 @@ interface FakeHostControls {
   ): void;
   emitClient: FixtureWire["emit"];
   emitHost: FixtureWire["emit"];
-  // The patch a commit, branch or stash diff opened from now on reads,
-  // in place of FAKE_DIFF: one git printed for a repository of the
-  // caller's (the commit-diff-rows proof).
+  // The patch a commit, branch, stash or pull request diff opened from
+  // now on reads, in place of FAKE_DIFF: one git printed for a
+  // repository of the caller's (the commit-diff-rows proof).
   setPatch(patch: string): void;
   // Set by boot.tsx once the memory router is up.
   navigate?: (to: string) => void;
@@ -934,6 +934,7 @@ function hostHandlersFor(
       fakePullRequests(projectId),
     "githubCli:worktreePullRequest": ({ branch }) =>
       fakePullRequestDetail(branch),
+    "githubCli:pullRequestDiff": () => fakePatch,
     // None without a gh signed in, as the host reads none then.
     "githubCli:repoMergeConfig": () =>
       new URLSearchParams(location.search).has("gh")

@@ -38,9 +38,10 @@ Some ways to use it:
   dials (`web/hub/` does not run), so a redial or its trace is the
   real web client's (`../reliability/README.md`).
 - **A real patch.** `window.fakeHost.setPatch(patch)` has the commit,
-  branch and stash diffs opened after it read a patch of your own in
-  place of the fixture's, such as `git show --format= --full-index
-  <hash>` in any repository, for a diff the fixture doesn't pose.
+  branch, stash and pull request diffs opened after it read a patch of
+  your own in place of the fixture's, such as `git show --format=
+  --full-index <hash>` in any repository, for a diff the fixture
+  doesn't pose.
 
 The marketing site runs the same bridge in-process for its live frames
 (`frames.tsx`): each frame is a desktop window of the app mounted into

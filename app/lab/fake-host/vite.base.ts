@@ -63,6 +63,10 @@ export function fakeHostBaseConfig(opts: {
     optimizeDeps: {
       entries: [opts.entry, "../../../packages/ui/src/**/*.{ts,tsx}"],
       exclude: ["@shigomori/contracts"],
+      // Imported only by a module of the app's (HighlightWorkers.tsx),
+      // which the scan doesn't reach: met as a page draws, it's bundled
+      // then and the page reloads, losing the fake host's state.
+      include: ["@pierre/diffs/worker"],
     },
     define: fixtureDefine,
     // The package's stylesheet stops at the theme root.
