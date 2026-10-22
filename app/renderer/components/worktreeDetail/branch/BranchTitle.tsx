@@ -57,6 +57,7 @@ export function BranchTitle({
     <BranchTitleView
       branch={worktree.branch}
       detached={worktree.detached}
+      rebasing={worktree.rebasing}
       subtitle={subtitle}
       titleRef={titleRef}
       editing={

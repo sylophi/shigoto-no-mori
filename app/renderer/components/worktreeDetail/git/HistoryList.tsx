@@ -353,9 +353,11 @@ function BaseLine({ worktree, base }: { worktree: Worktree; base: string }) {
             worktree={worktree}
             label={`Sync ${behind}`}
             disabledReason={
-              worktree.changedCount > 0
-                ? "Commit or stash your changes first"
-                : undefined
+              worktree.changedCount === null
+                ? "Couldn't read your changes"
+                : worktree.changedCount > 0
+                  ? "Commit or stash your changes first"
+                  : undefined
             }
           />
         )

@@ -55,6 +55,7 @@ const onBaseBranch = (branch: string, ref: string) =>
   branch !== "" && (ref === branch || ref.endsWith(`/${branch}`));
 
 const changesLine = (paint: Styles, git: Card["git"]) => {
+  if (git.changedCount === null) return paint.yellow("couldn't read");
   const parts = [
     git.staged > 0 ? paint.green(`${git.staged} staged`) : "",
     git.unstaged > 0 ? paint.yellow(`${git.unstaged} unstaged`) : "",

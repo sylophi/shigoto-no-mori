@@ -215,8 +215,8 @@ function syncStateView(state: RemoteSyncState): SyncStateView {
 
 export type WorktreeSyncView = SyncStateView & {
   state: RemoteSyncState;
-  // Uncommitted changes hold the move back: `move` is null, and the
-  // pill says `held` instead.
+  // Uncommitted changes, or ones that couldn't be read, hold the move
+  // back: `move` is null, and the pill says `held` instead.
   waiting: boolean;
 };
 
@@ -224,7 +224,7 @@ export type WorktreeSyncView = SyncStateView & {
 export function worktreeSyncView(worktree: Worktree): WorktreeSyncView {
   const state = deriveRemoteSyncState(worktree);
   const view = syncStateView(state);
-  const waiting = worktree.changedCount > 0 && syncWaitsForCleanTree(state);
+  const waiting = worktree.changedCount !== 0 && syncWaitsForCleanTree(state);
   return { ...view, state, waiting, move: waiting ? null : view.move };
 }
 

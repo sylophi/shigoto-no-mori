@@ -91,6 +91,7 @@ export function LocationFormView({
                 <WorktreeMoveDetailsView
                   branch={wt.branch}
                   detached={wt.detached}
+                  rebasing={wt.rebasing}
                   fromPath={tildify(wt.path, home)}
                   fromTip={wt.path}
                   toPath={tildify(destination, home)}

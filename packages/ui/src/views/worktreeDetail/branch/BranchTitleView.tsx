@@ -46,6 +46,7 @@ const SIZES = {
 export function BranchTitleView({
   branch,
   detached,
+  rebasing,
   subtitle = false,
   editing,
   actions,
@@ -53,6 +54,7 @@ export function BranchTitleView({
 }: {
   branch: string;
   detached: boolean;
+  rebasing?: string | undefined;
   subtitle?: boolean;
   // The rename under way, in place of the name.
   editing?: {
@@ -126,7 +128,13 @@ export function BranchTitleView({
     <div className="group/copy flex min-w-0 items-center gap-1.5">
       <SimpleTooltip
         whenTruncated
-        tip={<BranchLabel branch={branch} detached={detached} />}
+        tip={
+          <BranchLabel
+            branch={branch}
+            detached={detached}
+            rebasing={rebasing}
+          />
+        }
       >
         <Heading
           ref={titleRef}
@@ -136,6 +144,7 @@ export function BranchTitleView({
           <BranchLabel
             branch={branch}
             detached={detached}
+            rebasing={rebasing}
             suffixClassName={size.suffix}
           />
         </Heading>

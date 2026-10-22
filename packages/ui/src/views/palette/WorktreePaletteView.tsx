@@ -224,6 +224,7 @@ function PickedLabel({ row, icon }: { row: PaletteRow; icon: ReactNode }) {
             <BranchLabel
               branch={worktree.branch}
               detached={worktree.detached}
+              rebasing={worktree.rebasing}
             />
           </span>
           {device && <DeviceBadgeView badge={device} />}

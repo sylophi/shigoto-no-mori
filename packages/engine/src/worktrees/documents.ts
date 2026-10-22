@@ -97,7 +97,8 @@ export type StatusCard = {
     readonly unstaged: number;
     readonly untracked: number;
     readonly conflicted: number;
-    readonly changedCount: number;
+    // Null when git status couldn't be read, the counts above then 0.
+    readonly changedCount: number | null;
     // Repo-wide: git keeps one stash stack per repository.
     readonly stashCount: number;
     readonly lastCommit: CommitSummary | null;
@@ -681,7 +682,6 @@ export const NO_CHANGES = {
   unstaged: 0,
   untracked: 0,
   conflicted: 0,
-  changedCount: 0,
 };
 
 export const isPrimaryKeyword = (name: string) =>

@@ -1,4 +1,4 @@
-import { FileDiff } from "lucide-react";
+import { FileDiff, FileQuestionMark } from "lucide-react";
 import { worktreeSyncView } from "../../lib/syncState.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { StatusPillView } from "./StatusPillView.tsx";
@@ -12,7 +12,7 @@ interface StatusIndicatorProps {
 // the remote state waits its turn. The sidebar's rows have the room for
 // both, and render them side by side (WorktreeEntry).
 export function StatusIndicatorView({ worktree }: StatusIndicatorProps) {
-  return worktree.changedCount > 0 ? (
+  return worktree.changedCount !== 0 ? (
     <ChangedFilesPillView worktree={worktree} />
   ) : (
     <RemoteSyncPillView worktree={worktree} />
@@ -20,13 +20,26 @@ export function StatusIndicatorView({ worktree }: StatusIndicatorProps) {
 }
 
 // Renders nothing on a clean tree, so the sidebar's rows can place it
-// unconditionally alongside the remote pill.
+// unconditionally alongside the remote pill. A tree whose changes
+// couldn't be read isn't clean, and has no count.
 export function ChangedFilesPillView({ worktree }: StatusIndicatorProps) {
-  if (worktree.changedCount === 0) return null;
-  const label = `${pluralize(worktree.changedCount, "file")} changed`;
+  const count = worktree.changedCount;
+  if (count === 0) return null;
+  if (count === null) {
+    const label = "Couldn't read its changes";
+    return (
+      <StatusPillView
+        icon={FileQuestionMark}
+        tone="amber"
+        tip={label}
+        aria-label={label}
+      />
+    );
+  }
+  const label = `${pluralize(count, "file")} changed`;
   return (
     <StatusPillView icon={FileDiff} tone="amber" tip={label} aria-label={label}>
-      {worktree.changedCount}
+      {count}
     </StatusPillView>
   );
 }

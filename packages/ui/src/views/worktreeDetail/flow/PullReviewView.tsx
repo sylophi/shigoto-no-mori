@@ -8,6 +8,7 @@ import {
   ArrowUp,
   ChevronDown,
   FilePen,
+  FileQuestionMark,
   GitPullRequest,
   type LucideIcon,
 } from "lucide-react";
@@ -297,14 +298,24 @@ export function SourceCardView({
         {worktree.behind} behind
       </Fact>
     ),
-    worktree.changedCount > 0 && (
+    worktree.changedCount === null ? (
       <Fact
         key="dirty"
-        icon={FilePen}
+        icon={FileQuestionMark}
         className="text-amber-700 dark:text-amber-300"
       >
-        {worktree.changedCount} uncommitted
+        couldn&apos;t read changes
       </Fact>
+    ) : (
+      worktree.changedCount > 0 && (
+        <Fact
+          key="dirty"
+          icon={FilePen}
+          className="text-amber-700 dark:text-amber-300"
+        >
+          {worktree.changedCount} uncommitted
+        </Fact>
+      )
     ),
     pr && (
       <Fact key="pr" icon={GitPullRequest}>

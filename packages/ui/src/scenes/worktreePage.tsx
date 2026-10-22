@@ -287,6 +287,14 @@ export function WorktreePagePartsScene() {
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex flex-col gap-5">
         <Part label="Untitled">{branchTitle(QUAIL, false)}</Part>
+        <Part label="Stopped mid-rebase">
+          <BranchTitleView
+            branch="49971ed"
+            detached
+            rebasing={QUAIL.branch}
+            actions={null}
+          />
+        </Part>
         <Part label="Renaming">
           <BranchTitleView
             branch={QUAIL.branch}

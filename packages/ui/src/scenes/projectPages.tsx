@@ -520,7 +520,9 @@ export function TidyScene() {
           }}
           projectCount={groups.length}
           worktreeCount={entries.length}
-          dirtyCount={entries.filter((e) => e.worktree.changedCount > 0).length}
+          dirtyCount={
+            entries.filter((e) => e.worktree.changedCount !== 0).length
+          }
           safeCount={safe.length}
           reclaimable={sumBytes(safe)}
           loading={false}

@@ -65,7 +65,11 @@ export function WorktreeRowView({
         ) : (
           <span className="font-mono">
             {worktree.detached ? (
-              <BranchLabel branch={worktree.branch} detached />
+              <BranchLabel
+                branch={worktree.branch}
+                detached
+                rebasing={worktree.rebasing}
+              />
             ) : (
               <HighlightView text={worktree.branch} query={query} />
             )}

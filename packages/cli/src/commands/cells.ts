@@ -53,9 +53,11 @@ export const syncCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
       : paint.dim("local");
 
 export const changesCell = (paint: Styles, row: Worktrees.WorktreeRow) =>
-  row.changedCount > 0
-    ? paint.yellow(`${row.changedCount} changed`)
-    : paint.dim("clean");
+  row.changedCount === null
+    ? paint.yellow("couldn't read")
+    : row.changedCount > 0
+      ? paint.yellow(`${row.changedCount} changed`)
+      : paint.dim("clean");
 
 export const flagsCell = (
   paint: Styles,

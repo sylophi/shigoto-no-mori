@@ -33,7 +33,7 @@ export function HardResetDialog({
   const reset = useResetHard();
   const undo = useUndoResetHard();
   const data = preview.data;
-  const dirty = worktree.changedCount > 0;
+  const dirty = worktree.changedCount !== 0;
   const blocked =
     operation?.operation != null
       ? `Finish or abort the ${operation.operation} first.`

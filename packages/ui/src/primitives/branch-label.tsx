@@ -3,6 +3,9 @@ import { cn } from "../lib/utils.ts";
 interface BranchLabelProps {
   branch: string;
   detached: boolean;
+  // While detached to replay a rebase: the branch it replays, drawn in
+  // the hash's place.
+  rebasing?: string | undefined;
   // Override the suffix size when the parent text is much larger or
   // smaller than the default; otherwise the "(detached)" suffix inherits
   // the parent's font size.
@@ -10,16 +13,18 @@ interface BranchLabelProps {
 }
 
 // Renders a branch name with a muted "(detached)" suffix when HEAD is
-// detached. The parent owns the wrapping element, its classes, and any
-// tooltip. This component just keeps the detached affordance uniform.
+// detached, or the replayed branch with "(rebasing)" mid-rebase. The
+// parent owns the wrapping element, its classes, and any tooltip. This
+// component just keeps the detached affordance uniform.
 export function BranchLabel({
   branch,
   detached,
+  rebasing,
   suffixClassName,
 }: BranchLabelProps) {
   return (
     <>
-      {branch}
+      {rebasing ?? branch}
       {detached && (
         <span
           className={cn(
@@ -27,7 +32,7 @@ export function BranchLabel({
             suffixClassName,
           )}
         >
-          (detached)
+          {rebasing === undefined ? "(detached)" : "(rebasing)"}
         </span>
       )}
     </>

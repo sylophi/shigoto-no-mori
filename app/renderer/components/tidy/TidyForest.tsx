@@ -237,7 +237,7 @@ function TidyBody() {
       projectCount={projectCount(entries)}
       worktreeCount={entries.length}
       dirtyCount={
-        entries.filter((entry) => entry.worktree.changedCount > 0).length
+        entries.filter((entry) => entry.worktree.changedCount !== 0).length
       }
       safeCount={candidates.length}
       reclaimable={sumBytes(candidates)}

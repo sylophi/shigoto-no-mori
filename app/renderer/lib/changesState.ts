@@ -8,7 +8,7 @@
 export function changesState<File>(
   files: readonly File[] | undefined,
   statusError: unknown,
-  rowCount: number,
+  rowCount: number | null,
 ): {
   failed: boolean;
   loading: boolean;

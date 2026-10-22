@@ -158,7 +158,9 @@ export function PullProgressView({
   const ended: Ended =
     error !== undefined ? "failed" : cancelled ? "cancelled" : null;
   const failed = ended === "failed";
-  const dirty = worktree.changedCount > 0;
+  const count = worktree.changedCount;
+  // Changes that couldn't be read may be there.
+  const dirty = count !== 0;
   const folder = pullWorktreeName(worktree);
   const landingBranch = pullLandingBranch(worktree);
   const pullDone = frame?.step === "apply" && extraRows.length > 0;
@@ -204,9 +206,12 @@ export function PullProgressView({
     }),
     {
       title: `Capture on ${sourceDeviceLabel}`,
-      detail: dirty
-        ? pluralize(worktree.changedCount, "uncommitted file")
-        : "clean tree, nothing to capture",
+      detail:
+        count === null
+          ? "its changes couldn't be read"
+          : count > 0
+            ? pluralize(count, "uncommitted file")
+            : "clean tree, nothing to capture",
       position: stepPosition("capture"),
     },
     {

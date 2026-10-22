@@ -103,7 +103,12 @@ export function LiveWorktreeHeaderView({
   icon: ReactNode | "unreachable" | "pending";
   // What the work is called, or a note in its place.
   heading:
-    | { title: string | null; branch: string; detached: boolean }
+    | {
+        title: string | null;
+        branch: string;
+        detached: boolean;
+        rebasing?: string | undefined;
+      }
     | { note: string }
     | "pending";
   // Its folder and project, or null while they are loading.
@@ -130,7 +135,10 @@ export function LiveWorktreeHeaderView({
             {heading.note}
           </span>
         ) : (
-          <SimpleTooltip whenTruncated tip={heading.title ?? heading.branch}>
+          <SimpleTooltip
+            whenTruncated
+            tip={heading.title ?? heading.rebasing ?? heading.branch}
+          >
             <span
               className={cn(
                 "truncate text-sm font-medium",
@@ -141,6 +149,7 @@ export function LiveWorktreeHeaderView({
                 <BranchLabel
                   branch={heading.branch}
                   detached={heading.detached}
+                  rebasing={heading.rebasing}
                   suffixClassName="text-xs"
                 />
               )}
@@ -159,7 +168,7 @@ export function LiveWorktreeHeaderView({
   );
   const label =
     heading !== "pending" && !("note" in heading)
-      ? (heading.title ?? heading.branch)
+      ? (heading.title ?? heading.rebasing ?? heading.branch)
       : "";
   return (
     <div className="flex min-w-0 items-center gap-1">
