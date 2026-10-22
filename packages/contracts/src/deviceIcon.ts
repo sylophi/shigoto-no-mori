@@ -10,8 +10,8 @@
 // Two families. The shapes say what a device is: a Mac or a browser
 // detects its own (laptop, desktop or mini; phone, tablet or browser)
 // and reads as it until its owner picks, and a server is picked. The
-// marks are picked only: a leaf, a cat, a rocket, things that tell two laptops apart at
-// a glance, which a shape never can.
+// marks are picked only: a leaf, a cat, a rocket, things that tell two
+// laptops apart at a glance, which a shape never can.
 import * as Schema from "effect/Schema";
 import { WEB_PLATFORM } from "./platform.ts";
 
