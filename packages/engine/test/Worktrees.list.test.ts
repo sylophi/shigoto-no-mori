@@ -201,7 +201,7 @@ it("lists a project's worktrees with git once while its files say the same, and 
   assert.equal((await next()).listed, 0, "no change after");
 });
 
-it("a checkout stopped mid-rebase stays detached and names the branch it replays, in its identity and its row, the primary and a linked one alike", async () => {
+it("a checkout stopped mid-rebase stays detached and its row names the branch it replays, the primary and a linked one alike", async () => {
   const repo = box.repo("proj", { "README.md": "base\n" });
   const fox = join(box.home, "elsewhere", "fox");
   box.git(repo, "worktree", "add", "-q", "-b", "fox", fox);
@@ -227,15 +227,10 @@ it("a checkout stopped mid-rebase stays detached and names the branch it replays
   const short = (at: string) =>
     box.git(at, "rev-parse", "--short", "HEAD").trim();
   assert.deepEqual(
-    read.map(({ name, branch, detached, rebasing }) => ({
-      name,
-      branch,
-      detached,
-      rebasing,
-    })),
+    read.map(({ name, branch, detached }) => ({ name, branch, detached })),
     [
-      { name: "proj", branch: short(repo), detached: true, rebasing: "side" },
-      { name: "fox", branch: short(fox), detached: true, rebasing: "fox" },
+      { name: "proj", branch: short(repo), detached: true },
+      { name: "fox", branch: short(fox), detached: true },
     ],
   );
   const { rows } = (await box.engine(

@@ -188,19 +188,6 @@ export const makeListing = Effect.gen(function* () {
     return entries;
   });
 
-  // Read off the checkout's files, with no git: the primary's git dir
-  // is its .git, a linked one's the admin dir its .git names.
-  const rebasingBranchOf = (worktreePath: string) =>
-    git
-      .adminDirOf(worktreePath)
-      .pipe(
-        Effect.flatMap((admin) =>
-          git.rebasingBranch(
-            Option.getOrElse(admin, () => path.join(worktreePath, ".git")),
-          ),
-        ),
-      );
-
   const identities = Effect.fn("Worktrees.identities")(function* (
     project: RegisteredProject,
   ) {
@@ -211,9 +198,6 @@ export const makeListing = Effect.gen(function* () {
     const found: WorktreeIdentity[] = [];
     for (const entry of entries) {
       if (entry.bare) continue;
-      const rebasing = entry.detached
-        ? yield* rebasingBranchOf(entry.path)
-        : null;
       const isPrimary = entry.path === primaryPath;
       const isExternal = !isManagedPath(entry.path, bases);
       // The primary keeps its folder's name.
@@ -230,7 +214,6 @@ export const makeListing = Effect.gen(function* () {
         isPrimary,
         isExternal,
         detached: entry.detached,
-        ...(rebasing === null ? {} : { rebasing }),
         locked: entry.locked,
       });
     }
@@ -329,6 +312,22 @@ export const makeListing = Effect.gen(function* () {
       );
     }).pipe(Effect.orElseSucceed(() => 0));
 
+  // The branch a rebase replays in a detached checkout, read off its
+  // files with no git: the primary's git dir is its .git, a linked
+  // one's the admin dir its .git names. Null when none is under way.
+  const rebasingOf = (worktree: WorktreeIdentity) =>
+    worktree.detached
+      ? git
+          .adminDirOf(worktree.path)
+          .pipe(
+            Effect.flatMap((admin) =>
+              git.rebasingBranch(
+                Option.getOrElse(admin, () => path.join(worktree.path, ".git")),
+              ),
+            ),
+          )
+      : Effect.succeed(null);
+
   const descriptionOf = (worktree: WorktreeIdentity) =>
     hasWorktreeData(worktree)
       ? data.description(worktree.projectId, worktree.id)
@@ -357,6 +356,7 @@ export const makeListing = Effect.gen(function* () {
           relation,
           unpushed: git.unpushedCount(worktree.path),
           createdAt: createdAtOf(worktree.path),
+          rebasing: rebasingOf(worktree),
           described: descriptionOf(worktree),
         },
         { concurrency: "unbounded" },
@@ -389,7 +389,7 @@ export const makeListing = Effect.gen(function* () {
         isPrimary: worktree.isPrimary,
         isExternal: worktree.isExternal,
         detached: worktree.detached,
-        ...nonEmpty("rebasing", worktree.rebasing ?? ""),
+        ...nonEmpty("rebasing", probes.rebasing ?? ""),
         shelved: isShelved(worktree, context.shelved),
         // Unlike the shelf, any checkout can follow its upstream.
         autoPull: context.autoPull.has(worktree.id),
