@@ -128,6 +128,11 @@ function buildQueryKeys(deviceId: string) {
       worktreeId: string | undefined,
       hash: string | undefined,
     ) => host("commitMessage", projectId, worktreeId, hash),
+    commitSummary: (
+      projectId: string,
+      worktreeId: string | undefined,
+      hash: string,
+    ) => host("commitSummary", projectId, worktreeId, hash),
     pickedWorktreeName: (projectId: string | null) =>
       host("pickedWorktreeName", projectId),
 

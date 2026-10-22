@@ -10,11 +10,13 @@ import { ChevronDown, Files, Loader2, WrapText } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "../shared/PageHeaderView.tsx";
 import { BackButton } from "../../primitives/back-button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
+import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { Sheet, SheetContent, SheetTitle } from "../../primitives/sheet.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { isBinaryChange } from "../../lib/patchFiles.ts";
 import { cn } from "../../lib/utils.ts";
 import {
   CODE_GAP_BLOCK,
@@ -40,6 +42,13 @@ const DIFF_THEME = {
   // 'simple' is the shortest built-in separator (vs 'line-info' default
   // which renders rounded corners and an expansion-control row).
   hunkSeparators: "simple" as const,
+};
+
+// A binary file's header: git counts no lines in it, so pierre's "-0 +0"
+// goes.
+const BINARY_THEME = {
+  ...DIFF_THEME,
+  unsafeCSS: `${CODE_THEME.unsafeCSS} [data-deletions-count], [data-additions-count] { display: none; }`,
 };
 
 // The row sizes CODE_STYLE and DIFF_THEME lay out, for the virtualizer
@@ -287,9 +296,10 @@ export function DiffFileRowView({
   hunks: HunkControls | undefined;
   busy: boolean;
   // An image, video or audio file's sides (MediaDiffView), which its
-  // patch has no lines for.
+  // patch has no lines for. Any other binary file says it isn't shown.
   media?: ReactNode;
 }) {
+  const binary = isBinaryChange(fileDiff);
   return (
     <div data-diff-file={fileId}>
       {/* `PatchDiff` requires a single-file patch. For multi-file output
@@ -298,7 +308,7 @@ export function DiffFileRowView({
       <FileDiff
         fileDiff={fileDiff}
         options={{
-          ...DIFF_THEME,
+          ...(binary ? BINARY_THEME : DIFF_THEME),
           diffStyle,
           overflow: wrapLines ? "wrap" : "scroll",
           themeType,
@@ -342,7 +352,13 @@ export function DiffFileRowView({
             : undefined
         }
       />
-      {!collapsed && media}
+      {!collapsed &&
+        binary &&
+        (media || (
+          <div className="pt-2">
+            <EmptyPanel>Binary file, not shown.</EmptyPanel>
+          </div>
+        ))}
     </div>
   );
 }

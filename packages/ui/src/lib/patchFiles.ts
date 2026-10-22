@@ -16,16 +16,29 @@ export function fileKey(file: FileDiffMetadata): string {
   return `${file.prevName ?? ""} ${file.name}`;
 }
 
-// An image, video or audio file git only says differs: no hunks, so
-// pierre draws its header and nothing under it. A pure rename or a mode
-// change names no blobs (no `index` line), and its contents didn't
-// change, so the header says it all.
-export function isMediaBinary(file: FileDiffMetadata): boolean {
+// The empty blob's id, which an added or emptied empty file names.
+const EMPTY_BLOB = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
+
+// A side that has contents: an id that is neither git's zeros (no side
+// at all) nor the empty blob's, in full or in short (GitHub's patch).
+const holdsContents = (oid: string | undefined) =>
+  oid !== undefined && !/^0+$/.test(oid) && !EMPTY_BLOB.startsWith(oid);
+
+// A file git only says differs: no hunks, so pierre draws its header
+// and nothing under it. A pure rename or a mode change names no blobs
+// (no `index` line), and an empty file added or removed names only the
+// empty one: their header says it all.
+export function isBinaryChange(file: FileDiffMetadata): boolean {
   return (
     file.hunks.length === 0 &&
-    file.newObjectId !== undefined &&
-    mediaTypeOf(file.name) !== undefined
+    (holdsContents(file.prevObjectId) || holdsContents(file.newObjectId))
   );
+}
+
+// An image, video or audio file git only says differs, whose sides can
+// be shown.
+export function isMediaBinary(file: FileDiffMetadata): boolean {
+  return isBinaryChange(file) && mediaTypeOf(file.name) !== undefined;
 }
 
 // FileDiffMetadata carries no aggregate counts, so sum the hunks the way
@@ -109,7 +122,8 @@ export function patchEntries(files: readonly FileDiffMetadata[]): IndexEntry[] {
     path: file.name,
     prevPath: file.prevName ?? null,
     mark: PATCH_MARKS[file.type],
-    stats: fileStats(file),
+    // git counts no lines in a binary file, as numstat's "-" says.
+    stats: isBinaryChange(file) ? null : fileStats(file),
     deleted: file.type === "deleted",
     row: null,
   }));
