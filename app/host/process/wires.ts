@@ -29,6 +29,7 @@ import { isHostSide } from "@shigomori/contracts/link";
 import {
   hubContract,
   type HubPeerPush,
+  type HubStatus,
 } from "@shigomori/contracts/modules/hub";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
@@ -232,6 +233,26 @@ export function onPeerPush(listener: PeerPushListener): () => void {
   };
 }
 
+// Each peer as it comes to take this device's calls (PeerReach's
+// admissions), off the status snapshots: a direct session up with both
+// of the peer's switches on.
+const admissions = Effect.runSync(PubSub.unbounded<string>());
+let admitted = new Set<string>();
+const noteAdmissions = (status: HubStatus) => {
+  const now = new Set(
+    Object.keys(status.peerAppVersions).filter(
+      (peer) =>
+        status.peerAcceptsCommands[peer] === true &&
+        status.peerSharesData[peer] === true,
+    ),
+  );
+  for (const peer of now) {
+    if (!admitted.has(peer)) PubSub.publishUnsafe(admissions, peer);
+  }
+  admitted = now;
+};
+export const peerAdmissions = Stream.fromPubSub(admissions);
+
 // The window-facing hub module, which also lends its invokeOnPeer to
 // the host's peer reach (handlers.ts).
 export const hubHandlers = () => {
@@ -302,8 +323,10 @@ export const remotePlanesLayer = Layer.effectDiscard(
         connection: () => hub,
         localDeviceId: deviceIdNow,
         localAppVersion: () => hostFacts().appVersion,
-        broadcastStatus: (status) =>
-          broadcastAll(hubContract, "statusChanged", status),
+        broadcastStatus: (status) => {
+          noteAdmissions(status);
+          broadcastAll(hubContract, "statusChanged", status);
+        },
         broadcastPeerPush: (push) => {
           broadcastAll(hubContract, "peerPush", push);
           for (const listener of peerPushListeners) listener(push);

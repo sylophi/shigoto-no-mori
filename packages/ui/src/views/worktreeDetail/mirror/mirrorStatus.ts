@@ -1,7 +1,8 @@
 // One line of truth about a mirror session, shared by the header
 // pill, the dialogs and the sidebar row so every surface ranks the
 // same news the same way: a stop under way, a runner out of reach or
-// restarting (the session is then its last word), a pause, a halt, a
+// restarting (the session is then its last word), a pause (a person's,
+// then the copy's device turning the mirror away), a halt, a
 // lost link, a stored error, then the git half's verdict, then
 // conflicts, then problems, then the ordinary lifecycle. The label is
 // one or two words. The surfaces add "mirror" or the peer's name
@@ -12,6 +13,10 @@ import {
   type MirrorSession,
   type MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
+import {
+  type CopySwitchOff,
+  mirrorPausedNote,
+} from "../../../lib/commandAccessCopy.ts";
 import type { StatusTone } from "../../../primitives/status-dot.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 
@@ -87,12 +92,14 @@ const HALT_DETAIL: Record<string, string> = {
 
 // What the surface knows beside the session: the runner's reach (a
 // peer runner with no session up leaves only its last list, cached),
-// and its engine's state (a restarting engine lists its last sessions,
-// host/mirror/sessions.ts mirrorList).
+// its engine's state (a restarting engine lists its last sessions,
+// host/mirror/sessions.ts mirrorList), and a switch that is off on the
+// device holding the copy, which turns the mirror away until it is on.
 type MirrorContext = {
   runnerAway?: string;
   engine?: MirrorDaemonStatus;
   engineFailure?: string;
+  copyOff?: { device: string; off: CopySwitchOff };
 };
 
 export function describeMirror(
@@ -132,6 +139,15 @@ export function describeMirror(
     return look("amber", "Restarting", "the mirror engine is restarting", true);
   }
   if (session.paused) return look("slate", "Paused");
+  // The engine's connect error and the git half's off both follow from
+  // it, and it resumes by itself once the switch is on.
+  if (context.copyOff !== undefined) {
+    return look(
+      "slate",
+      "Paused",
+      mirrorPausedNote(context.copyOff.device, context.copyOff.off),
+    );
+  }
   if (isHaltedStatus(session.status)) {
     return look(
       "rose",
@@ -141,13 +157,14 @@ export function describeMirror(
   }
   // A lost link outranks what it causes: the engine's connect error,
   // and the git half's failure to reach the other side, are both the
-  // other device being away, which says itself better as a reconnect.
+  // other device being away, which says itself better as a reconnect
+  // (the error names the device by its id).
   if (
     session.status === "connecting-local" ||
     session.status === "connecting-remote" ||
     session.status === "disconnected"
   ) {
-    return look("amber", "Reconnecting", session.lastError ?? lifecycle, true);
+    return look("amber", "Reconnecting", lifecycle, true);
   }
   if (session.lastError) return look("rose", "Error", session.lastError);
   // The git half's verdict outranks file-level news: a diverged or

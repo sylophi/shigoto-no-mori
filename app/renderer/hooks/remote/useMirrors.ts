@@ -37,6 +37,7 @@ import {
 } from "@/hooks/remote/useMoveWorktree";
 import { quietVillagerMoves } from "@/lib/villagers/moves";
 import {
+  useDeviceName,
   useEveryHost,
   useRemoteDeviceApi,
 } from "@/hooks/remote/useRemoteDevices";
@@ -48,6 +49,9 @@ import { notifyError, toast } from "@/lib/toast";
 import { useApi } from "@/lib/runtime/pageApi";
 import { useAcceptsCommands } from "@/hooks/account/useAccount";
 import { useSharing } from "@/hooks/account/useSharing";
+import { useAtomValue } from "@effect/atom-react";
+import type { CopySwitchOff } from "@shigomori/ui/lib/commandAccessCopy.ts";
+import { remoteDevicesAtom } from "@/lib/remote/devices";
 
 const EMPTY: MirrorListResult = {
   daemon: "stopped",
@@ -108,6 +112,33 @@ export function useMirrorHereBlocker(peerLabel: string): string | undefined {
       ? undefined
       : mirrorEngineBlocker(list.daemon, peerLabel, list.daemonFailure))
   );
+}
+
+// The switch that is off on the device holding a mirror's copy, which
+// turns the mirror away until it is on, and that device as the words
+// name it: this device's own switch, or a peer's as its link reports
+// it. Sharing first, as "Mirror here" names them.
+export function useCopyOff(
+  deviceId: string | undefined,
+): { device: string; off: CopySwitchOff } | undefined {
+  const localDeviceId = useApi().deviceId;
+  const acceptsCommands = useAcceptsCommands().data;
+  const sharing = useSharing().data;
+  const peer = useAtomValue(remoteDevicesAtom, (devices) => {
+    const device = devices.find((entry) => entry.deviceId === deviceId);
+    if (device?.status.phase === "notSharing") return "sharing";
+    return device?.acceptsCommands === false ? "control" : undefined;
+  });
+  const device = useDeviceName(deviceId ?? "");
+  const off =
+    deviceId !== localDeviceId
+      ? peer
+      : sharing === false
+        ? "sharing"
+        : acceptsCommands === false
+          ? "control"
+          : undefined;
+  return off === undefined ? undefined : { device, off };
 }
 
 function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {

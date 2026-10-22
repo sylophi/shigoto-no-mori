@@ -8,11 +8,17 @@
 // with the watching detail, the states that move files read as
 // Syncing, the first pass reads as Syncing throughout, and an engine
 // that keeps stopping reads as failing, saying why, where one starting
-// reads as restarting.
+// reads as restarting. A switch off on the copy's device reads as
+// paused until it is on, naming the switch, after a person's pause,
+// and a lost link reads as reconnecting without the engine's connect
+// error, which names the device by its id.
 //
 // Run: pnpm test mirror-status.
 import assert from "node:assert/strict";
-import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
+import type {
+  MirrorSession,
+  MirrorStatus,
+} from "@shigomori/contracts/modules/mirror";
 import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 import { it } from "vitest";
 import { mirrorEndpoint, rawMirrorSession } from "./lib/mirrorFakes.mts";
@@ -24,6 +30,7 @@ const view = (
   status: MirrorStatus,
   successfulCycles: number,
   context: Parameters<typeof describeMirror>[1] = {},
+  fields: Partial<MirrorSession> = {},
 ) =>
   describeMirror(
     {
@@ -44,6 +51,7 @@ const view = (
       ignoreMode: "everything",
       lastError: "",
       git: { status: "synced", detail: "" },
+      ...fields,
     },
     context,
   );
@@ -99,4 +107,47 @@ it("an engine that stopped reads as failing with why, one starting as restarting
     },
   );
   assert.equal(view("watching", 3, { engine: "starting" }).label, "Restarting");
+});
+
+it("a switch off on the copy's device reads as paused until it is on, naming the switch, a person's pause before it, and a lost link as reconnecting without the engine's error, which names the device by its id", () => {
+  const refused = {
+    lastError:
+      "unable to connect to beta: this device is not permitted to run commands on the remote machine",
+    git: { status: "off", detail: "" },
+  } as const;
+  for (const [off, words] of [
+    ["control", "Allow control from other devices"],
+    ["sharing", "Share with other devices"],
+  ] as const) {
+    const paused = view(
+      "connecting-remote",
+      3,
+      { copyOff: { device: "Studio Mac", off } },
+      refused,
+    );
+    assert.deepEqual(
+      { tone: paused.tone, label: paused.label, detail: paused.detail },
+      {
+        tone: "slate",
+        label: "Paused",
+        detail: `Paused until Studio Mac turns on “${words}” on its account page.`,
+      },
+      off,
+    );
+  }
+  const byHand = view(
+    "disconnected",
+    3,
+    { copyOff: { device: "this device", off: "control" } },
+    { ...refused, paused: true },
+  );
+  assert.deepEqual([byHand.label, byHand.detail], ["Paused", ""]);
+  const away = { lastError: "no direct connection to 0123456789abcdef" };
+  for (const [status, detail] of [
+    ["disconnected", "waiting for the other device"],
+    ["connecting-remote", "connecting to the other device"],
+  ] as const) {
+    const lost = view(status, 3, {}, away);
+    assert.deepEqual([lost.label, lost.detail], ["Reconnecting", detail]);
+  }
 });

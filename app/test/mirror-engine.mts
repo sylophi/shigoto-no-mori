@@ -32,7 +32,9 @@
 //     missing ceiling, not the settle ceiling,
 //   - a daemon restarting keeps the list and the git follower's verdict
 //     its sessions had, and the threads note nothing of it,
-//   - a copy's release outstanding when the engine closes ends with it,
+//   - a peer coming to take this device's calls reconnects its sessions
+//     waiting on the link, none paused or halted and no other
+//     device's, and git looks at its sessions again,
 //   - the follower's copy-gone report, once a minute, counts elapsed
 //     time: a wall clock stepped back neither holds the next one off
 //     nor a step forward lets it through early,
@@ -65,6 +67,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
@@ -654,6 +657,65 @@ it("a daemon restarting keeps the list and the follower's verdict, and the threa
     ),
     [],
   );
+});
+
+it("a peer coming to take this device's calls reconnects its sessions waiting on the link at once, none paused or halted and no other device's, and git looks at its sessions again", async () => {
+  const admissions = Effect.runSync(PubSub.unbounded<string>());
+  const asked: string[] = [];
+  standInPeers({
+    transportFor: (deviceId) => ({
+      invoke: (channel) => {
+        if (channel === "mirror:gitState") asked.push(deviceId);
+        return Promise.reject(new Error("not in this check"));
+      },
+      subscribe: () => () => {},
+    }),
+    channelsFor: () => () => Promise.reject(new Error("not in this check")),
+    admissions: Stream.fromPubSub(admissions),
+  });
+  const project = await Effect.runPromiseWith(await hostContext())(
+    Effect.flatMap(Registry.Registry, (registry) =>
+      registry.register({
+        name: "admitted",
+        path: mkdtempSync(join(tmpdir(), "sm-mirror-admitted-")),
+      }),
+    ),
+  );
+  const { state, requests } = await harness(() => ({ ok: true }));
+  const into = (
+    id: string,
+    deviceId: string,
+    fields: Partial<Parameters<typeof rawMirrorSession>[0]>,
+  ) =>
+    rawMirrorSession({
+      session: id,
+      localRoot: root,
+      deviceId,
+      labels: {
+        [MIRROR_LABEL_MODE]: "mirror",
+        [MIRROR_LABEL_LOCAL_PROJECT]: project.id,
+      },
+      ...fields,
+    });
+  await state([
+    into("lost", "B", { status: "disconnected" }),
+    into("dialing", "B", { status: "connecting-remote" }),
+    into("held", "B", { status: "disconnected", paused: true }),
+    into("halted", "B", { status: "halted-on-root-emptied" }),
+    into("live", "B", { status: "watching" }),
+    into("elsewhere", "C", { status: "disconnected" }),
+  ]);
+  await waitFor(() => asked.length === 5, "git to look at the sessions");
+  asked.length = 0;
+  PubSub.publishUnsafe(admissions, "B");
+  const resumed = () =>
+    requests()
+      .filter((request) => request.startsWith("resume"))
+      .sort();
+  await waitFor(() => resumed().length === 2, "the sessions to reconnect");
+  assert.deepEqual(resumed(), ["resume dialing", "resume lost"]);
+  await waitFor(() => asked.length === 4, "git to look again");
+  assert.deepEqual(asked, ["B", "B", "B", "B"]);
 });
 
 it("a stepped wall clock neither holds a copy-gone report back nor lets one through early", async () => {

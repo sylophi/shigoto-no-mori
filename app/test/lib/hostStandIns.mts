@@ -7,6 +7,7 @@
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import * as AccountPeers from "../../host/lib/control/AccountPeers.ts";
 import * as DeviceId from "../../host/lib/config/DeviceId.ts";
 import { DataDirHolders } from "../../host/lib/DataDirHolders.ts";
@@ -63,6 +64,7 @@ const standIns = Layer.mergeAll(
       onPush: (contract, key, id, handler) =>
         peers.onPush(contract, key, id, handler),
       channels: (id) => peers.channels(id),
+      admissions: Stream.suspend(() => peers.admissions),
     }),
   ),
   Layer.succeed(

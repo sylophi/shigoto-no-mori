@@ -23,13 +23,16 @@
 //
 // Signals: the local git-directory watcher (a project ping), a local
 // index watcher per session, the peer's git:projectChanged and
-// mirror:gitChanged pushes, every daemon snapshot whose session set
-// changed (or that finds a waiting session's files caught up), and a
-// slow periodic sweep as the backstop. Reconciles are coalesced per
-// session: one in flight, one queued.
+// mirror:gitChanged pushes, the peer coming to take this device's
+// calls (its link up, its switches on), every daemon snapshot whose
+// session set changed (or that finds a waiting session's files caught
+// up), and a slow periodic sweep as the backstop. Reconciles are
+// coalesced per session: one in flight, one queued.
 import {
   isEntityGoneError,
   isGitOperationInProgressError,
+  isNoDirectConnectionError,
+  isPeerRefusal,
 } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Effect from "effect/Effect";
@@ -392,7 +395,16 @@ const reconcileOf = (
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.sync(() => {
-          const message = errorWordsOf(Cause.squash(cause));
+          const failure = Cause.squash(cause);
+          // The peer turning this device away (a switch of its, which
+          // may flip back) or out of reach is no failure of git's: the
+          // follow is off until the peer takes calls again, which looks
+          // again (onPeerAdmitted).
+          if (isPeerRefusal(failure) || isNoDirectConnectionError(failure)) {
+            setStatus(record, { status: "off", detail: "" });
+            return;
+          }
+          const message = errorWordsOf(failure);
           warn(`[mirror] git follow ${session.session}: ${message}`);
           setStatus(record, { status: "error", detail: message });
         }),
@@ -728,6 +740,12 @@ function makeFollower(
             s.worktreeId === worktreeId,
         ),
       );
+    },
+    // The peer came to take this device's calls (its link up, both of
+    // its switches on): what was said while it refused or was away
+    // does not stand.
+    onPeerAdmitted(deviceId: string): void {
+      post(triggerWhere((s) => s.deviceId === deviceId));
     },
     statusOf(session: string): MirrorGitStatus | undefined {
       return records.get(session)?.status;

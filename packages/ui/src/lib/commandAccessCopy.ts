@@ -22,8 +22,23 @@ export function peerTerminalsHiddenNote(deviceLabel: string): string {
   return `Terminals stay hidden until ${allowsControl(deviceLabel)}.`;
 }
 
+// A mirror's, while the device holding its copy turns it away: by the
+// switch that is off there.
+export function mirrorPausedNote(
+  deviceLabel: string,
+  off: CopySwitchOff,
+): string {
+  return `Paused until ${off === "control" ? allowsControl(deviceLabel) : sharesData(deviceLabel)}.`;
+}
+
+export type CopySwitchOff = "control" | "sharing";
+
 function allowsControl(deviceLabel: string): string {
   return `${deviceLabel} turns on “Allow control from other devices” on its account page`;
+}
+
+function sharesData(deviceLabel: string): string {
+  return `${deviceLabel} turns on “Share with other devices” on its account page`;
 }
 
 // Whether THIS device may command a device: the other machine's own

@@ -16,7 +16,8 @@ import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { errorWordsOf } from "@host/lib/errorWords";
-import type { PeerReach } from "@host/ipc/PeerReach";
+import { PeerReach } from "@host/ipc/PeerReach";
+import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import * as HostAccount from "@host/lib/HostAccount";
 import { makeGitFollower } from "./gitFollow";
 import { createMirrorHistory } from "./history";
@@ -41,6 +42,14 @@ import { endMirrorIfCopyGone } from "./sessions";
 // closes the sessions the sweep's terminates ride.
 const LEAVE_ACCOUNT_LIMIT = "5 seconds";
 
+// A session waiting on its link. A halt waits on a person instead, and
+// a resume would clear it.
+const LINK_LOST: ReadonlySet<MirrorStatus> = new Set([
+  "disconnected",
+  "connecting-local",
+  "connecting-remote",
+]);
+
 type Bookkeeping = Exclude<
   | PeerReach
   | Effect.Services<typeof settleMirrorBookkeeping>
@@ -59,6 +68,7 @@ const make = (options: {
   Effect.gen(function* () {
     const daemon = yield* MirrorDaemon.MirrorDaemon;
     const account = yield* HostAccount.HostAccount;
+    const reach = yield* PeerReach;
     const runFork = yield* FiberSet.makeRuntime<never>();
     const context = yield* Effect.context<Bookkeeping>();
     // What reaches the engine through its tag, run on this one.
@@ -303,6 +313,32 @@ const make = (options: {
         Effect.withSpan("MirrorEngine.leaveAccount"),
       ),
     });
+
+    // A peer coming to take this device's calls (its link up, both of
+    // its switches on): the sessions into it that wait on the link and
+    // that nobody paused reconnect at once, not at the engine's next
+    // retry, and git looks again.
+    yield* reach.admissions.pipe(
+      Stream.runForEach((deviceId) =>
+        Effect.gen(function* () {
+          for (const raw of yield* daemon.sessions) {
+            if (
+              raw.deviceId !== deviceId ||
+              raw.paused ||
+              !LINK_LOST.has(raw.status)
+            ) {
+              continue;
+            }
+            yield* Effect.ignoreCause(daemon.resume(raw.session), {
+              log: "Warn",
+              message: "[mirror] a session didn't reconnect",
+            });
+          }
+          follower.onPeerAdmitted(deviceId);
+        }),
+      ),
+      Effect.forkScoped,
+    );
 
     // Every snapshot: the follower compares the session set itself (one
     // that only moved a cycle count is a no-op there), and the history,
