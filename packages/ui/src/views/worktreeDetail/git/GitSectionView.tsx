@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ChevronRight, FileDiff } from "lucide-react";
+import { ChevronRight, FileDiff, FileQuestionMark } from "lucide-react";
 import { DiffStats } from "../../../primitives/diff-stats.tsx";
 import { RelativeDate } from "../../../primitives/relative-date.tsx";
 import { SectionHeading } from "../../../primitives/section-heading.tsx";
@@ -57,7 +57,8 @@ export function GitSectionView({
   };
 }) {
   const named = files.slice(0, NAMED_FILES);
-  const unnamed = worktree.changedCount - named.length;
+  const count = worktree.changedCount;
+  const unnamed = (count ?? 0) - named.length;
   const newestStash = stashes[0];
   const sum = (side: "additions" | "deletions") =>
     files.reduce((n, file) => n + (file.counts?.[side] ?? 0), 0);
@@ -88,7 +89,18 @@ export function GitSectionView({
             )
           }
         >
-          {worktree.changedCount > 0 ? (
+          {count === null ? (
+            <>
+              <FileQuestionMark
+                aria-hidden
+                className={cn(
+                  "mr-1.5 inline size-3.5 align-[-0.125em]",
+                  TONE_MARK.amber,
+                )}
+              />
+              Couldn&apos;t read changes
+            </>
+          ) : count > 0 ? (
             <>
               {/* The sidebar's mark for uncommitted work, in its tone. */}
               <FileDiff
@@ -98,7 +110,7 @@ export function GitSectionView({
                   TONE_MARK.amber,
                 )}
               />
-              {pluralize(worktree.changedCount, "file")} changed
+              {pluralize(count, "file")} changed
               {named.length > 0 && (
                 <Aside>
                   {named.map((f) => getBrowseLeafSegment(f.path)).join(", ")}

@@ -24,8 +24,9 @@ export function StashListView({
   stashes: readonly StashEntry[];
   // The stash shown beside the list, by hash.
   selected: string | undefined;
-  // The uncommitted files a stash would take.
-  changedCount: number;
+  // The uncommitted files a stash would take. Null when they couldn't
+  // be read, which leaves the stash to git.
+  changedCount: number | null;
   canCommand: boolean;
   // The new stash's name, and the stash under way.
   message: string;
@@ -64,7 +65,7 @@ export function StashListView({
       )}
       {stashes.length === 0 && (
         <p className="px-3 py-1 text-xs text-muted-foreground">
-          {changedCount > 0 || !canCommand
+          {changedCount !== 0 || !canCommand
             ? "No stashes yet"
             : "Nothing to stash"}
         </p>

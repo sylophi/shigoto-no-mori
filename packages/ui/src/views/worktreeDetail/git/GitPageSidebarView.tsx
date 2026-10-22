@@ -3,8 +3,10 @@ import { SegmentedControl } from "../../../primitives/segmented-control.tsx";
 
 export type GitTab = "changes" | "stashes" | "history";
 
-const counted = (label: string, count: number) =>
-  count > 0 ? `${label} ${count}` : label;
+// No count where there is none, or where it couldn't be read (the
+// Changes tab's own list says so).
+const counted = (label: string, count: number | null) =>
+  count ? `${label} ${count}` : label;
 
 // The Git page's sidebar, as GitHub Desktop splits its left column: the
 // Changes tab (the working tree's files, ticked into the next commit,
@@ -28,7 +30,7 @@ export function GitPageSidebarView({
 }: {
   tab: GitTab;
   onTab: (tab: GitTab) => void;
-  changedCount: number;
+  changedCount: number | null;
   stashCount: number;
   // A commit to open History on.
   hasHistory: boolean;

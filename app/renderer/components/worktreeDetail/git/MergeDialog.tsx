@@ -39,9 +39,11 @@ export function MergeDialog({
   const blocked =
     operation?.operation != null
       ? `Finish or abort the ${operation.operation} first.`
-      : worktree.changedCount > 0
-        ? "Commit or stash your changes first."
-        : null;
+      : worktree.changedCount === null
+        ? "Couldn't read your changes."
+        : worktree.changedCount > 0
+          ? "Commit or stash your changes first."
+          : null;
   const ready =
     data !== undefined &&
     data.incoming > 0 &&

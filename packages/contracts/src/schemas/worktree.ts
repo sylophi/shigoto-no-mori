@@ -74,7 +74,8 @@ export const WorktreeSchema = Schema.Struct({
   // A local fast-forward merge doesn't count: its history is
   // indistinguishable from a worktree that never committed.
   mergedIntoPrimary: Schema.Boolean,
-  changedCount: Schema.Natural,
+  // Null when git status couldn't be read: not clean, and no count.
+  changedCount: Schema.NullOr(Schema.Natural),
   // Newest mtime of the uncommitted changes, epoch ms.
   lastChangeAt: Schema.optional(Schema.Natural),
   // Epoch ms. Absent for the primary checkout.

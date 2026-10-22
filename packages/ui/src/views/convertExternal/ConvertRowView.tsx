@@ -1,4 +1,4 @@
-import { FileDiff } from "lucide-react";
+import { FileDiff, FileQuestionMark } from "lucide-react";
 import { WorktreeMoveDetailsView } from "../shared/WorktreeMoveDetailsView.tsx";
 import { Checkbox } from "../../primitives/checkbox.tsx";
 import { type RowStatus } from "../../primitives/row-status.tsx";
@@ -28,7 +28,7 @@ export function ConvertRowView({
   onToggle,
 }: ConvertRowProps) {
   const detached = worktree.detached;
-  const dirty = worktree.changedCount > 0;
+  const count = worktree.changedCount;
   const oldPath = tildify(worktree.path, home);
   const interactive = !disabled && status.kind !== "done";
 
@@ -60,13 +60,22 @@ export function ConvertRowView({
           error: "Conversion failed",
         }}
         branchAdornment={
-          dirty && (
-            <SimpleTooltip tip="Uncommitted changes will be wiped">
+          count === null ? (
+            <SimpleTooltip tip="Couldn't read its changes, so any will be wiped">
               <ToneTag tone="amber">
-                <FileDiff aria-hidden className="size-3" />
-                {worktree.changedCount} uncommitted
+                <FileQuestionMark aria-hidden className="size-3" />
+                couldn&apos;t read changes
               </ToneTag>
             </SimpleTooltip>
+          ) : (
+            count > 0 && (
+              <SimpleTooltip tip="Uncommitted changes will be wiped">
+                <ToneTag tone="amber">
+                  <FileDiff aria-hidden className="size-3" />
+                  {count} uncommitted
+                </ToneTag>
+              </SimpleTooltip>
+            )
           )
         }
       />

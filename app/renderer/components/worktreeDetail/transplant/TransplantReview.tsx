@@ -21,7 +21,7 @@ import {
 export function TransplantReview(props: PullReviewProps) {
   const { worktree, project, target, sourceDeviceLabel, thisDeviceLabel } =
     props;
-  const dirty = worktree.changedCount > 0;
+  const dirty = worktree.changedCount !== 0;
   return (
     <PullReviewStep
       {...props}
