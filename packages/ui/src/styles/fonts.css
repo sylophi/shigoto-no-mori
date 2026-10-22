@@ -10,3 +10,43 @@
 @import "@fontsource/zen-maru-gothic/500.css";
 @import "@fontsource/zen-maru-gothic/700.css";
 @import "@fontsource/zen-maru-gothic/900.css";
+
+/* Its backtick has no width, so the backtick comes from Geist (the
+   face index.css loads): of faces alike but for unicode-range, the one
+   declared last is tried first. */
+@font-face {
+  font-family: "Zen Maru Gothic";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
+    format("woff2");
+  unicode-range: U+0060;
+}
+@font-face {
+  font-family: "Zen Maru Gothic";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
+    format("woff2");
+  unicode-range: U+0060;
+}
+@font-face {
+  font-family: "Zen Maru Gothic";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
+    format("woff2");
+  unicode-range: U+0060;
+}
+@font-face {
+  font-family: "Zen Maru Gothic";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 900;
+  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2")
+    format("woff2");
+  unicode-range: U+0060;
+}

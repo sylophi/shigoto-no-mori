@@ -177,8 +177,8 @@ export const replayable = (history: string, alternate: boolean): string => {
   return history.slice(0, alternateScreen(history).enteredAt ?? 0);
 };
 
-// How a shell ended: its status, and whether a signal ended it.
-type Ended = { readonly code: number; readonly killed: boolean };
+// How a shell ended: its status.
+type Ended = { readonly code: number };
 
 interface Session {
   readonly terminal: Terminal;
@@ -303,7 +303,8 @@ const make = <R, E>(options: {
       ),
     );
 
-    // A listed terminal, a dead one included (`live` leaves it out).
+    // A listed terminal, a dead one on its way out included (`live`
+    // leaves it out).
     const listedSession = (terminalId: string, live = false) => {
       const session = sessions.get(terminalId);
       return session === undefined || (live && Option.isSome(session.exited))
@@ -385,16 +386,10 @@ const make = <R, E>(options: {
               kind: "exit",
               code: ended.value.code,
             });
-            // A shell that exited goes with its tab, whatever its status.
-            // One killed stays listed, dead, its screen kept to be read,
-            // until it is closed. Its scope closes from outside it, since
-            // this fiber is in it.
-            yield* Effect.forkIn(
-              ended.value.killed
-                ? Scope.close(session.scope, Exit.void)
-                : end(session),
-              layerScope,
-            );
+            // A shell that ended goes with its tab, whatever its status
+            // or signal. It ends from outside this fiber, which is in its
+            // scope.
+            yield* Effect.forkIn(end(session), layerScope);
             return;
           }
         }
@@ -527,11 +522,7 @@ const make = <R, E>(options: {
         // A shell that dies of a signal reads 128 + its number, as a
         // shell tells a child's.
         pty.onExit(({ exitCode, signal }) => {
-          const killed = signal !== undefined && signal !== 0;
-          Queue.offerUnsafe(reads, {
-            code: killed ? 128 + signal : exitCode,
-            killed,
-          });
+          Queue.offerUnsafe(reads, { code: signal ? 128 + signal : exitCode });
         });
         yield* Effect.forkIn(pump(session, reads, backlog), scope);
         // Runs as the scope closes, while the shell is still there to be
@@ -638,7 +629,7 @@ const make = <R, E>(options: {
                 ] satisfies TerminalEvent[],
               };
             };
-            // A dead one's events went with its scope.
+            // A dead one, on its way out, has sent its exit already.
             if (Option.isSome(session.exited)) {
               return Stream.fromIterable([
                 ...headOf().head,
