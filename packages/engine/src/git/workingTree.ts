@@ -105,9 +105,9 @@ export const makeWorkingTree = ({
         ],
         { concurrency: 2 },
       );
-      // Past a few new files it is a folder nobody meant to commit (a
-      // build, a node_modules), and its rows list without counts rather
-      // than every file being read on every change.
+      // Past a thousand new files it is a folder nobody meant to commit
+      // (a build, a node_modules), and its rows list without counts
+      // rather than every file being read on every change.
       const newFiles = files.filter(isUntracked);
       const untracked = new Map(
         newFiles.length > UNTRACKED_COUNT_FILES
@@ -134,9 +134,14 @@ export const makeWorkingTree = ({
       worktree: string,
     ) {
       const files = yield* changedFiles(worktree);
-      // A deleted path fails its stat. Fine: only the newest hit counts.
+      // Tracked files first: an unignored folder's new files sort among
+      // them by path, and would take every stat. A deleted path fails
+      // its stat. Fine: only the newest hit counts.
       const times = yield* Effect.forEach(
-        files.slice(0, CHANGE_MTIME_STATS),
+        [
+          ...files.filter((file) => !isUntracked(file)),
+          ...files.filter(isUntracked),
+        ].slice(0, CHANGE_MTIME_STATS),
         (file) =>
           fs.stat(path.join(worktree, file.path)).pipe(
             Effect.map((info) =>

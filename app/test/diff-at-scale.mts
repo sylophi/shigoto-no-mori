@@ -4,8 +4,8 @@
 // page of a worktree with an unignored build folder, two thousand new
 // files, lists a screenful of rows at the top and again at the end,
 // where the last file's row is, and its filter finds a row from the
-// middle. A row for every file held the window for seconds and took
-// gigabytes.
+// middle. A row for every file would hold the window for seconds and
+// take gigabytes.
 //
 // Run: pnpm test diff-at-scale.
 // covers: app/lab/fake-host/**

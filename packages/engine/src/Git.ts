@@ -235,8 +235,8 @@ export class Git extends Context.Service<
     readonly workingTreeChanges: (
       worktree: string,
     ) => Effect.Effect<{ count: number; lastChangeAt: number }, GitError>;
-    // How many changed files: the guard ahead of anything that deletes
-    // the folder.
+    // How many changed files: the guards against a dirty worktree (a
+    // removal, an apply).
     readonly changedCount: (
       worktree: string,
     ) => Effect.Effect<number, GitError>;

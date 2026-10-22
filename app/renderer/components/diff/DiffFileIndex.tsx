@@ -10,10 +10,15 @@ import {
   DiffFileIndexView,
   matchingEntries,
 } from "@shigomori/ui/views/diff/DiffFileIndexView.tsx";
+import { usePhoneLayout } from "@/hooks/ui/useViewport";
 
 // A row's height until it is measured: a line of text-xs and the jump
-// button's padding.
+// button's padding, or a phone's touch target (phone.css).
 const ROW_HEIGHT_HINT = 24;
+const PHONE_ROW_HEIGHT_HINT = 44;
+// The list's p-1 sets every row 4px below where the window counts it,
+// so a row revealed at the bottom edge needs that much more scroll.
+const LIST_PADDING = 4;
 
 type Props = Omit<
   ComponentProps<typeof DiffFileIndexView>,
@@ -23,8 +28,8 @@ type Props = Omit<
 // The diff's file list with only the rows near its view in the DOM. A
 // changes list runs to tens of thousands of rows when a build folder or
 // a node_modules isn't ignored, and a checkbox, a tooltip and a menu
-// trigger for every one of them held the window for seconds and took
-// gigabytes.
+// trigger for every one of them would hold the window for seconds and
+// take gigabytes.
 //
 // It holds the filter, since the window is over the rows the filter
 // leaves.
@@ -33,10 +38,12 @@ export function DiffFileIndex(props: Props) {
   const [query, setQuery] = useState("");
   const matches = matchingEntries(entries, query);
   const listRef = useRef<HTMLDivElement>(null);
+  const phone = usePhoneLayout();
   const virtualizer = useVirtualizer({
     count: matches.length,
     getScrollElement: () => listRef.current,
-    estimateSize: () => ROW_HEIGHT_HINT,
+    estimateSize: () => (phone ? PHONE_ROW_HEIGHT_HINT : ROW_HEIGHT_HINT),
+    scrollPaddingEnd: LIST_PADDING,
     overscan: 12,
     getItemKey: (index) => matches[index]?.key ?? index,
   });

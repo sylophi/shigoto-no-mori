@@ -7,6 +7,8 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  statSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -22,7 +24,10 @@ import {
   GitCommandError,
   UndoRefusedError,
 } from "../src/Git.ts";
-import { UNTRACKED_COUNT_FILES } from "../src/git/documents.ts";
+import {
+  CHANGE_MTIME_STATS,
+  UNTRACKED_COUNT_FILES,
+} from "../src/git/documents.ts";
 import {
   failureAs,
   failureOf,
@@ -120,7 +125,7 @@ it("lists each kind of change with its counts, sorted by path", async () => {
   assert.equal(rowOf(files, "new/sub dir.txt").counts?.additions, 1);
 
   // The row's count is the list's, each file of the new folder its
-  // own, under git's default of folding the folder into one entry.
+  // own, though git's default folds the folder into one entry.
   const row = await withGit((g) => g.workingTreeChanges(repo));
   assert.equal(row.count, files.length);
   assert.equal(await withGit((g) => g.changedCount(repo)), files.length);
@@ -130,9 +135,15 @@ it("lists each kind of change with its counts, sorted by path", async () => {
 it("past a thousand new files they list without counts, and git's own keep theirs", async () => {
   const repo = seedRepo();
   write(repo, "a.txt", "one\n2\nthree\nfour\n");
-  for (let i = 0; i <= UNTRACKED_COUNT_FILES; i++) {
+  for (let i = 0; i < UNTRACKED_COUNT_FILES; i++) {
     write(repo, `build/${i}.js`, "x\n");
   }
+  const counted = await changes(repo);
+  assert.equal(
+    counted.filter((f) => isUntracked(f) && f.counts).length,
+    UNTRACKED_COUNT_FILES,
+  );
+  write(repo, "build/one-more.js", "x\n");
   const files = await changes(repo);
   assert.equal(files.length, UNTRACKED_COUNT_FILES + 2);
   assert.deepEqual(
@@ -143,6 +154,21 @@ it("past a thousand new files they list without counts, and git's own keep their
     additions: 2,
     deletions: 1,
   });
+});
+
+it("the newest change is a tracked edit's, behind a folder of older new files", async () => {
+  const repo = seedRepo();
+  const hourAgo = new Date(Date.now() - 3_600_000);
+  for (let i = 0; i <= CHANGE_MTIME_STATS; i++) {
+    write(repo, `a-build/${i}.js`, "x\n");
+    utimesSync(join(repo, `a-build/${i}.js`), hourAgo, hourAgo);
+  }
+  write(repo, "b.txt", "edited\n");
+  const row = await withGit((g) => g.workingTreeChanges(repo));
+  assert.equal(
+    row.lastChangeAt,
+    Math.trunc(statSync(join(repo, "b.txt")).mtimeMs),
+  );
 });
 
 it("an untracked file the user's setting hides still lists and counts", async () => {
