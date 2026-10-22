@@ -88,7 +88,7 @@ if (
   process.exit(2);
 }
 const bundle: string = argument;
-// The launches' temp files, the app's own with them, in a folder of
+// The launches' temp files, the builds' own with them, in a folder of
 // this run's (../../testTemp.mts), and their git kept off this
 // repository and this machine's config (../../gitIsolation.ts).
 ownTestTemp("smoke");
@@ -589,12 +589,7 @@ async function updateInstalled(
       fail("the installed app didn't quit");
     }
     owed = true;
-    execFileSync("open", [
-      "-a",
-      installed,
-      "--env",
-      `SHIGOMORI_UPDATE_RELEASES_URL=${url}`,
-    ]);
+    openInstalled(installed, "--env", `SHIGOMORI_UPDATE_RELEASES_URL=${url}`);
     await until(() => {
       const status = statusIn(dataDir);
       return (
@@ -642,8 +637,17 @@ async function updateInstalled(
   }
 }
 
-// Quit as the menu's Quit does, and opened with no stand-ins: launchd's
-// environment has none.
+// The installed app started as the Dock starts it, on launchd's
+// environment and what `--env` adds. `open` hands the app its caller's
+// environment, and the app keeps launchd's variables of it, TMPDIR
+// among them, through every relaunch after, the installer's too: the
+// smoke's TMPDIR, a folder of this run's, would outlive the run there,
+// and every temporary folder the app makes would fail.
+function openInstalled(installed: string, ...args: string[]): void {
+  execFileSync("/usr/bin/open", ["-a", installed, ...args], { env: {} });
+}
+
+// Quit as the menu's Quit does, and opened with no stand-ins.
 async function reopenOnRealFeed(installed: string, dataDir: string) {
   const byHand = `quit ${installed} and open it again, so it checks the real feed`;
   try {
@@ -661,7 +665,7 @@ async function reopenOnRealFeed(installed: string, dataDir: string) {
         return;
       }
     }
-    execFileSync("open", ["-a", installed]);
+    openInstalled(installed);
     console.log("the installed app: opened again on the real feed");
   } catch (error) {
     console.error(`${String(error)}: ${byHand}`);
