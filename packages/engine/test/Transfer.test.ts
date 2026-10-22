@@ -133,7 +133,7 @@ describe("headlines and caveats", () => {
     });
     assert.equal(
       headlineOf(cloned, { mirror: true, sent: true }),
-      'mirroring feat to "Studio Mac", having cloned repo into /Users/rin/code/repo on "Studio Mac" first',
+      'mirroring feat to "Studio Mac", having added repo at /Users/rin/code/repo on "Studio Mac" first',
     );
     assert.equal(
       headlineOf(result(), { mirror: false, sent: true }),
@@ -384,7 +384,7 @@ describe("send, bring and mirror", () => {
     );
     assert.equal(
       headline(brought),
-      'brought fox from "Studio Mac", having cloned repo into /there/repo on "Studio Mac" first',
+      'brought fox from "Studio Mac", having added repo at /there/repo on "Studio Mac" first',
     );
     const mirroredHere = await outcome((transfer, here) =>
       transfer.mirror(

@@ -220,6 +220,14 @@ const make = Effect.gen(function* () {
         const index = yield* git
           .run(worktreePath, ["write-tree"], options)
           .pipe(Effect.option);
+        // The copy's assume-unchanged marks would hide edits from
+        // `add -A`: a really-refresh clears them where the file changed.
+        // A conflict's entries are left for `add -A` to resolve.
+        yield* git.run(
+          worktreePath,
+          ["update-index", "-q", "--unmerged", "--really-refresh"],
+          options,
+        );
         yield* git.run(worktreePath, ["add", "-A"], options);
         return {
           tree: (yield* git.run(worktreePath, ["write-tree"], options)).trim(),
@@ -340,7 +348,7 @@ const make = Effect.gen(function* () {
     yield* git.run(
       worktreePath,
       Option.isSome(staged)
-        ? ["read-tree", "-m", "--end-of-options", staged.value]
+        ? ["read-tree", "-m", "-i", "--end-of-options", staged.value]
         : ["reset", "-q"],
     );
     yield* git.deleteRef(projectPath, dirtyRef(worktreeId)).pipe(Effect.ignore);

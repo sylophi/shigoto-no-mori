@@ -1338,6 +1338,10 @@ it("transplant (dirty): the capture lands applied with its index and force remov
     "fourth feature",
   );
   await commitFile(wt4Path, "gone.txt", "gone\n", "a file to delete");
+  // An edit the index is told to overlook still moves.
+  await commitFile(wt4Path, "hidden.txt", "hidden\n", "a file to hide");
+  await git(wt4Path, ["update-index", "--assume-unchanged", "hidden.txt"]);
+  writeFileSync(join(wt4Path, "hidden.txt"), "hidden, then edited\n");
   writeFileSync(join(wt4Path, "staged.txt"), "staged\n");
   await git(wt4Path, ["add", "staged.txt"]);
   writeFileSync(join(wt4Path, "committed.txt"), "committed, then staged\n");
@@ -1361,6 +1365,7 @@ it("transplant (dirty): the capture lands applied with its index and force remov
   for (const [file, content] of [
     ["staged.txt", "staged\n"],
     ["committed.txt", "committed, then edited\n"],
+    ["hidden.txt", "hidden, then edited\n"],
     ["untracked.txt", "untracked\n"],
   ] as const) {
     assert.equal(
@@ -1368,8 +1373,11 @@ it("transplant (dirty): the capture lands applied with its index and force remov
       content,
     );
   }
+  // Here the overlooked edit is an edit like any other.
   assert.equal(
-    await gitOut(dirtyTransplant.worktree.path, "status", "--porcelain"),
+    (
+      await gitOut(dirtyTransplant.worktree.path, "status", "--porcelain")
+    ).replace(/^ M hidden\.txt\n/m, ""),
     status,
   );
   assert.equal(

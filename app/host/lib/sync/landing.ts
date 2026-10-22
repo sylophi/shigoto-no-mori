@@ -59,13 +59,14 @@ class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
   }
 }
 
-// The clone landed, but could not be added as a project.
+// The checkout is there, cloned or found, but could not be added as a
+// project.
 class CloneUnregisteredError extends Schema.TaggedError<CloneUnregisteredError>()(
   "CloneUnregisteredError",
   { path: Schema.String, reason: Schema.String },
 ) {
   override get message(): string {
-    return `Cloned into ${this.path}, but couldn't add it as a project: ${this.reason}`;
+    return `${this.path} is there, but couldn't be added as a project: ${this.reason}`;
   }
 }
 
