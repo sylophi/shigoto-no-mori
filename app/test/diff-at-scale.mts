@@ -12,8 +12,8 @@
 // its middle and its end, and so does a pull request's page of them
 // after a jump from its list to a file in the middle, which lands at the
 // top of the view, and after a scroll, where the list marks the file
-// the view reached. Every file mounted measured where it sat, one forced
-// layout after another, before the window could paint.
+// the view reached. Every file mounted measures where it sits, one
+// forced layout after another, before the window can paint.
 //
 // Run: pnpm test diff-at-scale.
 // covers: app/lab/fake-host/**

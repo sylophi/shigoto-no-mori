@@ -73,9 +73,8 @@ const MEDIA_SIDES_HEIGHT = 8 + 288;
 // it hasn't mounted (DiffPane): its header, and unless folded its hunks'
 // rows at DIFF_METRICS with a separator between hunks, or a media file's
 // sides. A drawn file is measured, so this only has to be close: it
-// leaves out a context line pierre may show in place of a separator,
-// wrapped lines, and the changes page's hunk bars (its one file is
-// measured as soon as it's drawn).
+// leaves out wrapped lines and the changes page's hunk bars (its one
+// file is measured as soon as it's drawn).
 export function estimateFileHeight(
   fileDiff: FileDiffMetadata,
   { collapsed, diffStyle }: { collapsed: boolean; diffStyle: DiffStyle },

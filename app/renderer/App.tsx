@@ -2,6 +2,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { ErrorBoundary } from "react-error-boundary";
 import { AppErrorFallback } from "@/components/AppChrome";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
+import { HighlightWorkers } from "@/components/diff/HighlightWorkers";
 import { OverlaysProvider } from "@/hooks/ui/useOverlays";
 import { PaletteProvider } from "@/hooks/ui/usePalette";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
@@ -25,7 +26,9 @@ export function App({
       <PaletteProvider fromRoot={themeFromRoot}>
         <ErrorBoundary FallbackComponent={AppErrorFallback}>
           <OverlaysProvider>
-            <RouterProvider router={router} />
+            <HighlightWorkers>
+              <RouterProvider router={router} />
+            </HighlightWorkers>
             <DevThemeHotkeys />
           </OverlaysProvider>
         </ErrorBoundary>

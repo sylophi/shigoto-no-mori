@@ -42,14 +42,14 @@ type Props = Omit<
 };
 
 // The patch's files with only those near the view mounted. A FileDiff
-// measures where it sits as it mounts, so a branch of two thousand files
-// laid out whole forced a layout for each in turn before the window
-// could paint, and drew and highlighted every one. The others are
-// placed by their estimated heights until they're drawn.
+// measures where it sits as it mounts, so thousands of files laid out
+// whole force a layout for each in turn before the window can paint,
+// and each is drawn and highlighted. The others are placed by their
+// estimated heights until they're drawn.
 //
 // It owns the virtualizer and only that: useVirtualizer opts its
-// component out of React Compiler memoization and re-renders it on
-// every scroll, which here only places a few slots again.
+// component out of React Compiler memoization and re-renders it as the
+// files in view change, which here only places a few slots again.
 export function DiffPane({
   scrollRef,
   files,
@@ -99,6 +99,15 @@ export function DiffPane({
     scrollPaddingStart: FILE_GAP,
     overscan: OVERSCAN,
   });
+  // A file that grows as its rows are drawn (wrapped lines, the changes
+  // page's hunk bars) keeps the lines in view where they are by itself,
+  // pierre's Virtualizer doing it, so the window moves the scroll only
+  // for a file wholly above the view.
+  fileWindow.shouldAdjustScrollPositionOnItemSizeChange = (
+    item,
+    _delta,
+    instance,
+  ) => item.end <= (instance.scrollOffset ?? 0);
 
   // The files on screen are measured again for a new layout: one whose
   // size it didn't change gets no resize to be measured by, and would
