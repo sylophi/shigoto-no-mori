@@ -173,8 +173,8 @@ function wipeDevProfile(profile: DevProfile): void {
   console.log(`[dev-profile] wiped ${profile.name}`);
 }
 
-// The Clerk bridge's token store (main/electron/ClerkTokens.ts), one file in
-// userData. Dev runs under Chromium's mock keychain, so the
+// The Clerk bridge's token store (main/electron/ClerkTokens.ts), one
+// file in userData. Dev runs under Chromium's mock keychain, so the
 // safeStorage ciphertext is portable between dev instances on one
 // machine.
 const TOKEN_STORE_FILE = `${CLERK_TOKEN_STORE}.json`;

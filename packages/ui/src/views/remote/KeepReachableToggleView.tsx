@@ -13,14 +13,10 @@ export function KeepReachableToggleView({
   on,
   pending,
   onChange,
-  launchAtLogin,
 }: {
   on: boolean;
   pending: boolean;
   onChange: (next: boolean) => void;
-  // Whether this platform takes the launch-at-login half, which the
-  // helper text stays honest about.
-  launchAtLogin: boolean;
 }) {
   return (
     <ToggleRowView
@@ -28,11 +24,7 @@ export function KeepReachableToggleView({
       onCheckedChange={onChange}
       disabled={pending}
       label="Keep this device reachable"
-      description={
-        launchAtLogin
-          ? "Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this machine stays available to your account."
-          : "Relaunches Shigoto no Mori after a recoverable crash so this machine stays available to your account. Starting automatically at login isn't supported on this platform."
-      }
+      description="Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this machine stays available to your account."
     />
   );
 }

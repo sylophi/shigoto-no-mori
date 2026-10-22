@@ -189,11 +189,10 @@ if (platform() === "darwin") {
 
 // The Clerk main-process bridge: renderer-scheme privileges (pre-ready
 // requirement), token storage, and the OAuth deep-link transport. After
-// the lock above (the bridge's own lock management is disabled) and the
-// dev userData suffix (tokens live in userData). Its cleanup() is
-// deliberately not wired to a quit event: every quit path in this file
-// ends in app.exit(), which skips will-quit, and process teardown
-// reclaims the bridge's IPC handlers wholesale anyway.
+// the lock above and the dev userData suffix (tokens live in userData).
+// Its cleanup() is deliberately not wired to a quit event: every quit
+// path in this file ends in app.exit(), which skips will-quit, and
+// process teardown reclaims the bridge's IPC handlers wholesale anyway.
 createDesktopClerkBridge();
 
 // Every handler is registered before the window can call one: the
