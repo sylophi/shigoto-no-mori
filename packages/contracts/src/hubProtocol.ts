@@ -162,7 +162,7 @@ export const TunnelProvisionRequestSchema = Schema.Struct({
 export const TunnelProvisionResponseSchema = Schema.Struct({
   hostname: Schema.NonEmptyString,
   connectorToken: Schema.NonEmptyString,
-  // A new DNS record can take a while to resolve.
+  // A new DNS record has yet to reach the edge.
   dnsCreated: Schema.Boolean,
 });
 export type TunnelProvisionResponse = typeof TunnelProvisionResponseSchema.Type;

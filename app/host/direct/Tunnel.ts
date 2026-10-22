@@ -39,10 +39,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
-import {
-  TUNNEL_PROBE_DEADLINE_FRESH_MS,
-  type TunnelState,
-} from "@shigomori/contracts/modules/hub";
+import type { TunnelState } from "@shigomori/contracts/modules/hub";
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
@@ -71,22 +68,19 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 
 // The readiness probe schedule: a fresh child is advertised only once
 // its hostname actually ROUTES from the edge to the local listener
-// (edge registration plus, for a first-ever tunnel, CNAME
-// propagation). Attempts are spaced on this ladder (capped at the last
-// rung) for as long as the child lives: a live connector that is not
-// routable yet is waiting on DNS, not broken, and the child exiting is
-// the one failure signal (a dead token makes cloudflared exit). The
-// first attempt waits 5 s for CNAME propagation. A probe earlier than
-// the CNAME reaches the tunnel zone's wildcard record (hub/README.md),
-// whose address the edge can't reach, and only times out. The
-// wildcard is why that costs only the attempt: without it the name
-// would answer NXDOMAIN, which the OS resolver caches for the zone's
-// negative TTL (30 minutes on Cloudflare), during which no probe from
-// this machine could succeed. A child that merely survives a spawn
-// says nothing about routability, and a web client whose ONLY
-// candidate is the tunnel would burn its keeper's backoff rungs
-// against a not-yet-routable advertisement (a transient failure, so it
-// retries forever -- but each wasted rung pushes the next attempt
+// (edge registration plus, for a first-ever tunnel, CNAME propagation).
+// Attempts are spaced on this ladder (capped at the last rung) up to
+// the deadline below. The first attempt waits 5 s for CNAME
+// propagation. A probe earlier than the CNAME reaches the tunnel zone's
+// wildcard record (hub/README.md), whose address the edge can't reach,
+// and only times out. The wildcard is why that costs only the attempt:
+// without it the name would answer NXDOMAIN, which the OS resolver
+// caches for the zone's negative TTL (30 minutes on Cloudflare), during
+// which no probe from this machine could succeed. A child that merely
+// survives a spawn says nothing about routability, and a web client
+// whose ONLY candidate is the tunnel would burn its keeper's backoff
+// rungs against a not-yet-routable advertisement (a transient failure,
+// so it retries forever -- but each wasted rung pushes the next attempt
 // further out).
 export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
   5_000, 8_000,
@@ -101,25 +95,13 @@ export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
 export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
   1_000, 2_000, 4_000, 8_000,
 ];
-// Past this, one warning names the hostname that is still not
-// routable, so a stuck tunnel is visible in the log without the
-// runner giving up on a healthy child, and the probe slows to the
-// rung below: a hostname that stays unroutable (a slow propagation, a
-// deleted record) costs one edge request a minute, not one every eight
-// seconds, for as long as the child lives.
-export const TUNNEL_PROBE_WARN_MS = 60_000;
-export const TUNNEL_PROBE_SLOW_MS = 60_000;
 // Past the deadline, the child is treated exactly like one that died:
 // killed and rescheduled on the backoff ladder, and since it never
 // reached readiness the restart re-provisions rather than reusing its
-// possibly-dead token. Two deadlines, chosen by what the Worker said:
-// a tunnel it just CREATED (dnsCreated) has a brand-new DNS record,
-// which can take minutes to route, so it gets a long one. A reused
-// tunnel resolved before, so a probe that keeps failing means a
-// deleted record or a stale ingress, and the re-provision is what
-// repairs those.
+// possibly-dead token. The re-provision repairs a deleted record or a
+// stale ingress. A brand-new hostname routes in seconds (the wildcard
+// above), so one deadline serves both ladders.
 export const TUNNEL_PROBE_DEADLINE_MS = 60_000;
-export { TUNNEL_PROBE_DEADLINE_FRESH_MS };
 
 // How long an unconfigured answer stands before the Worker is asked
 // again: a deployment setting, which a redeploy changes, so one request
@@ -328,12 +310,10 @@ const probeTunnelEdge = (hostname: string) =>
 
 // The probe ladder after the first attempt, until the hostname routes
 // or the deadline passes, read against the spawn time in elapsed time
-// (a sleep or a clock step spends none of it): past the warning
-// threshold every attempt waits the slow rung.
+// (a sleep or a clock step spends none of it).
 const probeSchedule = (
   spawnedAt: number,
   delaysMs: readonly [number, ...number[]],
-  deadlineMs: number,
 ) =>
   Schedule.fromStep(
     Clock.clockWith((clock) =>
@@ -341,13 +321,10 @@ const probeSchedule = (
         let attempt = 1;
         return (_now: number, routable: boolean) => {
           const now = elapsedMillisUnsafe(clock);
-          if (routable || now - spawnedAt >= deadlineMs) {
+          if (routable || now - spawnedAt >= TUNNEL_PROBE_DEADLINE_MS) {
             return Cause.done(routable);
           }
-          const delay =
-            now - spawnedAt >= TUNNEL_PROBE_WARN_MS
-              ? TUNNEL_PROBE_SLOW_MS
-              : backoffDelayMs(delaysMs, attempt);
+          const delay = backoffDelayMs(delaysMs, attempt);
           attempt += 1;
           return Effect.succeed([routable, Duration.millis(delay)] as [
             boolean,
@@ -480,29 +457,13 @@ const make = (options: Options) =>
     const rechecks = yield* Ref.make(Option.none<Queue.Queue<void>>());
 
     const probe = (hostname: string, fresh: boolean, spawnedAt: number) => {
-      const deadlineMs = fresh
-        ? TUNNEL_PROBE_DEADLINE_FRESH_MS
-        : TUNNEL_PROBE_DEADLINE_MS;
       const delaysMs = fresh
         ? TUNNEL_PROBE_DELAYS_MS
         : TUNNEL_PROBE_DELAYS_REUSED_MS;
-      let warned = false;
-      const attempt = Effect.gen(function* () {
-        const now = yield* elapsedMillis;
-        if (!warned && now - spawnedAt >= TUNNEL_PROBE_WARN_MS) {
-          warned = true;
-          yield* Effect.logWarning(
-            `[tunnel] ${hostname} is still not routable after ` +
-              `${Math.round(TUNNEL_PROBE_WARN_MS / 1000)}s, probing on ` +
-              "(a fresh hostname routes once the edge has its record)",
-          );
-        }
-        return yield* probeOnce(hostname);
-      });
       return Effect.sleep(delaysMs[0]).pipe(
         Effect.andThen(
-          attempt.pipe(
-            Effect.repeat(probeSchedule(spawnedAt, delaysMs, deadlineMs)),
+          probeOnce(hostname).pipe(
+            Effect.repeat(probeSchedule(spawnedAt, delaysMs)),
           ),
         ),
       );
@@ -699,8 +660,7 @@ const make = (options: Options) =>
                   routable
                     ? Effect.gen(function* () {
                         // The hostname resolves now, so a later child of
-                        // the same provision is held to the short
-                        // deadline.
+                        // the same provision probes on the reused ladder.
                         yield* remember({
                           provision: {
                             ...provision,

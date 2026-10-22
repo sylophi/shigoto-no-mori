@@ -16,7 +16,6 @@
 // reconnecting), so a row wearing it is one that is trying.
 import type { HubStatus, TunnelState } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shigomori/contracts/modules/hub";
 import { formatRelativeTime } from "../../lib/relativeTime.ts";
 import {
   deviceStatusView,
@@ -49,14 +48,7 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
     case "error":
       return `Tunnel is down (retrying). Until it's back, ${LOCAL_ONLY}`;
     case "starting":
-      // A brand-new tunnel waits on DNS, which the host gives that long
-      // to route, so a freshly enrolled machine can honestly sit here
-      // for a while without anything being wrong.
-      return (
-        "Tunnel starting… A brand-new tunnel's DNS can take up to " +
-        `${TUNNEL_PROBE_DEADLINE_FRESH_MS / 60_000} minutes to route, ` +
-        `and until it does, ${LOCAL_ONLY}`
-      );
+      return `Tunnel starting… Until it's up, ${LOCAL_ONLY}`;
     default:
       return null;
   }

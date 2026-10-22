@@ -17,7 +17,7 @@ export function PeerOfflineNoteView({
   return (
     <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
       {dialing
-        ? `${label} is on, but this window hasn't connected to it yet. Its settings load once the connection is up. A brand-new tunnel can take a while to route.`
+        ? `${label} is on, but this window hasn't connected to it yet. Its settings load once the connection is up.`
         : `${label} is offline. Its settings live on that device and load when it reconnects.`}
     </p>
   );
