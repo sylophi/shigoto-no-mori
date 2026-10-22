@@ -39,7 +39,7 @@ import {
   mappedPullRequest,
   worktreeTitle,
 } from "@shigomori/ui/lib/worktreeTitle.ts";
-import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
+import { ForwardItem, MirrorItem, ScriptItem, TerminalItem } from "./LiveItems";
 import { AgentItemView } from "@shigomori/ui/views/live/LiveItemsView.tsx";
 import {
   DeviceHeadingView,
@@ -118,6 +118,9 @@ function CardBody({
   // script running here: a card for a mirror or a forward alone has no
   // dev server of its own to point at.
   const scripts = card.items.some((item) => item.kind === "script");
+  const terminals = card.items.filter(
+    (item) => item.kind === "terminal",
+  ).length;
   // The worktree's page offers the console and the dialogs too, so a
   // card that cannot reach its device still leads there.
   return (
@@ -156,6 +159,14 @@ function CardBody({
             key={item.run.runId}
             deviceId={card.deviceId}
             run={item.run}
+          />
+        ) : item.kind === "terminal" ? (
+          <TerminalItem
+            key={item.terminal.terminalId}
+            deviceId={card.deviceId}
+            terminal={item.terminal}
+            index={item.index}
+            last={terminals === 1}
           />
         ) : item.kind === "mirror" ? (
           <MirrorItem

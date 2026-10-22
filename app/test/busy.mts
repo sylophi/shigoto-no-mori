@@ -407,8 +407,13 @@ const terminals = <A, E>(
 ) => runHost(Effect.flatMap(Terminals.Terminals, body));
 
 it("a peer's data-folder move is refused over a busy terminal", async () => {
+  const identities = await runHost(
+    Ops.listWorktreeIdentities({ projectId: project.id }),
+  );
+  const primary = identities.find((worktree) => worktree.isPrimary);
+  assert.ok(primary);
   const { terminalId } = await terminals((service) =>
-    service.open({ owner: { kind: "device" } }),
+    service.open({ projectId: project.id, worktreeId: primary.id }),
   );
   try {
     // The shell's own startup and prompt hooks read as busy for a

@@ -26,7 +26,7 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
       verb: RunningWorkError["verb"],
     ) => {
       const running = scripts.runningIn(worktree.id);
-      const open = terminals.openIn(worktree);
+      const open = terminals.openIn(worktree.id);
       return running + open === 0
         ? Effect.void
         : Effect.fail(

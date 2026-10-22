@@ -12,7 +12,7 @@
 //   - a close ends every attach with an exit and leaves the list,
 //   - a shell that exits leaves the list, whatever its status; one
 //     killed (128 + its signal) stays, its screen kept, until closed,
-//     and holds no folder,
+//     and counts as none open in its worktree,
 //   - a quit saves each terminal, and the next start opens it again
 //     under its history in the folder it was in, the history's lines
 //     left where they are, and a client that held it before starts over
@@ -36,11 +36,7 @@ import { once } from "node:events";
 import { mkdirSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
-import type {
-  Terminal,
-  TerminalEvent,
-  TerminalOwner,
-} from "@shigomori/contracts/schemas";
+import type { Terminal, TerminalEvent } from "@shigomori/contracts/schemas";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -64,7 +60,11 @@ import {
   testClock,
   waitFor,
 } from "./lib/checkKit.mts";
-import { launchTerminals, openSavedTerminals } from "./lib/terminalsApp.mts";
+import {
+  AT_HOME,
+  launchTerminals,
+  openSavedTerminals,
+} from "./lib/terminalsApp.mts";
 
 // What a save keeps of a history, the alternate screen read from the
 // history alone.
@@ -184,20 +184,22 @@ const unreadable = new Set<string>();
 beforeAll(() => {
   root = realpathSync(tempDir("sm-terminals-", track));
   dataDir = join(root, "data");
+  worktrees.set(AT_HOME.worktreeId, root);
 });
 afterAll(teardown);
 
-const start = (owner: TerminalOwner) => {
-  if (owner.kind === "device") {
-    return Effect.succeed<Terminals.Start>({
-      env: { ...process.env, PS1: "$ ", TERM: "xterm-256color" },
-    });
-  }
+const start = (owner: {
+  readonly projectId: string;
+  readonly worktreeId: string;
+}) => {
   if (unreadable.has(owner.projectId)) return Effect.die("unreadable");
   const cwd = worktrees.get(owner.worktreeId);
   return cwd === undefined
     ? Effect.fail(new UnknownWorktreeError({ worktreeId: owner.worktreeId }))
-    : Effect.succeed<Terminals.Start>({ cwd, env: process.env });
+    : Effect.succeed<Terminals.Start>({
+        cwd,
+        env: { ...process.env, PS1: "$ ", TERM: "xterm-256color" },
+      });
 };
 
 // Every project's worktrees: its primary checkout, as git always
@@ -278,13 +280,9 @@ describe("the service", () => {
   it("streams history, size and output, and a reconnect repeats nothing", async () => {
     const app = launch();
     try {
-      const { terminalId, cwd } = await withTerminals(app, (terminals) =>
-        terminals.open({
-          owner: { kind: "device" },
-          size: { cols: 100, rows: 30 },
-        }),
+      const { terminalId } = await withTerminals(app, (terminals) =>
+        terminals.open({ ...AT_HOME, size: { cols: 100, rows: 30 } }),
       );
-      assert.equal(cwd, root, "the first device terminal starts at home");
       const first = attach(app, terminalId);
       await waitFor(() => first.events.length >= 2, "the attach's head");
       assert.equal(first.events[0]?.kind, "history");
@@ -342,7 +340,7 @@ describe("the service", () => {
     const app = launch();
     try {
       const { terminalId } = await withTerminals(app, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
+        terminals.open(AT_HOME),
       );
       // Slow enough that the shell's output waits, and piles up past a
       // chunk's most while it does.
@@ -393,7 +391,7 @@ describe("the service", () => {
     const app = launch();
     try {
       const { terminalId } = await withTerminals(app, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
+        terminals.open(AT_HOME),
       );
       const attached = attach(app, terminalId);
       await withTerminals(app, (terminals) =>
@@ -414,7 +412,7 @@ describe("the service", () => {
     const app = launch();
     try {
       const { terminalId } = await withTerminals(app, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
+        terminals.open(AT_HOME),
       );
       const attached = attach(app, terminalId);
       await withTerminals(app, (terminals) =>
@@ -424,9 +422,9 @@ describe("the service", () => {
       assert.deepEqual(attached.events.at(-1), { kind: "exit", code: 137 });
       assert.deepEqual(await listedIds(app), [terminalId]);
       const openHere = await withTerminals(app, (terminals) =>
-        Effect.sync(() => terminals.openIn({ id: "none", path: root })),
+        Effect.sync(() => terminals.openIn(AT_HOME.worktreeId)),
       );
-      assert.equal(openHere, 0, "a dead one holds its folder");
+      assert.equal(openHere, 0, "a dead one holds its worktree");
 
       const again = attach(app, terminalId);
       await app.runPromise(Fiber.join(again.fiber));
@@ -448,7 +446,7 @@ describe("the service", () => {
     let held: { incarnation: string; seq: number };
     try {
       ({ terminalId } = await withTerminals(first, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
+        terminals.open(AT_HOME),
       ));
       const attached = attach(first, terminalId);
       await withTerminals(first, (terminals) =>
@@ -473,8 +471,8 @@ describe("the service", () => {
         return reopened.length > 0;
       }, "the saved terminal to open again");
       assert.deepEqual(
-        reopened.map((terminal) => [terminal.terminalId, terminal.cwd]),
-        [[terminalId, folder]],
+        reopened.map((terminal) => terminal.terminalId),
+        [terminalId],
       );
       // A client that held the shell before the restart starts over.
       const attached = attach(second, terminalId, held);
@@ -496,11 +494,6 @@ describe("the service", () => {
         () => attached.output().split(folder).length > 2,
         "the fresh shell's pwd",
       );
-      // A new device terminal starts where the newest one is.
-      const next = await withTerminals(second, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
-      );
-      assert.equal(next.cwd, folder);
     } finally {
       await second.dispose();
     }
@@ -586,9 +579,10 @@ describe("the service", () => {
         return reopened.length > 0;
       }, "the killed host's terminal to open again");
       assert.deepEqual(
-        reopened.map((terminal) => [terminal.terminalId, terminal.cwd]),
-        [[terminalId, folder]],
+        reopened.map((terminal) => terminal.terminalId),
+        [terminalId],
       );
+      assert.equal(seen?.cwd, folder, "saved out of its folder");
       const attached = attach(app, terminalId);
       await waitFor(() => attached.events.length >= 2, "the attach's head");
       const history = attached.events[0];
@@ -632,7 +626,7 @@ describe("the service", () => {
       const { terminalId } = await app.runPromise(
         Effect.provideService(
           Effect.flatMap(Terminals.Terminals, (terminals) =>
-            terminals.open({ owner: { kind: "device" } }),
+            terminals.open(AT_HOME),
           ),
           Clock.Clock,
           clocks.wall,
@@ -667,12 +661,16 @@ describe("the service", () => {
     const app = launch();
     try {
       const terminal = await withTerminals(app, (terminals) =>
-        terminals.open({
-          owner: { kind: "worktree", projectId: "P", worktreeId: "W" },
-        }),
+        terminals.open({ projectId: "P", worktreeId: "W" }),
       );
-      assert.equal(terminal.cwd, worktree);
       const attached = attach(app, terminal.terminalId);
+      await withTerminals(app, (terminals) =>
+        terminals.write(terminal.terminalId, "pwd\r"),
+      );
+      await waitFor(
+        () => attached.output().includes(worktree),
+        "the shell's pwd",
+      );
       await withTerminals(app, (terminals) => terminals.closeMissing);
       assert.equal(attached.events.at(-1)?.kind === "exit", false);
       worktrees.delete("W");
@@ -697,14 +695,10 @@ describe("the service", () => {
       // The unreadable project's first, so a sweep that died on it would
       // never reach the other.
       const unread = await withTerminals(app, (terminals) =>
-        terminals.open({
-          owner: { kind: "worktree", projectId: "Q", worktreeId: "K" },
-        }),
+        terminals.open({ projectId: "Q", worktreeId: "K" }),
       );
       const closing = await withTerminals(app, (terminals) =>
-        terminals.open({
-          owner: { kind: "worktree", projectId: "P", worktreeId: "G" },
-        }),
+        terminals.open({ projectId: "P", worktreeId: "G" }),
       );
       const stays = attach(app, unread.terminalId);
       const goes = attach(app, closing.terminalId);
@@ -726,7 +720,7 @@ describe("the service", () => {
     const app = launch();
     try {
       const { terminalId } = await withTerminals(app, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
+        terminals.open(AT_HOME),
       );
       const busy = () => withTerminals(app, (terminals) => terminals.busy);
       await waitFor(async () => (await busy()) === 0, "an idle prompt");
@@ -760,7 +754,7 @@ describe("the service", () => {
     const app = launch();
     try {
       const { terminalId } = await withTerminals(app, (terminals) =>
-        terminals.open({ owner: { kind: "device" } }),
+        terminals.open(AT_HOME),
       );
       // A link to the host that the proof drops at will: each drop ends
       // the attach under way the way a closed socket does.

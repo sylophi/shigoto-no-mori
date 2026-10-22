@@ -13,11 +13,7 @@ import { hasWorktreeData } from "@shigomori/contracts/schemas";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type {
-  Project,
-  ShigomoriConfig,
-  TerminalOwner,
-} from "@shigomori/contracts/schemas";
+import type { Project, ShigomoriConfig } from "@shigomori/contracts/schemas";
 import * as Ops from "@host/lib/engineOps";
 import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import { findProject } from "@host/lib/projects";
@@ -86,23 +82,22 @@ export function worktreeNotifiers(ctx: HandlerContext) {
   };
 }
 
-// Where a terminal starts (host/lib/terminals): a worktree's in its
-// folder with its scripts' SHIGOMORI_* env, a device's with the app's
-// own. TERM and COLORTERM say what xterm in the renderer draws.
-export const terminalStart = (owner: TerminalOwner) => {
-  const env = {
-    ...process.env,
-    TERM: "xterm-256color",
-    COLORTERM: "truecolor",
-  };
-  if (owner.kind === "device") return Effect.succeed<Start>({ env });
-  return Effect.gen(function* () {
+// Where a terminal starts (host/lib/terminals): in its worktree's
+// folder with its scripts' SHIGOMORI_* env. TERM and COLORTERM say what
+// xterm in the renderer draws.
+export const terminalStart = (owner: {
+  readonly projectId: string;
+  readonly worktreeId: string;
+}) =>
+  Effect.gen(function* () {
     const project = yield* findProject(owner.projectId);
     const ctx = yield* prepareScriptRun(project, owner.worktreeId);
     return {
       cwd: ctx.worktree.path,
       env: {
-        ...env,
+        ...process.env,
+        TERM: "xterm-256color",
+        COLORTERM: "truecolor",
         ...scriptEnvOf({ worktree: ctx.worktree, project, ...ctx.scriptEnv }),
       },
     } satisfies Start;
@@ -113,7 +108,6 @@ export const terminalStart = (owner: TerminalOwner) => {
       (cause) => Effect.die(cause),
     ),
   );
-};
 
 // The worktrees a project's terminals may stay in.
 export const terminalWorktrees = (projectId: string) =>

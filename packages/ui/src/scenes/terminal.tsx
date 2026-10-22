@@ -1,9 +1,7 @@
 // The terminal's parts: a worktree page's drawer with its tabs over a
-// script's console, a device's own terminals on their page over a
-// shell fed a fixture prompt with Nerd Font icons, the sidebar's list
-// of them, and a peer's terminals page while it takes no commands.
+// script's console, the same over a shell fed a fixture prompt with
+// Nerd Font icons, and a peer's drawer while it takes no commands.
 import { ScriptConsoleView } from "../views/scriptConsole/ScriptConsoleView.tsx";
-import { DeviceTerminalsPageView } from "../views/terminal/DeviceTerminalsPageView.tsx";
 import { TerminalDrawerView } from "../views/terminal/TerminalDrawerView.tsx";
 import { peerTerminalsHiddenNote } from "../lib/commandAccessCopy.ts";
 import { TerminalTabsView } from "../views/terminal/TerminalTabsView.tsx";
@@ -11,10 +9,6 @@ import {
   type TerminalFeed,
   TerminalView,
 } from "../views/terminal/TerminalView.tsx";
-import {
-  SidebarDeviceTerminalsView,
-  SidebarTerminalsView,
-} from "../views/sidebar/SidebarTerminalsView.tsx";
 import { THINKPAD_ID } from "../fixtures/fixtures.ts";
 import { deviceById } from "./world.ts";
 
@@ -36,56 +30,19 @@ const shell = (
   />
 );
 
+const tabs = [
+  { id: "a", label: "Terminal 1" },
+  { id: "b", label: "Terminal 2" },
+  { id: "script:dev", label: "dev" },
+];
+
 export function TerminalPartsScene() {
-  const thinkpad = deviceById(THINKPAD_ID);
   return (
-    <div className="grid h-full grid-cols-[240px_1fr] grid-rows-[300px_1fr]">
-      <div className="row-span-2 border-r border-border">
-        <SidebarTerminalsView>
-          <SidebarDeviceTerminalsView
-            label="Studio Mac"
-            icon="desktop"
-            tone={null}
-            terminals={[
-              {
-                terminalId: "a",
-                label: "forest",
-                cwd: "/Users/sam/code/forest",
-                selected: true,
-              },
-              {
-                terminalId: "b",
-                label: "sam",
-                cwd: "/Users/sam",
-                selected: false,
-              },
-            ]}
-            onPick={() => {}}
-          />
-          <SidebarDeviceTerminalsView
-            label={thinkpad.label}
-            icon={thinkpad.icon}
-            tone={thinkpad.status.tone}
-            terminals={[
-              {
-                terminalId: "c",
-                label: "logs",
-                cwd: "/var/logs",
-                selected: false,
-              },
-            ]}
-            onPick={() => {}}
-          />
-        </SidebarTerminalsView>
-      </div>
+    <div className="grid h-full grid-rows-2">
       <div className="relative flex flex-col justify-end">
-        <TerminalDrawerView height={260} onHeight={() => {}}>
+        <TerminalDrawerView height={300} onHeight={() => {}}>
           <TerminalTabsView
-            tabs={[
-              { id: "a", label: "Terminal 1" },
-              { id: "b", label: "Terminal 2" },
-              { id: "script:dev", label: "dev" },
-            ]}
+            tabs={tabs}
             selectedId="script:dev"
             onSelect={() => {}}
             onClose={() => {}}
@@ -114,40 +71,42 @@ export function TerminalPartsScene() {
           </TerminalTabsView>
         </TerminalDrawerView>
       </div>
-      <div className="border-t border-border">
-        <DeviceTerminalsPageView deviceName="Studio Mac">
+      <div className="relative flex flex-col justify-end">
+        <TerminalDrawerView height={300} onHeight={() => {}}>
           <TerminalTabsView
-            tabs={[{ id: "a", label: "Terminal 1" }]}
-            selectedId="a"
+            tabs={tabs}
+            selectedId="b"
             onSelect={() => {}}
             onClose={() => {}}
             onNew={() => {}}
+            onHide={() => {}}
           >
             {shell}
           </TerminalTabsView>
-        </DeviceTerminalsPageView>
+        </TerminalDrawerView>
       </div>
     </div>
   );
 }
 
-// A peer's terminals page while it takes no commands from here: the
-// words in place of the tabs.
+// A peer's drawer while it takes no commands from here: the words in
+// place of the tabs.
 export function PeerTerminalsHiddenScene() {
   const thinkpad = deviceById(THINKPAD_ID);
   return (
-    <div className="h-full bg-background">
-      <DeviceTerminalsPageView deviceName={thinkpad.label}>
+    <div className="relative flex h-full flex-col justify-end bg-background">
+      <TerminalDrawerView height={240} onHeight={() => {}}>
         <TerminalTabsView
           tabs={[]}
           selectedId={null}
           onSelect={() => {}}
           onClose={() => {}}
+          onHide={() => {}}
           note={peerTerminalsHiddenNote(thinkpad.label)}
         >
           {null}
         </TerminalTabsView>
-      </DeviceTerminalsPageView>
+      </TerminalDrawerView>
     </div>
   );
 }

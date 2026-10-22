@@ -1,11 +1,11 @@
 // What is running across the account right now, for the Live page
 // (components/live/LivePage.tsx) and the sidebar's Live mark: the
-// scripts each host runs, the forwards this machine holds, the
-// mirrors every host runs. (The agents waiting on you come off the
-// worktree lists, lib/agentWatch.ts.) Each part is read the way its own
-// surfaces read it: the scripts and the mirrors as their hosts' views
-// (scripts:watch, mirror:watch), the forwards off portForward:changed,
-// so nothing here polls.
+// scripts and the terminals each host runs, the forwards this machine
+// holds, the mirrors every host runs. (The agents waiting on you come
+// off the worktree lists, lib/agentWatch.ts.) Each part is read the way
+// its own surfaces read it: the scripts, the terminals and the mirrors
+// as their hosts' views (scripts:watch, terminals:list, mirror:watch),
+// the forwards off portForward:changed, so nothing here polls.
 import { callOf } from "@shigomori/contracts/contract";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import * as Atom from "effect/reactivity/Atom";
@@ -15,7 +15,7 @@ import type {
   MirrorServing,
   MirrorSession,
 } from "@shigomori/contracts/modules/mirror";
-import type { RunningScript } from "@shigomori/contracts/schemas";
+import type { RunningScript, Terminal } from "@shigomori/contracts/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { useEveryHostMirrors } from "@/hooks/remote/useMirrors";
 import { usePortForwardCount } from "@/hooks/remote/usePortForwards";
@@ -26,6 +26,7 @@ import {
   useRemoteDevices,
 } from "@/hooks/remote/useRemoteDevices";
 import { remoteDevicesAtom } from "@/lib/remote/devices";
+import { terminalsAtom } from "@/hooks/terminals/useTerminals";
 import { useApi } from "@/lib/runtime/pageApi";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
@@ -82,38 +83,73 @@ export function useDeviceRunningScripts(
 }
 
 const hostsScriptsAtom = viewsOf((deviceId) => runningScriptsAtom(deviceId));
+const hostsTerminalsAtom = viewsOf((deviceId) => terminalsAtom(deviceId));
 
-// Every host's running scripts. A peer out of reach lists none: its
-// last list could name a dev server that has since stopped, and
-// nothing here could stop it anyway. A peer whose app predates the
-// view ends it, and lists none too, as does one that runs no commands
-// from here (the view is gated), settled.
-export function useRunningScripts(): HostScripts[] {
+// Every host, and whether this device reads its runs and terminals: a
+// peer out of reach lists none, as its last list could name a dev
+// server that has since stopped, and nothing here could stop it anyway.
+// Nor does one that runs no commands from here (the views are gated),
+// settled.
+function useCommandedHosts() {
   const hosts = useEveryHost();
   const localDeviceId = useApi().deviceId;
   const registry = useRemoteDevices();
-  const reads = hosts.map(
-    ({ deviceId, api }) =>
+  return hosts.map(({ deviceId, api }) => ({
+    deviceId,
+    api,
+    reads:
       api !== undefined &&
       readsRunsOf(
         localDeviceId,
         deviceId,
         registry.find((entry) => entry.deviceId === deviceId)?.acceptsCommands,
       ),
-  );
+  }));
+}
+
+// Every host's running scripts. A peer whose app predates the view ends
+// it, and lists none.
+export function useRunningScripts(): HostScripts[] {
+  const hosts = useCommandedHosts();
   const views = useViews(
     hostsScriptsAtom,
-    hosts.map(({ deviceId }, index) => (reads[index] ? deviceId : null)),
+    hosts.map(({ deviceId, reads }) => (reads ? deviceId : null)),
   );
-  return hosts.map(({ deviceId, api }, index) => ({
+  return hosts.map(({ deviceId, api, reads }, index) => ({
     deviceId,
     api,
-    runs: reads[index] ? (views[index]?.data?.runs ?? NO_RUNS) : NO_RUNS,
-    loading: reads[index] === true && views[index]?.isPending === true,
+    runs: reads ? (views[index]?.data?.runs ?? NO_RUNS) : NO_RUNS,
+    loading: reads && views[index]?.isPending === true,
   }));
 }
 
 const NO_RUNS: RunningScript[] = [];
+
+// A host's open terminals.
+export type HostTerminals = {
+  deviceId: string;
+  terminals: readonly Terminal[];
+  // The first read is still on its way.
+  loading: boolean;
+};
+
+// Every host's open terminals, read as its runs are.
+export function useOpenTerminals(): HostTerminals[] {
+  const hosts = useCommandedHosts();
+  const views = useViews(
+    hostsTerminalsAtom,
+    hosts.map(({ deviceId, reads }) => (reads ? deviceId : null)),
+  );
+  return hosts.map(({ deviceId, reads }, index) => ({
+    deviceId,
+    terminals: reads
+      ? (views[index]?.data?.terminals ?? NO_TERMINALS)
+      : NO_TERMINALS,
+    loading: reads && views[index]?.isPending === true,
+  }));
+}
+
+const NO_TERMINALS: Terminal[] = [];
 
 // One mirror as the Live page lists it. A session comes off the list
 // of the device running it (the one holding the original). A stream
@@ -171,7 +207,9 @@ export function useLiveMirrors(): LiveMirror[] {
   return liveMirrorsOf(useEveryHostMirrors());
 }
 
-// How many things are live, for the sidebar's mark.
+// How many things are live, for the sidebar's mark. An open terminal
+// is not: a shell kept open in a drawer is how a day's work goes, and
+// would keep the mark lit. Live lists them.
 export function useLiveCount(): number {
   const scripts = useRunningScripts().reduce(
     (sum, host) => sum + host.runs.length,

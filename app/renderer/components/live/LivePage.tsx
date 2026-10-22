@@ -1,7 +1,7 @@
 // Everything running right now, across the account, on one page: the
-// agents waiting on you, the scripts each device runs, the ports this
-// machine forwards from its peers, and the mirrors keeping worktrees in
-// step between devices.
+// agents waiting on you, the scripts and terminals each device runs,
+// the ports this machine forwards from its peers, and the mirrors
+// keeping worktrees in step between devices.
 // What a worktree page shows one worktree at a time, gathered so a dev
 // server left running or a forgotten forward can be found (and
 // stopped) without walking the forest. Each worktree with something
@@ -13,9 +13,9 @@ import { ConfirmDestructiveButton } from "@shigomori/ui/primitives/confirm-destr
 import {
   type HostScripts,
   useLiveMirrors,
+  useOpenTerminals,
   useRunningScripts,
 } from "@/hooks/live/useLiveActivity";
-import { agentsNeedYou } from "@shigomori/ui/lib/agentNeeds.ts";
 import { useWaitingAgents } from "@/lib/agentWatch";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
@@ -23,45 +23,36 @@ import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { scriptRunsOf } from "@/hooks/scripts/scriptRuns";
 import { useRegistry } from "@/lib/runtime/viewHooks";
 import { useAllPortForwards } from "@/hooks/remote/usePortForwards";
-import { listed, plural, pluralize } from "@shigomori/contracts/words";
+import { plural, pluralize } from "@shigomori/contracts/words";
 import { notifyError, toast } from "@/lib/toast";
 import { DeviceHeading, LiveCard } from "./LiveCard";
 import {
   LiveDeviceSectionView,
   LivePageView,
 } from "@shigomori/ui/views/live/LivePageView.tsx";
-import { buildLive, countLive, type LiveDevice } from "./liveModel";
+import { buildLive, summarize } from "./liveModel";
 import { useApi } from "@/lib/runtime/pageApi";
-
-// "1 agent needs you, with 2 scripts, 1 port forward and 1 mirror
-// running", leaving out what is none.
-function summarize(devices: readonly LiveDevice[]): string {
-  const { agents, scripts, forwards, mirrors } = countLive(devices);
-  const parts = [
-    scripts > 0 && pluralize(scripts, "script"),
-    forwards > 0 && pluralize(forwards, "port forward"),
-    mirrors > 0 && pluralize(mirrors, "mirror"),
-  ].filter((part) => part !== false);
-  const running = listed(parts);
-  const needYou = agents > 0 && agentsNeedYou(agents);
-  if (needYou && running) return `${needYou}, with ${running} running`;
-  if (needYou) return needYou;
-  return running ? `${running} running` : "";
-}
 
 export function LivePage() {
   const hosts = useRunningScripts();
+  const terminals = useOpenTerminals();
   const mirrors = useLiveMirrors();
   const forwards = useAllPortForwards();
   const agents = useWaitingAgents();
-  const devices = buildLive({ agents, scripts: hosts, mirrors, forwards });
+  const devices = buildLive({
+    agents,
+    scripts: hosts,
+    terminals,
+    mirrors,
+    forwards,
+  });
   // Which device a card is on only says something once there is more
   // than one.
   const multiDevice = hosts.length > 1;
   const summary = summarize(devices);
   // Until every reachable device has answered, an empty page would
   // claim a quiet it does not know.
-  const loading = hosts.some((host) => host.loading);
+  const loading = [...hosts, ...terminals].some((host) => host.loading);
 
   return (
     <LivePageView
