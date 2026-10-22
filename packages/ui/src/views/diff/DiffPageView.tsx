@@ -16,6 +16,7 @@ import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { Sheet, SheetContent, SheetTitle } from "../../primitives/sheet.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
+import { isMediaBinary } from "../../lib/patchFiles.ts";
 import {
   CODE_GAP_BLOCK,
   CODE_LINE_HEIGHT,
@@ -57,6 +58,45 @@ const DIFF_METRICS: VirtualFileMetrics = {
   // The padding under a file's last row.
   spacing: CODE_GAP_BLOCK,
 };
+
+// The space around each file in the pane: above the first, between
+// two, and below the last. The slots' inset-x-2 is the same at the
+// sides.
+export const FILE_GAP = 8;
+
+// Pierre's "simple" hunk separator, and a media file's sides under its
+// header (MediaDiffView's pt-2 and h-72).
+const SEPARATOR_HEIGHT = 4;
+const MEDIA_SIDES_HEIGHT = 8 + 288;
+
+// A file's height before it is drawn, for the window to place the files
+// it hasn't mounted (DiffPane): its header, and unless folded its hunks'
+// rows at DIFF_METRICS with a separator between hunks, or a media file's
+// sides. A drawn file is measured, so this only has to be close: it
+// leaves out a context line pierre may show in place of a separator,
+// wrapped lines, and the changes page's hunk bars (its one file is
+// measured as soon as it's drawn).
+export function estimateFileHeight(
+  fileDiff: FileDiffMetadata,
+  { collapsed, diffStyle }: { collapsed: boolean; diffStyle: DiffStyle },
+): number {
+  const header = DIFF_METRICS.diffHeaderHeight;
+  if (collapsed) return header;
+  if (isMediaBinary(fileDiff)) return header + MEDIA_SIDES_HEIGHT;
+  const { hunks } = fileDiff;
+  if (hunks.length === 0) return header;
+  const lines = hunks.reduce(
+    (n, hunk) =>
+      n + (diffStyle === "split" ? hunk.splitLineCount : hunk.unifiedLineCount),
+    0,
+  );
+  return (
+    header +
+    lines * DIFF_METRICS.lineHeight +
+    (hunks.length - 1) * SEPARATOR_HEIGHT +
+    DIFF_METRICS.spacing
+  );
+}
 
 // A diff page (DiffPage.tsx binds it to a patch): the file list taken
 // over into the sidebar, the header, the patch, and on a phone the file
@@ -175,6 +215,7 @@ export function DiffPaneView({
   state,
   message,
   virtualizer,
+  height,
   children,
 }: {
   scrollRef?: Ref<HTMLDivElement>;
@@ -183,7 +224,10 @@ export function DiffPaneView({
   state: "loading" | "error" | "empty" | "files";
   message: ReactNode;
   virtualizer: Virtualizer | null;
-  // The files' rows (DiffFileRowView).
+  // The files' total, a FILE_GAP around each, as DiffPane places them.
+  // Unset when there are no files to place.
+  height?: number;
+  // The files' rows (DiffFileRowView), each in a DiffFileSlotView.
   children: ReactNode;
 }) {
   return (
@@ -208,8 +252,8 @@ export function DiffPaneView({
         <div
           ref={listRef}
           data-slot="diff-view"
-          className="flex flex-col gap-2 p-2 select-text"
-          style={CODE_STYLE}
+          className="relative select-text"
+          style={{ ...CODE_STYLE, height }}
         >
           {virtualizer ? (
             <VirtualizerContext value={virtualizer}>
@@ -247,17 +291,41 @@ export function DiffFilesSheetView({
   );
 }
 
+// A file at its place in the window (DiffPane): its offset from the
+// list's top, and the element the window measures it by.
+export function DiffFileSlotView({
+  index,
+  start,
+  measureRef,
+  children,
+}: {
+  index: number;
+  start: number;
+  measureRef: (node: Element | null) => void;
+  // The file's row (DiffFileRowView).
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-index={index}
+      ref={measureRef}
+      className="absolute inset-x-2 top-0"
+      style={{ transform: `translateY(${start}px)` }}
+    >
+      {children}
+    </div>
+  );
+}
+
 // One file of the patch. Its own component so folding a file re-renders
-// that file and not the other 130: pierre's FileDiff re-runs a full DOM
-// render on every pass, so untouched rows have to keep their cached
+// that file and not the others in view: pierre's FileDiff re-runs a full
+// DOM render on every pass, so untouched rows have to keep their cached
 // element to stay free. That only holds while every prop here is stable
 // per file, which is why `onToggle` is the caller's own setter rather
 // than a per-row closure.
 //
-// The wrapper is what the index scrolls to and what the scroll spy
-// observes. `collapsed` is pierre's own option: it drops the file's
-// rendered rows and keeps the header, so folding a file also stops
-// paying for it.
+// `collapsed` is pierre's own option: it drops the file's rendered rows
+// and keeps the header, so folding a file also stops paying for it.
 export function DiffFileRowView({
   fileDiff,
   fileId,

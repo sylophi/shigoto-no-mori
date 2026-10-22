@@ -648,6 +648,7 @@ function IndexRow({
       <button
         type="button"
         data-slot="diff-index-jump"
+        aria-current={active || undefined}
         onClick={select}
         onDoubleClick={
           onOpen && !entry.deleted ? () => onOpen(entry.path) : undefined
