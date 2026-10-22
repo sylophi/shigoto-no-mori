@@ -15,18 +15,16 @@ import {
 // grant, so a peer's Settings page can relocate that device's data
 // folder. The host relaunches itself after such a call, since the peer
 // has no window module to acknowledge with (host/ipc/modules/runtime).
-// info rides the wire so a peer's project pages can spell the paths a
-// worktree will land at the same way the local ones do, behind the
-// command grant like the fs reads (it names the host's homedir and
-// data dir, which a peer this host has not granted control to has no
-// use for).
+// info rides the wire so a peer's pages spell this host's paths the
+// way the local ones do (its home as ~, where a worktree will land).
+// Ungated, under the sharing switch like the lists: their paths and
+// worktrees:relocationPlan already show the home and the data dir.
 export const runtimeContract = defineContract(
   "runtime",
   "host",
   invoke("info", VoidSchema, RuntimeInfoSchema, {
     remote: true,
-    gated: true,
-    grant: "browseFiles",
+    gated: false,
   }),
   // The host's half of a nuke: everything that needs the store or a
   // running host. The files go at the next start (window:nuke).

@@ -925,8 +925,7 @@
     "kind": "invoke",
     "scope": "host",
     "remote": true,
-    "gated": true,
-    "grant": "browseFiles"
+    "gated": false
   },
   "runtime:moveDataDir": {
     "kind": "invoke",
