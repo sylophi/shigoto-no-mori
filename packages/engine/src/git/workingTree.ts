@@ -31,8 +31,8 @@ export const makeWorkingTree = ({
 
     // Each file of an untracked folder its own entry, whatever the
     // user's status.showUntrackedFiles. The changes list, every count of
-    // changes and the guards that refuse a dirty worktree read this one
-    // list, so they agree.
+    // changes and the remove, adopt and apply guards read this one list,
+    // so they agree.
     const changedFiles = Effect.fn("Git.changedFiles")(function* (
       worktree: string,
     ) {

@@ -222,7 +222,7 @@ export class Git extends Context.Service<
     // --- the working tree ---
     // The changed files, each file of an untracked directory its own
     // entry whatever the user's setting: what every count of changes,
-    // the changes list and the guards against a dirty worktree read.
+    // the changes list and the remove, adopt and apply guards read.
     readonly changedFiles: (
       worktree: string,
     ) => Effect.Effect<ChangedFile[], GitError>;
