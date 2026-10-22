@@ -20,7 +20,8 @@ export function runtimeInfoQueryOptions(
     },
     staleTime: Number.POSITIVE_INFINITY,
     enabled: enabled && api !== undefined,
-    // A peer's pages treat a refused read as "no path to spell".
+    // A peer on 3.0.0-beta.2 serves it only behind its command grant,
+    // and its pages take that refusal as "no path to spell".
     meta: gatedHostReadMeta(scope.remote, "Couldn't read runtime info"),
   });
 }

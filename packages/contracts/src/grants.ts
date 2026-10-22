@@ -113,7 +113,6 @@ export const GRANTS = {
       "projects:add",
       "projects:clone",
       "projects:create",
-      "runtime:info",
       "sync:hasCommits",
       "sync:ignoredPaths",
       "sync:openSource",

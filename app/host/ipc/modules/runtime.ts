@@ -5,7 +5,6 @@ import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import { uninstallCliEverything } from "@host/lib/cli/install";
 import { errorWordsOf } from "@host/lib/errorWords";
@@ -93,15 +92,10 @@ export const runtimeHandlers = {
   // Host facts only. isDev deliberately isn't here: it describes the
   // client build and rides the preload bridge (api.isDev) instead.
   info: () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
+    Effect.sync(() => {
       const dir = dataDir();
-      const real = yield* fs
-        .realPath(dir)
-        .pipe(Effect.orElseSucceed(() => dir));
       return {
         dataDir: dir,
-        ...(real === dir ? {} : { dataDirReal: real }),
         dataDirSource: dataDirSource(),
         // resolve() drops the trailing slash a hand-edited pointer may carry.
         atDefaultDataDir: resolve(dir) === defaultDataDir(),

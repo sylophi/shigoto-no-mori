@@ -301,7 +301,7 @@ export const mirrorOf = (target: { projectId: string; worktreeId: string }) =>
 // target's, or where the target keeps its repos. `parent` is the
 // caller's pick, a path under this device's home read as the same path
 // under the target's, the way the default is. The target's home and
-// projects are its own answers, over the grant the send needs anyway.
+// projects are its own answers.
 export const cloneIntoOn = (
   deviceId: string,
   project: Project,
