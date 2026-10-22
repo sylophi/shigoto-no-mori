@@ -11,7 +11,7 @@ import {
   createDesktopClerkBridge,
   serveRendererOverScheme,
 } from "./electron/clerk";
-import { deepLinkRoute, deepLinkRouteInArgv } from "./electron/deepLink";
+import { deepLinkRoute } from "./electron/deepLink";
 import { clerkPublishableKey } from "./electron/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
@@ -256,21 +256,11 @@ function isShuttingDown(): boolean {
 
 setNotificationOpener(openDeepLink);
 
-// Windows and Linux pass a deep link in a launch's argv: this
-// process's own when the link started the app, the second instance's
-// otherwise. macOS sends open-url, registered here before "ready" so a
-// link that launched the app is not missed.
-const launchRoute = deepLinkRouteInArgv(process.argv);
-if (launchRoute) openDeepLink(launchRoute);
+// Launching the app again while a copy runs is a request to see it.
+app.on("second-instance", () => surfaceWindow());
 
-// Launching the app again while a copy runs is a request to see it, and
-// so is a deep link.
-app.on("second-instance", (_event, argv) => {
-  const route = deepLinkRouteInArgv(argv);
-  if (route) openDeepLink(route);
-  else surfaceWindow();
-});
-
+// Registered before "ready" so a link that launched the app is not
+// missed.
 app.on("open-url", (event, url) => {
   const route = deepLinkRoute(url);
   if (route === null) return;

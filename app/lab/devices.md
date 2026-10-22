@@ -127,10 +127,9 @@ in `dev-app.md`, "When a device is removed".
 - **Second `pnpm dev` fails.** From the same worktree it fails on the
   renderer port. From another worktree it exits at the single-instance
   lock unless it runs as a profile.
-- **Profile boots signed out after `--clone-login`.** On Linux and
-  Windows the copied token store cannot be decrypted. On any platform
-  the plain dev app's Clerk session may have expired, even while it
-  still reads signed in: its device credential outlives the Clerk
+- **Profile boots signed out after `--clone-login`.** The plain dev
+  app's Clerk session may have expired, even while it still reads
+  signed in: its device credential outlives the Clerk
   session, and a clone copies the empty session. Open the plain dev
   app in a weblab session on a free port named in all three places:
   `"start": "SHIGOMORI_DEBUG_PORT=9341 pnpm dev"`, with `attach` and

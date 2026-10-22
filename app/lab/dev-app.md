@@ -219,9 +219,7 @@ The plain dev app (`pnpm dev` without a profile) must be signed in
 once before `--clone-login` works, and stay signed in: its Clerk
 session can lapse while its device credential lives on, and then it
 still reads signed in while every clone boots signed out (see
-`devices.md`, "Troubleshooting"). Cloning only works on macOS. Linux
-and Windows key the dev token store per app name, so the copied file
-decrypts to nothing and the profile boots signed out.
+`devices.md`, "Troubleshooting").
 
 Without `--clone-login`, sign in from the profile's own window using a
 method that stays in the window. GitHub sign-in uses a deep link, and

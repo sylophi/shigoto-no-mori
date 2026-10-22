@@ -19,7 +19,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, platform } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   assertDevProfileName,
@@ -53,17 +53,15 @@ export function devProfilePaths(name: string): DevProfile {
   };
 }
 
-// Electron's userData for the plain dev instance: the platform's
-// appData joined with the dev flavor's folder (main/flavor.ts).
+// Electron's userData for the plain dev instance: macOS's appData
+// joined with the dev flavor's folder (main/flavor.ts).
 function devUserDataDir(): string {
-  const home = homedir();
-  const appData =
-    platform() === "darwin"
-      ? join(home, "Library", "Application Support")
-      : platform() === "win32"
-        ? (process.env.APPDATA ?? join(home, "AppData", "Roaming"))
-        : (process.env.XDG_CONFIG_HOME ?? join(home, ".config"));
-  return join(appData, flavorNames("dev").userDataDir);
+  return join(
+    homedir(),
+    "Library",
+    "Application Support",
+    flavorNames("dev").userDataDir,
+  );
 }
 
 // The two env vars that make a launched app run as the profile.
@@ -176,11 +174,9 @@ function wipeDevProfile(profile: DevProfile): void {
 }
 
 // The Clerk bridge's token store (main/electron/ClerkTokens.ts), one file in
-// userData. On macOS dev runs under Chromium's mock keychain, so the
+// userData. Dev runs under Chromium's mock keychain, so the
 // safeStorage ciphertext is portable between dev instances on one
-// machine. On Linux and Windows the dev keychain item is per app
-// name, which the profile suffix changes, so the copy decrypts to
-// nothing there and the profile boots signed out.
+// machine.
 const TOKEN_STORE_FILE = `${CLERK_TOKEN_STORE}.json`;
 
 // The plain dev instance's sign-in, or a throw naming what to do.
