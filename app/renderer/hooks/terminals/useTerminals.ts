@@ -6,8 +6,9 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import { useView } from "@/lib/runtime/viewHooks";
 
-// A device's open terminals, as its host streams them (terminals:list).
-const terminalsAtom = Atom.family((deviceId: string) =>
+// A device's open terminals, as its host streams them (terminals:list):
+// a worktree page's drawer, and the Live page's.
+export const terminalsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
     view: callOf(terminalsContract, "list"),

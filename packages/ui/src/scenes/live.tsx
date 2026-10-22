@@ -1,6 +1,6 @@
 // The Live page over the fixtures: what runs on this Mac and the
-// Thinkpad, an agent waiting, the scripts, a mirror each way and a
-// forwarded port, and the page with nothing running.
+// Thinkpad, an agent waiting, the scripts, the terminals open, a mirror
+// each way and a forwarded port, and the page with nothing running.
 import type { ReactNode } from "react";
 import {
   DeviceHeadingView,
@@ -19,6 +19,7 @@ import {
   MirrorSessionItemView,
   MirrorStreamItemView,
   ScriptItemView,
+  TerminalItemView,
 } from "../views/live/LiveItemsView.tsx";
 import {
   LiveDeviceSectionView,
@@ -28,6 +29,7 @@ import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { peerReadOnlyNote } from "../lib/commandAccessCopy.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import {
+  fakeOpenTerminals,
   fakeRunningScripts,
   LOCAL_DEVICE_ID,
   THINKPAD_ID,
@@ -90,6 +92,22 @@ function script(worktreeId: string, readOnlyNote: string | null = null) {
   );
 }
 
+// The worktree's open terminals, named as the drawer's tabs are.
+function terminals(worktreeId: string) {
+  return fakeOpenTerminals[LOCAL_DEVICE_ID]
+    ?.filter((terminal) => terminal.worktreeId === worktreeId)
+    .map((terminal, index) => (
+      <TerminalItemView
+        key={terminal.terminalId}
+        label={`Terminal ${index + 1}`}
+        since={terminal.openedAt}
+        onOpen={noop}
+        closing={false}
+        onClose={noop}
+      />
+    ));
+}
+
 function livePage(
   state: "quiet" | "devices",
   children: ReactNode,
@@ -116,7 +134,7 @@ export function LivePageScene() {
       <LiveDeviceSectionView
         heading={deviceHeading(
           MAC,
-          "1 agent needs you, with 2 scripts running",
+          "1 agent needs you, with 2 scripts and 3 terminals running",
         )}
       >
         <LiveCardView
@@ -135,12 +153,14 @@ export function LivePageScene() {
           }
         >
           {script(BADGER.id)}
+          {terminals(BADGER.id)}
         </LiveCardView>
         <LiveCardView
           header={header(HUM, "Aggregate worktrees across devices")}
           ports={null}
         >
           {script(HUM.id)}
+          {terminals(HUM.id)}
           <MirrorSessionItemView
             peer={<DeviceNameView icon={THINKPAD.icon} name={THINKPAD.label} />}
             tone="emerald"
@@ -199,7 +219,7 @@ export function LivePageScene() {
         </LiveCardView>
       </LiveDeviceSectionView>
     </>,
-    "1 agent needs you, with 3 scripts, 1 port forward and 2 mirrors running",
+    "1 agent needs you, with 3 scripts, 3 terminals, 1 port forward and 2 mirrors running",
   );
 }
 

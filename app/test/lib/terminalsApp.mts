@@ -3,7 +3,6 @@
 // its own process, and in a child (terminalsHost.mts) it kills.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
-import type { TerminalOwner } from "@shigomori/contracts/schemas";
 import type {
   UnknownProjectError,
   UnknownWorktreeError,
@@ -45,15 +44,20 @@ const withStore =
       ),
     );
 
+// A worktree at the proof's home, for the terminals whose worktree
+// doesn't matter.
+export const AT_HOME = { projectId: "P", worktreeId: "home" } as const;
+
 // The saved terminals alone, to read the store a running host writes.
 export const openSavedTerminals = (options: Options) =>
   ManagedRuntime.make(Layer.empty.pipe(withStore(options)));
 
 export const launchTerminals = (
   options: Options & {
-    readonly start: (
-      owner: TerminalOwner,
-    ) => Effect.Effect<
+    readonly start: (owner: {
+      readonly projectId: string;
+      readonly worktreeId: string;
+    }) => Effect.Effect<
       Terminals.Start,
       UnknownProjectError | UnknownWorktreeError
     >;

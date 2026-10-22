@@ -13,8 +13,8 @@ import {
 
 // The host's interactive shells (app/host/lib/terminals). Every call is
 // gated under the scripts' consent: a terminal runs anything, as a
-// custom script already does, and its folders and output are as private
-// as a script's.
+// custom script already does, and which are open where, and their
+// output, are as private as a script's.
 const gated = { remote: true, gated: true, grant: "runCommands" } as const;
 
 export const terminalsContract = defineContract(

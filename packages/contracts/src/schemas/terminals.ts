@@ -6,28 +6,15 @@ const TerminalIdPayloadSchema = Schema.Struct({
   terminalId: Schema.NonEmptyString,
 });
 
-// Who a terminal belongs to: a worktree, which it starts in and closes
-// with, or the device, where it starts in the last folder used and
-// lives as long as the host.
-export const TerminalOwnerSchema = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal("worktree"),
-    ...WorktreeScopedPayloadSchema.fields,
-  }),
-  Schema.Struct({ kind: Schema.Literal("device") }),
-]);
-export type TerminalOwner = typeof TerminalOwnerSchema.Type;
-
 const GridSizeSchema = Schema.Struct({
   cols: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
   rows: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
 });
 
+// A terminal belongs to the worktree it starts in, and closes with it.
 const TerminalSchema = Schema.Struct({
   terminalId: Schema.NonEmptyString,
-  owner: TerminalOwnerSchema,
-  // The folder it started in.
-  cwd: Schema.String,
+  ...WorktreeScopedPayloadSchema.fields,
   // Epoch ms.
   openedAt: Schema.Finite,
 });
@@ -38,7 +25,7 @@ export const TerminalsSchema = Schema.Struct({
 });
 
 export const OpenTerminalPayloadSchema = Schema.Struct({
-  owner: TerminalOwnerSchema,
+  ...WorktreeScopedPayloadSchema.fields,
   // The grid the opening client has room for.
   size: Schema.optional(GridSizeSchema),
 });

@@ -18,7 +18,11 @@ import {
   type WorktreeDialog,
 } from "@/lib/routePaths";
 import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
-import { drawerKey, openScriptTab } from "@/store/terminalDrawer";
+import {
+  drawerKey,
+  openScriptTab,
+  openTerminalTab,
+} from "@/store/terminalDrawer";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // The worktree pages' params, read non-strictly because the pages
@@ -196,6 +200,18 @@ export function useWorktreeNav() {
         worktreeId,
         scriptKey: slotToParam(slot),
       });
+    },
+
+    // A terminal, on a NAMED device (the Live page): its worktree's
+    // page, with the drawer open on its tab.
+    toTerminalOn(
+      on: string,
+      projectId: string,
+      worktreeId: string,
+      terminalId: string,
+    ) {
+      openTerminalTab(drawerKey(on, projectId, worktreeId), terminalId);
+      goOn(on, "detail", { projectId, worktreeId });
     },
 
     // Explicitly a NAMED device's page, whatever the surrounding scope:

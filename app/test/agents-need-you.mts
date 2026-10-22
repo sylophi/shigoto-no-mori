@@ -129,6 +129,7 @@ it("Live: the waiting agent's card leads its device", () => {
         loading: false,
       },
     ],
+    terminals: [],
     mirrors: [],
     forwards: [],
   });

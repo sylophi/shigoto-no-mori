@@ -37,6 +37,11 @@ export const drawerOf = (state: DrawerState, key: string): Drawer =>
 export const scriptTabId = (slot: ScriptSlot): string =>
   `script:${slotToParam(slot)}`;
 
+// A terminal's tab, named for its place among its worktree's terminals
+// (oldest first, as its host lists them).
+export const terminalTabLabel = (index: number): string =>
+  `Terminal ${index + 1}`;
+
 // The key a worktree's drawer is kept by, on the device it lives on.
 export const drawerKey = (
   deviceId: string,
@@ -55,8 +60,21 @@ export function setDrawerOpen(key: string, open: boolean): void {
   update(key, (drawer) => ({ ...drawer, open }));
 }
 
+// A worktree's last terminal closed away from its drawer (on Live): with
+// no console in it either, the drawer hides as it does when its own
+// last tab closes, so the next visit opens no shell.
+export function hideEmptyDrawer(key: string): void {
+  const drawer = drawerOf(store.get(), key);
+  if (drawer.open && drawer.scripts.length === 0) setDrawerOpen(key, false);
+}
+
 export function pickDrawerTab(key: string, tab: string): void {
   update(key, (drawer) => ({ ...drawer, picked: tab }));
+}
+
+// Opens the drawer on a terminal's tab.
+export function openTerminalTab(key: string, terminalId: string): void {
+  update(key, (drawer) => ({ ...drawer, open: true, picked: terminalId }));
 }
 
 // Opens the drawer on a script's console, its tab added if it has none.

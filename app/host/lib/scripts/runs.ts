@@ -348,7 +348,6 @@ export const makeRuns = ({
         .open({
           command: args.command,
           cwd: args.worktree.path,
-          place: "worktree",
           env,
           cols: DEFAULT_COLS,
           rows: DEFAULT_ROWS,

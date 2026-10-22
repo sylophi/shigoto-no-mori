@@ -28,7 +28,6 @@ import { withDeviceScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import {
-  DEVICE_TERMINALS_PATH,
   MIGRATION_PATH,
   PROJECT_ROUTE_PATHS,
   WORKTREE_DIALOGS,
@@ -268,23 +267,6 @@ const worktreeFilesRoute = createRoute({
   remountDeps: ({ params }) => params,
 });
 
-// A device's own terminals, lazy like the console for xterm. The pick
-// rides the search, so a reload or a link lands on the same tab.
-const deviceTerminalsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: DEVICE_TERMINALS_PATH,
-  component: withDeviceScope(
-    lazyRouteComponent(
-      () => import("@/components/terminal/DeviceTerminals"),
-      "DeviceTerminals",
-    ),
-  ),
-  validateSearch: (search: Record<string, unknown>): { terminal?: string } =>
-    typeof search["terminal"] === "string"
-      ? { terminal: search["terminal"] }
-      : {},
-});
-
 // The project pages, each lazy. A peer's project header offers the
 // same actions this machine's does, and they all land here.
 function projectRoute(
@@ -368,7 +350,6 @@ function buildRouteTree(hasLocalHost: boolean) {
           accountRoute,
         ]),
     devicesRedirectRoute,
-    deviceTerminalsRoute,
     worktreeRoute,
     worktreeDiffRoute,
     pullRequestDiffRoute,

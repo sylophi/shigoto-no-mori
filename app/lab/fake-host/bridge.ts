@@ -114,6 +114,7 @@ import {
   fakeListeningPorts,
   fakePoolPorts,
   fakeRemoteUrls,
+  fakeOpenTerminals,
   fakeRunningScripts,
   fakeStashes,
   addLiveEdgeRuns,
@@ -1058,6 +1059,31 @@ function hostHandlersFor(
         emit("scripts:changed", undefined);
       }
       return { cancelled };
+    },
+    // The posed terminals. An attach replays a posed prompt, an open
+    // lists one more and a close drops it.
+    "terminals:list": () => ({
+      terminals: [...(fakeOpenTerminals[forest.deviceId] ?? [])],
+    }),
+    "terminals:attach": ({ terminalId }) => ({
+      kind: "history" as const,
+      data: `\x1b[2m${terminalId}\x1b[0m\r\n$ `,
+      incarnation: "0".repeat(32),
+      seq: 0,
+      reset: true,
+    }),
+    "terminals:open": ({ projectId, worktreeId }) => {
+      const terminalId = `t-${Date.now().toString(36)}`;
+      fakeOpenTerminals[forest.deviceId] = [
+        ...(fakeOpenTerminals[forest.deviceId] ?? []),
+        { terminalId, projectId, worktreeId, openedAt: Date.now() },
+      ];
+      return { terminalId };
+    },
+    "terminals:close": ({ terminalId }) => {
+      fakeOpenTerminals[forest.deviceId] = (
+        fakeOpenTerminals[forest.deviceId] ?? []
+      ).filter((terminal) => terminal.terminalId !== terminalId);
     },
     "mirror:history": ({ localWorktreeId }) => ({
       events: [...(fakeMirrors.history[localWorktreeId] ?? [])],

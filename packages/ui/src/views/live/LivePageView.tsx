@@ -71,8 +71,8 @@ function Quiet() {
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium">All quiet in the forest</p>
         <p className="max-w-sm text-xs text-muted-foreground">
-          Agents waiting on you, dev servers and other scripts, forwarded ports
-          and mirrors show up here, on any of your devices.
+          Agents waiting on you, dev servers and other scripts, terminals,
+          forwarded ports and mirrors show up here, on any of your devices.
         </p>
       </div>
     </div>
