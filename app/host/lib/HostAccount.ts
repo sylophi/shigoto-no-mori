@@ -5,7 +5,7 @@
 // signed out, or a build with no account service, which the hub
 // socket, the device link's listener and the tunnel all read as "stop".
 // Until the shell's first report the account is unknown, not signed
-// out: a host started again under a running shell is still on it.
+// out: a host started again under a running shell may still be on one.
 import type { AccountFacts } from "@shigomori/contracts/modules/session";
 import {
   type AccountService,

@@ -494,13 +494,13 @@ export const moveMirrorsOfWorktree = (
 // The engine persists its sessions, so they come back on every spawn:
 // a boot that starts signed out, or a daemon that was down at the
 // sign-out, would otherwise resume mirroring with peers of an account
-// this device is not on. Each session is asked about once the account
-// is known: before that (a host that just started, a crash's restart
-// under a running shell too) nothing is asked, and the first report
-// asks then. A sign-out ends what was running itself and resets the
-// sweep, so a session reported after it is asked again. Only the
-// running daemon's own snapshot is asked about: the one that stands
-// through a restart can end nothing.
+// this device is not on. Each session is asked about one time, after
+// the account is known: before that (a host that just started, a
+// crash's restart under a running shell too) nothing is asked, and the
+// first report asks. A sign-out ends what was running itself and
+// resets the sweep, so a session reported after it is asked again.
+// Only the running daemon's own snapshot is asked about: the one that
+// stands through a restart can end nothing.
 export function createNoAccountSweep(deps: {
   sessions: () => readonly MirrorSessionRaw[];
   // Whether `sessions` is the running daemon's own (MirrorDaemon's fresh).

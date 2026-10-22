@@ -310,9 +310,9 @@ const toMirrorEngine = (tell: (engine: MirrorEngine["Service"]) => void) =>
 
 // The account's facts as the shell reports them: at start and after
 // every sign-in, sign-out, rename, credential rotation or switch flip.
-// The first is the baseline, and the first time the sessions the
-// daemon brought back are asked about (noAccountSweep, which ends them
-// for a device signed out at start). A later report tells a rename or a
+// The first is the baseline, before which the sessions the daemon
+// brought back are not asked about (noAccountSweep, which ends them for
+// a device signed out at start). A later report tells a rename or a
 // switch flip (same account, nothing to tear down) from a departure.
 // A departure (a sign-out, since the hub refuses a switch without one)
 // tears down what was the account's, in the order the pieces need: the

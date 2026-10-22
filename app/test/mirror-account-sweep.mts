@@ -182,7 +182,11 @@ it("a host started again under a running shell keeps its mirrors, and a sign-out
 it("a host that starts signed out ends what its daemon brings back", async () => {
   const host = await startHost();
   await host.snapshot([live("b-1")]);
-  assert.deepEqual(host.ended, []);
+  assert.deepEqual(
+    host.ended,
+    [],
+    "the sessions ended before the shell said this device's account",
+  );
   await host.report(null);
   await waitFor(
     () => host.ended.includes("b-1"),
