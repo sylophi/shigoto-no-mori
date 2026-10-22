@@ -68,20 +68,19 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 
 // The readiness probe schedule: a fresh child is advertised only once
 // its hostname actually ROUTES from the edge to the local listener
-// (edge registration plus, for a first-ever tunnel, CNAME
-// propagation). Attempts are spaced on this ladder (capped at the last
-// rung) up to the deadline below. The first attempt waits 5 s for
-// CNAME propagation. A probe earlier than the CNAME reaches the tunnel
-// zone's wildcard record (hub/README.md), whose address the edge
-// can't reach, and only times out. The wildcard is why that costs
-// only the attempt: without it the name would answer NXDOMAIN, which
-// the OS resolver caches for the zone's negative TTL (30 minutes on
-// Cloudflare), during which no probe from this machine could
-// succeed. A child that merely survives a spawn
-// says nothing about routability, and a web client whose ONLY
-// candidate is the tunnel would burn its keeper's backoff rungs
-// against a not-yet-routable advertisement (a transient failure, so it
-// retries forever -- but each wasted rung pushes the next attempt
+// (edge registration plus, for a first-ever tunnel, CNAME propagation).
+// Attempts are spaced on this ladder (capped at the last rung) up to
+// the deadline below. The first attempt waits 5 s for CNAME
+// propagation. A probe earlier than the CNAME reaches the tunnel zone's
+// wildcard record (hub/README.md), whose address the edge can't reach,
+// and only times out. The wildcard is why that costs only the attempt:
+// without it the name would answer NXDOMAIN, which the OS resolver
+// caches for the zone's negative TTL (30 minutes on Cloudflare), during
+// which no probe from this machine could succeed. A child that merely
+// survives a spawn says nothing about routability, and a web client
+// whose ONLY candidate is the tunnel would burn its keeper's backoff
+// rungs against a not-yet-routable advertisement (a transient failure,
+// so it retries forever -- but each wasted rung pushes the next attempt
 // further out).
 export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
   5_000, 8_000,
@@ -99,8 +98,8 @@ export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
 // Past the deadline, the child is treated exactly like one that died:
 // killed and rescheduled on the backoff ladder, and since it never
 // reached readiness the restart re-provisions rather than reusing its
-// possibly-dead token, which repairs a deleted record or a stale
-// ingress. A brand-new hostname routes in seconds (the wildcard
+// possibly-dead token. The re-provision repairs a deleted record or a
+// stale ingress. A brand-new hostname routes in seconds (the wildcard
 // above), so one deadline serves both ladders.
 export const TUNNEL_PROBE_DEADLINE_MS = 60_000;
 

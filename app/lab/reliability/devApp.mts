@@ -138,8 +138,8 @@ export class DevApp {
       1000,
     );
     if (!this.options.needsTunnel) return;
-    // Seconds as a rule, a new hostname's too. The bound leaves room
-    // for the host's own restarts (host/direct/Tunnel.ts).
+    // A tunnel routes in seconds, a new hostname's too. The bound
+    // leaves room for the host's own restarts (host/direct/Tunnel.ts).
     const started = Date.now();
     let told = started;
     await waitFor(

@@ -32,12 +32,11 @@ this laptop: their network is what goes down, and their machine is what
 sleeps.
 
 - **The host (B)**: the dev app as the profile `<worktree>-host`
-  (`../dev-app.md`), kept from one run to the next. Its first run
-  seeds it with one repo and signs it in with `--clone-login` (the
-  plain dev app must be signed in), and then waits for its new tunnel
-  to route. It admits the web client's origin and accepts the desktop
-  device's commands. It advertises its direct
-  listener on a port of the harness's
+  (`../dev-app.md`), kept from one run to the next. Its first run seeds
+  it with one repo and signs it in with `--clone-login` (the plain dev
+  app must be signed in), and then waits for its new tunnel to route. It
+  admits the web client's origin and accepts the desktop device's
+  commands. It advertises its direct listener on a port of the harness's
   (`SHIGOMORI_DIRECT_FRONT_PORT`), where a TCP front passes every
   connection on to the listener, LAN candidates and the tunnel's
   connector alike. Every client's device link to B rides through it.
