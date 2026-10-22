@@ -9,6 +9,7 @@ import { parseNumstat, parseStatus } from "../gitParse.ts";
 import {
   BINARY_SNIFF_BYTES,
   CHANGE_MTIME_STATS,
+  UNTRACKED_COUNT_FILES,
   UNTRACKED_COUNT_LIMIT,
 } from "./documents.ts";
 import type { RunningArea } from "./running.ts";
@@ -22,16 +23,25 @@ export const makeWorkingTree = ({
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const { run } = running;
-    const status = Effect.fn("Git.status")(function* (
+    const status = Effect.fn("Git.status")(function* (worktree: string) {
+      return parseStatus(
+        yield* run(worktree, ["status", "--porcelain=v2", "-z"]),
+      );
+    });
+
+    // Each file of an untracked folder its own entry, whatever the
+    // user's status.showUntrackedFiles. The changes list, every count of
+    // changes and the remove, adopt and apply guards read this one list,
+    // so they agree.
+    const changedFiles = Effect.fn("Git.changedFiles")(function* (
       worktree: string,
-      untracked?: "normal" | "all",
     ) {
       return parseStatus(
         yield* run(worktree, [
           "status",
           "--porcelain=v2",
           "-z",
-          ...(untracked ? [`--untracked-files=${untracked}`] : []),
+          "--untracked-files=all",
         ]),
       );
     });
@@ -77,7 +87,7 @@ export const makeWorkingTree = ({
       // memory, not all of them.
       const [files, tracked] = yield* Effect.all(
         [
-          status(worktree, "all"),
+          changedFiles(worktree),
           // diff-index, which never writes the index back (see the runner),
           // `-M` for the renames porcelain diff finds.
           run(worktree, [
@@ -95,12 +105,18 @@ export const makeWorkingTree = ({
         ],
         { concurrency: 2 },
       );
+      // Past a thousand new files it is a folder nobody meant to commit
+      // (a build, a node_modules), and its rows list without counts
+      // rather than every file being read on every change.
+      const newFiles = files.filter(isUntracked);
       const untracked = new Map(
-        yield* Effect.forEach(files.filter(isUntracked), (file) =>
-          countUntracked(worktree, file.path).pipe(
-            Effect.map((counts) => [file.path, counts] as const),
-          ),
-        ),
+        newFiles.length > UNTRACKED_COUNT_FILES
+          ? []
+          : yield* Effect.forEach(newFiles, (file) =>
+              countUntracked(worktree, file.path).pipe(
+                Effect.map((counts) => [file.path, counts] as const),
+              ),
+            ),
       );
       const counted: ChangedFile[] = [];
       for (const file of files) {
@@ -117,11 +133,15 @@ export const makeWorkingTree = ({
     const workingTreeChanges = Effect.fn("Git.workingTreeChanges")(function* (
       worktree: string,
     ) {
-      const files = yield* status(worktree);
-      // A deleted path fails its stat and an untracked directory stats as
-      // the directory. Either is fine: only the newest hit counts.
+      const files = yield* changedFiles(worktree);
+      // Tracked files first: an unignored folder's new files sort among
+      // them by path, and would take every stat. A deleted path fails
+      // its stat. Fine: only the newest hit counts.
       const times = yield* Effect.forEach(
-        files.slice(0, CHANGE_MTIME_STATS),
+        [
+          ...files.filter((file) => !isUntracked(file)),
+          ...files.filter(isUntracked),
+        ].slice(0, CHANGE_MTIME_STATS),
         (file) =>
           fs.stat(path.join(worktree, file.path)).pipe(
             Effect.map((info) =>
@@ -140,10 +160,10 @@ export const makeWorkingTree = ({
     const changedCount = Effect.fn("Git.changedCount")(function* (
       worktree: string,
     ) {
-      return (yield* status(worktree, "normal")).length;
+      return (yield* changedFiles(worktree)).length;
     });
 
-    return { status, changes, workingTreeChanges, changedCount };
+    return { status, changedFiles, changes, workingTreeChanges, changedCount };
   });
 
 export type WorkingTreeArea = Effect.Success<

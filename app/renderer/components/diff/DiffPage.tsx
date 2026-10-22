@@ -16,7 +16,6 @@ import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import type { DiffChangesControls } from "@shigomori/ui/views/diff/changesControls.ts";
-import { DiffFileIndexView } from "@shigomori/ui/views/diff/DiffFileIndexView.tsx";
 import {
   DiffFileRowView,
   DiffFilesSheetView,
@@ -31,6 +30,7 @@ import {
   isMediaBinary,
   patchEntries,
 } from "@shigomori/ui/lib/patchFiles.ts";
+import { DiffFileIndex } from "./DiffFileIndex";
 import { MediaDiff } from "./MediaDiff";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
@@ -288,7 +288,7 @@ export function DiffPage({
         >
           {sidebarWith(
             showIndex && (
-              <DiffFileIndexView {...indexProps} onSelect={selectFile} />
+              <DiffFileIndex {...indexProps} onSelect={selectFile} />
             ),
           )}
         </SidebarTakeover>
@@ -384,7 +384,7 @@ export function DiffPage({
             title={filesLabel}
           >
             {sidebarWith(
-              <DiffFileIndexView {...indexProps} onSelect={selectFromSheet} />,
+              <DiffFileIndex {...indexProps} onSelect={selectFromSheet} />,
             )}
           </DiffFilesSheetView>
         )

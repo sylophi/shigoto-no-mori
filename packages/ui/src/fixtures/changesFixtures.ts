@@ -71,6 +71,14 @@ const POOL: readonly ChangedFile[] = (
   ] satisfies Omit<ChangedFile, "counts">[]
 ).map((file) => Object.assign(file, { counts: changeOf(file.path).counts }));
 
+// Past the pool, an unignored build folder: new files, each its own
+// row, too many for the host to count.
+const buildFile = (i: number): ChangedFile => ({
+  path: `dist/chunk-${String(i).padStart(5, "0")}.js`,
+  kind: "added",
+  staged: "none",
+});
+
 const byPath = (a: ChangedFile, b: ChangedFile) =>
   a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 
@@ -89,7 +97,10 @@ export function createFakeChanges(
     const count = findWorktree(worktreeId)?.changedCount ?? 0;
     let files = trees.get(worktreeId);
     if (!files || files.length !== count) {
-      files = POOL.slice(0, count).toSorted(byPath);
+      files = [
+        ...POOL.slice(0, count),
+        ...Array.from({ length: count - POOL.length }, (_, i) => buildFile(i)),
+      ].toSorted(byPath);
       trees.set(worktreeId, files);
     }
     return files;
@@ -174,8 +185,7 @@ export function createFakeChanges(
     fileDiff: (worktreeId: string, paths: readonly string[]) => {
       const path = paths.at(-1) ?? "";
       const file = filesOf(worktreeId).find((f) => f.path === path);
-      if (!file) return "";
-      return changeOf(file.path).patch;
+      return (file && CHANGE_PATCHES[file.path]?.patch) ?? "";
     },
   };
 }

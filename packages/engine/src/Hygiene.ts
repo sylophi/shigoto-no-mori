@@ -131,8 +131,8 @@ const make = Effect.gen(function* () {
     );
 
   // Untracked files whatever status.showUntrackedFiles says, asked only
-  // for a row the page would otherwise tick. Unreadable cuts the same
-  // way as dirty.
+  // for a row whose branch is already in the primary. Unreadable cuts
+  // the same way as dirty.
   const hasUntracked = (worktree: string) =>
     git
       .run(worktree, ["ls-files", "--others", "--exclude-standard", "-z"])

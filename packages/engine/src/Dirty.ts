@@ -258,19 +258,17 @@ const make = Effect.gen(function* () {
       });
     }
     if (!options.force) {
-      const status = yield* git
-        .status(worktreePath, "normal")
-        .pipe(Effect.result);
-      if (Result.isFailure(status)) {
+      const changed = yield* git.changedCount(worktreePath).pipe(Effect.result);
+      if (Result.isFailure(changed)) {
         return yield* new ApplyRefused({
           reason: "unreadable",
-          cause: status.failure,
+          cause: changed.failure,
         });
       }
-      if (status.success.length > 0) {
+      if (changed.success > 0) {
         return yield* new ApplyRefused({
           reason: "uncommitted",
-          count: status.success.length,
+          count: changed.success,
         });
       }
     }

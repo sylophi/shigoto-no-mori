@@ -160,8 +160,7 @@ export type RunOptions = {
   // A fetch from a file on this machine (a bundle), which no network can
   // stall, so it has no deadline however long its index takes.
   readonly local?: boolean | undefined;
-  // The output cap, over DEFAULT_MAX_OUTPUT. Only the patch reads
-  // raise it.
+  // The output cap, over DEFAULT_MAX_OUTPUT.
   readonly maxOutputBytes?: number | undefined;
   // A write asked once, not again on a held index.lock, for a caller
   // that checks before each ask (a stash's finish).
@@ -234,7 +233,8 @@ export const SLOTTED_SUBCOMMANDS = new Set([
   "worktree list",
 ]);
 
-// Covers any status, log or ref output by a wide margin.
+// Covers any log or ref output by a wide margin. A status of every new
+// file passes it at an unignored folder of about 150k files.
 export const DEFAULT_MAX_OUTPUT = 10 * 1024 * 1024;
 
 // A patch is the one output whose size the user decides: one
@@ -289,6 +289,8 @@ export const DISCARD_SNAPSHOTS_KEPT = 40;
 // reading the file for.
 export const BINARY_SNIFF_BYTES = 8000;
 export const UNTRACKED_COUNT_LIMIT = 4 * 1024 * 1024;
+// And only while there are this few of them.
+export const UNTRACKED_COUNT_FILES = 1000;
 
 export const encoder = new TextEncoder();
 // A byte order mark git prints first is the content's own (a blob that

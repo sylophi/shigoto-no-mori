@@ -339,8 +339,9 @@ export const RenameWorktreePayloadSchema = Schema.Struct({
   ),
 });
 
-// force false refuses a worktree with changes or untracked files, which
-// the row's count can miss (it honors `status.showUntrackedFiles no`).
+// force false refuses a worktree with changes or untracked files, read
+// as it runs rather than off the row's count, which an edit since the
+// list loaded leaves behind, and which reads none when its status fails.
 // Absent = forced.
 export const ConvertExternalPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,

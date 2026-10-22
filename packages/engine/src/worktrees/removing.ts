@@ -65,9 +65,8 @@ export const makeRemoving = ({
     const { projectSettings } = listing;
     const { scriptContext, runScript, portPoolActive } = creating;
 
-    // Fails closed on a dirty or unreadable worktree, untracked files
-    // counted whatever the user's setting, since the next step destroys
-    // the folder.
+    // Fails closed on a dirty or unreadable worktree, since the next
+    // step destroys the folder.
     const requireClean = (
       worktree: WorktreeIdentity,
       force: boolean,

@@ -21,8 +21,9 @@ export const WorktreeHygieneSchema = Schema.Struct({
   // Removal would delete the local default branch, which nothing else
   // can restore.
   holdsPrimaryBranch: Schema.Boolean,
-  // Untracked files `changedCount` missed: under
-  // status.showUntrackedFiles=no a tree of new files reports clean.
+  // Untracked files, asked only for a row whose branch is already in
+  // the primary, by a check of its own that reads true when it can't
+  // tell.
   untracked: Schema.Boolean,
 });
 export type WorktreeHygiene = typeof WorktreeHygieneSchema.Type;
