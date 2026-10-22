@@ -50,10 +50,8 @@ export function rememberVisibilityForRestart(): void {
 
 // A logout or reboot the login item brings the app back from. Without
 // a login item nothing does, and a hidden or minimized start on the
-// user's own launch later would be wrong. macOS only: on Linux a
-// shutdown listener takes a systemd inhibitor lock.
+// user's own launch later would be wrong.
 export function rememberVisibilityAtShutdown(): void {
-  if (process.platform !== "darwin") return;
   powerMonitor.on("shutdown", () => {
     if (app.getLoginItemSettings().openAtLogin) rememberVisibilityForRestart();
   });

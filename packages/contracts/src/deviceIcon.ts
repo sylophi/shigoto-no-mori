@@ -7,10 +7,11 @@
 // renderer surface, so the set cannot drift between them. Pure: no
 // node, no DOM.
 //
-// Two families. The shapes are what a device can detect itself to be,
-// and what it reads as until its owner picks. The marks are picked
-// only: a leaf, a cat, a rocket, things that tell two laptops apart at
-// a glance, which a shape never can.
+// Two families. The shapes say what a device is: a Mac or a browser
+// detects its own (laptop, desktop or mini; phone, tablet or browser)
+// and reads as it until its owner picks, and a server is picked. The
+// marks are picked only: a leaf, a cat, a rocket, things that tell two
+// laptops apart at a glance, which a shape never can.
 import * as Schema from "effect/Schema";
 import { WEB_PLATFORM } from "./platform.ts";
 
@@ -109,13 +110,13 @@ export function isDeviceIcon(value: unknown): value is DeviceIcon {
 // The shape a machine is drawn as when nothing better is known: the one
 // that claims the least. The one literal, so every fallback (an id the
 // registry no longer knows, a placeholder before the status lands, an
-// icon this build does not know) lands on the same glyph.
+// icon this build does not know, a Mac the detector can't place) lands
+// on the same glyph.
 export const MACHINE_FALLBACK_ICON: DeviceShape = "desktop";
 
-// The shape a device of this platform is drawn as when its icon cannot
-// be: the detector found nothing better, or the registry carries an
-// icon this build does not know (a newer build's pick). A browser is
-// a browser, and a machine is the fallback shape.
+// The shape a device of this platform is drawn as when the registry
+// carries an icon this build does not know (a newer build's pick). A
+// browser is a browser, and a machine is the fallback shape.
 export function fallbackDeviceIcon(platform: string): DeviceShape {
   return platform === WEB_PLATFORM ? "browser" : MACHINE_FALLBACK_ICON;
 }

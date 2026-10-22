@@ -66,11 +66,9 @@ if (asPeer) {
 } else {
   // `pnpm start` is a shell chain, which passes no signal on to the
   // step that is running, so a stop goes to the whole tree under pnpm.
-  // Windows cannot exec pnpm's .cmd shim without a shell.
   const child = spawn("pnpm", ["start", "--profile", ...argv], {
     cwd: appRoot,
     stdio: "inherit",
-    shell: process.platform === "win32",
   });
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {

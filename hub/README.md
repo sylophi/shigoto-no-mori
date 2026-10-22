@@ -376,15 +376,13 @@ curl -X POST https://api.clerk.com/v1/redirect_urls \
   -d '{"url": "shigomori://app/"}'
 ```
 
-Social (browser-redirect) sign-in works in `pnpm start` on macOS: the
-dev launcher (scripts/lib/devBundle.mts) clones Electron.app into a
+Social (browser-redirect) sign-in works in `pnpm start`: the dev
+launcher (scripts/lib/devBundle.mts) clones Electron.app into a
 gitignored per-worktree bundle that claims `shigomori-dev://` with
 LaunchServices, and runs the dev app from it, so the redirect
 deep-links back to the running dev process. With several dev worktrees
-the most recently launched one owns the scheme. On Linux and Windows
-dev stays unbundled and social sign-in still needs a packaged build
-(email-code sign-in works everywhere). The dev bundle registers its
-own plist, so the packaged app's `shigomori://` registration
+the most recently launched one owns the scheme. The dev bundle
+registers its own plist, so the packaged app's `shigomori://` registration
 (forge.config.ts protocols) is not exercised by dev sign-in: verify
 social providers against a packaged build before a release that
 touches it.

@@ -75,7 +75,6 @@ import { shortHostname } from "../main/core/account/defaultDeviceName.ts";
 import {
   appleProductNameOf,
   deviceShapeFromAppleModel,
-  deviceShapeFromDmi,
 } from "../main/core/account/defaultDeviceIcon.ts";
 import {
   type AccountStatus,
@@ -188,12 +187,6 @@ const ownRowListing = (icon: DeviceIcon, name = "d"): DeviceInfo[] => [
   { ...DEVICE, deviceId: "peer-uuid", platform: "linux", icon: "server" },
   { ...DEVICE, icon, name },
 ];
-
-const dmi = (
-  chassisType: string,
-  vendor: string | null = null,
-  product: string | null = null,
-) => deviceShapeFromDmi({ chassisType, vendor, product });
 
 it("config: isConfigured is false until every required field is set", () => {
   assert.equal(isConfigured(CONFIG), true);
@@ -1220,7 +1213,7 @@ it("enroll flow: a device with a 2.x record enrolls again with a key and keeps i
   assert.equal(store.readWithoutKey(), null);
 });
 
-it("device icon detection: Apple product names and model identifiers, DMI chassis codes, virtual machines", () => {
+it("device icon detection: Apple product names and model identifiers", () => {
   assert.equal(deviceShapeFromAppleModel("MacBook Pro"), "laptop");
   assert.equal(deviceShapeFromAppleModel("MacBookAir10,1"), "laptop");
   assert.equal(deviceShapeFromAppleModel("Mac mini (2024)"), "mini");
@@ -1237,13 +1230,6 @@ it("device icon detection: Apple product names and model identifiers, DMI chassi
     "Mac mini (2024)",
   );
   assert.equal(appleProductNameOf("no product node here"), null);
-  assert.equal(dmi("10", "LENOVO", "20XW"), "laptop");
-  assert.equal(dmi("3"), "desktop");
-  assert.equal(dmi("23"), "server");
-  assert.equal(dmi("35"), "mini");
-  assert.equal(dmi("2"), null, "an Unknown chassis is no answer");
-  assert.equal(dmi("10", "QEMU", "Standard PC"), "server");
-  assert.equal(dmi("9", "Apple Inc.", "MacBookPro18,3"), "laptop");
 });
 
 it("sign-out flow: signOutDevice revokes THIS device then clears, and still clears (reporting the failure) when the revoke fails", async () => {

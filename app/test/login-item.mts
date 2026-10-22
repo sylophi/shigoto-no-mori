@@ -35,11 +35,6 @@ vi.mock("electron", () => ({
   BrowserWindow: {},
   powerMonitor: {},
 }));
-// A platform with login items, wherever the proof runs.
-vi.mock("node:os", async (actual) => ({
-  ...(await actual<typeof import("node:os")>()),
-  platform: () => "darwin",
-}));
 vi.mock("../main/hostProcess", () => ({
   host: () => ({ account: () => Effect.void }),
   hostDeviceId: async () => "login-item-device",

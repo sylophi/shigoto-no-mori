@@ -10,9 +10,9 @@
 //
 // On a Mac, a missing prebuild for this machine is an error, not a
 // skip: the script console can't spawn anything without it, and that
-// is far easier to read here than at the first run. Elsewhere (a Linux
-// CI box running lint) node-pty ships nothing and the app isn't built,
-// so it is only a note.
+// is far easier to read here than at the first run. Elsewhere (the hub
+// job's install on Linux CI) node-pty ships nothing and the app isn't
+// built, so it is only a note.
 
 import { chmod, readdir, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";

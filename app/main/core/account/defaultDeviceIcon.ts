@@ -1,14 +1,11 @@
-// What kind of machine a desktop device is, as far as the OS will say,
-// for the icon it enrolls under before anyone picks one. Pure node (os
-// and a child process, a few sysfs reads), electron-free like the rest
-// of main/core/account/ so the account check script drives the
-// mapping half. Every probe may fail, and a failure reads as the
-// platform fallback rather than an error: the icon is cosmetic, and a
-// status read must never break on it.
-import { readFile } from "node:fs/promises";
-import { platform } from "node:os";
+// What kind of Mac a desktop device is, as far as macOS will say, for
+// the icon it enrolls under before anyone picks one. Pure node (a child
+// process), electron-free like the rest of main/core/account/ so the
+// account check script drives the mapping half. Every probe may fail,
+// and a failure reads as the fallback shape rather than an error: the
+// icon is cosmetic, and a status read must never break on it.
 import {
-  fallbackDeviceIcon,
+  MACHINE_FALLBACK_ICON,
   type DeviceShape,
 } from "@shigomori/contracts/deviceIcon";
 import { execFile } from "node:child_process";
@@ -32,84 +29,6 @@ export function deviceShapeFromAppleModel(model: string): DeviceShape | null {
     return "desktop";
   }
   return null;
-}
-
-// SMBIOS chassis types (System Management BIOS spec, table 17), as
-// /sys/class/dmi/id/chassis_type reports them. Only the codes that say
-// a shape are listed. The rest ("Other", "Unknown", docking stations)
-// fall through.
-const DMI_CHASSIS_SHAPE: Record<string, DeviceShape> = {
-  "3": "desktop", // Desktop
-  "4": "desktop", // Low profile desktop
-  "5": "desktop", // Pizza box
-  "6": "desktop", // Mini tower
-  "7": "desktop", // Tower
-  "8": "laptop", // Portable
-  "9": "laptop", // Laptop
-  "10": "laptop", // Notebook
-  "11": "tablet", // Hand held
-  "13": "desktop", // All in one
-  "14": "laptop", // Sub notebook
-  "15": "mini", // Space-saving
-  "16": "mini", // Lunch box
-  "17": "server", // Main server chassis
-  "22": "server", // Expansion chassis
-  "23": "server", // Rack mount chassis
-  "24": "server", // Sealed-case PC
-  "25": "server", // Multi-system chassis
-  "30": "tablet", // Tablet
-  "31": "laptop", // Convertible
-  "32": "laptop", // Detachable
-  "34": "mini", // Embedded PC
-  "35": "mini", // Mini PC
-  "36": "mini", // Stick PC
-};
-
-// Vendor and product strings a hypervisor or a cloud host writes into
-// the DMI tables. A virtual machine has no shape of its own: it is a
-// box somewhere, which is what "server" says.
-const VIRTUAL_MARKERS = [
-  "qemu",
-  "kvm",
-  "vmware",
-  "virtualbox",
-  "xen",
-  "hyper-v",
-  "parallels",
-  "amazon ec2",
-  "google compute engine",
-  "digitalocean",
-  "hetzner",
-  "linode",
-  "openstack",
-  "virtual machine",
-];
-
-export function deviceShapeFromDmi(dmi: {
-  chassisType: string | null;
-  vendor: string | null;
-  product: string | null;
-}): DeviceShape | null {
-  const vendorProduct =
-    `${dmi.vendor ?? ""} ${dmi.product ?? ""}`.toLowerCase();
-  if (VIRTUAL_MARKERS.some((marker) => vendorProduct.includes(marker))) {
-    return "server";
-  }
-  // A Mac running Linux (Asahi) still reports its Apple product name.
-  const apple =
-    dmi.product === null ? null : deviceShapeFromAppleModel(dmi.product);
-  if (apple !== null) return apple;
-  const code = dmi.chassisType?.trim() ?? "";
-  return DMI_CHASSIS_SHAPE[code] ?? null;
-}
-
-async function readTrimmed(path: string): Promise<string | null> {
-  try {
-    const text = (await readFile(path, "utf8")).trim();
-    return text === "" ? null : text;
-  } catch {
-    return null;
-  }
 }
 
 // The product name the "About this Mac" window shows, from the
@@ -144,33 +63,8 @@ async function macShape(): Promise<DeviceShape | null> {
   }
 }
 
-async function linuxShape(): Promise<DeviceShape | null> {
-  // WSL has no chassis, and a Windows machine's shape is unknown from
-  // inside it: leave it to the fallback.
-  const release = await readTrimmed("/proc/sys/kernel/osrelease");
-  if (release?.toLowerCase().includes("microsoft")) return null;
-  const [chassisType, vendor, product] = await Promise.all([
-    readTrimmed("/sys/class/dmi/id/chassis_type"),
-    readTrimmed("/sys/class/dmi/id/sys_vendor"),
-    readTrimmed("/sys/class/dmi/id/product_name"),
-  ]);
-  return deviceShapeFromDmi({ chassisType, vendor, product });
-}
-
 // The icon this desktop device detects for itself. Never rejects:
-// an unreadable probe lands on the platform fallback.
+// an unreadable probe lands on the fallback shape.
 export async function detectDesktopDeviceShape(): Promise<DeviceShape> {
-  const fallback = fallbackDeviceIcon(platform());
-  try {
-    switch (platform()) {
-      case "darwin":
-        return (await macShape()) ?? fallback;
-      case "linux":
-        return (await linuxShape()) ?? fallback;
-      default:
-        return fallback;
-    }
-  } catch {
-    return fallback;
-  }
+  return (await macShape()) ?? MACHINE_FALLBACK_ICON;
 }

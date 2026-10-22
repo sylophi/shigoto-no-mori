@@ -212,12 +212,7 @@ export function DevicesPageScene() {
                     pending={false}
                     onChange={noop}
                   />
-                  <KeepReachableToggleView
-                    on
-                    pending={false}
-                    onChange={noop}
-                    launchAtLogin
-                  />
+                  <KeepReachableToggleView on pending={false} onChange={noop} />
                 </ExposureSwitchesView>
               ),
             }),
@@ -324,7 +319,6 @@ export function DevicesPartsScene() {
                       on={false}
                       pending={false}
                       onChange={noop}
-                      launchAtLogin={false}
                     />
                   </ExposureSwitchesView>
                 ),
