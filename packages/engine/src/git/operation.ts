@@ -137,7 +137,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
       });
 
     // The branch a rebase replays, which git keeps in its state dir while
-    // HEAD is detached for the replay.
+    // HEAD is detached for the replay. Null when none is under way.
     const rebasingBranch = (dir: string) =>
       Effect.gen(function* () {
         const names = yield* Effect.forEach(
@@ -331,6 +331,7 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
 
     return {
       gitDir,
+      rebasingBranch,
       conflictedPaths,
       hasStagedChanges,
       operationInProgress,

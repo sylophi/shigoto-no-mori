@@ -648,6 +648,9 @@ export class Git extends Context.Service<
     readonly hasStagedChanges: (
       worktree: string,
     ) => Effect.Effect<boolean, GitError>;
+    // The branch a rebase replays in the worktree whose git dir this
+    // is, or null.
+    readonly rebasingBranch: (gitDir: string) => Effect.Effect<string | null>;
     // The operation under way in the worktree whose git dir this is
     // ("merge", "rebase", "cherry-pick", ...), or null.
     readonly operationInProgress: (

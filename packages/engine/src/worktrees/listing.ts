@@ -188,6 +188,19 @@ export const makeListing = Effect.gen(function* () {
     return entries;
   });
 
+  // Read off the checkout's files, with no git: the primary's git dir
+  // is its .git, a linked one's the admin dir its .git names.
+  const rebasingBranchOf = (worktreePath: string) =>
+    git
+      .adminDirOf(worktreePath)
+      .pipe(
+        Effect.flatMap((admin) =>
+          git.rebasingBranch(
+            Option.getOrElse(admin, () => path.join(worktreePath, ".git")),
+          ),
+        ),
+      );
+
   const identities = Effect.fn("Worktrees.identities")(function* (
     project: RegisteredProject,
   ) {
@@ -198,6 +211,12 @@ export const makeListing = Effect.gen(function* () {
     const found: WorktreeIdentity[] = [];
     for (const entry of entries) {
       if (entry.bare) continue;
+      // git detaches HEAD to replay a rebase, but the branch is still
+      // the checkout's (git won't check it out anywhere else), and so is
+      // its name.
+      const rebasing = entry.detached
+        ? yield* rebasingBranchOf(entry.path)
+        : null;
       const isPrimary = entry.path === primaryPath;
       const isExternal = !isManagedPath(entry.path, bases);
       // The primary keeps its folder's name.
@@ -209,11 +228,11 @@ export const makeListing = Effect.gen(function* () {
         id: worktreeIdFromPath(entry.path),
         projectId: project.id,
         name,
-        branch: deriveBranch(entry),
+        branch: rebasing ?? deriveBranch(entry),
         path: entry.path,
         isPrimary,
         isExternal,
-        detached: entry.detached,
+        detached: entry.detached && rebasing === null,
         locked: entry.locked,
       });
     }

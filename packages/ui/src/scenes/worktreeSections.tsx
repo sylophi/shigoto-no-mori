@@ -517,6 +517,24 @@ export function WorktreeSectionsPartsScene({
             onResolve={noop}
           />
         </Part>
+        <Part label="Stopped, in the Git page's narrowest sidebar">
+          <div className="w-56">
+            <OperationBannerView
+              state={{
+                operation: "merge",
+                continuable: true,
+                conflicted: 0,
+                rebasing: null,
+              }}
+              onGitPage
+              canCommand
+              busy={false}
+              onAbort={noop}
+              onContinue={noop}
+              onResolve={noop}
+            />
+          </div>
+        </Part>
         <Part label="Sync">
           <span className="flex flex-wrap items-center gap-2">
             <HeldSyncView

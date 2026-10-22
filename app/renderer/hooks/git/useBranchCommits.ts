@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type {
   BranchHistory,
   CommitSummary,
@@ -58,5 +58,36 @@ export function useBranchCommits(
       return allPages.reduce((sum, page) => sum + page.length, 0);
     },
     meta: { errorTitle: "Couldn't load the history" },
+  });
+}
+
+// One commit's row, read by its hash: the first of `git log` from it.
+// For a commit none of the page's lists holds (a search's, one HEAD
+// moved away from, a deep link's).
+export function useCommitSummary(
+  projectId: string,
+  worktreeId: string | undefined,
+  hash: string,
+  enabled: boolean,
+) {
+  const { api, keys } = useHostScope();
+  return useQuery({
+    queryKey: keys.commitSummary(projectId, worktreeId, hash),
+    queryFn: async ({ signal }) => {
+      const [commit] = await api.run(
+        api.worktrees.listCommits({
+          projectId,
+          worktreeId: worktreeId ?? "",
+          skip: 0,
+          count: 1,
+          from: hash,
+        }),
+        { signal },
+      );
+      return commit ?? null;
+    },
+    enabled: enabled && worktreeId !== undefined,
+    staleTime: Infinity,
+    meta: { errorTitle: "Couldn't read the commit" },
   });
 }
