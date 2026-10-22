@@ -1,5 +1,11 @@
 [
   {
+    "file": "app/renderer/components/diff/DiffFileIndex.tsx",
+    "function": "DiffFileIndex",
+    "category": "IncompatibleLibrary",
+    "reason": "Use of incompatible library"
+  },
+  {
     "file": "app/renderer/components/sidebar/SidebarList.tsx",
     "function": "SidebarList",
     "category": "IncompatibleLibrary",

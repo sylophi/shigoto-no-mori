@@ -14,20 +14,18 @@
 // covers: app/renderer/components/diff/**
 // covers: packages/ui/src/views/diff/**
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import { it } from "vitest";
 import {
-  appRoot,
-  freeLoopbackPort,
   sandboxGit,
   scrubbedGitEnv,
   scrubProcessGitEnv,
   tempDir,
   waitFor,
 } from "./lib/checkKit.mts";
+import { openFakeHost, startFakeHost } from "./lib/fakeHostPage.mts";
 import { engineGit } from "./lib/gitPromises.mts";
 import { trackTest } from "./lib/vitestKit.mts";
 
@@ -76,55 +74,6 @@ function seedRepo(): { repo: string; head: string } {
   write("src/util/board/board.cpp", cppLines(8, "cell") + cppLines(16, "row"));
   git(repo, "commit", "-q", "-am", "Rewrite the shop's prices");
   return { repo, head: git(repo, "rev-parse", "HEAD").trim() };
-}
-
-// The desktop fake host (app/lab/fake-host), on a port of its own.
-async function startFakeHost(): Promise<string> {
-  const port = await freeLoopbackPort();
-  const server = spawn(
-    join(appRoot, "node_modules/.bin/vite"),
-    ["--config", "lab/fake-host/vite.config.ts", "--host", "127.0.0.1"],
-    {
-      cwd: appRoot,
-      env: { ...process.env, FAKE_HOST_PORT: String(port) },
-      stdio: "ignore",
-    },
-  );
-  trackTest(() => {
-    server.kill();
-  });
-  const url = `http://127.0.0.1:${port}`;
-  await waitFor(
-    () =>
-      fetch(url).then(
-        (r) => r.ok,
-        () => false,
-      ),
-    "the fake host's vite server",
-    60_000,
-  );
-  return url;
-}
-
-// A cold vite transforms the whole renderer on the first load, which
-// takes a CI runner a minute or more, can answer 504 while it bundles
-// dependencies, and reloads the page once they're bundled.
-async function openFakeHost(page: Page, url: string): Promise<void> {
-  const deadline = Date.now() + 180_000;
-  for (;;) {
-    try {
-      await page.goto(`${url}/?theme=dark`, {
-        waitUntil: "commit",
-        timeout: 60_000,
-      });
-      await page.waitForFunction(() => window.fakeHost?.navigate, null, {
-        timeout: Math.max(1, Math.min(60_000, deadline - Date.now())),
-      });
-      return;
-    } catch (error) {
-      if (Date.now() >= deadline) throw error;
-    }
-  }
 }
 
 type RowFault = { file: string; fault: string };

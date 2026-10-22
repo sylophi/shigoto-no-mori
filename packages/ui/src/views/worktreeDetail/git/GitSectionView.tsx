@@ -78,7 +78,9 @@ export function GitSectionView({
           label="Changes"
           onOpen={nav.toDiff}
           trailing={
-            files.length > 0 && (
+            // With not one file counted (binaries, or more new files than
+            // the host counts) there is no total, not "+0 −0".
+            files.some((file) => file.counts) && (
               <DiffStats
                 additions={sum("additions")}
                 deletions={sum("deletions")}

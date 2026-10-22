@@ -235,8 +235,8 @@ local one. A landing needs the repo on the device it lands on: the
 clone a move or mirror makes first on a device without it isn't
 posed, so that one fails at the landing. The changes page keeps a
 working tree per worktree (`changesFixtures.ts`, seeded from its
-`changedCount`), which ticking, committing, discarding and pushing
-move.
+`changedCount`, past eight files an unignored build folder's new ones),
+which ticking, committing, discarding and pushing move.
 
 The app downloads the villager faces and profiles from Nookipedia when
 its user asks. The fake host serves its own copy from

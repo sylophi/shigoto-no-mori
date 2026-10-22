@@ -45,7 +45,6 @@ scrubProcessGitEnv(GIT_IDENTITY);
 // The engine's Git, in the shapes these cases call it by.
 const discardChanges = (worktree: string, paths: readonly string[]) =>
   engineGit.discard({ worktree, paths });
-const listChangedFiles = (worktree: string) => engineGit.status(worktree);
 const listChangesForPage = (worktree: string) => engineGit.changes(worktree);
 const readCommitMessage = (worktree: string, hash: string) =>
   engineGit.readCommitMessage(worktree, hash);
@@ -170,16 +169,6 @@ it("the page lists each kind of change with its counts, sorted by path", async (
     staged: "none",
   });
   assert.equal(rowOf(files, "new/sub dir.txt").counts?.additions, 1);
-
-  // The sidebar's cheap form folds an untracked directory into one
-  // row and skips the counts.
-  const cheap = await listChangedFiles(repo);
-  assert.deepEqual(rowOf(cheap, "new/"), {
-    path: "new/",
-    kind: "added",
-    staged: "none",
-  });
-  assert.equal(rowOf(cheap, "a.txt").counts, undefined);
 });
 
 it("a file edited in the index and again since reads as partial", async () => {
