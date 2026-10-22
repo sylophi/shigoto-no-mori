@@ -88,7 +88,7 @@ if (
   process.exit(2);
 }
 const bundle: string = argument;
-// The launches' temp files, the app's own with them, in a folder of
+// The launches' temp files, the builds' own with them, in a folder of
 // this run's (../../testTemp.mts), and their git kept off this
 // repository and this machine's config (../../gitIsolation.ts).
 ownTestTemp("smoke");

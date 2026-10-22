@@ -84,7 +84,10 @@ export APPLE_SIGNING_IDENTITY="<the Developer ID Application identity>"
    The first prints two lines, `PATH=/usr/bin:/bin:/usr/sbin:/sbin` and
    `TMPDIR=` at the folder the second prints. An app left on the smoke's
    TMPDIR, a folder the smoke deletes, fails every temporary folder it
-   makes.
+   makes. A smoke run from a checkout whose `smoke-app.mts` has no
+   `openInstalled` (step 3's other-protocol case) leaves it so, which is
+   no failure of the candidate's: quit the app, open it from the Dock,
+   and read it again.
 
 The smoke refuses before the app's first check, since `updater.json`
 names the running app only from then, and leaves nothing behind. It
