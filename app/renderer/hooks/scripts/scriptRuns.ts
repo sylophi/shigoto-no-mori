@@ -595,7 +595,7 @@ export class ScriptRuns {
   }
 }
 
-export function exitSentinel(code: number | null): string {
+function exitSentinel(code: number | null): string {
   // Dim divider so users can see where the run ended even if the
   // program's last line didn't end with a newline.
   if (code === null) return "\r\n\x1b[2m── stopped ──\x1b[0m\r\n";

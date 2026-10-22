@@ -23,9 +23,8 @@ export function attachTerminal(
   api: Pick<HostApi, "view" | "listen">,
   terminalId: string,
   screen: TerminalScreen,
-  // The shell exited (its code, null for a close), or the
-  // terminal is gone from the host.
-  onEnd: (code: number | null) => void,
+  // The shell ended, or the terminal is gone from the host.
+  onEnd: () => void,
 ): () => void {
   let after: { incarnation: string; seq: number } | undefined;
   let stopped = false;
@@ -62,7 +61,7 @@ export function attachTerminal(
             return;
           case "exit":
             stopped = true;
-            onEnd(event.code);
+            onEnd();
             return;
         }
       },
@@ -70,7 +69,7 @@ export function attachTerminal(
         if (mine !== current || stopped) return;
         if (failure === undefined || isUnknownTerminalError(failure)) {
           stopped = true;
-          onEnd(null);
+          onEnd();
           return;
         }
         const wait = backoffDelayMs(RETRY_DELAYS_MS, attempt);
