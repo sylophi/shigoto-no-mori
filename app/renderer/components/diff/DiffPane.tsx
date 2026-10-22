@@ -113,7 +113,8 @@ export function DiffPane({
   // Where the reader is, kept as the view scrolls: the file being read
   // and how far into it the view is. A new layout or fold places every
   // file anew, by sizes the files above haven't been drawn at, and the
-  // view goes back to the same place in the same file.
+  // view goes back to the same place in the same file, or to its top
+  // as a jump lands when it's now shorter than that.
   const place = useRef<{ index: number; into: number }>(undefined);
   useEffect(() => {
     const view = scrollRef.current;
@@ -133,8 +134,14 @@ export function DiffPane({
   const returnToPlace = useEffectEvent(() => {
     const was = place.current;
     const item = was && fileWindow.measurementsCache[was.index];
-    if (item)
-      fileWindow.scrollToOffset(item.start + Math.min(was.into, item.size));
+    if (!item) return;
+    const to =
+      was.into < item.size ? item.start + was.into : item.start - FILE_GAP;
+    fileWindow.scrollToOffset(to);
+    // The window reads the view's offset back only when the scroll
+    // event comes. Until then the files measured below (remeasure) are
+    // placed against this one, not the offset left behind.
+    fileWindow.scrollOffset = to;
   });
   useLayoutEffect(() => {
     returnToPlace();
