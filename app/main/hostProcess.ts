@@ -407,6 +407,10 @@ export const hostBusy = (quitAfter: boolean) =>
   Effect.suspend(() =>
     busy.ask(child, busyWithin(host().busy(), BUSY_DEADLINE), quitAfter),
   );
+// The same, asked again while the prompt it raised is up: none when the
+// host doesn't answer in time, and the first ask's kill left as it is.
+export const hostBusyAgain = () =>
+  Effect.suspend(() => busyWithin(host().busy(), BUSY_DEADLINE));
 
 export function hostAddress(): Promise<Address> {
   return address.promise.then(({ port, token, deviceId }) => ({

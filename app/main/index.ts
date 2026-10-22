@@ -30,7 +30,7 @@ import { captureConsoleToFile } from "./electron/logFile";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import { registerShellHandlers } from "./ipc/handlers";
 import { buildAppMenu } from "./electron/menu";
-import { type HostFailure, hostBusy } from "./hostProcess";
+import type { HostFailure } from "./hostProcess";
 import { installShellPorts } from "./ipc/register";
 import {
   dataDir,
@@ -430,7 +430,7 @@ app.on("before-quit", (event) => {
   }
   if (askingToQuit) return;
   askingToQuit = true;
-  void confirmBusyAction("quit", () => Effect.runPromise(hostBusy(true)))
+  void confirmBusyAction("quit")
     .catch((error: unknown) => {
       // The ask reads an unanswering host as idle, so what lands here
       // is a defect building the ask (the host's client, or its link)

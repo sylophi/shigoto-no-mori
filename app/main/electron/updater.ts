@@ -337,12 +337,7 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
     );
     if (refusal !== null) throw new Error(refusal);
   } else {
-    if (
-      !(await confirmBusyAction("restart", () =>
-        Effect.runPromise(hostBusy(true)),
-      ))
-    )
-      return "declined";
+    if (!(await confirmBusyAction("restart"))) return "declined";
     // The dialog can sit open arbitrarily long. Re-check that another
     // path didn't start the install during it, and that the staged
     // update still exists -- a terminal run whose feed answered 204

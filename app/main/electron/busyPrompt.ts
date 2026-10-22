@@ -3,6 +3,8 @@
 // counts come from the host (its session's `busy`), read again while the
 // prompt is up (core/host/busyPrompt.ts), the words from shared/busy.ts.
 import { BrowserWindow, dialog } from "electron";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import {
   BUSY_COPY,
   type BusyAction,
@@ -10,6 +12,7 @@ import {
   busyDetail,
 } from "@shared/busy";
 import { followBusy } from "../core/host/busyPrompt";
+import { hostBusy, hostBusyAgain } from "../hostProcess";
 
 function parentWindow(): BrowserWindow | undefined {
   const focused = BrowserWindow.getFocusedWindow();
@@ -22,13 +25,13 @@ function parentWindow(): BrowserWindow | undefined {
 
 // Whether to go ahead: at once when nothing is running, else as the
 // user answers, or once what was running is done.
-export function confirmBusyAction(
-  action: BusyAction,
-  read: () => Promise<BusyOperations>,
-): Promise<boolean> {
+export function confirmBusyAction(action: BusyAction): Promise<boolean> {
   const copy = BUSY_COPY[action];
+  const words = (busy: BusyOperations) => busyDetail(busy, action);
   return followBusy({
-    detail: async () => busyDetail(await read(), action),
+    detail: async () => words(await Effect.runPromise(hostBusy(true))),
+    again: async () =>
+      Option.map(await Effect.runPromise(hostBusyAgain()), words),
     show: async (detail, signal) => {
       const opts = {
         type: "warning" as const,

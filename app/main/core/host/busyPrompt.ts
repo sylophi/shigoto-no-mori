@@ -3,9 +3,14 @@
 // words change the prompt is taken down and asked again in the new ones.
 // With nothing left to interrupt it goes ahead, since the person already
 // asked to quit or restart.
+import * as Option from "effect/Option";
+
 type Following = {
   // The prompt's words for what is under way now, null for nothing.
   readonly detail: () => Promise<string | null>;
+  // The same, asked again while the prompt is up: none when the host
+  // didn't answer in time, which leaves the prompt as it is.
+  readonly again: () => Promise<Option.Option<string | null>>;
   // The prompt, true to go ahead. The signal takes it down.
   readonly show: (detail: string, signal: AbortSignal) => Promise<boolean>;
   readonly every: number;
@@ -24,22 +29,26 @@ async function ask(options: Following, shown: string): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const poll = () => {
     timer = setTimeout(() => {
-      // A read that fails leaves the prompt as it is.
+      // A read that fails leaves the prompt as it is too.
       void options
-        .detail()
-        .catch(() => shown)
+        .again()
+        .catch(() => Option.none<string | null>())
         .then((now) => {
           if (answered) return;
-          if (now === shown) return poll();
-          next = now;
+          if (Option.isNone(now) || now.value === shown) return poll();
+          next = now.value;
           changed.abort();
         });
     }, options.every);
   };
   poll();
-  const proceed = await options.show(shown, changed.signal);
-  answered = true;
-  clearTimeout(timer);
+  let proceed: boolean;
+  try {
+    proceed = await options.show(shown, changed.signal);
+  } finally {
+    answered = true;
+    clearTimeout(timer);
+  }
   if (!changed.signal.aborted) return proceed;
   return next === null ? true : ask(options, next);
 }
