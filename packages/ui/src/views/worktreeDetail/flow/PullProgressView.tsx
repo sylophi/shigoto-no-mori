@@ -198,7 +198,10 @@ export function PullProgressView({
   // a script (skipped with the switch off), the re-apply always.
   const rows: Row[] = [
     ...rowIf(target.clone !== undefined, {
-      title: `Clone ${projectName} to ${thisDeviceLabel}`,
+      title:
+        target.clone?.found === "same-repo"
+          ? `Add ${projectName} on ${thisDeviceLabel}`
+          : `Clone ${projectName} to ${thisDeviceLabel}`,
       detail: cloneCaption ?? (
         <span className="font-mono">{target.clone?.dest}</span>
       ),

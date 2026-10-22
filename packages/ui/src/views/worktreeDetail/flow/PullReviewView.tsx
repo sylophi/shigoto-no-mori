@@ -488,7 +488,9 @@ export function LandingLinesView({
 }
 
 // No checkout of the repo there: it lands in a clone made first,
-// whose folder can be changed.
+// whose folder can be changed, or in the checkout of it already at that
+// folder. A folder something else holds tints the path, and the footer
+// says why.
 export function CloneLinesView({
   clone,
   title,
@@ -510,15 +512,27 @@ export function CloneLinesView({
         <PathSpan
           path={clone.dest}
           home={null}
-          className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
+          className={cn(
+            "min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground",
+            clone.found === "taken" && "text-amber-700 dark:text-amber-300",
+          )}
         />
         <Button variant="outline" size="xs" onClick={onChange}>
           Change
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        No checkout of {clone.projectName} there yet, so it&rsquo;s cloned
-        first.
+        {clone.found === "same-repo" ? (
+          <>
+            A checkout of {clone.projectName} is already there, so the worktree
+            lands in it.
+          </>
+        ) : (
+          <>
+            No checkout of {clone.projectName} there yet, so it&rsquo;s cloned
+            first.
+          </>
+        )}
       </p>
       {picker}
     </>

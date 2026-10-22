@@ -1196,6 +1196,13 @@
     "gated": true,
     "grant": "changeCode"
   },
+  "sync:cloneDestination": {
+    "kind": "invoke",
+    "scope": "host",
+    "remote": true,
+    "gated": true,
+    "grant": "browseFiles"
+  },
   "sync:hasCommits": {
     "kind": "invoke",
     "scope": "host",

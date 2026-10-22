@@ -1147,11 +1147,11 @@ it("mirror: a describe on a device whose clock is behind its peer's still outran
   }
 });
 
-it("pull round trip (dirty): no branch bundle for a locally-known tip, and the capture is re-keyed, applied unstaged, and consumed", async () => {
+it("pull round trip (dirty): no branch bundle for a locally-known tip, and the capture is re-keyed, applied, and consumed", async () => {
   // (7) Dirty + tip-already-local path: scratch sits at the base
   // commit the receiver already holds, so no branch bundle crosses;
   // the fresh capture does, gets re-keyed from the source worktree id
-  // to the new local one, and lands unstaged.
+  // to the new local one, and lands applied.
   const dirtyPull = await pullWorktree(
     {
       sourceDeviceId: LISTENER,
@@ -1172,7 +1172,7 @@ it("pull round trip (dirty): no branch bundle for a locally-known tip, and the c
     readFileSync(join(dirtyPull.worktree.path, "dirty.txt"), "utf8"),
     "uncommitted work\n",
   );
-  // Restored UNSTAGED, exactly as `sm dirty apply` flattens it.
+  // Untracked, as it was.
   assert.match(
     await gitOut(dirtyPull.worktree.path, "status", "--porcelain"),
     /^\?\? dirty\.txt$/m,
@@ -1324,11 +1324,11 @@ it("transplant (clean): the worktree lands here and the source worktree, its sm 
   );
 });
 
-it("transplant (dirty): the capture lands applied and force removes the still-dirty source worktree", async () => {
+it("transplant (dirty): the capture lands applied with its index and force removes the still-dirty source worktree", async () => {
   // (10) Dirty transplant: staged + unstaged + untracked dirt on the
-  // source. The capture lands here applied, and the teardown's
-  // captured-driven force removes the (legitimately still dirty)
-  // source anyway.
+  // source. The capture lands here applied, staged and unstaged as
+  // they were, and the teardown's captured-driven force removes the
+  // (legitimately still dirty) source anyway.
   const wt4Path = await addWorktree(
     sourceRepo,
     "wt4",
@@ -1337,10 +1337,17 @@ it("transplant (dirty): the capture lands applied and force removes the still-di
     "committed\n",
     "fourth feature",
   );
+  await commitFile(wt4Path, "gone.txt", "gone\n", "a file to delete");
   writeFileSync(join(wt4Path, "staged.txt"), "staged\n");
   await git(wt4Path, ["add", "staged.txt"]);
+  writeFileSync(join(wt4Path, "committed.txt"), "committed, then staged\n");
+  await git(wt4Path, ["add", "committed.txt"]);
   writeFileSync(join(wt4Path, "committed.txt"), "committed, then edited\n");
+  await git(wt4Path, ["mv", "readme.txt", "renamed.txt"]);
+  await git(wt4Path, ["rm", "-q", "gone.txt"]);
   writeFileSync(join(wt4Path, "untracked.txt"), "untracked\n");
+  const status = await gitOut(wt4Path, "status", "--porcelain");
+  assert.match(status, /^R {2}readme\.txt -> renamed\.txt$/m);
   const dirtyTransplant = await transplant({
     sourceDeviceId: LISTENER,
     sourceProjectId,
@@ -1361,6 +1368,10 @@ it("transplant (dirty): the capture lands applied and force removes the still-di
       content,
     );
   }
+  assert.equal(
+    await gitOut(dirtyTransplant.worktree.path, "status", "--porcelain"),
+    status,
+  );
   assert.equal(
     existsSync(wt4Path),
     false,
@@ -1899,12 +1910,15 @@ it("cloneProjectFromPeer: the peer's default branch lands as a registered checko
   const [, total] = firstFrame;
   assert.deepEqual(firstFrame, [0, total]);
   assert.deepEqual(cloneFrames.at(-1), [total, total]);
-  // A taken folder, a parent that is a file, and a landing branch the
-  // clone itself checks out are refused before anything is made, and
-  // none leaves a folder or a registration behind.
+  // A folder something other than the repo holds, a parent that is a
+  // file, and a landing branch the clone itself checks out are refused
+  // before anything is made, and none leaves a folder or a registration
+  // behind.
   const before = (await listProjects()).length;
+  mkdirSync(join(clonesDir, "plain"));
+  writeFileSync(join(clonesDir, "plain", "notes.txt"), "mine\n");
   await assert.rejects(
-    () => cloneFrom({ parentDir: clonesDir, name: "lone" }, "feat/landing"),
+    () => cloneFrom({ parentDir: clonesDir, name: "plain" }, "feat/landing"),
     /already exists/,
   );
   writeFileSync(join(sandbox, "notafolder"), "");
@@ -2311,7 +2325,7 @@ describe("cancelMove", () => {
   });
 });
 
-it("sendWorktree into a device with no checkout: the peer clones the repo from here over the link (progress relayed), registers it, lands the copy in it with its uncommitted work, and the teardown removes the source here", async () => {
+it("sendWorktree into a device with no checkout: the peer clones the repo from here over the link (progress relayed), registers it, lands the copy in it with its uncommitted work, and the teardown removes the source here; into one holding an unregistered checkout of the repo at that folder, the destination read tells free, taken and same-repo apart, and the send registers the checkout untouched and lands beside it", async () => {
   // ---- A send into a device with no checkout of the repo: the peer
   // clones it from here first, over the same link the branch then
   // crosses, and lands the copy in the clone. The two ends need
@@ -2422,6 +2436,75 @@ it("sendWorktree into a device with no checkout: the peer clones the repo from h
     );
     assert.equal(loneTorn.sourceRemoved, true, loneTorn.sourceError);
     assert.equal(existsSync(loneWtPath), false);
+
+    // ---- The same send into a device that holds a checkout of the repo
+    // it never registered, at the folder the clone would take: the same
+    // layout cloned by hand on both machines. The dialog's read over the
+    // wire tells a free folder, a taken one and that checkout apart, and
+    // the send registers the checkout as it is and lands the copy beside
+    // it.
+    const handRepo = await fixture.initRepo("hand-source");
+    await commitFile(handRepo, "root.txt", "hand root\n", "hand root");
+    const handWtPath = await addWorktree(
+      handRepo,
+      "hand-wt",
+      "hand-feature",
+      "hand.txt",
+      "hand feature\n",
+      "hand feature",
+    );
+    const { id: handProjectId } = await addProject(otherCli.sm, handRepo);
+    const handIdentity = await repoIdentityOf(handRepo);
+    const handInto = join(sandbox, "clones", "hand");
+    mkdirSync(join(handInto, "plain"), { recursive: true });
+    writeFileSync(join(handInto, "plain", "notes.txt"), "mine\n");
+    await git(handInto, ["clone", "-q", handRepo, "handmade"]);
+    const handmade = join(handInto, "handmade");
+    writeFileSync(join(handmade, "root.txt"), "edited by hand\n");
+    writeFileSync(join(handmade, "scratch.txt"), "untracked\n");
+    const handStatus = await gitOut(handmade, "status", "--porcelain");
+    const handHead = await gitOut(handmade, "rev-parse", "HEAD");
+    const answer = (name: string, asked: string | null = handIdentity) =>
+      runHost(
+        sync.cloneDestination({
+          cloneInto: { parentDir: handInto, name },
+          identity: asked,
+        }),
+      );
+    assert.equal(await answer("fresh"), "free");
+    assert.equal(await answer("plain"), "taken");
+    assert.equal(await answer("handmade"), "same-repo");
+    assert.equal(await answer("handmade", "another-repo"), "taken");
+    assert.equal(await answer("handmade", null), "taken");
+    const handSent = await asOtherDevice(
+      syncHandlers.sendWorktree(
+        {
+          targetDeviceId: LISTENER,
+          projectId: handProjectId,
+          worktreeId: worktreeIdFromPath(handWtPath),
+          cloneInto: { parentDir: handInto, name: "handmade" },
+        },
+        pullCtx,
+      ),
+    );
+    assert.equal(handSent.cloned?.path, handmade);
+    assert.equal((await findProjectOrThrow(handSent.cloned.id)).path, handmade);
+    assert.equal(handSent.worktree.projectId, handSent.cloned.id);
+    assert.equal(
+      readFileSync(join(handSent.worktree.path, "hand.txt"), "utf8"),
+      "hand feature\n",
+    );
+    assert.ok(
+      !handSent.worktree.path.startsWith(`${handmade}/`),
+      "the copy lands beside the checkout, not in it",
+    );
+    // The checkout itself as it was: its HEAD, its edit, its untracked file.
+    assert.equal(await gitOut(handmade, "rev-parse", "HEAD"), handHead);
+    assert.equal(await gitOut(handmade, "status", "--porcelain"), handStatus);
+    assert.equal(
+      readFileSync(join(handmade, "root.txt"), "utf8"),
+      "edited by hand\n",
+    );
   } finally {
     await otherEngine.close();
   }

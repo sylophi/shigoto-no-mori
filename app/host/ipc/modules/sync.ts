@@ -21,6 +21,7 @@ import {
 } from "@host/lib/sync/sourceLink";
 import { scriptEventNotifier } from "../scriptRun";
 import type { HostServices } from "@host/process/services";
+import { cloneDestination } from "@host/lib/sync/cloneFromPeer";
 import { landForSender } from "@host/lib/sync/landing";
 import { pullWorktree, sendWorktree } from "@host/lib/sync/move";
 import { teardownSource } from "@host/lib/sync/receipts";
@@ -63,6 +64,11 @@ export const syncHandlers = {
           }),
         ),
     ),
+
+  // Where a move to this device would clone the repo, asked by its
+  // dialog before it starts.
+  cloneDestination: ({ cloneInto, identity }) =>
+    cloneDestination(cloneInto, identity),
 
   // A pull's link (and the git follower's fetch): this host is the
   // source. The open returns once the link is attached, and the

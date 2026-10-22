@@ -2151,6 +2151,16 @@
       "cancelled": false
     }
   },
+  "sync:cloneDestination": {
+    "payload": {
+      "cloneInto": {
+        "parentDir": "k",
+        "name": "觋Y"
+      },
+      "identity": null
+    },
+    "success": "taken"
+  },
   "sync:hasCommits": {
     "payload": {
       "projectId": "\n",

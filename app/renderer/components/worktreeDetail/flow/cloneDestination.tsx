@@ -31,10 +31,13 @@ import { ensureTrailingSep, tildify } from "@shigomori/contracts/projectPaths";
 // The clone the flow would make, computed only while it is the
 // landing (`enabled`): the reads behind it are the destination's home
 // and projects and the source's home, none of which a flow into a
-// checkout already there needs.
+// checkout already there needs. What is at its folder there is read on
+// the review alone (`reviewing`), so a run keeps the answer it started
+// on.
 function useCloneDestination(
   sourceProject: Project,
   enabled: boolean,
+  reviewing: boolean,
 ): CloneDestination {
   // The dialog sits under the source's scope, so its runtime info is
   // the source's home. The destination's comes from its own scope.
@@ -67,10 +70,25 @@ function useCloneDestination(
         })
       : "~/");
   const cloneInto = cloneIntoOf(parent, sourceProject.path);
+  const identity = sourceProject.identity ?? null;
+  const { data: found } = useQuery({
+    queryKey: destination.keys.cloneDestination(
+      parent,
+      cloneInto.name,
+      identity,
+    ),
+    queryFn: ({ signal }) =>
+      destination.api.run(
+        destination.api.sync.cloneDestination({ cloneInto, identity }),
+        { signal },
+      ),
+    enabled: enabled && reviewing && destination.hasHost,
+  });
   return {
     projectName: sourceProject.name,
     cloneInto,
     dest: `${parent}${cloneInto.name}`,
+    found,
     setParent: (chosen) =>
       setPicked({
         deviceId: destination.deviceId,
@@ -101,7 +119,11 @@ export function useLandingTarget({
     submitted === undefined
       ? !unpicked && localProject === undefined
       : submitted.cloneInto !== undefined;
-  const clone = useCloneDestination(sourceProject, cloning);
+  const clone = useCloneDestination(
+    sourceProject,
+    cloning,
+    submitted === undefined,
+  );
   if (cloning) return { clone };
   return localProject === undefined ? null : { project: localProject };
 }
