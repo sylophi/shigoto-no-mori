@@ -177,9 +177,6 @@ export const replayable = (history: string, alternate: boolean): string => {
   return history.slice(0, alternateScreen(history).enteredAt ?? 0);
 };
 
-// How a shell ended: its status.
-type Ended = { readonly code: number };
-
 interface Session {
   readonly terminal: Terminal;
   // The folder its shell started in.
@@ -345,7 +342,7 @@ const make = <R, E>(options: {
     // as a chunk, then the exit once the shell is gone.
     const pump = (
       session: Session,
-      reads: Queue.Queue<string | Ended>,
+      reads: Queue.Queue<string | number>,
       backlog: { bytes: number; paused: boolean },
     ) =>
       Effect.gen(function* () {
@@ -354,7 +351,7 @@ const make = <R, E>(options: {
           if (typeof first === "string") yield* Effect.sleep(BATCH);
           const taken = [first, ...(yield* Queue.clear(reads))];
           let data = "";
-          let ended: Option.Option<Ended> = Option.none();
+          let ended: Option.Option<number> = Option.none();
           for (const item of taken) {
             if (typeof item === "string") data += item;
             else ended = Option.some(item);
@@ -380,11 +377,11 @@ const make = <R, E>(options: {
             });
           }
           if (Option.isSome(ended)) {
-            session.exited = Option.some(ended.value.code);
+            session.exited = Option.some(ended.value);
             session.forget = true;
             yield* PubSub.publish(session.events, {
               kind: "exit",
-              code: ended.value.code,
+              code: ended.value,
             });
             // A shell that ended goes with its tab, whatever its status
             // or signal. It ends from outside this fiber, which is in its
@@ -504,7 +501,8 @@ const make = <R, E>(options: {
           forget: false,
         };
         yield* Scope.addFinalizer(scope, PubSub.shutdown(session.events));
-        const reads = yield* Queue.unbounded<string | Ended>();
+        // Its output, then its exit status.
+        const reads = yield* Queue.unbounded<string | number>();
         const backlog = { bytes: 0, paused: false };
         pty.onData((data) => {
           backlog.bytes += data.length;
@@ -522,7 +520,7 @@ const make = <R, E>(options: {
         // A shell that dies of a signal reads 128 + its number, as a
         // shell tells a child's.
         pty.onExit(({ exitCode, signal }) => {
-          Queue.offerUnsafe(reads, { code: signal ? 128 + signal : exitCode });
+          Queue.offerUnsafe(reads, signal ? 128 + signal : exitCode);
         });
         yield* Effect.forkIn(pump(session, reads, backlog), scope);
         // Runs as the scope closes, while the shell is still there to be
@@ -629,7 +627,8 @@ const make = <R, E>(options: {
                 ] satisfies TerminalEvent[],
               };
             };
-            // A dead one, on its way out, has sent its exit already.
+            // A dead one, on its way out, gets its exit from here, not
+            // from its events.
             if (Option.isSome(session.exited)) {
               return Stream.fromIterable([
                 ...headOf().head,
