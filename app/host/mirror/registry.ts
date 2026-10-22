@@ -494,27 +494,29 @@ export const moveMirrorsOfWorktree = (
 // The engine persists its sessions, so they come back on every spawn:
 // a boot that starts signed out, or a daemon that was down at the
 // sign-out, would otherwise resume mirroring with peers of an account
-// this device is not on. Each session is asked about once, signed in
-// or not, so one failed credential read (it reads as signed out) ends
-// nothing already running. A sign-out ends what was running itself and
-// resets the sweep, so a session reported after it is asked again. Only
-// the running daemon's own snapshot is asked about: the one that stands
+// this device is not on. Nothing is asked before the shell's first
+// report, which asks itself (handlers.ts applyAccount); after it, each
+// session is asked about one time, so the snapshots while it ends do
+// not end it again. A sign-out ends what was running itself and resets
+// the sweep, so a session reported after it is asked again. Only the
+// running daemon's own snapshot is asked about: the one that stands
 // through a restart can end nothing.
 export function createNoAccountSweep(deps: {
   sessions: () => readonly MirrorSessionRaw[];
   // Whether `sessions` is the running daemon's own (MirrorDaemon's fresh).
   fresh: () => boolean;
-  signedIn: () => boolean;
+  // Undefined while the account is unknown.
+  signedIn: () => boolean | undefined;
   end: () => void;
 }): { run: () => void; reset: () => void } {
   const asked = new Set<string>();
   return {
     run: () => {
       if (!deps.fresh()) return;
+      const signedIn = deps.signedIn();
+      if (signedIn === undefined) return;
       const unasked = deps.sessions().filter((raw) => !asked.has(raw.session));
       if (unasked.length === 0) return;
-      // Asked before marking: a check that throws leaves them to ask again.
-      const signedIn = deps.signedIn();
       for (const raw of unasked) asked.add(raw.session);
       if (!signedIn) deps.end();
     },
