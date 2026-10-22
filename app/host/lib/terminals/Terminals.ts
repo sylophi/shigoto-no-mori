@@ -2,8 +2,7 @@
 // PTY (../scripts/ScriptRuns.ts), a resource in a scope of its own under the
 // layer's: closing it is closing that scope, whose release is the kill
 // chain. A terminal belongs to a worktree, which it starts in with the
-// environment the worktree's scripts get and closes with, or to the
-// device, where it starts in the folder the last one was in. Its
+// environment the worktree's scripts get and closes with. Its
 // history and folder are saved (SavedTerminals) a moment after its
 // output changes and again as it closes, so after a quit or a crash the
 // next start opens a fresh shell there under that history.
@@ -19,15 +18,10 @@ import {
   UnknownTerminalError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
-import type {
-  Terminal,
-  TerminalEvent,
-  TerminalOwner,
-} from "@shigomori/contracts/schemas";
+import type { Terminal, TerminalEvent } from "@shigomori/contracts/schemas";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
 import { elapsedMillis } from "@shigomori/engine/elapsed";
 import * as Clock from "effect/Clock";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -45,7 +39,6 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
-import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
 
@@ -60,10 +53,13 @@ const mintHex = (words: number) =>
     (parts) => parts.map((part) => part.toString(16).padStart(8, "0")).join(""),
   );
 
-// Where a terminal's shell starts and what it is given.
+// The worktree a terminal belongs to.
+type Owner = Pick<Terminal, "projectId" | "worktreeId">;
+
+// Where a terminal's shell starts (its worktree's folder) and what it is
+// given.
 export type Start = {
-  // The worktree's folder. A device's terminal has none of its own.
-  readonly cwd?: string;
+  readonly cwd: string;
   readonly env: Readonly<Record<string, string | undefined>>;
 };
 
@@ -186,6 +182,8 @@ type Ended = { readonly code: number; readonly killed: boolean };
 
 interface Session {
   readonly terminal: Terminal;
+  // The folder its shell started in.
+  readonly cwd: string;
   readonly pty: PtyHandle;
   readonly history: History;
   readonly events: PubSub.PubSub<TerminalEvent>;
@@ -210,21 +208,15 @@ interface Session {
   forget: boolean;
 }
 
-const ownedBy = (session: Session) =>
-  session.terminal.owner.kind === "worktree"
-    ? session.terminal.owner
-    : undefined;
-
 export class Terminals extends Context.Service<
   Terminals,
   {
     // Every open terminal, oldest first, and again on each open and
     // close.
     readonly list: Stream.Stream<ReadonlyArray<Terminal>>;
-    readonly open: (input: {
-      readonly owner: TerminalOwner;
-      readonly size?: Size | undefined;
-    }) => Effect.Effect<
+    readonly open: (
+      input: Owner & { readonly size?: Size | undefined },
+    ) => Effect.Effect<
       Terminal,
       PtySpawnError | UnknownProjectError | UnknownWorktreeError
     >;
@@ -247,11 +239,8 @@ export class Terminals extends Context.Service<
       terminalId: string,
       size: Size,
     ) => Effect.Effect<void, UnknownTerminalError>;
-    // How many live terminals are the worktree's, or in its folder.
-    readonly openIn: (worktree: {
-      readonly id: string;
-      readonly path: string;
-    }) => number;
+    // How many live terminals are the worktree's.
+    readonly openIn: (worktreeId: string) => number;
     // Closes the terminals whose worktree, or its project, is gone. A
     // project whose worktrees can't be read keeps its terminals.
     readonly closeMissing: Effect.Effect<void>;
@@ -264,10 +253,10 @@ export class Terminals extends Context.Service<
 >()("sm/host/Terminals") {}
 
 const make = <R, E>(options: {
-  // The folder and environment a terminal starts with: a worktree's
-  // scripts', or the app's own for the device's.
+  // The folder and environment a terminal starts with: its worktree's
+  // scripts'.
   readonly start: (
-    owner: TerminalOwner,
+    owner: Owner,
   ) => Effect.Effect<Start, UnknownProjectError | UnknownWorktreeError, R>;
   // The worktrees a project has now, where their terminals may stay.
   readonly worktrees: (
@@ -281,7 +270,7 @@ const make = <R, E>(options: {
   Effect.gen(function* () {
     // What the start reads, as the layer finds it.
     const startContext = yield* Effect.context<R>();
-    const startOf = (owner: TerminalOwner) =>
+    const startOf = (owner: Owner) =>
       options.start(owner).pipe(Effect.provide(startContext));
     // The folder of each of the project's worktrees, none for a project
     // that is gone, or null when that can't be told: git lists at least
@@ -305,9 +294,6 @@ const make = <R, E>(options: {
     const fs = yield* FileSystem.FileSystem;
     const lifecycle = yield* Lifecycle.Lifecycle;
     const saved = yield* SavedTerminals.SavedTerminals;
-    const home = yield* Config.String("HOME").pipe(
-      Effect.orElseSucceed(() => "/"),
-    );
     const sessions = new Map<string, Session>();
     const listed = yield* SubscriptionRef.make<ReadonlyArray<Terminal>>([]);
     const announce = Effect.suspend(() =>
@@ -353,24 +339,6 @@ const make = <R, E>(options: {
 
     const exists = (path: string) =>
       fs.exists(path).pipe(Effect.orElseSucceed(() => false));
-
-    // The device's next terminal starts where its newest open one is,
-    // else where the last one was, else home.
-    const deviceFolder = Effect.gen(function* () {
-      const newest = living().findLast(
-        (session) => session.terminal.owner.kind === "device",
-      );
-      const candidates = [
-        newest === undefined ? Option.none() : yield* folderOf(newest),
-        yield* saved.lastFolder,
-      ];
-      for (const candidate of candidates) {
-        if (Option.isSome(candidate) && (yield* exists(candidate.value))) {
-          return candidate.value;
-        }
-      }
-      return home;
-    });
 
     // Takes the PTY's reads in frames, keeps them, and sends each frame
     // as a chunk, then the exit once the shell is gone.
@@ -451,24 +419,14 @@ const make = <R, E>(options: {
         yield* Scope.close(session.scope, Exit.void);
       });
 
-    // The folder a shell is in now, kept as the device's last when it is
-    // the device's.
-    const noteFolder = Effect.fnUntraced(function* (session: Session) {
-      const folder = yield* folderOf(session);
-      if (session.terminal.owner.kind === "device" && Option.isSome(folder)) {
-        yield* saved.setLastFolder(folder.value);
-      }
-      return folder;
-    });
-
     // The terminal as it is now, in the store: its folder and its
     // history. One row, written at once, so a crash leaves the last one
     // whole.
     const persist = Effect.fnUntraced(function* (session: Session) {
-      const folder = yield* noteFolder(session);
+      const folder = yield* folderOf(session);
       yield* saved.save({
         ...session.terminal,
-        cwd: Option.getOrElse(folder, () => session.terminal.cwd),
+        cwd: Option.getOrElse(folder, () => session.cwd),
         seq: session.seq,
         history: replayable(session.history.text(), session.alternate),
       });
@@ -504,7 +462,7 @@ const make = <R, E>(options: {
 
     const begin = Effect.fnUntraced(function* (
       terminal: Terminal,
-      env: Start["env"],
+      { cwd, env }: Start,
       size: Size,
       restored?: { readonly seq: number; readonly history: string },
     ) {
@@ -513,8 +471,7 @@ const make = <R, E>(options: {
         const pty = yield* spawn(
           {
             command: null,
-            cwd: terminal.cwd,
-            place: terminal.owner.kind === "worktree" ? "worktree" : "folder",
+            cwd,
             env,
             ...size,
           },
@@ -533,6 +490,7 @@ const make = <R, E>(options: {
         const first = restored === undefined ? 0 : restored.seq + 1;
         const session: Session = {
           terminal,
+          cwd,
           pty,
           incarnation: yield* mintHex(4),
           history: makeHistory(
@@ -582,7 +540,6 @@ const make = <R, E>(options: {
           scope,
           Effect.gen(function* () {
             if (!session.forget) return yield* persist(session);
-            yield* noteFolder(session);
             yield* saved.forget(terminal.terminalId);
           }),
         );
@@ -595,23 +552,18 @@ const make = <R, E>(options: {
 
     const mintId = mintHex(2);
 
-    const open = Effect.fn("Terminals.open")(function* (input: {
-      readonly owner: TerminalOwner;
-      readonly size?: Size | undefined;
-    }) {
-      const start = yield* startOf(input.owner);
+    const open = Effect.fn("Terminals.open")(function* (
+      input: Owner & { readonly size?: Size | undefined },
+    ) {
+      const start = yield* startOf(input);
       const terminal: Terminal = {
         terminalId: yield* mintId,
-        owner: input.owner,
-        cwd: start.cwd ?? (yield* deviceFolder),
+        projectId: input.projectId,
+        worktreeId: input.worktreeId,
         openedAt: yield* Clock.currentTimeMillis,
       };
       yield* Effect.annotateCurrentSpan({ terminalId: terminal.terminalId });
-      const session = yield* begin(
-        terminal,
-        start.env,
-        input.size ?? DEFAULT_SIZE,
-      );
+      const session = yield* begin(terminal, start, input.size ?? DEFAULT_SIZE);
       return session.terminal;
     });
 
@@ -629,18 +581,16 @@ const make = <R, E>(options: {
     // row kept until the shell saves over it. One whose worktree is gone
     // is dropped.
     const restore = Effect.gen(function* () {
-      for (const terminal of yield* saved.list) {
-        const start = yield* Effect.option(startOf(terminal.owner));
+      for (const { cwd, seq, history, ...terminal } of yield* saved.list) {
+        const start = yield* Effect.option(startOf(terminal));
         if (Option.isNone(start)) {
           yield* saved.forget(terminal.terminalId);
           continue;
         }
-        const cwd = (yield* exists(terminal.cwd))
-          ? terminal.cwd
-          : (start.value.cwd ?? home);
-        yield* begin({ ...terminal, cwd }, start.value.env, DEFAULT_SIZE, {
-          seq: terminal.seq,
-          history: terminal.history,
+        const folder = (yield* exists(cwd)) ? cwd : start.value.cwd;
+        yield* begin(terminal, { ...start.value, cwd: folder }, DEFAULT_SIZE, {
+          seq,
+          history,
         }).pipe(
           Effect.onError(() => saved.forget(terminal.terminalId)),
           Effect.catchTags({
@@ -759,18 +709,14 @@ const make = <R, E>(options: {
           .map((line) => line.trim().split(/\s+/).map(Number))
           .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid).length;
       }).pipe(Effect.withSpan("Terminals.busy")),
-      openIn: (worktree) =>
-        living().filter(({ terminal: { owner, cwd } }) =>
-          owner.kind === "worktree"
-            ? owner.worktreeId === worktree.id
-            : isSameOrInside(cwd, worktree.path),
-        ).length,
+      openIn: (worktreeId) =>
+        living().filter(({ terminal }) => terminal.worktreeId === worktreeId)
+          .length,
       closeMissing: Effect.gen(function* () {
-        const owned = [...sessions.values()].flatMap((session) => {
-          const owner = ownedBy(session);
-          return owner === undefined ? [] : [{ session, owner }];
-        });
-        const projects = new Set(owned.map(({ owner }) => owner.projectId));
+        const owned = [...sessions.values()];
+        const projects = new Set(
+          owned.map((session) => session.terminal.projectId),
+        );
         const present = new Map(
           yield* Effect.forEach(
             projects,
@@ -783,10 +729,10 @@ const make = <R, E>(options: {
           ),
         );
         const missing = new Set<string>();
-        for (const { session, owner } of owned) {
-          const folders = present.get(owner.projectId);
+        for (const session of owned) {
+          const folders = present.get(session.terminal.projectId);
           if (folders === null || folders === undefined) continue;
-          const path = folders.get(owner.worktreeId);
+          const path = folders.get(session.terminal.worktreeId);
           if (path === undefined || !(yield* exists(path))) {
             missing.add(session.terminal.terminalId);
           }

@@ -62,16 +62,9 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
     >
       <Suspense>
         <TerminalTabs
-          owner={{
-            kind: "worktree",
-            projectId: worktree.projectId,
-            worktreeId: worktree.id,
-          }}
-          scripts={{
-            worktree,
-            slots,
-            onClose: (slot) => closeScriptTab(key, slot),
-          }}
+          worktree={worktree}
+          slots={slots}
+          onCloseScript={(slot) => closeScriptTab(key, slot)}
           picked={drawer.picked}
           onPick={(tab) => pickDrawerTab(key, tab)}
           onEmpty={close}

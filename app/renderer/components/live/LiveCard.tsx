@@ -39,7 +39,7 @@ import {
   mappedPullRequest,
   worktreeTitle,
 } from "@shigomori/ui/lib/worktreeTitle.ts";
-import { ForwardItem, MirrorItem, ScriptItem } from "./LiveItems";
+import { ForwardItem, MirrorItem, ScriptItem, TerminalItem } from "./LiveItems";
 import { AgentItemView } from "@shigomori/ui/views/live/LiveItemsView.tsx";
 import {
   DeviceHeadingView,
@@ -156,6 +156,13 @@ function CardBody({
             key={item.run.runId}
             deviceId={card.deviceId}
             run={item.run}
+          />
+        ) : item.kind === "terminal" ? (
+          <TerminalItem
+            key={item.terminal.terminalId}
+            deviceId={card.deviceId}
+            terminal={item.terminal}
+            index={item.index}
           />
         ) : item.kind === "mirror" ? (
           <MirrorItem

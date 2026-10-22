@@ -2,7 +2,8 @@
 // waiting on you is drawn as it is (AgentItemView). A script: its
 // output (the console takes up the run's output whichever window or
 // device started it, hooks/scripts/useScriptRunner.ts), a restart and a
-// stop. A mirror: how it is doing, and its manage dialog (status,
+// stop. A terminal: its worktree's page with the drawer on its tab, and
+// its close. A mirror: how it is doing, and its manage dialog (status,
 // history, pause, the ignore rule, stop) under the device running it,
 // as the worktree's Mirror button opens it. A forward: the local
 // address it answers on, the worktree's Ports dialog to move it to
@@ -10,12 +11,17 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
-import type { RunningScript, Worktree } from "@shigomori/contracts/schemas";
+import type {
+  RunningScript,
+  Terminal,
+  Worktree,
+} from "@shigomori/contracts/schemas";
 import { RunnerScope } from "@/components/worktreeDetail/mirror/MirrorAction";
 import { MirrorManageDialog } from "@/components/worktreeDetail/mirror/MirrorManageDialog";
 import { useMirrorView } from "@/components/worktreeDetail/mirror/useMirrorView";
 import { PortsDialog } from "@/components/worktreeDetail/ports/PortsDialog";
 import type { LiveMirror } from "@/hooks/live/useLiveActivity";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePortForwardStop } from "@/hooks/remote/usePortForwards";
 import {
   useDeviceIcon,
@@ -25,12 +31,14 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { slotLabel } from "@/store/scriptSlot";
+import { terminalTabLabel } from "@/store/terminalDrawer";
 import {
   DeviceNameView,
   ForwardItemView,
   MirrorSessionItemView,
   MirrorStreamItemView,
   ScriptItemView,
+  TerminalItemView,
 } from "@shigomori/ui/views/live/LiveItemsView.tsx";
 import { useOutside } from "@shigomori/ui/outside.tsx";
 
@@ -81,6 +89,42 @@ export function ScriptItem({
       }
       stopping={state.cancelling}
       onStop={() => void stop()}
+    />
+  );
+}
+
+// Under the card's scope, as ScriptItem is, so its close reaches the
+// device the terminal runs on.
+export function TerminalItem({
+  deviceId,
+  terminal,
+  index,
+}: {
+  deviceId: string;
+  terminal: Terminal;
+  index: number;
+}) {
+  const { toTerminalOn } = useWorktreeNav();
+  const { api } = useHostScope();
+  const close = useMutation({
+    mutationFn: () =>
+      api.run(api.terminals.close({ terminalId: terminal.terminalId })),
+    meta: { errorTitle: "Couldn't close the terminal" },
+  });
+  return (
+    <TerminalItemView
+      label={terminalTabLabel(index)}
+      since={terminal.openedAt}
+      onOpen={() =>
+        toTerminalOn(
+          deviceId,
+          terminal.projectId,
+          terminal.worktreeId,
+          terminal.terminalId,
+        )
+      }
+      closing={close.isPending}
+      onClose={() => close.mutate()}
     />
   );
 }

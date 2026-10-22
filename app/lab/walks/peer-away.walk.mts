@@ -145,32 +145,17 @@ it("a device tab switched to one never reached here says it is offline, and list
 
 // The terminal on screen ends when A turns control off, the words for
 // it in its place, and a new one answers once control is back.
-const revokeAndRegrant = async () => {
-  await setControl(a.page, false);
-  await main(b.page).getByText(TERMINALS_HIDDEN_A).waitFor();
-  await expect.poll(() => b.page.locator(".xterm").count()).toBe(0);
-  await setControl(a.page, true);
-  await answers(b.page, "again");
-};
-
-it("the other device's own terminal gives way to words that say terminals stay hidden when its control goes off, and comes back with it", async () => {
-  await setControl(a.page, true);
-  await b.page.keyboard.press("Meta+K");
-  await b.page.keyboard.type("Terminals on");
-  await b.page
-    .getByRole("option", { name: /Terminals on .*\[walk-a\]/ })
-    .click();
-  await answers(b.page, "device");
-  await revokeAndRegrant();
-});
-
-it("a worktree's terminal drawer on the other device does the same", async () => {
+it("a worktree's terminal drawer on the other device gives way to words that say terminals stay hidden when its control goes off, and comes back with it", async () => {
   await setControl(a.page, true);
   const name = await quickCreate(a, join(a.root, "repos", REAL_NAME));
   await openPeerWorktree(b.page, "a", name);
   await b.page.locator("footer").getByText("Terminal", { exact: true }).click();
   await answers(b.page, "drawer");
-  await revokeAndRegrant();
+  await setControl(a.page, false);
+  await main(b.page).getByText(TERMINALS_HIDDEN_A).waitFor();
+  await expect.poll(() => b.page.locator(".xterm").count()).toBe(0);
+  await setControl(a.page, true);
+  await answers(b.page, "again");
 });
 
 // Last: A quits for good.

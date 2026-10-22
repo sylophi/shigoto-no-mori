@@ -104,7 +104,6 @@ const unwatched = new Set([
   "icon_cache",
   "clone_verified",
   "saved_terminals",
-  "terminal_folder",
   "running_scripts",
   "mirror_agreements",
   "mirror_history",

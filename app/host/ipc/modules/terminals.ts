@@ -23,10 +23,10 @@ export const terminalsViews: ViewHandlers<typeof terminalsContract, Terminals> =
   };
 
 export const terminalsHandlers = {
-  open: ({ owner, size }) =>
-    Effect.flatMap(Terminals, (terminals) =>
-      terminals.open({ owner, size }),
-    ).pipe(Effect.map(({ terminalId }) => ({ terminalId }))),
+  open: (input) =>
+    Effect.flatMap(Terminals, (terminals) => terminals.open(input)).pipe(
+      Effect.map(({ terminalId }) => ({ terminalId })),
+    ),
   close: ({ terminalId }) =>
     Effect.flatMap(Terminals, (terminals) => terminals.close(terminalId)),
   write: ({ terminalId, data }) =>

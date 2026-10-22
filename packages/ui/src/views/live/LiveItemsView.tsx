@@ -3,6 +3,7 @@ import {
   Cable,
   ExternalLink as ExternalLinkIcon,
   Loader2,
+  PanelBottomOpen,
   RefreshCw,
   RotateCw,
   Settings2,
@@ -28,7 +29,7 @@ import { cn } from "../../lib/utils.ts";
 
 // The live things a card lists, each a block with its status and its
 // actions as labelled buttons (LiveBlockView, at the end). LiveItems.tsx
-// binds each to its runner, mirror or forward.
+// binds each to its runner, terminal, mirror or forward.
 
 // How long something has been up, coarse like the app's relative
 // times: "up 12m", "up 3h 5m", "up 2d", or "just started".
@@ -190,6 +191,55 @@ export function ScriptItemView({
             </Button>
           </>
         )
+      }
+    />
+  );
+}
+
+// An open terminal: its tab's name, how long it has been open, the way
+// to it (its worktree's page, the drawer open on its tab) and its close,
+// the drawer's.
+export function TerminalItemView({
+  label,
+  since,
+  onOpen,
+  closing,
+  onClose,
+}: {
+  label: string;
+  since: number;
+  onOpen: () => void;
+  closing: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <LiveBlockView
+      mark={
+        <SquareTerminal aria-hidden className="size-4 text-muted-foreground" />
+      }
+      title={<span className="min-w-0 truncate font-medium">{label}</span>}
+      status={<UptimeView since={since} />}
+      actions={
+        <>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={ON_FILL}
+            onClick={onOpen}
+          >
+            <PanelBottomOpen />
+            Open
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost-destructive"
+            disabled={closing}
+            onClick={onClose}
+          >
+            {closing ? <Loader2 className="animate-spin" /> : <X />}
+            {closing ? "Closing…" : "Close"}
+          </Button>
+        </>
       }
     />
   );

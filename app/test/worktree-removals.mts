@@ -394,13 +394,7 @@ it("an interrupt after one layer went announces it removed and the rest kept", a
 const open = (project: Project, worktree: Worktree) =>
   runHost(
     Effect.flatMap(Terminals.Terminals, (terminals) =>
-      terminals.open({
-        owner: {
-          kind: "worktree",
-          projectId: project.id,
-          worktreeId: worktree.id,
-        },
-      }),
+      terminals.open({ projectId: project.id, worktreeId: worktree.id }),
     ),
   );
 const openIds = async () =>

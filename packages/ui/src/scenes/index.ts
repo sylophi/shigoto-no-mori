@@ -163,6 +163,6 @@ export const scenes = {
   marks: { Scene: MarksScene, size: [640, 480] },
   folderPicker: { Scene: FolderPickerScene, ...DESKTOP },
   pathPicker: { Scene: PathPickerScene, ...DESKTOP },
-  terminalParts: { Scene: TerminalPartsScene, size: [1100, 720] },
+  terminalParts: { Scene: TerminalPartsScene, size: [900, 640] },
   peerTerminalsHidden: { Scene: PeerTerminalsHiddenScene, size: [900, 320] },
 } satisfies Record<string, Scene>;

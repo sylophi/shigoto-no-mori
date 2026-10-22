@@ -1,14 +1,12 @@
 // A row of terminal tabs over the picked one's body: each tab its
-// label and a close, a new terminal at the row's end, and whatever the
-// place it sits in adds after that (a drawer's hide). Left and right arrows move the
-// pick, as tabs do. The row and the body are one surface, the card,
-// inset to the page's gutter.
+// label and a close, a new terminal at the row's end, and the drawer's
+// hide after that. Left and right arrows move the pick, as tabs do. The
+// row and the body are one surface, the card, inset to the page's
+// gutter.
 import type { ReactNode } from "react";
 import { Tabs } from "@base-ui/react/tabs";
 import { ChevronDown, Plus, X } from "lucide-react";
-import { Button } from "../../primitives/button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
-import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { useRevealPicked } from "../../hooks/useRevealPicked.ts";
@@ -28,7 +26,6 @@ export function TerminalTabsView({
   onClose,
   onNew,
   onHide,
-  empty = false,
   note = null,
   children,
 }: {
@@ -38,11 +35,7 @@ export function TerminalTabsView({
   onClose: (id: string) => void;
   // Absent where no terminal can be opened.
   onNew?: () => void;
-  // Present where the tabs fold away (a drawer).
-  onHide?: () => void;
-  // The last tab was closed and nothing opens another by itself (a
-  // device's page).
-  empty?: boolean;
+  onHide: () => void;
   // What shows in place of the tabs' bodies while none can be shown (a
   // peer that takes no commands from here).
   note?: string | null;
@@ -115,36 +108,17 @@ export function TerminalTabsView({
             <Plus className="size-3.5" />
           </IconButton>
         )}
-        {onHide && (
-          <IconButton
-            aria-label="Hide terminals"
-            onClick={onHide}
-            className="-mr-1 ml-auto rounded-full"
-          >
-            <ChevronDown className="size-3.5" />
-          </IconButton>
-        )}
+        <IconButton
+          aria-label="Hide terminals"
+          onClick={onHide}
+          className="-mr-1 ml-auto rounded-full"
+        >
+          <ChevronDown className="size-3.5" />
+        </IconButton>
       </div>
       <div className="min-h-0 flex-1">
         {note !== null ? (
           <CenteredMessage className="px-6 text-center">{note}</CenteredMessage>
-        ) : empty ? (
-          <div className="px-6 py-2 phone:px-4">
-            <EmptyPanel>
-              <p>No terminals open.</p>
-              {onNew && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onNew}
-                  className="mt-3"
-                >
-                  <Plus />
-                  New terminal
-                </Button>
-              )}
-            </EmptyPanel>
-          </div>
         ) : (
           children
         )}

@@ -32,7 +32,6 @@ export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
   {
     shell: Schema.String,
     cwd: Schema.String,
-    place: Schema.Literals(["worktree", "folder"]),
     reason: Schema.Literals(["cwd-missing", "shell-missing", "failed"]),
     cause: Schema.Defect(),
   },
@@ -40,9 +39,7 @@ export class PtySpawnError extends Schema.TaggedError<PtySpawnError>()(
   override get message(): string {
     switch (this.reason) {
       case "cwd-missing":
-        return this.place === "worktree"
-          ? `Worktree directory is missing: ${this.cwd}`
-          : `The folder is missing: ${this.cwd}`;
+        return `Worktree directory is missing: ${this.cwd}`;
       case "shell-missing":
         return `Login shell not found: ${this.shell}`;
       case "failed":
@@ -56,8 +53,6 @@ export interface SpawnOptions {
   // interactive (a terminal's).
   readonly command: string | null;
   readonly cwd: string;
-  // Whether `cwd` is a worktree's, as the words for it missing say.
-  readonly place: "worktree" | "folder";
   readonly env: NodeJS.ProcessEnv;
   readonly cols: number;
   readonly rows: number;
@@ -136,7 +131,6 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
     return yield* new PtySpawnError({
       shell,
       cwd: opts.cwd,
-      place: opts.place,
       reason: missing,
       cause: undefined,
     });
@@ -190,7 +184,6 @@ export const spawn = Effect.fn("Pty.spawn")(function* (
         new PtySpawnError({
           shell,
           cwd: opts.cwd,
-          place: opts.place,
           reason: "failed",
           cause,
         }),

@@ -2408,20 +2408,17 @@
       "terminals": [
         {
           "terminalId": "0",
-          "owner": {
-            "kind": "device"
-          },
-          "cwd": "v",
-          "openedAt": -3.920363497664199e-232
+          "projectId": "Wv",
+          "worktreeId": "D",
+          "openedAt": -5.2161211745009093e-73
         }
       ]
     }
   },
   "terminals:open": {
     "payload": {
-      "owner": {
-        "kind": "device"
-      }
+      "projectId": "-1",
+      "worktreeId": "\n"
     },
     "success": {
       "terminalId": "p:"

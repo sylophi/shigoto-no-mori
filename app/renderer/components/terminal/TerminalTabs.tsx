@@ -1,36 +1,25 @@
-import { useEffect, useRef, useState } from "react";
-import type {
-  Terminal as TerminalInfo,
-  TerminalOwner,
-  Worktree,
-} from "@shigomori/contracts/schemas";
+import { useEffect, useRef } from "react";
+import type { Worktree } from "@shigomori/contracts/schemas";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useTerminals } from "@/hooks/terminals/useTerminals";
 import { notifyError } from "@/lib/toast";
-import { scriptTabId } from "@/store/terminalDrawer";
+import { scriptTabId, terminalTabLabel } from "@/store/terminalDrawer";
 import { slotLabel, type ScriptSlot } from "@/store/scriptSlot";
 import { Terminal } from "./Terminal";
 import { TerminalTabsView } from "@shigomori/ui/views/terminal/TerminalTabsView.tsx";
 import { peerTerminalsHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
-
-const ownedBy = (terminal: TerminalInfo, owner: TerminalOwner): boolean =>
-  owner.kind === "device"
-    ? terminal.owner.kind === "device"
-    : terminal.owner.kind === "worktree" &&
-      terminal.owner.projectId === owner.projectId &&
-      terminal.owner.worktreeId === owner.worktreeId;
 
 type TerminalTabsProps = Parameters<typeof AttachedTerminalTabs>[0];
 
 // The tabs while this device may command the scoped one; while it may
 // not (its control turned off, with a terminal open here), the words
 // that say so in their place, and the attached terminal ends with
-// them. The pick is kept by the place the tabs sit in, so control
-// coming back opens them where they were, or a new terminal if none
-// is left, as the tabs do whenever they mount with none.
+// them. The pick is kept by the drawer, so control coming back opens
+// them where they were, or a new terminal if none is left, as the tabs
+// do whenever they mount with none.
 export function TerminalTabs(props: TerminalTabsProps) {
   const { canCommand } = useCommandAccess();
   const deviceLabel = useScopedDeviceLabel();
@@ -49,45 +38,40 @@ export function TerminalTabs(props: TerminalTabsProps) {
   );
 }
 
-// The scoped device's terminals of one owner, and a worktree's script
-// consoles opened beside them, as tabs over the picked one, the newest
-// terminal until another is picked. Only the picked one is attached
-// and drawn. With no tab at all, a terminal is opened as it mounts,
-// and `onEmpty` hears when the last tab goes.
+// The scoped device's terminals of a worktree, and the script consoles
+// opened beside them, as tabs over the picked one, the newest terminal
+// until another is picked. Only the picked one is attached and drawn.
+// With no tab at all, a terminal is opened as it mounts, and `onEmpty`
+// hears when the last tab goes.
 function AttachedTerminalTabs({
-  owner,
-  scripts,
-  picked: pickedProp,
-  onPick,
+  worktree,
+  slots,
+  onCloseScript,
+  picked,
+  onPick: pick,
   onEmpty,
   onHide,
 }: {
-  owner: TerminalOwner;
-  // The worktree's consoles open as tabs (the drawer's), and how one
-  // closes.
-  scripts?: {
-    readonly worktree: Worktree;
-    readonly slots: readonly ScriptSlot[];
-    readonly onClose: (slot: ScriptSlot) => void;
-  };
-  // The pick, when the place this sits in keeps it (a page's URL, the
-  // drawer's store).
-  picked?: string | null;
-  onPick?: (tab: string) => void;
-  onEmpty?: () => void;
-  onHide?: () => void;
+  worktree: Worktree;
+  // The consoles open as tabs, and how one closes.
+  slots: readonly ScriptSlot[];
+  onCloseScript: (slot: ScriptSlot) => void;
+  picked: string | null;
+  onPick: (tab: string) => void;
+  onEmpty: () => void;
+  onHide: () => void;
 }) {
   const { api } = useHostScope();
-  const listed = useTerminals();
-  const terminals = listed?.filter((terminal) => ownedBy(terminal, owner));
-  const slots = scripts?.slots ?? [];
-  const [pickedState, setPickedState] = useState<string | null>(null);
-  const picked = pickedProp === undefined ? pickedState : pickedProp;
-  const pick = onPick ?? setPickedState;
+  const owner = { projectId: worktree.projectId, worktreeId: worktree.id };
+  const terminals = useTerminals()?.filter(
+    (terminal) =>
+      terminal.projectId === owner.projectId &&
+      terminal.worktreeId === owner.worktreeId,
+  );
   const tabs = [
     ...(terminals ?? []).map((terminal, i) => ({
       id: terminal.terminalId,
-      label: `Terminal ${i + 1}`,
+      label: terminalTabLabel(i),
     })),
     ...slots.map((slot) => ({ id: scriptTabId(slot), label: slotLabel(slot) })),
   ];
@@ -98,7 +82,7 @@ function AttachedTerminalTabs({
 
   const open = () =>
     void api
-      .run(api.terminals.open({ owner }))
+      .run(api.terminals.open(owner))
       .then(({ terminalId }) => pick(terminalId))
       .catch((error: unknown) =>
         notifyError("Couldn't open a terminal", error),
@@ -109,8 +93,6 @@ function AttachedTerminalTabs({
   // closing.
   const seen = useRef<"waiting" | "opened" | "had">("waiting");
   const count = terminals === undefined ? undefined : tabs.length;
-  const [hadTabs, setHadTabs] = useState(false);
-  if (count !== undefined && count > 0 && !hadTabs) setHadTabs(true);
   useEffect(() => {
     if (count === undefined) return;
     if (count > 0) {
@@ -121,7 +103,7 @@ function AttachedTerminalTabs({
       seen.current = "opened";
       open();
     } else if (seen.current === "had") {
-      onEmpty?.();
+      onEmpty();
     }
   });
 
@@ -133,7 +115,7 @@ function AttachedTerminalTabs({
       onClose={(id) => {
         const slot = slots.find((each) => scriptTabId(each) === id);
         if (slot !== undefined) {
-          scripts?.onClose(slot);
+          onCloseScript(slot);
           return;
         }
         void api
@@ -144,10 +126,9 @@ function AttachedTerminalTabs({
       }}
       onNew={open}
       onHide={onHide}
-      empty={onEmpty === undefined && count === 0 && hadTabs}
     >
-      {pickedSlot !== undefined && scripts !== undefined ? (
-        <ScriptConsole worktree={scripts.worktree} slot={pickedSlot} />
+      {pickedSlot !== undefined ? (
+        <ScriptConsole worktree={worktree} slot={pickedSlot} />
       ) : (
         selectedId !== null && (
           <Terminal key={selectedId} terminalId={selectedId} />
