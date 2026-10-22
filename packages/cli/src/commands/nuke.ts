@@ -4,10 +4,10 @@
 // start that deletes the files), as only it can revoke the device and
 // turn its login item off. Then what a start can't take, as something
 // of the app's is still running through it: the app's own folder, its
-// logs and preferences, the config folder once empty, and the bundle
-// (--keep-app keeps it). A kept app whose start couldn't delete a file
-// keeps its own folder too, the nuke's marker in it, for its next start
-// to finish.
+// logs and preferences, the data-folder lock, the config folder once
+// empty, and the bundle (--keep-app keeps it). A kept app whose start
+// couldn't delete a file keeps its own folder too, the nuke's marker in
+// it, for its next start to finish.
 import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, realpathSync, rmdirSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -151,14 +151,15 @@ export const nuke = Command.make(
       });
       for (const { id, path } of place.paths) {
         if (id === "config") {
-          // Its pointer went with the app's nuke. Anything else in it is
-          // the owner's.
+          // Its pointer went with the app's nuke, and its lock just
+          // before. Anything else in it is the owner's.
           yield* Effect.try(() => {
             if (readdirSync(path).length === 0) rmdirSync(path);
           }).pipe(Effect.ignore);
         } else if (
           (id === "userData" && !(marked && input.keepApp)) ||
           id === "logs" ||
+          id === "dataDirLock" ||
           id === "preferences"
         ) {
           // What the app's start couldn't delete, this can't either: said

@@ -1,9 +1,10 @@
 // What a relaunch through `open` passes on, the app's own (a data-folder
-// move, a nuke, the fatal recovery) and the installer's: open hands the
-// app launchd's environment, not ours, so a data dir the environment
+// move, a nuke, the fatal recovery) and the installer's. open hands the
+// app our environment, but the app takes the update stand-ins and the
+// debug port out of its own as it starts, so a data dir the environment
 // chose (a test run's), a test build's update stand-ins and its debug
-// port are passed on, or the app would come back on the default data
-// dir, checking the real feeds, with no port to drive it on.
+// port are passed on by name, or the app would come back checking the
+// real feeds, with no port to drive it on.
 export const RELAUNCH_ENV = {
   dataDir: "SHIGOMORI_DATA_DIR",
   feedUrl: "SHIGOMORI_UPDATE_FEED_URL",

@@ -20,10 +20,9 @@ import * as Schema from "effect/Schema";
 import * as SqlError from "effect/sql/SqlError";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import { DATA_DIR_LOCK } from "./footprint.ts";
 import * as Paths from "./Paths.ts";
 import type { OpenDatabase } from "./Store.ts";
-
-const LOCK = "data-dir.lock";
 
 // A lock held elsewhere asked for again every 50 ms up to `within`.
 const askedFor = (within: Duration.Input) => ({
@@ -141,7 +140,7 @@ export const layer = (open: OpenDatabase) =>
       const paths = yield* Paths.Paths;
       const reactivity = yield* Reactivity.Reactivity;
       const dir = path.dirname(paths.pointerFile);
-      const file = path.join(dir, LOCK);
+      const file = path.join(dir, DATA_DIR_LOCK);
       // A connection in exclusive locking mode keeps the lock its first
       // read (shared) or write (its own) takes until it closes, with the
       // scope it was opened in. A lock held elsewhere is asked for again

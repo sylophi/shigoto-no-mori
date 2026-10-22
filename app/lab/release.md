@@ -72,6 +72,20 @@ export APPLE_SIGNING_IDENTITY="<the Developer ID Application identity>"
    the smoke's press carries its checkout's protocol, and the installed
    app refuses any but its own.
 
+4. Once it passes, the app it opened again runs on a normal launch's
+   environment, launchd's, with nothing of the smoke's:
+
+   ```sh
+   ps -Ewwaxo command= | grep -F "<the installed .app>/Contents/MacOS/" | grep -v grep \
+     | tr ' ' '\n' | grep -E '^(PATH|TMPDIR|SHIGOMORI_[A-Z_]+)='
+   getconf DARWIN_USER_TEMP_DIR
+   ```
+
+   The first prints two lines, `PATH=/usr/bin:/bin:/usr/sbin:/sbin` and
+   `TMPDIR=` at the folder the second prints. An app left on the smoke's
+   TMPDIR, a folder the smoke deletes, fails every temporary folder it
+   makes.
+
 The smoke refuses before the app's first check, since `updater.json`
 names the running app only from then, and leaves nothing behind. It
 offers the candidate from a local release list, quits the app as the
@@ -80,7 +94,9 @@ update, and presses the button the way the window does
 (`scripts/press-restart-to-update.mts`). It passes once the app is back
 on the new version, by its bundle and by its own word in
 `updater.json`, and the bundle's own `sm` answers `devices` signed in.
-However it ends, the app is opened again on the real feed.
+However it ends, the app is opened again on the real feed. Each start
+it makes is through `open` with none of the smoke's environment, since
+`open` hands the app it starts its caller's.
 
 Then put the version back (`git checkout package.json`), tag the tip
 and publish its release as a prerelease.

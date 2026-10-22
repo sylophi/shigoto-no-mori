@@ -7,9 +7,11 @@ import { execFile, execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   symlinkSync,
@@ -42,6 +44,7 @@ import {
   success,
 } from "../../engine/test/lib/fakeApp.ts";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { NUKE_EXIT } from "@shigomori/engine/footprint";
 import { said as updateSaid } from "../src/commands/update.ts";
 import { NAMESPACE_USAGE } from "../src/errors.ts";
 import { documentedCommands } from "../src/help.ts";
@@ -2710,6 +2713,48 @@ describe("a data-folder move under way", () => {
     assert.equal(made.code, 0, made.stderr);
     const removed = await runAt(alpha, "rm", "fox");
     assert.equal(removed.code, 0, removed.stderr);
+  });
+});
+
+describe("nuke", () => {
+  // Run from a bundle whose app is a stand-in that has finished its own
+  // nuke: the data-folder lock a change took goes with the rest, and the
+  // config folder with it, nothing else being in it.
+  it("leaves no data-folder lock, nor the config folder it was in", async () => {
+    const alpha = box.repo("alpha");
+    box.write("registry.json", {
+      projects: [{ id: "A", name: "alpha", path: alpha }],
+    });
+    await box.migrate("cli");
+    const made = await runAt(alpha, "worktrees", "create", "fox");
+    assert.equal(made.code, 0, made.stderr);
+    const names = flavorNames("dev");
+    const config = join(box.home, ".config", names.configDir);
+    assert.ok(existsSync(join(config, "data-dir.lock")));
+
+    const contents = join(box.home, `${names.appName}.app`, "Contents");
+    const resources = join(contents, "Resources");
+    mkdirSync(resources, { recursive: true });
+    mkdirSync(join(contents, "MacOS"));
+    const binary = join(resources, names.binaryName);
+    copyFileSync(built, binary);
+    chmodSync(binary, 0o755);
+    copyFileSync(join(dirname(built), "macfs"), join(resources, "macfs"));
+    writeFileSync(
+      join(contents, "MacOS", names.appName),
+      `#!/bin/sh\nexit ${NUKE_EXIT.finished}\n`,
+      { mode: 0o755 },
+    );
+    const nuked = await box.runAt(binary, "cli", box.home, [
+      "nuke",
+      "--yes",
+      "--keep-app",
+    ]);
+    assert.equal(nuked.code, 0, nuked.stderr);
+    assert.equal(
+      existsSync(config) ? readdirSync(config).join(", ") : null,
+      null,
+    );
   });
 });
 
