@@ -1205,7 +1205,7 @@ it("pull refusals: an already-existing branch and an unmatched repo identity bot
         },
         pullCtx,
       ),
-    /is already checked out at .* on this device/,
+    /is already checked out on this device in .*\. Delete that worktree first/,
   );
   // And an identity nothing local matches is refused before anything
   // else runs.

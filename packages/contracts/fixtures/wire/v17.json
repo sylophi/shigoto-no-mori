@@ -1240,6 +1240,7 @@
         "isPrimary": true,
         "isExternal": false,
         "detached": true,
+        "rebasing": "feat",
         "shelved": false,
         "autoPull": false
       },

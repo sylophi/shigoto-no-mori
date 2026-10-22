@@ -90,7 +90,7 @@ function useLocalCollision(
     localProject === undefined
       ? null
       : held
-        ? pullBranchCollision(landingBranch, holder?.path, where)
+        ? pullBranchCollision(landingBranch, holder, where)
         : inTheWay !== undefined
           ? pullBranchInTheWay(landingBranch, inTheWay, where)
           : taken

@@ -17,14 +17,19 @@ export function pullFolderCollision(
   return `A folder named ${name} already exists ${where} (${path}). Remove or rename it first.`;
 }
 
+// The worktree holding the branch goes by its name, as the sidebar
+// shows it, and a shelved one says so, since it's out of the list.
 export function pullBranchCollision(
   branch: string,
-  holderPath: string | undefined,
+  holder: { readonly name: string; readonly shelved: boolean } | undefined,
   where = "on this device",
 ): string {
-  return holderPath === undefined
-    ? `${branch} already exists ${where}. Delete that branch first, or open it and pull normally.`
-    : `${branch} is already checked out at ${holderPath} ${where}. Stop or delete that worktree first.`;
+  if (holder === undefined) {
+    return `${branch} already exists ${where}. Delete that branch first, or open it and pull normally.`;
+  }
+  return holder.shelved
+    ? `${branch} is already checked out ${where} in ${holder.name}, which is shelved. Delete that worktree first, or unshelve it and pull normally.`
+    : `${branch} is already checked out ${where} in ${holder.name}. Delete that worktree first, or open it and pull normally.`;
 }
 
 // The branch whose place in git's ref tree a new one would take: refs

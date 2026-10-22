@@ -94,10 +94,10 @@ const refuseLandingCollision = Effect.fnUntraced(function* (
   );
   if (local.includes(branch)) {
     // Name the worktree holding it when one does: that is the thing
-    // the user has to stop or delete.
+    // the user has to delete or unshelve.
     const holder = existing.find((w) => w.branch === branch);
     return yield* new LandingCollisionError({
-      reason: pullBranchCollision(branch, holder?.path),
+      reason: pullBranchCollision(branch, holder),
     });
   }
   // Refused here, before the transfer, rather than by the create.

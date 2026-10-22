@@ -111,6 +111,24 @@ it("an agent's state change counts as activity", () => {
   ]);
 });
 
+it("a worktree's creation counts as activity, so a fresh copy of an old branch leads", () => {
+  const copy = worktree("copy", {
+    createdAt: 950,
+    recentCommits: [
+      {
+        hash: "abc1234",
+        subject: "Old work",
+        author: "a",
+        date: new Date(5).toISOString(),
+        additions: 1,
+        deletions: 0,
+      },
+    ],
+  });
+  assert.equal(worktreeLastActivityAt(copy), 950);
+  assert.equal(order([...trees, copy], false)[0], "copy");
+});
+
 it("Live: the waiting agent's card leads its device", () => {
   const [device] = buildLive({
     agents: [

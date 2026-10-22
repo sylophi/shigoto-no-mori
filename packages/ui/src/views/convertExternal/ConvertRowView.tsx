@@ -49,6 +49,7 @@ export function ConvertRowView({
       <WorktreeMoveDetailsView
         branch={worktree.branch}
         detached={detached}
+        rebasing={worktree.rebasing}
         fromPath={oldPath}
         fromTip={worktree.path}
         toPath={proposedPath}

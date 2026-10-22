@@ -99,6 +99,7 @@ export function TidyRowView({
               <BranchLabel
                 branch={worktree.branch}
                 detached={worktree.detached}
+                rebasing={worktree.rebasing}
               />
             }
           >
@@ -106,6 +107,7 @@ export function TidyRowView({
               <BranchLabel
                 branch={worktree.branch}
                 detached={worktree.detached}
+                rebasing={worktree.rebasing}
               />
             </span>
           </SimpleTooltip>

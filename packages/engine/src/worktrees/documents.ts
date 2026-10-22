@@ -42,6 +42,8 @@ export type WorktreeIdentity = {
   // row's flags, though the primary also sits outside them.
   readonly isExternal: boolean;
   readonly detached: boolean;
+  // While detached to replay a rebase: the branch it replays.
+  readonly rebasing?: string;
   // `git worktree lock`ed: git keeps it while its directory is missing.
   readonly locked: boolean;
 };

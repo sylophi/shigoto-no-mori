@@ -183,6 +183,7 @@ export function rankPaletteEntries(
 
 const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
   worktree.branch,
+  worktree.rebasing ?? "",
   worktreeTitle(worktree, pr) ?? "",
   worktree.name,
   `${project.name} ${worktree.branch}`,

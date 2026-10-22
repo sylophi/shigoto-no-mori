@@ -6,9 +6,9 @@ import {
 // Where a worktree ranks within one of the inbox's boxes: one whose
 // agent waits on you comes first while its mark shows (pinWaiting, the
 // Mark worktrees whose agent needs you setting), the longest wait
-// first, then the newest work, with the name as the tiebreak so
-// worktrees with no activity at all (fresh, never committed, clean)
-// still land in a stable order.
+// first, then the newest work (a worktree's creation counts), with the
+// name as the tiebreak so worktrees with no activity known still land
+// in a stable order.
 export interface InboxRank {
   worktree: Worktree;
   activityAt: number;
