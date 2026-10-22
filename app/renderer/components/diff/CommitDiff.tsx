@@ -1,5 +1,8 @@
 import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
-import { useBranchHistory } from "@/hooks/git/useBranchCommits";
+import {
+  useBranchHistory,
+  useCommitSummary,
+} from "@/hooks/git/useBranchCommits";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
@@ -18,22 +21,27 @@ export function CommitDiff() {
   // it's cached), for the commit's place among them: what may be
   // rewritten from it.
   const { data: history } = useBranchHistory(projectId, worktree?.id);
+  const recent = worktree?.recentCommits ?? [];
+  const timeline = history?.commits ?? recent;
+  const index = timeline.findIndex((c) => c.hash === hash);
+  // One only the upstream has (its side of a split) comes from the
+  // history read too. Any other off the timeline (the history before
+  // the branch, a search result, one HEAD moved away from, a deep link)
+  // is read by its hash.
+  const incoming = history?.incoming.find((c) => c.hash === hash);
+  const listed =
+    timeline[index] ?? incoming ?? recent.find((c) => c.hash === hash);
+  const { data: read } = useCommitSummary(
+    projectId,
+    worktree?.id,
+    hash,
+    listed === undefined,
+  );
+  const commit = listed ?? read ?? undefined;
 
   if (!worktree) {
     return <WorktreeMissingView {...missing} />;
   }
-
-  const timeline = history?.commits ?? worktree.recentCommits;
-  const index = timeline.findIndex((c) => c.hash === hash);
-  // A commit off the timeline (the history before the branch, a search
-  // result) carries what its row did, and one only the upstream has (its
-  // side of a split) comes from the history read too. Deep-linked, the
-  // hash alone is enough for the diff.
-  const incoming = history?.incoming.find((c) => c.hash === hash);
-  const commit =
-    timeline[index] ??
-    incoming ??
-    worktree.recentCommits.find((c) => c.hash === hash);
 
   return (
     <DiffPage

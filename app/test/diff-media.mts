@@ -1,7 +1,8 @@
 // Durable proof for a media file's sides in a diff
 // (renderer/components/diff/MediaDiff.tsx) against a REAL repository:
 // git's patch for an image parses into a file with no hunks that names
-// both blobs, the way the diff page tells it apart, and readGitBlob
+// both blobs, the way the diff page tells it apart, any other binary
+// file's row says it isn't shown and counts no lines, and readGitBlob
 // (host/lib/worktrees/files.ts, over the engine's Git) hands back each
 // side's bytes, the text a media extension can hold, and a blob the
 // repository doesn't have as missing.
@@ -10,9 +11,16 @@
 import assert from "node:assert/strict";
 import { symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parsePatchFiles } from "@pierre/diffs";
+import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 import { only } from "@shigomori/contracts/util/only";
-import { isMediaBinary } from "@shigomori/ui/lib/patchFiles.ts";
+import {
+  isBinaryChange,
+  isMediaBinary,
+  patchEntries,
+} from "@shigomori/ui/lib/patchFiles.ts";
+import { DiffFileRowView } from "@shigomori/ui/views/diff/DiffPageView.tsx";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { it } from "vitest";
 import { readGitBlob as readGitBlobEffect } from "@host/lib/worktrees/files";
 import {
@@ -193,6 +201,52 @@ it("a working-tree patch's new side reads off the disk while it still hashes the
   assert.deepEqual(await readGitBlob(repo, ignored, "link.png"), {
     kind: "missing",
   });
+});
+
+// A file's row in a diff, as markup.
+const rowOf = (file: FileDiffMetadata) =>
+  renderToString(
+    createElement(DiffFileRowView, {
+      fileDiff: file,
+      fileId: file.name,
+      collapsed: false,
+      diffStyle: "unified",
+      wrapLines: false,
+      themeType: "light",
+      onToggle: undefined,
+      hunks: undefined,
+      busy: false,
+    }),
+  );
+
+it("any other binary file's row says it isn't shown, and an empty file's nothing", async () => {
+  const { repo } = seedRepo();
+  writeFileSync(join(repo, "data.bin"), Buffer.from([0, 1, 2, 3]));
+  writeFileSync(join(repo, "empty.txt"), "");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "more");
+  git(repo, "rm", "-q", "data.bin");
+  git(repo, "commit", "-q", "-m", "less");
+  const filesOf = async (rev: string) =>
+    parsePatchFiles(
+      await engineGit.commitDiff(repo, git(repo, "rev-parse", rev).trim()),
+    ).flatMap((p) => p.files);
+  const added = await filesOf("HEAD~1");
+  const bin = added.find((f) => f.name === "data.bin");
+  const empty = added.find((f) => f.name === "empty.txt");
+  const [deleted] = await filesOf("HEAD");
+  assert.ok(bin && empty && deleted);
+  for (const file of [bin, deleted]) {
+    assert.ok(isBinaryChange(file), file.type);
+    assert.ok(!isMediaBinary(file), file.type);
+  }
+  assert.ok(!isBinaryChange(empty), "an empty file is no binary change");
+  assert.deepEqual(
+    patchEntries(added).map((entry) => entry.stats),
+    [null, { additions: 0, deletions: 0 }],
+  );
+  assert.match(rowOf(bin), /Binary file, not shown\./);
+  assert.doesNotMatch(rowOf(empty), /not shown/);
 });
 
 it("a pure rename names no blobs, so it gets no preview", async () => {
