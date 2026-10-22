@@ -107,7 +107,6 @@ const unwatched = new Set([
   "running_scripts",
   "mirror_agreements",
   "mirror_history",
-  "mirror_invites",
   "wt_move_scan",
   "v2_import",
   "moving",

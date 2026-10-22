@@ -47,7 +47,6 @@ import {
 import { worktreeNotifiers } from "@host/ipc/scriptRun";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
-import { landInvitedMirror } from "@host/mirror/invites";
 
 // The branch the landing asked for is gone from the source.
 class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
@@ -378,13 +377,6 @@ export const landForSender: EffectHandlers<
       (frame) => source.report(frame),
       move,
     );
-    // A landing this device asked for (a mirror invited from here,
-    // host/mirror/invites.ts): the invitation moves onto the copy
-    // before the peer's next call names it.
-    yield* landInvitedMirror(ctx.callerDeviceId, landing.sourceWorktreeId, {
-      projectId: landed.worktree.projectId,
-      worktreeId: landed.worktree.id,
-    });
     yield* keep;
     return { ...landed, receipt };
   }).pipe(

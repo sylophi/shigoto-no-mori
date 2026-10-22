@@ -16,8 +16,6 @@ import type { GrantId } from "./grants.ts";
 // peer's. "client": the machine the window runs on.
 export type ContractScope = "host" | "client";
 
-export type InvitableScope = "landing" | "copy" | "project";
-
 const ModuleName = Context.Service<"sm/contracts/ModuleName", string>(
   "sm/contracts/ModuleName",
 );
@@ -47,15 +45,6 @@ export const TracksProjectUsage = Context.Service<
   boolean
 >("sm/contracts/TracksProjectUsage");
 
-// The switch's one exception: a gated call a mirror into this device
-// makes, admitted by the invitation with the switch off, scoped to what
-// the payload names ("copy": the copy's project and worktree, "project":
-// its project only).
-export const Invitable = Context.Service<
-  "sm/contracts/Invitable",
-  InvitableScope
->("sm/contracts/Invitable");
-
 export const Grant = Context.Service<"sm/contracts/Grant", GrantId>(
   "sm/contracts/Grant",
 );
@@ -74,7 +63,6 @@ type InvokeOptions = {
   readonly tracksProjectUsage?: boolean;
   readonly remote?: boolean;
   readonly gated?: boolean;
-  readonly invitable?: InvitableScope;
   readonly grant?: GrantId;
   readonly busy?: ChangeKind;
 };
@@ -88,7 +76,6 @@ function annotationsOf(options: InvokeOptions): Context.Context<never> {
   add(TracksProjectUsage, options.tracksProjectUsage);
   add(Remote, options.remote);
   add(Gated, options.gated);
-  add(Invitable, options.invitable);
   add(Grant, options.grant);
   add(Busy, options.busy);
   return annotations as Context.Context<never>;

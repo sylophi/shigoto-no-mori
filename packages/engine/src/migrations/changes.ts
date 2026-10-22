@@ -4,8 +4,8 @@ import * as SqlClient from "effect/sql/SqlClient";
 // The tables a view is read from. The two caches (icon_cache,
 // clone_verified) are left out: nothing shows them, and a clone checkout
 // writes a row per file. So are the saved terminals, the running
-// scripts and the mirrors' agreements, history and invitations, which
-// only the host reads, and the one-time scan into wt/ (wt_move_scan),
+// scripts and the mirrors' agreements and history, which only the host
+// reads, and the one-time scan into wt/ (wt_move_scan),
 // which only the doctor reads.
 const firstTables = [
   "projects",

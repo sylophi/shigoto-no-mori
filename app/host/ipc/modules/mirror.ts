@@ -9,7 +9,6 @@ import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/Views";
 import type { HostServices } from "@host/process/services";
-import { forgetMirrorInvitesOf } from "@host/mirror/invites";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
 import {
   applyServedGitState,
@@ -43,9 +42,6 @@ export const mirrorHandlers = {
   resume: ({ session }) => pauseOrResume(session, "resume"),
   setIgnores: ({ session, ignoreMode, ignores }) =>
     reopenMirror(session, ignoreMode, ignores),
-  // The runner ended its mirror into a copy here and kept the copy:
-  // the invitation goes, the worktree stays.
-  release: ({ worktreeId }) => forgetMirrorInvitesOf(worktreeId),
   history: ({ localWorktreeId }) =>
     Effect.map(MirrorEngine, (engine) => ({
       events: engine.history(localWorktreeId),

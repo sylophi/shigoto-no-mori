@@ -29,7 +29,7 @@ export const GRANTS = {
   changeCode: {
     title: "Change your code",
     detail:
-      "Create, delete and move worktrees, commit, discard changes, push (force push too), publish new repositories, and open and merge pull requests with this machine's Git and GitHub credentials.",
+      "Create, delete and move worktrees, mirror worktrees into this machine (writing their files as they change), commit, discard changes, push (force push too), publish new repositories, and open and merge pull requests with this machine's Git and GitHub credentials.",
     calls: [
       "branches:create",
       "branches:delete",
@@ -46,8 +46,8 @@ export const GRANTS = {
       "githubCli:stageAttachment",
       "githubCli:stageAttachmentFromUrl",
       "mirror:applyGitState",
+      "mirror:openStream",
       "mirror:pause",
-      "mirror:release",
       "mirror:resume",
       "mirror:setIgnores",
       "mirror:startTo",
@@ -109,7 +109,6 @@ export const GRANTS = {
       "fs:listDirectory",
       "fs:scanForGitRepos",
       "mirror:gitState",
-      "mirror:openStream",
       "projects:add",
       "projects:clone",
       "projects:create",

@@ -59,7 +59,6 @@ import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@shared/paths";
 import * as Sharing from "@host/lib/Sharing";
-import { mirrorInviteAdmits, mirrorInviteSees } from "@host/mirror/invites";
 import * as Loopback from "@host/socket/Loopback";
 import * as DeviceLink from "@host/socket/DeviceLink";
 import {
@@ -137,11 +136,7 @@ export const deviceLinkLayer = () =>
         localKey: () => remote.now()?.hub.localKey() ?? null,
       },
       isCommandGranted: acceptsPeerCommands,
-      // The switches' one exception: the mirrors this device asked for.
-      isInvited: mirrorInviteAdmits,
     },
-    // Not sharing, a mirror it asked for still follows its copy here.
-    seesPush: mirrorInviteSees,
     services: Graph.services,
   });
 

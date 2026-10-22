@@ -42,11 +42,11 @@
 //     refused as holding no checkout.
 //   - `mirror --from` asks the peer to run the mirror (its
 //     mirror:startTo, on its own engine) and send the copy here,
-//     relaying its progress, with no need of this device's own switch:
-//     the ask leaves an invitation (host/mirror/invites.ts, whose
-//     rules are mirror-invites.mts's) for the peer's original. The
-//     copy is local, a repeat from either end answers with it, and
-//     `unmirror` removes it through the peer, original kept.
+//     relaying its progress. It is refused here, before the peer hears
+//     of it, while either of this device's own switches is off, naming
+//     the switch. The copy is local, a repeat from either end answers
+//     with it, and `unmirror` removes it through the peer, original
+//     kept.
 //
 // Every worktree is named with -p: a landed copy keeps its source's
 // folder name, and with both projects in one registry the bare name
@@ -135,7 +135,8 @@ import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
-import { listMirrorInvites } from "@host/mirror/invites";
+import * as HostAccount from "@host/lib/HostAccount";
+import * as Sharing from "@host/lib/Sharing";
 import * as Loopback from "@host/socket/Loopback";
 import type { LinkRegistrar } from "@host/socket/DeviceLink";
 import { createServed } from "@shared/ipc/served";
@@ -559,7 +560,6 @@ it("loopback.json is owner-only, a call before the hello is refused, a stale tok
     startTo: onListener(mirrorHandlers.startTo),
     startFrom: onListener(mirrorHandlers.startFrom),
     stop: onListener(mirrorHandlers.stop),
-    release: onListener(mirrorHandlers.release),
     pause: onListener(mirrorHandlers.pause),
     resume: onListener(mirrorHandlers.resume),
     setIgnores: onListener(mirrorHandlers.setIgnores),
@@ -1147,10 +1147,10 @@ it("unmirror of a mirror whose copy was already deleted on the peer ends the ses
   assert.equal(existsSync(mirrorPath), true, "the original stays");
 });
 
-it("mirror --from: run by the peer on the original with its progress relayed, the copy local and the mirror invited past this device's switch (an ask that fails to land withdraws its invitation), a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only", async () => {
+it("mirror --from: refused here while either of this device's switches is off, naming it, then run by the peer on the original with its progress relayed and the copy local, a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only", async () => {
   // ---- (7b) mirror --from: the peer holds the original, so the peer
   // runs the mirror (its mirror:startTo, on its own engine) and sends
-  // the copy HERE, which lands through the ask's invitation. unmirror
+  // the copy HERE, through this device's own switches. unmirror
   // removes the local copy through the peer and leaves the peer's
   // original.
   peerOwns = sourceProjectId;
@@ -1177,12 +1177,43 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
     "",
   ]);
   assert.equal(blankFrom.code, 2, "a blank --from is a usage error");
-  // This device's own switch is not in the way: the ask invites the
-  // mirror (host/mirror/invites.ts), and the invitation is what the
-  // peer's send lands through. Nothing is invited before the ask,
-  // and an ask the peer cannot land (the branch is taken here)
-  // leaves none behind either.
-  assert.deepEqual(listMirrorInvites(), [], "no invitation before the ask");
+  // The account starts unreported, which reads as control off.
+  const ask = ["worktrees", "mirror", "feat-in", "-p", "target", "--from"];
+  const controlOff = await runCli([...ask, "Studio Mac"]);
+  assert.notEqual(controlOff.code, 0);
+  assert.match(
+    cliFailureMessage(controlOff, "no error doc"),
+    /Turn on “Allow control from other devices” on this device's account page to mirror here/,
+  );
+  await runHost(
+    Effect.flatMap(HostAccount.HostAccount, (account) =>
+      account.set({
+        hubUrl: "http://127.0.0.1:9",
+        accountId: "account",
+        credential: "",
+        deviceKey: "",
+        webOrigin: "",
+        acceptsCommands: true,
+      }),
+    ),
+  );
+  await runHost(
+    Effect.flatMap(Sharing.Sharing, (sharing) => sharing.set(false)),
+  );
+  const sharingOff = await runCli([...ask, "Studio Mac"]);
+  assert.notEqual(sharingOff.code, 0);
+  assert.match(
+    cliFailureMessage(sharingOff, "no error doc"),
+    /Turn on “Share with other devices” on this device's account page to mirror here/,
+  );
+  await runHost(
+    Effect.flatMap(Sharing.Sharing, (sharing) => sharing.set(true)),
+  );
+  assert.equal(
+    listenerEngine.state.created.length,
+    0,
+    "the peer heard of neither",
+  );
   await git(targetRepo, ["branch", "feat-in"]);
   const collided = await runCli([
     "worktrees",
@@ -1198,11 +1229,6 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
     listenerEngine.state.created.length,
     0,
     "the peer started nothing",
-  );
-  assert.deepEqual(
-    listMirrorInvites(),
-    [],
-    "a failed ask withdraws its invitation",
   );
   await git(targetRepo, ["branch", "-D", "feat-in"]);
   const createdHereBefore = mirrorsCreated().length;
@@ -1230,23 +1256,6 @@ it("mirror --from: run by the peer on the original with its progress relayed, th
   assert.equal(inboundInput.deviceId, DIALER);
   assert.equal(inboundInput.remoteRoot, inbound.worktree.path);
   assert.equal(inboundInput.labels[MIRROR_LABEL_MODE], "mirror");
-  // The ask's invitation, for the peer and its original. It stays
-  // pending here: the landing runs on the one listener both devices
-  // share, stamped with the ASKING device as its caller, so it never
-  // matches. What the landing does with it is mirror-invites.mts's.
-  assert.deepEqual(
-    listMirrorInvites().map(({ peerDeviceId, sourceWorktreeId }) => ({
-      peerDeviceId,
-      sourceWorktreeId,
-    })),
-    [
-      {
-        peerDeviceId: LISTENER,
-        sourceWorktreeId: inboundInput.localWorktreeId,
-      },
-    ],
-    "the ask left an invitation for the peer's original",
-  );
   const inboundSteps = new Set(progressOf(inboundRun).map((doc) => doc.step));
   for (const step of ["capture", "create", "apply"]) {
     assert.ok(

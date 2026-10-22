@@ -58,12 +58,7 @@ export type ChannelHandle = {
 };
 
 export type LinkChannels = {
-  // `invited`: the command switch turning off leaves it be.
-  attach(
-    channelId: string,
-    endpoint: ChannelEndpoint,
-    opts?: { readonly invited?: boolean },
-  ): ChannelHandle;
+  attach(channelId: string, endpoint: ChannelEndpoint): ChannelHandle;
   has(channelId: string): boolean;
   size(): number;
 };
@@ -92,13 +87,13 @@ export class PeerAuth extends RpcMiddleware.Service<
 }) {}
 
 // Anything not annotated gated:false, a missing annotation included,
-// runs only while the switch is on or as a call the host invited.
+// runs only while the switch is on.
 export class CommandGate extends RpcMiddleware.Service<
   CommandGate,
   { requires: LinkPeer }
 >()("sm/remote/CommandGate", { error: CommandRefusedError }) {}
 
-// Off, every call but the link's own and invited ones is refused, reads
+// Off, every call but the link's own is refused, reads
 // included, and one under way ends. A push passes, carrying only what the
 // host still lets this peer hear.
 export class SharingGate extends RpcMiddleware.Service<

@@ -129,17 +129,6 @@ export type DirectListenerOpts = {
   peerKey?: (deviceId: string) => Uint8Array;
   registerHandlers?: (binding: WsServerBinding) => void;
   start?: Partial<WsServerStartOpts>;
-  // The switch's one exception (WsServerTicketAuth.isInvited): the
-  // calls the host asked for itself. Absent, the switch is the whole
-  // verdict, as it is for every check but the gate's own.
-  isInvited?: (
-    peerDeviceId: string,
-    channel: string,
-    input: unknown,
-  ) => boolean;
-  // The pushes a peer still hears while sharing is off, beside
-  // sharing:changed (the host's mirrorInviteSees). Absent, none.
-  seesPush?: (peerDeviceId: string, payload: unknown) => boolean;
   // What the listener's graph runs on beyond its own (a tracer, a
   // file-sync engine), over the proof file's host services.
   provide?: Layer.Layer<never>;
@@ -225,11 +214,7 @@ export async function startDirectListener(
                 localKey: () => testDeviceKey(listenerId).pair,
               },
               isCommandGranted: () => accepts,
-              ...(opts.isInvited === undefined
-                ? {}
-                : { isInvited: opts.isInvited }),
             },
-            seesPush: opts.seesPush ?? (() => false),
           }),
         ),
       ),
@@ -492,12 +477,10 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
   opts: {
     contracts?: ServedContracts<C>;
     provide?: DirectListenerOpts["provide"];
-    isInvited?: DirectListenerOpts["isInvited"];
   } = {},
 ): Promise<DirectWire> {
   const listener = await startDirectListener(track, {
     ...(opts.provide === undefined ? {} : { provide: opts.provide }),
-    ...(opts.isInvited === undefined ? {} : { isInvited: opts.isInvited }),
     registerHandlers: (binding) => {
       for (const [contract, handlers] of opts.contracts ?? []) {
         binding.served.serve(contract, handlers);

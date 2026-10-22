@@ -37,9 +37,9 @@
 //     time: a wall clock stepped back neither holds the next one off
 //     nor a step forward lets it through early,
 //   - a worktree re-keyed with no host hook (an adopt, a project
-//     relocate, as the terminal makes them) carries its thread and the
-//     invitation of a copy it is to its new id, and the daemon's next
-//     snapshot re-opens a session on it at its new path,
+//     relocate, as the terminal makes them) carries its thread to its
+//     new id, and the daemon's next snapshot re-opens a session on it at
+//     its new path,
 //   - a device leaving its account ends its sessions within the
 //     sweep's bound: a terminate the daemon never answers is given up
 //     at 5 s, and an answer that comes later notes nothing on the
@@ -87,16 +87,8 @@ import {
 } from "../host/mirror/MirrorEngine.ts";
 import * as MirrorEngineLayer from "../host/mirror/MirrorEngineLayer.ts";
 import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
-import {
-  inviteMirror,
-  landInvitedMirror,
-  listMirrorInvites,
-} from "../host/mirror/invites.ts";
 import { makeGitFollower } from "../host/mirror/gitFollow.ts";
-import {
-  MIRROR_LABEL_LOCAL_PROJECT,
-  stopMirrorsForWorktree,
-} from "../host/mirror/registry.ts";
+import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import { transferFilesOnce } from "../host/mirror/oneShot.ts";
 import { mirrorList } from "../host/mirror/sessions.ts";
 import { MIRROR_LABEL_MODE } from "@shigomori/contracts/modules/mirror";
@@ -526,7 +518,7 @@ it("an engine whose stores cannot be read answers as unavailable and refuses eve
   assert.deepEqual(requests(), []);
 });
 
-it("an adopt and a project relocate carry a mirror's thread, its copy's invitation and its running session to the new id", async () => {
+it("an adopt and a project relocate carry a mirror's thread and its running session to the new id", async () => {
   // The engine's adopt and relocate run git in this process.
   scrubProcessGitEnv();
   const git = sandboxGit();
@@ -540,7 +532,7 @@ it("an adopt and a project relocate carry a mirror's thread, its copy's invitati
   git(repo, "add", ".");
   git(repo, "commit", "-q", "-m", "a");
   // An original mirrored from here, outside the repo, and a copy a peer
-  // mirrors into, inside it.
+  // mirrors into, inside it, whose thread the relocate carries.
   const outside = join(base, "outside");
   git(repo, "worktree", "add", "-q", "-b", "otter", outside);
   const copy = join(repo, "nested", "owl");
@@ -550,24 +542,13 @@ it("an adopt and a project relocate carry a mirror's thread, its copy's invitati
       registry.register({ name: "repo", path: repo }),
     ),
   );
-  const invite = inviteMirror({
-    peerDeviceId: "B",
-    sourceWorktreeId: "0123456789ab",
-    identity: "repo",
-  });
-  trackTest(() => run(invite.withdraw));
-  await run(
-    landInvitedMirror("B", "0123456789ab", {
-      projectId: project.id,
-      worktreeId: worktreeIdFromPath(copy),
-    }),
-  );
   const original = worktreeIdFromPath(outside);
   succeeded(
     await engine((mirrors) =>
       Effect.sync(() => {
         mirrors.noteEvent(original, "started", "");
         mirrors.noteEvent(worktreeIdFromPath(repo), "started", "");
+        mirrors.noteEvent(worktreeIdFromPath(copy), "started", "");
       }),
     ),
   );
@@ -621,11 +602,8 @@ it("an adopt and a project relocate carry a mirror's thread, its copy's invitati
   );
   const movedCopy = worktreeIdFromPath(join(moved, "nested", "owl"));
   await waitFor(
-    () =>
-      listMirrorInvites().some(
-        (landed) => landed.copy?.worktreeId === movedCopy,
-      ),
-    "the copy's invitation to follow the relocate",
+    () => history(movedCopy).some((event) => event.kind === "started"),
+    "the copy's thread to follow the relocate",
   );
   assert.ok(
     history(worktreeIdFromPath(moved)).some(
@@ -676,45 +654,6 @@ it("a daemon restarting keeps the list and the follower's verdict, and the threa
     ),
     [],
   );
-});
-
-it("a copy's release still out when the engine closes ends with it", async () => {
-  let asked = false;
-  let ended = false;
-  standInPeers({
-    transportFor: () => ({
-      invoke: (channel, _input, options) =>
-        new Promise((_resolve, reject) => {
-          if (channel !== "mirror:release") {
-            reject(new Error("not in this check"));
-            return;
-          }
-          asked = true;
-          options?.signal?.addEventListener("abort", () => {
-            ended = true;
-            reject(new Error("aborted"));
-          });
-        }),
-      subscribe: () => () => {},
-    }),
-    channelsFor: () => () => Promise.reject(new Error("not in this check")),
-  });
-  const { run, state, close } = await harness(() => ({ ok: true }));
-  await state([
-    rawMirrorSession({
-      session: "s1",
-      localRoot: root,
-      deviceId: "B",
-      localWorktreeId: "w1",
-      labels: {
-        [MIRROR_LABEL_MODE]: "mirror",
-      },
-    }),
-  ]);
-  await run(stopMirrorsForWorktree("w1"));
-  await waitFor(() => asked, "the copy's release to be asked");
-  await close();
-  await waitFor(() => ended, "the release to end with the engine");
 });
 
 it("a stepped wall clock neither holds a copy-gone report back nor lets one through early", async () => {

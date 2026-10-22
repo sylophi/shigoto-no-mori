@@ -325,8 +325,7 @@ export const layer = Layer.effect(Registry, make);
   one description of that route for the Worker and the app alike.
 - The per-call classification travels as annotations on the
   definition, read by middleware: `remote` (reaches a peer), `gated`
-  (served to a peer only with the command switch on), `invitable` (the
-  mirror invitation's exception, with its scope),
+  (served to a peer only with the command switch on),
   `tracksProjectUsage`, `grant` (the consent text that covers the
   call), and `busy` (what a quit waits on the call for). A host-scoped
   call classifies itself; middleware fails closed

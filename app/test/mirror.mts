@@ -1346,7 +1346,6 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     const put = (raw: MirrorSessionRaw) => live.set(raw.session, raw);
     const noted: Parameters<MirrorEngine["Service"]["noteEvent"]>[] = [];
     const deleted: string[] = [];
-    const released: string[] = [];
     let status: Effect.Success<MirrorEngine["Service"]["status"]> = "running";
     let verdict: MirrorGitStatus = { status: "synced", detail: "" };
     let timedOut = false;
@@ -1367,10 +1366,6 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
       refreshGit: () => Effect.sync(() => (timedOut ? "timed-out" : verdict)),
       noteEvent: (worktreeId, kind, detail) =>
         noted.push([worktreeId, kind, detail]),
-      releaseCopy: (raw) =>
-        Effect.sync(() => {
-          released.push(raw.worktreeId);
-        }),
     });
     // The peer's list never answers, which the copy-gone probe reads
     // as no answer (the copy may well be there), so no refusal is
@@ -1432,15 +1427,13 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
 
     // The original removed outside the app: the copy is the only one
-    // left, so even a forced stop keeps it, and its device is told it
-    // is a plain worktree now.
+    // left, so even a forced stop keeps it.
     put(sessionOf("orphan", { localRoot: goneRoot }));
     assert.deepEqual(await stop({ session: "orphan", force: true }), {
       removedCopy: false,
     });
     assert.ok(!live.has("orphan"));
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
-    await waitFor(() => released.includes("wt-orphan"), "the release");
     assert.deepEqual(noted.at(-1), [
       "orig-orphan",
       "stopped",

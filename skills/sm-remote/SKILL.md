@@ -27,8 +27,8 @@ sm worktrees list --remote
 sm worktrees mirror <name> --from <device>
 ```
 
-`cd` to the path it prints. If their machine refuses, tell the user to
-turn on command access there (Settings, Account).
+`cd` to the path it prints. If either machine refuses, pass on what it
+says: it names the switch to turn on, and on which machine.
 
 ## Stop mirroring
 

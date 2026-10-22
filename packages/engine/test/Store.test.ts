@@ -440,11 +440,6 @@ it.each([
     "file-sync/mirror-history.json",
     { events: "unreadable" },
   ],
-  [
-    "mirror invites that aren't a list",
-    "file-sync/mirror-invites.json",
-    { invites: { a: 1 } },
-  ],
 ])(
   "leaves every v2 file in place when the import drops %s",
   async (_, file, doc) => {

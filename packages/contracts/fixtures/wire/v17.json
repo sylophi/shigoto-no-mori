@@ -1190,12 +1190,6 @@
       "session": "\ud800"
     }
   },
-  "mirror:release": {
-    "payload": {
-      "projectId": "😀",
-      "worktreeId": "347ee37ffaee"
-    }
-  },
   "mirror:resume": {
     "payload": {
       "session": "0"
@@ -1216,7 +1210,6 @@
       "sourceDeviceId": " ",
       "sourceProjectId": "0",
       "sourceWorktreeId": "177e8279dfaf",
-      "sourceIdentity": "N",
       "ignoreMode": "custom",
       "ignores": ["\udc00", "0<"]
     },
