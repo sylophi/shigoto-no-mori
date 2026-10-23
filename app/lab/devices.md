@@ -55,15 +55,15 @@ the bridge's answers, the other device's window, and the disk.
   checkout on the landing device, a move clones it first, which is
   worth checking too.
 - **Moves, mirrors and their dialogs.** Start them from the UI (a
-  worktree page's footer: Mirror, and Transplant under Options) or through
-  the api's `sync` and `mirror`, then watch both windows
-  and the disk. What each should do is in its contract
+  worktree page's footer: Mirror, and Transplant under Options) or
+  through the api's `sync` and `mirror`, then watch both windows and
+  the disk. What each should do is in its contract
   (`packages/contracts/src/modules/`), and `bridge.md` says what each
-  call returns. Two mirror cases worth a look: relocate a mirrored original on the device running
-  it (its session leaves `api.run(api.mirror.list())`, and the other
-  device's page for the copy stops saying it is mirrored), and a
-  delete the CLI refuses (dirty tree, no force) leaves the mirror
-  running.
+  call returns. Two mirror cases worth a look: relocate a mirrored
+  original on the device running it (its session leaves
+  `api.run(api.mirror.list())`, and the other device's page for the
+  copy stops saying it is mirrored), and a delete the CLI refuses
+  (dirty tree, no force) leaves the mirror running.
 - **Command access.** A device that just enrolled accepts no commands,
   so moves onto it are refused (the dialogs show it read-only), and its
   own "Mirror here" stays off, until its switch is on: Allow control

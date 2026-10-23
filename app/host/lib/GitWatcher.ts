@@ -177,8 +177,7 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
 // its stamp (written by a rename into place too), for the index's own
 // signal. A file that isn't there reads as absent; any other failure
 // (a directory git removed mid-walk, a volume that stalls) fails the
-// reading, which the caller skips rather than read as
-// a change.
+// reading, which the caller skips rather than read as a change.
 const isNotFound = (error: PlatformError.PlatformError) =>
   Predicate.isTagged(error.reason, "NotFound");
 

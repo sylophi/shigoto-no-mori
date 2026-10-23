@@ -575,9 +575,9 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         );
     if (legacyPointerFile !== null) yield* removeIfThere(legacyPointerFile);
     yield* flushed(dirname(pointerFile));
-    // The store this process holds is the old place's: the first one to
-    // open it at the new place removes the old tree, the journal, and lets
-    // it write.
+    // The store this process holds is the old place's: the first engine
+    // graph to come up at the new place (not the doctor's) removes the old
+    // tree, the journal, and lets it write.
     yield* finishMove(journal, newDir, {
       settle: false,
       file: join(newDir, JOURNAL),

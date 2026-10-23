@@ -165,8 +165,9 @@ with no `window`, so a view must not reach for the runtime.
   lays out by the window's width, a container query (`@min-[48rem]:`),
   never the viewport's (`md:`). The host API comes through the runtime,
   not `window.api`.
-- A container's data is a host view (an atom on the client's runtime)
-  or a request (a React Query query), as `EFFECT.md` section 10 says.
+- A container's data is a host view or the state kept from a push
+  stream (an atom on the client's runtime), or a request (a React Query
+  query), as `EFFECT.md` section 10 says.
   Atoms live in the app's hooks and containers, never in
   `@shigomori/ui`.
 

@@ -138,7 +138,7 @@ const removeOwnCopy = (dir: string) =>
   });
 
 // A step of a finish or an undo that failed keeps the journal, for the
-// next process to open the store to carry on.
+// next engine graph to come up (not the doctor's) to carry on.
 const settled = <A, E, R>(
   step: Effect.Effect<A, E, R>,
   what: string,
@@ -159,14 +159,14 @@ const settled = <A, E, R>(
 
 // The end of a move that landed at `at`, its journal at `file`. In the
 // moving process (`settle` false) only git's links are re-pointed: its
-// store is the old place's. The first engine graph to come up at the new
-// place (`settle` true; not the doctor's) then removes the old tree a copy left (its
-// own copy only, its journal last), which waited till then so a power
-// loss before the copy reached the disk still had it; re-points every
-// link again, the journal's entries and any worktree git lists under the
-// old folder; carries each entry's port-pool lease; removes the journal;
-// and lets the store write, last. Each step is idempotent, so a process
-// that finds the journal runs it again.
+// store is the old place's. The first engine graph to come up at the
+// new place (`settle` true; not the doctor's) then removes the old tree
+// a copy left (its own copy only, its journal last), which waited till
+// then so a power loss before the copy reached the disk still had it;
+// re-points every link again, the journal's entries and any worktree
+// git lists under the old folder; carries each entry's port-pool lease;
+// removes the journal; and lets the store write, last. Each step is
+// idempotent, so a process that finds the journal runs it again.
 export const finishMove = (
   journal: Journal,
   at: string,
