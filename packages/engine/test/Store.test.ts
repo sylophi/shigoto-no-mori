@@ -339,10 +339,9 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
     title: "Fox",
   });
   write("running-scripts.json", { ownerPid: 99999, scripts: [] });
-  // 2.x's mirror invitations, which 3.x drops unread.
-  write("file-sync/mirror-invites.json", [
-    { deviceId: "B", projectId: "A", worktreeId: "aaaaaaaaaaaa" },
-  ]);
+  // 2.x's mirror invitations, which 3.x drops unread: one that can't be
+  // read goes all the same.
+  write("file-sync/mirror-invites.json", "not json");
   write("updater.json", { channel: "stable" });
   const listing = async () => ({
     projects: await rows("projects"),

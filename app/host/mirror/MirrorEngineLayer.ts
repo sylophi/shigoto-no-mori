@@ -329,16 +329,21 @@ const make = (options: {
           (raw) =>
             raw.deviceId === deviceId &&
             !raw.paused &&
-            LINK_LOST.has(raw.status) &&
-            !isRecreating(raw.session),
+            LINK_LOST.has(raw.status),
         );
         yield* Effect.forEach(
           waiting,
           (raw) =>
-            Effect.ignoreCause(daemon.resume(raw.session), {
-              log: "Warn",
-              message: "[mirror] a session didn't reconnect",
-            }),
+            // Asked as the resume goes out, so a re-open that started
+            // since keeps its pause.
+            Effect.suspend(() =>
+              isRecreating(raw.session)
+                ? Effect.void
+                : Effect.ignoreCause(daemon.resume(raw.session), {
+                    log: "Warn",
+                    message: "[mirror] a session didn't reconnect",
+                  }),
+            ),
           { concurrency: "unbounded", discard: true },
         );
       });

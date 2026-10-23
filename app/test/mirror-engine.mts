@@ -32,12 +32,15 @@
 //     missing ceiling, not the settle ceiling,
 //   - a daemon restarting keeps the list and the git follower's verdict
 //     its sessions had, and the threads note nothing of it,
-//   - a thread says a lost link and its return, never the connect error
-//     meanwhile, which names the other device by its id, and an error
-//     from before stands until the link is back,
+//   - a thread says a lost link and its return, never the link's
+//     error, which names the other device by its id, and an error from
+//     before stands until the link is back, while the sync's own error,
+//     which leaves the link down too, is noted,
+//   - a thread notes git agreeing again across a spell of git off,
 //   - a peer coming to take this device's calls reconnects its sessions
-//     waiting on the link, none paused or halted and no other
-//     device's, and git looks at its sessions again,
+//     waiting on the link at once and side by side, none paused, halted
+//     or held by a re-open and no other device's, and git looks at its
+//     sessions again,
 //   - the hub's status snapshots admit a peer as its direct session is
 //     up with both of its switches on, once, and again after it left,
 //   - the follower's copy-gone report, once a minute, counts elapsed
@@ -97,6 +100,7 @@ import {
 import * as MirrorEngineLayer from "../host/mirror/MirrorEngineLayer.ts";
 import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
 import { makeGitFollower } from "../host/mirror/gitFollow.ts";
+import { createMirrorHistory } from "../host/mirror/history.ts";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import { transferFilesOnce } from "../host/mirror/oneShot.ts";
 import { mirrorList } from "../host/mirror/sessions.ts";
@@ -665,7 +669,7 @@ it("a daemon restarting keeps the list and the follower's verdict, and the threa
   );
 });
 
-it("a thread says a lost link and its return, never the connect error meanwhile, which names the other device by its id, and an error from before stands until the link is back", async () => {
+it("a thread says a lost link and its return, never the link's error, which names the other device by its id, and an error from before stands until the link is back, while the sync's own error, which leaves the link down too, is noted", async () => {
   const { state, history } = await harness(() => ({ ok: true }));
   const at = (
     connected: boolean,
@@ -719,9 +723,40 @@ it("a thread says a lost link and its return, never the connect error meanwhile,
     "connected",
     "disconnected",
   ]);
+  // The link back, its error not cleared yet by the sync's start.
+  await state([
+    at(true, {
+      lastError: "unable to connect to beta: no direct connection to 0123",
+    }),
+  ]);
+  await state([
+    at(false, {
+      lastError: "unable to stage files on beta: no space left on device",
+    }),
+  ]);
+  assert.deepEqual(kinds().slice(0, 3), ["error", "disconnected", "recovered"]);
 });
 
-it("a peer coming to take this device's calls reconnects its sessions waiting on the link at once, none paused or halted and no other device's, and git looks at its sessions again", async () => {
+it("a thread notes git agreeing again across a spell of git off, which says nothing of the git state", () => {
+  const history = createMirrorHistory({
+    store: { load: () => ({}), save: () => {} },
+  });
+  const raw = rawMirrorSession({
+    session: "s1",
+    localRoot: root,
+    localWorktreeId: "w-git",
+    labels: { [MIRROR_LABEL_MODE]: "mirror" },
+  });
+  for (const status of ["synced", "diverged", "off", "synced"] as const) {
+    history.observe([raw], () => ({ status, detail: "" }));
+  }
+  assert.deepEqual(
+    history.eventsFor("w-git").map((event) => event.kind),
+    ["git-synced", "git-diverged"],
+  );
+});
+
+it("a peer coming to take this device's calls reconnects its sessions waiting on the link at once and side by side, none paused, halted or held by a re-open and no other device's, and git looks at its sessions again", async () => {
   const admissions = Effect.runSync(PubSub.unbounded<string>());
   const asked: string[] = [];
   standInPeers({
@@ -743,7 +778,21 @@ it("a peer coming to take this device's calls reconnects its sessions waiting on
       }),
     ),
   );
-  const { state, requests } = await harness(() => ({ ok: true }));
+  // A resume waits on its reconnect, and a re-open's pause on the
+  // daemon: both are held until the check ends.
+  let holding = true;
+  const { state, requests, fork, held, answerHeld } = await harness((request) =>
+    holding && (request.op === "resume" || request.op === "pause")
+      ? null
+      : { ok: true, ...(request.op === "create" ? { session: "new" } : {}) },
+  );
+  // Before the engine's teardown, which waits on them.
+  trackTest(async () => {
+    holding = false;
+    for (const request of held.splice(0)) {
+      await answerHeld(request, { ok: true });
+    }
+  });
   const into = (
     id: string,
     deviceId: string,
@@ -766,22 +815,29 @@ it("a peer coming to take this device's calls reconnects its sessions waiting on
     into("halted", "B", { status: "halted-on-root-emptied" }),
     into("live", "B", { status: "watching" }),
     into("elsewhere", "C", { status: "disconnected" }),
+    into("reopening", "B", { status: "disconnected" }),
   ]);
-  await waitFor(() => asked.length === 5, "git to look at the sessions");
+  await waitFor(() => asked.length === 6, "git to look at the sessions");
+  fork((mirrors) => mirrors.recreate("reopening", input));
+  await waitFor(
+    () => requests().includes("pause reopening"),
+    "the re-open to pause its session",
+  );
   asked.length = 0;
   PubSub.publishUnsafe(admissions, "B");
   const resumed = () =>
     requests()
       .filter((request) => request.startsWith("resume"))
       .sort();
+  // Side by side: neither resume has an answer yet.
   await waitFor(
-    () => resumed().length >= 2 && asked.length >= 4,
+    () => resumed().length >= 2 && asked.length >= 5,
     "the sessions to reconnect and git to look again",
   );
-  // The resumes are asked side by side: any third would be in by now.
+  // Any third resume would be in by now.
   await settleTurns();
   assert.deepEqual(resumed(), ["resume dialing", "resume lost"]);
-  assert.deepEqual(asked, ["B", "B", "B", "B"]);
+  assert.deepEqual(asked, ["B", "B", "B", "B", "B"]);
 });
 
 // A hub status with each peer a direct session is up with, by its two

@@ -10,6 +10,10 @@
 // daemon: the store is injected.
 import { pluralize } from "@shigomori/contracts/words";
 import {
+  CommandRefusedError,
+  NotSharingError,
+} from "@shigomori/contracts/errors";
+import {
   isHaltedStatus,
   MIRROR_HISTORY_LIMIT,
   type MirrorEvent,
@@ -26,6 +30,15 @@ const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
   "connected",
   "disconnected",
 ]);
+
+// The words the link's errors carry, however the engine wraps them.
+const LINK_WORDS = [
+  "no direct connection to ",
+  new CommandRefusedError({}).message,
+  new NotSharingError({}).message,
+];
+const isLinkError = (error: string) =>
+  LINK_WORDS.some((words) => error.includes(words));
 
 // What the recorder remembers of a session between two snapshots, the
 // facts whose change is an event.
@@ -174,6 +187,7 @@ export function createMirrorHistory(deps: {
       const git = gitStatusOf(session.session);
       const previous = seen.get(session.session);
       const connected = session.local.connected && session.remote.connected;
+      const error = session.lastError ?? "";
       // A session's first connection is the expected course after
       // "started" and stays quiet, like the first git agreement below:
       // only a connection regained after a noted loss is news. A
@@ -191,13 +205,15 @@ export function createMirrorHistory(deps: {
         connected,
         lostConnection: lost,
         halted: isHaltedStatus(session.status),
-        // While the link is down, its connect error is the loss the
-        // "disconnected" row says, worded from this side and naming the
-        // other device by its id: the error last noted stands until
-        // the link is back.
-        lastError: connected
-          ? (session.lastError ?? "")
-          : (previous?.lastError ?? ""),
+        // The link's own error (the peer out of reach or turning this
+        // device away, naming it by its id) is the loss the
+        // "disconnected" row says, and none while the link is down
+        // isn't a recovery: the error last noted stands. The sync's
+        // own (a disk full), which also leaves the link down, is noted.
+        lastError:
+          isLinkError(error) || (!connected && error === "")
+            ? (previous?.lastError ?? "")
+            : error,
         conflicts: session.conflicts.length + session.excludedConflicts,
         // An off follow says nothing of the git state (the peer turned
         // this device away, or isn't reached): the verdict before it
