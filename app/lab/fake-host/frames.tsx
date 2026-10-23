@@ -11,8 +11,8 @@ let started: ReturnType<typeof start> | undefined;
 
 function start() {
   // Every visit starts on the client settings the scenes draw (the
-  // sidebar's inbox), as pose.ts seeds the fake host's, and as a first
-  // run, so a fixture version that moved brings no update toast.
+  // sidebar's inbox), as pose.ts seeds the fake host's, and with no last
+  // version, so a fixture version that moved brings no update toast.
   localStorage.setItem(
     "sm.fakeHost.clientConfig",
     JSON.stringify({ sidebarView: "inbox" }),

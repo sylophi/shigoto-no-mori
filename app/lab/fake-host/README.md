@@ -46,8 +46,9 @@ Some ways to use it:
 The marketing site runs the same bridge in-process for its live frames
 (`frames.tsx`): each frame is a desktop window of the app mounted into
 an element of the site's page, all of them on one bridge and one
-client, posing as the released app (no dev badge or hotkeys) and on
-the sidebar's inbox (`marketing/README.md`, "The frames").
+client, posing as the released app (no dev badge or hotkeys), on the
+sidebar's inbox, and with no last version, so no update toast
+(`marketing/README.md`, "The frames").
 
 What it cannot tell you: anything below the bridge. Transfers,
 mirrors and the hub are posed, and a channel the fixtures don't
