@@ -18,8 +18,7 @@ page.
   of the shared settings); `ipc/stubDefaults.ts` answers a local host
   call it lacks with a schema-derived stub.
 - `hub/`: the tab's hub socket (`connection.ts`), and its trace
-  (`trace.ts`): a console line per phase change, the web client's only
-  log.
+  (`trace.ts`): a console line per phase change.
 - `account/`: the browser's credential store, device id, name and icon.
 - `lib/kvStorage.ts`: localStorage behind a schema.
 

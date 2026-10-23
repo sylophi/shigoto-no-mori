@@ -1,11 +1,10 @@
 // The app's logger, and the Promise-facing adapter for code that is not
-// Effect yet (EFFECT.md, section 3), which writes the same lines without
-// running an effect. A line goes to the console at its level, as
-// console.* did, with a failure's cause after the message. In
-// the desktop main process electron-log owns the console and writes it
-// to ~/Library/Logs (main/electron/logFile.ts). In a renderer the
-// console is the devtools'. The adapter goes once the last caller is an
-// effect that logs through the graph's logger.
+// Effect (EFFECT.md, section 3), which writes the same lines without
+// running an effect. A line goes to the console at its level, with a
+// failure's cause after the message. In the desktop main process
+// electron-log owns the console and writes it to ~/Library/Logs
+// (main/electron/logFile.ts). In a renderer the console is the
+// devtools'.
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Logger from "effect/Logger";

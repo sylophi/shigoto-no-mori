@@ -4,9 +4,9 @@
 // listener all read this table, through the device's bindings
 // (`keybindings` in the client config). A control's own keys (Enter in
 // a field, the arrows in a list, Escape out of a dialog) are the
-// control's and stay out, and so are the switches for what is still an
-// experiment: the dev builds' theme keys and the palettes' hidden
-// variants (usePaletteVariantHotkey).
+// control's and stay out, and so are the hidden switches: the dev
+// builds' theme keys and the palettes' variants
+// (usePaletteVariantHotkey).
 //
 // A chord is written once: `Mod` is ⌘ on macOS and Ctrl elsewhere. A
 // letter or a digit is the one the key types, whichever key types it:

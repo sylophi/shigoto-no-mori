@@ -1,5 +1,5 @@
 // The shapes a subsystem takes in the layer graphs (host/process/layer.ts,
-// main/shellLayer.ts) while its insides are not Effect yet. A start that
+// main/shellLayer.ts) when its insides are not Effect. A start that
 // throws is logged and the rest of the graph still comes up: a build
 // that failed would close the graph's scope, running the quit's
 // finalizers under a live app.

@@ -17,7 +17,8 @@ import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 // process.env carries none of these. Capturing them at package time is
 // how a shipped build arrives configured. Every value is a public
 // endpoint or a public OAuth client_id by design
-// (shared/account/serviceConfig.ts), so inlining them leaks nothing.
+// (packages/contracts/src/accountServiceConfig.ts), so inlining them
+// leaks nothing.
 // An explicit define of one named constant rather than envPrefix +
 // import.meta.env: this build targets node, and import.meta.env
 // substitution is fragile enough on the web side (see the warning in

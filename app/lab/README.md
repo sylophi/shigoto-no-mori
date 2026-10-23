@@ -8,14 +8,14 @@ These pages describe what you can do, not what you must. Pick what
 the change calls for, check what it touches, and skip the rest. The
 one part to keep as written is "Sharing the machine".
 
-Commands and paths are relative to `app/`. The repo root's
-`package.json` forwards the scripts named here.
+Commands and paths are relative to `app/`.
 
 | Page | Reach for it to |
 | --- | --- |
 | [`fake-host/README.md`](fake-host/README.md) | See a screen in any state (a peer offline, a failing PR, the phone layout) or watch a flow play out, in a browser, with no hub, account or second machine |
 | [`scenes`](../../packages/ui/src/scenes/index.ts) | Draw the app's views over the fixtures, with no app behind them: what the marketing site renders and `@shigomori/ui`'s `scenes` proof renders in Node. They and the fixtures live in `packages/ui`; `/scenes.html` on the desktop fake host's port lists them and draws one |
 | [`scene-compare/README.md`](scene-compare/README.md) | See what a change does to the look: every scene in both themes against a base ref, with a report of the pairs that differ (`pnpm scenes:compare`) |
+| [`guide-eval/README.md`](guide-eval/README.md) | See how the guide answers a new user's how-tos, through Claude Code and Codex (`pnpm guide-eval`) |
 | [`reliability/README.md`](reliability/README.md) | Prove every client (the web client, the desktop app's windows, a device on the tunnel, the terminal) recovers on its own: the network dropped, the hub redeployed (when named), the host killed or asleep, the laptop asleep, a tab or window reloaded, a token expired, scripted against the dev hub with a report (`pnpm reliability`), once or as a soak for hours |
 | [`devices.md`](devices.md) | Check the real thing: dev apps as devices on this machine, moving and mirroring worktrees between them for real |
 | [`bridge.md`](bridge.md) | Ask a device window what it knows (its page api), or run the same verbs from the CLI |

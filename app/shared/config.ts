@@ -1,5 +1,5 @@
 // The process's settings from its environment, for code that is not
-// Effect yet (EFFECT.md, section 3): read through Effect's Config, so
+// Effect (EFFECT.md, section 3): read through Effect's Config, so
 // unset and empty read alike. The provider is made per read: the
 // packaged app rebuilds its environment from the login shell after the
 // first reads (shared/shellEnv.ts), and a provider made before that

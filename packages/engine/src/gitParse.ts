@@ -204,8 +204,7 @@ export function parseLeftRight(
 // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
 // on its own line after each commit's formatted output. A SOH (\x01)
 // sentinel opens each record, and NUL separates its fields, since an
-// author name can hold a tab. Held to app/shared/fixtures/git-log.json,
-// as the host's parser is.
+// author name can hold a tab. Held to app/shared/fixtures/git-log.json.
 const LOG_SENTINEL = "\x01";
 export const LOG_FORMAT = `${LOG_SENTINEL}%h%x00%an%x00%aI%x00%s`;
 

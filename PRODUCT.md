@@ -89,5 +89,3 @@ No formal WCAG target. Defaults to honor:
 - Keyboard navigation for the core loop (worktree list, create, switch, launch).
 - Reasonable contrast across surfaces, with light and dark themes both readable at small text sizes in both visual systems.
 - `prefers-reduced-motion` respected for any non-essential animation.
-
-Revisit accessibility once the multi-device workflow is stable.

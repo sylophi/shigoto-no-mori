@@ -14,10 +14,9 @@ import { useTheme } from "./useTheme";
 
 // Ctrl+Alt+Shift+L, the hidden way to a palette's variants
 // (packages/ui/src/lib/themes.ts): steps the saved light pick through its
-// swatch's cycle and saves it at once. Every build has it. The variants
-// wait off the picker while their fate is open, so this is an
-// experiment's switch and stays outside the keymap (lib/keymap.ts), like
-// the dev builds' theme keys. It listens only
+// swatch's cycle and saves it at once. Every build has it. It is hidden,
+// so it stays outside the keymap (lib/keymap.ts), like the dev builds'
+// theme keys. It listens only
 // while the window shows that saved pick (light, doubutsu on, no preview
 // staged over it) and the caller enables it, which AppShell does off
 // Settings, whose form keeps a staged copy of the pick its Save would write
