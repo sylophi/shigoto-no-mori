@@ -83,7 +83,7 @@ const noop = (): void => {};
 // Values of a peer's view this host holds for a window that has not
 // taken them, as many as a terminal's client may fall behind its shell
 // by (host/lib/terminals/Terminals.ts).
-export const RELAY_BACKLOG = 64;
+const RELAY_BACKLOG = 64;
 
 // hub:watchPeer as a window's host serves it. A window that falls
 // RELAY_BACKLOG values behind the peer's view has it ended as no

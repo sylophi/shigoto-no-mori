@@ -32,8 +32,7 @@
 // also deletes the keeper's entry), or quit (the keeper's scope
 // closing, which latches it).
 //
-// Pure shared code (no node builtins, no electron), driven headlessly
-// by the direct-plane check on a TestClock with a stub dial.
+// Pure shared code (no node builtins, no electron).
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -98,12 +97,10 @@ type PeerState = {
 };
 
 // The keeper, for the length of the scope it is made in: the peers'
-// loops run in it (on its Clock, which a check makes a TestClock to
-// drive the ladder instead of sleeping it out), and its close is the
-// quit's latch: every loop ends and everything after is ignored, so a
-// pending retry cannot dial mid-teardown. The ladder and the stable
-// threshold are NOT seams -- they are the shared supervisor constants,
-// and the check asserts against those same constants on purpose.
+// loops run in it (on its Clock), and its close is the quit's latch:
+// every loop ends and everything after is ignored, so a pending retry
+// cannot dial mid-teardown. The ladder and the stable threshold are the
+// shared supervisor constants.
 export const make = (
   deps: DirectKeeperDeps,
 ): Effect.Effect<DirectKeeper, never, Scope.Scope> =>

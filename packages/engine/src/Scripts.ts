@@ -214,7 +214,7 @@ const runArgs = (
 // is named whole ("just build" is one argument from the app), or, typed
 // in a terminal, as `sm run just build`: the runner and the recipe as
 // two words, unless package.json has a script called "just" itself.
-export function findScript<
+function findScript<
   S extends { readonly name: string; readonly runner: Runner | undefined },
 >(
   scripts: ReadonlyArray<S>,
@@ -238,7 +238,7 @@ const publicScript = ({ name, command, file, label }: FoundScript): Script => ({
   label,
 });
 
-export function mergeArrangedOrder(
+function mergeArrangedOrder(
   stored: ReadonlyArray<string>,
   arranged: ReadonlyArray<string>,
 ): ReadonlyArray<string> {

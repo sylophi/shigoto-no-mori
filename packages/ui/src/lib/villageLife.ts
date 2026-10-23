@@ -16,16 +16,8 @@
 import {
   type ClientConfig,
   clientSetting,
-  DEVICE_SETTINGS_DEFAULTS,
-  type GlobalConfig,
 } from "@shigomori/contracts/schemas/config";
 import type { VillagerDataStatus } from "@shigomori/contracts/schemas/villagers";
-
-export function doubutsuNamesEnabled(
-  config: Pick<GlobalConfig, "doubutsuNames">,
-): boolean {
-  return config.doubutsuNames ?? DEVICE_SETTINGS_DEFAULTS.doubutsuNames;
-}
 
 type VillageConfig = Pick<ClientConfig, "villageLife">;
 

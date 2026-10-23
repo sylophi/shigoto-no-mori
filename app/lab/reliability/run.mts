@@ -8,8 +8,8 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { isolateGit } from "../../../gitIsolation.ts";
-import { endAll } from "../../../testProcesses.mts";
+import { isolateGit } from "../../../test/gitIsolation.ts";
+import { endAll } from "../../../test/testProcesses.mts";
 import {
   CLIENT_KINDS,
   Lab,
@@ -29,7 +29,7 @@ import {
 } from "./scenarios.mts";
 
 // The seed repositories' git and the apps' own off this repository and
-// this machine's config (../../../gitIsolation.ts).
+// this machine's config (../../../test/gitIsolation.ts).
 isolateGit();
 
 const { values } = parseArgs({

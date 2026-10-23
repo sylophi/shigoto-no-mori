@@ -5,10 +5,9 @@
 // factory rather than a plain function because the deps are owned by
 // whoever assembled the direct listener: process/wires.ts wires the
 // real listener status, ticket store, tunnel runner and both switches in,
-// and the direct-plane check drives the same factory with its own
-// instances.
+// and the proofs' direct sandbox (app/test/lib/directBoot.mts) its own.
 //
-// This file must stay Electron free (pnpm test host-boundary).
+// This file must stay Electron free.
 import * as Schema from "effect/Schema";
 import {
   type DirectCandidate,
@@ -80,7 +79,7 @@ function lanUrlOf(address: string, port: number): string {
 // (HELLO_TIMEOUT_MS, 10 s), with time left to dial the tunnel. A
 // tunnel-only asker answered at once would wait out its dial ladder
 // instead, up to 16 s past the tunnel coming up.
-export const TUNNEL_HOLD_MS = 6_000;
+const TUNNEL_HOLD_MS = 6_000;
 
 const UNDIALED_BEFORE_RECHECK = 2;
 

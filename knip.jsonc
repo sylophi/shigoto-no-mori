@@ -2,8 +2,8 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      // testProcesses.setup.mts runs under each workspace's own vitest,
-      // which its vitest config names.
+      // test/testProcesses.setup.mts runs under each workspace's own
+      // vitest, which its vitest config names.
       "ignoreDependencies": ["vitest"],
     },
     "app": {
@@ -19,11 +19,8 @@
         // viewer's), and clerkStub.tsx stands in for Clerk through a
         // Vite alias in vite.base.ts.
         "lab/fake-host/{web-main,villager-icons,clerkStub,scenes}.tsx",
-        // The proofs, which vitest runs, and the bench, a script run by hand.
+        // The proofs, which vitest runs.
         "test/*.mts",
-        "test/bench/*.mts",
-        // The host the terminals proof spawns and kills.
-        "test/lib/terminalsHost.mts",
         // Run through package.json scripts or by hand (their headers say how).
         "scripts/*.{mts,cts}",
         // A lab check run by hand against a packaged build.
@@ -36,8 +33,7 @@
     },
     "hub": {
       "ignoreDependencies": [
-        // cloudflare:test and cloudflare:workers are workerd's built-in
-        // modules, provided by @cloudflare/vitest-pool-workers.
+        // cloudflare:workers is workerd's built-in module.
         "cloudflare",
       ],
     },
@@ -48,9 +44,8 @@
       "includeEntryExports": true,
     },
     "packages/cli": {
-      // The entrypoint Bun compiles, and the output's test's process,
-      // run by path under Bun.
-      "entry": ["src/main.ts", "test/fixtures/*.ts"],
+      // The entrypoint Bun compiles.
+      "entry": ["src/main.ts"],
     },
     // Its exports map makes every module an entry, like the contracts'.
     "packages/ui": {
@@ -59,8 +54,8 @@
     // Its exports map makes every module an entry, like the contracts'.
     "packages/engine": {
       "includeEntryExports": true,
-      // Run by path from the store's and the lock's tests, each in a
-      // process of its own.
+      // Run by path from the store's crash test, in a process of its
+      // own.
       "entry": ["test/fixtures/*.ts"],
     },
   },
@@ -70,11 +65,7 @@
     "plutil",
     "osascript",
     "pgrep",
-    "chflags",
-    "mkfifo",
-    "xattr",
     "ditto",
-    "openssl",
     "port-pool",
     // app's, run by release.yml from app/ (knip reads it from the root).
     "electron-forge",

@@ -149,7 +149,7 @@ export function mirrorBadgeLookup(
 // working mark comes first, when it counts (isAgentWorking): it says
 // the worktree isn't ready to look at yet, wherever it was filed. Shelving is the user's own call, so it outranks the prefixes.
 // The inbox files by the same rule.
-export function groupShelfOf(
+function groupShelfOf(
   worktree: Worktree,
   prefixes: readonly string[],
   allowAgentWorking: boolean,

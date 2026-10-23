@@ -24,7 +24,7 @@ export const CHARACTER_CATEGORIES = [
   "Category:Special characters",
 ] as const;
 
-export function wikiPageUrl(title: string): string {
+function wikiPageUrl(title: string): string {
   return WIKI_PAGE + encodeURIComponent(title.replaceAll(" ", "_"));
 }
 
@@ -102,7 +102,7 @@ function splitTopLevel(text: string, separator: string): string[] {
 
 // The body of the page's first `{{Infobox ...}}`, as field → plain
 // text. Empty fields, "N/A" and the page styling are left out.
-export function infobox(wikitext: string): Record<string, string> {
+function infobox(wikitext: string): Record<string, string> {
   const start = wikitext.search(/\{\{\s*Infobox/i);
   if (start < 0) return {};
   let depth = 0;

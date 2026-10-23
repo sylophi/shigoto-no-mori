@@ -6,7 +6,7 @@
 const pad = (n: number) => String(n).padStart(2, "0");
 
 // The local calendar day as the profiles spell birthdays, "MM-DD".
-export function monthDayOf(date: Date): string {
+function monthDayOf(date: Date): string {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 

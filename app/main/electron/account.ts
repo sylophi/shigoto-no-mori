@@ -142,8 +142,8 @@ function serviceConfig(): AccountServiceConfig {
   // __SM_ACCOUNT_BAKED_ENV__ is the vite.node.config.ts define. This
   // module only ever loads through that build, so a bare reference is
   // safe, and it stays out of the pure contracts module so
-  // accountServiceConfig.ts remains drivable under plain node
-  // (test/account.mts).
+  // accountServiceConfig.ts stays loadable under plain node, where the
+  // Vite configs read it.
   cachedConfig = resolveServiceConfig(
     mergeServiceEnv(fileEnv, __SM_ACCOUNT_BAKED_ENV__, process.env),
   );

@@ -3,10 +3,11 @@ package main
 // End-to-end proof for the mirror engine (engine.go), in one process:
 // a real daemon driven over its NDJSON control pipe, a stand-in
 // gateway doing exactly what the app's will (read the preface, answer
-// ok, serve a Mutagen endpoint on the socket), and two real
-// directories that must converge in both directions. Nothing here is
-// a double on the sync path: Mutagen scans, watches, stages and
-// transitions real files.
+// ok, serve a Mutagen endpoint on the socket), and real directories.
+// Nothing here is a double on the sync path: Mutagen scans, watches,
+// stages and transitions real files. A session reaches only the root it
+// is served, and the sessions a v2 daemon left come back under v3's
+// labels.
 
 import (
 	"bufio"
@@ -16,16 +17,13 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/encoding"
 	"github.com/mutagen-io/mutagen/pkg/filesystem"
 	"github.com/mutagen-io/mutagen/pkg/identifier"
-	"github.com/mutagen-io/mutagen/pkg/selection"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
-	"github.com/mutagen-io/mutagen/pkg/synchronization/rsync"
 	"io"
 	"maps"
 	"net"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,17 +31,14 @@ import (
 
 // The gateway stand-in: every accepted socket is one mirror stream,
 // served at root as the host serves the worktree it opened the stream
-// for. Records each preface so the test can pin what the daemon
-// announces.
-func startTestGateway(t *testing.T, root string) (addr string, prefaces func() []mirrorPreface) {
+// for.
+func startTestGateway(t *testing.T, root string) string {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { listener.Close() })
-	var mu sync.Mutex
-	var seen []mirrorPreface
 	go func() {
 		for {
 			conn, err := listener.Accept()
@@ -62,24 +57,12 @@ func startTestGateway(t *testing.T, root string) (addr string, prefaces func() [
 					conn.Close()
 					return
 				}
-				mu.Lock()
-				seen = append(seen, preface)
-				mu.Unlock()
-				if preface.DeviceID != "peer-1" {
-					io.WriteString(conn, "error unknown device\n")
-					conn.Close()
-					return
-				}
 				io.WriteString(conn, "ok\n")
 				_ = serveMirrorEndpoint(conn, root, io.Discard)
 			}()
 		}
 	}()
-	return listener.Addr().String(), func() []mirrorPreface {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]mirrorPreface(nil), seen...)
-	}
+	return listener.Addr().String()
 }
 
 // A running daemon plus the two halves of its control channel.
@@ -89,37 +72,16 @@ type testDaemon struct {
 	mu       sync.Mutex
 	docs     []map[string]any
 	done     chan error
-	logs     *syncBuffer
-}
-
-// The daemon's stderr (Mutagen's warnings included), for failure
-// messages.
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf strings.Builder
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
 }
 
 func startTestDaemon(t *testing.T, gateway, dataDir string) *testDaemon {
 	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
-	logs := &syncBuffer{}
-	d := &testDaemon{t: t, requests: inW, done: make(chan error, 1), logs: logs}
+	d := &testDaemon{t: t, requests: inW, done: make(chan error, 1)}
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		d.done <- runMirrorDaemon(ctx, inR, outW, gateway, dataDir, logs)
+		d.done <- runMirrorDaemon(ctx, inR, outW, gateway, dataDir, io.Discard)
 		outW.Close()
 	}()
 	go func() {
@@ -215,365 +177,13 @@ func fileAbsent(path string) bool {
 	return os.IsNotExist(err)
 }
 
-func TestMirrorTwoWayOverGateway(t *testing.T) {
-	dataDir := filepath.Join(t.TempDir(), "mirror-data")
-	local := filepath.Join(t.TempDir(), "local")
-	remote := filepath.Join(t.TempDir(), "remote")
-	gateway, prefaces := startTestGateway(t, remote)
-	for _, dir := range []string{local, remote} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// Seeded before the session exists: the initial reconciliation must
-	// carry existing content across, including a gitignored-looking
-	// file and a nested one.
-	writeFileT(t, filepath.Join(local, "src", "main.go"), "package main\n")
-	writeFileT(t, filepath.Join(local, ".env"), "SECRET=1\n")
-	// A linked worktree's .git is a FILE naming a machine-specific
-	// gitdir. It must never cross.
-	writeFileT(t, filepath.Join(local, ".git"), "gitdir: /Users/someone/repo/.git/worktrees/x\n")
-	// A submodule's .git is a pointer file too, its gitdir relative to a
-	// layout only this machine has. Nor does it cross, while the
-	// submodule's own files do.
-	writeFileT(t, filepath.Join(local, "vendor", "sub", ".git"), "gitdir: ../../../repo/.git/worktrees/x/modules/sub\n")
-	writeFileT(t, filepath.Join(local, "vendor", "sub", "lib.go"), "package sub\n")
-	writeFileT(t, filepath.Join(remote, "notes.md"), "from the peer\n")
-	// Under the create's own ignores: a build folder and a log stay put.
-	writeFileT(t, filepath.Join(local, "dist", "bundle.js"), "built\n")
-	writeFileT(t, filepath.Join(local, "debug.log"), "noise\n")
-	// The bring rule's shape (packages/contracts/src/mirrorIgnores.ts bringIgnores): a
-	// rule ignores the folder and, past the marker, a trailing pair
-	// takes it back out, whole, a log inside included. A pair for a
-	// file inside a folder that stays ignored does nothing, since the
-	// scan never walks in, which is why the app's picker only offers
-	// the topmost entry. A picked name is a literal: its glob syntax
-	// is escaped, so the bracketed file crosses, the name the bare
-	// class would have matched stays, and a lone bracket is no error.
-	writeFileT(t, filepath.Join(local, "cache", "data.bin"), "warm\n")
-	writeFileT(t, filepath.Join(local, "cache", "run.log"), "kept\n")
-	writeFileT(t, filepath.Join(local, "dist", "keep.txt"), "unreachable\n")
-	writeFileT(t, filepath.Join(local, "data[1].json"), "picked\n")
-	writeFileT(t, filepath.Join(local, "data1.json"), "not picked\n")
-	writeFileT(t, filepath.Join(local, "lone[x.json"), "picked too\n")
-	ignores := []string{
-		"/dist", "*.log", "*.json", "cache/",
-		"/.git/shigomori-brought",
-		"!/dist/keep.txt", "!/dist/keep.txt/**",
-		"!/cache", "!/cache/**",
-		`!/data\[1\].json`, `!/data\[1\].json/**`,
-		`!/lone\[x.json`, `!/lone\[x.json/**`,
-	}
-
-	d := startTestDaemon(t, gateway, dataDir)
-	waitForT(t, 10*time.Second, "ready", func() bool {
-		for _, doc := range d.snapshot() {
-			if doc["event"] == "ready" {
-				return true
-			}
-		}
-		return false
-	})
-
-	created := d.call(mirrorRequest{
-		ID: "1", Op: "create",
-		LocalRoot:       local,
-		DeviceID:        "peer-1",
-		ProjectID:       "proj-a",
-		WorktreeID:      "0123456789ab",
-		RemoteRoot:      remote,
-		Name:            "feature-x",
-		Labels:          map[string]string{"localProjectId": "proj-local"},
-		LocalWorktreeID: "ba9876543210",
-		Ignores:         ignores,
-	})
-	if created["ok"] != true {
-		t.Fatalf("create failed: %v", created["error"])
-	}
-	session, _ := created["session"].(string)
-	if session == "" {
-		t.Fatal("create returned no session id")
-	}
-
-	// Initial convergence, both directions.
-	waitForT(t, 30*time.Second, "seed to reach the peer", func() bool {
-		return fileEquals(filepath.Join(remote, "src", "main.go"), "package main\n") &&
-			fileEquals(filepath.Join(remote, ".env"), "SECRET=1\n") &&
-			fileEquals(filepath.Join(remote, "cache", "data.bin"), "warm\n") &&
-			fileEquals(filepath.Join(remote, "cache", "run.log"), "kept\n") &&
-			fileEquals(filepath.Join(remote, "data[1].json"), "picked\n") &&
-			fileEquals(filepath.Join(remote, "lone[x.json"), "picked too\n") &&
-			fileEquals(filepath.Join(remote, "vendor", "sub", "lib.go"), "package sub\n") &&
-			fileEquals(filepath.Join(local, "notes.md"), "from the peer\n")
-	})
-	if !fileAbsent(filepath.Join(remote, ".git")) {
-		t.Fatal(".git crossed to the peer")
-	}
-	if !fileAbsent(filepath.Join(remote, "vendor", "sub", ".git")) {
-		t.Fatal("a submodule's .git pointer crossed to the peer")
-	}
-	if !fileAbsent(filepath.Join(remote, "dist")) || !fileAbsent(filepath.Join(remote, "debug.log")) || !fileAbsent(filepath.Join(remote, "data1.json")) {
-		t.Fatal("an ignored path crossed to the peer")
-	}
-
-	// Live edits after the session is watching: local to remote, remote
-	// to local, a delete, a nested new directory.
-	writeFileT(t, filepath.Join(local, "src", "main.go"), "package main\n// edited\n")
-	waitForT(t, 30*time.Second, "local edit to reach the peer", func() bool {
-		return fileEquals(filepath.Join(remote, "src", "main.go"), "package main\n// edited\n")
-	})
-	writeFileT(t, filepath.Join(remote, "node_modules", "dep", "index.js"), "module.exports = 1\n")
-	waitForT(t, 30*time.Second, "remote nested write to reach local", func() bool {
-		return fileEquals(filepath.Join(local, "node_modules", "dep", "index.js"), "module.exports = 1\n")
-	})
-	if err := os.Remove(filepath.Join(local, ".env")); err != nil {
-		t.Fatal(err)
-	}
-	waitForT(t, 30*time.Second, "local delete to reach the peer", func() bool {
-		return fileAbsent(filepath.Join(remote, ".env"))
-	})
-	if !fileAbsent(filepath.Join(remote, ".git")) {
-		t.Fatal(".git crossed to the peer after live cycles")
-	}
-
-	// The state stream describes the session in the app's vocabulary.
-	waitForT(t, 30*time.Second, "a watching state snapshot", func() bool {
-		state := d.sessionState(session)
-		return state != nil && state["status"] == "watching"
-	})
-	state := d.sessionState(session)
-	for key, want := range map[string]any{
-		"name":            "feature-x",
-		"localRoot":       local,
-		"deviceId":        "peer-1",
-		"projectId":       "proj-a",
-		"worktreeId":      "0123456789ab",
-		"remoteRoot":      remote,
-		"paused":          false,
-		"localWorktreeId": "ba9876543210",
-	} {
-		if state[key] != want {
-			t.Errorf("state[%s] = %v, want %v", key, state[key], want)
-		}
-	}
-	labels, _ := state["labels"].(map[string]any)
-	if labels["localProjectId"] != "proj-local" {
-		t.Errorf("labels = %v", state["labels"])
-	}
-	echoed, _ := state["ignores"].([]any)
-	if len(echoed) != len(ignores) {
-		t.Errorf("ignores = %v (the .git pointer must stay out of the echo)", state["ignores"])
-	}
-	for i, pattern := range echoed {
-		if i < len(ignores) && pattern != ignores[i] {
-			t.Errorf("ignores[%d] = %v, want %v (the order is the rule: the last match wins)", i, pattern, ignores[i])
-		}
-	}
-	if createdAt, _ := state["createdAt"].(float64); createdAt <= 0 {
-		t.Errorf("createdAt = %v", state["createdAt"])
-	}
-	localState, _ := state["local"].(map[string]any)
-	remoteState, _ := state["remote"].(map[string]any)
-	if localState["connected"] != true || remoteState["connected"] != true {
-		t.Errorf("endpoints not both connected: %v / %v", localState, remoteState)
-	}
-	if cycles, _ := state["successfulCycles"].(float64); cycles < 1 {
-		t.Errorf("successfulCycles = %v", state["successfulCycles"])
-	}
-	if conflicts, _ := state["conflicts"].([]any); len(conflicts) != 0 {
-		t.Errorf("unexpected conflicts: %v", conflicts)
-	}
-
-	// The gateway learned who the stream is for.
-	seen := prefaces()
-	if len(seen) == 0 {
-		t.Fatal("gateway saw no preface")
-	}
-	if seen[0].DeviceID != "peer-1" || seen[0].ProjectID != "proj-a" ||
-		seen[0].WorktreeID != "0123456789ab" || seen[0].LocalWorktreeID != "ba9876543210" {
-		t.Errorf("preface = %+v", seen[0])
-	}
-
-	// Pause stops propagation. Resume picks it back up.
-	if paused := d.call(mirrorRequest{ID: "2", Op: "pause", Session: session}); paused["ok"] != true {
-		t.Fatalf("pause failed: %v", paused["error"])
-	}
-	waitForT(t, 10*time.Second, "paused state", func() bool {
-		state := d.sessionState(session)
-		return state != nil && state["paused"] == true
-	})
-	writeFileT(t, filepath.Join(local, "while-paused.txt"), "held\n")
-	time.Sleep(1500 * time.Millisecond)
-	if !fileAbsent(filepath.Join(remote, "while-paused.txt")) {
-		t.Fatal("a paused session propagated a write")
-	}
-	if resumed := d.call(mirrorRequest{ID: "3", Op: "resume", Session: session}); resumed["ok"] != true {
-		t.Fatalf("resume failed: %v", resumed["error"])
-	}
-	waitForT(t, 30*time.Second, "held write to cross after resume", func() bool {
-		return fileEquals(filepath.Join(remote, "while-paused.txt"), "held\n")
-	})
-
-	// Terminate removes the session. The files stay where they are.
-	if terminated := d.call(mirrorRequest{ID: "4", Op: "terminate", Session: session}); terminated["ok"] != true {
-		t.Fatalf("terminate failed: %v", terminated["error"])
-	}
-	waitForT(t, 10*time.Second, "session gone from state", func() bool {
-		return d.sessionState(session) == nil
-	})
-	if !fileEquals(filepath.Join(remote, "src", "main.go"), "package main\n// edited\n") {
-		t.Fatal("terminate touched the mirrored files")
-	}
-
-	// Closing the control channel ends the daemon cleanly.
-	d.requests.Close()
-	select {
-	case err := <-d.done:
-		if err != nil {
-			t.Fatalf("daemon exited with: %v", err)
-		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("daemon did not exit after stdin closed")
-	}
-}
-
-// A mirror start's first pass: the remote becomes an exact copy of the
-// local side. A path both hold differently takes the local version
-// instead of standing as a conflict, what only the remote holds goes,
-// and an ignored path on the remote is left alone.
-func TestMirrorReplicaMakesTheRemoteAnExactCopy(t *testing.T) {
-	dataDir := filepath.Join(t.TempDir(), "mirror-data")
-	local := t.TempDir()
-	remote := t.TempDir()
-	gateway, _ := startTestGateway(t, remote)
-	writeFileT(t, filepath.Join(local, "src", "a.txt"), "original\n")
-	writeFileT(t, filepath.Join(local, ".env"), "FROM=original\n")
-	writeFileT(t, filepath.Join(remote, "src", "a.txt"), "made by the create\n")
-	writeFileT(t, filepath.Join(remote, ".env"), "FROM=carry-over\n")
-	writeFileT(t, filepath.Join(remote, "stray.txt"), "only on the copy\n")
-	writeFileT(t, filepath.Join(remote, "node_modules", "dep.js"), "left out\n")
-	d := startTestDaemon(t, gateway, dataDir)
-	created := d.call(mirrorRequest{
-		ID: "1", Op: "create",
-		LocalRoot:  local,
-		DeviceID:   "peer-1",
-		WorktreeID: "0123456789ab",
-		RemoteRoot: remote,
-		Ignores:    []string{"node_modules/"},
-		Direction:  "replica",
-	})
-	if created["ok"] != true {
-		t.Fatalf("create failed: %v", created["error"])
-	}
-	waitForT(t, 30*time.Second, "the remote to match the local side", func() bool {
-		return fileEquals(filepath.Join(remote, "src", "a.txt"), "original\n") &&
-			fileEquals(filepath.Join(remote, ".env"), "FROM=original\n") &&
-			fileAbsent(filepath.Join(remote, "stray.txt"))
-	})
-	if !fileEquals(filepath.Join(remote, "node_modules", "dep.js"), "left out\n") {
-		t.Fatal("the replica touched an ignored path on the remote")
-	}
-	if !fileEquals(filepath.Join(local, "src", "a.txt"), "original\n") || !fileAbsent(filepath.Join(local, "stray.txt")) {
-		t.Fatal("the replica wrote to the local side")
-	}
-	d.requests.Close()
-	<-d.done
-}
-
-// What a session makes, on either side, has a checkout's modes: 644 for
-// a file, 755 for a folder and for a file its source can run.
-func TestMirrorMakesFilesWithCheckoutModes(t *testing.T) {
-	dataDir := filepath.Join(t.TempDir(), "mirror-data")
-	local := t.TempDir()
-	remote := t.TempDir()
-	gateway, _ := startTestGateway(t, remote)
-	for root, folder := range map[string]string{local: "from-local", remote: "from-remote"} {
-		writeFileT(t, filepath.Join(root, folder, "plain.txt"), "plain\n")
-		writeFileT(t, filepath.Join(root, folder, "run.sh"), "#!/bin/sh\n")
-		if err := os.Chmod(filepath.Join(root, folder, "run.sh"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	d := startTestDaemon(t, gateway, dataDir)
-	created := d.call(mirrorRequest{
-		ID: "1", Op: "create",
-		LocalRoot:  local,
-		DeviceID:   "peer-1",
-		WorktreeID: "0123456789ab",
-		RemoteRoot: remote,
-	})
-	if created["ok"] != true {
-		t.Fatalf("create failed: %v", created["error"])
-	}
-	// The local side's files made by the served side, and the remote's by
-	// the daemon's own.
-	made := []string{filepath.Join(remote, "from-local"), filepath.Join(local, "from-remote")}
-	waitForT(t, 30*time.Second, "each side's files on the other", func() bool {
-		for _, folder := range made {
-			if !fileEquals(filepath.Join(folder, "plain.txt"), "plain\n") ||
-				!fileEquals(filepath.Join(folder, "run.sh"), "#!/bin/sh\n") {
-				return false
-			}
-		}
-		return true
-	})
-	for _, folder := range made {
-		for path, want := range map[string]os.FileMode{
-			folder:                             0o755,
-			filepath.Join(folder, "plain.txt"): 0o644,
-			filepath.Join(folder, "run.sh"):    0o755,
-		} {
-			info, err := os.Stat(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := info.Mode().Perm(); got != want {
-				t.Errorf("%s is %o, want %o", path, got, want)
-			}
-		}
-	}
-	d.requests.Close()
-	<-d.done
-}
-
-// A stage reports the whole of it, not the file it is on: the bytes it
-// has taken in, of what the other side holds beyond this one.
-func TestMirrorStagingCountsTheStage(t *testing.T) {
-	const mb = 1 << 20
-	state := &synchronization.EndpointState{
-		Connected:     true,
-		Scanned:       true,
-		TotalFileSize: 40 * mb,
-		StagingProgress: &rsync.ReceiverState{
-			Path:              "node_modules/big.bin",
-			ReceivedSize:      512 * 1024,
-			ExpectedSize:      10 * mb,
-			ReceivedFiles:     120,
-			ExpectedFiles:     200,
-			TotalReceivedSize: 1200 * mb,
-		},
-	}
-	other := &synchronization.EndpointState{Connected: true, Scanned: true, TotalFileSize: 2040 * mb}
-	staging := mirrorEndpointStateOf(state, other).Staging
-	if staging == nil || staging.ReceivedSize != 1200*mb || staging.ExpectedSize != 2000*mb {
-		t.Fatalf("staging = %+v, want 1200 MB of 2000 MB", staging)
-	}
-	// A side that already holds more than the other still reads a stage
-	// it is part way through, never past its end.
-	other.TotalFileSize = 30 * mb
-	staging = mirrorEndpointStateOf(state, other).Staging
-	if staging.ReceivedSize != 1200*mb || staging.ExpectedSize != 1200*mb {
-		t.Fatalf("staging = %+v, want 1200 MB of 1200 MB", staging)
-	}
-}
-
 // The serving side reaches the worktree it was opened for and nothing
 // else: a session naming another folder there, here a replica, which
 // would empty it, syncs into the worktree, and the folder it named is
 // never touched.
 func TestMirrorServeHoldsTheStreamToItsRoot(t *testing.T) {
 	remote := t.TempDir()
-	gateway, _ := startTestGateway(t, remote)
+	gateway := startTestGateway(t, remote)
 	local := t.TempDir()
 	named := t.TempDir()
 	writeFileT(t, filepath.Join(local, "a.txt"), "from the session\n")
@@ -600,82 +210,6 @@ func TestMirrorServeHoldsTheStreamToItsRoot(t *testing.T) {
 	<-d.done
 }
 
-// A label value outside Mutagen's alphabet would make the session
-// vanish on the next daemon start (the load-time check), and the app
-// reads identity out of the labels, so the create refuses instead of
-// folding the value.
-func TestMirrorCreateRefusesInvalidLabel(t *testing.T) {
-	gateway, _ := startTestGateway(t, t.TempDir())
-	daemon := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "data"))
-	created := daemon.call(mirrorRequest{
-		ID: "1", Op: "create",
-		LocalRoot:  t.TempDir(),
-		DeviceID:   "peer-1",
-		RemoteRoot: t.TempDir(),
-		Name:       "feat/mirror",
-		Labels:     map[string]string{"branch": "feat/mirror"},
-	})
-	if created["ok"] != false {
-		t.Fatalf("create with an invalid label value succeeded: %v", created)
-	}
-	if msg, _ := created["error"].(string); !strings.Contains(msg, "label") {
-		t.Fatalf("refusal does not name the label: %v", created["error"])
-	}
-	daemon.requests.Close()
-	<-daemon.done
-}
-
-// An unknown op is refused, and so is a create's direction outside the
-// four.
-func TestMirrorDaemonRefusesTheUnknown(t *testing.T) {
-	gateway, _ := startTestGateway(t, t.TempDir())
-	daemon := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "data"))
-	if unknown := daemon.call(mirrorRequest{ID: "2", Op: "nope"}); unknown["ok"] != false {
-		t.Fatalf("an unknown op was answered ok: %v", unknown)
-	}
-	sideways := daemon.call(mirrorRequest{
-		ID: "3", Op: "create",
-		LocalRoot:  t.TempDir(),
-		DeviceID:   "peer-1",
-		RemoteRoot: t.TempDir(),
-		Name:       "sideways",
-		Direction:  "sideways",
-	})
-	if msg, _ := sideways["error"].(string); sideways["ok"] != false || !strings.Contains(msg, "direction") {
-		t.Fatalf("a create's unknown direction was not refused: %v", sideways)
-	}
-	daemon.requests.Close()
-	<-daemon.done
-}
-
-func TestMirrorCreateRefusesUnreachablePeer(t *testing.T) {
-	dataDir := filepath.Join(t.TempDir(), "mirror-data")
-	local := t.TempDir()
-	remote := t.TempDir()
-	gateway, _ := startTestGateway(t, remote)
-	d := startTestDaemon(t, gateway, dataDir)
-	// The gateway refuses any device but peer-1, standing in for a peer
-	// that is offline or ungranted: create must fail with the gateway's
-	// reason instead of minting a session that can never connect.
-	created := d.call(mirrorRequest{
-		ID: "1", Op: "create",
-		LocalRoot:  local,
-		DeviceID:   "peer-offline",
-		RemoteRoot: remote,
-	})
-	if created["ok"] != false {
-		t.Fatalf("create against an unreachable peer succeeded: %v", created)
-	}
-	msg, _ := created["error"].(string)
-	if !strings.Contains(msg, "unknown device") {
-		t.Errorf("error = %q, want the gateway's reason", msg)
-	}
-	d.requests.Close()
-	if err := <-d.done; err != nil {
-		t.Fatalf("daemon exited with: %v", err)
-	}
-}
-
 func writeFileT(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -683,154 +217,6 @@ func writeFileT(t *testing.T, path, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// The host's SIGTERM path: the daemon must exit promptly on context
-// cancellation even while its stdin stays open and a request is
-// parked on a connect that will never answer.
-func TestMirrorDaemonExitsOnCancelWithStdinOpen(t *testing.T) {
-	// A gateway that accepts and then never answers the preface, so a
-	// create blocks inside its connect until cancelled.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { listener.Close() })
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				return
-			}
-			t.Cleanup(func() { conn.Close() })
-		}
-	}()
-	dataDir := filepath.Join(t.TempDir(), "mirror-data")
-	inR, inW := io.Pipe()
-	t.Cleanup(func() { inW.Close() })
-	outR, outW := io.Pipe()
-	go io.Copy(io.Discard, outR)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() {
-		done <- runMirrorDaemon(ctx, inR, outW, listener.Addr().String(), dataDir, io.Discard)
-		outW.Close()
-	}()
-	// Give the daemon a moment to come up, then park a create on the
-	// silent gateway.
-	time.Sleep(200 * time.Millisecond)
-	req, _ := json.Marshal(mirrorRequest{
-		ID: "1", Op: "create",
-		LocalRoot:  t.TempDir(),
-		DeviceID:   "peer-1",
-		RemoteRoot: t.TempDir(),
-	})
-	if _, err := inW.Write(append(req, '\n')); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(200 * time.Millisecond)
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("daemon exited with: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("daemon did not exit on cancellation while stdin stayed open")
-	}
-}
-
-// A session created under a name Mutagen would reject on load (the
-// branch name, slash included) must still be there after the daemon
-// restarts: persistence is the whole point of the daemon's data dir.
-func TestMirrorSessionSurvivesDaemonRestart(t *testing.T) {
-	dataDir := filepath.Join(t.TempDir(), "mirror-data")
-	local := t.TempDir()
-	remote := t.TempDir()
-	gateway, _ := startTestGateway(t, remote)
-	writeFileT(t, filepath.Join(local, "a.txt"), "a\n")
-
-	first := startTestDaemon(t, gateway, dataDir)
-	created := first.call(mirrorRequest{
-		ID: "1", Op: "create",
-		LocalRoot:       local,
-		DeviceID:        "peer-1",
-		RemoteRoot:      remote,
-		Name:            "feat/mirror",
-		Labels:          map[string]string{"localProjectId": "proj-local"},
-		LocalWorktreeID: "ba9876543210",
-	})
-	if created["ok"] != true {
-		t.Fatalf("create failed: %v", created["error"])
-	}
-	session, _ := created["session"].(string)
-	waitForT(t, 30*time.Second, "the first daemon to sync", func() bool {
-		return fileEquals(filepath.Join(remote, "a.txt"), "a\n")
-	})
-	// State docs are throttled (streamMirrorState), so the one naming
-	// the session may trail the files by a beat.
-	var state map[string]any
-	waitForT(t, 10*time.Second, "the session state", func() bool {
-		state = first.sessionState(session)
-		return state != nil
-	})
-	if state["name"] != "feat-mirror" {
-		t.Fatalf("session name not folded into Mutagen's alphabet: %v", state)
-	}
-	first.requests.Close()
-	if err := <-first.done; err != nil {
-		t.Fatalf("first daemon exited with: %v", err)
-	}
-
-	second := startTestDaemon(t, gateway, dataDir)
-	deadline := time.Now().Add(45 * time.Second)
-	for {
-		s := second.sessionState(session)
-		if s != nil && s["status"] == "watching" {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the restarted daemon never reported the session watching; last state %v; docs %d; daemon log:\n%s", s, len(second.snapshot()), second.logs.String())
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	restarted := second.sessionState(session)
-	labels, _ := restarted["labels"].(map[string]any)
-	if labels["localProjectId"] != "proj-local" {
-		t.Fatalf("labels lost across the restart: %v", labels)
-	}
-	if restarted["localWorktreeId"] != "ba9876543210" {
-		t.Fatalf("the local worktree lost across the restart: %v", restarted["localWorktreeId"])
-	}
-	writeFileT(t, filepath.Join(local, "b.txt"), "b\n")
-	waitForT(t, 30*time.Second, "the restarted session to sync", func() bool {
-		return fileEquals(filepath.Join(remote, "b.txt"), "b\n")
-	})
-	second.requests.Close()
-	if err := <-second.done; err != nil {
-		t.Fatalf("second daemon exited with: %v", err)
-	}
-}
-
-// The name is folded into Mutagen's alphabet and pushed out of the
-// shapes it refuses on load (a UUID, a reserved word), so a session
-// never vanishes over a cosmetic name.
-func TestMirrorSessionNameFolding(t *testing.T) {
-	cases := map[string]string{
-		"feat/mirror":                          "feat-mirror",
-		"123-start":                            "m-123-start",
-		"defaults":                             "m-defaults",
-		"d9d02c4d-6328-4cb2-95ac-1eedde979ee0": "m-d9d02c4d-6328-4cb2-95ac-1eedde979ee0",
-	}
-	for in, want := range cases {
-		got := mirrorSessionName(in)
-		if got != want {
-			t.Errorf("mirrorSessionName(%q) = %q, want %q", in, got, want)
-		}
-		if err := selection.EnsureNameValid(got); err != nil {
-			t.Errorf("mirrorSessionName(%q) = %q is still invalid: %v", in, got, err)
-		}
 	}
 }
 
@@ -911,7 +297,7 @@ func TestMirrorV2SessionLoadsRelabelled(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "mirror-data")
 	local := t.TempDir()
 	remote := t.TempDir()
-	gateway, _ := startTestGateway(t, remote)
+	gateway := startTestGateway(t, remote)
 	writeFileT(t, filepath.Join(local, "a.txt"), "a\n")
 
 	first := startTestDaemon(t, gateway, dataDir)

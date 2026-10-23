@@ -1,10 +1,9 @@
 // The browser's preload: the twin of main/preload.ts. Makes the web
 // bridge once, on the profile's device id (settled under the account
 // lock, so it may wait on another tab), reading the real browser
-// globals and Vite build facts (the factory itself stays injectable for
-// the headless check), and wires the page-level events the bridge
-// cannot see from inside (other tabs, the network coming back). Its api
-// is the page's, which the entry hands to the boot (main.tsx).
+// globals and Vite build facts, and wires the page-level events the
+// bridge cannot see from inside (other tabs, the network coming back).
+// Its api is the page's, which the entry hands to the boot (main.tsx).
 import { viteEnv } from "./account/config";
 import { browserHintsOf } from "./account/deviceName";
 import { ACCOUNT_KEY } from "./account/store";

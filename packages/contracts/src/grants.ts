@@ -1,9 +1,7 @@
 // What the command switch ("Allow control from other devices") hands to
 // the account's other devices: each line the switch's panel shows, and
 // the calls it covers. A remote gated call names its line in its Grant
-// annotation (contract.ts), next to its other annotations, and the
-// socket-host proof holds this table to those annotations both ways, so
-// the table is the one place to read what the switch gives away.
+// annotation (contract.ts), next to its other annotations.
 export const GRANTS = {
   runCommands: {
     title: "Run commands as you",

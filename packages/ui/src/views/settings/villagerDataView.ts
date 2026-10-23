@@ -2,8 +2,7 @@ import type { VillagerDataStatus } from "@shigomori/contracts/schemas";
 import { assertNever } from "../../lib/utils.ts";
 
 // What the Village life row and the villager data control under it say
-// and offer (VillageLifeSetting.tsx, VillagerDataControl.tsx). Pure, so
-// every state's words are pinned by test/villager-data.mts.
+// and offer (VillageLifeSetting.tsx, VillagerDataControl.tsx).
 
 // The Village life row opens once this window holds the villager data,
 // all of it. Its description always says what it is, and while locked,

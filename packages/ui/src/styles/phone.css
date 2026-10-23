@@ -27,8 +27,7 @@
  *
  * The `phone:` variant (index.css) remains for what a scale cannot
  * express: a different layout. DESIGN.md ("Sizing") has the rules for
- * component code. test/theme-contract.mts verifies every data-* hook
- * selected here is still set by a component.
+ * component code.
  */
 
 /* ---- 1. Scale tokens ---------------------------------------------- */

@@ -30,9 +30,8 @@ interface LauncherIconProps {
 }
 
 // Every PNG in app-icons, keyed by file name, which is the app's id in
-// packages/engine/src/data/launcher-catalog.json (test/launcher-icons.mts holds them
-// to it). A Map, not an object literal, so an id like "constructor"
-// can't reach the prototype.
+// packages/engine/src/data/launcher-catalog.json. A Map, not an object
+// literal, so an id like "constructor" can't reach the prototype.
 const APP_ICON_URL = new Map(
   Object.entries(
     import.meta.glob<string>("../../app-icons/*.png", {

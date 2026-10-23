@@ -32,7 +32,7 @@ const isLocal = (url: string) =>
 
 // Whether an attribute's URLs (every candidate of a srcset) all load
 // from `hosts`, or stay on the page's own origin.
-export const loadsFrom = (
+const loadsFrom = (
   attribute: string,
   value: string,
   hosts: readonly string[],

@@ -1,11 +1,9 @@
 // The minimal key-value seam every web-side store is written against.
 // It is the subset of the DOM Storage interface the stores actually
 // use, so window.localStorage and window.sessionStorage satisfy it
-// directly while the headless bridge check drives the same code with a
-// plain in-memory map and no DOM at all. Everything in web/ that
-// persists reads storage through an injected KeyValueStorage rather
-// than touching a browser global at module scope, which is what lets
-// the check import these modules under node.
+// directly. Everything in web/ that persists reads storage through an
+// injected KeyValueStorage rather than touching a browser global at
+// module scope.
 import {
   type ContractSchema,
   type Decoded,

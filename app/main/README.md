@@ -36,8 +36,7 @@ machine the window runs on.
   a plain `click`. Labels are title case, as macOS's own are ("Add
   Project…", "New Window"), with an ellipsis when the item asks for
   more first.
-- `core/`: the shell's logic that runs without Electron, so a proof
-  drives it under plain node: the account's credential store and
+- `core/`: the shell's logic that runs without Electron: the account's credential store and
   default device name and icon, the guide, the keychain reset,
   liveness's rate limits, the hold on its host (`host/`: the watchdog,
   the restart ledger, the busy asks and the prompt that follows them),

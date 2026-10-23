@@ -8,7 +8,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { GIT_IDENTITY } from "../../../gitIsolation.ts";
+import { GIT_IDENTITY } from "../../../test/gitIsolation.ts";
 import { createCliRunner, scrubProcessGitEnv } from "./checkKit.mts";
 import {
   addProject,

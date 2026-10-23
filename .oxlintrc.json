@@ -57,12 +57,7 @@
   },
   "overrides": [
     {
-      "files": [
-        "app/test/**",
-        "app/lab/**",
-        "hub/test/**",
-        "packages/*/test/**"
-      ],
+      "files": ["app/test/**", "app/lab/**", "packages/*/test/**"],
       "rules": { "no-await-in-loop": "off" }
     }
   ],

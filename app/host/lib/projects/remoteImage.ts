@@ -14,7 +14,7 @@ import * as Schema from "effect/Schema";
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const FETCH_TIMEOUT = "15 seconds";
 
-export class RemoteImageError extends Schema.TaggedError<RemoteImageError>()(
+class RemoteImageError extends Schema.TaggedError<RemoteImageError>()(
   "RemoteImageError",
   {
     host: Schema.String,
@@ -67,10 +67,7 @@ function remoteAuthority(
 // Whether `url` is served over https by a remote's host or a subdomain
 // of it (an Enterprise Server's media. and uploads.), on the default
 // port or the one an https remote names.
-export function isRemoteImageUrl(
-  url: URL,
-  remotes: readonly string[],
-): boolean {
+function isRemoteImageUrl(url: URL, remotes: readonly string[]): boolean {
   if (url.protocol !== "https:") return false;
   const host = url.hostname.toLowerCase();
   return remotes.some((remote) => {

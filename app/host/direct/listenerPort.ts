@@ -9,7 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import type * as DeviceLink from "@host/socket/DeviceLink";
 
 // The port remembered at `path`, or 0 (any) when there is none.
-export const rememberedPort = (path: string) =>
+const rememberedPort = (path: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(path)).pipe(
     Effect.map((text) => {
       const port = Number(text.trim());

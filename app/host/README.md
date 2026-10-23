@@ -102,9 +102,7 @@ commits it (`EFFECT.md`, section 5); the engine's are in
    (`registerContract`, onto `shared/ipc/served.ts`); a new call in an
    existing module needs nothing there. The group's RPC server decodes
    each payload and encodes each answer with the call's schemas.
-5. A proof in `app/test` calls the handler on the host's services with
-   `runHost(handlers.call(...))` (`app/test/README.md`).
-6. The renderer reaches it through its client; the lab's fake host
+5. The renderer reaches it through its client; the lab's fake host
    answers a call it has no fixture for with a stub derived from the
    schema, so it needs an entry (`app/lab/fake-host/`) only when a
    screen should show something real.

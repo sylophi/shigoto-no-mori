@@ -35,9 +35,3 @@ To bump, raise `PROTOCOL_VERSION`, `git mv` the samples file to the new version'
 A version no build has been cut with yet takes its changes in place: its samples file is edited and the version stays, since no build of it exists to read the old bytes. Once a build carries the version, the rules above hold for it. A device on another version never links (the device link's hello asks for its own exactly), so a field a version makes optional is optional for its meaning, never for an older peer.
 
 `pnpm -F @shigomori/contracts wire-fixtures` adds a sample derived from the schema for each part that has none, asks for one by hand where a schema's checks leave nothing to derive, and drops the samples of calls and parts that are gone. It never rewrites a sample that is there, and it formats the file as the repo does (oxfmt), so the diff is the samples it added or dropped. `test/wire.test.ts` also refuses a channel named twice in the file, which `JSON.parse` would hide.
-
-## Classification
-
-`fixtures/wire/classification.json` holds what every call of every module may do over a wire: its kind (invoke, push or view), its module's scope, and each annotation it carries (`remote`, `gated`, `grant`, `tracksProjectUsage`, `busy`), an annotation it lacks left out. `test/classification.test.ts` derives the same from the contract and fails with the diff when they differ. So a read that becomes a command, a call that joins or leaves the remote surface, or a grant that moves shows up as a reviewed change to what the device link hands to other devices.
-
-Unlike the samples, the file is the contract's own reading, so `pnpm -F @shigomori/contracts classification` writes it whole. Run it when the change is meant, and read its diff.

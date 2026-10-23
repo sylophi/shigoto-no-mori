@@ -4,8 +4,7 @@
 // session, opened with forward:open (the host side in
 // host/ipc/modules/forward.ts, the wire rules in
 // packages/contracts/src/modules/forward.ts). Its peer reach is
-// injected (PortForwards.ts passes PeerReach's), so the proof drives
-// the real engine over a real device wire (test/port-forward.mts).
+// injected (PortForwards.ts passes PeerReach's).
 //
 // The per-socket bridging (attach, open, the adapter's backpressure and
 // teardown) lives in bridge.ts, shared with the mirror gateway. This
@@ -48,7 +47,6 @@ export type ForwardApi = PeerCalls<typeof forwardContract>;
 // one device, not each forward alone. A conn over the cap would be
 // refused there anyway, but only after a full open round trip, so an
 // accepted socket over the cap is destroyed immediately instead.
-// Exported so the port-forward check's cap scenario tracks this value.
 export const MAX_CONNS_PER_DEVICE = 16;
 
 // The changed signal's window: opens and closes arrive in bursts (one

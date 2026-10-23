@@ -6,14 +6,18 @@
   (`pnpm install`, then `pnpm run postinstall`, since install scripts
   are off; `pnpm -C app …` or the root scripts for the app), Go for `file-sync/`
   and `macfs/`, Bun to compile the terminal `sm` (`packages/cli`).
-- On commit, lefthook runs lint, format, typecheck and the proofs the
-  change touches, and CI runs every check on each pull request:
-  `pnpm check`, each piece a `check:*` script in the root
-  `package.json`. `pnpm test <name>` runs one proof (`app/test/`), and
+- On commit, lefthook runs lint, format, typecheck and the tests of
+  what the change touches, and CI runs every check on each pull
+  request: `pnpm check`, each piece a `check:*` script in the root
+  `package.json`. `pnpm test` runs the app's proofs (`app/test/`), and
   `pnpm -C packages/<package> exec vitest run <file>` one package
   test file. `pnpm typecheck` also prints the Effect language
   service's suggestions (`suggestion TS377…`), which don't fail it.
   Run the checks a change touches and leave the repo-wide suite to CI.
+- Tests are kept to what guards the user's data: the v2 import and the
+  store's migrations, what deletes files (worktree removal, nuke, the
+  recovery of an interrupted removal or move, the mirror's deletions),
+  and the wire fixtures. Changes elsewhere don't add tests.
 - To check a change by running it (a screen in some state, a
   screenshot, the real app on several devices), start at
   `app/lab/README.md`. Pages and windows are driven with weblab.
@@ -22,10 +26,6 @@
 - Effect code follows `EFFECT.md`, which starts by sending you to
   Effect's own guidance for the pinned version: read it before writing
   Effect code.
-- A workflow that changes state is proved by a failure injected
-  between each pair of its external steps and by a recovery that itself
-  fails, and its cleanup is proved after a refusal and after a kill,
-  not only after success.
 - A pull request has a short title and a body that is a single brief
   `## Description` section: what changed and why, in a few sentences.
   No test plan or other sections.

@@ -2,8 +2,8 @@
 // order, then the user-added rows that do not collide. A custom entry
 // on a number port-pool also allocated is shadowed by the pool row
 // rather than listed twice: the number is the identity a forward keys
-// on, so one row per number. Pure and shared so the host handler, the
-// fake host bridge and the ports check all run the one rule.
+// on, so one row per number. Pure and shared so the host handler and
+// the fake host bridge run the one rule.
 import type { CustomPort, WorktreePort } from "@shigomori/contracts/schemas";
 
 export type PoolPort = { name: string; port: number };

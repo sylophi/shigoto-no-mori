@@ -11,9 +11,8 @@
  * Color-blocking and fill contrast carry hierarchy.
  *
  * ============================= CONTRACT =============================
- * Everything this file hooks into, so refactors can't silently strip
- * the theme. `pnpm test theme-contract` (test/theme-contract.mts, run
- * in pre-commit) verifies each hook still exists.
+ * Everything this file hooks into: a refactor that drops one strips
+ * the theme there.
  *
  * 1. Theme tokens (index.css / @theme): --background, --card, --popover,
  *    --primary, --secondary, --muted, --accent, --destructive, --input,
@@ -34,27 +33,27 @@
  *    classes (per-theme markup shipped side by side), and the pickers'
  *    li[data-row-idx].
  *
- * 4. Upstream library attributes (re-verify on upgrades; theme-contract
- *    greps the packages): Base UI's data-highlighted / data-disabled /
- *    data-popup-open / data-unchecked, cmdk's [cmdk-item] +
- *    aria-selected, sonner's [data-sonner-toast] (+ data-styled,
- *    data-type), [data-sonner-toaster], [data-title], [data-description],
+ * 4. Upstream library attributes (re-verify on upgrades): Base UI's
+ *    data-highlighted / data-disabled / data-popup-open /
+ *    data-unchecked, cmdk's [cmdk-item] + aria-selected, sonner's
+ *    [data-sonner-toast] (+ data-styled, data-type),
+ *    [data-sonner-toaster], [data-title], [data-description],
  *    [data-icon], [data-button], [data-close-button] and its
  *    --border-radius variable.
  *    Clerk's .cl-rootBox / .cl-modalBackdrop (the ambient-strip
  *    carve-outs below) are part of Clerk's documented appearance API
- *    but live in its runtime-loaded UI bundle, so theme-contract cannot
- *    grep them -- re-verify by eye when the Clerk packages move.
+ *    and live in its runtime-loaded UI bundle -- re-verify by eye when
+ *    the Clerk packages move.
  *
  * 5. One consumer links this file on its own:
  *    scripts/dmg-background.html, the dmg installer artwork, which
  *    renders against the leaf-wallpaper ::before, the header/footer
  *    band rule and the --doubutsu-* tokens. It is a committed png, so a
- *    broken hook there is invisible until someone opens a release.
- *    `pnpm test theme-contract` verifies it, and `pnpm test dmg-art`
- *    catches art that predates a palette edit.
+ *    broken hook there is invisible until someone opens a release, and
+ *    a palette edit means rendering it again
+ *    (scripts/build-dmg-background.cts).
  *
- * 6. Tailwind utility names (stable public API, checked loosely):
+ * 6. Tailwind utility names (stable public API):
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
  *    -semibold/-bold/-black/-mono/-terminal, [class*="backdrop-blur"].
  *
@@ -1057,7 +1056,7 @@
 /* The mirror: `v1-only` markup keeps its natural display in v1 and
    drops out under doubutsu. Together the two let a component ship both
    theme's markup side by side rather than branching on the theme in
-   JS, which theme-contract can't see. */
+   JS. */
 .doubutsu .v1-only {
   display: none;
 }

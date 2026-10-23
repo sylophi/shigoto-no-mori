@@ -7,7 +7,7 @@ import type { VillagerProfile } from "@shigomori/contracts/schemas";
 // profile's kind. Legendary is picked by hand and holds names only.
 export type VillagerRarity = "common" | "rare" | "legendary";
 
-export const LEGENDARY_VILLAGERS: readonly string[] = [
+const LEGENDARY_VILLAGERS: readonly string[] = [
   "tom-nook",
   "isabelle",
   "kk-slider",

@@ -1,9 +1,9 @@
 // What kind of Mac a desktop device is, as far as macOS will say, for
 // the icon it enrolls under before anyone picks one. Pure node (a child
-// process), electron-free like the rest of main/core/account/ so the
-// account check script drives the mapping half. Every probe may fail,
-// and a failure reads as the fallback shape rather than an error: the
-// icon is cosmetic, and a status read must never break on it.
+// process), electron-free like the rest of main/core/account/. Every
+// probe may fail, and a failure reads as the fallback shape rather
+// than an error: the icon is cosmetic, and a status read must never
+// break on it.
 import {
   MACHINE_FALLBACK_ICON,
   type DeviceShape,
@@ -20,7 +20,7 @@ const execFileP = promisify(execFile);
 // identifier, which says nothing about the shape, so the product name
 // is asked for first and the identifier is the fallback for the
 // machines that still spell a family into it.
-export function deviceShapeFromAppleModel(model: string): DeviceShape | null {
+function deviceShapeFromAppleModel(model: string): DeviceShape | null {
   const normalized = model.replace(/[\s-]/g, "").toLowerCase();
   if (normalized.startsWith("macbook")) return "laptop";
   if (normalized.startsWith("macmini")) return "mini";
@@ -33,7 +33,7 @@ export function deviceShapeFromAppleModel(model: string): DeviceShape | null {
 
 // The product name the "About this Mac" window shows, from the
 // IORegistry's product node: `"product-name" = <"Mac mini (2024)">`.
-export function appleProductNameOf(ioregOutput: string): string | null {
+function appleProductNameOf(ioregOutput: string): string | null {
   const match = /"product-name"\s*=\s*<"([^"]*)">/.exec(ioregOutput);
   const name = match?.[1]?.trim() ?? "";
   return name === "" ? null : name;

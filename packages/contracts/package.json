@@ -10,8 +10,7 @@
   "scripts": {
     "typecheck": "$(effect-tsgo get-exe-path) && $(effect-tsgo get-exe-path) -p test",
     "test": "vitest run",
-    "wire-fixtures": "UPDATE_WIRE_FIXTURES=1 vitest run test/wire.test.ts && pnpm -w exec oxfmt packages/contracts/fixtures/wire",
-    "classification": "UPDATE_CLASSIFICATION=1 vitest run test/classification.test.ts && pnpm -w exec oxfmt packages/contracts/fixtures/wire/classification.json"
+    "wire-fixtures": "UPDATE_WIRE_FIXTURES=1 vitest run test/wire.test.ts && pnpm -w exec oxfmt packages/contracts/fixtures/wire"
   },
   "dependencies": {
     "effect": "catalog:",

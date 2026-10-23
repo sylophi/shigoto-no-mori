@@ -14,7 +14,7 @@ const NOT_READY_STALE_MS = 30_000;
 // readiness: null (gh not ready, or not a GitHub repo) and a failed read
 // both leave the UI allowing every method. A failed read is asked again
 // (the default retries, then the next mount).
-export function repoMergeConfigQueryOptions(
+function repoMergeConfigQueryOptions(
   api: HostApi,
   keys: QueryKeyRegistry,
   projectId: string,

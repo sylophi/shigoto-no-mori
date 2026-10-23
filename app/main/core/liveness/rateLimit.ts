@@ -1,11 +1,10 @@
 // The rate limits of the two liveness recovery paths (electron/liveness.ts):
 // the renderer's sliding window over recent recreations, and the fatal
-// relaunches' count. They import nothing, so test/liveness.mts drives
-// them under plain Node.
+// relaunches' count.
 
 // A renderer that dies and gets recreated only to die again is a loop:
 // a fourth crash within the window gives up.
-export const CRASH_LOOP = { windowMs: 30_000, max: 3 };
+const CRASH_LOOP = { windowMs: 30_000, max: 3 };
 
 // Main-process fatal-relaunch guard. A deterministic startup crash would
 // otherwise relaunch forever, so two relaunches with no stable run of a
@@ -19,7 +18,7 @@ export const relaunchAllowed = (relaunches: number): boolean =>
 
 // `recent` holds when the actions before this one were taken, and comes
 // back pruned to the window, with `now` when this one is allowed.
-export function decide(
+function decide(
   recent: readonly number[],
   now: number,
   policy: { windowMs: number; max: number },
@@ -38,7 +37,7 @@ export function decide(
 // budget, where every window gone within a second of the last counted
 // one is that one kill, so a signal that takes every window spends it
 // once.
-export const GONE_TOGETHER_MS = 1_000;
+const GONE_TOGETHER_MS = 1_000;
 
 export function rendererGone(input: {
   readonly ownTeardown: boolean;

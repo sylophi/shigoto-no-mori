@@ -13,7 +13,7 @@
 // supervision fiber reconcile starts, which closes when the wanted
 // port changes and when the layer does.
 //
-// This file must stay Electron free (pnpm test host-boundary).
+// This file must stay Electron free.
 import { findExecutable } from "@shigomori/engine/executables";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -50,13 +50,13 @@ import * as Processes from "@shigomori/engine/processes";
 import { readTunnelPid, tunnelPidText } from "@shigomori/engine/tunnelPid";
 import { elapsedMillis, elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 
-// ---- pure deciders, exported for the direct-plane check ----
+// ---- pure deciders ----
 
 // Restart delays for a failing tunnel (a provision error, a child that
 // exits), capped at the last rung: the socket supervisor's ladder plus
 // one extra top rung, so a persistently failing cloudflared never
 // re-spawns more than once a minute.
-export const TUNNEL_BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
+const TUNNEL_BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
   ...BACKOFF_LADDER_MS,
   60_000,
 ];
@@ -64,7 +64,7 @@ export const TUNNEL_BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
 // A child that stayed up at least this long before dying is treated as
 // healthy, so its restart starts the ladder from the bottom: the same
 // stable threshold the socket supervisor uses.
-export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
+const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 
 // The readiness probe schedule: a fresh child is advertised only once
 // its hostname actually ROUTES from the edge to the local listener
@@ -82,9 +82,7 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // rungs against a not-yet-routable advertisement (a transient failure,
 // so it retries forever -- but each wasted rung pushes the next attempt
 // further out).
-export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
-  5_000, 8_000,
-];
+const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [5_000, 8_000];
 // The ladder for a tunnel the Worker REUSED, which is every launch
 // after a device's first. Its hostname resolved before, so there is no
 // propagation to wait out: all a probe waits on is the connector
@@ -92,7 +90,7 @@ export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
 // Until it passes the device advertises no tunnel candidate, so on the
 // ladder above a web client (whose only candidate is the tunnel) could
 // not reach a freshly launched device for its first five seconds.
-export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
+const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
   1_000, 2_000, 4_000, 8_000,
 ];
 // Past the deadline, the child is treated exactly like one that died:
@@ -101,23 +99,22 @@ export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
 // possibly-dead token. The re-provision repairs a deleted record or a
 // stale ingress. A brand-new hostname routes in seconds (the wildcard
 // above), so one deadline serves both ladders.
-export const TUNNEL_PROBE_DEADLINE_MS = 60_000;
+const TUNNEL_PROBE_DEADLINE_MS = 60_000;
 
 // How long an unconfigured answer stands before the Worker is asked
 // again: a deployment setting, which a redeploy changes, so one request
 // per interval. Whatever a sleep does to the timer, the wake that ends
 // it asks at once (`recheck`).
-export const UNCONFIGURED_RETRY_MS = 5 * 60_000;
+const UNCONFIGURED_RETRY_MS = 5 * 60_000;
 
 // One probe attempt's own fetch bound, so a black-holed edge cannot
 // wedge the probe chain.
 const PROBE_ATTEMPT_TIMEOUT_MS = 5_000;
 
-// The child's argv and env, pure so the check can pin the secret
-// discipline: the connector token rides ONLY in env.TUNNEL_TOKEN
-// (cloudflared reads it there), never argv, so `ps` output and spawn
-// logging can never leak it.
-export function cloudflaredArgs(): string[] {
+// The child's argv and env. The connector token rides ONLY in
+// env.TUNNEL_TOKEN (cloudflared reads it there), never argv, so `ps`
+// output and spawn logging can never leak it.
+function cloudflaredArgs(): string[] {
   // --no-autoupdate: cloudflared otherwise checks for a newer release
   // and replaces its own binary, which would break the signature of
   // the copy the app ships. The version is pinned in
@@ -133,7 +130,7 @@ export function cloudflaredArgs(): string[] {
   return ["tunnel", "--no-autoupdate", "--ha-connections", "1", "run"];
 }
 
-export function cloudflaredEnv(connectorToken: string): Record<string, string> {
+function cloudflaredEnv(connectorToken: string): Record<string, string> {
   return { TUNNEL_TOKEN: connectorToken };
 }
 
@@ -209,7 +206,7 @@ type TunnelStatus = {
 };
 
 // What the hub Worker's provision call hands back for a listener port.
-export type TunnelProvision = {
+type TunnelProvision = {
   hostname: string;
   connectorToken: string;
   dnsCreated: boolean;

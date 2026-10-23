@@ -47,6 +47,7 @@ export type VillagerKind = typeof VillagerKindSchema.Type;
 // What the villager's wiki page says about them, as far as it does:
 // every field but the name, the kind and the page is left out when the
 // page lacks it.
+/** @public the wire fixtures read it, through the barrel */
 export const VillagerProfileSchema = Schema.Struct({
   name: Schema.NonEmptyString,
   kind: VillagerKindSchema,

@@ -9,9 +9,6 @@
 // deletion is not ACL-gated, so the only one possible is the unlock
 // prompt of a locked login keychain, and safeStorage's own read would
 // raise that right after anyway.
-//
-// Electron-free, so test/keychain.mts can run the real thing
-// against a probe item.
 import * as Predicate from "effect/Predicate";
 import { execFileSync } from "node:child_process";
 

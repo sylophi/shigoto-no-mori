@@ -56,13 +56,9 @@ import {
   GIT_IDENTITY,
   isolateGit,
   repositoryRoot,
-} from "../../../../gitIsolation.ts";
+} from "../../../../test/gitIsolation.ts";
 import { macfs } from "./macfs.ts";
-import { SYNC_SPAWN } from "../../../../testProcesses.mts";
-
-// The darwin helper, for the tests that take it with the sandbox's
-// environment.
-export { macfs };
+import { SYNC_SPAWN } from "../../../../test/testProcesses.mts";
 
 // The services a harness case calls.
 export type Engine =
@@ -94,8 +90,7 @@ export type Engine =
   | Paths.Paths;
 
 // What the agent hooks run, as the installed binary names itself.
-export const HOOK_BINARY =
-  "/Applications/Shigoto no Mori.app/Contents/Resources/smd";
+const HOOK_BINARY = "/Applications/Shigoto no Mori.app/Contents/Resources/smd";
 
 // git's variables point a child at the repository a hook runs in, and
 // the user's git config would reach the sandbox's repos. The engine's

@@ -24,7 +24,7 @@ import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 
 // What a cut action says: the call was lost with the process, which
 // the window's band names (HostBand).
-export const OWN_APP_DROP_WORDS =
+const OWN_APP_DROP_WORDS =
   "The app's background process restarted before this finished. Try again.";
 
 // Per-query opt-out: pass `meta: { silentError: true }` to suppress the

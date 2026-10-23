@@ -1,7 +1,6 @@
 // The New worktree menu's projects: the tree's list of projects, so a
 // repo checked out on several devices is one entry, in the tree's
-// order and split by owner the same way. Kept apart from the menu so
-// the proof can drive it (test/new-worktree-menu.mts).
+// order and split by owner the same way.
 import type { Project } from "@shigomori/contracts/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";

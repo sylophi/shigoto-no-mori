@@ -14,8 +14,7 @@ level up.
 - `lab/README.md`: testing by hand on the real UI, driven with weblab:
   the fake host (any screen posed in a browser) and device windows
   (the real app as several devices on one machine).
-- `test/README.md`: the programmatic checks, the proofs `pnpm test`
-  and lefthook run.
+- `test/README.md`: the proofs, which `pnpm test` and lefthook run.
 - `host/README.md`: what the host serves, and a new call end to end.
 - `main/README.md`: the shell, Electron's main process.
 - `renderer/README.md`: the UI both shells run, containers over the

@@ -175,7 +175,7 @@ interface FakeHostControls {
   emitHost: FixtureWire["emit"];
   // The patch a commit, branch, stash or pull request diff opened from
   // now on reads, in place of FAKE_DIFF: one git printed for a
-  // repository of the caller's (the commit-diff-rows proof).
+  // repository of the caller's.
   setPatch(patch: string): void;
   // Set by boot.tsx once the memory router is up.
   navigate?: (to: string) => void;

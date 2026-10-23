@@ -35,11 +35,9 @@ const WRITE_RETRY = Schedule.min([
 ]);
 
 const waiting = Latch.makeUnsafe(false);
-const allStored = Latch.makeUnsafe(true);
 
 function persist(doc: SharedSettingsDoc): void {
   unstored.push(doc);
-  allStored.closeUnsafe();
   waiting.openUnsafe();
 }
 
@@ -49,7 +47,6 @@ const writer = Effect.forever(
     const doc = unstored.shift();
     if (doc === undefined) {
       waiting.closeUnsafe();
-      allStored.openUnsafe();
       return;
     }
     // A write that fails (the store busy, the disk full) is tried again
@@ -82,9 +79,6 @@ export const layer = Layer.effectDiscard(
   ),
 );
 export const sharedSettingsLoaded = loaded.get;
-
-// Once every change made so far is in the store.
-export const sharedSettingsStored = allStored.await;
 
 type ChangeListener = (doc: SharedSettingsDoc) => void;
 const changeListeners = new Set<ChangeListener>();

@@ -9,7 +9,7 @@ import type { MirrorEngine } from "../../host/mirror/MirrorEngine.ts";
 type MirrorEndpoint = MirrorSessionRaw["local"];
 
 // One end of a session: connected and scanned, holding nothing.
-export const mirrorEndpoint = (
+const mirrorEndpoint = (
   fields: Partial<MirrorEndpoint> = {},
 ): MirrorEndpoint => ({
   connected: true,

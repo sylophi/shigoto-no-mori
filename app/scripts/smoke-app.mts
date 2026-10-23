@@ -56,9 +56,9 @@ import type { AddressInfo } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { isolateGit } from "../../gitIsolation.ts";
-import { endAll, onRunEnd, own } from "../../testProcesses.mts";
-import { leaveTestTemp, ownTestTemp } from "../../testTemp.mts";
+import { isolateGit } from "../../test/gitIsolation.ts";
+import { endAll, onRunEnd, own } from "../../test/testProcesses.mts";
+import { leaveTestTemp, ownTestTemp } from "../../test/testTemp.mts";
 
 const OPEN_WITHIN_MS = 60_000;
 const QUIT_WITHIN_MS = 20_000;
@@ -92,13 +92,13 @@ if (
 }
 const bundle: string = argument;
 // The launches' temp files, the builds' own with them, in a folder of
-// this run's (../../testTemp.mts), and their git kept off this
-// repository and this machine's config (../../gitIsolation.ts).
+// this run's (../../test/testTemp.mts), and their git kept off this
+// repository and this machine's config (../../test/gitIsolation.ts).
 ownTestTemp("smoke");
 isolateGit();
 // However the smoke ends (a signal, a crash, a failure), every app it
 // started ends, those the installer opened through LaunchServices too
-// (`own`, ../../testProcesses.mts), and then the run's folder goes: a
+// (`own`, ../../test/testProcesses.mts), and then the run's folder goes: a
 // signal ends the smoke with no exit handlers, ownTestTemp's among them.
 onRunEnd(() => {
   if (serving !== undefined) quitServed(serving);

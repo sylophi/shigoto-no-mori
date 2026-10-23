@@ -4,8 +4,7 @@
 // branch, the corrupt-reads-null tolerance) while the raw storage
 // primitives are injected, so a node fs backing and a browser
 // localStorage backing both plug in without forking this logic. Pure: no
-// node builtins, no electron, so the account check drives the core with
-// an in-memory backing and the desktop adapter wraps it around fs.
+// node builtins, no electron.
 //
 // The credential is the long-lived device secret the enroll response
 // returned, and the device key the private half of the key pair the

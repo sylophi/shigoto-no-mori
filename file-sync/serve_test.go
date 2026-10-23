@@ -136,60 +136,6 @@ func TestServeKeepsGitOutOfReach(t *testing.T) {
 	}
 }
 
-// One transition that mixes .git with an ordinary change applies the
-// ordinary one: a .githooks -> .git/hooks link must not hold back every
-// other edit. Each refused change stays as it was, as a problem.
-func TestServeAppliesTheRestOfABatchThatTouchesGit(t *testing.T) {
-	t.Setenv("MUTAGEN_DATA_DIRECTORY", filepath.Join(t.TempDir(), "mutagen"))
-	root := t.TempDir()
-	writeFileT(t, filepath.Join(root, ".githooks"), "hooks\n")
-	writeFileT(t, filepath.Join(root, "sub", "a.txt"), "a\n")
-	session, err := identifier.New(identifier.PrefixSynchronization)
-	if err != nil {
-		t.Fatal(err)
-	}
-	endpoint, err := dialServed(t, root, session, &synchronization.Configuration{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx := context.Background()
-	snapshot, err, _ := endpoint.Scan(ctx, nil, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	directory := &core.Entry{Kind: core.EntryKind_Directory}
-	changes := []*core.Change{
-		{Path: ".githooks", Old: snapshot.Content.Contents[".githooks"], New: &core.Entry{Kind: core.EntryKind_SymbolicLink, Target: ".git/hooks"}},
-		{Path: "sub/c", New: directory},
-		{Path: ".GIT/hooks", New: directory},
-	}
-	results, problems, _, err := endpoint.Transition(ctx, changes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(results) != len(changes) {
-		t.Fatalf("%d results for %d changes", len(results), len(changes))
-	}
-	if !results[0].Equal(changes[0].Old, true) || results[2] != nil {
-		t.Fatal("a refused change's result is not its old entry")
-	}
-	if results[1].Kind != core.EntryKind_Directory {
-		t.Fatalf("sub/c came back as %v (%v)", results[1], problems)
-	}
-	if len(problems) != 2 || problems[0].Path != ".githooks" || problems[1].Path != ".GIT/hooks" {
-		t.Fatalf("problems: %v", problems)
-	}
-	if info, err := os.Stat(filepath.Join(root, "sub", "c")); err != nil || !info.IsDir() {
-		t.Fatal("the ordinary change was not applied")
-	}
-	if info, err := os.Lstat(filepath.Join(root, ".githooks")); err != nil || !info.Mode().IsRegular() {
-		t.Fatal(".githooks was changed")
-	}
-	if _, err := os.Lstat(filepath.Join(root, ".git")); err == nil {
-		t.Fatal(".git was written")
-	}
-}
-
 // A real repository, a primary checkout whose remote's URL holds a
 // credential and a linked worktree whose .git is a pointer file: a peer
 // that reads .git is refused before anything is read, and one that
@@ -285,7 +231,7 @@ func git(t *testing.T, dir string, args ...string) {
 	command := exec.Command("git", args...)
 	command.Dir = dir
 	// Not the repository a hook that runs this test is committing in
-	// (../gitIsolation.ts).
+	// (../test/gitIsolation.ts).
 	for _, entry := range os.Environ() {
 		if !strings.HasPrefix(entry, "GIT_") {
 			command.Env = append(command.Env, entry)

@@ -13,19 +13,13 @@ import {
   deliveredRelay,
   encodeEnvelope,
   HUB_PING,
-  encodeRelayFrame,
   HUB_PONG,
   type ServerEnvelope,
 } from "@shigomori/contracts/hubProtocol";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { toText } from "@host/hub/rawData";
 import { toBase64Url } from "@shared/crypto/deviceKey";
-import {
-  HandshakeState,
-  type KeyPair,
-  keyPairFromPrivateKey,
-} from "@shared/crypto/noise";
-import { relayPrologue } from "@shared/hub/link";
+import { type KeyPair, keyPairFromPrivateKey } from "@shared/crypto/noise";
 import { boundPort, type Track } from "./checkKit.mts";
 
 // The key a test device enrolled with, the same for its id in every
@@ -57,32 +51,6 @@ function holderOfTicket(ticket: string): Holder | null {
   return second === "web" || second === "desktop"
     ? { deviceId, kind: second, connection: third ?? "" }
     : { deviceId, kind: "desktop", connection: second ?? "" };
-}
-
-// An ask from `from` to `to`, sealed to `to`'s roster key with
-// `from`'s (or the given) static key. The payload defaults to a
-// connectInfo ask with `input`.
-export function sealAsk(
-  from: string,
-  to: string,
-  id: number,
-  payload: unknown,
-  key: KeyPair = testDeviceKey(from).pair,
-): { frame: string; handshake: HandshakeState } {
-  const handshake = new HandshakeState({
-    initiator: true,
-    prologue: relayPrologue(from, to),
-    s: key,
-    rs: testDeviceKey(to).pair.publicKey,
-  });
-  const sealed = toBase64Url(
-    handshake.writeMessage(new TextEncoder().encode(JSON.stringify(payload)))
-      .message,
-  );
-  return {
-    frame: encodeRelayFrame({ kind: "ask", id, sealed }),
-    handshake,
-  };
 }
 
 type StubSend = { from: string; to: string; frame: string };

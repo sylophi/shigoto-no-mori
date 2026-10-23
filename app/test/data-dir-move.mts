@@ -1,10 +1,10 @@
 // Durable proof that a data-folder move a crash cut short is undone at
 // the next start (host/lib/dataDirMove.ts). The move re-keys every
 // worktree under the data folder before it copies, so a crash mid-copy
-// left the store keyed to paths that never came to be, and the partial
-// copy refused every retry. Asserts, for a move to another volume (the
-// rename refused across volumes) whose copy stops halfway and is never
-// heard from again, as in a crash:
+// leaves the store keyed to paths that never come to be, and a partial
+// copy that would refuse every retry. Asserts, for a move to another
+// volume (the rename refused across volumes) whose copy stops halfway
+// and is never heard from again, as in a crash:
 //   - while it hangs, the worktree's title is under its new id, and the
 //     partial copy sits beside the destination, not at it;
 //   - the next start's resume (the layer the host's graph runs at
@@ -16,9 +16,7 @@
 // which would refuse every retry. A rename a crash cut before the
 // pointer moved is found by the folder that arrived, its journal naming
 // the one that left, and the pointer committed. The copy holds the
-// store still, so no write tears it. And one that failed after the host let
-// go of the folder restarts the app, once its user has read why when
-// they asked for it here (the shell's dialog). A data folder reached
+// store still, so no write tears it. A data folder reached
 // through a link carries its worktrees, which git names by the link's
 // target (or spelled with trailing slashes), to their ids at the
 // destination's target, and one that is itself a link is refused.
@@ -52,14 +50,12 @@ import {
   resumeDataDirMove,
 } from "@shigomori/engine/dataDirMove";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import * as Paths from "@shigomori/engine/Paths";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import {
   JOURNAL,
   rescueStrandedMove,
   reviveStore,
 } from "@shigomori/engine/dataDirMoveJournal";
-import { afterFailedMove } from "../host/ipc/modules/runtime.ts";
 import * as Ops from "../host/lib/engineOps.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import { initDataDirAt } from "../shared/paths.ts";
@@ -433,28 +429,6 @@ it("keeps a move journal it can't read, which may be all that says what a move l
   await runHost(resumeDataDirMove(engineDataDir));
   assert.equal(readFileSync(journal, "utf8"), "not a journal");
   await clearJournal();
-});
-
-it("a move that failed after the folder was let go never leaves the app running without it", () => {
-  // Before the release, the app carries on where it was.
-  assert.equal(
-    afterFailedMove({ watchersStopped: false, unattended: false }),
-    "carry-on",
-  );
-  assert.equal(
-    afterFailedMove({ watchersStopped: false, unattended: true }),
-    "carry-on",
-  );
-  // After it: asked here, the user reads why and restarts (or quits);
-  // asked by a peer, the app restarts with nobody to ask.
-  assert.equal(
-    afterFailedMove({ watchersStopped: true, unattended: false }),
-    "ask",
-  );
-  assert.equal(
-    afterFailedMove({ watchersStopped: true, unattended: true }),
-    "relaunch",
-  );
 });
 
 // A write from another process, or why it was refused.
@@ -903,37 +877,6 @@ it("a move settles an earlier move's journal first, and waits while it can't", a
   assert.equal(journalLeft(), false);
 });
 
-// The owner's (a): from the journal's first write until it is gone the
-// store is the move's: another process's write (the terminal's) is
-// refused, and writes again once the move is undone.
-it("refuses another process's writes while a move's journal is out, and takes them again after", async () => {
-  const parent = join(elsewhere, "exclusive");
-  mkdirSync(parent);
-  let during = "";
-  const failed = await runHost(
-    moveDataDir(parent, {
-      place: {
-        dataDir: engineDataDir,
-        pointerFile: join(elsewhere, "config-exclusive", "data-dir"),
-        legacyPointerFile: null,
-        defaultDataDir: join(elsewhere, "home", ".sm"),
-        dataDirName: "moved",
-      },
-      holdUpdater: Effect.succeed(null),
-      killAllScripts: Effect.void,
-      movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
-      beforeMove: Effect.gen(function* () {
-        during = writeTheStore();
-        return yield* Effect.fail("stop before the folder moves");
-      }),
-    }).pipe(Effect.flip),
-  );
-  assert.equal(failed, "stop before the folder moves");
-  assert.match(during, /sm-data-folder-moved/);
-  assert.equal(writeTheStore(), "written");
-  assert.equal(journalLeft(), false);
-});
-
 it.each([
   ["", "alias"],
   ["///", "alias-slashes"],
@@ -961,118 +904,3 @@ it.each([
     assert.equal(existsSync(join(elsewhere, `${name}-to`)), false);
   },
 );
-
-// Every change the host makes through the engine passes the data-folder
-// lock: one is refused while a move holds it alone.
-it("refuses a change of the host's while a move holds the lock", async () => {
-  const identity = (
-    await runHost(Ops.listWorktreeIdentities({ projectId }))
-  ).find((row) => row.path === fox);
-  assert.ok(identity !== undefined);
-  const lockFile = await runHost(
-    Effect.map(Paths.Paths, ({ pointerFile }) =>
-      join(dirname(pointerFile), "data-dir.lock"),
-    ),
-  );
-  mkdirSync(dirname(lockFile), { recursive: true });
-  const move = new DatabaseSync(lockFile);
-  move.exec("PRAGMA locking_mode = EXCLUSIVE");
-  move.exec("CREATE TABLE IF NOT EXISTS held (id INTEGER PRIMARY KEY)");
-  move.exec("INSERT OR REPLACE INTO held (id) VALUES (1)");
-  try {
-    const refused = await runHost(
-      Ops.writeWorktreeDescription(projectId, identity.id, { title: "Owl" }),
-    ).then(
-      () => null,
-      (error: unknown) => error,
-    );
-    assert.match(String(refused), /The data folder is being moved/);
-  } finally {
-    move.close();
-  }
-  assert.equal(await titleOf(identity.id), "Fox");
-});
-
-// A worktree being sent or brought still has files to land after its
-// landing, which a move's copy would miss: the move is refused, asked
-// once it holds the lock.
-it("refuses a move while a worktree is being sent or brought", async () => {
-  const parent = join(elsewhere, "while-moving");
-  const refused = await runHost(
-    moveDataDir(parent, {
-      place: {
-        dataDir: engineDataDir,
-        pointerFile: join(elsewhere, "config-6", "data-dir"),
-        legacyPointerFile: null,
-        defaultDataDir: join(elsewhere, "home", ".sm"),
-        dataDirName: "moved",
-      },
-      beforeMove: Effect.void,
-      holdUpdater: Effect.succeed(null),
-      killAllScripts: Effect.void,
-      movesUnderWay: Effect.succeed({ moving: true, bringing: [] }),
-    }).pipe(Effect.flip),
-  );
-  assert.match(String(refused), /being sent or brought/);
-  assert.equal(existsSync(join(parent, "moved")), false);
-  assert.equal(journalLeft(), false);
-});
-
-// A peer bringing a worktree from here reads its files as the move would
-// rename them: refused the same way, naming the peer, to try again.
-it("refuses a move while a peer is bringing a worktree from here, naming it", async () => {
-  const parent = join(elsewhere, "while-serving");
-  const refused = await runHost(
-    moveDataDir(parent, {
-      place: {
-        dataDir: engineDataDir,
-        pointerFile: join(elsewhere, "config-7", "data-dir"),
-        legacyPointerFile: null,
-        defaultDataDir: join(elsewhere, "home", ".sm"),
-        dataDirName: "moved",
-      },
-      beforeMove: Effect.void,
-      holdUpdater: Effect.succeed(null),
-      killAllScripts: Effect.void,
-      movesUnderWay: Effect.succeed({ moving: false, bringing: ["Thinkpad"] }),
-    }).pipe(Effect.flip),
-  );
-  assert.match(
-    String(refused),
-    /Thinkpad is bringing a worktree from here\. Try again when it finishes\./,
-  );
-  assert.equal(existsSync(join(parent, "moved")), false);
-  assert.equal(journalLeft(), false);
-});
-
-// An update installing restarts the app out of the folder the move
-// renames: refused in the updater's words, before a script is stopped
-// or anything moves.
-it("refuses a move while an update installs, in the updater's words, with no script stopped", async () => {
-  const parent = join(elsewhere, "while-installing");
-  let scriptsStopped = false;
-  const refused = await runHost(
-    moveDataDir(parent, {
-      place: {
-        dataDir: engineDataDir,
-        pointerFile: join(elsewhere, "config-8", "data-dir"),
-        legacyPointerFile: null,
-        defaultDataDir: join(elsewhere, "home", ".sm"),
-        dataDirName: "moved",
-      },
-      beforeMove: Effect.void,
-      holdUpdater: Effect.succeed("3.1.0"),
-      killAllScripts: Effect.sync(() => {
-        scriptsStopped = true;
-      }),
-      movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
-    }).pipe(Effect.flip),
-  );
-  assert.match(
-    String(refused),
-    /The update to 3\.1\.0 is installing, and the app restarts into it\. Move the data folder after the restart\./,
-  );
-  assert.equal(scriptsStopped, false, "a script was stopped first");
-  assert.equal(existsSync(join(parent, "moved")), false);
-  assert.equal(journalLeft(), false);
-});

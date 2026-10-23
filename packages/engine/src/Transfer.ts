@@ -50,7 +50,7 @@ export type TransferFlags = {
 type ProgressDocument = Readonly<SyncPullProgress> & {
   readonly event: "progress";
 };
-export type Progress = {
+type Progress = {
   readonly document: ProgressDocument;
   readonly line: string | undefined;
 };
@@ -127,7 +127,7 @@ export class StopUnconfirmed extends Schema.TaggedError<StopUnconfirmed>()(
 }
 
 // What a headline and the caveats read of a transfer's answer.
-export type TransferResult = Pick<
+type TransferResult = Pick<
   ControlTransferResult,
   "captured" | "dirtyApplied" | "files" | "source" | "alreadyMirrored"
 > & {
@@ -262,7 +262,7 @@ const isSourceFate = Schema.is(ControlSourceFateSchema);
 // saved leave-out rule and the setup default that goes with it. `sent`
 // is the direction: --clone-into names a folder on the device a send
 // goes to, and a bring lands in this device's own checkout.
-export const transferOptions = (
+const transferOptions = (
   flags: TransferFlags,
   options: {
     readonly device: string | undefined;
@@ -311,7 +311,7 @@ export const sourceFateDone = (fate: string): string =>
 // The work landed, but something that should have followed it didn't:
 // the uncommitted changes weren't applied on the copy, the ignored files
 // didn't cross, or the source's fate couldn't be carried out.
-export const caveatsOf = (result: TransferResult): ReadonlyArray<string> => [
+const caveatsOf = (result: TransferResult): ReadonlyArray<string> => [
   ...(result.captured && !result.dirtyApplied
     ? [
         "the uncommitted changes did not apply on the copy, so they exist only on the source",
@@ -327,7 +327,7 @@ export const caveatsOf = (result: TransferResult): ReadonlyArray<string> => [
     : []),
 ];
 
-export const headlineOf = (
+const headlineOf = (
   result: TransferResult,
   direction: { readonly mirror: boolean; readonly sent: boolean },
 ): string => {
