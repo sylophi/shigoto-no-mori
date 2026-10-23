@@ -17,12 +17,17 @@
 // same wire with the dialer's worktree a real clone of the listener's repository:
 //   - commits on both sides since they agreed report diverged and move
 //     nothing,
+//   - a checkout on the listener to a branch another worktree on the
+//     dialer holds is refused, and nothing moves,
 //   - a merge in progress on the listener, or a rebase on the dialer,
 //     moves nothing until it finishes,
 //   - the dialer's primary checkout (the original, on the device running the
 //     session) mirrored to a mirror/main worktree on the listener carries commits
 //     both ways, the listener's own main never moves, and a stray branch
-//     on the copy is never followed.
+//     on the copy is never followed,
+//   - its apply (host/mirror/gitState.ts) to a checkout moved since its
+//     read, onto another branch at the same tip or detached there, is
+//     refused, the checkout left where it was.
 // Then:
 //   - terminating a session leaves both copies as they are,
 //   - a one-shot pull never writes the dialer's files onto the listener,
@@ -57,6 +62,7 @@ import {
   mirrorContract,
   type MirrorGitStatus,
 } from "@shigomori/contracts/modules/mirror";
+import type { Project } from "@shigomori/contracts/schemas";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -79,6 +85,7 @@ import { listMirrorServing } from "@host/mirror/serving";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { type GitFollower, makeGitFollower } from "@host/mirror/gitFollow";
+import { applyGitState, readGitState } from "@host/mirror/gitState";
 import {
   type MirrorSessionRaw,
   ORIGINAL_GONE_DETAIL,
@@ -439,6 +446,21 @@ it("git: commits on both sides report diverged and move nothing", async () => {
   await waitGit("synced", "synced after resolving the divergence");
 });
 
+it("git: a checkout on the listener to a branch held by another worktree on the dialer is refused, and nothing moves", async () => {
+  await addWorktree(dialerRepo, "dialer-wt2", "other");
+  await git(listenerWorktree, ["checkout", "-q", "-b", "other"]);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
+  await waitGit("blocked", "the follower to refuse the held branch");
+  assert.equal(
+    await gitOut(dialerRoot, "symbolic-ref", "HEAD"),
+    "refs/heads/feature",
+  );
+  // Back on its branch for what follows.
+  await git(listenerWorktree, ["checkout", "-q", "feature"]);
+  follower.onPeerProjectChanged(LISTENER, listenerProjectId);
+  await waitGit("synced", "synced after the listener checks back");
+});
+
 it("git: a merge on the listener or a rebase on the dialer moves nothing until it finishes", async () => {
   // A git operation in progress on either side blocks the follow, and
   // nothing moves until it finishes.
@@ -600,6 +622,46 @@ it("git: a primary mirrored to a mirror/main worktree carries commits both ways 
     "the primary's session to leave the state stream",
   );
 });
+
+for (const [name, moved, move] of [
+  [
+    "moved-branch",
+    "onto another branch at the same tip",
+    ["checkout", "-q", "-b", "beta"],
+  ],
+  [
+    "moved-detached",
+    "detached at the same tip",
+    ["checkout", "-q", "--detach"],
+  ],
+] as const) {
+  it(`git: an apply to a checkout moved ${moved} since its read is refused, its HEAD kept`, async () => {
+    // The state an apply would carry stages one edit, and the index is
+    // put back to HEAD, so the apply has something to move.
+    const repo = await fixture.initRepo(name);
+    await fixture.commitFile(repo, "a.txt", "a\n", "a");
+    writeFileSync(join(repo, "a.txt"), "staged\n");
+    await git(repo, ["add", "a.txt"]);
+    const wanted = await runHost(readGitState(repo, repo, "wt"));
+    await git(repo, ["reset", "-q"]);
+    const current = await runHost(readGitState(repo, repo, "wt"));
+    assert.notEqual(current.indexTree, wanted.indexTree);
+    await git(repo, [...move]);
+    const head = await gitOut(repo, "rev-parse", "--abbrev-ref", "HEAD");
+    assert.deepEqual(
+      await runHost(
+        applyGitState(
+          // As a project the apply reads only its path.
+          { path: repo } as Project,
+          { id: "wt", path: repo },
+          { expect: current, state: wanted },
+        ),
+      ),
+      { applied: false, refusal: { kind: "changed-locally" } },
+    );
+    assert.equal(await gitOut(repo, "rev-parse", "--abbrev-ref", "HEAD"), head);
+  });
+}
 
 it("terminate leaves both copies intact", async () => {
   onSnapshot = null;

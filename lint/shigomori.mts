@@ -1,5 +1,5 @@
-// The repo's own oxlint rules, one per file in rules/, each with its
-// test beside it. README.md lists them.
+// The repo's own oxlint rules, one per file in rules/. README.md lists
+// them.
 import disableNeedsReason from "./rules/disable-needs-reason.mts";
 import effectFnServiceMethods from "./rules/effect-fn-service-methods.mts";
 import effectNamespaceImports from "./rules/effect-namespace-imports.mts";

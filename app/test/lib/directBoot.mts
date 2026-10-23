@@ -217,8 +217,6 @@ async function startDirectListener(
             set: (on) => SubscriptionRef.set(sharing, on),
           }),
         ),
-        // The store says nothing here: the views a proof reads are
-        // host-views.mts's.
         Layer.succeed(StoreChanges.StoreChanges, {
           subscribe: Effect.succeed(Stream.never),
           release: Effect.void,

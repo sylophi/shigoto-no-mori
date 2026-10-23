@@ -1,8 +1,9 @@
 // land's removal guard: the branch goes with the land, so commits the
 // PR's head never had (made after its last push, or under a name an
 // older PR merged with) are refused, named, before anything is merged or
-// removed, and again after a merge GitHub answered at once. Against real
-// git and a scripted gh.
+// removed, and again after a merge GitHub answered at once; and done's
+// delete of a branch, refused unless a merged PR holds it whole. Against
+// real git and a scripted gh.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -204,5 +205,60 @@ describe("commits the pull request never had", () => {
       box.git(located.project.path, "log", "-1", "--format=%s", "fox"),
       /^late/,
     );
+  });
+
+  const done = (located: Worktrees.Located) =>
+    box.engine(
+      Effect.flatMap(Effect.service(Landing.Landing), (landing) =>
+        landing.done(located, { force: false }),
+      ),
+    ) as Promise<Record<string, unknown>>;
+  const mergedGh = (said: string) =>
+    box.fakeBin(
+      "gh",
+      `case "$*" in
+  "pr list --state merged --head fox "*) ${said};;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac`,
+    );
+
+  // On the primary checkout, where done's checkout of main frees the
+  // branch for its `branch -D`: a linked worktree can't check main out.
+  it("done refuses a branch its merged PR doesn't hold whole, and one GitHub couldn't be asked about", async () => {
+    const upstream = box.repo("upstream", { "README.md": "hi\n" });
+    const repo = join(box.home, "repo");
+    execFileSync("git", ["clone", "-q", upstream, repo]);
+    box.git(repo, "checkout", "-q", "-b", "fox");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "fox");
+    const head = box.git(repo, "rev-parse", "HEAD").trim();
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "late");
+    const located = (await box.engine(
+      Effect.gen(function* () {
+        yield* (yield* Registry.Registry).register({
+          name: "repo",
+          path: repo,
+        });
+        const worktrees = yield* Worktrees.Worktrees;
+        return yield* worktrees.resolve(yield* worktrees.here(repo), {});
+      }),
+    )) as Worktrees.Located;
+    const kept = () => {
+      assert.equal(box.git(repo, "branch", "--show-current").trim(), "fox");
+      assert.match(box.git(repo, "log", "-1", "--format=%s", "fox"), /^late/);
+    };
+
+    mergedGh(`echo '[{"number":5,"headRefOid":"${head}"}]'`);
+    const unpushed = await done(located);
+    assert.equal(
+      unpushed["code"],
+      "unpushed-commits",
+      JSON.stringify(unpushed),
+    );
+    kept();
+
+    mergedGh(`echo 'error connecting to api.github.com' >&2; exit 1`);
+    const unasked = await done(located);
+    assert.equal(unasked["ok"], false, JSON.stringify(unasked));
+    kept();
   });
 });

@@ -17,7 +17,9 @@
 //     after the move, or while its cleanup runs, is kept, for a pull
 //     and for a send alike;
 //   - a pull cancelled mid-create takes what it made and leaves the
-//     source as it was, so the same pull lands after.
+//     source as it was, so the same pull lands after, and a send
+//     cancelled on the peer leaves no receipt, so its teardown is
+//     refused.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR holding two projects (source and target repos);
@@ -655,7 +657,10 @@ it("sendWorktree: a dirty worktree lands on the peer with its commit and its unc
 // cut short mid-create, with the target's setup script hung, ends
 // within moments with the script dead, the worktree it made
 // removed, the branch (kept by `sm rm` under the setting) and
-// incoming ref gone and the source untouched.
+// incoming ref gone and the source untouched. The same for a send,
+// where the landing runs on the peer and meets the cancel as the link
+// torn down under it, and which leaves no receipt to tear the source
+// down on.
 describe("cancelMove", () => {
   let targetConfigBefore: ShigomoriConfig | null;
   const setupPidPath = join(sandbox, "setup.pid");
@@ -770,5 +775,65 @@ describe("cancelMove", () => {
       pullCtx,
     );
     assert.equal(retried.worktree.branch, "cancel1");
+  });
+
+  it("cancelMove (send): the peer's landing is cancelled by the link torn down under it, its setup script dies, the copy goes, and no receipt is kept", async () => {
+    // (b) The send: the landing runs on the peer, under the link this
+    // side tears down as it cancels.
+    const wtCancel2Path = await addWorktree(
+      sourceRepo,
+      "wt-cancel2",
+      "cancel2",
+    );
+    const wtCancel2Id = worktreeIdFromPath(wtCancel2Path);
+    const cancelledSend = Promise.resolve(
+      sendWorktreeHere(
+        {
+          targetDeviceId: LISTENER,
+          projectId: sourceProjectId,
+          worktreeId: wtCancel2Id,
+        },
+        pullCtx,
+      ),
+    );
+    cancelledSend.catch(() => {});
+    const sendSetupPid = await setupStarted();
+    assert.deepEqual(
+      await runHost(
+        syncHandlers.cancelMove({ sourceWorktreeId: wtCancel2Id }, pullCtx),
+      ),
+      { cancelled: true },
+    );
+    await assert.rejects(cancelledSend, /The move was cancelled/);
+    await waitFor(
+      () => !processAlive(sendSetupPid),
+      "the peer's setup script to die",
+    );
+    // The peer unwinds on its own after the link drops: the branch goes
+    // with the worktree, and the incoming ref after them.
+    await waitFor(
+      async () =>
+        !(await refExists(targetRepo, "refs/heads/cancel2")) &&
+        !(await refExists(targetRepo, "refs/shigomori/incoming/cancel2")),
+      "the peer to remove the cancelled copy",
+      20_000,
+    );
+    await landedNothing("cancel2", wtCancel2Path);
+    await assert.rejects(
+      async () =>
+        runHost(
+          syncHandlers.teardownSource(
+            {
+              direction: "send",
+              deviceId: LISTENER,
+              projectId: sourceProjectId,
+              worktreeId: wtCancel2Id,
+            },
+            pullCtx,
+          ),
+        ),
+      /No send recorded/,
+      "a cancelled send must leave no receipt to tear the source down on",
+    );
   });
 });

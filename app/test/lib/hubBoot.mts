@@ -1,7 +1,5 @@
-// The two-device boot helper shared by the hub-transport e2e checks
-// (hub-link.mts, sync-transfer.mts,
-// port-forward.mts): a REAL hub connection against the stub
-// Durable Object (hubStub.mts, extracted for the same reason).
+// The two-device boot under directBoot.mts: a REAL hub connection
+// against the stub Durable Object (hubStub.mts).
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";

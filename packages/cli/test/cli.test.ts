@@ -1,12 +1,20 @@
 // The terminal binary, built as it ships, on a sandbox data dir: what
 // the engine's tests can't see from a service call. A 2.x data dir is
-// left as v2 left it until the app or `doctor --fix` migrates it, and
+// left as v2 left it until the app or `doctor --fix` migrates it, the
+// shell's config gets back what it held before the hook went in, and
 // rm --stack and land keep a worktree whose branch holds a commit its
 // merged PR never had.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import {
   afterEach,
   beforeAll,
@@ -33,8 +41,8 @@ afterEach(() => box.remove());
 const runAt = (cwd: string, ...args: string[]) =>
   box.runAt(built, "cli", cwd, args);
 
-// The binary handed `input` on stdin, as a harness runs a hook: how it
-// ended and its stdout.
+// The binary handed `input` on stdin, as a harness runs a hook, and
+// `env` over the sandbox's: how it ended and its stdout.
 const piped = (
   cwd: string,
   args: ReadonlyArray<string>,
@@ -155,6 +163,69 @@ describe("the v3 migration", () => {
       new RegExp(`close sleep \\(${held.pid}\\), which runs in it`),
     );
     assert.ok(!fixed.checks.some(({ id }) => id === "v2-data-dir"));
+  });
+});
+
+// The shell's config, which nuke takes the hook out of as `shell
+// uninstall` does.
+describe("shell", () => {
+  const BEGIN = "# >>> shigomori-dev shell integration >>>";
+
+  // A home of its own, with `files` in it.
+  const homeWith = (files: Record<string, string>) => {
+    const home = join(box.home, "home");
+    for (const [file, content] of Object.entries(files)) {
+      mkdirSync(dirname(join(home, file)), { recursive: true });
+      writeFileSync(join(home, file), content, { mode: 0o600 });
+    }
+    return home;
+  };
+
+  it("installs the hook in the shell's config and takes it out again", async () => {
+    const home = homeWith({ ".zshrc": "export A=1\n" });
+    const run = (...args: string[]) =>
+      piped(box.home, args, { HOME: home, SHELL: "/bin/zsh" }, "");
+    await run("shell", "install");
+    // Idempotent.
+    await run("shell", "install", "zsh");
+    const rc = readFileSync(join(home, ".zshrc"), "utf8");
+    assert.equal(rc.split(BEGIN).length, 2, rc);
+    assert.ok(rc.startsWith("export A=1\n\n"), rc);
+    await run("shell", "uninstall");
+    assert.equal(readFileSync(join(home, ".zshrc"), "utf8"), "export A=1\n");
+  });
+
+  it("leaves an edited hook alone", async () => {
+    const home = homeWith({
+      ".zshrc": `${BEGIN}\necho mine\n# <<< shigomori-dev shell integration <<<\n`,
+    });
+    const before = readFileSync(join(home, ".zshrc"), "utf8");
+    const run = (...args: string[]) =>
+      piped(box.home, args, { HOME: home }, "");
+    await run("shell", "install", "zsh");
+    await run("shell", "uninstall");
+    assert.equal(readFileSync(join(home, ".zshrc"), "utf8"), before);
+  });
+
+  // A dotfiles manager's link stays one, and the file it tracks gets
+  // the hook.
+  it("writes a symlinked config through its link", async () => {
+    const home = homeWith({ "dotfiles/zshrc": "export A=1\n" });
+    symlinkSync("dotfiles/zshrc", join(home, ".zshrc"));
+    const run = (...args: string[]) =>
+      piped(box.home, args, { HOME: home }, "");
+    await run("shell", "install", "zsh");
+    assert.ok(lstatSync(join(home, ".zshrc")).isSymbolicLink());
+    assert.match(
+      readFileSync(join(home, "dotfiles/zshrc"), "utf8"),
+      /^export A=1\n\n# >>> shigomori-dev shell integration >>>\n/,
+    );
+    await run("shell", "uninstall");
+    assert.ok(lstatSync(join(home, ".zshrc")).isSymbolicLink());
+    assert.equal(
+      readFileSync(join(home, "dotfiles/zshrc"), "utf8"),
+      "export A=1\n",
+    );
   });
 });
 

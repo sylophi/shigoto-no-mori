@@ -90,8 +90,7 @@ commits it (`EFFECT.md`, section 5); the engine's are in
 
 1. The call in its contract module
    (`packages/contracts/src/modules/<module>.ts`), classified
-   (`packages/contracts/README.md`), with its wire sample and the
-   classification file regenerated.
+   (`packages/contracts/README.md`), with its wire sample.
 2. The capability as a method on the service that owns the domain
    (EFFECT.md, section 1), in `lib/`; a new service also goes into
    `process/layer.ts` and `HostServices`.

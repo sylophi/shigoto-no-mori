@@ -1,10 +1,8 @@
-// The stub Durable Object shared by the hub-transport checks: a node
-// ws server implementing hubObject.ts's envelope behavior (deliver
+// The stub Durable Object the proofs' devices meet at: a node ws
+// server implementing hubObject.ts's envelope behavior (deliver
 // forwarding to every socket of a device, full-roster presence on join
-// and leave, offline nacks, and supersede: a desktop
-// device's second socket, or a connection dialing again). Extracted from
-// hub-link.mts so sync-transfer.mts drives the same stub
-// instead of a second copy.
+// and leave, offline nacks, and supersede: a desktop device's second
+// socket, or a connection dialing again).
 import { WebSocket, WebSocketServer } from "ws";
 import {
   CLOSE_SUPERSEDED,

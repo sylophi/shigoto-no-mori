@@ -139,7 +139,7 @@ running app (no queries, atoms, stores, router, the page's api). A
 **container** binds data to a view and has no markup of its own: it
 writes no element, only views and the primitives they are built from
 (a menu's items, a modal's shell, a status dot), with the props those
-take, a class among them (`app/test/containers.mts` holds it). Views live in `@shigomori/ui` (`packages/ui/src/views`),
+take, a class among them. Views live in `@shigomori/ui` (`packages/ui/src/views`),
 which cannot import the app: what a view needs from the app's hooks or
 store is a type defined in the package, and a link it opens goes
 through `useOutside`. Containers stay in `renderer/components`. The

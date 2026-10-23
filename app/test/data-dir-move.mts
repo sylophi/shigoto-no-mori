@@ -16,9 +16,11 @@
 // which would refuse every retry. A rename a crash cut before the
 // pointer moved is found by the folder that arrived, its journal naming
 // the one that left, and the pointer committed. The copy holds the
-// store still, so no write tears it. A data folder reached
-// through a link carries its worktrees, which git names by the link's
-// target (or spelled with trailing slashes), to their ids at the
+// store still, so no write tears it. A move is refused while a worktree
+// is being sent or brought, or a peer brings one from here, whose files
+// landing after the copy would go with the old tree. A data folder
+// reached through a link carries its worktrees, which git names by the
+// link's target (or spelled with trailing slashes), to their ids at the
 // destination's target, and one that is itself a link is refused.
 //
 // Run: pnpm test data-dir-move.
@@ -904,3 +906,52 @@ it.each([
     assert.equal(existsSync(join(elsewhere, `${name}-to`)), false);
   },
 );
+
+// A worktree being sent or brought still has files to land after its
+// landing, which a move's copy would miss: the move is refused, asked
+// once it holds the lock.
+it("refuses a move while a worktree is being sent or brought", async () => {
+  const parent = join(elsewhere, "while-moving");
+  const refused = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-6", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      beforeMove: Effect.void,
+      holdUpdater: Effect.succeed(null),
+      killAllScripts: Effect.void,
+      movesUnderWay: Effect.succeed({ moving: true, bringing: [] }),
+    }).pipe(Effect.flip),
+  );
+  assert.match(String(refused), /being sent or brought/);
+  assert.equal(existsSync(join(parent, "moved")), false);
+  assert.equal(journalLeft(), false);
+});
+
+// A peer bringing a worktree from here reads its files as the move would
+// rename them: refused the same way.
+it("refuses a move while a peer is bringing a worktree from here", async () => {
+  const parent = join(elsewhere, "while-serving");
+  const refused = await runHost(
+    moveDataDir(parent, {
+      place: {
+        dataDir: engineDataDir,
+        pointerFile: join(elsewhere, "config-7", "data-dir"),
+        legacyPointerFile: null,
+        defaultDataDir: join(elsewhere, "home", ".sm"),
+        dataDirName: "moved",
+      },
+      beforeMove: Effect.void,
+      holdUpdater: Effect.succeed(null),
+      killAllScripts: Effect.void,
+      movesUnderWay: Effect.succeed({ moving: false, bringing: ["Thinkpad"] }),
+    }).pipe(Effect.flip),
+  );
+  assert.match(String(refused), /bringing a worktree from here/);
+  assert.equal(existsSync(join(parent, "moved")), false);
+  assert.equal(journalLeft(), false);
+});

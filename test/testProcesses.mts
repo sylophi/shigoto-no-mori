@@ -3,10 +3,10 @@
 // lab run that throws, Ctrl-C, a kill or the terminal closing end every
 // process this one started and everything under it, the processes that
 // left its group included (`sm` runs git in a session of its own, as
-// the engine runs every command and Electron its host). What a proof
-// spawns itself it hands to `own`, which ends it with the case it
-// started in (testProcesses.setup.mts); what the code under test starts
-// ends with the file, and everything with the run.
+// the engine runs every command). What a proof spawns itself it hands
+// to `own`, which ends it with the case it started in
+// (testProcesses.setup.mts); what the code under test starts ends with
+// the file, and everything with the run.
 //
 // `onRunEnd(end)` runs `end` once, synchronously, on exit or on SIGINT,
 // SIGTERM or SIGHUP, which would otherwise end the process with no

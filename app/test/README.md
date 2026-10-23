@@ -13,9 +13,10 @@ file here, and `lib/` holds what they share.
   move or removal, and the migration's move into `wt/` killed at each
   step, finished or undone by the next start and by `sm doctor --fix`.
 - `data-dir-move.mts`: a data-folder move cut short, finished or undone
-  at the next start, never deleting a folder it didn't make.
+  at the next start, never deleting a folder it didn't make, and
+  refused while a worktree is in transit.
 - `sync-transfer.mts`: a move between devices takes the source only
-  once the copy holds it.
+  once the copy holds it, and a cancelled one keeps nothing that could.
 - `mirror.mts`, `mirror-engine.mts`: a mirror never deletes or
   overwrites what isn't its own.
 - `control.mts`: an unmirror removes the copy only once the follower

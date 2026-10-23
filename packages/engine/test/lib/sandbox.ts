@@ -90,7 +90,8 @@ export type Engine =
   | Paths.Paths;
 
 // What the agent hooks run, as the installed binary names itself.
-const HOOK_BINARY = "/Applications/Shigoto no Mori.app/Contents/Resources/smd";
+export const HOOK_BINARY =
+  "/Applications/Shigoto no Mori.app/Contents/Resources/smd";
 
 // git's variables point a child at the repository a hook runs in, and
 // the user's git config would reach the sandbox's repos. The engine's
