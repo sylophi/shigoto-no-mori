@@ -55,8 +55,11 @@
 //     at 5 s, and an answer that comes later notes nothing on the
 //     thread, since the sweep did not go on running,
 //   - a moved original's re-open at a start waits, its session paused,
-//     for the peer to take this device's calls, and a worktree made at
-//     the old folder meanwhile ends the mirror, its copy kept.
+//     for the peer to take this device's calls, and the mirror ends, its
+//     copy kept and its thread on the worktree it became, when a
+//     worktree is made at the old folder meanwhile, when the one it
+//     became is mirrored meanwhile, or when the peer comes past 2
+//     minutes.
 //
 // Run: pnpm test mirror-engine.
 import assert from "node:assert/strict";
@@ -1179,8 +1182,9 @@ it("a worktree made where a moved one was ends its mirror when it goes, never re
 // store records the move), as the daemon's first snapshot finds it
 // with B not reached yet: the session's root gone and the session
 // trying to connect. The bookkeeping has looked and paused it. `reach`
-// brings B in. The session's id is the check's own: the bookkeeping's
-// marks (registry.ts) outlive a check.
+// brings B in. The session's id and the worktree's name are the
+// check's own: the bookkeeping's marks (registry.ts) and the data
+// folder outlive a check.
 async function movedOriginalWithPeerAway(id: string) {
   scrubProcessGitEnv();
   const git = sandboxGit();
@@ -1229,7 +1233,7 @@ async function movedOriginalWithPeerAway(id: string) {
       const worktrees = yield* Worktrees.Worktrees;
       const created = yield* worktrees.create(
         registered,
-        { name: "otter", branch: "otter", skipSetup: true },
+        { name: `otter-${id}`, branch: "otter", skipSetup: true },
         { report: () => Effect.void, color: false },
       );
       const row = (yield* worktrees.identities(registered)).find(
@@ -1265,6 +1269,7 @@ async function movedOriginalWithPeerAway(id: string) {
     project,
     original,
     moved,
+    raw,
     reach: () => {
       reached = true;
       PubSub.publishUnsafe(admissions, "B");
@@ -1301,7 +1306,7 @@ it("a moved original's mirror waiting on its peer ends, its copy kept, when a wo
     Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
       worktrees.create(
         project,
-        { name: "otter", branch: "fox", skipSetup: true },
+        { name: "otter-taken", branch: "fox", skipSetup: true },
         { report: () => Effect.void, color: false },
       ),
     ),
@@ -1315,5 +1320,44 @@ it("a moved original's mirror waiting on its peer ends, its copy kept, when a wo
   assert.deepEqual(requests(), ["pause taken", "terminate taken"]);
   const stopped = history(moved.id).find((event) => event.kind === "stopped");
   assert.match(stopped?.detail ?? "", /took its old folder/);
-  assert.ok(!history(original.id).some((event) => event.kind === "stopped"));
+  // The thread went with the worktree, not to the one at its old folder.
+  assert.deepEqual(history(original.id), []);
+});
+
+it("a moved original's mirror whose peer comes past 2 minutes of waiting ends, its copy kept, never re-opening on what drifted apart meanwhile", async () => {
+  const { requests, reach, adjust, history, moved } =
+    await movedOriginalWithPeerAway("past");
+  await adjust(2 * 60_000 + 1);
+  reach();
+  await waitFor(
+    () => requests().includes("terminate past"),
+    "the waiting mirror to end",
+  );
+  assert.deepEqual(requests(), ["pause past", "terminate past"]);
+  const stopped = history(moved.id).find((event) => event.kind === "stopped");
+  assert.match(stopped?.detail ?? "", /wasn't reached within 2 minutes/);
+});
+
+it("a moved original's mirror waiting on its peer ends, its copy kept, when the worktree it became is mirrored meanwhile, never giving it a second mirror", async () => {
+  const { requests, state, reach, history, moved, raw } =
+    await movedOriginalWithPeerAway("twice");
+  await state([
+    raw(true),
+    rawMirrorSession({
+      session: "twice-to-c",
+      localRoot: moved.path,
+      localWorktreeId: moved.id,
+      deviceId: "C",
+      labels: { [MIRROR_LABEL_MODE]: "mirror" },
+    }),
+  ]);
+  await waitFor(
+    () => requests().includes("terminate twice"),
+    "the waiting mirror to end",
+  );
+  reach();
+  await settleTurns();
+  assert.deepEqual(requests(), ["pause twice", "terminate twice"]);
+  const stopped = history(moved.id).find((event) => event.kind === "stopped");
+  assert.match(stopped?.detail ?? "", /mirrored again/);
 });

@@ -20,6 +20,7 @@ import {
   mirrorEngineBlocker,
 } from "@shigomori/contracts/modules/mirror";
 import { errorWordsOf } from "@host/lib/errorWords";
+import { ageOf, stamp, type Stamp } from "@host/lib/util/kept";
 import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
 import { PeerReach } from "@host/ipc/PeerReach";
 import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
@@ -238,7 +239,7 @@ const endSessionsOnWorktree = (
 ) =>
   Effect.flatMap(daemon.sessions, (sessions) =>
     Effect.forEach(
-      sessions.filter((raw) => raw.localWorktreeId === localWorktreeId),
+      sessions.filter((raw) => worktreeIdNow(raw) === localWorktreeId),
       (raw) =>
         daemon
           .terminate(raw.session)
@@ -275,6 +276,12 @@ export const ORIGINAL_GONE_DETAIL =
 const FOLDER_TAKEN_DETAIL =
   "This worktree moved, and another worktree took its old folder before the other device could be reached to re-open the mirror, so the mirror ended. The copy on the other device stays as a worktree.";
 
+const PEER_LATE_DETAIL =
+  "This worktree moved, and the other device wasn't reached within 2 minutes to re-open the mirror, so the mirror ended. The copy on the other device stays as a worktree.";
+
+const MIRRORED_AGAIN_DETAIL =
+  "This worktree moved, and it was mirrored again before the other device could be reached to re-open this mirror, so this one ended. The copy on the other device stays as a worktree.";
+
 // The bookkeeping every snapshot of a running daemon is checked
 // against (the root wires it to the daemon's onChange):
 //   - the stops that came while the daemon was down, replayed,
@@ -284,15 +291,16 @@ const FOLDER_TAKEN_DETAIL =
 //     on every snapshot, and one whose root is missing ends with its
 //     copy kept. One whose original moved (the move recorded) re-opens
 //     there instead, once its peer takes this device's calls, and ends
-//     if another worktree takes the old folder first. The engine has
-//     more than one word for a root that went (a halt when the copy
-//     stood still, a conflict at the root when the copy had changed
-//     too, a problem at the root when the parent folder went with it),
-//     and the look is one stat on a snapshot the engine only sends on a
-//     change, so no word is waited for. Ended rather than left there,
-//     since its Stop would otherwise remove the copy that is now the
-//     only one there is, and the git half keeps failing to read a
-//     worktree that is not there,
+//     if another worktree takes the old folder first, if the worktree
+//     it became is mirrored meanwhile, or if the peer comes too late.
+//     The engine has more than one word for a root that went (a halt
+//     when the copy stood still, a conflict at the root when the copy
+//     had changed too, a problem at the root when the parent folder
+//     went with it), and the look is one stat on a snapshot the engine
+//     only sends on a change, so no word is waited for. Ended rather
+//     than left there, since its Stop would otherwise remove the copy
+//     that is now the only one there is, and the git half keeps
+//     failing to read a worktree that is not there,
 //   - a session a re-open replaced (MIRROR_LABEL_REPLACES) that
 //     outlived it (a quit or a failed terminate between the re-open's
 //     create and its terminate), so a pair never has two sessions.
@@ -303,17 +311,30 @@ const endingSessions = new Set<string>();
 // ended, kept until the engine stops listing them: snapshots overlap,
 // and a sweep that starts between the end and the engine's next
 // snapshot would find the session listed still and end it twice. A
-// look that finds the root, a session left to wait on its peer, or an
-// end that fails, forgets the mark, so the next snapshot looks again.
+// look that finds the root of a session not waiting on its peer, or
+// can't see a waiting one's, a session left to wait, or an end that
+// fails, forgets the mark, so the next snapshot looks again.
 const rootLooks = new Set<string>();
 
 // The sessions of a moved original whose re-open waits for the peer to
 // take this device's calls, each with the id of the worktree the
-// original became, kept until the engine stops listing them. Each is
-// paused, so neither the engine's retry nor an admission brings it back
-// on the old folder, which a worktree made there meanwhile would make
-// another's.
-const waitingOnPeer = new Map<string, string>();
+// original became and when the wait began, kept until the engine stops
+// listing them. Each is paused, so neither the engine's retry nor an
+// admission brings it back on the old folder, which a worktree made
+// there meanwhile would make another's.
+const waitingOnPeer = new Map<string, { id: string; since: Stamp }>();
+
+// The longest a re-open waits for the peer: a peer coming up just after
+// this device. A re-open is a new session, with no record of what the
+// two sides last agreed on, so whatever changed on either side while it
+// waited comes back as a creation or a conflict, which sessions.ts's
+// reopenMirror refuses on a pair that isn't settled.
+const PEER_WAIT_MS = 2 * 60_000;
+
+// The worktree a session's local side is now: a waiting one's is the
+// worktree its original became, which its labels don't say yet.
+const worktreeIdNow = (raw: MirrorSessionRaw): string =>
+  waitingOnPeer.get(raw.session)?.id ?? localWorktreeIdOf(raw);
 
 // Sessions a re-open is replacing right now (MirrorEngine's recreate): the
 // re-open ends the old one itself once the new one is up, so the
@@ -405,21 +426,36 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
           }
           return;
         }
-        if (holdingRoots.has(localWorktreeIdOf(raw))) return;
+        if (holdingRoots.has(worktreeIdNow(raw))) return;
         if (rootLooks.has(raw.session)) return;
         rootLooks.add(raw.session);
         const waiting = waitingOnPeer.get(raw.session);
-        const end = (detail: string) =>
+        // The end of a moved original's mirror is noted on the worktree
+        // it became, its thread carried there first.
+        const end = (detail: string, worktreeId?: string) =>
           Effect.gen(function* () {
+            if (worktreeId !== undefined) {
+              daemon.moveHistory(localWorktreeIdOf(raw), worktreeId);
+            }
             const ended = yield* endOnce(
               raw.session,
-              endMirrorKeepingCopy(daemon, raw, detail, waiting),
+              endMirrorKeepingCopy(daemon, raw, detail, worktreeId),
             );
             if (!ended) rootLooks.delete(raw.session);
           });
         if (yield* Effect.promise(() => rootExists(raw.localRoot))) {
-          // A waiting session's old folder is another worktree's now.
-          if (waiting !== undefined) yield* end(FOLDER_TAKEN_DETAIL);
+          // A waiting session's old folder, there to see, is another
+          // worktree's now. One the look can't see (its volume not
+          // mounted) keeps waiting.
+          const taken =
+            waiting !== undefined &&
+            (yield* Effect.promise(() =>
+              access(raw.localRoot).then(
+                () => true,
+                () => false,
+              ),
+            ));
+          if (taken) yield* end(FOLDER_TAKEN_DETAIL, waiting.id);
           else rootLooks.delete(raw.session);
           return;
         }
@@ -432,13 +468,31 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
           movedTo !== null &&
           (yield* Effect.promise(() => rootExists(movedTo)))
         ) {
+          const movedId = worktreeIdFromPath(movedTo);
+          // The worktree it became mirrors on its own now, and a worktree
+          // has one mirror.
+          if (sessions.some((other) => localWorktreeIdOf(other) === movedId)) {
+            yield* end(MIRRORED_AGAIN_DETAIL, movedId);
+            return;
+          }
+          const now = yield* stamp;
+          if (
+            waiting !== undefined &&
+            ageOf(waiting.since, now) > PEER_WAIT_MS
+          ) {
+            yield* end(PEER_LATE_DETAIL, movedId);
+            return;
+          }
           // The re-open needs the peer (the engine opens a session only
           // against both sides): one not taking this device's calls yet
           // (not reached at a start, away, or a switch of its off) waits,
           // paused, and is looked at again when it comes to
           // (MirrorEngineLayer's admissions).
           if (!reach.admits(raw.deviceId)) {
-            waitingOnPeer.set(raw.session, worktreeIdFromPath(movedTo));
+            waitingOnPeer.set(raw.session, {
+              id: movedId,
+              since: waiting?.since ?? now,
+            });
             rootLooks.delete(raw.session);
             if (!raw.paused) {
               yield* Effect.ignoreCause(daemon.pause(raw.session), {
@@ -452,7 +506,7 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
           if (reopening.has(raw.localRoot)) return;
           reopening.add(raw.localRoot);
           yield* moveMirrorsOfWorktree(localWorktreeIdOf(raw), {
-            id: worktreeIdFromPath(movedTo),
+            id: movedId,
             path: movedTo,
           });
           return;
