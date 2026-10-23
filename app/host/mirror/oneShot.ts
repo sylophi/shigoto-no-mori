@@ -83,7 +83,13 @@ export const transferFilesOnce = (
   onProgress: (bytes: number, totalBytes: number) => void,
 ): Effect.Effect<TransferFilesResult, never, MirrorEngine> =>
   Effect.acquireUseRelease(
-    Effect.sync(beginTransfer),
+    Effect.sync(() =>
+      beginTransfer({
+        deviceId: input.sourceDeviceId,
+        worktreeId: input.sourceWorktreeId,
+        transfer: (input.direction ?? "pull") === "pull" ? "out" : "in",
+      }),
+    ),
     (token) =>
       Effect.gen(function* () {
         const daemon = yield* requireRunningEngine;

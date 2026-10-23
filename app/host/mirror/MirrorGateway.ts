@@ -39,6 +39,7 @@ import {
   listenLoopback,
 } from "@host/portForward/bridge";
 import { log } from "@shared/log";
+import { transferInto } from "./registry";
 
 // file-sync/engine.go reads this exact name.
 export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
@@ -68,6 +69,13 @@ const PrefaceSchema = Schema.fromJsonString(
   }),
 );
 const decodePreface = Schema.decodeUnknownResult(PrefaceSchema);
+
+// A move's files step, told to the peer so it counts the stream as
+// under way (registry.ts transferInto). A live mirror's is not.
+const transferOf = (preface: { deviceId: string; worktreeId: string }) => {
+  const transfer = transferInto(preface.deviceId, preface.worktreeId);
+  return transfer === undefined ? {} : { transfer };
+};
 
 // A preface is a short JSON line. Anything longer is not our daemon.
 const PREFACE_LIMIT_BYTES = 8 * 1024;
@@ -188,6 +196,7 @@ const make = Effect.gen(function* () {
                 ...(preface.localWorktreeId === undefined
                   ? {}
                   : { peerWorktreeId: preface.localWorktreeId }),
+                ...transferOf(preface),
               }),
             ),
           carried,

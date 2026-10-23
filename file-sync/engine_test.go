@@ -18,6 +18,7 @@ import (
 	"github.com/mutagen-io/mutagen/pkg/identifier"
 	"github.com/mutagen-io/mutagen/pkg/selection"
 	"github.com/mutagen-io/mutagen/pkg/synchronization"
+	"github.com/mutagen-io/mutagen/pkg/synchronization/rsync"
 	"io"
 	"maps"
 	"net"
@@ -477,6 +478,93 @@ func TestMirrorReplicaMakesTheRemoteAnExactCopy(t *testing.T) {
 	}
 	d.requests.Close()
 	<-d.done
+}
+
+// What a session makes, on either side, has a checkout's modes: 644 for
+// a file, 755 for a folder and for a file its source can run.
+func TestMirrorMakesFilesWithCheckoutModes(t *testing.T) {
+	dataDir := filepath.Join(t.TempDir(), "mirror-data")
+	local := t.TempDir()
+	remote := t.TempDir()
+	gateway, _ := startTestGateway(t, remote)
+	for root, folder := range map[string]string{local: "from-local", remote: "from-remote"} {
+		writeFileT(t, filepath.Join(root, folder, "plain.txt"), "plain\n")
+		writeFileT(t, filepath.Join(root, folder, "run.sh"), "#!/bin/sh\n")
+		if err := os.Chmod(filepath.Join(root, folder, "run.sh"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := startTestDaemon(t, gateway, dataDir)
+	created := d.call(mirrorRequest{
+		ID: "1", Op: "create",
+		LocalRoot:  local,
+		DeviceID:   "peer-1",
+		WorktreeID: "0123456789ab",
+		RemoteRoot: remote,
+	})
+	if created["ok"] != true {
+		t.Fatalf("create failed: %v", created["error"])
+	}
+	// The local side's files made by the served side, and the remote's by
+	// the daemon's own.
+	made := []string{filepath.Join(remote, "from-local"), filepath.Join(local, "from-remote")}
+	waitForT(t, 30*time.Second, "each side's files on the other", func() bool {
+		for _, folder := range made {
+			if !fileEquals(filepath.Join(folder, "plain.txt"), "plain\n") ||
+				!fileEquals(filepath.Join(folder, "run.sh"), "#!/bin/sh\n") {
+				return false
+			}
+		}
+		return true
+	})
+	for _, folder := range made {
+		for path, want := range map[string]os.FileMode{
+			folder:                             0o755,
+			filepath.Join(folder, "plain.txt"): 0o644,
+			filepath.Join(folder, "run.sh"):    0o755,
+		} {
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := info.Mode().Perm(); got != want {
+				t.Errorf("%s is %o, want %o", path, got, want)
+			}
+		}
+	}
+	d.requests.Close()
+	<-d.done
+}
+
+// A stage reports the whole of it, not the file it is on: the bytes it
+// has taken in, of what the other side holds beyond this one.
+func TestMirrorStagingCountsTheStage(t *testing.T) {
+	const mb = 1 << 20
+	state := &synchronization.EndpointState{
+		Connected:     true,
+		Scanned:       true,
+		TotalFileSize: 40 * mb,
+		StagingProgress: &rsync.ReceiverState{
+			Path:              "node_modules/big.bin",
+			ReceivedSize:      512 * 1024,
+			ExpectedSize:      10 * mb,
+			ReceivedFiles:     120,
+			ExpectedFiles:     200,
+			TotalReceivedSize: 1200 * mb,
+		},
+	}
+	other := &synchronization.EndpointState{Connected: true, Scanned: true, TotalFileSize: 2040 * mb}
+	staging := mirrorEndpointStateOf(state, other).Staging
+	if staging == nil || staging.ReceivedSize != 1200*mb || staging.ExpectedSize != 2000*mb {
+		t.Fatalf("staging = %+v, want 1200 MB of 2000 MB", staging)
+	}
+	// A side that already holds more than the other still reads a stage
+	// it is part way through, never past its end.
+	other.TotalFileSize = 30 * mb
+	staging = mirrorEndpointStateOf(state, other).Staging
+	if staging.ReceivedSize != 1200*mb || staging.ExpectedSize != 1200*mb {
+		t.Fatalf("staging = %+v, want 1200 MB of 1200 MB", staging)
+	}
 }
 
 // The serving side reaches the worktree it was opened for and nothing

@@ -124,6 +124,8 @@ const MirrorConflictSchema = strict(
   }),
 );
 
+// A stage as a whole: the file it is on, the bytes it has taken in, and
+// what the other side holds beyond this one (file-sync's engine.go).
 const MirrorStagingSchema = strict(
   Schema.Struct({
     path: Schema.String,
@@ -511,6 +513,10 @@ const MirrorOpenStreamPayloadSchema = strict(
     ...MirrorWorktreePayloadSchema.struct.fields,
     channelId: HexId32Schema,
     peerWorktreeId: Schema.optional(WorktreeIdSchema),
+    // A move's files step rather than a live mirror, and whether its
+    // files come into the served worktree or leave it: the serving side
+    // counts it as under way while it runs, as a quit asks.
+    transfer: Schema.optional(Schema.Literals(["in", "out"])),
   }),
 );
 export type MirrorOpenStreamPayload = typeof MirrorOpenStreamPayloadSchema.Type;

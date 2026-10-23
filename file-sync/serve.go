@@ -147,8 +147,8 @@ func servedConfiguration(asked *synchronization.Configuration) *synchronization.
 	served.Ignores = append(served.Ignores, mirrorGitPointerIgnore)
 	served.SymbolicLinkMode = core.SymbolicLinkMode_SymbolicLinkModeDefault
 	served.PermissionsMode = core.PermissionsMode_PermissionsModeDefault
-	served.DefaultFileMode = 0
-	served.DefaultDirectoryMode = 0
+	served.DefaultFileMode = madeFileMode
+	served.DefaultDirectoryMode = madeDirectoryMode
 	served.DefaultOwner = ""
 	served.DefaultGroup = ""
 	return served
@@ -183,9 +183,19 @@ func (e guardedEndpoint) Stage(paths []string, digests [][]byte) ([]string, []*r
 	return e.Endpoint.Stage(allowedPaths, allowedDigests)
 }
 
+// What a side makes, files and folders, gets the modes a checkout gives
+// them (umask 022). Mutagen's own defaults are owner-only, and its
+// portable permissions carry only the executable bit across, which it
+// adds for whoever may read.
+const (
+	madeFileMode      = 0o644
+	madeDirectoryMode = 0o755
+)
+
 // The daemon's own side of each session, which applies what the peer's
 // scan reports, holds .git as serve does: a peer's serve can be changed
-// to report it.
+// to report it. It makes files with a checkout's modes, as serve does,
+// whatever the session was created with.
 type guardedLocalHandler struct {
 	synchronization.ProtocolHandler
 }
@@ -200,7 +210,13 @@ func (h guardedLocalHandler) Connect(
 	configuration *synchronization.Configuration,
 	alpha bool,
 ) (synchronization.Endpoint, error) {
-	endpoint, err := h.ProtocolHandler.Connect(ctx, logger, url, prompter, session, version, configuration, alpha)
+	made := &synchronization.Configuration{}
+	if configuration != nil {
+		made = proto.Clone(configuration).(*synchronization.Configuration)
+	}
+	made.DefaultFileMode = madeFileMode
+	made.DefaultDirectoryMode = madeDirectoryMode
+	endpoint, err := h.ProtocolHandler.Connect(ctx, logger, url, prompter, session, version, made, alpha)
 	if err != nil {
 		return nil, err
 	}

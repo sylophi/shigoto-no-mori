@@ -32,7 +32,7 @@ import { dataDir } from "@shared/paths";
 import { readJson } from "../core/files/jsonFile";
 import { busyRemoteRefusal } from "@shared/busy";
 import { log } from "@shared/log";
-import { hostBusy, noteUpdaterState } from "../hostProcess";
+import { hostBusy, isQuitting, noteUpdaterState } from "../hostProcess";
 import { confirmBusyAction } from "./busyPrompt";
 import { requireCliBinary } from "./cliBinary";
 import { QUIT_AFTER_ANSWER_MS } from "./relaunch";
@@ -337,13 +337,7 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
     );
     if (refusal !== null) throw new Error(refusal);
   } else {
-    if (
-      !(await confirmBusyAction(
-        "restart",
-        await Effect.runPromise(hostBusy(true)),
-      ))
-    )
-      return "declined";
+    if (!(await confirmBusyAction("restart"))) return "declined";
     // The dialog can sit open arbitrarily long. Re-check that another
     // path didn't start the install during it, and that the staged
     // update still exists -- a terminal run whose feed answered 204
@@ -351,6 +345,9 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
     // installer can't follow with a relaunch.
     if (installing) return "installing";
     if (!(await hasInstallableStaged())) return "nothing-staged";
+    // A quit the person chose meanwhile ends the app without the update
+    // (its scripts stopping is what let this prompt go ahead).
+    if (isQuitting()) return "declined";
   }
   // A move or a reset of the data folder that began while the dialog
   // was up.

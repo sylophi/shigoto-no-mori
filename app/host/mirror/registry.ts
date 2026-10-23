@@ -156,12 +156,35 @@ export const mirrorSessions = (
 // session, and a terminate that failed. It never covers a transfer
 // still running, even on the snapshot that names the session before the
 // create's own reply lands, because the token is live first.
-const liveTransfers = new Set<string>();
+// Each by the peer's worktree it runs against, which the gateway tells
+// the peer (transferInto).
+const liveTransfers = new Map<string, TransferTarget>();
 
-export function beginTransfer(): string {
+export type TransferTarget = {
+  readonly deviceId: string;
+  readonly worktreeId: string;
+  // Whether the files go into the peer's worktree or come out of it.
+  readonly transfer: "in" | "out";
+};
+
+export function beginTransfer(target: TransferTarget): string {
   const token = randomUUID();
-  liveTransfers.add(token);
+  liveTransfers.set(token, target);
   return token;
+}
+
+// How a transfer running here meets the peer's worktree, or undefined
+// when none does (a live mirror's stream).
+export function transferInto(
+  deviceId: string,
+  worktreeId: string,
+): "in" | "out" | undefined {
+  for (const target of liveTransfers.values()) {
+    if (target.deviceId === deviceId && target.worktreeId === worktreeId) {
+      return target.transfer;
+    }
+  }
+  return undefined;
 }
 
 export function endTransfer(token: string): void {
