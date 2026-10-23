@@ -1,5 +1,6 @@
 {
   "framework": "astro",
+  "installCommand": "pnpm install --no-frozen-lockfile",
   "headers": [
     {
       "source": "/_astro/(.*)",

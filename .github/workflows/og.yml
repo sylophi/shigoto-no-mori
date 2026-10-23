@@ -59,7 +59,14 @@ jobs:
             echo "The link preview is up to date."
             exit 0
           fi
-          branch="link-preview/${GITHUB_SHA::12}"
+          # Named for the image, so a later run that shoots the same one
+          # pushes nothing new.
+          image=$(git hash-object marketing/public/img/og.jpg)
+          branch="link-preview/${image::12}"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "The link preview changed, and $branch has it already."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"

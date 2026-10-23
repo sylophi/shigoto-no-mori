@@ -386,12 +386,11 @@ social providers against a packaged build before a release that
 touches it.
 
 The production web client deploys from the `web-client-prod` branch,
-Vercel's production branch for the project. The Vercel project's Root
-Directory is `app`, where `vercel.json` lives, and the install uses
-the workspace's lockfile at the repo root. The release workflow
-fast-forwards it to the tagged commit at the end of every full
-(non-prerelease) release, once the desktop assets are uploaded, so the
-web client ships the same source as the `.app` without a push by hand.
+Vercel's production branch for the project (set up as "The Vercel
+projects" says, below). The release workflow fast-forwards it to the
+tagged commit at the end of every full (non-prerelease) release, once
+the desktop assets are uploaded, so the web client ships the same
+source as the `.app` without a push by hand.
 A push by hand is still fine for a web-only fix between releases: the
 workflow leaves a branch that is already past the tag alone, and goes
 red rather than overwrite one that has diverged from it.
@@ -406,6 +405,24 @@ For local development, put the account service values above in a gitignored
 `.env.local` in `app/` (simple `KEY=value` lines). Both the
 desktop and the web build read it. Baked and real environment variables
 override it, and packaged builds never read it.
+
+### The Vercel projects
+
+The web client (`app`) and the marketing site (`marketing`, deployed
+from `main`) are each a Vercel project that builds one folder of the
+pnpm workspace at the repo root, whose dependencies take their versions
+from the `catalog:` in `pnpm-workspace.yaml`. Each project's settings
+hold what its folder's `vercel.json` can't:
+
+- Root Directory: the folder, with "Include files outside the root
+  directory" on, since the install and the build read the workspace
+  root and `packages/`.
+- The environment variable `ENABLE_EXPERIMENTAL_COREPACK=1`, so the
+  install runs the pnpm the root `package.json` pins
+  (`packageManager`).
+
+Each `vercel.json` holds the install command, `pnpm install
+--no-frozen-lockfile`, beside the build settings and the headers.
 
 ## Develop and test
 
