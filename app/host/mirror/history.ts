@@ -27,14 +27,19 @@ const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
   "disconnected",
 ]);
 
-// The words of the engine's errors for a cut stream (Mutagen's remote
-// endpoint client), however the sync wraps them: "beta polling error:
-// unable to receive poll response: … EOF". The peer's own failures
-// come as "remote error: …" and this side's carry none of them.
+// The words of the engine's errors for a cut stream, however the sync
+// wraps them: its remote endpoint client's requests and responses
+// ("beta polling error: unable to receive poll response: … EOF"), and
+// the file copy's own encoding over the stream, for a cut mid-copy.
+// This side's own failures carry none of them. A peer that fails while
+// it takes files in (its disk full) ends the stream, which reads as a
+// cut too: Mutagen carries no cause across it.
 const LINK_WORDS = [
   "unable to send ",
   "unable to receive ",
-  "message transmission failed",
+  "unable to decode transmission",
+  "unable to encode transmission",
+  "unable to flush encoded messages",
 ];
 const isLinkError = (error: string) =>
   LINK_WORDS.some((words) => error.includes(words));

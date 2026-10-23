@@ -696,13 +696,17 @@ it("a thread says a lost link and its return, never the cut stream's error, and 
   const cut =
     "beta polling error: unable to receive poll response: unable to read message length: EOF";
   await state([at(true)]);
-  await state([at(false, { lastError: cut })]);
-  await state([
-    at(false, {
-      lastError:
-        "beta scan error: unable to receive scan response: message transmission failed: EOF",
-    }),
-  ]);
+  // A cut on a request going out, and on a file copy coming in, going
+  // out, and flushed at its end.
+  for (const lastError of [
+    cut,
+    "beta scan error: unable to send scan request: message transmission failed: write tcp 127.0.0.1:52011->127.0.0.1:52010: write: broken pipe",
+    "unable to stage files on alpha: unable to decode and forward rsync operations: unable to decode transmission: unable to read message length: EOF",
+    "unable to stage files on beta: unable to transmit delta: unable to encode transmission: unable to write message: write tcp 127.0.0.1:52011->127.0.0.1:52010: write: broken pipe",
+    "unable to stage files on beta: unable to finalize receiver: unable to finalize encoder: unable to flush encoded messages: EOF",
+  ]) {
+    await state([at(false, { lastError })]);
+  }
   await state([at(true)]);
   assert.deepEqual(kinds(), ["connected", "disconnected"]);
   await state([at(true, { lastError: "alpha scan error: a scan failed" })]);
@@ -723,7 +727,7 @@ it("a thread says a lost link and its return, never the cut stream's error, and 
   await state([
     at(false, {
       lastError:
-        "unable to stage files on beta: remote error: no space left on device",
+        "unable to save ancestor: unable to write message data: unable to write data to temporary file: write /data/archive: no space left on device",
     }),
   ]);
   assert.deepEqual(kinds().slice(0, 5), [

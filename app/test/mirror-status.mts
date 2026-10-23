@@ -113,7 +113,8 @@ it("an engine that stopped reads as failing with why, one starting as restarting
 });
 
 it("a switch off on the copy's device reads as paused until it is on, naming the switch, a person's pause before it, and a lost link as reconnecting without the engine's error for the cut stream", () => {
-  const refused = {
+  // A session the copy's device turned away: its stream cut, git off.
+  const turnedAway = {
     lastError:
       "beta polling error: unable to receive poll response: unable to read message length: EOF",
     git: { status: "off", detail: "" },
@@ -126,7 +127,7 @@ it("a switch off on the copy's device reads as paused until it is on, naming the
       "connecting-remote",
       3,
       { copyOff: { device: "Studio Mac", off } },
-      refused,
+      turnedAway,
     );
     assert.deepEqual(
       {
@@ -148,7 +149,7 @@ it("a switch off on the copy's device reads as paused until it is on, naming the
     "disconnected",
     3,
     { copyOff: { device: "this device", off: "control" } },
-    { ...refused, paused: true },
+    { ...turnedAway, paused: true },
   );
   assert.deepEqual(
     [byHand.label, byHand.detail, byHand.paused],
