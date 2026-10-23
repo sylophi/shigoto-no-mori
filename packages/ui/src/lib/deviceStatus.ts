@@ -67,7 +67,7 @@ export const THIS_DEVICE_NOT_RESPONDING_VIEW: DeviceStatusView = {
   reachable: false,
 };
 
-// A device's name and its state, in one spelling ("Thinkpad,
+// A device's name and its state, in one spelling ("MacBook,
 // Connected", "Studio Mac, This device"): the chip's tooltip and a
 // filter pill's accessible name.
 export function deviceTitle(

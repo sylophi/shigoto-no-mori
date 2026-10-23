@@ -267,7 +267,7 @@ Rules that keep a machine looking like itself everywhere:
   the next one answers): then it wears a rose dot and reads "Not
   responding" (`THIS_DEVICE_NOT_RESPONDING_VIEW`), wherever its tab,
   filter or card shows it.
-- **A device's tooltip is `deviceTitle`** ("Thinkpad, Connected",
+- **A device's tooltip is `deviceTitle`** ("MacBook, Connected",
   "Studio Mac, This device") where it has one, as on the chip. The
   device pickers have none (above).
 

@@ -9,7 +9,7 @@ import {
   type TerminalFeed,
   TerminalView,
 } from "../views/terminal/TerminalView.tsx";
-import { THINKPAD_ID } from "../fixtures/fixtures.ts";
+import { MACBOOK_ID } from "../fixtures/fixtures.ts";
 import { deviceById } from "./world.ts";
 
 const prompt: TerminalFeed = (screen) => {
@@ -92,7 +92,7 @@ export function TerminalPartsScene() {
 // A peer's drawer while it takes no commands from here: the words in
 // place of the tabs.
 export function PeerTerminalsHiddenScene() {
-  const thinkpad = deviceById(THINKPAD_ID);
+  const macbook = deviceById(MACBOOK_ID);
   return (
     <div className="relative flex h-full flex-col justify-end bg-background">
       <TerminalDrawerView height={240} onHeight={() => {}}>
@@ -102,7 +102,7 @@ export function PeerTerminalsHiddenScene() {
           onSelect={() => {}}
           onClose={() => {}}
           onHide={() => {}}
-          note={peerTerminalsHiddenNote(thinkpad.label)}
+          note={peerTerminalsHiddenNote(macbook.label)}
         >
           {null}
         </TerminalTabsView>

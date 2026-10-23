@@ -43,7 +43,7 @@ import { WorktreeMissingView } from "../views/shared/WorktreeMissingView.tsx";
 import { WorktreeMoveDetailsView } from "../views/shared/WorktreeMoveDetailsView.tsx";
 import type { ScriptRunState } from "../lib/scriptRun.ts";
 import { THIS_DEVICE_NOT_RESPONDING_VIEW } from "../lib/deviceStatus.ts";
-import { LOCAL_DEVICE_ID, MINI_ID, THINKPAD_ID } from "../fixtures/fixtures.ts";
+import { LOCAL_DEVICE_ID, MINI_ID, MACBOOK_ID } from "../fixtures/fixtures.ts";
 import { SceneDialog, SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
 import {
@@ -82,7 +82,7 @@ export function ProjectPageScene() {
         title="Configure"
         tabs={
           <DeviceTabBarView
-            tabs={deviceTabs([LOCAL_DEVICE_ID, THINKPAD_ID, MINI_ID])}
+            tabs={deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID])}
             selectedId={LOCAL_DEVICE_ID}
             onSelect={noop}
             allDevicesTab
@@ -138,7 +138,7 @@ export function ProjectPageScene() {
 // the eyebrow links back to the page this one is under, and the peer
 // won't run commands from here.
 export function PeerProjectPageScene() {
-  const thinkpad = deviceById(THINKPAD_ID);
+  const macbook = deviceById(MACBOOK_ID);
   return (
     <SceneWindowFrame
       sidebar={
@@ -155,14 +155,14 @@ export function PeerProjectPageScene() {
         terrier={false}
         chip={
           <DeviceChipView
-            label={thinkpad.label}
-            icon={thinkpad.icon}
-            status={thinkpad.status}
+            label={macbook.label}
+            icon={macbook.icon}
+            status={macbook.status}
           />
         }
         showAllDevices={false}
         body={
-          <DeviceTabNoteView note="Thinkpad doesn't run commands from this device." />
+          <DeviceTabNoteView note="MacBook doesn't run commands from this device." />
         }
       />
     </SceneWindowFrame>
@@ -213,7 +213,7 @@ export function MarksScene() {
         ))}
       </Strip>
       <Strip label="Device leads">
-        {[LOCAL_DEVICE_ID, THINKPAD_ID, MINI_ID].map((id) => {
+        {[LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID].map((id) => {
           const device = deviceById(id);
           return (
             <span key={id} className="inline-flex items-center gap-3">
@@ -231,7 +231,7 @@ export function MarksScene() {
               ...deviceById(LOCAL_DEVICE_ID),
               status: THIS_DEVICE_NOT_RESPONDING_VIEW,
             },
-            ...deviceTabs([THINKPAD_ID]),
+            ...deviceTabs([MACBOOK_ID]),
           ]}
           selectedId={LOCAL_DEVICE_ID}
           onSelect={noop}

@@ -197,7 +197,7 @@ export interface MoveNews {
   // Another device the move happened on, by name.
   device: string | null;
   // "Lucha moved out", "Lucha and Raymond moved in". With a device
-  // named, "on Thinkpad" follows.
+  // named, "on MacBook" follows.
   title: string;
   // The title in the villager's voice, for one common villager with a
   // catchphrase this voice can use.

@@ -46,7 +46,7 @@ import {
   accountDevices,
   forests,
   LOCAL_DEVICE_ID,
-  THINKPAD_ID,
+  MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
@@ -150,12 +150,12 @@ function row(
   );
 }
 
-const [HERE, THINKPAD, MINI, WORKPC] = accountDevices;
+const [HERE, MACBOOK, MINI, WORK_IMAC] = accountDevices;
 
-// The Thinkpad's dev server, forwarded here.
+// The MacBook's dev server, forwarded here.
 const FORWARD = {
   forwardId: "fwd_1",
-  deviceId: THINKPAD_ID,
+  deviceId: MACBOOK_ID,
   localPort: 5741,
   remotePort: 5173,
   connCount: 2,
@@ -190,7 +190,7 @@ const signIn = (
 );
 
 // The account page, signed in: this machine sharing and taking control
-// from the others, the Thinkpad with a forward open, the Mini asleep.
+// from the others, the MacBook with a forward open, the Mini asleep.
 export function DevicesPageScene() {
   return (
     <SceneWindowFrame sidebar={<SceneSidebar view="inbox" />}>
@@ -216,13 +216,13 @@ export function DevicesPageScene() {
                 </ExposureSwitchesView>
               ),
             }),
-          [THINKPAD, MINI, WORKPC].flatMap((device) =>
+          [MACBOOK, MINI, WORK_IMAC].flatMap((device) =>
             device === undefined
               ? []
               : [
                   row(device, {
                     exposure:
-                      device === THINKPAD ? (
+                      device === MACBOOK ? (
                         <PortForwardSectionView
                           canStart
                           forwards={[FORWARD]}
@@ -323,9 +323,9 @@ export function DevicesPartsScene() {
                   </ExposureSwitchesView>
                 ),
               })}
-            {WORKPC && row(WORKPC, { confirming: true, showId: true })}
-            {THINKPAD &&
-              row(THINKPAD, {
+            {WORK_IMAC && row(WORK_IMAC, { confirming: true, showId: true })}
+            {MACBOOK &&
+              row(MACBOOK, {
                 access: REFUSED,
                 exposure: (
                   <PortForwardSectionView

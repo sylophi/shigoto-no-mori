@@ -2,7 +2,7 @@
 // commands from here: the switch lives on the other machine's account
 // page, so the sentence names that machine and the switch by its label.
 // `deviceLabel` is how the caller names the machine in its own
-// sentence: "Thinkpad", "it", "this device".
+// sentence: "MacBook", "it", "this device".
 export function peerReadOnlyNote(deviceLabel: string): string {
   return `Read-only until ${allowsControl(deviceLabel)}.`;
 }

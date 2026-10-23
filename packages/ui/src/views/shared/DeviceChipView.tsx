@@ -23,7 +23,7 @@ export function DeviceChipView({
 }) {
   return (
     // The name is the chip. The connection state stays on the dot's
-    // tone and the tooltip, so the header reads "on Thinkpad", not a
+    // tone and the tooltip, so the header reads "on MacBook", not a
     // status report.
     <SimpleTooltip tip={deviceTitle(label, status)}>
       <span data-slot="device-chip" className={DEVICE_PILL_CLASS}>

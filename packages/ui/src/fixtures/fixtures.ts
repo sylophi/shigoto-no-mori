@@ -1,5 +1,5 @@
 // The fixture world: one account and its four devices (Studio Mac
-// local, Thinkpad online with a direct session, Mini and Work PC
+// local, MacBook online with a direct session, Mini and Work iMac
 // offline). Pure data, which the scenes draw and the lab's fake host
 // serves over fixture wires (app/lab/fake-host/bridge.ts).
 import type * as Types from "effect/Types";
@@ -19,9 +19,9 @@ export const FAKE_ACCOUNT_ID = "user_2rin8xk3";
 export const FAKE_APP_VERSION = "3.0.3";
 
 export const LOCAL_DEVICE_ID = "dev_8f3ac2e1";
-export const THINKPAD_ID = "dev_1c94b0da";
+export const MACBOOK_ID = "dev_1c94b0da";
 export const MINI_ID = "dev_5b0e77aa";
-export const WORKPC_ID = "dev_a02f61c3";
+export const WORK_IMAC_ID = "dev_a02f61c3";
 
 const now = Date.now();
 const HOUR = 3_600_000;
@@ -54,9 +54,9 @@ export const accountDevices: Types.Mutable<DeviceInfo>[] = [
     online: true,
   },
   {
-    deviceId: THINKPAD_ID,
-    name: "Thinkpad",
-    platform: "linux",
+    deviceId: MACBOOK_ID,
+    name: "MacBook",
+    platform: "darwin",
     icon: "laptop",
     createdAt: now - 16 * DAY,
     lastSeenAt: now,
@@ -72,9 +72,9 @@ export const accountDevices: Types.Mutable<DeviceInfo>[] = [
     online: false,
   },
   {
-    deviceId: WORKPC_ID,
-    name: "Work PC",
-    platform: "win32",
+    deviceId: WORK_IMAC_ID,
+    name: "Work iMac",
+    platform: "darwin",
     icon: "desktop",
     createdAt: now - 9 * DAY,
     lastSeenAt: now - 6 * DAY,
@@ -178,7 +178,7 @@ const localProjects: Project[] = [
     identity: null,
     remote: "github.com/pingdotgg/t3code",
     // Listed by terrier, not this app's registry, like dotfiles on the
-    // Thinkpad: the rows Mark terrier projects tags.
+    // MacBook: the rows Mark terrier projects tags.
     source: "terrier",
     lastUsed: now - 5 * DAY,
     recentCount: 2,
@@ -382,13 +382,13 @@ const localWorktrees: Record<string, FakeWorktree[]> = {
   ],
 };
 
-// ---- Thinkpad (online, direct session up) ----
+// ---- MacBook (online, direct session up) ----
 
-const thinkpadProjects: Project[] = [
+const macbookProjects: Project[] = [
   {
-    id: "tp_sm",
+    id: "mb_sm",
     name: "shigoto-no-mori",
-    path: "/home/rin/dev/shigoto-no-mori",
+    path: "/Users/rtakeda/dev/shigoto-no-mori",
     pathExists: true,
     identity: SM_IDENTITY,
     remote: "github.com/sylophi/shigoto-no-mori",
@@ -396,9 +396,9 @@ const thinkpadProjects: Project[] = [
     recentCount: 11,
   },
   {
-    id: "tp_df",
+    id: "mb_df",
     name: "dotfiles",
-    path: "/home/rin/dotfiles",
+    path: "/Users/rtakeda/dotfiles",
     pathExists: true,
     identity: DF_IDENTITY,
     remote: "github.com/rin/dotfiles",
@@ -408,14 +408,14 @@ const thinkpadProjects: Project[] = [
   },
 ];
 
-const thinkpadWorktrees: Record<string, FakeWorktree[]> = {
-  tp_sm: [
+const macbookWorktrees: Record<string, FakeWorktree[]> = {
+  mb_sm: [
     worktree({
       id: "aa11bb22cc33",
-      projectId: "tp_sm",
+      projectId: "mb_sm",
       name: "shigoto-no-mori",
       branch: "main",
-      path: "/home/rin/dev/shigoto-no-mori",
+      path: "/Users/rtakeda/dev/shigoto-no-mori",
       isPrimary: true,
       recentCommits: [
         commit(
@@ -429,10 +429,10 @@ const thinkpadWorktrees: Record<string, FakeWorktree[]> = {
     }),
     worktree({
       id: "a1b2c3d4e5f6",
-      projectId: "tp_sm",
+      projectId: "mb_sm",
       name: "gentle-gecko",
       branch: "exp/terrier-sync",
-      path: "/home/rin/.sm/wt/shigoto-no-mori/gentle-gecko",
+      path: "/Users/rtakeda/.sm/wt/shigoto-no-mori/gentle-gecko",
       createdAt: now - 2 * HOUR,
       ahead: 1,
       changedCount: 7,
@@ -449,26 +449,32 @@ const thinkpadWorktrees: Record<string, FakeWorktree[]> = {
     }),
     worktree({
       id: "c0ffee123456",
-      projectId: "tp_sm",
+      projectId: "mb_sm",
       name: "patient-panda",
-      branch: "exp/wayland-tray",
-      path: "/home/rin/.sm/wt/shigoto-no-mori/patient-panda",
+      branch: "exp/menu-bar-icon",
+      path: "/Users/rtakeda/.sm/wt/shigoto-no-mori/patient-panda",
       createdAt: now - 8 * DAY,
       shelved: true,
       changedCount: 2,
       lastChangeAt: now - 6 * DAY,
       recentCommits: [
-        commit("9d41a07", "Probe the Wayland tray protocol", 6 * DAY, 31, 4),
+        commit(
+          "9d41a07",
+          "Probe a template image for the menu bar",
+          6 * DAY,
+          31,
+          4,
+        ),
       ],
     }),
   ],
-  tp_df: [
+  mb_df: [
     worktree({
       id: "dd44ee55ff66",
-      projectId: "tp_df",
+      projectId: "mb_df",
       name: "dotfiles",
       branch: "main",
-      path: "/home/rin/dotfiles",
+      path: "/Users/rtakeda/dotfiles",
       isPrimary: true,
       hasUpstream: true,
       recentCommits: [
@@ -524,7 +530,7 @@ const miniWorktrees: Record<string, FakeWorktree[]> = {
 // A disk per device for the add-project flow to browse: home folder,
 // then every folder it can list, keyed by absolute path. A registered
 // project's folder is a git repo here too, and each machine has a repo
-// or two it never registered, so a scan finds something. The Thinkpad
+// or two it never registered, so a scan finds something. The MacBook
 // has no port-pool, which is what cloning one onto it is posed with.
 export type FakeDisk = {
   home: string;
@@ -551,23 +557,23 @@ export const fakeDisks: Record<string, FakeDisk> = {
       "/Users/rin/dev/sandbox": [repo("advent-2025")],
     },
   },
-  [THINKPAD_ID]: {
-    home: "/home/rin",
+  [MACBOOK_ID]: {
+    home: "/Users/rtakeda",
     dirs: {
-      "/home/rin": [
+      "/Users/rtakeda": [
         dir("Downloads"),
         dir("dev"),
         repo("dotfiles"),
         dir("notes"),
       ],
-      "/home/rin/Downloads": [],
-      "/home/rin/notes": [],
-      "/home/rin/dev": [
+      "/Users/rtakeda/Downloads": [],
+      "/Users/rtakeda/notes": [],
+      "/Users/rtakeda/dev": [
         repo("blog"),
         dir("experiments"),
         repo("shigoto-no-mori"),
       ],
-      "/home/rin/dev/experiments": [repo("zig-raytracer")],
+      "/Users/rtakeda/dev/experiments": [repo("zig-raytracer")],
     },
   },
   [MINI_ID]: {
@@ -577,7 +583,7 @@ export const fakeDisks: Record<string, FakeDisk> = {
       "/Users/rin/dev": [repo("shigoto-no-mori")],
     },
   },
-  [WORKPC_ID]: { home: "/home/rin", dirs: { "/home/rin": [] } },
+  [WORK_IMAC_ID]: { home: "/Users/rin", dirs: { "/Users/rin": [] } },
 };
 
 // The remote each fixture repo was cloned from, by repo identity (the
@@ -609,10 +615,10 @@ export const forests: Record<string, DeviceForest> = {
     worktrees: localWorktrees,
     grantsCaller: true,
   },
-  [THINKPAD_ID]: {
-    deviceId: THINKPAD_ID,
-    projects: thinkpadProjects,
-    worktrees: thinkpadWorktrees,
+  [MACBOOK_ID]: {
+    deviceId: MACBOOK_ID,
+    projects: macbookProjects,
+    worktrees: macbookWorktrees,
     grantsCaller: true,
   },
   [MINI_ID]: {
@@ -621,8 +627,8 @@ export const forests: Record<string, DeviceForest> = {
     worktrees: miniWorktrees,
     grantsCaller: false,
   },
-  [WORKPC_ID]: {
-    deviceId: WORKPC_ID,
+  [WORK_IMAC_ID]: {
+    deviceId: WORK_IMAC_ID,
     projects: [],
     worktrees: {},
     grantsCaller: false,
@@ -674,7 +680,7 @@ export const fakeListeningPorts = new Set([5731, 5173, 6006, 8787, 5182]);
 
 // The scripts each device runs right now, as scripts:list answers (the
 // Live page). The dev servers behind the listening ports above, and a
-// setup still going on Thinkpad. Stopping one drops it here.
+// setup still going on MacBook. Stopping one drops it here.
 const minutesAgo = (minutes: number) => Date.now() - minutes * 60_000;
 export const fakeRunningScripts: Record<string, RunningScript[]> = {
   [LOCAL_DEVICE_ID]: [
@@ -695,18 +701,18 @@ export const fakeRunningScripts: Record<string, RunningScript[]> = {
       interactive: true,
     },
   ],
-  [THINKPAD_ID]: [
+  [MACBOOK_ID]: [
     {
-      runId: "run-tp-gecko-dev",
-      projectId: "tp_sm",
+      runId: "run-mb-gecko-dev",
+      projectId: "mb_sm",
       worktreeId: "a1b2c3d4e5f6",
       slot: { kind: "package", name: "dev" },
       startedAt: minutesAgo(180),
       interactive: true,
     },
     {
-      runId: "run-tp-panda-setup",
-      projectId: "tp_sm",
+      runId: "run-mb-panda-setup",
+      projectId: "mb_sm",
       worktreeId: "c0ffee123456",
       slot: { kind: "setup" },
       startedAt: minutesAgo(1),
@@ -717,7 +723,7 @@ export const fakeRunningScripts: Record<string, RunningScript[]> = {
 
 // The terminals each device has open, as terminals:list answers (a
 // worktree page's drawer, the Live page): two in brave-badger and one
-// in happy-hummingbird on Studio Mac, one in a Thinkpad worktree.
+// in happy-hummingbird on Studio Mac, one in a MacBook worktree.
 // Closing one drops it here.
 export const fakeOpenTerminals: Record<string, Terminal[]> = {
   [LOCAL_DEVICE_ID]: [
@@ -740,10 +746,10 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
       openedAt: minutesAgo(12),
     },
   ],
-  [THINKPAD_ID]: [
+  [MACBOOK_ID]: [
     {
-      terminalId: "t-tp-gecko-1",
-      projectId: "tp_sm",
+      terminalId: "t-mb-gecko-1",
+      projectId: "mb_sm",
       worktreeId: "a1b2c3d4e5f6",
       openedAt: minutesAgo(95),
     },

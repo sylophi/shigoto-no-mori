@@ -1,4 +1,4 @@
-// "Studio Mac" -> SM, "Thinkpad" -> TH, "Work PC" -> WP. Word initials
+// "Studio Mac" -> SM, "MacBook" -> MA, "Work iMac" -> WI. Word initials
 // when there are two words, else the first two letters. Enough to tell
 // an account's handful of machines apart, with the full name on hover.
 // One rule for every mark that stands in for a device (the sidebar's

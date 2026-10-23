@@ -13,8 +13,7 @@ export function TransplantHeadlineView({
   branch: string;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
-  // Where the move takes it, in words ("to the Thinkpad", "off the
-  // MacBook").
+  // Where the move takes it, in words ("to Mini", "off MacBook").
   away: string;
   // The running stage's line, off the progress frames.
   running: string;

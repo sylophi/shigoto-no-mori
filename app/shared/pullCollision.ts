@@ -7,7 +7,7 @@
 // insensitively, or anything at the path), the same rule the
 // engine's create applies (Worktrees.ts).
 // `where` places the landing device when it is not the one speaking
-// ("on Thinkpad"): the review of a flow to a peer, told from the
+// ("on MacBook"): the review of a flow to a peer, told from the
 // sending side.
 export function pullFolderCollision(
   name: string,

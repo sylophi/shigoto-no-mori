@@ -129,9 +129,9 @@ export type Landing = {
   onPeer: boolean;
   // Standing alone: "Open here", "ignored files there".
   here: "here" | "there";
-  // In a sentence: "creating the worktree here / on Thinkpad".
+  // In a sentence: "creating the worktree here / on MacBook".
   on: string;
-  // As a direction: "Transplanted feat here / to Thinkpad".
+  // As a direction: "Transplanted feat here / to MacBook".
   to: string;
 };
 export const LANDS_HERE: Landing = {

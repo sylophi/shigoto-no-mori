@@ -167,7 +167,7 @@ export function initialPaletteKey(
 
 // Best field wins: a query can name the branch, its title, the folder, the
 // project (alone or ahead of the branch, "sm feat"), the device, so
-// "thinkpad" narrows to that machine's work, the project's owner, so
+// "macbook" narrows to that machine's work, the project's owner, so
 // an org's name narrows to its work, or the pull request, by
 // "#148" or its title. Worktrees on a shelf score at half, so
 // they come up for a query that names them and sink under one that

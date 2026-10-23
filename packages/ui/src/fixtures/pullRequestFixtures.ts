@@ -23,7 +23,7 @@ import {
 import { armsAutoMerge } from "../lib/pullRequest.ts";
 import { COMMIT_PATCH } from "./patches.ts";
 
-const FAKE_SM_PROJECT_IDS = new Set(["p_sm", "tp_sm", "mini_sm"]);
+const FAKE_SM_PROJECT_IDS = new Set(["p_sm", "mb_sm", "mini_sm"]);
 
 const fakePullRequest = (
   number: number,
@@ -41,7 +41,7 @@ const fakePullRequest = (
 
 // The repo's PRs by head branch. Three of them are a stack across two
 // devices (brave-badger and quiet-quail here, gentle-gecko on the
-// Thinkpad), with the bottom already landed, so the stack list, the
+// MacBook), with the bottom already landed, so the stack list, the
 // pill positions and the "merge up to here" button all pose.
 const FAKE_PRS = {
   "v2-exp/remote-ui-flows": fakePullRequest(

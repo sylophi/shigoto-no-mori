@@ -30,7 +30,7 @@ import type {
   PullRequest,
   PullRequestDetail,
 } from "@shigomori/contracts/schemas";
-import { LOCAL_DEVICE_ID, THINKPAD_ID } from "../fixtures/fixtures.ts";
+import { LOCAL_DEVICE_ID, MACBOOK_ID } from "../fixtures/fixtures.ts";
 import {
   FAKE_PULL_REQUEST_OPTIONS,
   FAKE_REPO_MERGE_CONFIG,
@@ -43,7 +43,7 @@ import { projectNamed, worktreeNamed } from "./world.ts";
 const noop = () => {};
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 const GECKO = worktreeNamed(
-  projectNamed(THINKPAD_ID, "shigoto-no-mori"),
+  projectNamed(MACBOOK_ID, "shigoto-no-mori"),
   "gentle-gecko",
 );
 const PRS: Record<string, PullRequest> = unposedPullRequests(SM.id);
@@ -203,13 +203,13 @@ export function PullRequestPartsScene() {
             count: 3,
             reach: "stack",
             armed: true,
-            blockedNote: "1 more on Thinkpad, which is offline.",
+            blockedNote: "1 more on MacBook, which is offline.",
           })}
           {closedBox({
             count: 3,
             stackError: {
               kind: "cleanup",
-              message: "Thinkpad: teardown exited with code 1",
+              message: "MacBook: teardown exited with code 1",
             },
           })}
           {closedBox({

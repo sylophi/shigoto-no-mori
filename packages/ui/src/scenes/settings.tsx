@@ -82,7 +82,7 @@ import {
   fakeReleases,
   LOCAL_DEVICE_ID,
   MINI_ID,
-  THINKPAD_ID,
+  MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import {
   FAKE_DETECTED,
@@ -171,7 +171,7 @@ function versionSection() {
     <VersionSectionView
       version={<BuildVersionLineView version={VERSION} commit={COMMIT} />}
       canCommand
-      deviceLabel="Thinkpad"
+      deviceLabel="MacBook"
       state={STAGED}
       isError={false}
       onRetry={noop}
@@ -182,7 +182,7 @@ function versionSection() {
           version={STAGED.version}
           remote={false}
           canCommand
-          deviceLabel="Thinkpad"
+          deviceLabel="MacBook"
           armed={false}
           pending={false}
           onClick={noop}
@@ -205,7 +205,7 @@ export function SettingsGeneralScene() {
         { eyebrow: "Settings", title: "General" },
         GENERAL_TAB,
         <DeviceTabBarView
-          tabs={deviceTabs([LOCAL_DEVICE_ID, THINKPAD_ID, MINI_ID])}
+          tabs={deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID])}
           selectedId={LOCAL_DEVICE_ID}
           onSelect={noop}
           trailing={
@@ -241,7 +241,7 @@ export function SettingsGeneralScene() {
           />
           <DataLocationSectionView
             remote={false}
-            deviceLabel="Thinkpad"
+            deviceLabel="MacBook"
             root={`${HOME}/.sm`}
             home={HOME}
             moving={false}
@@ -380,7 +380,7 @@ function Part({ label, children }: { label: string; children: ReactNode }) {
 // read-only, loading, and its CLI read refused. The phone layout's
 // section chips, and the page while its configs load.
 export function SettingsPartsScene() {
-  const thinkpad = deviceById(THINKPAD_ID);
+  const macbook = deviceById(MACBOOK_ID);
   return (
     <div className="grid h-full grid-cols-2 gap-8 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-8">
@@ -404,7 +404,7 @@ export function SettingsPartsScene() {
         <Part label="Worktrees and integrations, a peer read-only">
           <DeviceTogglesView
             readOnly
-            note={<PeerReadOnlyNoteView label={thinkpad.label} />}
+            note={<PeerReadOnlyNoteView label={macbook.label} />}
             saveError={null}
           >
             <WorktreeTogglesView
@@ -427,18 +427,18 @@ export function SettingsPartsScene() {
         </Part>
         <Part label="A peer's General section">
           <PeerOfflineNoteView label="Mini" dialing={false} />
-          <PeerOfflineNoteView label={thinkpad.label} dialing />
+          <PeerOfflineNoteView label={macbook.label} dialing />
           <PeerSettingsLoadingView />
           <PeerVersionLineView appVersion="" />
           <PeerReadErrorView
             what="the CLI install"
-            device={thinkpad.label}
+            device={macbook.label}
             message="the device closed the connection"
             heading="Command line tool"
           />
           <PeerReadErrorView
             what="the agent hooks"
-            device={thinkpad.label}
+            device={macbook.label}
             message="the device closed the connection"
             heading="Coding agents"
           />
@@ -497,7 +497,7 @@ export function SettingsDialogsScene() {
               version={STAGED.version}
               remote={false}
               canCommand
-              deviceLabel="Thinkpad"
+              deviceLabel="MacBook"
               armed={false}
               pending={false}
               onClick={noop}
