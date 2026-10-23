@@ -1,28 +1,24 @@
 // Watches every registered project's git directory so a commit, a
 // checkout, a branch created or deleted, a rebase or a fetch made by
-// ANY tool (an agent in a terminal, an editor, plain git) shows up in
+// any tool (an agent in a terminal, an editor, plain git) shows up in
 // the app within a debounce, on this machine and on every device
 // viewing it, instead of on the next focus or the minute sweep. The
 // store's changes (engine StoreChanges) cover sm's own bookkeeping.
 // The git facts a worktree row shows
-// (branch, tip, ahead/behind) live in the PROJECT's git directory, and
+// (branch, tip, ahead/behind) live in the project's git directory, and
 // a linked worktree's metadata lives under its `worktrees/<name>/`
 // there too, so one recursive watch per project covers every worktree
 // of it.
 //
-// What counts as a change is an ALLOWLIST of git-dir paths (HEAD and
-// ORIG_HEAD, packed-refs, refs/** but the app's own refs/shigomori/**,
-// a worktree's HEAD and ORIG_HEAD, a worktree entry appearing or
-// vanishing, a stopped operation's markers), not "anything under .git":
-// objects/ churns on every commit, logs/ mirrors every ref update,
-// FETCH_HEAD is rewritten by the app's own minute sweep, and `index` is
-// rewritten by every stage and by another program's `git status` or
-// `git diff` (a person's, a prompt's dirty check), while a stage moves
-// no ref (its own signal, below). refs/shigomori/ holds the app's own
-// bookkeeping (dirty captures, a transfer's landing refs, the mirror's
-// staged-tree commits, discard undos), which no view reads. Uncommitted
-// file edits are not seen in the git directory: they live in the
-// working trees.
+// What counts as a change is an allowlist of git-dir paths (`RELEVANT`,
+// below), not "anything under .git": objects/ churns on every commit,
+// logs/ mirrors every ref update, FETCH_HEAD is rewritten by the app's
+// own minute sweep, and `index` is rewritten by every stage and by
+// another program's `git status` or `git diff` (a person's, a prompt's
+// dirty check), while a stage moves no ref (its own signal, below).
+// refs/shigomori/ holds the app's own bookkeeping, which no view reads.
+// Uncommitted file edits are not seen in the git directory: they live
+// in the working trees.
 //
 // So each worktree's working tree is watched too, its own `.git` left
 // out, and a change there is a second, quieter signal
@@ -174,11 +170,10 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
   });
 
 // What a project's git directory says about the state its rows show,
-// read with no git: HEAD and ORIG_HEAD and each worktree's,
-// packed-refs, every loose ref the allowlist counts (a ref is written
-// by a rename into place, so a new inode), and the stopped-operation
-// markers (a directory by being there). Two equal readings mean nothing
-// the allowlist above cares about moved between them. And apart, each
+// read with no git: each path the allowlist counts (a ref is written by
+// a rename into place, so a new inode; a stopped operation's directory
+// counts by being there). Two equal readings mean nothing the allowlist
+// cares about moved between them. And apart, each
 // checkout's index by its stamp (written by a rename into place too),
 // for the index's own signal. A file that isn't there reads as absent;
 // any other failure (a directory git removed mid-walk, a volume that

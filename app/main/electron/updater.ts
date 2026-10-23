@@ -382,14 +382,11 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
 // Update this device, whether or not its update is here yet: Update
 // all and the update toast ask every device behind the newest release
 // they know of, and a device whose last check predates that release
-// has nothing staged. One that has it restarts into it now. One that
-// doesn't is armed to, and the check that stages it installs it once
-// staged (runCheck): one started here, or the one already running,
-// followed by one more if that one asked before the release was out. A check
-// that stages nothing drops the arm: the device is up to date on its
-// channel, or failed, which its Settings section says. An unattended
-// request is refused up front on a busy host, while the caller still
-// waits on the answer, and the install checks again when it comes.
+// has nothing staged. Such a device is armed, and the check that stages
+// the update installs it (runCheck); a check already running is
+// followed by one more, since it may have asked before the release was
+// out. An unattended request is refused up front on a busy host, while
+// the caller still waits on the answer.
 async function updateNow(unattended: boolean): Promise<void> {
   if (installing) return;
   if (held) throw new Error(heldWords);

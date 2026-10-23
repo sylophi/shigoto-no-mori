@@ -1,12 +1,8 @@
 // POSIX process-group signaling for the scripts (./ScriptRuns.ts) and the
-// lifecycle scripts the engine runs.
-//
-// Kill strategy:
-//   1. SIGTERM the process group (negative pgid), covering normal forks.
-//   2. Walk `ps` for any descendant still reachable via ppid (e.g.
-//      double-forked daemons) and SIGTERM those too.
-//   3. The caller escalates to SIGKILL through the same path after its
-//      grace period.
+// lifecycle scripts the engine runs: a signal goes to the process (its
+// group, when it leads one) and to every descendant still reachable by
+// its ppid (a double-forked daemon), and the caller escalates to SIGKILL
+// the same way after its grace period.
 import * as Effect from "effect/Effect";
 import * as Processes from "@shigomori/engine/processes";
 import { descendantsIn } from "./descendants";
@@ -15,8 +11,7 @@ function safeKill(pid: number, signal: NodeJS.Signals): void {
   // kill(-1) signals every process the user may signal, kill(0) our
   // own group, kill(1) launchd. No real child or group ever maps to
   // these, so refuse them at the chokepoint every pid source funnels
-  // through. The persisted-scripts schema rejects pid < 2 too, but
-  // a floor here covers future sources as well.
+  // through.
   if (!Number.isInteger(pid) || Math.abs(pid) < 2) return;
   try {
     process.kill(pid, signal);

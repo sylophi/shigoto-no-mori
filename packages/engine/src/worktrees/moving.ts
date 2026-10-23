@@ -5,7 +5,9 @@
 // (migrations/moving.ts), and git's move is its commit point. From the
 // record to the carry nothing interrupts it; the record goes once the
 // carry is whole, and a move a crash cut short is finished or undone by
-// `resume` (at the app's start and by the doctor's fix).
+// `resume` (at the app's start and by the doctor's fix). Every move goes
+// through it: `worktrees move`, a rename, the migration's into `wt/` and
+// relocate's. A create refuses a path a record still names.
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

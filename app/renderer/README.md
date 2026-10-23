@@ -14,14 +14,11 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
 - `components/<area>/`: the containers, by area, each binding its data
   to a view from `@shigomori/ui` under the plain name the view drops
   `View` from. A container draws no markup of its own.
-- `hooks/<area>/`: where a container's data comes from, unless one
-  container alone reads it, which may ask in place. A host view (a
-  stream the host serves) is an atom (`lib/runtime/atoms.ts`, read
-  through `lib/runtime/viewHooks.ts`), and so is what is kept from a
-  push stream (a device's script runs, its worktree lifecycle and git
-  fetches, the hub's status); a request is a React Query query
-  whose key comes from `lib/queryKeys.ts`. Ongoing state the host
-  watches is a view, its refresh a request (EFFECT.md, section 10). A hook under
+- `hooks/<area>/`: where a container's data comes from (`EFFECT.md`,
+  section 10), unless one container alone reads it, which may ask in
+  place. An atom is `lib/runtime/atoms.ts`'s, read through
+  `lib/runtime/viewHooks.ts`; a request's key comes from
+  `lib/queryKeys.ts`. A hook under
   `hooks/remote/` scopes its calls to a device (`useHostScope`). A hook
   of the page's own logic (which device is picked, where a click goes,
   what a menu offers) sits with the containers of the area it belongs

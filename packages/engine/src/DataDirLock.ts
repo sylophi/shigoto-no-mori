@@ -5,6 +5,15 @@
 // engine's entry points; a move, and the recovery of one, holds it
 // alone. SQLite's locks are the kernel's, so a hold goes with its
 // process, however that ends, and nothing reads a pid to tell.
+//
+// The entry points: every call that changes code (what a peer needs the
+// `changeCode` grant for), a landing's create, capture and apply as one
+// change wherever it is asked from, every change the host makes through
+// the engine (`asChange`), the auto-pull's fast-forward, and each
+// terminal command that changes a worktree on disk (`changing`, and
+// `changingWithFix` for the doctor's `--fix`). A write that only touches
+// the store holds nothing: while a move's journal is there, the store
+// refuses every write but the move's (`dataDirMoveJournal.ts`).
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";

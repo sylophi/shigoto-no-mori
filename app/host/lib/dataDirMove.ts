@@ -1,13 +1,11 @@
-// Moves the shigomori data dir to a new parent directory (or, with no
-// parent, back to its default location): the folder relocates under the
-// flavor's canonical name (.sm / .smd -- which is also how a pre-2.0
-// ~/shigomori gets renamed), the pointer file (policy in
-// shared/packaging/cliDist.mts) records the new spot for both the app's
-// and the CLI's next boot -- or is removed when the new spot is the
-// default, so "pointer exists" keeps meaning "relocated" -- and the
-// caller must relaunch the app right after: the in-process data dir is
-// a boot-time constant and every module has already derived paths from
-// it.
+// Moves the shigomori data dir to a new parent directory, or back to its
+// default place: the folder moves under the flavor's name (.sm / .smd,
+// which also renames a pre-2.0 ~/shigomori), and the pointer file
+// (shared/packaging/cliDist.mts) records the new place for the app's and
+// the CLI's next start, or goes when that place is the default, so a
+// pointer always means a moved folder. The caller relaunches the app
+// right after: the data dir is a boot-time constant every module has
+// derived paths from.
 //
 // Two kinds of stored paths go stale and are carried along: worktree
 // ids are hashes of the worktree's absolute path, so everything the
@@ -24,13 +22,11 @@
 // sibling of the destination, flushed to disk and renamed in only once
 // whole.
 //
-// The journal is written whole and flushed each time it changes. Each
-// worktree that moves is an entry (its project, old and new path, its
-// dirty capture's commit or null, and its mark: `planned`, `rekeyed` or
-// `returned`). A strict read is one whose error is an error, never taken
-// for absence: a capture ref git can't open or parse (`Git.readRef`), a
-// journal that can't be read or decoded. The steps, and what a crash
-// after each leaves:
+// The journal (the engine's `dataDirMoveJournal.ts`) holds an entry per
+// worktree that moves, marked `planned`, `rekeyed` or `returned`. A
+// strict read takes an error as an error, never as absence: a capture
+// ref git can't open or parse (`Git.readRef`), a journal that can't be
+// read or decoded. The steps, and what a crash after each leaves:
 //  0. The lock alone, waiting 30 s for the changes under way (one still
 //     running refuses the move), then an earlier journal settled. Until
 //     it is, the move is refused and the store keeps refusing writes.
@@ -65,27 +61,13 @@
 //     undoes (a copy).
 //  9. The pointer committed, renamed in (or removed, for the default
 //     place) and its folder flushed. Finished at the destination.
-// 10. The finish: git's repair here; then, by the first process to open
-//     the store at the new place, holding the lock alone (the engine's
-//     `finishMove`), a copy's old tree deleted while it holds this
-//     move's journal (read strictly, that journal last), git's repair of
-//     the entries and of every worktree listed under the old folder,
-//     their port-pool leases carried, then the journal gone and the
-//     store writing again. A crash leaves it to the next process there,
-//     and a copy's old tree takes its space until then.
+// 10. The finish: git's repair here, then the engine's `finishMove` in
+//     the first process to open the store at the new place. A crash
+//     leaves it to the next process there, and a copy's old tree takes
+//     its space until then.
 //
-// The undo (the engine's `undoMove`) goes from the last entry to the
-// first, each reversal the move's own write: `returned` is skipped,
-// `rekeyed` reversed, `planned` reversed only if something is kept under
-// its new id. A reversal moves the rows back in one transaction and the
-// capture only if it is the snapshot's commit, read strictly; any other
-// stays where it is, and one that can't be read fails the undo. Each
-// reversed entry is marked `returned` before the next, so a retried undo
-// never reverses one twice. Then a copy's partial folder goes, and its
-// landed one if the journal it carries is this move's (that journal
-// last), then the journal, and only then does the store write again.
-// A failure keeps the journal and the refusal for the next process, and
-// a journal that can't be read is never settled: it stays, for a look.
+// The finish and the undo (`undoMove`) are the engine's, in its
+// dataDirMove.ts.
 //
 // Not covered: `SHIGOMORI_DATA_DIR` naming the folder a move moved still
 // names the old place; a write from outside sm into a copy's old tree
