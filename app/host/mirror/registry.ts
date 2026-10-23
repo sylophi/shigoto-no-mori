@@ -6,6 +6,7 @@
 // mirrors without importing that module (which reaches sync, which
 // reaches worktrees).
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { randomUUID } from "node:crypto";
@@ -346,8 +347,9 @@ const endingSessions = new Set<string>();
 // and a sweep that starts between the end and the engine's next
 // snapshot would find the session listed still and end it twice. A
 // look that finds the root of a session not waiting on its peer, or
-// can't see a waiting one's, a session left to wait, or an end that
-// fails, forgets the mark, so the next snapshot looks again.
+// can't see a waiting one's, a session left to wait, a move the look
+// can't read, or an end that fails, forgets the mark, so the next
+// snapshot looks again.
 const rootLooks = new Set<string>();
 
 // The sessions of a moved original whose re-open waits for the peer to
@@ -426,6 +428,15 @@ export const rootExists = (path: string): Promise<boolean> =>
       error.code !== "ENOENT" || unmountedVolume(path) !== null,
   );
 
+// Where the store records a folder moved to, null when it records no
+// move, undefined when the read fails: the store's read dies on a
+// failure rather than fail, and a look that can't read the record leaves
+// the session to the next one.
+const recordedMove = (path: string) =>
+  Effect.map(Effect.exit(Ops.wtFolderMovedTo(path)), (read) =>
+    Exit.isSuccess(read) ? read.value : undefined,
+  );
+
 export const settleMirrorBookkeeping = Effect.gen(function* () {
   const daemon = yield* engineOrNull;
   // Off the running daemon's own snapshot: its ready comes before it.
@@ -485,9 +496,11 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
           // paused for a person's Resume, which keeps what the pair
           // agreed on.
           if (waiting !== undefined) {
-            const movedBack = yield* Ops.wtFolderMovedTo(waiting.path).pipe(
-              Effect.orElseSucceed(() => null),
-            );
+            const movedBack = yield* recordedMove(waiting.path);
+            if (movedBack === undefined) {
+              rootLooks.delete(raw.session);
+              return;
+            }
             if (
               movedBack !== null &&
               worktreeIdFromPath(movedBack) === localWorktreeIdOf(raw)
@@ -512,9 +525,11 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
         }
         // The v3 migration moved the original into wt/: the mirror
         // re-opens there, as after a move.
-        const movedTo = yield* Ops.wtFolderMovedTo(raw.localRoot).pipe(
-          Effect.orElseSucceed(() => null),
-        );
+        const movedTo = yield* recordedMove(raw.localRoot);
+        if (movedTo === undefined) {
+          rootLooks.delete(raw.session);
+          return;
+        }
         if (
           movedTo !== null &&
           (yield* Effect.promise(() => rootExists(movedTo)))

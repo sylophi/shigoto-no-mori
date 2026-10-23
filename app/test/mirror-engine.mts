@@ -110,7 +110,10 @@ import * as MirrorEngineLayer from "../host/mirror/MirrorEngineLayer.ts";
 import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
 import { makeGitFollower } from "../host/mirror/gitFollow.ts";
 import { createMirrorHistory } from "../host/mirror/history.ts";
-import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
+import {
+  isWaitingOnPeer,
+  MIRROR_LABEL_LOCAL_PROJECT,
+} from "../host/mirror/registry.ts";
 import { transferFilesOnce } from "../host/mirror/oneShot.ts";
 import { mirrorList, stopMirror } from "../host/mirror/sessions.ts";
 import { MIRROR_LABEL_MODE } from "@shigomori/contracts/modules/mirror";
@@ -1269,8 +1272,14 @@ async function movedOriginalWithPeerAway(id: string, holdTerminate = false) {
     () => asked.includes("B") && mirror.requests().includes(`pause ${id}`),
     "the re-open to wait on the peer, its session paused",
   );
-  // The daemon's next snapshot, which says so.
+  // The daemon's next snapshot, which says so, and the look it starts,
+  // which asks after B again.
+  const looked = asked.length;
   await mirror.state([raw(true)]);
+  await waitFor(
+    () => asked.length > looked,
+    "the paused session's look to ask after its peer",
+  );
   return {
     ...mirror,
     project,
@@ -1428,6 +1437,7 @@ it("a moved original's mirror waiting on its peer is that worktree's own again, 
   // the disk, which no number of turns settles.
   await delay(250);
   assert.deepEqual(requests(), ["pause back"]);
+  assert.ok(!isWaitingOnPeer("back"), "the wait outlived the move back");
   assert.ok(!history(original.id).some((event) => event.kind === "stopped"));
 });
 
