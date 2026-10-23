@@ -21,9 +21,11 @@
   shots from the lab, in light and dark.
 - Effect code follows `EFFECT.md`, which starts by sending you to
   Effect's own guidance for the pinned version: read it before writing
-  Effect code. While the `release/v3` branch lives, `V3.md`
-  is its charter and checklist, and `CLAUDE.md` holds the rules for a
-  thread working one of its items.
+  Effect code.
+- A workflow that changes state is proved by a failure injected
+  between each pair of its external steps and by a recovery that itself
+  fails, and its cleanup after a refusal and after a kill, not only
+  after success.
 - A pull request has a short title and a body that is a single brief
   `## Description` section: what changed and why, in a few sentences.
   No test plan or other sections.

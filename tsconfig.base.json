@@ -21,8 +21,8 @@
     "noEmit": true,
     // Effect's diagnostics, which the typecheck scripts run through
     // @effect/tsgo's build of the compiler. unstableApiUsage is off
-    // because v3 builds on Effect's unstable modules by decision (sql,
-    // rpc, process, cli, http) and would warn on every use. Effect is
+    // because the code builds on Effect's unstable modules (sql, rpc,
+    // process, cli, http) and would warn on every use. Effect is
     // pinned exactly, and EFFECT.md has those APIs read from the pinned
     // source, which is the guard the diagnostic stands for.
     "plugins": [
