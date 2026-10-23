@@ -69,12 +69,14 @@ import {
   endMirrorsIntoGoneCopy,
   engineOrNull,
   findSession,
+  isWaitingOnPeer,
   localWorktreeIdOf,
   type MirrorSessionRaw,
   mirrorSessions,
   ORIGINAL_GONE_DETAIL,
   requireRunningEngine,
   rootExists,
+  STOPPED_WAITING_DETAIL,
 } from "./registry";
 import { MirrorEngine, MirrorError } from "./MirrorEngine";
 import { announceServingChange, listMirrorServing } from "./serving";
@@ -344,7 +346,14 @@ export const stopMirror = (session: string, force: boolean) =>
       });
     }
     if (!(yield* Effect.promise(() => rootExists(raw.localRoot)))) {
-      yield* endMirrorKeepingCopy(daemon, raw, ORIGINAL_GONE_DETAIL);
+      // A moved original's, waiting on its peer, isn't gone.
+      yield* endMirrorKeepingCopy(
+        daemon,
+        raw,
+        isWaitingOnPeer(session)
+          ? STOPPED_WAITING_DETAIL
+          : ORIGINAL_GONE_DETAIL,
+      );
       return { removedCopy: false };
     }
     // The copy goes with the stop, so it must hold nothing the original

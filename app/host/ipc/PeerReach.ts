@@ -69,17 +69,22 @@ export class PeerReach extends Context.Service<
     // Each peer as it comes to take this device's calls: its direct
     // session up with both of its switches on.
     readonly admissions: Stream.Stream<string>;
+    // Whether the peer takes this device's calls now.
+    readonly admits: (deviceId: string) => boolean;
   }
 >()("sm/host/PeerReach") {}
 
 export const make = (reach: {
   readonly transportFor: (deviceId: string) => ClientTransport;
   readonly channelsFor: (deviceId: string) => PeerChannels;
-  // None in a check that doesn't exercise them.
+  // A check that doesn't exercise them has none, and every peer taking
+  // this device's calls.
   readonly admissions?: Stream.Stream<string>;
+  readonly admits?: (deviceId: string) => boolean;
 }): PeerReach["Service"] =>
   PeerReach.of({
     admissions: reach.admissions ?? Stream.never,
+    admits: reach.admits ?? (() => true),
     calls: <M extends ContractModule>(contract: M, deviceId: string) => {
       const transport = reach.transportFor(deviceId);
       const calls: Record<string, (input?: unknown) => unknown> = {};
@@ -135,6 +140,7 @@ export const makeAdmissions = Effect.map(
         admitted = now;
       },
       admissions: Stream.fromPubSub(admissions),
+      admits: (peer: string) => admitted.has(peer),
     };
   },
 );
