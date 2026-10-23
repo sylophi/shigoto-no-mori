@@ -31,9 +31,10 @@ const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
 // wraps them: its remote endpoint client's requests and responses
 // ("beta polling error: unable to receive poll response: … EOF"), and
 // the file copy's own encoding over the stream, for a cut mid-copy.
-// This side's own failures carry none of them. A peer that fails while
-// it takes files in (its disk full) ends the stream, which reads as a
-// cut too: Mutagen carries no cause across it.
+// This side's own failures carry none of them. A peer whose serve ends
+// mid-copy (it quit or died) reads as a cut too: Mutagen carries no
+// cause across it. Its disk full doesn't end it: the file is skipped
+// and comes back as a transition problem.
 const LINK_WORDS = [
   "unable to send ",
   "unable to receive ",
@@ -41,8 +42,17 @@ const LINK_WORDS = [
   "unable to encode transmission",
   "unable to flush encoded messages",
 ];
+// The message codec's own failures under those words, which aren't a
+// cut: a snapshot past its size cap (a huge tree), or a message that
+// can't be encoded or read.
+const CODEC_WORDS = [
+  "message size too large",
+  "unable to marshal message",
+  "unable to unmarshal message",
+];
 const isLinkError = (error: string) =>
-  LINK_WORDS.some((words) => error.includes(words));
+  LINK_WORDS.some((words) => error.includes(words)) &&
+  !CODEC_WORDS.some((words) => error.includes(words));
 
 // What the recorder remembers of a session between two snapshots, the
 // facts whose change is an event.

@@ -701,9 +701,9 @@ it("a thread says a lost link and its return, never the cut stream's error, and 
   for (const lastError of [
     cut,
     "beta scan error: unable to send scan request: message transmission failed: write tcp 127.0.0.1:52011->127.0.0.1:52010: write: broken pipe",
-    "unable to stage files on alpha: unable to decode and forward rsync operations: unable to decode transmission: unable to read message length: EOF",
+    "unable to stage files on alpha: unable to decode and forward rsync operations: unable to decode transmission: unable to read message length: unexpected EOF",
     "unable to stage files on beta: unable to transmit delta: unable to encode transmission: unable to write message: write tcp 127.0.0.1:52011->127.0.0.1:52010: write: broken pipe",
-    "unable to stage files on beta: unable to finalize receiver: unable to finalize encoder: unable to flush encoded messages: EOF",
+    "unable to stage files on beta: unable to finalize receiver: unable to finalize encoder: unable to flush encoded messages: write tcp 127.0.0.1:52011->127.0.0.1:52010: write: broken pipe",
   ]) {
     await state([at(false, { lastError })]);
   }
@@ -727,10 +727,18 @@ it("a thread says a lost link and its return, never the cut stream's error, and 
   await state([
     at(false, {
       lastError:
-        "unable to save ancestor: unable to write message data: unable to write data to temporary file: write /data/archive: no space left on device",
+        "unable to save ancestor: unable to write message data: unable to write data to temporary file: write /data/archives/.mutagen-temporary-atomic-write123: no space left on device",
     }),
   ]);
-  assert.deepEqual(kinds().slice(0, 5), [
+  // The codec's own failure under a cut's words: a snapshot too big.
+  await state([
+    at(false, {
+      lastError:
+        "beta scan error: unable to receive scan response: message size too large",
+    }),
+  ]);
+  assert.deepEqual(kinds().slice(0, 6), [
+    "error",
     "error",
     "disconnected",
     "connected",
