@@ -26,6 +26,10 @@
 //   - stopping the daemon ends it and the gateway closes clean.
 // Then the git follower (host/mirror/gitFollow.ts), driven against the
 // same wire with the dialer's worktree a real clone of the listener's repository:
+//   - either of the listener's switches turned off drops the stream then,
+//     an edit on the dialer stays there and git reads off, not an error,
+//     and back on, the resume its admission brings reconnects the
+//     session at once, the edit lands and git is in step again,
 //   - a commit on the listener lands on the dialer: same tip, same branch, clean status,
 //   - staging on the listener shows as staged on the dialer, without touching files,
 //   - a commit on the dialer lands on the listener the same way (the push direction),
@@ -625,6 +629,48 @@ it("git: a fresh session on equal tips reports synced", async () => {
   );
   onSnapshot = () => follower.sessionsChanged();
   await waitGit("synced", "the follower to report synced");
+});
+
+it("either switch turned off on the listener mid-mirror stops its writes at once and git reads off, not an error, and turned back on, the resume its admission brings reconnects at once and git is in step again", async () => {
+  const edited = join(dialerRoot, "while-off.txt");
+  const landed = join(listenerWorktree, "while-off.txt");
+  const switches = [
+    ["control", (on: boolean) => listener.setAccepts(on)],
+    ["sharing", (on: boolean) => listener.setSharing(on)],
+  ] as const;
+  for (const [name, turn] of switches) {
+    turn(false);
+    // The stream drops then, and what changes on the dialer stays there.
+    await waitFor(
+      () =>
+        daemon.sessions().find((s) => s.session === session)?.remote
+          .connected === false,
+      `the session to lose the listener with ${name} off`,
+      10_000,
+    );
+    writeFileSync(edited, `${name} off\n`);
+    assert.deepEqual(await runHost(follower.reconcileNow(session)), {
+      status: "off",
+      detail: "",
+    });
+    await delay(3_000);
+    assert.equal(
+      fileEquals(landed, `${name} off\n`),
+      false,
+      `an edit crossed into the listener with ${name} off`,
+    );
+    // What the engine does on the listener's admission
+    // (MirrorEngineLayer.ts): well inside the engine's own 15 s retry.
+    turn(true);
+    await daemon.resume(session);
+    follower.onPeerAdmitted(LISTENER);
+    await waitFor(
+      () => fileEquals(landed, `${name} off\n`),
+      `the edit to land once ${name} is back on`,
+      10_000,
+    );
+    await waitGit("synced", `git to be in step once ${name} is back on`);
+  }
 });
 
 it("git: a commit on the listener lands on the dialer with the same tip, branch and a clean status", async () => {
@@ -1346,7 +1392,6 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     const put = (raw: MirrorSessionRaw) => live.set(raw.session, raw);
     const noted: Parameters<MirrorEngine["Service"]["noteEvent"]>[] = [];
     const deleted: string[] = [];
-    const released: string[] = [];
     let status: Effect.Success<MirrorEngine["Service"]["status"]> = "running";
     let verdict: MirrorGitStatus = { status: "synced", detail: "" };
     let timedOut = false;
@@ -1367,10 +1412,6 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
       refreshGit: () => Effect.sync(() => (timedOut ? "timed-out" : verdict)),
       noteEvent: (worktreeId, kind, detail) =>
         noted.push([worktreeId, kind, detail]),
-      releaseCopy: (raw) =>
-        Effect.sync(() => {
-          released.push(raw.worktreeId);
-        }),
     });
     // The peer's list never answers, which the copy-gone probe reads
     // as no answer (the copy may well be there), so no refusal is
@@ -1432,15 +1473,13 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, an o
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
 
     // The original removed outside the app: the copy is the only one
-    // left, so even a forced stop keeps it, and its device is told it
-    // is a plain worktree now.
+    // left, so even a forced stop keeps it.
     put(sessionOf("orphan", { localRoot: goneRoot }));
     assert.deepEqual(await stop({ session: "orphan", force: true }), {
       removedCopy: false,
     });
     assert.ok(!live.has("orphan"));
     assert.deepEqual(deleted, ["wt-conflicted", "wt-ahead"]);
-    await waitFor(() => released.includes("wt-orphan"), "the release");
     assert.deepEqual(noted.at(-1), [
       "orig-orphan",
       "stopped",

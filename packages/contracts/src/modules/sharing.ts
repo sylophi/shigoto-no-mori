@@ -6,8 +6,7 @@ import { VoidSchema } from "../schemas/index.ts";
 // the switch on its account page (the device setting
 // shareWithDevices). Off, its device link refuses every call a peer
 // makes, reads included, and pushes peers nothing (SharingGate,
-// link.ts), so they see a device with nothing on it. The mirrors this
-// device asked for are the one exception (host/mirror/invites.ts).
+// link.ts), so they see a device with nothing on it.
 export const sharingContract = defineContract(
   "sharing",
   "host",

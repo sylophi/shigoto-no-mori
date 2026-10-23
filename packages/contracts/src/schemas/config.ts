@@ -291,9 +291,8 @@ const GlobalConfigSchema = Schema.Struct({
   // When false, this device runs no direct listener and isn't advertised
   // (its own dials are unaffected). Absent = on. `sm config` only.
   directConnections: Schema.optional(Schema.Boolean),
-  // When false, the link refuses every peer call and pushes nothing,
-  // except for the mirrors this device asked for. Absent = on. Never in
-  // the Settings patch, so no peer can write it.
+  // When false, the link refuses every peer call and pushes nothing.
+  // Absent = on. Never in the Settings patch, so no peer can write it.
   shareWithDevices: Schema.optional(Schema.Boolean),
   // For a cloudflared not on PATH. `sm config` only.
   cloudflaredPath: Schema.optional(Schema.String),

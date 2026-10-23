@@ -588,8 +588,7 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "changeCode",
-    "invitable": "copy"
+    "grant": "changeCode"
   },
   "mirror:changed": {
     "kind": "push",
@@ -608,8 +607,7 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "browseFiles",
-    "invitable": "copy"
+    "grant": "browseFiles"
   },
   "mirror:history": {
     "kind": "invoke",
@@ -628,8 +626,7 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "browseFiles",
-    "invitable": "copy"
+    "grant": "changeCode"
   },
   "mirror:pause": {
     "kind": "invoke",
@@ -637,14 +634,6 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode"
-  },
-  "mirror:release": {
-    "kind": "invoke",
-    "scope": "host",
-    "remote": true,
-    "gated": true,
-    "grant": "changeCode",
-    "invitable": "copy"
   },
   "mirror:resume": {
     "kind": "invoke",
@@ -1208,8 +1197,7 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "browseFiles",
-    "invitable": "project"
+    "grant": "browseFiles"
   },
   "sync:ignoredPaths": {
     "kind": "invoke",
@@ -1223,8 +1211,7 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "browseFiles",
-    "invitable": "copy"
+    "grant": "browseFiles"
   },
   "sync:pullProgress": {
     "kind": "push",
@@ -1242,8 +1229,7 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "changeCode",
-    "invitable": "project"
+    "grant": "changeCode"
   },
   "sync:receiveWorktree": {
     "kind": "invoke",
@@ -1251,7 +1237,6 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "invitable": "landing",
     "busy": "land"
   },
   "sync:sendWorktree": {
@@ -1436,8 +1421,7 @@
     "scope": "host",
     "remote": true,
     "gated": true,
-    "grant": "changeCode",
-    "invitable": "copy"
+    "grant": "changeCode"
   },
   "worktreeData:patchPorts": {
     "kind": "invoke",
@@ -1451,8 +1435,7 @@
     "kind": "invoke",
     "scope": "host",
     "remote": true,
-    "gated": false,
-    "invitable": "copy"
+    "gated": false
   },
   "worktrees:abortOperation": {
     "kind": "invoke",
@@ -1561,7 +1544,6 @@
     "remote": true,
     "gated": true,
     "grant": "changeCode",
-    "invitable": "copy",
     "tracksProjectUsage": true,
     "busy": "remove"
   },
@@ -1628,8 +1610,7 @@
     "kind": "invoke",
     "scope": "host",
     "remote": true,
-    "gated": false,
-    "invitable": "project"
+    "gated": false
   },
   "worktrees:listCommits": {
     "kind": "invoke",

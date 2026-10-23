@@ -128,6 +128,7 @@ import {
   registerViews,
   hubHandlers,
   onPeerPush,
+  peerAdmissions,
 } from "./wires";
 import { log, warnOnFailure } from "@shared/log";
 import * as Graph from "./graph";
@@ -157,6 +158,7 @@ const peerTransportFor = (deviceId: string): ClientTransport => ({
 const peerReach = PeerReach.make({
   transportFor: peerTransportFor,
   channelsFor: (deviceId) => () => hubHandlers().peerChannels(deviceId),
+  admissions: peerAdmissions.admissions,
 });
 
 // A change push's window: a burst goes out as one ping this long after

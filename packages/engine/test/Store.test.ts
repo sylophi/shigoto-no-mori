@@ -339,6 +339,9 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
     title: "Fox",
   });
   write("running-scripts.json", { ownerPid: 99999, scripts: [] });
+  // 2.x's mirror invitations, which 3.x drops unread: one that can't be
+  // read goes all the same.
+  write("file-sync/mirror-invites.json", "not json");
   write("updater.json", { channel: "stable" });
   const listing = async () => ({
     projects: await rows("projects"),
@@ -356,6 +359,7 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
     "config.json",
     "state.json",
     "running-scripts.json",
+    "file-sync/mirror-invites.json",
     "projects",
   ]) {
     assert.ok(!existsSync(join(dataDir, file)), file);
@@ -439,11 +443,6 @@ it.each([
     "a mirror history that isn't an object",
     "file-sync/mirror-history.json",
     { events: "unreadable" },
-  ],
-  [
-    "mirror invites that aren't a list",
-    "file-sync/mirror-invites.json",
-    { invites: { a: 1 } },
   ],
 ])(
   "leaves every v2 file in place when the import drops %s",

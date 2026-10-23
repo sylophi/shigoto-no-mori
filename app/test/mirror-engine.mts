@@ -32,14 +32,24 @@
 //     missing ceiling, not the settle ceiling,
 //   - a daemon restarting keeps the list and the git follower's verdict
 //     its sessions had, and the threads note nothing of it,
-//   - a copy's release outstanding when the engine closes ends with it,
+//   - a thread says a lost link and its return, never the cut stream's
+//     error, and an error from before stands until the link is back,
+//     while the sync's own error, which leaves the link down too, is
+//     noted,
+//   - a thread notes git agreeing again across a spell of git off,
+//   - a peer coming to take this device's calls reconnects its sessions
+//     waiting on the link at once and side by side, none paused, halted
+//     or held by a re-open and no other device's, and git looks at its
+//     sessions again,
+//   - the hub's status snapshots admit a peer as its direct session is
+//     up with both of its switches on, once, and again after it left,
 //   - the follower's copy-gone report, once a minute, counts elapsed
 //     time: a wall clock stepped back neither holds the next one off
 //     nor a step forward lets it through early,
 //   - a worktree re-keyed with no host hook (an adopt, a project
-//     relocate, as the terminal makes them) carries its thread and the
-//     invitation of a copy it is to its new id, and the daemon's next
-//     snapshot re-opens a session on it at its new path,
+//     relocate, as the terminal makes them) carries its thread to its
+//     new id, and the daemon's next snapshot re-opens a session on it at
+//     its new path,
 //   - a device leaving its account ends its sessions within the
 //     sweep's bound: a terminate the daemon never answers is given up
 //     at 5 s, and an answer that comes later notes nothing on the
@@ -65,6 +75,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
@@ -73,6 +84,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as TestClock from "effect/testing/TestClock";
 import { it } from "vitest";
 import * as FileSync from "../host/fileSync/FileSync.ts";
+import * as PeerReach from "../host/ipc/PeerReach.ts";
 import * as HostAccount from "../host/lib/HostAccount.ts";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
@@ -87,16 +99,9 @@ import {
 } from "../host/mirror/MirrorEngine.ts";
 import * as MirrorEngineLayer from "../host/mirror/MirrorEngineLayer.ts";
 import * as MirrorGateway from "../host/mirror/MirrorGateway.ts";
-import {
-  inviteMirror,
-  landInvitedMirror,
-  listMirrorInvites,
-} from "../host/mirror/invites.ts";
 import { makeGitFollower } from "../host/mirror/gitFollow.ts";
-import {
-  MIRROR_LABEL_LOCAL_PROJECT,
-  stopMirrorsForWorktree,
-} from "../host/mirror/registry.ts";
+import { createMirrorHistory } from "../host/mirror/history.ts";
+import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import { transferFilesOnce } from "../host/mirror/oneShot.ts";
 import { mirrorList } from "../host/mirror/sessions.ts";
 import { MIRROR_LABEL_MODE } from "@shigomori/contracts/modules/mirror";
@@ -526,7 +531,7 @@ it("an engine whose stores cannot be read answers as unavailable and refuses eve
   assert.deepEqual(requests(), []);
 });
 
-it("an adopt and a project relocate carry a mirror's thread, its copy's invitation and its running session to the new id", async () => {
+it("an adopt and a project relocate carry a mirror's thread and its running session to the new id", async () => {
   // The engine's adopt and relocate run git in this process.
   scrubProcessGitEnv();
   const git = sandboxGit();
@@ -540,7 +545,7 @@ it("an adopt and a project relocate carry a mirror's thread, its copy's invitati
   git(repo, "add", ".");
   git(repo, "commit", "-q", "-m", "a");
   // An original mirrored from here, outside the repo, and a copy a peer
-  // mirrors into, inside it.
+  // mirrors into, inside it, whose thread the relocate carries.
   const outside = join(base, "outside");
   git(repo, "worktree", "add", "-q", "-b", "otter", outside);
   const copy = join(repo, "nested", "owl");
@@ -550,24 +555,13 @@ it("an adopt and a project relocate carry a mirror's thread, its copy's invitati
       registry.register({ name: "repo", path: repo }),
     ),
   );
-  const invite = inviteMirror({
-    peerDeviceId: "B",
-    sourceWorktreeId: "0123456789ab",
-    identity: "repo",
-  });
-  trackTest(() => run(invite.withdraw));
-  await run(
-    landInvitedMirror("B", "0123456789ab", {
-      projectId: project.id,
-      worktreeId: worktreeIdFromPath(copy),
-    }),
-  );
   const original = worktreeIdFromPath(outside);
   succeeded(
     await engine((mirrors) =>
       Effect.sync(() => {
         mirrors.noteEvent(original, "started", "");
         mirrors.noteEvent(worktreeIdFromPath(repo), "started", "");
+        mirrors.noteEvent(worktreeIdFromPath(copy), "started", "");
       }),
     ),
   );
@@ -621,11 +615,8 @@ it("an adopt and a project relocate carry a mirror's thread, its copy's invitati
   );
   const movedCopy = worktreeIdFromPath(join(moved, "nested", "owl"));
   await waitFor(
-    () =>
-      listMirrorInvites().some(
-        (landed) => landed.copy?.worktreeId === movedCopy,
-      ),
-    "the copy's invitation to follow the relocate",
+    () => history(movedCopy).some((event) => event.kind === "started"),
+    "the copy's thread to follow the relocate",
   );
   assert.ok(
     history(worktreeIdFromPath(moved)).some(
@@ -678,43 +669,233 @@ it("a daemon restarting keeps the list and the follower's verdict, and the threa
   );
 });
 
-it("a copy's release still out when the engine closes ends with it", async () => {
-  let asked = false;
-  let ended = false;
-  standInPeers({
-    transportFor: () => ({
-      invoke: (channel, _input, options) =>
-        new Promise((_resolve, reject) => {
-          if (channel !== "mirror:release") {
-            reject(new Error("not in this check"));
-            return;
-          }
-          asked = true;
-          options?.signal?.addEventListener("abort", () => {
-            ended = true;
-            reject(new Error("aborted"));
-          });
-        }),
-      subscribe: () => () => {},
-    }),
-    channelsFor: () => () => Promise.reject(new Error("not in this check")),
-  });
-  const { run, state, close } = await harness(() => ({ ok: true }));
-  await state([
+it("a thread says a lost link and its return, never the cut stream's error, and an error from before stands until the link is back, while the sync's own error, which leaves the link down too, is noted", async () => {
+  const { state, history } = await harness(() => ({ ok: true }));
+  const at = (
+    connected: boolean,
+    fields: Partial<Parameters<typeof rawMirrorSession>[0]> = {},
+  ) =>
     rawMirrorSession({
       session: "s1",
       localRoot: root,
-      deviceId: "B",
-      localWorktreeId: "w1",
-      labels: {
-        [MIRROR_LABEL_MODE]: "mirror",
-      },
+      localWorktreeId: "w-link",
+      labels: { [MIRROR_LABEL_MODE]: "mirror" },
+      status: connected ? "watching" : "connecting-remote",
+      local: mirrorEndpoint({ connected: true }),
+      remote: mirrorEndpoint({ connected }),
+      ...fields,
+    });
+  // The link's rows and the engine's errors: the git follower, which has
+  // no project to read here, notes its own.
+  const kinds = () =>
+    history("w-link")
+      .map((event) => event.kind)
+      .filter((kind) => !kind.startsWith("git-"));
+  // Mutagen's words as a stream is cut (the peer away, or a switch of
+  // its turned off): the sync fails with both ends reset to down.
+  const cut =
+    "beta polling error: unable to receive poll response: unable to read message length: EOF";
+  await state([at(true)]);
+  // A cut on a request going out, and on a file copy coming in, going
+  // out, and flushed at its end.
+  for (const lastError of [
+    cut,
+    "beta scan error: unable to send scan request: message transmission failed: write tcp 127.0.0.1:52011->127.0.0.1:52010: write: broken pipe",
+    "unable to stage files on alpha: unable to decode and forward rsync operations: unable to decode transmission: unable to read message length: unexpected EOF",
+    "unable to stage files on beta: unable to transmit delta: unable to encode transmission: unable to write message: write tcp 127.0.0.1:52011->127.0.0.1:52010: write: broken pipe",
+    "unable to stage files on beta: unable to finalize receiver: unable to finalize encoder: unable to flush encoded messages: write tcp 127.0.0.1:52011->127.0.0.1:52010: write: broken pipe",
+  ]) {
+    await state([at(false, { lastError })]);
+  }
+  await state([at(true)]);
+  assert.deepEqual(kinds(), ["connected", "disconnected"]);
+  await state([at(true, { lastError: "alpha scan error: a scan failed" })]);
+  await state([at(false, { lastError: cut })]);
+  await state([at(true)]);
+  // Newest first.
+  assert.deepEqual(kinds(), [
+    "recovered",
+    "connected",
+    "disconnected",
+    "error",
+    "connected",
+    "disconnected",
+  ]);
+  // The link back, its error not cleared yet by the sync's start.
+  await state([at(false, { lastError: cut })]);
+  await state([at(true, { lastError: cut })]);
+  await state([
+    at(false, {
+      lastError:
+        "unable to save ancestor: unable to write message data: unable to write data to temporary file: write /data/archives/.mutagen-temporary-atomic-write123: no space left on device",
     }),
   ]);
-  await run(stopMirrorsForWorktree("w1"));
-  await waitFor(() => asked, "the copy's release to be asked");
-  await close();
-  await waitFor(() => ended, "the release to end with the engine");
+  // The codec's own failure under a cut's words: a snapshot too big.
+  await state([
+    at(false, {
+      lastError:
+        "beta scan error: unable to receive scan response: message size too large",
+    }),
+  ]);
+  assert.deepEqual(kinds().slice(0, 6), [
+    "error",
+    "error",
+    "disconnected",
+    "connected",
+    "disconnected",
+    "recovered",
+  ]);
+});
+
+it("a thread notes git agreeing again across a spell of git off, which says nothing of the git state", () => {
+  const history = createMirrorHistory({
+    store: { load: () => ({}), save: () => {} },
+  });
+  const raw = rawMirrorSession({
+    session: "s1",
+    localRoot: root,
+    localWorktreeId: "w-git",
+    labels: { [MIRROR_LABEL_MODE]: "mirror" },
+  });
+  for (const status of ["synced", "diverged", "off", "synced"] as const) {
+    history.observe([raw], () => ({ status, detail: "" }));
+  }
+  assert.deepEqual(
+    history.eventsFor("w-git").map((event) => event.kind),
+    ["git-synced", "git-diverged"],
+  );
+});
+
+it("a peer coming to take this device's calls reconnects its sessions waiting on the link at once and side by side, none paused, halted or held by a re-open and no other device's, and git looks at its sessions again", async () => {
+  const admissions = Effect.runSync(PubSub.unbounded<string>());
+  const asked: string[] = [];
+  standInPeers({
+    transportFor: (deviceId) => ({
+      invoke: (channel) => {
+        if (channel === "mirror:gitState") asked.push(deviceId);
+        return Promise.reject(new Error("not in this check"));
+      },
+      subscribe: () => () => {},
+    }),
+    channelsFor: () => () => Promise.reject(new Error("not in this check")),
+    admissions: Stream.fromPubSub(admissions),
+  });
+  const project = await Effect.runPromiseWith(await hostContext())(
+    Effect.flatMap(Registry.Registry, (registry) =>
+      registry.register({
+        name: "admitted",
+        path: mkdtempSync(join(tmpdir(), "sm-mirror-admitted-")),
+      }),
+    ),
+  );
+  // A resume waits on its reconnect, and a re-open's pause on the
+  // daemon: both are held until the check ends.
+  let holding = true;
+  const { state, requests, fork, held, answerHeld } = await harness((request) =>
+    holding && (request.op === "resume" || request.op === "pause")
+      ? null
+      : { ok: true, ...(request.op === "create" ? { session: "new" } : {}) },
+  );
+  // Before the engine's teardown, which waits on them.
+  trackTest(async () => {
+    holding = false;
+    for (const request of held.splice(0)) {
+      await answerHeld(request, { ok: true });
+    }
+  });
+  const into = (
+    id: string,
+    deviceId: string,
+    fields: Partial<Parameters<typeof rawMirrorSession>[0]>,
+  ) =>
+    rawMirrorSession({
+      session: id,
+      localRoot: root,
+      deviceId,
+      labels: {
+        [MIRROR_LABEL_MODE]: "mirror",
+        [MIRROR_LABEL_LOCAL_PROJECT]: project.id,
+      },
+      ...fields,
+    });
+  await state([
+    into("lost", "B", { status: "disconnected" }),
+    into("dialing", "B", { status: "connecting-remote" }),
+    into("held", "B", { status: "disconnected", paused: true }),
+    into("halted", "B", { status: "halted-on-root-emptied" }),
+    into("live", "B", { status: "watching" }),
+    into("elsewhere", "C", { status: "disconnected" }),
+    into("reopening", "B", { status: "disconnected" }),
+  ]);
+  await waitFor(() => asked.length === 6, "git to look at the sessions");
+  fork((mirrors) => mirrors.recreate("reopening", input));
+  await waitFor(
+    () => requests().includes("pause reopening"),
+    "the re-open to pause its session",
+  );
+  asked.length = 0;
+  PubSub.publishUnsafe(admissions, "B");
+  const resumed = () =>
+    requests()
+      .filter((request) => request.startsWith("resume"))
+      .sort();
+  // Side by side: neither resume has an answer yet.
+  await waitFor(
+    () => resumed().length >= 2 && asked.length >= 5,
+    "the sessions to reconnect and git to look again",
+  );
+  // Any third resume would be in by now.
+  await settleTurns();
+  assert.deepEqual(resumed(), ["resume dialing", "resume lost"]);
+  assert.deepEqual(asked, ["B", "B", "B", "B", "B"]);
+});
+
+// A hub status with each peer a direct session is up with, by its two
+// switches as reported.
+const hubStatus = (
+  peers: Record<string, { control?: boolean; sharing?: boolean }>,
+) => {
+  const reported = (key: "control" | "sharing") =>
+    Object.fromEntries(
+      Object.entries(peers).flatMap(([peer, switches]) =>
+        switches[key] === undefined ? [] : [[peer, switches[key]]],
+      ),
+    );
+  return {
+    peerAppVersions: Object.fromEntries(
+      Object.keys(peers).map((peer) => [peer, "3.0.0"]),
+    ),
+    peerAcceptsCommands: reported("control"),
+    peerSharesData: reported("sharing"),
+  };
+};
+
+it("the hub's status snapshots admit a peer as its direct session is up with both of its switches on, once, and again after it left", async () => {
+  const admissions = Effect.runSync(PeerReach.makeAdmissions);
+  const heard: string[] = [];
+  const listening = Effect.runFork(
+    admissions.admissions.pipe(
+      Stream.runForEach((peer) => Effect.sync(() => heard.push(peer))),
+    ),
+  );
+  trackTest(() => Effect.runPromise(Fiber.interrupt(listening)));
+  await settleTurns();
+  const both = { control: true, sharing: true };
+  admissions.note(
+    hubStatus({
+      B: both,
+      C: { control: false, sharing: true },
+      D: { control: true },
+    }),
+  );
+  admissions.note(hubStatus({ B: both, C: both }));
+  // B's link drops, then comes back with its sharing off, then on.
+  admissions.note(hubStatus({ C: both }));
+  admissions.note(hubStatus({ B: { control: true, sharing: false }, C: both }));
+  admissions.note(hubStatus({ B: both, C: both }));
+  await waitFor(() => heard.length === 3, "the admissions");
+  await settleTurns();
+  assert.deepEqual(heard, ["B", "C", "B"]);
 });
 
 it("a stepped wall clock neither holds a copy-gone report back nor lets one through early", async () => {

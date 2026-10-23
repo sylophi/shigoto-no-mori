@@ -11,18 +11,14 @@
 // The command gate (CommandGate): a call annotated gated:false runs for
 // every linked peer, and any other only while the host accepts
 // commands, refused with CommandRefusedError before its handler runs.
-// The switch's one exception, a call the host invited
-// (WsServerTicketAuth.isInvited), runs with the switch off, and the
-// byte channel it attaches outlives the drop the switch-off deals every
-// other channel.
+// Turned off, it drops every byte channel a peer holds, and the peer
+// opens new ones once it is back on.
 //
 // The sharing gate (SharingGate): with the host's sharing off, a peer's
 // reads and commands alike are refused with NotSharingError before
-// their handlers run, and its pushes are withheld, save for the mirror
-// this device asked for, whose calls on its copy are still served and
-// whose copy's pushes still arrive. Flipped while a peer is linked,
-// its calls and views under way end, its byte channels drop, and it
-// hears the switch both ways.
+// their handlers run, and its pushes are withheld but the switches'.
+// Flipped while a peer is linked, its calls and views under way end,
+// its byte channels drop, and it hears the switch both ways.
 //
 // Interruption: a call its caller cancels, or whose link drops, is
 // interrupted on the host, its handler's signal aborted. Views stream
@@ -109,14 +105,6 @@ import {
   sealDialer,
 } from "@shared/remote/sealedSocket";
 import { generateKeyPair } from "@shared/crypto/noise";
-import {
-  dropMirrorInvitesWithPeers,
-  inviteMirror,
-  landInvitedMirror,
-  loadMirrorInvites,
-  mirrorInviteAdmits,
-  mirrorInviteSees,
-} from "@host/mirror/invites";
 import {
   makeHubHandlers,
   RELAY_BACKLOG,
@@ -905,15 +893,9 @@ it("what a granted call left going reaches its peer only while commands and shar
   assert.equal(has(heard, "not-sharing"), false);
 });
 
-it("invited calls: with commands off a call the host asked for runs while the rest stay refused, and the byte channel it attached survives the switch-off drop that resets every other as the switch turns, no bytes moving", async () => {
+it("commands turned off under a linked peer drop its byte channels then, no bytes moving, refuse a new one, and once back on a new one carries bytes on the same link", async () => {
   const track = trackTest;
-  const invitedPort = 1;
-  const { listener, seen } = await listen(track, {
-    isInvited: (peer, channel, input) =>
-      peer === DIALER &&
-      channel === "forward:open" &&
-      (input as { port: number }).port === invitedPort,
-  });
+  const { listener, seen } = await listen(track);
   listener.setAccepts(true);
   const connection = await dialListener(track, listener);
   const read = (id: string) => {
@@ -932,24 +914,17 @@ it("invited calls: with commands off a call the host asked for runs while the re
     });
     return { handle, got, reset: () => reset };
   };
-  const granted = read("0123456789abcdef0123456789abcdef");
+  const before = read("0123456789abcdef0123456789abcdef");
   await invoke(connection, "forward:open", {
     port: 2,
     channelId: "0123456789abcdef0123456789abcdef",
   });
-  const invited = read("fedcba9876543210fedcba9876543210");
-  await invoke(connection, "forward:open", {
-    port: invitedPort,
-    channelId: "fedcba9876543210fedcba9876543210",
-  });
-  // The switch turning off drops the granted channel then, idle as it
-  // is, and the invited one carries on.
   listener.setAccepts(false);
   await waitFor(
     () => seen.channels.get("0123456789abcdef0123456789abcdef")?.reset === true,
-    "the granted channel to drop",
+    "the channel to drop",
   );
-  await waitFor(() => granted.reset(), "the dialer to hear the drop");
+  await waitFor(() => before.reset(), "the dialer to hear the drop");
   const refused = await rejection(
     invoke(connection, "forward:open", {
       port: 3,
@@ -957,13 +932,14 @@ it("invited calls: with commands off a call the host asked for runs while the re
     }),
   );
   assert.ok(refused instanceof CommandRefusedError);
-  invited.handle.write(Buffer.from("hello"));
-  await waitFor(() => invited.got.join("") === "hello", "the echo");
-  assert.equal(invited.reset(), false);
-  assert.equal(
-    seen.channels.get("fedcba9876543210fedcba9876543210")?.reset,
-    false,
-  );
+  listener.setAccepts(true);
+  const after = read("fedcba9876543210fedcba9876543210");
+  await invoke(connection, "forward:open", {
+    port: 4,
+    channelId: "fedcba9876543210fedcba9876543210",
+  });
+  after.handle.write(Buffer.from("hello"));
+  await waitFor(() => after.got.join("") === "hello", "the echo");
 });
 
 it("sharing turned off under a linked peer drops its byte channels then, no bytes moving", async () => {
@@ -992,20 +968,9 @@ it("sharing turned off under a linked peer drops its byte channels then, no byte
   await waitFor(() => reset, "the dialer to hear the drop");
 });
 
-it("sharing gate: with sharing off a peer's reads and commands are refused and never run, and its pushes withheld, while the mirror this device asked for is still served and still hears its copy, and turning it back on needs no reconnect", async () => {
+it("sharing gate: with sharing off a peer's reads and commands are refused and never run, and its pushes withheld but the switches', and turning it back on needs no reconnect", async () => {
   const track = trackTest;
-  const copy = { projectId: "copy-project", worktreeId: "abcdef012345" };
-  await runHost(loadMirrorInvites);
-  track(() => runHost(dropMirrorInvitesWithPeers(() => false)));
-  inviteMirror({
-    peerDeviceId: DIALER,
-    sourceWorktreeId: "0123456789ab",
-    identity: "repo-identity",
-  });
-  await runHost(landInvitedMirror(DIALER, "0123456789ab", copy));
   const { listener, seen } = await listen(track, {
-    isInvited: mirrorInviteAdmits,
-    seesPush: mirrorInviteSees,
     registerHandlers: (binding) =>
       binding.handle("worktreeData:read", async () => null),
   });
@@ -1014,6 +979,8 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
   const connection = await dialListener(track, listener);
   const heard: unknown[] = [];
   connection.transport.subscribe("git:projectChanged", (p) => heard.push(p));
+  const switches: unknown[] = [];
+  connection.transport.subscribe("sharing:changed", (on) => switches.push(on));
   assert.ok(
     (await rejection(
       invoke(connection, "git:sweep", { renewal: true }),
@@ -1025,38 +992,33 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
     )) instanceof NotSharingError,
   );
   assert.equal(seen.refreshes, 0, "a handler ran while not sharing");
-  // The mirror's own call on its copy, and the same call elsewhere.
-  assert.equal(await invoke(connection, "worktreeData:read", copy), null);
   assert.ok(
     (await rejection(
       invoke(connection, "worktreeData:read", {
-        projectId: copy.projectId,
+        projectId: "p",
         worktreeId: "543210fedcba",
       }),
     )) instanceof NotSharingError,
   );
-  // A push about another project goes before each one about the copy's,
-  // so the copy's arriving alone shows the other was withheld.
+  // Pushes about a project made until the switch's is heard, while off,
+  // then one made back on: one push's arrivals keep their order, so the
+  // first to arrive being the last made shows the others were withheld.
   await waitFor(() => {
     listener.binding.broadcastAll("git:projectChanged", {
       projectId: "elsewhere",
     });
-    listener.binding.broadcastAll("git:projectChanged", {
-      projectId: copy.projectId,
-    });
-    return has(heard, copy.projectId);
-  }, "the mirror to hear its copy");
-  assert.equal(has(heard, "elsewhere"), false);
+    listener.binding.broadcastAll("sharing:changed", false);
+    return switches.length > 0;
+  }, "the peer to hear the switch");
   listener.setSharing(true);
   assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
     leaseMs: 5,
   });
   await waitFor(() => {
-    listener.binding.broadcastAll("git:projectChanged", {
-      projectId: "elsewhere",
-    });
-    return has(heard, "elsewhere");
+    listener.binding.broadcastAll("git:projectChanged", { projectId: "back" });
+    return has(heard, "back");
   }, "the peer to hear the rest again");
+  assert.deepEqual(heard[0], { projectId: "back" });
 });
 
 it("runtime info: a peer without control is served this host's home and data folder, and with sharing off it is refused and never runs, like the lists", async () => {

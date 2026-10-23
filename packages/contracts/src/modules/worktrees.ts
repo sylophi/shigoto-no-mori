@@ -89,7 +89,6 @@ export const worktreesContract = defineContract(
   invoke("list", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
     remote: true,
     gated: false,
-    invitable: "project",
   }),
   view("watch", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
     remote: true,
@@ -139,7 +138,6 @@ export const worktreesContract = defineContract(
     gated: true,
     grant: "changeCode",
     busy: "remove",
-    invitable: "copy",
   }),
   invoke("deleteStack", DeleteStackPayloadSchema, DeleteStackResultSchema, {
     tracksProjectUsage: true,

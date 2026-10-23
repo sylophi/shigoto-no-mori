@@ -1,11 +1,12 @@
 // The one seam every reach into a peer device goes through: a client
-// for any contract on the peer's direct session, and the byte channels
-// of that session. The root provides it (host/process/handlers.ts),
-// since the remote plumbing lives there, and its transport must route
-// through the bridge's SHARED direct-session cache (makeHubHandlers),
-// never a fresh dial: the host keeps exactly one authed socket per
-// deviceId, and a second dial silently supersedes the session every
-// remote-forest query is riding on.
+// for any contract on the peer's direct session, the byte channels of
+// that session, and each peer as it comes to take this device's calls.
+// The root provides it (host/process/handlers.ts), since the remote
+// plumbing lives there, and its transport must route through the
+// bridge's SHARED direct-session cache (makeHubHandlers), never a fresh
+// dial: the host keeps exactly one authed socket per deviceId, and a
+// second dial silently supersedes the session every remote-forest query
+// is riding on.
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
 import type { ChannelMux } from "@shared/remote/channels";
@@ -26,8 +27,11 @@ import {
   isInvoke,
   keyOf,
 } from "@shigomori/contracts/contract";
+import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
+import * as Stream from "effect/Stream";
 import type { EffectClient, PushKeys } from "@shigomori/contracts/types";
 
 // The byte channels of a peer's cached session, which the source links
@@ -62,14 +66,20 @@ export class PeerReach extends Context.Service<
       handler: (payload: unknown) => void,
     ) => () => void;
     readonly channels: (deviceId: string) => PeerChannels;
+    // Each peer as it comes to take this device's calls: its direct
+    // session up with both of its switches on.
+    readonly admissions: Stream.Stream<string>;
   }
 >()("sm/host/PeerReach") {}
 
 export const make = (reach: {
   readonly transportFor: (deviceId: string) => ClientTransport;
   readonly channelsFor: (deviceId: string) => PeerChannels;
+  // None in a check that doesn't exercise them.
+  readonly admissions?: Stream.Stream<string>;
 }): PeerReach["Service"] =>
   PeerReach.of({
+    admissions: reach.admissions ?? Stream.never,
     calls: <M extends ContractModule>(contract: M, deviceId: string) => {
       const transport = reach.transportFor(deviceId);
       const calls: Record<string, (input?: unknown) => unknown> = {};
@@ -97,6 +107,37 @@ export const make = (reach: {
         .subscribe(channelOf(callOf(contract, key)), handler),
     channels: reach.channelsFor,
   });
+
+// The admissions, off the hub's status snapshots (host/process/wires.ts
+// notes each): a peer is admitted as it comes into the set of those
+// taking this device's calls, and again after it left it.
+export const makeAdmissions = Effect.map(
+  PubSub.unbounded<string>(),
+  (admissions) => {
+    let admitted = new Set<string>();
+    return {
+      note: (
+        status: Pick<
+          HubStatus,
+          "peerAppVersions" | "peerAcceptsCommands" | "peerSharesData"
+        >,
+      ) => {
+        const now = new Set(
+          Object.keys(status.peerAppVersions).filter(
+            (peer) =>
+              status.peerAcceptsCommands[peer] === true &&
+              status.peerSharesData[peer] === true,
+          ),
+        );
+        for (const peer of now) {
+          if (!admitted.has(peer)) PubSub.publishUnsafe(admissions, peer);
+        }
+        admitted = now;
+      },
+      admissions: Stream.fromPubSub(admissions),
+    };
+  },
+);
 
 // The same, for an effect that has the service to hand.
 export const peerEffects = <M extends ContractModule>(

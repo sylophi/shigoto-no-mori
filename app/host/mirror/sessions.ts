@@ -13,9 +13,7 @@
 // whichever device asked for it (the copy's device asks over the
 // grant, startFrom below): it reaches the copy's `file-sync serve`
 // and git state through the peer's grant (openStream, gitState,
-// applyGitState), which is the grant the send already needed, or
-// through the invitation the copy's device left when it asked
-// (host/mirror/invites.ts), which admits exactly those calls. So a
+// applyGitState), which is the grant the send already needed. So a
 // stop always removes the peer's worktree. The copy's root path is
 // read off the peer's own landing answer over the grant-gated wire,
 // never taken from the caller.
@@ -31,6 +29,7 @@ import * as Schema from "effect/Schema";
 import {
   MIRROR_COPY_STAYED,
   mirrorFilesSettled,
+  mirrorHereBlocker,
   type MirrorIgnoreMode,
   type MirrorListResult,
   type MirrorSession,
@@ -54,9 +53,10 @@ import {
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
 import * as DeviceId from "@host/lib/config/DeviceId";
+import * as HostAccount from "@host/lib/HostAccount";
+import * as Sharing from "@host/lib/Sharing";
 import * as Moves from "@host/lib/sync/Moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
-import { inviteMirror, listMirrorInvites } from "./invites";
 import { transferFilesOnce } from "./oneShot";
 import {
   annotateMirrorSession,
@@ -169,9 +169,6 @@ export const startMirrorTo = (
     const refusal = mirrorStartRefusal(input.worktreeId, {
       sessions: yield* mirrorSessions(daemon),
       servedWorktreeIds: listMirrorServing().map((stream) => stream.worktreeId),
-      invitedCopyIds: listMirrorInvites().map(
-        (invite) => invite.copy?.worktreeId,
-      ),
     });
     if (refusal !== null) {
       return yield* new MirrorStartRefusedError({ reason: refusal });
@@ -252,16 +249,14 @@ export const startMirrorTo = (
   });
 
 // The ask from the copy's side. The session runs on the peer, which
-// holds the original: this device invites the mirror (invites.ts),
-// then asks the peer's startTo towards here, and the peer's send,
-// stream and git half land through that invitation whatever this
-// device's switch says. The peer's progress comes back as its
+// holds the original: this device asks the peer's startTo towards
+// here, and the peer's send, stream and git half land through this
+// device's own switches, so a switch that is off refuses the ask
+// before the peer hears of it. The peer's progress comes back as its
 // pushes, keyed by its worktree, and is relayed to the caller. The
 // caller going away (a closed window or CLI socket aborts the
 // context) cancels the start on the peer, the way the dialog's
 // cancel does: the peer's send stops and the copy it made here goes.
-// A start that fails withdraws the invitation: the peer's rollback
-// already removed whatever landed under it.
 export const startMirrorFrom = (
   input: MirrorStartFromPayload,
   ctx: HandlerContext,
@@ -270,10 +265,9 @@ export const startMirrorFrom = (
     sourceDeviceId,
     sourceProjectId: projectId,
     sourceWorktreeId: worktreeId,
-    sourceIdentity: identity,
     ...rule
   } = input;
-  return Effect.acquireUseRelease(
+  const ask = Effect.acquireUseRelease(
     Effect.map(PeerReach, (reach) => {
       const notify = ctx.notifier(syncContract, "pullProgress");
       return reach.onPush(
@@ -294,35 +288,37 @@ export const startMirrorFrom = (
     // A move like the others (Moves.ts), so the dialog's and the
     // CLI's cancel (sync:cancelMove, by the source worktree) and a
     // caller going away both reach it, and interrupt the peer's send
-    // over the device link. The invitation is made inside, once the
-    // move holds its key: a second ask for the same worktree is refused
-    // without touching the first's.
+    // over the device link.
     () =>
       Effect.flatMap(Moves.Moves, (moves) =>
         moves.run(
           ctx,
           worktreeId,
           Effect.gen(function* () {
-            const invite = inviteMirror({
-              peerDeviceId: sourceDeviceId,
-              sourceWorktreeId: worktreeId,
-              identity,
-              cloneInto: rule.cloneInto,
+            const started = yield* peerMirrorFor(sourceDeviceId).startTo({
+              targetDeviceId: yield* DeviceId.current,
+              projectId,
+              worktreeId,
+              ...rule,
             });
-            const started = yield* peerMirrorFor(sourceDeviceId)
-              .startTo({
-                targetDeviceId: yield* DeviceId.current,
-                projectId,
-                worktreeId,
-                ...rule,
-              })
-              .pipe(Effect.onError(() => invite.withdraw));
             return decodeMirrorStartToResult(started);
           }),
         ),
       ),
     (stopRelay) => Effect.sync(stopRelay),
   );
+  return Effect.gen(function* () {
+    const blocker = mirrorHereBlocker({
+      acceptsCommands:
+        (yield* (yield* HostAccount.HostAccount).current).facts
+          ?.acceptsCommands === true,
+      sharing: yield* (yield* Sharing.Sharing).current,
+    });
+    if (blocker !== undefined) {
+      return yield* new MirrorStartRefusedError({ reason: blocker });
+    }
+    return yield* ask;
+  });
 };
 
 // Stop ends the session and removes the copy the mirror made: the

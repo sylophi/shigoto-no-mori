@@ -74,7 +74,7 @@ export function MirrorManageDialog({
   };
   const controls = useMirrorControls();
   const setIgnores = useSetMirrorIgnores();
-  const stop = useStopConfirm(controls, session, names, (removedCopy) => {
+  const stop = useStopConfirm(controls, session, view, names, (removedCopy) => {
     onClose();
     onStopped(removedCopy);
   });
@@ -131,10 +131,13 @@ export function MirrorManageDialog({
 // it, a conflict's files or a resume, is in the body and the header).
 // A refusal from the runner (it looked again at the stop and found the
 // copy not in step) stands in for the session's verdict until the
-// session moves on from where it was refused.
+// session moves on from where it was refused. A mirror the copy's
+// device turns away reads as paused here too, as it does above, rather
+// than as the session's lost link.
 function useStopConfirm(
   controls: ReturnType<typeof useMirrorControls>,
   session: MirrorSession,
+  view: MirrorLook,
   names: MirrorNames,
   onStopped: (removedCopy: boolean) => void,
 ): StopConfirm {
@@ -145,6 +148,7 @@ function useStopConfirm(
   } | null>(null);
   const moment = `${session.successfulCycles}:${session.git?.status ?? ""}`;
   const blocker =
+    (view.paused === true ? "the mirror is paused" : undefined) ??
     mirrorStopBlocker(session) ??
     (refusal?.at === moment ? refusal.reason : undefined);
   const note =

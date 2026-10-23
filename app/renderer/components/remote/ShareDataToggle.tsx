@@ -1,6 +1,6 @@
 // This machine's sharing switch, written through the host as it flips.
 // Off, the account's other devices see it as not sharing, with nothing
-// on it, while the mirrors this machine asks for keep working.
+// on it, and a mirror into it pauses until it is back on.
 import { useSetSharing, useSharing } from "@/hooks/account/useSharing";
 import { ShareDataToggleView } from "@shigomori/ui/views/remote/ShareDataToggleView.tsx";
 

@@ -2,12 +2,10 @@ import { pluralize } from "../words.ts";
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import { broughtPaths } from "../mirrorIgnores.ts";
-import { DeviceIdSchema } from "../hubProtocol.ts";
 import {
   type MirrorIgnoreMode,
   MirrorIgnoreModeSchema,
   MirrorIgnoresSchema,
-  SyncCloneIntoSchema,
   SyncLandingRefSchema,
   SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResultSchema,
@@ -25,9 +23,9 @@ import { errorMessageOf } from "../errors.ts";
 
 // A mirror always runs on the device holding the original. startTo sends
 // the worktree through the ordinary move and opens the mirror on top, so
-// git agrees on both sides from the first second. Asked for from the
-// copy's side, startFrom leaves an invitation behind so the peer's send,
-// stream and git half land here whatever this device's switch says.
+// git agrees on both sides from the first second. startFrom is the same
+// asked for from the copy's side, whose switches must let the peer's
+// send, stream and git half in.
 
 // Mutagen's ids, pinned loosely.
 const MirrorSessionIdSchema = Schema.String.check(
@@ -345,6 +343,21 @@ export function mirrorEngineBlocker(
   }
 }
 
+// "Mirror here" has the peer write into this device, which both of this
+// device's switches must let it do.
+export function mirrorHereBlocker(own: {
+  readonly acceptsCommands: boolean;
+  readonly sharing: boolean;
+}): string | undefined {
+  if (!own.sharing) {
+    return "Turn on “Share with other devices” on this device's account page to mirror here.";
+  }
+  if (!own.acceptsCommands) {
+    return "Turn on “Allow control from other devices” on this device's account page to mirror here.";
+  }
+  return undefined;
+}
+
 const MirrorListResultSchema = strict(
   Schema.Struct({
     daemon: MirrorDaemonStatusSchema,
@@ -365,15 +378,13 @@ const MirrorStartToPayloadSchema = strict(
 );
 export type MirrorStartToPayload = typeof MirrorStartToPayloadSchema.Type;
 
-// The source named as a pull names it; the identity and clone place are
-// what the invitation holds the landing to.
+// The source named as a pull names it.
 const pullFields = SyncPullWorktreePayloadSchema.struct.fields;
 const MirrorStartFromPayloadSchema = strict(
   Schema.Struct({
     sourceDeviceId: pullFields.sourceDeviceId,
     sourceProjectId: pullFields.sourceProjectId,
     sourceWorktreeId: pullFields.sourceWorktreeId,
-    sourceIdentity: pullFields.sourceIdentity,
     runSetup: pullFields.runSetup,
     cloneInto: pullFields.cloneInto,
     ignoreMode: MirrorIgnoreModeSchema,
@@ -560,24 +571,6 @@ export const MirrorEventSchema = strict(
 export type MirrorEvent = typeof MirrorEventSchema.Type;
 export const MIRROR_HISTORY_LIMIT = 100;
 
-// What the landing must match for the link to admit the peer's calls.
-const MirrorInviteAskSchema = strict(
-  Schema.Struct({
-    peerDeviceId: DeviceIdSchema,
-    sourceWorktreeId: WorktreeIdSchema,
-    identity: Schema.NonEmptyString,
-    cloneInto: Schema.optional(SyncCloneIntoSchema),
-  }),
-);
-export type MirrorInviteAsk = typeof MirrorInviteAskSchema.Type;
-
-export const MirrorInviteSchema = strict(
-  Schema.Struct({
-    ...MirrorInviteAskSchema.struct.fields,
-    copy: Schema.optional(MirrorWorktreePayloadSchema),
-  }),
-);
-export type MirrorInvite = typeof MirrorInviteSchema.Type;
 const MirrorHistoryPayloadSchema = strict(
   Schema.Struct({
     localWorktreeId: WorktreeIdSchema,
@@ -618,14 +611,6 @@ export const mirrorContract = defineContract(
     gated: true,
     grant: "changeCode",
   }),
-  // Drops the invitation for a copy no longer mirrored. Invitable: the
-  // invited runner is exactly who says so.
-  invoke("release", MirrorWorktreePayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-    invitable: "copy",
-  }),
   invoke("pause", MirrorSessionPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
@@ -646,24 +631,24 @@ export const mirrorContract = defineContract(
     remote: true,
     gated: false,
   }),
+  // The far end of a mirror, two-way so it writes the copy's files too,
+  // or of a move's files step (`transfer`).
   invoke("openStream", MirrorOpenStreamPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
-    grant: "browseFiles",
-    invitable: "copy",
+    grant: "changeCode",
   }),
   // Gated: reading mints the index carrier ref.
   invoke("gitState", MirrorWorktreePayloadSchema, GitStateSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
-    invitable: "copy",
   }),
   invoke(
     "applyGitState",
     MirrorApplyGitStatePayloadSchema,
     MirrorApplyGitStateResultSchema,
-    { remote: true, gated: true, grant: "changeCode", invitable: "copy" },
+    { remote: true, gated: true, grant: "changeCode" },
   ),
   // Carries the list, since a busy mirror fires several times a second;
   // bare when the host has none to send, and a reader re-asks.

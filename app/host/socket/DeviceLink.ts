@@ -11,17 +11,16 @@
 // for the device the ticket was minted for, and every frame after that
 // encrypted. Its hello must name that device, whose key the roster must
 // still hold, and this build's protocol version (modules/link.ts), and
-// only that hello spends the ticket. Until then every other call is refused
-// (PeerAuth). Then a call annotated gated:false runs for
-// the peer, and any other only under the host's live command switch, or
-// as a call the host itself invited (CommandGate). Above both sits the
-// sharing switch: off, every call is refused that was not invited, reads
-// included, and a push reaches a peer only where the host still lets it
-// (SharingGate). A desktop device holds one link: a second hello from it
-// supersedes the first (two app instances on one root). A web device
-// holds one per connection its tabs dial, each with its own pushes and
-// views. Either way a hello with a connection id already held replaces
-// that connection, its own redial.
+// only that hello spends the ticket. Until then every other call is
+// refused (PeerAuth). Then a call annotated gated:false runs for the
+// peer, and any other only under the host's live command switch
+// (CommandGate). Above both sits the sharing switch: off, every call is
+// refused, reads included, and a push reaches a peer only where the
+// host still lets it (SharingGate). A desktop device holds one link: a
+// second hello from it supersedes the first (two app instances on one
+// root). A web device holds one per connection its tabs dial, each with
+// its own pushes and views. Either way a hello with a connection id
+// already held replaces that connection, its own redial.
 //
 // The listener sits on every interface (and behind the tunnel), so it
 // is written to be hostile-safe: an inbound frame cap, an Origin gate,
@@ -166,11 +165,6 @@ export type WsServerTicketAuth = {
   // is the whole verdict. Read at every call and every channel write,
   // so flipping it takes effect without a reconnect.
   isCommandGranted(): boolean;
-  // The switch's one exception: a gated call this host asked the peer
-  // to make (a mirror it invited, host/mirror/invites.ts), admitted
-  // whatever the switch says, scoped by the call's payload. A byte
-  // channel such a call attaches survives the switch turning off.
-  isInvited?(peerDeviceId: string, channel: string, input: unknown): boolean;
 };
 
 // The sharing switch as the device link reads it (SharingGate). The
@@ -178,11 +172,7 @@ export type WsServerTicketAuth = {
 type LinkSharing = Pick<
   Sharing.Sharing["Service"],
   "current" | "now" | "changes"
-> & {
-  // The pushes a peer still hears while it is off, beside
-  // sharing:changed: what a mirror this host invited follows.
-  readonly seesPush: (peerDeviceId: string, payload: unknown) => boolean;
-};
+>;
 
 // The calls the shell makes of its host (modules/session.ts), which no
 // other caller on the loopback may.
@@ -639,15 +629,14 @@ export const make = (options: {
             return { deviceId: opts.deviceId, appVersion: opts.appVersion };
           });
 
-        // The bytes the switches gave: gone the moment either is off,
-        // the ones an invited call opened aside. Dropped as the switch
-        // turns (below), and again at a read or write, for a channel a
-        // call attached as it turned.
+        // The bytes the switches gave: gone the moment either is off.
+        // Dropped as the switch turns (below), and again at a read or
+        // write, for a channel a call attached as it turned.
         const underSwitch = (connection: Connection) =>
           Effect.gen(function* () {
             const shared = yield* sharingNow;
             if (!shared || !auth.isCommandGranted()) {
-              connection.channels.dropUninvited();
+              connection.channels.dropAll();
             }
           });
 
@@ -700,20 +689,11 @@ export const make = (options: {
         };
 
         // What of the host's pushes on `channel` this peer hears while
-        // sharing is off: the switches, and what a mirror the host
-        // invited follows.
-        const heard = (connection: Connection, channel: string) =>
+        // sharing is off: the switches alone.
+        const heard = (channel: string) =>
           sharing === undefined || SWITCHES.has(channel)
             ? (pushes: Stream.Stream<unknown>) => pushes
-            : Stream.filterEffect((payload: unknown) =>
-                Effect.map(
-                  sharing.current,
-                  (on) =>
-                    on ||
-                    (connection.deviceId !== null &&
-                      sharing.seesPush(connection.deviceId, payload)),
-                ),
-              );
+            : Stream.filterEffect(() => sharing.current);
 
         // A push: the host's own when it is one every peer may hear
         // (annotated `remote`), and the ones for this peer alone.
@@ -724,9 +704,7 @@ export const make = (options: {
               Effect.map(connectionOf(client.id), (connection) =>
                 Stream.merge(
                   toEveryPeer
-                    ? hostPushes
-                        .stream(channel)
-                        .pipe(heard(connection, channel))
+                    ? hostPushes.stream(channel).pipe(heard(channel))
                     : Stream.empty,
                   Stream.fromPubSub(connection.pushes).pipe(
                     Stream.filter((entry) => entry.channel === channel),
@@ -802,112 +780,87 @@ export const make = (options: {
           }),
         );
 
-        const commandGate = Layer.succeed(
-          CommandGate,
-          (effect, { rpc, payload }) =>
-            Effect.gen(function* () {
-              // The loopback's callers command this machine as its owner.
-              if (local) return yield* effect;
-              const peer = yield* LinkPeer;
-              // Only an explicit gated:false is a read. A missing
-              // annotation is gated like a command.
-              if (annotation(rpc as ContractCall, Gated) === false) {
-                return yield* effect;
-              }
-              if (
-                peer.deviceId !== undefined &&
-                auth.isInvited?.(peer.deviceId, channelOf(rpc), payload) ===
-                  true
-              ) {
-                return yield* effect.pipe(
-                  Effect.provideService(LinkPeer, {
-                    ...peer,
-                    channels: {
-                      ...peer.channels,
-                      attach: (channelId, endpoint) =>
-                        peer.channels.attach(channelId, endpoint, {
-                          invited: true,
-                        }),
-                    },
-                  }),
+        const commandGate = Layer.succeed(CommandGate, (effect, { rpc }) =>
+          Effect.gen(function* () {
+            // The loopback's callers command this machine as its owner.
+            if (local) return yield* effect;
+            const peer = yield* LinkPeer;
+            // Only an explicit gated:false is a read. A missing
+            // annotation is gated like a command.
+            if (annotation(rpc as ContractCall, Gated) === false) {
+              return yield* effect;
+            }
+            // Subscribed before the switch is read, so a flip in
+            // between is heard: a call or a view under way ends as the
+            // switch turns off, and what it set going (a script's
+            // console) reaches the peer only while it is on.
+            return yield* Effect.scoped(
+              Effect.gen(function* () {
+                const pushes = yield* hostPushes.subscribe;
+                if (!auth.isCommandGranted()) {
+                  return yield* new CommandRefusedError();
+                }
+                const off = pushes.pipe(
+                  Stream.filter(
+                    (published) =>
+                      published.channel === COMMAND_ACCESS_CHANGED &&
+                      !auth.isCommandGranted(),
+                  ),
+                  Stream.runHead,
+                  Effect.andThen(Effect.fail(new CommandRefusedError())),
                 );
-              }
-              // Subscribed before the switch is read, so a flip in
-              // between is heard: a call or a view under way ends as the
-              // switch turns off, and what it set going (a script's
-              // console) reaches the peer only while it is on.
-              return yield* Effect.scoped(
-                Effect.gen(function* () {
-                  const pushes = yield* hostPushes.subscribe;
-                  if (!auth.isCommandGranted()) {
-                    return yield* new CommandRefusedError();
-                  }
-                  const off = pushes.pipe(
-                    Stream.filter(
-                      (published) =>
-                        published.channel === COMMAND_ACCESS_CHANGED &&
-                        !auth.isCommandGranted(),
-                    ),
-                    Stream.runHead,
-                    Effect.andThen(Effect.fail(new CommandRefusedError())),
-                  );
-                  return yield* Effect.raceFirst(
-                    effect.pipe(
-                      Effect.provideService(LinkPeer, {
-                        ...peer,
-                        notify: (module, key, said) => {
-                          if (auth.isCommandGranted()) {
-                            peer.notify(module, key, said);
-                          }
-                        },
-                      }),
-                    ),
-                    off,
-                  );
-                }),
-              );
-            }),
+                return yield* Effect.raceFirst(
+                  effect.pipe(
+                    Effect.provideService(LinkPeer, {
+                      ...peer,
+                      notify: (module, key, said) => {
+                        if (auth.isCommandGranted()) {
+                          peer.notify(module, key, said);
+                        }
+                      },
+                    }),
+                  ),
+                  off,
+                );
+              }),
+            );
+          }),
         );
 
-        const sharingGate = Layer.succeed(
-          SharingGate,
-          (effect, { rpc, payload }) =>
-            Effect.gen(function* () {
-              const peer = yield* LinkPeer;
-              const tag = channelOf(rpc);
-              if (
-                tag.startsWith("link:") ||
-                isPush(rpc as ContractCall) ||
-                (peer.deviceId !== undefined &&
-                  auth.isInvited?.(peer.deviceId, tag, payload) === true)
-              ) {
-                return yield* effect;
-              }
-              if (sharing === undefined || !(yield* sharing.current)) {
-                return yield* new NotSharingError();
-              }
-              const shared = sharing;
-              // A call or a view under way ends as the switch turns off,
-              // and what it set going reaches the peer only while it is on.
-              const off = shared.changes.pipe(
-                Stream.filter((on) => !on),
-                Stream.runHead,
-                Effect.andThen(Effect.fail(new NotSharingError())),
-              );
-              return yield* Effect.raceFirst(
-                effect.pipe(
-                  Effect.provideService(LinkPeer, {
-                    ...peer,
-                    notify: (module, key, said) => {
-                      if (shared.now()) {
-                        peer.notify(module, key, said);
-                      }
-                    },
-                  }),
-                ),
-                off,
-              );
-            }),
+        const sharingGate = Layer.succeed(SharingGate, (effect, { rpc }) =>
+          Effect.gen(function* () {
+            const peer = yield* LinkPeer;
+            if (
+              channelOf(rpc).startsWith("link:") ||
+              isPush(rpc as ContractCall)
+            ) {
+              return yield* effect;
+            }
+            if (sharing === undefined || !(yield* sharing.current)) {
+              return yield* new NotSharingError();
+            }
+            const shared = sharing;
+            // A call or a view under way ends as the switch turns off,
+            // and what it set going reaches the peer only while it is on.
+            const off = shared.changes.pipe(
+              Stream.filter((on) => !on),
+              Stream.runHead,
+              Effect.andThen(Effect.fail(new NotSharingError())),
+            );
+            return yield* Effect.raceFirst(
+              effect.pipe(
+                Effect.provideService(LinkPeer, {
+                  ...peer,
+                  notify: (module, key, said) => {
+                    if (shared.now()) {
+                      peer.notify(module, key, said);
+                    }
+                  },
+                }),
+              ),
+              off,
+            );
+          }),
         );
 
         yield* RpcServer.make(group, {
@@ -1176,7 +1129,7 @@ export const make = (options: {
             Stream.runForEach(() =>
               Effect.sync(() => {
                 for (const connection of connections.values()) {
-                  connection.channels.dropUninvited();
+                  connection.channels.dropAll();
                 }
               }),
             ),
@@ -1314,7 +1267,6 @@ export const make = (options: {
 export const layer = (options: {
   readonly registrar: LinkRegistrar;
   readonly auth: WsServerTicketAuth;
-  readonly seesPush: LinkSharing["seesPush"];
   readonly services: LateServices;
 }) =>
   Layer.effect(
@@ -1329,7 +1281,6 @@ export const layer = (options: {
           current: sharing.current,
           now: sharing.now,
           changes: sharing.changes,
-          seesPush: options.seesPush,
         },
       });
     }),

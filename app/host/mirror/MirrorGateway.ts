@@ -25,6 +25,10 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { createServer, type Socket } from "node:net";
+import {
+  isNoDirectConnectionError,
+  isPeerRefusal,
+} from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import * as PeerReach from "@host/ipc/PeerReach";
@@ -206,9 +210,16 @@ const make = Effect.gen(function* () {
             socket.write("ok\n");
           },
           onOpenFailed: (error) => {
-            log.warn(
-              `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorWordsOf(error)}`,
-            );
+            // The peer turning this device away or out of reach is a
+            // mirror paused or waiting, which the engine asks again
+            // about every 15 s for as long as it lasts, or a move's
+            // files step failing, which the move reports itself: no
+            // news.
+            if (!isPeerRefusal(error) && !isNoDirectConnectionError(error)) {
+              log.warn(
+                `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorWordsOf(error)}`,
+              );
+            }
             socket.write(`error ${errorWordsOf(error).replace(/\n/g, " ")}\n`);
           },
           onClosed: () => {

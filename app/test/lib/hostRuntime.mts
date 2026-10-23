@@ -32,6 +32,7 @@ import * as Scripts from "../../host/lib/Scripts.ts";
 import * as ScriptRuns from "../../host/lib/scripts/ScriptRuns.ts";
 import * as ScriptChanges from "../../host/lib/scripts/ScriptChanges.ts";
 import * as Terminals from "../../host/lib/terminals/Terminals.ts";
+import * as HostAccount from "../../host/lib/HostAccount.ts";
 import * as Sharing from "../../host/lib/Sharing.ts";
 import * as Moves from "../../host/lib/sync/Moves.ts";
 import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
@@ -115,6 +116,8 @@ const runtime = ManagedRuntime.make(
         Villagers.deviceLayer,
         Views.layer,
         Sharing.layer({ announce: () => {} }),
+        // Unreported, as the host starts.
+        HostAccount.layer,
         Moves.layer,
         // No fetches behind a proof's back.
         Layer.succeed(

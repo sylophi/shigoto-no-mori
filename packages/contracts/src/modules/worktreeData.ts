@@ -14,13 +14,12 @@ export const worktreeDataContract = defineContract(
   "worktreeData",
   "host",
   // A mirror into this device reads its copy's description here
-  // (host/lib/sync/worktreeDescription.ts), invited past the sharing
-  // switch.
+  // (host/lib/sync/worktreeDescription.ts).
   invoke(
     "read",
     ReadWorktreeDataPayloadSchema,
     Schema.NullOr(ShigomoriWorktreeDataSchema),
-    { remote: true, gated: false, invitable: "copy" },
+    { remote: true, gated: false },
   ),
   invoke("patchPorts", PatchWorktreePortsPayloadSchema, VoidSchema, {
     tracksProjectUsage: true,
@@ -35,6 +34,5 @@ export const worktreeDataContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
-    invitable: "copy",
   }),
 );

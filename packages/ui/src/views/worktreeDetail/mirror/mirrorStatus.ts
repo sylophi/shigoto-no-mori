@@ -1,17 +1,21 @@
 // One line of truth about a mirror session, shared by the header
 // pill, the dialogs and the sidebar row so every surface ranks the
 // same news the same way: a stop under way, a runner out of reach or
-// restarting (the session is then its last word), a pause, a halt, a
-// lost link, a stored error, then the git half's verdict, then
-// conflicts, then problems, then the ordinary lifecycle. The label is
-// one or two words. The surfaces add "mirror" or the peer's name
-// themselves.
+// restarting (the session is then its last word), a person's pause, a
+// halt, the copy's device turning the mirror away, a lost link, a
+// stored error, then the git half's verdict, then conflicts, then
+// problems, then the ordinary lifecycle. The label is one or two words.
+// The surfaces add "mirror" or the peer's name themselves.
 import {
   isHaltedStatus,
   type MirrorDaemonStatus,
   type MirrorSession,
   type MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
+import {
+  type CopySwitchOff,
+  mirrorPausedUntil,
+} from "../../../lib/commandAccessCopy.ts";
 import type { StatusTone } from "../../../primitives/status-dot.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 
@@ -65,6 +69,9 @@ export type MirrorLook = {
   // Set only by the conflict branch, which is the one chip with a
   // list behind it (MirrorConflictsView.tsx).
   showConflicts?: boolean;
+  // Set by the two pauses, a person's and the copy's device's, under
+  // which the engine reports no files and git off.
+  paused?: boolean;
 };
 
 const look = (
@@ -87,12 +94,14 @@ const HALT_DETAIL: Record<string, string> = {
 
 // What the surface knows beside the session: the runner's reach (a
 // peer runner with no session up leaves only its last list, cached),
-// and its engine's state (a restarting engine lists its last sessions,
-// host/mirror/sessions.ts mirrorList).
+// its engine's state (a restarting engine lists its last sessions,
+// host/mirror/sessions.ts mirrorList), and a switch that is off on the
+// device holding the copy, which turns the mirror away until it is on.
 type MirrorContext = {
   runnerAway?: string;
   engine?: MirrorDaemonStatus;
   engineFailure?: string;
+  copyOff?: { device: string; off: CopySwitchOff };
 };
 
 export function describeMirror(
@@ -131,7 +140,9 @@ export function describeMirror(
   if (context.engine !== undefined && context.engine !== "running") {
     return look("amber", "Restarting", "the mirror engine is restarting", true);
   }
-  if (session.paused) return look("slate", "Paused");
+  if (session.paused) return { ...look("slate", "Paused"), paused: true };
+  // A halt waits on a person, whatever the switch: it doesn't pick up
+  // by itself.
   if (isHaltedStatus(session.status)) {
     return look(
       "rose",
@@ -139,15 +150,28 @@ export function describeMirror(
       HALT_DETAIL[session.status] ?? session.statusText,
     );
   }
-  // A lost link outranks what it causes: the engine's connect error,
-  // and the git half's failure to reach the other side, are both the
-  // other device being away, which says itself better as a reconnect.
+  // The engine's error for the cut stream and the git half's off both
+  // follow from it, and it resumes by itself once the switch is on.
+  if (context.copyOff !== undefined) {
+    return {
+      ...look(
+        "slate",
+        "Paused",
+        mirrorPausedUntil(context.copyOff.device, context.copyOff.off),
+      ),
+      paused: true,
+    };
+  }
+  // A lost link outranks what it causes: the engine's error for the cut
+  // stream, and the git half's failure to reach the other side, are both
+  // the other device being away, which says itself better as a
+  // reconnect than in the engine's transport words.
   if (
     session.status === "connecting-local" ||
     session.status === "connecting-remote" ||
     session.status === "disconnected"
   ) {
-    return look("amber", "Reconnecting", session.lastError ?? lifecycle, true);
+    return look("amber", "Reconnecting", lifecycle, true);
   }
   if (session.lastError) return look("rose", "Error", session.lastError);
   // The git half's verdict outranks file-level news: a diverged or

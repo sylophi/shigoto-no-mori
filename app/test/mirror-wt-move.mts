@@ -3,23 +3,19 @@
 // (packages/engine/src/WtFolder.ts). A worktree's id is a hash of its
 // path, so the move gives the copy a new one while the device running
 // the mirror still names it by its v2 id. Starts from a v2 data
-// dir: a project with the copy under the v2 `worktrees/` root, and the
-// copy's landed invitation in file-sync/mirror-invites.json naming the
-// v2 id. The engine comes up on it as a first v3 start does (the
-// store's import, then the move), and the copy's device serves the
-// runner's calls over a REAL direct wire with its command and sharing
-// switches off, so the invitation alone admits them. Asserts:
+// dir: a project with the copy under the v2 `worktrees/` root. The
+// engine comes up on it as a first v3 start does (the store's import,
+// then the move), and the copy's device serves the runner's calls over
+// a REAL direct wire. Asserts:
 //   - the start moved the copy into wt/,
-//   - the invitation loads under the copy's new id, in the store too,
-//     and the boot's check against the listed worktrees keeps it,
 //   - a stream the runner's daemon opens by the v2 id, through the REAL
 //     gateway, is served from the copy's new folder and listed under its
 //     new id,
 //   - the git follower, on a session naming the v2 id, reads the copy
 //     and reports synced, never the copy gone,
-//   - a rename while the app runs carries the invitation along, and an
-//     id a live worktree has is never taken for the one its old
-//     worktree moved to.
+//   - a rename while the app runs leaves every id the copy had naming
+//     it, and an id a live worktree has is never taken for the one its
+//     old worktree moved to.
 //
 // The runner's copy-gone check (sessions.ts copyIsGone) still reads the
 // peer's list, which names the copy by its new id only; the follower
@@ -31,10 +27,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { connect as netConnect } from "node:net";
 import { join } from "node:path";
 import { Duplex, PassThrough } from "node:stream";
-import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import * as MirrorInvites from "@shigomori/engine/MirrorInvites";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -50,12 +44,6 @@ import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import * as MirrorGateway from "@host/mirror/MirrorGateway";
 import { makeGitFollower } from "@host/mirror/gitFollow";
-import {
-  listMirrorInvites,
-  loadMirrorInvites,
-  mirrorInviteAdmits,
-  reconcileMirrorInvites,
-} from "@host/mirror/invites";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import { listMirrorServing } from "@host/mirror/serving";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
@@ -70,12 +58,10 @@ import {
 import { standInDeviceId, standInPeers } from "./lib/hostStandIns.mts";
 import { runHost } from "./lib/hostRuntime.mts";
 import { rawMirrorSession } from "./lib/mirrorFakes.mts";
-import { onSandboxEngine } from "./lib/sandboxEngine.mts";
 import { hostEngine } from "./lib/smBinary.mts";
 
 const COPY_PROJECT = "copy-project";
 const RUNNER_PROJECT = "runner-project";
-const ORIGINAL = "0123456789ab";
 
 const fixture = cliSandbox("sm-mirror-wt-move-");
 const { sandbox, dataDir, git, gitOut } = fixture;
@@ -133,7 +119,7 @@ const writeJson = (path: string, value: unknown) => {
 };
 
 beforeAll(async () => {
-  // ---- The v2 data dir: the copy under worktrees/, its invitation by its v2 id ----
+  // ---- The v2 data dir: the copy under worktrees/ ----
   repo = await fixture.initRepo("repo");
   await fixture.commitFile(repo, "readme.txt", "base\n", "base");
   v2Path = join(dataDir, "worktrees", "repo", "feature");
@@ -161,31 +147,20 @@ beforeAll(async () => {
       { id: RUNNER_PROJECT, name: "runner-repo", path: runnerRepo },
     ],
   });
-  writeJson(join(dataDir, "file-sync", "mirror-invites.json"), {
-    invites: [
-      {
-        peerDeviceId: DIALER,
-        sourceWorktreeId: ORIGINAL,
-        identity: "repo-identity",
-        copy: { projectId: COPY_PROJECT, worktreeId: v2Id },
-      },
-    ],
-  });
 
   // ---- The first v3 start: the store's import and the move ----
   ({ close: closeEngine } = await hostEngine(dataDir));
 
-  // ---- The copy's device: commands and sharing off, the invitation its one exception ----
+  // ---- The copy's device, which lets this one in ----
   let listener: DirectWire["listener"];
   ({ listener, toListener } = await bootDirectWire(track, {
     provide: fileSync,
-    isInvited: mirrorInviteAdmits,
     contracts: [
       [worktreesContract, worktreesHandlers],
       [mirrorContract, mirrorHandlers],
     ],
   }));
-  listener.setSharing(false);
+  listener.setAccepts(true);
   standInPeers({
     transportFor: () => toListener.transport,
     channelsFor: () => toListener.channels,
@@ -203,32 +178,6 @@ it("the first v3 start moved the copy into wt/", async () => {
   const listed = await gitOut(repo, "worktree", "list", "--porcelain");
   assert.ok(listed.includes(`worktree ${wtPath}\n`), listed);
   assert.ok(!existsSync(v2Path));
-});
-
-it("the invitation loads under the copy's new id, and the boot's check keeps it", async () => {
-  await runHost(loadMirrorInvites);
-  // As the mirror layer checks the landed ones at boot.
-  await runHost(
-    reconcileMirrorInvites(({ projectId, worktreeId }) =>
-      findProjectAndWorktree(projectId, worktreeId).pipe(
-        Effect.as(true),
-        Effect.catch((error) => Effect.succeed(!isEntityGoneError(error))),
-      ),
-    ),
-  );
-  const copy = { projectId: COPY_PROJECT, worktreeId: newId };
-  assert.deepEqual(
-    listMirrorInvites().map((invite) => invite.copy),
-    [copy],
-  );
-  const stored = await onSandboxEngine(
-    Effect.flatMap(MirrorInvites.MirrorInvites, (store) => store.load),
-  );
-  assert.deepEqual(
-    stored.map((invite) => invite.copy),
-    [copy],
-    "the next start reads it under the new id",
-  );
 });
 
 it("a stream the runner opens by the v2 id is served from the copy's new folder", async () => {
@@ -320,9 +269,9 @@ it("the git follower reads the copy by the v2 id and reports synced, never the c
   assert.deepEqual(gone, []);
 });
 
-it("a rename while the app runs carries the invitation, and a live id is never taken for the one its old worktree moved to", async () => {
-  // The copy renamed here: its invitation follows, and the peer's calls
-  // by either id it had still name it.
+it("a rename while the app runs leaves every id the copy had naming it, and a live id is never taken for the one its old worktree moved to", async () => {
+  // The copy renamed here: the peer's calls by any id it had still name
+  // it.
   const renamed = await runHost(
     worktreesHandlers.rename({
       projectId: COPY_PROJECT,
@@ -330,19 +279,11 @@ it("a rename while the app runs carries the invitation, and a live id is never t
       name: "renamed",
     }),
   );
-  assert.deepEqual(
-    listMirrorInvites().map((invite) => invite.copy?.worktreeId),
-    [renamed.id],
-  );
   for (const worktreeId of [v2Id, newId, renamed.id]) {
-    assert.equal(
-      mirrorInviteAdmits(DIALER, "mirror:gitState", {
-        projectId: COPY_PROJECT,
-        worktreeId,
-      }),
-      true,
-      worktreeId,
+    const { worktree } = await runHost(
+      findProjectAndWorktree(COPY_PROJECT, worktreeId),
     );
+    assert.equal(worktree.id, renamed.id, worktreeId);
   }
   // A new worktree where the copy was, its folder then deleted by hand:
   // git still lists it, so its id is its own, not the renamed copy's.
