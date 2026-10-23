@@ -3,15 +3,18 @@
 3.0's hub turns away every build below its protocol, and a 2.x device's
 credential has no device key, so the production hub, the web client and
 every installed app move to 3.0 together. The release goes out in this
-order. The `wrangler` commands run from `hub/` as `pnpm exec wrangler`.
+order. The hub's commands run from `hub/`, `wrangler` as
+`pnpm exec wrangler`.
 
 1. The D1 migrations on a copy of production: `wrangler d1 export
    shigomori-hub --remote --output <file>`, loaded with `wrangler d1
-   execute shigomori-hub --local --file <file>` and migrated with
-   `wrangler d1 migrations apply shigomori-hub --local`. It passes
-   when every device row is kept with `public_key` added empty. The
-   export prints a presigned link to it, valid an hour; keep that line
-   out of anything shared.
+   execute shigomori-hub --local --persist-to <dir> --file <file>` and
+   migrated with `wrangler d1 migrations apply shigomori-hub --local
+   --persist-to <dir>`, where `<dir>` is an empty folder (a copy left
+   by an earlier load already has the tables). It passes when every
+   device row is kept with `public_key` NULL. The export prints a
+   presigned link to it, valid an hour; keep that line out of anything
+   shared.
 2. The release published from main's tip, flagged as a prerelease. A
    2.x updater passes over a prerelease, so no device runs 3.0 before
    its hub does: one that enrolled on the 2.x hub would keep a key the
@@ -67,9 +70,9 @@ each repo's `.git/worktrees/<name>/gitdir`). With 3.0 quit:
    `git -C <project> worktree repair -- <from_path>`, then the copy on
    the drive deleted). A worktree made after the update isn't in the
    backup, and 2.x doesn't know it.
-2. Copy the backup back into the data folder, all but its `worktrees/`:
-   step 1 put the live worktrees there, and the backup's copies are
-   older.
+2. Copy the backup back into the data folder, all but its top-level
+   `worktrees/`: step 1 put the live worktrees there, and the backup's
+   copies are older.
 3. Set `store.db` and its `-wal` and `-shm` aside. A store whose import
    is recorded never imports again, so what 2.x writes after the
    restore would never reach a later 3.0.
