@@ -126,17 +126,17 @@ const catalog = (names: Names) => {
         "worktrees dirty <capture|apply> [<name>] [-f]",
         "Snapshot or restore uncommitted changes",
         "The device-sync primitive. capture commits the worktree's dirty state -- untracked files " +
-          "included, ignored files excluded, staged and unstaged flattened together -- to a hidden " +
+          "included, ignored files excluded, what is staged kept apart -- to a hidden " +
           "ref (refs/shigomori/dirty/<id>, one per worktree, overwritten each time) without touching " +
           "the real index; on a clean worktree it just removes any stale capture. apply restores a " +
-          "capture, unstaged, onto a clean worktree whose HEAD matches the capture's parent, then " +
+          "capture, staged and unstaged as they were, onto a clean worktree whose HEAD matches the capture's parent, then " +
           "deletes the ref. -f skips apply's clean check only. git still refuses where local changes " +
           "overlap the capture, and a HEAD mismatch always refuses (sync the branch first).",
       ],
       [
         "worktrees send [<name>] [--to <device>]",
         "Move a worktree to another device",
-        "The app's \"Transplant to…\". --to takes a device's name, the start of it, or its id, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it; a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. Left off, --to prefers a device that holds the repo. Needs the app open, and finishes there even if interrupted. Exits 3 when the worktree landed but something after it didn't hold.",
+        "The app's \"Transplant to…\". --to takes a device's name, the start of it, or its id, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it; a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open, and finishes there even if interrupted. Exits 3 when the worktree landed but something after it didn't hold.",
       ],
       [
         "worktrees bring <worktree> [--from <device>]",

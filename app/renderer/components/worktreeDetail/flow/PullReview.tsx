@@ -45,6 +45,7 @@ import {
   SourceCardView,
 } from "@shigomori/ui/views/worktreeDetail/flow/PullReviewView.tsx";
 import {
+  cloneRefusal,
   type Landing,
   LANDS_HERE,
 } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
@@ -229,7 +230,7 @@ function PullReviewFooter({
   const { refusal } = useLocalCollision(target?.project, worktree, landing);
   return (
     <PullReviewFooterView
-      refusal={refusal}
+      refusal={refusal ?? cloneRefusal(target?.clone)}
       unpicked={target === null}
       {...props}
     />

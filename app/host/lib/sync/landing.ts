@@ -59,13 +59,14 @@ class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
   }
 }
 
-// The clone landed, but could not be added as a project.
+// The checkout is there, cloned or found, but could not be added as a
+// project.
 class CloneUnregisteredError extends Schema.TaggedError<CloneUnregisteredError>()(
   "CloneUnregisteredError",
   { path: Schema.String, reason: Schema.String },
 ) {
   override get message(): string {
-    return `Cloned into ${this.path}, but couldn't add it as a project: ${this.reason}`;
+    return `${this.path} is there, but couldn't be added as a project: ${this.reason}`;
   }
 }
 
@@ -191,7 +192,8 @@ export const landWorktree = (
 
     // 1. The landing project, re-resolved by identity from disk, or made
     // now: with none, and a place named for one, the repo is cloned from
-    // the source first (cloneFromPeer.ts) and the copy lands in that. A
+    // the source first (cloneFromPeer.ts), or the checkout of it already
+    // there is registered, and the copy lands in that. A
     // checkout this device has wins over the place named: the dialog
     // that named it was reading a stale list, and a second clone of a
     // repo already here is not what anyone asked for.

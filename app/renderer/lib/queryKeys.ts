@@ -243,6 +243,12 @@ function buildQueryKeys(deviceId: string) {
       host("githubCli", "pullRequests", projectId, "candidates"),
 
     fsListDirectory: (path: string) => host("fs", "listDirectory", path),
+    // What is at the folder a move would clone into (sync:cloneDestination).
+    cloneDestination: (
+      parentDir: string,
+      name: string,
+      identity: string | null,
+    ) => host("sync", "cloneDestination", parentDir, name, identity),
     fsIsGitRepo: (path: string) => host("fs", "isGitRepo", path),
 
     // `ruleIgnored` is another verdict on the same folder, so it keys

@@ -162,6 +162,23 @@ export const SyncCloneIntoSchema = strict(
 );
 export type SyncCloneInto = typeof SyncCloneIntoSchema.Type;
 
+// What is at the folder a move would clone into, read before it starts:
+// nothing yet, a checkout of the same repo (which the landing registers
+// and lands in), or anything else.
+const SyncCloneDestinationPayloadSchema = strict(
+  Schema.Struct({
+    cloneInto: SyncCloneIntoSchema,
+    // The repo's identity on the source. Null never matches.
+    identity: Schema.NullOr(Schema.String),
+  }),
+);
+const SyncCloneDestinationSchema = Schema.Literals([
+  "free",
+  "taken",
+  "same-repo",
+]);
+export type SyncCloneDestination = typeof SyncCloneDestinationSchema.Type;
+
 export const SyncPullWorktreePayloadSchema = strict(
   Schema.Struct({
     sourceDeviceId: DeviceIdSchema,
@@ -404,6 +421,13 @@ export const syncContract = defineContract(
     "ignoredPaths",
     SyncIgnoredPathsPayloadSchema,
     SyncIgnoredPathsResultSchema,
+    { remote: true, gated: true, grant: "browseFiles" },
+  ),
+  // Discloses whether a path is there, as fs:listDirectory does.
+  invoke(
+    "cloneDestination",
+    SyncCloneDestinationPayloadSchema,
+    SyncCloneDestinationSchema,
     { remote: true, gated: true, grant: "browseFiles" },
   ),
   invoke(

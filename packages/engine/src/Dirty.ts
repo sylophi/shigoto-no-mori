@@ -7,9 +7,10 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { errnoText } from "./platformErrors.ts";
+import { errnoText, isNotFound } from "./platformErrors.ts";
 import { messageOf } from "./errorDocument.ts";
 import { entryExists } from "./entries.ts";
 import * as Git from "./Git.ts";
@@ -125,12 +126,14 @@ export class Dirty extends Context.Service<
   {
     // Commits every change, untracked files included, onto HEAD without
     // touching the index or the files, and keeps it under the
-    // worktree's ref. A clean worktree drops any capture it had.
+    // worktree's ref, with what is staged. A clean worktree drops any
+    // capture it had.
     readonly capture: (
       target: DirtyTarget,
     ) => Effect.Effect<Captured, NoHead | CaptureFailed | Git.GitError>;
     // The capture's changes back onto the worktree, which must be on
-    // the commit it was taken on. Untracked files come back untracked.
+    // the commit it was taken on, staged and unstaged as they were.
+    // Untracked files come back untracked.
     readonly apply: (
       target: DirtyTarget,
       options: { readonly force: boolean },
@@ -186,45 +189,74 @@ const make = Effect.gen(function* () {
     const parent = (yield* git
       .run(worktreePath, ["rev-parse", "HEAD"])
       .pipe(Effect.mapError((cause) => new NoHead({ cause })))).trim();
-    // A scratch index, so the worktree's own staging stays as it is.
-    const tree = yield* Effect.scoped(
+    // A scratch index, so the worktree's own staging stays as it is:
+    // what is staged is a copy of the real one's tree, and everything is
+    // HEAD's tree with `add -A` on top.
+    const { tree, staged } = yield* Effect.scoped(
       Effect.gen(function* () {
+        const failed = (cause: PlatformError.PlatformError) =>
+          new CaptureFailed({ reason: errnoText(cause), cause });
         const dir = yield* fs
           .makeTempDirectoryScoped({ prefix: "sm-dirty-" })
+          .pipe(Effect.mapError(failed));
+        const scratch = path.join(dir, "index");
+        const options = { env: { GIT_INDEX_FILE: scratch } };
+        const copied = yield* fs
+          .copyFile(yield* git.gitPath(worktreePath, "index"), scratch)
           .pipe(
-            Effect.mapError(
-              (cause) => new CaptureFailed({ reason: errnoText(cause), cause }),
-            ),
+            Effect.as(true),
+            Effect.catchIf(isNotFound, () => Effect.succeed(false)),
+            Effect.mapError(failed),
           );
-        const options = {
-          env: { GIT_INDEX_FILE: path.join(dir, "index") },
-        };
+        // A worktree git hasn't touched yet has no index, and an index
+        // holding a conflict has no tree: nothing staged moves then.
+        const index = copied
+          ? yield* git
+              .run(worktreePath, ["write-tree"], options)
+              .pipe(Effect.option)
+          : Option.none();
+        // Read afresh, not the copy, whose marks (assume-unchanged,
+        // skip-worktree) would hide an edit from `add -A`.
         yield* git.run(
           worktreePath,
           ["read-tree", "--end-of-options", parent],
           options,
         );
         yield* git.run(worktreePath, ["add", "-A"], options);
-        return (yield* git.run(worktreePath, ["write-tree"], options)).trim();
+        return {
+          tree: (yield* git.run(worktreePath, ["write-tree"], options)).trim(),
+          staged: Option.map(index, (out) => out.trim()),
+        };
       }),
     );
     // Against the commit the tree was built on, which HEAD may have left.
-    if (tree === (yield* git.treeOf(worktreePath, parent))) {
+    const parentTree = yield* git.treeOf(worktreePath, parent);
+    const index = Option.filter(staged, (written) => written !== parentTree);
+    if (tree === parentTree && Option.isNone(index)) {
       yield* git.deleteRef(projectPath, dirtyRef(worktreeId));
       return { captured: false } as const;
     }
-    const commit = (yield* git.run(
-      worktreePath,
-      [
-        "commit-tree",
-        tree,
-        "-p",
-        parent,
-        "-m",
-        `shigomori dirty state ${worktreeId}`,
-      ],
-      { env: IDENTITY },
-    )).trim();
+    const commitTree = (of: string, parents: readonly string[]) =>
+      git
+        .run(
+          worktreePath,
+          [
+            "commit-tree",
+            of,
+            ...parents.flatMap((commit) => ["-p", commit]),
+            "-m",
+            `shigomori dirty state ${worktreeId}`,
+          ],
+          { env: IDENTITY },
+        )
+        .pipe(Effect.map((out) => out.trim()));
+    // What was staged rides as the second parent, as in git stash.
+    const commit = yield* commitTree(tree, [
+      parent,
+      ...(Option.isSome(index)
+        ? [yield* commitTree(index.value, [parent])]
+        : []),
+    ]);
     yield* git.updateRef({
       repo: projectPath,
       ref: dirtyRef(worktreeId),
@@ -305,8 +337,14 @@ const make = Effect.gen(function* () {
         ),
       ),
     );
-    // The changes stay in the files, not in the index.
-    yield* git.run(worktreePath, ["reset", "-q"]);
+    // The index as it was captured: what was staged, else HEAD's.
+    const staged = yield* git.refTip(projectPath, `${commit}^2`);
+    yield* git.run(
+      worktreePath,
+      Option.isSome(staged)
+        ? ["read-tree", "-m", "-i", "--end-of-options", staged.value]
+        : ["reset", "-q"],
+    );
     yield* git.deleteRef(projectPath, dirtyRef(worktreeId)).pipe(Effect.ignore);
     return { commit, changedFiles: changed.length };
   });
