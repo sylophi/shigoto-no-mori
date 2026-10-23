@@ -1561,6 +1561,7 @@ async function fakeSyncPull(
     (entry) => entry.id === input.sourceWorktreeId,
   );
   const name = input.worktreeName ?? sourceWorktree?.name ?? "tender-tanuki";
+  const home = fakeDisks[local.deviceId]?.home ?? "/Users/rin";
   const landed = worktreeFixture({
     ...sourceWorktree,
     // One per source and forest, so two sources land as two worktrees.
@@ -1568,7 +1569,7 @@ async function fakeSyncPull(
     projectId: project.id,
     name,
     branch: input.landBranch ?? input.branch,
-    path: `/Users/rin/.sm/wt/${project.name}/${name}`,
+    path: `${home}/.sm/wt/${project.name}/${name}`,
     ahead: sourceWorktree?.ahead ?? 0,
     behind: 0,
     changedCount: sourceWorktree?.changedCount ?? 0,
