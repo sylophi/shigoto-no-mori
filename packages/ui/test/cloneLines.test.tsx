@@ -3,8 +3,8 @@
 // folder the clone would take (sync:cloneDestination) is on the review
 // before Start.
 //   1. A free folder says the repo is cloned first, and Start goes.
-//   2. A taken one tints the path beside Change, and the footer says it
-//      already exists, with Start held.
+//   2. A taken one tints the path beside Change and says something else
+//      is there, and the footer says it already exists, with Start held.
 //   3. A checkout of the same repo there says the worktree lands in it,
 //      and Start goes.
 import assert from "node:assert/strict";
@@ -75,6 +75,10 @@ it("a free folder is cloned into, and Start goes", () => {
 it("a taken folder is tinted and named in the footer, and Start waits", () => {
   const { lines, footer } = review("taken");
   assert.match(lines, /text-amber[^"]*"[^>]*>~\/Code\/shigoto-no-mori/);
+  assert.match(
+    text(lines),
+    /Something other than a checkout of shigoto-no-mori is there\./,
+  );
   assert.match(text(footer), /~\/Code\/shigoto-no-mori already exists\./);
   assert.equal(startHeld(footer), true);
 });
