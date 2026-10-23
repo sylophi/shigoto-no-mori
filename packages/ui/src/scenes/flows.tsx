@@ -194,7 +194,7 @@ export function TransplantReviewScene() {
               projectName={MB_SM.name}
               sourceDeviceLabel={MACBOOK.label}
               icon={MACBOOK.icon}
-              home="/Users/rin"
+              home="/Users/rtakeda"
             />
           }
           destination={

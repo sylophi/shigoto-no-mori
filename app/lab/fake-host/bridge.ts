@@ -1798,7 +1798,7 @@ function initCrowd(): void {
     );
     // Every fifth stays on this machine alone, so the projects differ.
     if (shared && i % 5 !== 4) {
-      checkout(macbook, `mb_crowd_${i}`, `/Users/rin/dev/${name}`);
+      checkout(macbook, `mb_crowd_${i}`, `/Users/rtakeda/dev/${name}`);
     }
   });
 }

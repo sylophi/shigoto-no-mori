@@ -388,7 +388,7 @@ const macbookProjects: Project[] = [
   {
     id: "mb_sm",
     name: "shigoto-no-mori",
-    path: "/Users/rin/dev/shigoto-no-mori",
+    path: "/Users/rtakeda/dev/shigoto-no-mori",
     pathExists: true,
     identity: SM_IDENTITY,
     remote: "github.com/sylophi/shigoto-no-mori",
@@ -398,7 +398,7 @@ const macbookProjects: Project[] = [
   {
     id: "mb_df",
     name: "dotfiles",
-    path: "/Users/rin/dotfiles",
+    path: "/Users/rtakeda/dotfiles",
     pathExists: true,
     identity: DF_IDENTITY,
     remote: "github.com/rin/dotfiles",
@@ -415,7 +415,7 @@ const macbookWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "mb_sm",
       name: "shigoto-no-mori",
       branch: "main",
-      path: "/Users/rin/dev/shigoto-no-mori",
+      path: "/Users/rtakeda/dev/shigoto-no-mori",
       isPrimary: true,
       recentCommits: [
         commit(
@@ -432,7 +432,7 @@ const macbookWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "mb_sm",
       name: "gentle-gecko",
       branch: "exp/terrier-sync",
-      path: "/Users/rin/.sm/wt/shigoto-no-mori/gentle-gecko",
+      path: "/Users/rtakeda/.sm/wt/shigoto-no-mori/gentle-gecko",
       createdAt: now - 2 * HOUR,
       ahead: 1,
       changedCount: 7,
@@ -451,14 +451,20 @@ const macbookWorktrees: Record<string, FakeWorktree[]> = {
       id: "c0ffee123456",
       projectId: "mb_sm",
       name: "patient-panda",
-      branch: "exp/wayland-tray",
-      path: "/Users/rin/.sm/wt/shigoto-no-mori/patient-panda",
+      branch: "exp/menu-bar-icon",
+      path: "/Users/rtakeda/.sm/wt/shigoto-no-mori/patient-panda",
       createdAt: now - 8 * DAY,
       shelved: true,
       changedCount: 2,
       lastChangeAt: now - 6 * DAY,
       recentCommits: [
-        commit("9d41a07", "Probe the Wayland tray protocol", 6 * DAY, 31, 4),
+        commit(
+          "9d41a07",
+          "Probe a template image for the menu bar",
+          6 * DAY,
+          31,
+          4,
+        ),
       ],
     }),
   ],
@@ -468,7 +474,7 @@ const macbookWorktrees: Record<string, FakeWorktree[]> = {
       projectId: "mb_df",
       name: "dotfiles",
       branch: "main",
-      path: "/Users/rin/dotfiles",
+      path: "/Users/rtakeda/dotfiles",
       isPrimary: true,
       hasUpstream: true,
       recentCommits: [
@@ -552,22 +558,22 @@ export const fakeDisks: Record<string, FakeDisk> = {
     },
   },
   [MACBOOK_ID]: {
-    home: "/Users/rin",
+    home: "/Users/rtakeda",
     dirs: {
-      "/Users/rin": [
+      "/Users/rtakeda": [
         dir("Downloads"),
         dir("dev"),
         repo("dotfiles"),
         dir("notes"),
       ],
-      "/Users/rin/Downloads": [],
-      "/Users/rin/notes": [],
-      "/Users/rin/dev": [
+      "/Users/rtakeda/Downloads": [],
+      "/Users/rtakeda/notes": [],
+      "/Users/rtakeda/dev": [
         repo("blog"),
         dir("experiments"),
         repo("shigoto-no-mori"),
       ],
-      "/Users/rin/dev/experiments": [repo("zig-raytracer")],
+      "/Users/rtakeda/dev/experiments": [repo("zig-raytracer")],
     },
   },
   [MINI_ID]: {
@@ -697,7 +703,7 @@ export const fakeRunningScripts: Record<string, RunningScript[]> = {
   ],
   [MACBOOK_ID]: [
     {
-      runId: "run-tp-gecko-dev",
+      runId: "run-mb-gecko-dev",
       projectId: "mb_sm",
       worktreeId: "a1b2c3d4e5f6",
       slot: { kind: "package", name: "dev" },
@@ -705,7 +711,7 @@ export const fakeRunningScripts: Record<string, RunningScript[]> = {
       interactive: true,
     },
     {
-      runId: "run-tp-panda-setup",
+      runId: "run-mb-panda-setup",
       projectId: "mb_sm",
       worktreeId: "c0ffee123456",
       slot: { kind: "setup" },
@@ -742,7 +748,7 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
   ],
   [MACBOOK_ID]: [
     {
-      terminalId: "t-tp-gecko-1",
+      terminalId: "t-mb-gecko-1",
       projectId: "mb_sm",
       worktreeId: "a1b2c3d4e5f6",
       openedAt: minutesAgo(95),
