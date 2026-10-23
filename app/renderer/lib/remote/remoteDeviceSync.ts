@@ -374,7 +374,7 @@ function buildEntry(
   } else if (!online.has(info.deviceId)) {
     status = { phase: "stopped" };
   } else {
-    // In the roster but no direct session yet: the host's keeper is
+    // In the roster but no direct session yet: the direct plane's keeper is
     // dialing or backing off toward one. The api is present anyway so
     // a view can stand ready and the invoke that races the landing
     // dial joins it -- and when the dial lands a beat later,

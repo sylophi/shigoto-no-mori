@@ -11,8 +11,8 @@
 // back), or every desktop would redial every open tab forever.
 //
 // The keeper is the only caller of the bridge's dialPeer, so its state
-// and the session cache can't drift. Pure shared code (no node builtins, no
-// electron).
+// and the session cache can't drift. Pure shared code (no node
+// builtins, no electron).
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

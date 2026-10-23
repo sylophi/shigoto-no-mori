@@ -269,8 +269,8 @@ export const make = (
     // One connect attempt: mint a fresh ticket, dial the DO, and treat
     // the first presence envelope as the accept signal (the DO sends it
     // right after accepting, and a rejected ticket never gets one, only
-    // a close). The connection is the supervisor's shape, a probe
-    // only. The socket lives as long as the attempt's scope, and an interrupt
+    // a close). The connection is the supervisor's shape, a probe only.
+    // The socket lives as long as the attempt's scope, and an interrupt
     // (the supervisor stopping) cancels a mint or a half-open socket.
     const dial = (
       opts: HubConnectOpts,

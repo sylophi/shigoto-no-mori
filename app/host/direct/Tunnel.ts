@@ -274,7 +274,7 @@ const KILL_GRACE_MS = 3_000;
 
 // The default readiness probe: a plain HTTPS GET of the tunnel
 // hostname. The direct listener is a ws server, so a non-upgrade GET
-// that actually REACHED it earns an HTTP 426 (or 400) relayed through
+// that actually reached it earns an HTTP 426 (or 400) relayed through
 // the edge. A tunnel the edge cannot route yet answers 5xx (CF 530
 // "no connector") or times out. Dependency-free on purpose: fetch is
 // the platform global.

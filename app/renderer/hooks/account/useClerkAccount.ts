@@ -16,8 +16,9 @@ export const CLERK_SIGN_OUT_KEY = ["clerkSignOut"] as const;
 // ClerkAccountSync to re-enroll. The account half is Clerk's sign-out
 // callback: without one clerk-js navigates away mid-revoke.
 // ClerkAccountSync fires the same signOut off Clerk's announcement, and
-// the handlers' in-flight guard makes it one revoke. With no Clerk session (an
-// expired sign-in) clerk-js skips the callback, so it runs here.
+// the account handlers' in-flight guard makes it one revoke. With no
+// Clerk session (an expired sign-in) clerk-js skips the callback, so it
+// runs here.
 export function useClerkSignOut() {
   const api = useApi();
   const clerk = useClerk();

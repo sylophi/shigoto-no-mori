@@ -34,7 +34,7 @@ export type RemoteDevice = {
   // read-only note and disabled control reads (useCommandAccess).
   acceptsCommands?: boolean;
   // Set while the peer's session is up and it shares, or while it's
-  // rostered with no session: a call while the host's keeper
+  // rostered with no session: a call while the direct plane's keeper
   // (shared/hub/directKeeper.ts) dials joins the dial, and
   // remoteDeviceSync refetches when the session lands. Host calls route
   // over the hub bridge onto the device link. Client-scoped calls reject

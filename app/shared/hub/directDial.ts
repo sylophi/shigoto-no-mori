@@ -49,8 +49,7 @@
 // refusal carrying a plain message, a peer speaking another shape of
 // the wire and so never answering) stays transient.
 //
-// One attempt, no retry: retry is the keeper's
-// (shared/hub/directKeeper.ts).
+// One attempt, no retry: retry is the keeper's (shared/hub/directKeeper.ts).
 //
 // Pure browser-global-plus-shared code: no node builtins, no electron.
 import type { KeyPair } from "@shared/crypto/noise";

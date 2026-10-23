@@ -1,9 +1,9 @@
 // The direct data plane over one hub connection: the dialer, the
 // renderer-facing bridge, the keeper (directKeeper.ts) and the presence
 // reconcile (directPresence.ts). Data is direct or nothing: the bridge
-// never sees the connection, and the one question the dialer puts to it
-// is a peer's connect info. The host (host/process/wires.ts) and the web bridge
-// (web/ipc/register.ts) differ only by these deps.
+// never sees the connection, and the one question the dialer puts to
+// it is a peer's connect info. The host (host/process/wires.ts) and the
+// web bridge (web/ipc/register.ts) differ only by these deps.
 //
 // Pure aside from the injected deps (no electron, no node builtins). It
 // lives as long as the scope it is made in (quit, a tab's teardown).
@@ -71,9 +71,9 @@ export type DirectPlaneDeps = {
   // injects the `ws` package so a failed dial names its
   // errno. The web bridge and the checks take the platform global.
   openSocket?: OpenClientSocket;
-  // The dialer's deadline for each leg of an attempt. A check seam: the fixtures
-  // shrink it so failure scenarios settle fast, real owners omit it
-  // and take the dialer's HELLO_TIMEOUT_MS default.
+  // The dialer's deadline for each leg of an attempt. A check seam: the
+  // fixtures shrink it so failure scenarios settle fast, real owners
+  // omit it and take the dialer's HELLO_TIMEOUT_MS default.
   deadlineMs?: number;
   // The host half, absent on platforms that only ever dial out: the
   // direct listener's targeted roster close, and this device's own

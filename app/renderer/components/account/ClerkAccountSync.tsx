@@ -7,9 +7,9 @@
 //   the hub never sees one mid-expiry), once per Clerk user per session
 //   (armedFor): the effect re-runs on any status change, and a failed
 //   enroll must not loop (the account page offers a retry). Having seen
-//   the device enrolled counts as that attempt:
-//   a credential that goes while the session lives was signed out, and
-//   enrolling again would undo it.
+//   the device enrolled counts as that attempt: a credential that goes
+//   while the session lives was signed out, and enrolling again would
+//   undo it.
 // - Signed in as a different user than the credential's: sign the
 //   account layer out first (the hub refuses a cross-account re-enroll
 //   of the same deviceId), and the effect re-runs into the enroll
