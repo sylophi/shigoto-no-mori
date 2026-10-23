@@ -23,8 +23,9 @@ const decodeMirrorSession = Schema.decodeUnknownSync(MirrorSessionSchema);
 
 // One mirror per worktree: a worktree that already runs a session is
 // mirrored, and one a peer mirrors into (it serves the stream) is a
-// copy, which a second mirror would chain off. Either start would only fail later on the
-// branch, or worse, land. Null when the worktree may start one.
+// copy, which a second mirror would chain off. Either start would only
+// fail later on the branch, or worse, land. Null when the worktree may
+// start one.
 export function mirrorStartRefusal(
   worktreeId: string,
   held: {

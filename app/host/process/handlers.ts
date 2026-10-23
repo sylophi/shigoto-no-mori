@@ -158,7 +158,7 @@ const peerTransportFor = (deviceId: string): ClientTransport => ({
 const peerReach = PeerReach.make({
   transportFor: peerTransportFor,
   channelsFor: (deviceId) => () => hubHandlers().peerChannels(deviceId),
-  admissions: peerAdmissions,
+  admissions: peerAdmissions.admissions,
 });
 
 // A change push's window: a burst goes out as one ping this long after

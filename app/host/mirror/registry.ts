@@ -255,9 +255,8 @@ const endSessionsOnWorktree = (
   );
 
 // Ends a mirror and leaves its copy where it is, an ordinary worktree
-// of its device: the end of a mirror
-// whose original is gone (the copy is then the only one left). The
-// original's thread says why.
+// of its device: the end of a mirror whose original is gone (the copy
+// is then the only one left). The original's thread says why.
 export const endMirrorKeepingCopy = (
   daemon: MirrorEngine["Service"],
   raw: MirrorSessionRaw,

@@ -15,7 +15,7 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import {
   type CopySwitchOff,
-  mirrorPausedNote,
+  mirrorPausedUntil,
 } from "../../../lib/commandAccessCopy.ts";
 import type { StatusTone } from "../../../primitives/status-dot.tsx";
 import { pluralize } from "@shigomori/contracts/words";
@@ -70,6 +70,9 @@ export type MirrorLook = {
   // Set only by the conflict branch, which is the one chip with a
   // list behind it (MirrorConflictsView.tsx).
   showConflicts?: boolean;
+  // Set by the two pauses, a person's and the copy's device's, under
+  // which the engine reports no files and git off.
+  paused?: boolean;
 };
 
 const look = (
@@ -138,15 +141,18 @@ export function describeMirror(
   if (context.engine !== undefined && context.engine !== "running") {
     return look("amber", "Restarting", "the mirror engine is restarting", true);
   }
-  if (session.paused) return look("slate", "Paused");
+  if (session.paused) return { ...look("slate", "Paused"), paused: true };
   // The engine's connect error and the git half's off both follow from
   // it, and it resumes by itself once the switch is on.
   if (context.copyOff !== undefined) {
-    return look(
-      "slate",
-      "Paused",
-      mirrorPausedNote(context.copyOff.device, context.copyOff.off),
-    );
+    return {
+      ...look(
+        "slate",
+        "Paused",
+        mirrorPausedUntil(context.copyOff.device, context.copyOff.off),
+      ),
+      paused: true,
+    };
   }
   if (isHaltedStatus(session.status)) {
     return look(

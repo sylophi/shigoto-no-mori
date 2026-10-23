@@ -6,9 +6,10 @@
 // mirror on that device's daemon, this machine's for "Mirror to", the
 // peer's for "Mirror here" (asked through this device's startFrom,
 // which this device's own switches must let in). The controls (stop,
-// pause, resume, the ignore rule) go to the device RUNNING the session through the scope
-// they are mounted under, which is that device's: its own page, or the
-// far end's page re-scoped to it (useWorktreeMirrorLinks).
+// pause, resume, the ignore rule) go to the device RUNNING the session
+// through the scope they are mounted under, which is that device's: its
+// own page, or the far end's page re-scoped to it
+// (useWorktreeMirrorLinks).
 import type { MirrorLink } from "@shigomori/ui/lib/forest.ts";
 import { useRegistry } from "@/lib/runtime/viewHooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -381,12 +382,12 @@ export function useWorktreeMirrorLinks(
 // Start a mirror, driven by the mirror dialog: a send and the session
 // opened on top, on the device holding the original. "Mirror to…"
 // sends one of this device's. "Mirror here" runs this device's
-// mirror:startFrom, which asks the peer the dialog is scoped to, which holds the original, to send it here, the
-// clone place (when this device has no checkout) in this device's
-// terms. The dialog's last step is the report, so no toast here.
-// Refusals surface centrally. Either start is a move this device runs,
-// so the cancel is the ordinary one, which startFrom forwards to the
-// peer running the send.
+// mirror:startFrom, which asks the peer the dialog is scoped to, which
+// holds the original, to send it here, the clone place (when this
+// device has no checkout) in this device's terms. The dialog's last
+// step is the report, so no toast here. Refusals surface centrally.
+// Either start is a move this device runs, so the cancel is the
+// ordinary one, which startFrom forwards to the peer running the send.
 export function useStartMirror(move: Move) {
   const api = useApi();
   return useMoveMutation(move, {

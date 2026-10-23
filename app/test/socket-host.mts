@@ -17,9 +17,8 @@
 // The sharing gate (SharingGate): with the host's sharing off, a peer's
 // reads and commands alike are refused with NotSharingError before
 // their handlers run, and its pushes are withheld but the switches'.
-// Flipped while a peer is linked,
-// its calls and views under way end, its byte channels drop, and it
-// hears the switch both ways.
+// Flipped while a peer is linked, its calls and views under way end,
+// its byte channels drop, and it hears the switch both ways.
 //
 // Interruption: a call its caller cancels, or whose link drops, is
 // interrupted on the host, its handler's signal aborted. Views stream
@@ -1001,8 +1000,9 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
       }),
     )) instanceof NotSharingError,
   );
-  // A push about a project goes before each of the switch's, so the
-  // switch's arriving alone shows the other was withheld.
+  // Pushes about a project made until the switch's is heard, while off,
+  // then one made back on: one push's arrivals keep their order, so the
+  // first to arrive being the last made shows the others were withheld.
   await waitFor(() => {
     listener.binding.broadcastAll("git:projectChanged", {
       projectId: "elsewhere",
@@ -1010,17 +1010,15 @@ it("sharing gate: with sharing off a peer's reads and commands are refused and n
     listener.binding.broadcastAll("sharing:changed", false);
     return switches.length > 0;
   }, "the peer to hear the switch");
-  assert.equal(has(heard, "elsewhere"), false);
   listener.setSharing(true);
   assert.deepEqual(await invoke(connection, "git:sweep", { renewal: true }), {
     leaseMs: 5,
   });
   await waitFor(() => {
-    listener.binding.broadcastAll("git:projectChanged", {
-      projectId: "elsewhere",
-    });
-    return has(heard, "elsewhere");
+    listener.binding.broadcastAll("git:projectChanged", { projectId: "back" });
+    return has(heard, "back");
   }, "the peer to hear the rest again");
+  assert.deepEqual(heard[0], { projectId: "back" });
 });
 
 it("runtime info: a peer without control is served this host's home and data folder, and with sharing off it is refused and never runs, like the lists", async () => {

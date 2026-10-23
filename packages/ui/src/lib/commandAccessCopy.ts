@@ -22,13 +22,13 @@ export function peerTerminalsHiddenNote(deviceLabel: string): string {
   return `Terminals stay hidden until ${allowsControl(deviceLabel)}.`;
 }
 
-// A mirror's, while the device holding its copy turns it away: by the
-// switch that is off there.
-export function mirrorPausedNote(
+// A mirror's, while the device holding its copy turns it away: the line
+// beside its "Paused", by the switch that is off there.
+export function mirrorPausedUntil(
   deviceLabel: string,
   off: CopySwitchOff,
 ): string {
-  return `Paused until ${off === "control" ? allowsControl(deviceLabel) : sharesData(deviceLabel)}.`;
+  return `until ${off === "control" ? allowsControl(deviceLabel) : sharesData(deviceLabel)}`;
 }
 
 export type CopySwitchOff = "control" | "sharing";

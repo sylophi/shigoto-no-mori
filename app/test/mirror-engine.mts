@@ -35,6 +35,8 @@
 //   - a peer coming to take this device's calls reconnects its sessions
 //     waiting on the link, none paused or halted and no other
 //     device's, and git looks at its sessions again,
+//   - the hub's status snapshots admit a peer as its direct session is
+//     up with both of its switches on, once, and again after it left,
 //   - the follower's copy-gone report, once a minute, counts elapsed
 //     time: a wall clock stepped back neither holds the next one off
 //     nor a step forward lets it through early,
@@ -76,6 +78,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as TestClock from "effect/testing/TestClock";
 import { it } from "vitest";
 import * as FileSync from "../host/fileSync/FileSync.ts";
+import * as PeerReach from "../host/ipc/PeerReach.ts";
 import * as HostAccount from "../host/lib/HostAccount.ts";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
@@ -716,6 +719,54 @@ it("a peer coming to take this device's calls reconnects its sessions waiting on
   assert.deepEqual(resumed(), ["resume dialing", "resume lost"]);
   await waitFor(() => asked.length === 4, "git to look again");
   assert.deepEqual(asked, ["B", "B", "B", "B"]);
+});
+
+// A hub status with each peer a direct session is up with, by its two
+// switches as reported.
+const hubStatus = (
+  peers: Record<string, { control?: boolean; sharing?: boolean }>,
+) => {
+  const reported = (key: "control" | "sharing") =>
+    Object.fromEntries(
+      Object.entries(peers).flatMap(([peer, switches]) =>
+        switches[key] === undefined ? [] : [[peer, switches[key]]],
+      ),
+    );
+  return {
+    peerAppVersions: Object.fromEntries(
+      Object.keys(peers).map((peer) => [peer, "3.0.0"]),
+    ),
+    peerAcceptsCommands: reported("control"),
+    peerSharesData: reported("sharing"),
+  };
+};
+
+it("the hub's status snapshots admit a peer as its direct session is up with both of its switches on, once, and again after it left", async () => {
+  const admissions = Effect.runSync(PeerReach.makeAdmissions);
+  const heard: string[] = [];
+  const listening = Effect.runFork(
+    admissions.admissions.pipe(
+      Stream.runForEach((peer) => Effect.sync(() => heard.push(peer))),
+    ),
+  );
+  trackTest(() => Effect.runPromise(Fiber.interrupt(listening)));
+  await settleTurns();
+  const both = { control: true, sharing: true };
+  admissions.note(
+    hubStatus({
+      B: both,
+      C: { control: false, sharing: true },
+      D: { control: true },
+    }),
+  );
+  admissions.note(hubStatus({ B: both, C: both }));
+  // B's link drops, then comes back with its sharing off, then on.
+  admissions.note(hubStatus({ C: both }));
+  admissions.note(hubStatus({ B: { control: true, sharing: false }, C: both }));
+  admissions.note(hubStatus({ B: both, C: both }));
+  await waitFor(() => heard.length === 3, "the admissions");
+  await settleTurns();
+  assert.deepEqual(heard, ["B", "C", "B"]);
 });
 
 it("a stepped wall clock neither holds a copy-gone report back nor lets one through early", async () => {

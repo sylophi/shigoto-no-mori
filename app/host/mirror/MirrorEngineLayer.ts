@@ -1,8 +1,8 @@
 // The mirror engine (MirrorEngine.ts) as the host runs it: the daemon's
-// sessions with the git follower and the threads over them, the
-// mirrors this device asked peers for, and the bookkeeping each
-// snapshot runs. Apart from the tag because the helpers it runs
-// (registry.ts, sessions.ts) reach the engine by that tag.
+// sessions with the git follower and the threads over them, and the
+// bookkeeping each snapshot runs. Apart from the tag because the
+// helpers it runs (registry.ts, sessions.ts) reach the engine by that
+// tag.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
@@ -100,8 +100,9 @@ const make = (options: {
     // Every re-key the engine records (WtFolder.movedIds), this process's
     // or another's (the terminal's adopt or relocate), carries the thread
     // kept under the old id: those made while the app was closed as it
-    // comes up, and each one after as the store records it. The sessions follow at the daemon's next snapshot, which finds
-    // their root gone and the move recorded (settleMirrorBookkeeping).
+    // comes up, and each one after as the store records it. The sessions
+    // follow at the daemon's next snapshot, which finds their root gone
+    // and the move recorded (settleMirrorBookkeeping).
     const folder = yield* WtFolder.WtFolder;
     const carried = new Map<string, string>();
     const carryRekeys = Effect.gen(function* () {

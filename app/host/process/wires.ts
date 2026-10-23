@@ -29,7 +29,6 @@ import { isHostSide } from "@shigomori/contracts/link";
 import {
   hubContract,
   type HubPeerPush,
-  type HubStatus,
 } from "@shigomori/contracts/modules/hub";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
@@ -60,6 +59,7 @@ import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@shared/paths";
 import * as Sharing from "@host/lib/Sharing";
+import * as PeerReach from "@host/ipc/PeerReach";
 import * as Loopback from "@host/socket/Loopback";
 import * as DeviceLink from "@host/socket/DeviceLink";
 import {
@@ -234,24 +234,8 @@ export function onPeerPush(listener: PeerPushListener): () => void {
 }
 
 // Each peer as it comes to take this device's calls (PeerReach's
-// admissions), off the status snapshots: a direct session up with both
-// of the peer's switches on.
-const admissions = Effect.runSync(PubSub.unbounded<string>());
-let admitted = new Set<string>();
-const noteAdmissions = (status: HubStatus) => {
-  const now = new Set(
-    Object.keys(status.peerAppVersions).filter(
-      (peer) =>
-        status.peerAcceptsCommands[peer] === true &&
-        status.peerSharesData[peer] === true,
-    ),
-  );
-  for (const peer of now) {
-    if (!admitted.has(peer)) PubSub.publishUnsafe(admissions, peer);
-  }
-  admitted = now;
-};
-export const peerAdmissions = Stream.fromPubSub(admissions);
+// admissions), off the status snapshots.
+export const peerAdmissions = Effect.runSync(PeerReach.makeAdmissions);
 
 // The window-facing hub module, which also lends its invokeOnPeer to
 // the host's peer reach (handlers.ts).
@@ -324,7 +308,7 @@ export const remotePlanesLayer = Layer.effectDiscard(
         localDeviceId: deviceIdNow,
         localAppVersion: () => hostFacts().appVersion,
         broadcastStatus: (status) => {
-          noteAdmissions(status);
+          peerAdmissions.note(status);
           broadcastAll(hubContract, "statusChanged", status);
         },
         broadcastPeerPush: (push) => {

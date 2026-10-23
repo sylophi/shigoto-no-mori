@@ -11,16 +11,16 @@
 // for the device the ticket was minted for, and every frame after that
 // encrypted. Its hello must name that device, whose key the roster must
 // still hold, and this build's protocol version (modules/link.ts), and
-// only that hello spends the ticket. Until then every other call is refused
-// (PeerAuth). Then a call annotated gated:false runs for
-// the peer, and any other only under the host's live command switch
+// only that hello spends the ticket. Until then every other call is
+// refused (PeerAuth). Then a call annotated gated:false runs for the
+// peer, and any other only under the host's live command switch
 // (CommandGate). Above both sits the sharing switch: off, every call is
-// refused, reads included, and a push reaches a peer only where the host
-// still lets it (SharingGate). A desktop device holds one link: a second hello from it
-// supersedes the first (two app instances on one root). A web device
-// holds one per connection its tabs dial, each with its own pushes and
-// views. Either way a hello with a connection id already held replaces
-// that connection, its own redial.
+// refused, reads included, and a push reaches a peer only where the
+// host still lets it (SharingGate). A desktop device holds one link: a
+// second hello from it supersedes the first (two app instances on one
+// root). A web device holds one per connection its tabs dial, each with
+// its own pushes and views. Either way a hello with a connection id
+// already held replaces that connection, its own redial.
 //
 // The listener sits on every interface (and behind the tunnel), so it
 // is written to be hostile-safe: an inbound frame cap, an Origin gate,

@@ -27,8 +27,10 @@ import {
   isInvoke,
   keyOf,
 } from "@shigomori/contracts/contract";
+import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import type { EffectClient, PushKeys } from "@shigomori/contracts/types";
 
@@ -105,6 +107,37 @@ export const make = (reach: {
         .subscribe(channelOf(callOf(contract, key)), handler),
     channels: reach.channelsFor,
   });
+
+// The admissions, off the hub's status snapshots (host/process/wires.ts
+// notes each): a peer is admitted as it comes into the set of those
+// taking this device's calls, and again after it left it.
+export const makeAdmissions = Effect.map(
+  PubSub.unbounded<string>(),
+  (admissions) => {
+    let admitted = new Set<string>();
+    return {
+      note: (
+        status: Pick<
+          HubStatus,
+          "peerAppVersions" | "peerAcceptsCommands" | "peerSharesData"
+        >,
+      ) => {
+        const now = new Set(
+          Object.keys(status.peerAppVersions).filter(
+            (peer) =>
+              status.peerAcceptsCommands[peer] === true &&
+              status.peerSharesData[peer] === true,
+          ),
+        );
+        for (const peer of now) {
+          if (!admitted.has(peer)) PubSub.publishUnsafe(admissions, peer);
+        }
+        admitted = now;
+      },
+      admissions: Stream.fromPubSub(admissions),
+    };
+  },
+);
 
 // The same, for an effect that has the service to hand.
 export const peerEffects = <M extends ContractModule>(

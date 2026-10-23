@@ -126,11 +126,17 @@ it("a switch off on the copy's device reads as paused until it is on, naming the
       refused,
     );
     assert.deepEqual(
-      { tone: paused.tone, label: paused.label, detail: paused.detail },
+      {
+        tone: paused.tone,
+        label: paused.label,
+        detail: paused.detail,
+        paused: paused.paused,
+      },
       {
         tone: "slate",
         label: "Paused",
-        detail: `Paused until Studio Mac turns on “${words}” on its account page.`,
+        detail: `until Studio Mac turns on “${words}” on its account page`,
+        paused: true,
       },
       off,
     );
@@ -141,7 +147,10 @@ it("a switch off on the copy's device reads as paused until it is on, naming the
     { copyOff: { device: "this device", off: "control" } },
     { ...refused, paused: true },
   );
-  assert.deepEqual([byHand.label, byHand.detail], ["Paused", ""]);
+  assert.deepEqual(
+    [byHand.label, byHand.detail, byHand.paused],
+    ["Paused", "", true],
+  );
   const away = { lastError: "no direct connection to 0123456789abcdef" };
   for (const [status, detail] of [
     ["disconnected", "waiting for the other device"],
