@@ -24,8 +24,8 @@
   Effect code.
 - A workflow that changes state is proved by a failure injected
   between each pair of its external steps and by a recovery that itself
-  fails, and its cleanup after a refusal and after a kill, not only
-  after success.
+  fails, and its cleanup is proved after a refusal and after a kill,
+  not only after success.
 - A pull request has a short title and a body that is a single brief
   `## Description` section: what changed and why, in a few sentences.
   No test plan or other sections.

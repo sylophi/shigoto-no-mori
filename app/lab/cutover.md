@@ -3,27 +3,29 @@
 3.0's hub turns away every build below its protocol, and a 2.x device's
 credential has no device key, so the production hub, the web client and
 every installed app move to 3.0 together. The release goes out in this
-order.
+order. The `wrangler` commands run from `hub/` as `pnpm exec wrangler`.
 
-1. The D1 migrations on a copy of production: `wrangler d1 export` of
-   `shigomori-hub`, applied locally with every migration. The export
-   prints a presigned link to it, valid an hour; keep that line out of
-   anything shared.
+1. The D1 migrations on a copy of production: `wrangler d1 export
+   shigomori-hub --remote --output <file>`, loaded with `wrangler d1
+   execute shigomori-hub --local --file <file>` and migrated with
+   `wrangler d1 migrations apply shigomori-hub --local`. It passes
+   when every device row is kept with `public_key` added empty. The
+   export prints a presigned link to it, valid an hour; keep that line
+   out of anything shared.
 2. The release published from main's tip, flagged as a prerelease. A
    2.x updater passes over a prerelease, so no device runs 3.0 before
    its hub does: one that enrolled on the 2.x hub would keep a key the
    hub never stored. The workflow's "on main" check skips a
    prerelease, so the tag is checked against main's tip by hand.
-3. The hub, from `hub/`: `wrangler d1 migrations apply shigomori-hub
-   --remote`, then `pnpm run deploy:prod`. The migration goes first,
-   since 3.0's Worker reads `public_key` in every device query and
-   2.x's is fine on the new column.
+3. Once the release's run is green and its assets are up, the hub:
+   `wrangler d1 migrations apply shigomori-hub --remote`, then
+   `pnpm run deploy:prod`. The migration goes first, since 3.0's Worker
+   reads `public_key` in every device query and 2.x's is fine on the new
+   column.
 4. At once, the release marked a full release:
    `gh release edit v3.0.0 --prerelease=false --latest`. Between 3 and 4
    every 2.x device is turned away. A 2.x updater offers only full
-   releases; it checks the staged bundle with `codesign --verify --deep
-   --strict` and the installed app's Team ID, swaps it in, and 3.0's
-   first start migrates the data folder.
+   releases, and 3.0's first start migrates the data folder.
 5. The web client: `web-client-prod` moved to the tag's commit by hand
    (`gh api -X PATCH repos/sylophi/shigoto-no-mori/git/refs/heads/web-client-prod -f sha=<sha>`).
    The workflow's job that moves it runs only for a release published
@@ -65,11 +67,14 @@ each repo's `.git/worktrees/<name>/gitdir`). With 3.0 quit:
    `git -C <project> worktree repair -- <from_path>`, then the copy on
    the drive deleted). A worktree made after the update isn't in the
    backup, and 2.x doesn't know it.
-2. Copy the backed-up 2.x files back into the data folder.
+2. Copy the backup back into the data folder, all but its `worktrees/`:
+   step 1 put the live worktrees there, and the backup's copies are
+   older.
 3. Set `store.db` and its `-wal` and `-shm` aside. A store whose import
    is recorded never imports again, so what 2.x writes after the
    restore would never reach a later 3.0.
+4. Install 2.37.4 from its release in place of 3.0. It offers 3.0
+   again; leave Restart to update alone.
 
-The data files, every repo's worktree list, refs and local config, and
-each worktree's HEAD, changes and stashes are then as they were before
-the update, and 2.x opens the folder as one that never saw 3.0.
+2.x then finds each worktree it knew where it kept it, with the work
+done since, and opens the folder as one that never saw 3.0.
