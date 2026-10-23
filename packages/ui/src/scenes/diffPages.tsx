@@ -490,7 +490,7 @@ export function DiffPartsScene() {
             branchBar={branchBar}
             lastCommit={null}
             composer={null}
-            readOnlyNote={peerReadOnlyNote("Thinkpad")}
+            readOnlyNote={peerReadOnlyNote("MacBook")}
           />
         </Part>
         <DiffFilesSheetView

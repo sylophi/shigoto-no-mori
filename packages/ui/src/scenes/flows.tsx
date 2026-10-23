@@ -1,4 +1,4 @@
-// The transplant and mirror flows over the fixtures: Thinkpad's
+// The transplant and mirror flows over the fixtures: MacBook's
 // gentle-gecko transplanted here, brave-badger mirrored to a peer, the
 // steps either flow goes through, a running mirror's dialog, and the
 // mirror's marks on a worktree's header.
@@ -64,8 +64,8 @@ import { createFakeChanges } from "../fixtures/changesFixtures.ts";
 import {
   LOCAL_DEVICE_ID,
   MINI_ID,
-  THINKPAD_ID,
-  WORKPC_ID,
+  MACBOOK_ID,
+  WORK_IMAC_ID,
 } from "../fixtures/fixtures.ts";
 import {
   mirrorHistoryFixture,
@@ -76,11 +76,11 @@ import { deviceById, projectNamed, worktreeNamed } from "./world.ts";
 
 const noop = () => {};
 const HERE = deviceById(LOCAL_DEVICE_ID);
-const THINKPAD = deviceById(THINKPAD_ID);
+const MACBOOK = deviceById(MACBOOK_ID);
 const MINI = deviceById(MINI_ID);
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
-const TP_SM = projectNamed(THINKPAD_ID, "shigoto-no-mori");
-const GECKO = worktreeNamed(TP_SM, "gentle-gecko");
+const MB_SM = projectNamed(MACBOOK_ID, "shigoto-no-mori");
+const GECKO = worktreeNamed(MB_SM, "gentle-gecko");
 const BADGER = worktreeNamed(SM, "brave-badger");
 const GECKO_TITLE = worktreeTitle(GECKO, posedPullRequestDetail(GECKO.branch));
 const WORKTREES_BASE = "~/.sm/wt/shigoto-no-mori";
@@ -159,7 +159,7 @@ function Part({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-// Thinkpad's gentle-gecko, on its way here: its changes travel, the
+// MacBook's gentle-gecko, on its way here: its changes travel, the
 // carry-over is this machine's.
 export function TransplantReviewScene() {
   const files = changeEntries(
@@ -176,9 +176,9 @@ export function TransplantReviewScene() {
           <TransplantHeadlineView
             stage="review"
             branch={GECKO.branch}
-            sourceDeviceLabel={THINKPAD.label}
+            sourceDeviceLabel={MACBOOK.label}
             thisDeviceLabel={HERE.label}
-            away={`off ${THINKPAD.label}`}
+            away={`off ${MACBOOK.label}`}
             running=""
           />
         }
@@ -191,10 +191,10 @@ export function TransplantReviewScene() {
               title={GECKO_TITLE}
               pr={posedPullRequestDetail(GECKO.branch)}
               worktree={GECKO}
-              projectName={TP_SM.name}
-              sourceDeviceLabel={THINKPAD.label}
-              icon={THINKPAD.icon}
-              home="/home/rin"
+              projectName={MB_SM.name}
+              sourceDeviceLabel={MACBOOK.label}
+              icon={MACBOOK.icon}
+              home="/Users/rin"
             />
           }
           destination={
@@ -262,7 +262,7 @@ export function TransplantReviewScene() {
               unpicked={false}
               waiting={false}
               blocked={null}
-              idleNote={`Nothing on ${THINKPAD.label} is deleted until you say so at the last step.`}
+              idleNote={`Nothing on ${MACBOOK.label} is deleted until you say so at the last step.`}
               startLabel="Start transplant"
               onCancel={noop}
               onStart={noop}
@@ -294,8 +294,8 @@ export function MirrorReviewScene() {
   const toPeer: DestinationPick = {
     targets: [
       peerTarget(MINI_ID, { project: undefined, block: undefined }),
-      peerTarget(THINKPAD_ID, { project: TP_SM, block: "offline" }),
-      peerTarget(WORKPC_ID, { project: undefined, block: "no-grant" }),
+      peerTarget(MACBOOK_ID, { project: MB_SM, block: "offline" }),
+      peerTarget(WORK_IMAC_ID, { project: undefined, block: "no-grant" }),
     ],
     pickedId: MINI_ID,
     onPick: noop,
@@ -413,7 +413,7 @@ export function FlowStepsScene() {
     ...GECKO,
     path: `/Users/rin/.sm/wt/shigoto-no-mori/${GECKO.name}`,
   };
-  const session = mirrorSessionFixture(BADGER, THINKPAD_ID, GECKO);
+  const session = mirrorSessionFixture(BADGER, MACBOOK_ID, GECKO);
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-6">
@@ -426,10 +426,10 @@ export function FlowStepsScene() {
             <TransplantHeadlineView
               stage="running"
               branch={GECKO.branch}
-              sourceDeviceLabel={THINKPAD.label}
+              sourceDeviceLabel={MACBOOK.label}
               thisDeviceLabel={HERE.label}
-              away={`off ${THINKPAD.label}`}
-              running={`Sending the branch and your changes from ${THINKPAD.label}.`}
+              away={`off ${MACBOOK.label}`}
+              running={`Sending the branch and your changes from ${MACBOOK.label}.`}
             />
           }
         >
@@ -443,14 +443,14 @@ export function FlowStepsScene() {
             phasesSeen={new Set()}
             worktree={GECKO}
             target={{ project: SM }}
-            sourceDeviceLabel={THINKPAD.label}
+            sourceDeviceLabel={MACBOOK.label}
             thisDeviceLabel={HERE.label}
             runSetup
             onCancel={noop}
             onClose={noop}
             onRetry={noop}
             filesDetail="everything ignored, too"
-            sourceIcon={THINKPAD.icon}
+            sourceIcon={MACBOOK.icon}
             destinationIcon={HERE.icon}
             plan={PLAN}
           />
@@ -466,7 +466,7 @@ export function FlowStepsScene() {
               branch={BADGER.branch}
               landingBranch={BADGER.branch}
               sourceDeviceLabel={HERE.label}
-              on={`on ${THINKPAD.label}`}
+              on={`on ${MACBOOK.label}`}
               running=""
             />
           }
@@ -479,11 +479,11 @@ export function FlowStepsScene() {
             }}
             phasesSeen={new Set(["carryOver", "setup"])}
             worktree={BADGER}
-            target={{ project: TP_SM }}
+            target={{ project: MB_SM }}
             sourceDeviceLabel={HERE.label}
-            thisDeviceLabel={THINKPAD.label}
+            thisDeviceLabel={MACBOOK.label}
             runSetup
-            landing={landsOnPeer(THINKPAD.label)}
+            landing={landsOnPeer(MACBOOK.label)}
             error={new Error("setup exited with code 1: pnpm install failed")}
             onCancel={noop}
             onClose={noop}
@@ -498,7 +498,7 @@ export function FlowStepsScene() {
             progressLabel="Mirror progress"
             failedNote="Nothing was left behind, so trying again starts clean."
             sourceIcon={HERE.icon}
-            destinationIcon={THINKPAD.icon}
+            destinationIcon={MACBOOK.icon}
             plan={PLAN}
           />
         </FlowDialog>
@@ -513,9 +513,9 @@ export function FlowStepsScene() {
             <TransplantHeadlineView
               stage="done"
               branch={GECKO.branch}
-              sourceDeviceLabel={THINKPAD.label}
+              sourceDeviceLabel={MACBOOK.label}
               thisDeviceLabel={HERE.label}
-              away={`off ${THINKPAD.label}`}
+              away={`off ${MACBOOK.label}`}
               running=""
             />
           }
@@ -532,7 +532,7 @@ export function FlowStepsScene() {
                 {landed.path}
               </span>
             }
-            sourceDeviceLabel={THINKPAD.label}
+            sourceDeviceLabel={MACBOOK.label}
             thisDeviceLabel={HERE.label}
             landing={LANDS_HERE}
             choice="teardown"
@@ -558,7 +558,7 @@ export function FlowStepsScene() {
               branch={BADGER.branch}
               landingBranch={BADGER.branch}
               sourceDeviceLabel={HERE.label}
-              on={`on ${THINKPAD.label}`}
+              on={`on ${MACBOOK.label}`}
               running=""
             />
           }
@@ -573,7 +573,7 @@ export function FlowStepsScene() {
             status={describeMirror(session)}
             summary="gitignored left out"
             sourceDeviceLabel={HERE.label}
-            thisDeviceLabel={THINKPAD.label}
+            thisDeviceLabel={MACBOOK.label}
             dirtyApplied={false}
             onDone={noop}
           />
@@ -601,8 +601,8 @@ const CONFLICTS: MirrorSession["conflicts"] = [
 
 const NAMES = {
   runner: HERE.label,
-  copy: THINKPAD.label,
-  other: THINKPAD.label,
+  copy: MACBOOK.label,
+  other: MACBOOK.label,
 };
 
 const STOP_IDLE: StopConfirm = {
@@ -638,7 +638,7 @@ function manageDialog(
             session={session}
             names={NAMES}
             runnerIcon={HERE.icon}
-            copyIcon={THINKPAD.icon}
+            copyIcon={MACBOOK.icon}
           />
         }
         ignores={
@@ -675,12 +675,12 @@ function manageDialog(
   );
 }
 
-// brave-badger's mirror with Thinkpad, two paths held still and its
+// brave-badger's mirror with MacBook, two paths held still and its
 // rule being changed, and the same mirror paused, its stop asked for
 // before git agreed.
 export function MirrorManageScene() {
-  const copy = worktreeNamed(TP_SM, "gentle-gecko");
-  const session = mirrorSessionFixture(BADGER, THINKPAD_ID, copy);
+  const copy = worktreeNamed(MB_SM, "gentle-gecko");
+  const session = mirrorSessionFixture(BADGER, MACBOOK_ID, copy);
   return (
     <div className="grid h-full grid-cols-2 items-start gap-6 overflow-hidden bg-background p-6 text-foreground">
       {manageDialog({ ...session, conflicts: CONFLICTS }, STOP_IDLE, true)}
@@ -692,14 +692,14 @@ export function MirrorManageScene() {
           statusText: "Paused",
           git: {
             status: "diverged",
-            detail: "Thinkpad has a commit the original lacks",
+            detail: "MacBook has a commit the original lacks",
           },
         },
         {
           ...STOP_IDLE,
           confirming: true,
           blocker: "git has diverged",
-          note: `Not confirmed in step: git has diverged. Removing the copy on ${THINKPAD.label} now loses anything only it holds.`,
+          note: `Not confirmed in step: git has diverged. Removing the copy on ${MACBOOK.label} now loses anything only it holds.`,
         },
         false,
       )}
@@ -710,9 +710,9 @@ export function MirrorManageScene() {
 // The mirror's marks and the leave-out picker's rows in their other
 // states.
 export function FlowPartsScene() {
-  const copy = worktreeNamed(TP_SM, "gentle-gecko");
+  const copy = worktreeNamed(MB_SM, "gentle-gecko");
   const session = {
-    ...mirrorSessionFixture(BADGER, THINKPAD_ID, copy),
+    ...mirrorSessionFixture(BADGER, MACBOOK_ID, copy),
     conflicts: CONFLICTS,
   };
   const look = describeMirror(session);
@@ -728,7 +728,7 @@ export function FlowPartsScene() {
                   chip={
                     <MirrorStatusChipView tone="emerald" label="Mirrored" />
                   }
-                  other={THINKPAD.label}
+                  other={MACBOOK.label}
                 />
                 <MirrorLineView
                   chip={
@@ -755,7 +755,7 @@ export function FlowPartsScene() {
                     names={NAMES}
                   />
                 }
-                other={THINKPAD.label}
+                other={MACBOOK.label}
               />
             }
           />
@@ -848,7 +848,7 @@ export function FlowPartsScene() {
                   stage={stage}
                   branch="main"
                   landingBranch="main-mirror"
-                  sourceDeviceLabel={THINKPAD.label}
+                  sourceDeviceLabel={MACBOOK.label}
                   on="here"
                   running="Reaching the source."
                 />
@@ -859,9 +859,9 @@ export function FlowPartsScene() {
             <TransplantHeadlineView
               stage="cancelled"
               branch={GECKO.branch}
-              sourceDeviceLabel={THINKPAD.label}
+              sourceDeviceLabel={MACBOOK.label}
               thisDeviceLabel={HERE.label}
-              away={`off ${THINKPAD.label}`}
+              away={`off ${MACBOOK.label}`}
               running=""
             />
           </p>

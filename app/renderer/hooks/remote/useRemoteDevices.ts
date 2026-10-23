@@ -103,7 +103,7 @@ export function useDeviceIcon(deviceId: string): DeviceIcon {
   return deviceId === localDeviceId ? localIcon : remoteIcon;
 }
 
-// The device's name for prose ("on Thinkpad", "Thinkpad:3000").
+// The device's name for prose ("on MacBook", "MacBook:3000").
 export function useRemoteDeviceLabel(deviceId: string): string {
   return useRemoteDevice(deviceId)?.label ?? UNNAMED_DEVICE;
 }

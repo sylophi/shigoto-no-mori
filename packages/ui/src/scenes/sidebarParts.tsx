@@ -39,7 +39,7 @@ import {
 } from "../views/sidebar/WorktreeMenuView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { DropdownMenuItem, StaticMenu } from "../primitives/dropdown-menu.tsx";
-import { LOCAL_DEVICE_ID, THINKPAD_ID } from "../fixtures/fixtures.ts";
+import { LOCAL_DEVICE_ID, MACBOOK_ID } from "../fixtures/fixtures.ts";
 import { projectRows } from "./sidebar.tsx";
 import { deviceById, projectNamed, worktreeNamed } from "./world.ts";
 
@@ -56,13 +56,13 @@ function Part({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function SidebarPartsScene() {
-  const thinkpad = deviceById(THINKPAD_ID);
+  const macbook = deviceById(MACBOOK_ID);
   const badge = {
-    deviceId: thinkpad.deviceId,
-    label: thinkpad.label,
-    icon: thinkpad.icon,
-    tone: thinkpad.status.tone,
-    reachable: thinkpad.status.reachable,
+    deviceId: macbook.deviceId,
+    label: macbook.label,
+    icon: macbook.icon,
+    tone: macbook.status.tone,
+    reachable: macbook.status.reachable,
   };
   const worktree = worktreeNamed(SM, "happy-hummingbird");
   return (
@@ -87,8 +87,8 @@ export function SidebarPartsScene() {
             <WorktreeSortSubmenuView sort="name" onPick={noop} />
             <DropdownMenuItem variant="destructive">
               <DeviceMenuRowView
-                icon={thinkpad.icon}
-                label={thinkpad.label}
+                icon={macbook.icon}
+                label={macbook.label}
                 note="via terrier"
               />
             </DropdownMenuItem>

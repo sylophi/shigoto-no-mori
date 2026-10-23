@@ -163,7 +163,7 @@ export function FilesPartsScene() {
         <FilesNoteView peerNote={null} />
       </Part>
       <Part label="A peer's files">
-        <FilesNoteView peerNote={peerFilesHiddenNote("Thinkpad")} />
+        <FilesNoteView peerNote={peerFilesHiddenNote("MacBook")} />
       </Part>
       <Part label="Reading">
         <FileViewerView

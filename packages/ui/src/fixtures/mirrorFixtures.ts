@@ -59,7 +59,7 @@ export function mirrorHistoryFixture(): MirrorEvent[] {
     {
       at: now - 75 * 60_000,
       kind: "disconnected",
-      detail: "Thinkpad went to sleep",
+      detail: "MacBook went to sleep",
     },
     { at: now - 2 * HOUR, kind: "ignores-changed", detail: "gitignored" },
     { at: now - 3 * HOUR, kind: "connected", detail: "" },

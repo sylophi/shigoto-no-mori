@@ -31,7 +31,7 @@ const PR_FOLDER_OPTIONS = [
 
 // What the destination line leads with, per mode. The device, when there
 // is a choice of one, is spliced in after this: "... checked out on
-// Thinkpad into /home/...".
+// MacBook into /Users/...".
 const MODE_DEST_LEAD: Record<NewWorktreeMode, string> = {
   "branch-from": "A new branch created off the source. Checked out",
   checkout: "Check out the source branch",

@@ -247,7 +247,7 @@ async function updateDevice(
   return "armed";
 }
 
-// "this device and Thinkpad" as the start of a sentence.
+// "this device and MacBook" as the start of a sentence.
 function sentenceStart(text: string): string {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 }

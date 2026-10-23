@@ -121,7 +121,7 @@ export function VillagerDialogueView({
   );
 }
 
-// "Moved in on Thinkpad, holding katrina", the branch picked out in
+// "Moved in on MacBook, holding katrina", the branch picked out in
 // `ink` (a text color class) the way a dialogue picks out its key words.
 export function MoveCaptionView({
   news,

@@ -262,14 +262,14 @@ function portRows(remote: boolean) {
       entry={entry}
       taken={PORTS}
       remote={remote}
-      deviceLabel="Thinkpad"
+      deviceLabel="MacBook"
       onUpdate={entry.source === "custom" ? resolved : undefined}
       onRemove={entry.source === "custom" ? noop : undefined}
       plain={!remote}
       forward={
         remote && (
           <ForwardControlView
-            deviceLabel="Thinkpad"
+            deviceLabel="MacBook"
             remotePort={entry.port}
             localPort={entry.port}
             live={entry.listening}
@@ -650,7 +650,7 @@ export function WorktreeSectionsPartsScene({
           <ModalBox className="max-w-2xl">
             <PortsDialogView
               remote
-              deviceLabel="Thinkpad"
+              deviceLabel="MacBook"
               canForward
               list={
                 <PortListView

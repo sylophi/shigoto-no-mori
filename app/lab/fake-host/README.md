@@ -107,15 +107,15 @@ Poses ride the URL:
   `?light=<id>` and `?dark=<id>` pick each appearance's doubutsu
   palette (the ids in `packages/ui/src/lib/themes.ts`, default `cream` and
   `charcoal`).
-- `?peers=sm:connected,tp:connected,mini:online,pc:offline`: presence
-  per device key (`sm` Studio Mac, `tp` Thinkpad, `mini` Mini, `pc`
-  Work PC). The desktop default is `tp:connected`, and the web
+- `?peers=sm:connected,mb:connected,mini:online,imac:offline`: presence
+  per device key (`sm` Studio Mac, `mb` MacBook, `mini` Mini, `imac`
+  Work iMac). The desktop default is `mb:connected`, and the web
   default adds `sm`.
-- `?updates=sm,tp,mini`: the devices holding a staged update, by the
+- `?updates=sm,mb,mini`: the devices holding a staged update, by the
   same keys (default none). Every device runs 3.0.3 and the update is
   3.1.0, so the others count as behind it (the update toast, Update
   all).
-- `?downloading=sm,tp,mini`: the devices downloading the update.
+- `?downloading=sm,mb,mini`: the devices downloading the update.
 - `?migration=waiting|moving|stuck|done`: the v3 migration in that
   state (`MIGRATION_POSES` in the fixtures' `stepsFixtures.ts`),
   for its page (`?to=/migration`). Without it there is nothing to
@@ -127,7 +127,7 @@ Poses ride the URL:
   `?migration=`.
 - `?fresh=1`: Studio Mac a fresh install with no project, for the
   home a fresh install opens on.
-- `?notSharing=tp,mini`: the devices with sharing off, by the same
+- `?notSharing=mb,mini`: the devices with sharing off, by the same
   keys, which then serve this page nothing.
 - `?hubBlocked=update-required`: this device's hub socket blocked, for
   `update-required`, `refused`, `revoked` or `superseded`, in the words
@@ -135,19 +135,19 @@ Poses ride the URL:
 - `?crowd=<n>`: up to 20 more projects on Studio Mac, most holding
   their primary checkout alone, for the forest at the size where
   finding a project gets hard. Add `&crowdShared=1` to have terrier
-  list them all and the Thinkpad hold most of them too, so nearly
+  list them all and the MacBook hold most of them too, so nearly
   every project is terrier's and on a second device (the open
   project's header shows the paw and its devices).
 - `?mirrorEngine=running|starting|stopped|unavailable`: every
   device's mirror engine (default `running`), for the reason the
   Mirror buttons give when it can't take a start.
 - `?mirrored=1`: a mirror running from boot (Studio Mac's
-  `brave-badger` with a copy on Thinkpad), for the surfaces that list
+  `brave-badger` with a copy on MacBook), for the surfaces that list
   mirrors (the Live page, the sidebar's fold).
 - `?liveEdge=1`: the Live page's hard cases beside its usual runs: a
   very long script name, a worktree running five scripts, a run in a
   worktree its device no longer lists, a run on Mini (which takes no
-  commands from here: add `&peers=tp:connected,mini:connected`), and a
+  commands from here: add `&peers=mb:connected,mini:connected`), and a
   forward tied to no worktree at another local port.
 - `?gh=missing|signed-out`: the GitHub CLI on every device not
   installed, or not signed in, for the surfaces that say why they
@@ -169,7 +169,7 @@ Poses ride the URL:
   `all-skipped`, `auto-merge`, `pending`, `failing`, `failing-blocked`,
   `failing-and-pending`, `many`. Absent, it keeps two passing checks.
 - `?stack=merged`: the stack of three PRs across Studio Mac and
-  Thinkpad (`fix-stale-locks`, `exp/terrier-sync`, `port-pool-retry`)
+  MacBook (`fix-stale-locks`, `exp/terrier-sync`, `port-pool-retry`)
   all landed, so the closed-PR box offers the stack cleanup.
 - `?reviews=<variant>`: the reviews on the same PR, keys of
   `FAKE_REVIEW_POSES`: `approved`, `approved-no-rule`,

@@ -405,7 +405,7 @@ export function WorktreePagePartsScene() {
               onDelete: noop,
             }}
             leading={<NoIdentityNoteView />}
-            readOnlyNote={peerReadOnlyNote("Thinkpad")}
+            readOnlyNote={peerReadOnlyNote("MacBook")}
             optionsMenu={null}
           />
         </Part>

@@ -67,7 +67,7 @@ import {
   accountDevices,
   forests,
   LOCAL_DEVICE_ID,
-  THINKPAD_ID,
+  MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
 
@@ -86,11 +86,11 @@ const MARKS: SidebarMarks = {
   allowAgentWorking: false,
 };
 
-// The peers that answer: the Thinkpad from the desktop, every online
+// The peers that answer: the MacBook from the desktop, every online
 // machine from a browser.
 function statusOf(shell: SceneShell, deviceId: string) {
   const connected =
-    deviceId === THINKPAD_ID ||
+    deviceId === MACBOOK_ID ||
     (shell === "web" && deviceId === LOCAL_DEVICE_ID);
   return deviceStatusView(
     connected ? { phase: "connected" } : { phase: "stopped" },

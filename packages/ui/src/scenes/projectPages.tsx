@@ -71,7 +71,7 @@ import {
   LOCAL_DEVICE_ID,
   repoDescriptionFor,
   MINI_ID,
-  THINKPAD_ID,
+  MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import { fakeDiskUsage, fakeHygiene } from "../fixtures/tidyFixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
@@ -111,7 +111,7 @@ function projectPage(title: string, body: ReactNode) {
         title={title}
         tabs={
           <DeviceTabBarView
-            tabs={deviceTabs([LOCAL_DEVICE_ID, THINKPAD_ID, MINI_ID])}
+            tabs={deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID])}
             selectedId={LOCAL_DEVICE_ID}
             onSelect={noop}
             allDevicesTab
@@ -229,7 +229,7 @@ function Part({ label, children }: { label: string; children: ReactNode }) {
 // location and external worktrees, and their states.
 export function ProjectPagesPartsScene() {
   const mini = deviceById(MINI_ID);
-  const thinkpad = deviceById(THINKPAD_ID);
+  const macbook = deviceById(MACBOOK_ID);
   const here = deviceById(LOCAL_DEVICE_ID);
   const external = WORKTREES.find((w) => w.isExternal) ?? WORKTREES[0];
   const tidy = tidyForest();
@@ -270,7 +270,7 @@ export function ProjectPagesPartsScene() {
                   block: undefined,
                 },
                 {
-                  ...thinkpad,
+                  ...macbook,
                   isThisDevice: false,
                   block: undefined,
                 },
@@ -445,7 +445,7 @@ export function ProjectPagesPartsScene() {
           <OnlyInWorktreesView inPrimary={false} worktrees={["quiet-quail"]} />
           <FoundOnDevicesView
             holders={[
-              { device: thinkpad.label, inPrimary: true, worktrees: [] },
+              { device: macbook.label, inPrimary: true, worktrees: [] },
               { device: mini.label, inPrimary: false, worktrees: ["fox"] },
             ]}
           />
@@ -504,7 +504,7 @@ export function TidyScene() {
       <TidyPageView
         tabs={
           <DeviceTabBarView
-            tabs={deviceTabs([LOCAL_DEVICE_ID, THINKPAD_ID, MINI_ID])}
+            tabs={deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID])}
             selectedId={LOCAL_DEVICE_ID}
             onSelect={noop}
           />

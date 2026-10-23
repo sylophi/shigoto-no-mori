@@ -103,8 +103,8 @@ import {
   FAKE_APP_VERSION,
   LOCAL_DEVICE_ID,
   MINI_ID,
-  THINKPAD_ID,
-  WORKPC_ID,
+  MACBOOK_ID,
+  WORK_IMAC_ID,
   accountDevices,
   forests,
   fakeCustomPorts,
@@ -416,7 +416,7 @@ function hostHandlersFor(
   forest: DeviceForest,
   emit: FixtureWire["emit"],
 ): FixtureHandlers {
-  const disk = fakeDisks[forest.deviceId] ?? { home: "/home/rin", dirs: {} };
+  const disk = fakeDisks[forest.deviceId] ?? { home: "/Users/rin", dirs: {} };
   mirrorWires.set(forest.deviceId, emit);
   // The worktree data files, seeded from the fixtures and mutated by
   // worktreeData:patchPorts so adding and removing ports shows its
@@ -1303,7 +1303,7 @@ function fakeScriptTicker(
 // ---- mirror fixtures ----
 //
 // One mirror world for the whole fake host, since a session on Studio
-// Mac and the stream Thinkpad serves for it are two views of the same
+// Mac and the stream MacBook serves for it are two views of the same
 // fact. Each forest's emitter is remembered so mirror:changed reaches
 // every page, a peer's riding the client wire's peer push
 // (installFakeHostBridge).
@@ -1630,20 +1630,20 @@ const WEB_DEVICE_ID = "dev_beefcafe01";
 let villageLife = false;
 
 // Presence the fake host can pose: which peers are in the roster, and which
-// of those have an established direct session. ?peers=tp:connected,
-// mini:online,pc:offline overrides the default (Thinkpad connected,
+// of those have an established direct session. ?peers=mb:connected,
+// mini:online,imac:offline overrides the default (MacBook connected,
 // the rest offline, and the web shell also defaults Studio Mac
 // connected).
 const PEER_KEYS: Record<string, string> = {
   sm: LOCAL_DEVICE_ID,
-  tp: THINKPAD_ID,
+  mb: MACBOOK_ID,
   mini: MINI_ID,
-  pc: WORKPC_ID,
+  imac: WORK_IMAC_ID,
 };
 const roster = new Set<string>();
 const directSessions = new Set<string>();
-// ?updates=sm,tp,mini: the devices holding a staged update, and
-// ?downloading=sm,tp,mini the ones fetching it.
+// ?updates=sm,mb,mini: the devices holding a staged update, and
+// ?downloading=sm,mb,mini the ones fetching it.
 const stagedUpdates = new Set<string>();
 const downloadingUpdates = new Set<string>();
 // ?migration=waiting|moving|stuck|done: the v3 migration in that state
@@ -1657,7 +1657,7 @@ function posedMigration(): MigrationProgress {
     : { planned: true, import: null, worktrees: null };
 }
 
-// ?notSharing=tp,mini: the devices with sharing off, which then serve
+// ?notSharing=mb,mini: the devices with sharing off, which then serve
 // this page nothing.
 const notSharing = new Set<string>();
 const FAKE_UPDATE_VERSION = "3.1.0";
@@ -1666,7 +1666,7 @@ function initPresence(): void {
   const pose = new URLSearchParams(location.search);
   const posed = pose.get("peers");
   const entries = (
-    posed ?? (WEB_SHELL ? "sm:connected,tp:connected" : "tp:connected")
+    posed ?? (WEB_SHELL ? "sm:connected,mb:connected" : "mb:connected")
   ).split(",");
   for (const entry of entries) {
     const [key, state] = entry.split(":");
@@ -1704,7 +1704,7 @@ const BLOCK_MESSAGES = {
 // the size where finding a project gets hard. Most hold their primary
 // checkout alone, the way most real ones do, and every fourth has a
 // worktree or two in flight. With ?crowdShared=1 terrier lists them
-// all and most are cloned on the Thinkpad too, the way a registry kept
+// all and most are cloned on the MacBook too, the way a registry kept
 // on every machine fills the list: nearly every project then carries a
 // paw and a device, which the open project's header shows.
 const CROWD_NAMES = [
@@ -1747,9 +1747,9 @@ function initCrowd(): void {
   const posed = Number(pose.get("crowd"));
   const local = forests[LOCAL_DEVICE_ID];
   if (!Number.isInteger(posed) || posed <= 0 || local === undefined) return;
-  const thinkpad =
-    pose.get("crowdShared") === "1" ? forests[THINKPAD_ID] : undefined;
-  const shared = thinkpad !== undefined;
+  const macbook =
+    pose.get("crowdShared") === "1" ? forests[MACBOOK_ID] : undefined;
+  const shared = macbook !== undefined;
   CROWD_NAMES.slice(0, posed).forEach((name, i) => {
     // One checkout of the crowd's project on a device, its primary
     // worktree first and the given ones after it.
@@ -1798,7 +1798,7 @@ function initCrowd(): void {
     );
     // Every fifth stays on this machine alone, so the projects differ.
     if (shared && i % 5 !== 4) {
-      checkout(thinkpad, `tp_crowd_${i}`, `/home/rin/dev/${name}`);
+      checkout(macbook, `mb_crowd_${i}`, `/Users/rin/dev/${name}`);
     }
   });
 }
@@ -1961,11 +1961,11 @@ export function installFakeHostBridge(
       "a3f19c2e77b04d5586e1f20c9ab34d61",
       {
         forwardId: "a3f19c2e77b04d5586e1f20c9ab34d61",
-        deviceId: THINKPAD_ID,
+        deviceId: MACBOOK_ID,
         remotePort: 5173,
         localPort: 5173,
         connCount: 2,
-        worktree: { projectId: "tp_sm", worktreeId: "a1b2c3d4e5f6" },
+        worktree: { projectId: "mb_sm", worktreeId: "a1b2c3d4e5f6" },
       },
     ],
   ]);
@@ -1976,7 +1976,7 @@ export function installFakeHostBridge(
     addLiveEdgeRuns();
     forwards.set("b7e0aa9c1d2f4e6081b3c5d7e9f1a2b4", {
       forwardId: "b7e0aa9c1d2f4e6081b3c5d7e9f1a2b4",
-      deviceId: THINKPAD_ID,
+      deviceId: MACBOOK_ID,
       remotePort: 3000,
       localPort: 3001,
       connCount: 0,
@@ -2289,10 +2289,10 @@ export function installFakeHostBridge(
   };
 
   // ?mirrored=1: a mirror running from boot, Studio Mac's brave-badger
-  // kept in step with a copy on Thinkpad, through the posed start.
+  // kept in step with a copy on MacBook, through the posed start.
   if (new URLSearchParams(location.search).get("mirrored") === "1") {
     void fakeMirrorStartTo(localForest, {
-      targetDeviceId: THINKPAD_ID,
+      targetDeviceId: MACBOOK_ID,
       projectId: "p_sm",
       worktreeId: "a10000000003",
       ignoreMode: "gitignored",

@@ -35,7 +35,7 @@ import {
   forests,
   LOCAL_DEVICE_ID,
   MINI_ID,
-  THINKPAD_ID,
+  MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import { fakePullRequestCandidates } from "../fixtures/pullRequestFixtures.ts";
 import { SceneDialog, SceneWindowFrame } from "./frame.tsx";
@@ -50,7 +50,7 @@ const WORKTREES: Worktree[] = forests[LOCAL_DEVICE_ID]?.worktrees[SM.id] ?? [];
 const WORKTREE_BY_BRANCH = new Map(WORKTREES.map((w) => [w.branch, w]));
 const DEST_ROOT = `${HOME}/.sm/worktrees/shigoto-no-mori`;
 const CANDIDATES = fakePullRequestCandidates();
-const DEVICE_TABS = deviceTabs([LOCAL_DEVICE_ID, THINKPAD_ID, MINI_ID]);
+const DEVICE_TABS = deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID]);
 
 function newWorktreePage(form: ReactNode) {
   return (

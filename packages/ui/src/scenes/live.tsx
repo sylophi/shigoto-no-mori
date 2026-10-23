@@ -1,5 +1,5 @@
 // The Live page over the fixtures: what runs on this Mac and the
-// Thinkpad, an agent waiting, the scripts, the terminals open, a mirror
+// MacBook, an agent waiting, the scripts, the terminals open, a mirror
 // each way and a forwarded port, and the page with nothing running.
 import type { ReactNode } from "react";
 import {
@@ -32,7 +32,7 @@ import {
   fakeOpenTerminals,
   fakeRunningScripts,
   LOCAL_DEVICE_ID,
-  THINKPAD_ID,
+  MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
@@ -44,7 +44,7 @@ const QUAIL = worktreeNamed(SM, "quiet-quail");
 const BADGER = worktreeNamed(SM, "brave-badger");
 const HUM = worktreeNamed(SM, "happy-hummingbird");
 const MAC = deviceById(LOCAL_DEVICE_ID);
-const THINKPAD = deviceById(THINKPAD_ID);
+const MACBOOK = deviceById(MACBOOK_ID);
 const runOf = (worktreeId: string) =>
   fakeRunningScripts[LOCAL_DEVICE_ID]?.find((r) => r.worktreeId === worktreeId);
 
@@ -162,7 +162,7 @@ export function LivePageScene() {
           {script(HUM.id)}
           {terminals(HUM.id)}
           <MirrorSessionItemView
-            peer={<DeviceNameView icon={THINKPAD.icon} name={THINKPAD.label} />}
+            peer={<DeviceNameView icon={MACBOOK.icon} name={MACBOOK.label} />}
             tone="emerald"
             spinning={false}
             label="In step"
@@ -173,7 +173,7 @@ export function LivePageScene() {
         </LiveCardView>
       </LiveDeviceSectionView>
       <LiveDeviceSectionView
-        heading={deviceHeading(THINKPAD, "1 script and 1 port forward running")}
+        heading={deviceHeading(MACBOOK, "1 script and 1 port forward running")}
       >
         <LiveCardView
           header={header(HUM, null)}
@@ -194,7 +194,7 @@ export function LivePageScene() {
             label="dev"
             mono
             since={Date.now() - 3 * 3_600_000}
-            readOnlyNote={peerReadOnlyNote(THINKPAD.label)}
+            readOnlyNote={peerReadOnlyNote(MACBOOK.label)}
             onOutput={noop}
             restart={null}
             stopping={false}

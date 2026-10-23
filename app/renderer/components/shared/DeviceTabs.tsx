@@ -163,7 +163,7 @@ export function useHostDevicePick<T extends { deviceId: string }>(
 // The body under the picked tab: the page itself under that device's
 // scope, or a note where the page can't be. An offline peer keeps its
 // tab and says so, rather than vanishing and leaving "where did the
-// Thinkpad go" open (where the page knows the peer at all: a project
+// MacBook go" open (where the page knows the peer at all: a project
 // page lists a peer by its checkout, which an asleep peer never asked
 // this session can't report). A peer that will not run commands from
 // here says where the grant is made, since every page here exists to

@@ -25,7 +25,7 @@ export function MirrorHeadlineView({
   branch: string;
   landingBranch: string;
   sourceDeviceLabel: string;
-  // Where the copy lands, in words ("here", "on the Thinkpad").
+  // Where the copy lands, in words ("here", "on the MacBook").
   on: string;
   // The running stage's line, off the progress frames.
   running: string;
