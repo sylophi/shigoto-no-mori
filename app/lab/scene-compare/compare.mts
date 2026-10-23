@@ -22,7 +22,7 @@ import { chromium, type Browser, type Page } from "playwright-core";
 
 const { values } = parseArgs({
   options: {
-    base: { type: "string", default: "origin/release/v3" },
+    base: { type: "string", default: "origin/main" },
     threshold: { type: "string", default: "20" },
   },
 });

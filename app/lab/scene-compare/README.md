@@ -6,14 +6,13 @@ it draws (the desktop app, the web app on a phone, or a part), by the
 working tree and by a base ref. Pairs that differ go in a report.
 
 ```sh
-pnpm scenes:compare                      # against origin/release/v3
-pnpm scenes:compare --base origin/main   # any ref git resolves: a branch, a tag, a SHA
+pnpm scenes:compare                      # against origin/main
+pnpm scenes:compare --base HEAD~1        # any ref git resolves: a branch, a tag, a SHA
 pnpm scenes:compare --threshold 50       # pixels a pair may differ by (20)
 ```
 
-The base defaults to `origin/release/v3` while v3 is built there. Once
-that branch is in main, the default becomes `origin/main`. Fetch first,
-since the script compares against the ref as it stands locally.
+Fetch first, since the script compares against the ref as it stands
+locally.
 
 It checks the base out into a temporary git worktree, installs it, copies
 the file icons into both sides (the app's own `copy-material-icons.mts`,

@@ -30,7 +30,7 @@ The samples prove one direction: this build reads what the version's samples hol
 - No bump: a new call (an older build answers a call it lacks with a defect for that call alone, and the link stays up), and a new optional field in a plain struct or a `loose` one, which an older build drops or keeps as it came. Nor any change to a `client` module's calls, which only a window and its own build's shell exchange, or to `session`'s, which only a host and the shell that spawned it exchange (its samples are edited in place).
 - A bump: anything an older build decodes and would refuse or misread. A new field in a `strict` schema (strict refuses a key it does not model), a field or call removed or renamed, a type narrowed, a new literal or union member, a new error in `CallFailureSchema` (an older build cannot decode it), or a change to the encoding.
 
-To bump, raise `PROTOCOL_VERSION`, `git mv` the samples file to the new version's name, and run `wire-fixtures`. The hub deploys with the bump, since its floor is the version.
+To bump, raise `PROTOCOL_VERSION`, `git mv` the samples file to the new version's name, and run `wire-fixtures`. The hub's floor is the version, so its next deploy turns away every build below the bump: deploy it only once a release with the bump has reached the devices (`hub/README.md`, "The version floor").
 
 A version no build has been cut with yet takes its changes in place: its samples file is edited and the version stays, since no build of it exists to read the old bytes. Once a build carries the version, the rules above hold for it. A device on another version never links (the device link's hello asks for its own exactly), so a field a version makes optional is optional for its meaning, never for an older peer.
 
