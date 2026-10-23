@@ -136,8 +136,6 @@ jobs:
   # darwin helper, built from macfs/ (hence Go).
   engine:
     runs-on: macos-latest
-    # Its setup, the engine's suite and the terminal's run seven to ten
-    # minutes, the suite's share varying by two from run to run.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -168,50 +166,6 @@ jobs:
 
       - name: Terminal
         run: pnpm run check:cli
-
-  # The main ruleset requires a ui job. It typechecks the ui package,
-  # which the typecheck job does too.
-  ui:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: ui
-        run: pnpm -F @shigomori/ui typecheck
-
-  # The main ruleset requires a hub job. It typechecks the hub Worker,
-  # which the typecheck job does too.
-  hub:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Hub typecheck
-        run: pnpm -C hub typecheck
 
   # The file-sync engine's tests, on macOS, the one platform it ships
   # for: it watches through FSEvents.
