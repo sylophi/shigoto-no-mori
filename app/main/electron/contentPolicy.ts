@@ -51,6 +51,9 @@ export function rendererContentPolicy(options: {
         `https://${host}`,
         `https://*.${host}`,
       ]),
+      // Where github.com/user-attachments/assets/<id> redirects a reader
+      // GitHub doesn't know: the policy holds redirects too.
+      "https://github-production-user-asset-6210df.s3.amazonaws.com",
     ],
     // The files page's video and audio, read whole into data: URLs.
     "media-src": ["'self'", "data:"],

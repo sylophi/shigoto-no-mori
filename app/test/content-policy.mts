@@ -65,6 +65,7 @@ it("a packaged build runs no inline script or eval, connects to the loopback and
     "https://*.github.com",
     "https://githubusercontent.com",
     "https://*.githubusercontent.com",
+    "https://github-production-user-asset-6210df.s3.amazonaws.com",
   ]);
   assert.deepEqual(policy.get("media-src"), ["'self'", "data:"]);
   assert.deepEqual(policy.get("object-src"), ["'none'"]);
