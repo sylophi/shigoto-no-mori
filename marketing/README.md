@@ -121,10 +121,11 @@ byte on the same runner image. A runner draws text a little differently
 from a Mac, so a shot from `pnpm og` on a Mac is for looking at:
 committed, it would differ from every run's. The runner's Chrome comes
 with its image, so the first run after an update to it can bring an
-image with no visible change, which merging settles. The branch is
-named for the image, so runs that shoot the same one push it once.
-Opening the pull request needs the repository to let Actions create
-them; without that, the run's summary links the pushed branch.
+image with no visible change, which merging settles once every runner
+has the update. The branch is named for the image, so runs that shoot
+the same one push it once. Opening the pull request needs the
+repository to let Actions create them; without that, the run's summary
+links the pushed branch.
 
 ## Where the pieces come from
 
