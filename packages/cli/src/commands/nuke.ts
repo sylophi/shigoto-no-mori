@@ -64,15 +64,8 @@ export const nuke = Command.make(
   "nuke",
   {
     rest,
-    yes: Flag.Boolean("yes").pipe(
-      Flag.withAlias("y"),
-      Flag.withDescription("Say yes: nothing of this build stays"),
-      Flag.withDefault(false),
-    ),
-    keepApp: Flag.Boolean("keep-app").pipe(
-      Flag.withDescription("Keep the app's bundle"),
-      Flag.withDefault(false),
-    ),
+    yes: Flag.Boolean("yes").pipe(Flag.withAlias("y"), Flag.withDefault(false)),
+    keepApp: Flag.Boolean("keep-app").pipe(Flag.withDefault(false)),
   },
   (input) =>
     Effect.gen(function* () {
@@ -199,6 +192,4 @@ export const nuke = Command.make(
         return yield* new ExitCode({ code: 1 });
       }
     }),
-).pipe(
-  Command.withDescription("Take everything of this build off the machine"),
 );

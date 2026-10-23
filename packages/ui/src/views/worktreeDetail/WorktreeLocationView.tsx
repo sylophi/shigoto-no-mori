@@ -7,7 +7,6 @@ import { Pencil } from "lucide-react";
 import { InlineNameEditorView } from "../shared/InlineNameEditorView.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
-import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 
 export function WorktreeLocationView({
   path,
@@ -50,15 +49,13 @@ export function WorktreeLocationView({
         copyable
       />
       {rename && (
-        <SimpleTooltip tip="Rename folder">
-          <IconButton
-            aria-label={`Rename ${folder}`}
-            onClick={() => rename.onEditingChange(true)}
-            className="shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/rename:opacity-100 focus-visible:opacity-100"
-          >
-            <Pencil className="size-3.5" />
-          </IconButton>
-        </SimpleTooltip>
+        <IconButton
+          aria-label={`Rename ${folder}`}
+          onClick={() => rename.onEditingChange(true)}
+          className="shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/rename:opacity-100 focus-visible:opacity-100"
+        >
+          <Pencil className="size-3.5" />
+        </IconButton>
       )}
     </span>
   );

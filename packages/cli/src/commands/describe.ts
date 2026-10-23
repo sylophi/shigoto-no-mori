@@ -145,6 +145,4 @@ export const describe = Command.make(
             ),
           );
     }),
-).pipe(
-  Command.withDescription("Set or show a worktree's title and description"),
 );

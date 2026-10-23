@@ -39,7 +39,7 @@ export function SidebarSectionView({
         label="Show device icons"
         description={
           signedIn
-            ? "Badges open projects and each worktree with the devices they live on. Turn off for quieter rows. The device filter still narrows the list."
+            ? "Badges open projects and each worktree with the devices they live on. The device filter works either way."
             : "Sign in to bring in your other devices. Open projects and each worktree are then badged with the devices they live on."
         }
       />

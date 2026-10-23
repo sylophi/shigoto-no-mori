@@ -85,7 +85,7 @@ export function AppearanceSectionView({
         checked={doubutsu}
         onCheckedChange={onDoubutsuChange}
         label="Doubutsu theme"
-        description="Bold, color-blocked Animal Crossing inspired theme. Layers on top of light and dark; turn off for the plain, neutral look."
+        description="Bold, color-blocked Animal Crossing inspired theme, over light or dark."
       />
       {/* Its palettes, one per appearance the way most apps offer it,
           so a cream day and a navy night can go together. They wait,
@@ -124,7 +124,7 @@ export function AppearanceSectionView({
           onCheckedChange={onPauseAnimationsOnBatteryChange}
           disabled={!doubutsu}
           label="Pause always-on animations on battery"
-          description="The drifting wallpaper redraws the window every frame, even when nothing else is happening. Pausing it while this machine runs on battery saves energy, and it picks up again when plugged in."
+          description="The drifting wallpaper redraws the window every frame. It picks up again when plugged in."
         />
       )}
       {villageLife}

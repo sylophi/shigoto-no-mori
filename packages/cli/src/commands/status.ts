@@ -184,10 +184,7 @@ export const status = Command.make(
     ref: Argument.String("worktree").pipe(Argument.optional),
     // The first is read and the rest let be.
     rest,
-    noPr: Flag.Boolean("no-pr").pipe(
-      Flag.withDescription("Skip the pull request lookup"),
-      Flag.withDefault(false),
-    ),
+    noPr: Flag.Boolean("no-pr").pipe(Flag.withDefault(false)),
   },
   (input) =>
     Effect.gen(function* () {
@@ -201,6 +198,4 @@ export const status = Command.make(
       const now = yield* Clock.currentTimeMillis;
       yield* out(card(styles(stdoutColor), found, { home, width, now }));
     }),
-).pipe(
-  Command.withDescription("One worktree's git state, ports and pull request"),
 );

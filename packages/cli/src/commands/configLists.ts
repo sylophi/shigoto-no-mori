@@ -198,10 +198,7 @@ export const launcherVerb = <E, R>(resolve: Effect.Effect<Settings, E, R>) =>
             );
         }
       }),
-  ).pipe(
-    Command.withAlias("launchers"),
-    Command.withDescription("The custom launchers: list, add, rm"),
-  );
+  ).pipe(Command.withAlias("launchers"));
 
 // --- carry-over ---
 
@@ -244,14 +241,8 @@ export const carryOverVerb = <E, R>(
     "carryover",
     {
       args: Argument.String("args").pipe(Argument.variadic()),
-      copy: Flag.Boolean("copy").pipe(
-        Flag.withDescription("Copy the file into new worktrees"),
-        Flag.withDefault(false),
-      ),
-      symlink: Flag.Boolean("symlink").pipe(
-        Flag.withDescription("Link the file into new worktrees (the default)"),
-        Flag.withDefault(false),
-      ),
+      copy: Flag.Boolean("copy").pipe(Flag.withDefault(false)),
+      symlink: Flag.Boolean("symlink").pipe(Flag.withDefault(false)),
     },
     (input) =>
       Effect.gen(function* () {
@@ -354,7 +345,4 @@ export const carryOverVerb = <E, R>(
             );
         }
       }),
-  ).pipe(
-    Command.withAlias("carry-over"),
-    Command.withDescription("The files carried into new worktrees"),
-  );
+  ).pipe(Command.withAlias("carry-over"));

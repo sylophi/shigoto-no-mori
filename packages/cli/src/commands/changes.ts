@@ -44,18 +44,7 @@ class SetupFailed extends Schema.TaggedError<SetupFailed>()("SetupFailed", {
   }
 }
 
-const flag = (name: string, description: string) =>
-  Flag.Boolean(name).pipe(
-    Flag.withDescription(description),
-    Flag.withDefault(false),
-  );
-
-const force = (description: string) =>
-  Flag.Boolean("force").pipe(
-    Flag.withAlias("f"),
-    Flag.withDescription(description),
-    Flag.withDefault(false),
-  );
+const flag = (name: string) => Flag.Boolean(name).pipe(Flag.withDefault(false));
 
 // A new worktree's last word: the failed scripts as warnings and the
 // path as the result, or the closing document. Exit 3 when a script
@@ -97,10 +86,10 @@ export const create = Command.make(
     rest,
     branch: Flag.String("branch").pipe(Flag.withAlias("b"), Flag.optional),
     base: Flag.String("base").pipe(Flag.optional),
-    checkout: flag("checkout", "Check out the existing branch --base names"),
-    noCd: flag("no-cd", "Stay where you are"),
-    noSetup: flag("no-setup", "Skip the project's setup script"),
-    noClone: flag("no-clone", "Have git write every file"),
+    checkout: flag("checkout"),
+    noCd: flag("no-cd"),
+    noSetup: flag("no-setup"),
+    noClone: flag("no-clone"),
   },
   (input) =>
     Effect.gen(function* () {
@@ -154,10 +143,7 @@ export const create = Command.make(
       }
       if (code !== 0) return yield* new ExitCode({ code });
     }),
-).pipe(
-  Command.withDescription("Make a new worktree and set it up"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated));
 
 export const adopt = Command.make(
   "adopt",
@@ -165,7 +151,10 @@ export const adopt = Command.make(
     ...worktreeFlags,
     ref: Argument.String("worktree").pipe(Argument.optional),
     rest,
-    force: force("Adopt it with uncommitted changes"),
+    force: Flag.Boolean("force").pipe(
+      Flag.withAlias("f"),
+      Flag.withDefault(false),
+    ),
   },
   (input) =>
     Effect.gen(function* () {
@@ -188,11 +177,7 @@ export const adopt = Command.make(
       }
       if (code !== 0) return yield* new ExitCode({ code });
     }),
-).pipe(
-  Command.withDescription("Make an external worktree a managed one"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 export const setup = Command.make(
   "setup",
@@ -233,11 +218,7 @@ export const setup = Command.make(
       }
       return yield* new SetupFailed({ name: located.worktree.name });
     }),
-).pipe(
-  Command.withDescription("Run a worktree's setup again"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 export const rm = Command.make(
   "rm",
@@ -246,7 +227,7 @@ export const rm = Command.make(
     ref: Argument.String("worktree").pipe(Argument.optional),
     rest,
     ...removeFlags,
-    stack: flag("stack", "The worktrees of the landed stack under it too"),
+    stack: flag("stack"),
   },
   (input) =>
     Effect.gen(function* () {
@@ -301,11 +282,7 @@ export const rm = Command.make(
         yield* cdNote("the removed worktree", hint);
       }
     }),
-).pipe(
-  Command.withDescription("Remove a worktree, its teardown first"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 // A move or a rename made, printed, with a note for a shell that stood
 // in the old folder (looked at before the move).
@@ -352,11 +329,7 @@ export const move = Command.make(
       );
       yield* reportMoved(located, moveWorktree(at, located, destination));
     }),
-).pipe(
-  Command.withDescription("Move a worktree's folder"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 export const rename = Command.make(
   "rename",
@@ -382,8 +355,4 @@ export const rename = Command.make(
       );
       yield* reportMoved(located, renameWorktree(at, located, name));
     }),
-).pipe(
-  Command.withDescription("Rename a worktree's folder"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);

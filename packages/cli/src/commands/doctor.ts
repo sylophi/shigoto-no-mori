@@ -109,15 +109,8 @@ export const doctorCommand = Command.make(
   "doctor",
   {
     rest,
-    fix: Flag.Boolean("fix").pipe(
-      Flag.withDescription("Apply the repairs the checks offer"),
-      Flag.withDefault(false),
-    ),
-    yes: Flag.Boolean("yes").pipe(
-      Flag.withAlias("y"),
-      Flag.withDescription("Say yes to the repairs that delete something"),
-      Flag.withDefault(false),
-    ),
+    fix: Flag.Boolean("fix").pipe(Flag.withDefault(false)),
+    yes: Flag.Boolean("yes").pipe(Flag.withAlias("y"), Flag.withDefault(false)),
   },
   ({ rest: extra, fix, yes }) =>
     Effect.gen(function* () {
@@ -144,4 +137,4 @@ export const doctorCommand = Command.make(
       // Every failure is on the checklist already.
       if (!doc.ok) return yield* new ExitCode({ code: 1 });
     }),
-).pipe(Command.withDescription("Check this install, and repair it with --fix"));
+);

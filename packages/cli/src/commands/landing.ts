@@ -57,7 +57,6 @@ const isMethod = Schema.is(MergeMethodSchema);
 
 const methodFlag = Flag.String("method").pipe(
   Flag.withAlias("m"),
-  Flag.withDescription("merge, squash or rebase"),
   Flag.optional,
 );
 
@@ -71,10 +70,7 @@ const methodOf = (flag: Option.Option<string>) => {
   );
 };
 
-const stackFlag = Flag.Boolean("stack").pipe(
-  Flag.withDescription("Every open pull request under it too, bottom first"),
-  Flag.withDefault(false),
-);
+const stackFlag = Flag.Boolean("stack").pipe(Flag.withDefault(false));
 
 // The positionals it needs are read and the rest let be.
 const target = {
@@ -228,10 +224,7 @@ export const pr = Command.make("pr", target, (input) =>
     );
     yield* note(styles(stderrColor).dim(url));
   }),
-).pipe(
-  Command.withDescription("Open a worktree's pull request"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated));
 
 export const merge = Command.make(
   "merge",
@@ -274,11 +267,7 @@ export const merge = Command.make(
         ),
       );
     }),
-).pipe(
-  Command.withDescription("Merge a worktree's pull request"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 export const land = Command.make(
   "land",
@@ -311,11 +300,7 @@ export const land = Command.make(
       }
       yield* reportCleanup(doc, located);
     }),
-).pipe(
-  Command.withDescription("Merge a worktree's pull request and clean up"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 export const done = Command.make(
   "done",
@@ -323,7 +308,6 @@ export const done = Command.make(
     ...target,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
-      Flag.withDescription("Discard a branch that isn't merged"),
       Flag.withDefault(false),
     ),
   },
@@ -340,11 +324,7 @@ export const done = Command.make(
         yield* note(styles(stderrColor).dim(`skipped catch-up: ${skipped}`));
       }
     }),
-).pipe(
-  Command.withDescription("Put a checkout back on the primary branch"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 // rm --stack: the cleanup half of a stack land.
 export const removeStack = (

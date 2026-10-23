@@ -35,10 +35,7 @@ export const launchersCommand = Command.make(
     ...projectFlags,
     verb: Argument.String("list").pipe(Argument.optional),
     rest,
-    catalog: Flag.Boolean("catalog").pipe(
-      Flag.withDescription("Every app the catalog knows, installed or not"),
-      Flag.withDefault(false),
-    ),
+    catalog: Flag.Boolean("catalog").pipe(Flag.withDefault(false)),
   },
   (input) =>
     Effect.gen(function* () {
@@ -73,4 +70,4 @@ export const launchersCommand = Command.make(
         yield* note(styles(stderrColor).dim(`${row.hiddenCount} hidden`));
       }
     }),
-).pipe(Command.withDescription("A project's launcher row"));
+);

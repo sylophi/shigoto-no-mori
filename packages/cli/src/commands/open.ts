@@ -106,7 +106,7 @@ export const open = Command.make(
           })
         : out(`opened ${opened.label} in ${located.worktree.name}`);
     }),
-).pipe(Command.withDescription("Open a worktree in a launcher"));
+);
 
 // sm [worktrees] edit <file> [<worktree>]: a worktree's file in the
 // editor the settings name, or its default app. A relative path reads
@@ -131,7 +131,7 @@ export const edit = Command.make(
       );
       yield* json ? emit({ ok: true, path: opened }) : out(`opened ${opened}`);
     }),
-).pipe(Command.withDescription("Open a worktree's file in your editor"));
+);
 
 // sm app: the installed app, opened or brought forward.
 export const app = Command.make("app", { rest }, (input) =>
@@ -144,4 +144,4 @@ export const app = Command.make("app", { rest }, (input) =>
     const { appName } = flavorNames((yield* Paths.Paths).flavor);
     yield* json ? emit({ ok: true }) : out(`opened ${appName}`);
   }),
-).pipe(Command.withDescription("Open the Shigoto no Mori app"));
+);
