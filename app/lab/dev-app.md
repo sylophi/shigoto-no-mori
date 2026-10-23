@@ -341,11 +341,11 @@ removed one the next time they read the registry. A relaunch after
   `APPLE_SIGNING_IDENTITY` in the build environment the bundle is
   unsigned and, like dev, runs on Chromium's mock keychain: the real
   keychain is exercised only by a Developer-ID-signed build (the
-  release workflow). A local prod
-  build shares the installed app's userData, and tokens it writes are
-  under the mock key, so switching between it and the installed app
-  signs the other out once. It takes no debugging port: it quits when
-  started with `--remote-debugging-port` or `--remote-debugging-pipe`
+  release workflow). A local prod build shares the installed app's
+  userData, and tokens it writes are under the mock key, so switching
+  between it and the installed app signs the other out once. It takes
+  no debugging port: it quits when started with
+  `--remote-debugging-port` or `--remote-debugging-pipe`
   (`main/electron/debugSwitches.ts`). Read and drive its window
   through macOS accessibility instead, asking the app for its page's
   tree by setting `AXManualAccessibility` once the page is up
