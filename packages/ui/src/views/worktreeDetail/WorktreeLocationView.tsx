@@ -52,7 +52,8 @@ export function WorktreeLocationView({
         <IconButton
           aria-label={`Rename ${folder}`}
           onClick={() => rename.onEditingChange(true)}
-          className="shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover/rename:opacity-100 focus-visible:opacity-100"
+          reveal
+          className="group-hover/rename:opacity-100"
         >
           <Pencil className="size-3.5" />
         </IconButton>

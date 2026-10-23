@@ -41,12 +41,12 @@ const catalog = (names: Names) => {
       [
         "update [--check]",
         "Update the app to the latest release",
-        "Checks GitHub releases, downloads, verifies and installs without opening the app (the linked CLI updates with it), restarting a running app into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only releases.",
+        "Checks GitHub releases, downloads, verifies and installs without opening the app (the linked CLI updates with it), restarting a running app into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
       ],
       [
         "doctor [--fix] [--yes]",
         "Check the installation and data dir",
-        "Checks the environment, the data dir, processes a crashed app left running, and each project. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each that deletes something (--yes skips the prompts); anything else is reported. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.",
+        "Checks the environment, the data dir, each project, and the processes a crashed app left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts); anything else is reported. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.",
       ],
       [
         "nuke --yes [--keep-app]",
