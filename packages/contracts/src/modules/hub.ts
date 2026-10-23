@@ -3,8 +3,9 @@ import { DeviceIdSchema } from "../hubProtocol.ts";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
-// The one hub socket lives in the host (the Durable Object supersedes a
-// second one per device), so windows reach peers through it.
+// The one hub socket lives with the bridge, in the host or in the web
+// shell's page (the Durable Object supersedes a second one per device),
+// so windows reach peers through it.
 // Client-scoped, so the bridge can never be served back to a peer.
 
 const HubSocketStatusSchema = Schema.Union([
