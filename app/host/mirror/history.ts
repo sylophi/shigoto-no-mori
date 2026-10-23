@@ -32,8 +32,8 @@ const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
 // ("beta polling error: unable to receive poll response: … EOF"), and
 // the file copy's own encoding over the stream, for a cut mid-copy.
 // This side's own failures carry none of them, but for its message
-// codec's below. A peer whose serve ends (it quit or died, or turned
-// away a request past its size cap, a huge tree's) reads as a cut too:
+// codec's below. A peer whose serve ends (it quit or died, or couldn't
+// read a huge tree's request, past its size cap) reads as a cut too:
 // Mutagen carries no cause across it. Its disk full doesn't end it:
 // the file is skipped and comes back as a transition problem.
 const LINK_WORDS = [
