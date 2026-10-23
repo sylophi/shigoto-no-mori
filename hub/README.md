@@ -389,8 +389,8 @@ The production web client deploys from the `web-client-prod` branch,
 Vercel's production branch for the project (set up as "The Vercel
 projects" says, below). The release workflow fast-forwards it to the
 tagged commit at the end of every full (non-prerelease) release, once
-the desktop assets are uploaded, so the
-web client ships the same source as the `.app` without a push by hand.
+the desktop assets are uploaded, so the web client ships the same
+source as the `.app` without a push by hand.
 A push by hand is still fine for a web-only fix between releases: the
 workflow leaves a branch that is already past the tag alone, and goes
 red rather than overwrite one that has diverged from it.

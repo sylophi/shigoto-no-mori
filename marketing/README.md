@@ -117,11 +117,14 @@ CI and committed rather than at deploy because Vercel's build has no
 browser to shoot with, and a committed image keeps the fixed URL with
 its own caching, reviewed like any other change. The committed image is
 the workflow's shot, which a run with nothing changed repeats byte for
-byte. A runner draws text a little differently from a Mac, so a shot
-from `pnpm og` on a Mac is for looking at: committed, it would differ
-from every run's. Opening the pull request needs the
-repository to let Actions create them; without that, the run's summary
-links the pushed branch.
+byte on the same runner image. A runner draws text a little differently
+from a Mac, so a shot from `pnpm og` on a Mac is for looking at:
+committed, it would differ from every run's. The runner's Chrome comes
+with its image, so the first run after an update to it can bring an
+image with no visible change, which merging settles. The branch is
+named for the image, so runs that shoot the same one push it once.
+Opening the pull request needs the repository to let Actions create
+them; without that, the run's summary links the pushed branch.
 
 ## Where the pieces come from
 

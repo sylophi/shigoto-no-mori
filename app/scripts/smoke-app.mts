@@ -721,6 +721,9 @@ async function serve(port: string) {
       SHIGOMORI_DEBUG_PORT: port,
     },
     stdio: "inherit",
+    // A group of its own, with its host: a terminal's Ctrl-C reaches
+    // the smoke alone, whose run end quits the app.
+    detached: true,
   });
   serving = child.pid;
   let exited = false;
