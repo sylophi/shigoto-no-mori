@@ -533,7 +533,7 @@ const hubRedeploy: Scenario = {
   name: "hub-redeploy",
   does: "The dev hub is deployed again from this checkout's hub/ (wrangler deploy --env dev), which restarts its Durable Objects and drops every socket.",
   boundMs: 60_000,
-  // The dev hub is shared: every dev build on the account talks to it.
+  // The dev hub is shared: every dev build talks to it.
   onlyNamed: true,
   async run(lab) {
     changeHost(lab);

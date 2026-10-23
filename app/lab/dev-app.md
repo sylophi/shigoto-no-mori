@@ -338,10 +338,10 @@ removed one the next time they read the registry. A relaunch after
   everything of the build off the machine, its bundle too.
 - **Packaged prod build** (`pnpm make`). The only way to test a
   packaged scheme registration under the real names. Without
-  `APPLE_SIGNING_IDENTITY` in the build
-  environment the bundle is unsigned and, like dev, runs on
-  Chromium's mock keychain: the real keychain is exercised only by a
-  Developer-ID-signed build (the release workflow). A local prod
+  `APPLE_SIGNING_IDENTITY` in the build environment the bundle is
+  unsigned and, like dev, runs on Chromium's mock keychain: the real
+  keychain is exercised only by a Developer-ID-signed build (the
+  release workflow). A local prod
   build shares the installed app's userData, and tokens it writes are
   under the mock key, so switching between it and the installed app
   signs the other out once. It takes no debugging port: it quits when

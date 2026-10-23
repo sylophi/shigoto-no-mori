@@ -82,7 +82,7 @@ sign itself out. Run one before the worktree goes: the account holds
 | --- | --- | --- |
 | `network-drop` | The clients' network goes for 20 to 60 s (flows stall, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. A tab has to stop reading the host as Connected within 10 s and a window within 15 s. The terminal runs `devices`, `list --remote` and a `send` meanwhile. | 30 s |
 | `network-blip` | Every flow stalls for 5 to 15 s and resumes, with no offline event. | 30 s |
-| `hub-redeploy` | The dev hub is deployed again from this checkout, which restarts its Durable Objects and drops every socket. Runs only when named: the dev hub is shared (every dev build on the account talks to it). Named, it is skipped when this checkout's `hub/` or contracts differ from main as fetched then, untracked files included. | 60 s |
+| `hub-redeploy` | The dev hub is deployed again from this checkout, which restarts its Durable Objects and drops every socket. Runs only when named: the dev hub is shared (every dev build talks to it). Named, it is skipped when this checkout's `hub/` or contracts differ from main as fetched then, untracked files included. | 60 s |
 | `host-kill` | B's host process is killed, and its shell forks it again. | 60 s |
 | `app-relaunch` | B's whole dev app quits and launches again. | 60 s from the relaunch |
 | `laptop-sleep` | The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, A and C stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and their windows hear the network come back, as a wake tells them, and the tabs wake. | 30 s |

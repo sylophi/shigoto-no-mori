@@ -355,8 +355,8 @@ curl -X PATCH https://api.clerk.com/v1/instance \
 
 The second call's list is the first call's answer plus the new origin;
 the one above is the dev instance's. Read it back the same way
-afterwards. Without it, desktop sign-in fails on
-every Frontend API call after the first (the web client is unaffected:
+afterwards. Without it, desktop sign-in fails on every Frontend API
+call after the first (the web client is unaffected:
 a browser origin authenticates the browser way).
 
 A PRODUCTION instance additionally enforces an allowlist of OAuth

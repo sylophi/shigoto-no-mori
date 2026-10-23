@@ -1,14 +1,13 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { RuntimeInfo } from "@shigomori/contracts/schemas";
 import { type HostScope, useHostScope } from "@/hooks/remote/useHostScope";
-import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import { queryKeysFor } from "@/lib/queryKeys";
 
 // Single source of truth for a host's runtime info, so a read of this
 // machine's from under a peer's scope (the pull dialogs' clone section)
 // shares the cache entry with the scoped hook below.
 export function runtimeInfoQueryOptions(
-  scope: Pick<HostScope, "deviceId" | "api" | "remote">,
+  scope: Pick<HostScope, "deviceId" | "api">,
   enabled = true,
 ) {
   const { deviceId, api } = scope;
@@ -20,9 +19,7 @@ export function runtimeInfoQueryOptions(
     },
     staleTime: Number.POSITIVE_INFINITY,
     enabled: enabled && api !== undefined,
-    // A peer on 3.0.0-beta.2 serves it only behind its command grant,
-    // and its pages take that refusal as "no path to spell".
-    meta: gatedHostReadMeta(scope.remote, "Couldn't read runtime info"),
+    meta: { errorTitle: "Couldn't read runtime info" },
   });
 }
 
