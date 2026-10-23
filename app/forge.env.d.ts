@@ -13,4 +13,4 @@ declare const __SM_ACCOUNT_BAKED_ENV__: Record<string, string>;
 declare const __SM_SIGNED_MAC_BUILD__: boolean;
 // The flavor forge packaged this build as (SM_FLAVOR at build time,
 // vite.node.config.ts). Read only by main/flavor.ts.
-declare const __SM_PACKAGED_FLAVOR__: "prod" | "v3";
+declare const __SM_PACKAGED_FLAVOR__: import("@shigomori/engine/flavor").Flavor;

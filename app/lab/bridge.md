@@ -11,8 +11,8 @@ The app keeps it in a React context, not on `window`. A dev build, the
 fake host and a test flavor started with `--sm-lab` hand it to tools
 outside the page as `window.__smLab.api`
 (`renderer/lib/runtime/labHandle.ts`), which `api` below stands for.
-Reaching it takes a debugging port, which a packaged prod or v3 build
-refuses (`dev-app.md`, "Packaged prod or v3 build"):
+Reaching it takes a debugging port, which a packaged prod build
+refuses (`dev-app.md`, "Packaged prod build"):
 
 ```json
 { "js": "((api) => api.run(api.hub.status()))(window.__smLab.api)" }

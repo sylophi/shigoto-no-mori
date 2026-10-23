@@ -61,16 +61,14 @@ export const makeFeeds = ({
 }) =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
-    // Which releases this build is offered, none for dev.
-    const offered = flavorNames(flavor).updates;
-    // Whether a run may ask for updates at all: a build with a line, or a
-    // test flavor given a stand-in list (the lab's), never a dev build or
-    // a test flavor on the real endpoints.
+    // Whether a run may ask for updates at all: prod, or a test flavor
+    // given a stand-in list (the lab's), never a dev build or a test
+    // flavor on the real endpoints.
     const updates = (endpoints: {
       readonly feedUrl?: string;
       readonly releasesUrl?: string;
     }) =>
-      offered !== null ||
+      flavorNames(flavor).updates ||
       (flavorNames(flavor).debuggable &&
         Boolean(endpoints.feedUrl || endpoints.releasesUrl));
 
@@ -285,12 +283,7 @@ export const makeFeeds = ({
       const fromList = Effect.map(
         fetchReleaseList(input),
         ({ releases, confirmed }) => ({
-          release: pickRelease(
-            current,
-            releases,
-            input.running.arch,
-            offered ?? "releases",
-          ),
+          release: pickRelease(current, releases, input.running.arch),
           confirmed,
         }),
       );
@@ -298,9 +291,6 @@ export const makeFeeds = ({
         release,
         confirmed: current.prerelease.length === 0,
       }));
-      // The update server knows no v3 line: a v3 build asks GitHub
-      // alone.
-      if (offered === "v3") return yield* fromList;
       if (releaseListUrl(input) === "") return yield* fromServer;
       if (updateServerUrl(input) === "") return yield* fromList;
       return yield* fromList.pipe(
