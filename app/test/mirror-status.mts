@@ -11,7 +11,7 @@
 // reads as restarting. A switch off on the copy's device reads as
 // paused until it is on, naming the switch, after a person's pause and
 // a halt, and a lost link reads as reconnecting without the engine's
-// connect error, which names the device by its id. The switch is this
+// error for the cut stream. The switch is this
 // device's own when the copy is here and the peer's as its link
 // reports it otherwise, sharing first.
 //
@@ -112,10 +112,10 @@ it("an engine that stopped reads as failing with why, one starting as restarting
   assert.equal(view("watching", 3, { engine: "starting" }).label, "Restarting");
 });
 
-it("a switch off on the copy's device reads as paused until it is on, naming the switch, a person's pause before it, and a lost link as reconnecting without the engine's error, which names the device by its id", () => {
+it("a switch off on the copy's device reads as paused until it is on, naming the switch, a person's pause before it, and a lost link as reconnecting without the engine's error for the cut stream", () => {
   const refused = {
     lastError:
-      "unable to connect to beta: this device is not permitted to run commands on the remote machine",
+      "beta polling error: unable to receive poll response: unable to read message length: EOF",
     git: { status: "off", detail: "" },
   } as const;
   for (const [off, words] of [
@@ -154,7 +154,10 @@ it("a switch off on the copy's device reads as paused until it is on, naming the
     [byHand.label, byHand.detail, byHand.paused],
     ["Paused", "", true],
   );
-  const away = { lastError: "no direct connection to 0123456789abcdef" };
+  const away = {
+    lastError:
+      "beta polling error: unable to receive poll response: unable to read message length: EOF",
+  };
   for (const [status, detail] of [
     ["disconnected", "waiting for the other device"],
     ["connecting-remote", "connecting to the other device"],

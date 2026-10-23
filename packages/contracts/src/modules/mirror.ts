@@ -631,7 +631,8 @@ export const mirrorContract = defineContract(
     remote: true,
     gated: false,
   }),
-  // The far end of a two-way session: it writes the copy's files too.
+  // The far end of a mirror, two-way so it writes the copy's files too,
+  // or of a move's files step (`transfer`).
   invoke("openStream", MirrorOpenStreamPayloadSchema, VoidSchema, {
     remote: true,
     gated: true,

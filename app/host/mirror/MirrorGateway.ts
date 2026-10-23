@@ -212,7 +212,9 @@ const make = Effect.gen(function* () {
           onOpenFailed: (error) => {
             // The peer turning this device away or out of reach is a
             // mirror paused or waiting, which the engine asks again
-            // about every 15 s for as long as it lasts: no news.
+            // about every 15 s for as long as it lasts, or a move's
+            // files step failing, which the move reports itself: no
+            // news.
             if (!isPeerRefusal(error) && !isNoDirectConnectionError(error)) {
               log.warn(
                 `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorWordsOf(error)}`,

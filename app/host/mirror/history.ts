@@ -10,10 +10,6 @@
 // daemon: the store is injected.
 import { pluralize } from "@shigomori/contracts/words";
 import {
-  CommandRefusedError,
-  NotSharingError,
-} from "@shigomori/contracts/errors";
-import {
   isHaltedStatus,
   MIRROR_HISTORY_LIMIT,
   type MirrorEvent,
@@ -31,11 +27,14 @@ const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
   "disconnected",
 ]);
 
-// The words the link's errors carry, however the engine wraps them.
+// The words of the engine's errors for a cut stream (Mutagen's remote
+// endpoint client), however the sync wraps them: "beta polling error:
+// unable to receive poll response: … EOF". The peer's own failures
+// come as "remote error: …" and this side's carry none of them.
 const LINK_WORDS = [
-  "no direct connection to ",
-  new CommandRefusedError({}).message,
-  new NotSharingError({}).message,
+  "unable to send ",
+  "unable to receive ",
+  "message transmission failed",
 ];
 const isLinkError = (error: string) =>
   LINK_WORDS.some((words) => error.includes(words));
@@ -205,11 +204,12 @@ export function createMirrorHistory(deps: {
         connected,
         lostConnection: lost,
         halted: isHaltedStatus(session.status),
-        // The link's own error (the peer out of reach or turning this
-        // device away, naming it by its id) is the loss the
-        // "disconnected" row says, and none while the link is down
-        // isn't a recovery: the error last noted stands. The sync's
-        // own (a disk full), which also leaves the link down, is noted.
+        // The link's own error (its stream cut: the peer away, or a
+        // switch of its off) is the loss the "disconnected" row says,
+        // read too just after the link is back, until the sync's start
+        // clears it, and none while the link is down isn't a recovery:
+        // the error last noted stands. The sync's own (a disk full),
+        // which also leaves the link down, is noted.
         lastError:
           isLinkError(error) || (!connected && error === "")
             ? (previous?.lastError ?? "")

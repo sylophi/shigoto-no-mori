@@ -32,10 +32,10 @@
 //     missing ceiling, not the settle ceiling,
 //   - a daemon restarting keeps the list and the git follower's verdict
 //     its sessions had, and the threads note nothing of it,
-//   - a thread says a lost link and its return, never the link's
-//     error, which names the other device by its id, and an error from
-//     before stands until the link is back, while the sync's own error,
-//     which leaves the link down too, is noted,
+//   - a thread says a lost link and its return, never the cut stream's
+//     error, and an error from before stands until the link is back,
+//     while the sync's own error, which leaves the link down too, is
+//     noted,
 //   - a thread notes git agreeing again across a spell of git off,
 //   - a peer coming to take this device's calls reconnects its sessions
 //     waiting on the link at once and side by side, none paused, halted
@@ -669,7 +669,7 @@ it("a daemon restarting keeps the list and the follower's verdict, and the threa
   );
 });
 
-it("a thread says a lost link and its return, never the link's error, which names the other device by its id, and an error from before stands until the link is back, while the sync's own error, which leaves the link down too, is noted", async () => {
+it("a thread says a lost link and its return, never the cut stream's error, and an error from before stands until the link is back, while the sync's own error, which leaves the link down too, is noted", async () => {
   const { state, history } = await harness(() => ({ ok: true }));
   const at = (
     connected: boolean,
@@ -691,28 +691,22 @@ it("a thread says a lost link and its return, never the link's error, which name
     history("w-link")
       .map((event) => event.kind)
       .filter((kind) => !kind.startsWith("git-"));
+  // Mutagen's words as a stream is cut (the peer away, or a switch of
+  // its turned off): the sync fails with both ends reset to down.
+  const cut =
+    "beta polling error: unable to receive poll response: unable to read message length: EOF";
   await state([at(true)]);
+  await state([at(false, { lastError: cut })]);
   await state([
     at(false, {
       lastError:
-        "unable to connect to beta: no direct connection to 0123456789abcdef",
-    }),
-  ]);
-  await state([
-    at(false, {
-      lastError:
-        "unable to connect to beta: this device is not permitted to run commands on the remote machine",
+        "beta scan error: unable to receive scan response: message transmission failed: EOF",
     }),
   ]);
   await state([at(true)]);
   assert.deepEqual(kinds(), ["connected", "disconnected"]);
-  assert.ok(
-    !history("w-link").some((event) =>
-      event.detail.includes("0123456789abcdef"),
-    ),
-  );
-  await state([at(true, { lastError: "a scan failed" })]);
-  await state([at(false, { lastError: "no direct connection to 0123" })]);
+  await state([at(true, { lastError: "alpha scan error: a scan failed" })]);
+  await state([at(false, { lastError: cut })]);
   await state([at(true)]);
   // Newest first.
   assert.deepEqual(kinds(), [
@@ -724,17 +718,21 @@ it("a thread says a lost link and its return, never the link's error, which name
     "disconnected",
   ]);
   // The link back, its error not cleared yet by the sync's start.
-  await state([
-    at(true, {
-      lastError: "unable to connect to beta: no direct connection to 0123",
-    }),
-  ]);
+  await state([at(false, { lastError: cut })]);
+  await state([at(true, { lastError: cut })]);
   await state([
     at(false, {
-      lastError: "unable to stage files on beta: no space left on device",
+      lastError:
+        "unable to stage files on beta: remote error: no space left on device",
     }),
   ]);
-  assert.deepEqual(kinds().slice(0, 3), ["error", "disconnected", "recovered"]);
+  assert.deepEqual(kinds().slice(0, 5), [
+    "error",
+    "disconnected",
+    "connected",
+    "disconnected",
+    "recovered",
+  ]);
 });
 
 it("a thread notes git agreeing again across a spell of git off, which says nothing of the git state", () => {

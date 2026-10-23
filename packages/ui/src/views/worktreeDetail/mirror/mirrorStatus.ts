@@ -150,8 +150,8 @@ export function describeMirror(
       HALT_DETAIL[session.status] ?? session.statusText,
     );
   }
-  // The engine's connect error and the git half's off both follow from
-  // it, and it resumes by itself once the switch is on.
+  // The engine's error for the cut stream and the git half's off both
+  // follow from it, and it resumes by itself once the switch is on.
   if (context.copyOff !== undefined) {
     return {
       ...look(
@@ -162,10 +162,10 @@ export function describeMirror(
       paused: true,
     };
   }
-  // A lost link outranks what it causes: the engine's connect error,
-  // and the git half's failure to reach the other side, are both the
-  // other device being away, which says itself better as a reconnect
-  // (the error names the device by its id).
+  // A lost link outranks what it causes: the engine's error for the cut
+  // stream, and the git half's failure to reach the other side, are both
+  // the other device being away, which says itself better as a
+  // reconnect than in the engine's transport words.
   if (
     session.status === "connecting-local" ||
     session.status === "connecting-remote" ||
