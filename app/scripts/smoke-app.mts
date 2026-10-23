@@ -66,6 +66,9 @@ const QUIT_WITHIN_MS = 20_000;
 // then downloads and verifies.
 const STAGE_WITHIN_MS = 4 * 60_000;
 const RESTART_WITHIN_MS = 2 * 60_000;
+// The app --serve leaves up, by its main process, for the run's end to
+// quit first (quitServed).
+let serving: number | undefined;
 
 const argument = process.argv[2];
 const mode = process.argv[3];
@@ -98,6 +101,7 @@ isolateGit();
 // (`own`, ../../testProcesses.mts), and then the run's folder goes: a
 // signal ends the smoke with no exit handlers, ownTestTemp's among them.
 onRunEnd(() => {
+  if (serving !== undefined) quitServed(serving);
   endAll();
   leaveTestTemp();
 });
@@ -164,6 +168,23 @@ async function stop(pid: number, exited: () => boolean): Promise<void> {
   signal(pid, "SIGTERM");
   if (!(await until(exited, QUIT_WITHIN_MS))) signal(pid, "SIGKILL");
   await until(exited, QUIT_WITHIN_MS);
+}
+
+// Quits the served app as stop() does, through its main process, which
+// closes its host: ended with the rest of its tree, the host goes first,
+// and the app reads that as a crash and starts another. A run's end
+// can't wait on the event loop, which reaps an exited child, so ps
+// reads it gone or a zombie.
+function quitServed(pid: number): void {
+  signal(pid, "SIGTERM");
+  const deadline = Date.now() + QUIT_WITHIN_MS;
+  while (Date.now() < deadline) {
+    const stat = spawnSync("/bin/ps", ["-o", "stat=", "-p", String(pid)], {
+      encoding: "utf8",
+    }).stdout.trim();
+    if (stat === "" || stat.startsWith("Z")) return;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+  }
 }
 
 async function launch(label: string, prepare: (dataDir: string) => void) {
@@ -701,6 +722,7 @@ async function serve(port: string) {
     },
     stdio: "inherit",
   });
+  serving = child.pid;
   let exited = false;
   child.once("exit", () => {
     exited = true;
@@ -712,6 +734,7 @@ async function serve(port: string) {
   );
   console.log(`serving on 127.0.0.1:${port}, the data folder ${dataDir}`);
   await stopped;
+  serving = undefined;
   if (child.pid !== undefined) await stop(child.pid, () => exited);
   rmSync(root, { recursive: true, force: true });
 }

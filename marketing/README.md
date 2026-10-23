@@ -26,10 +26,9 @@ the other.
 This package pins TypeScript 6: `astro check` needs its programmatic
 API, which the native TypeScript 7 compiler lacks.
 
-It deploys as its own Vercel project with the Root Directory set to
-`marketing`, and the install uses the workspace's lockfile at the
-repo root. `vercel.json` pins the Astro preset and holds the headers.
-The production build follows `main`.
+It deploys from `main` as its own Vercel project, set up as
+`hub/README.md` ("The Vercel projects") says. `vercel.json` pins the
+Astro preset and the install command, and holds the headers.
 
 ## Layout
 
@@ -116,9 +115,11 @@ and shoots it whenever the site, the views or the lockfile change on
 `main`, and opens a pull request when the image changed. It is shot in
 CI and committed rather than at deploy because Vercel's build has no
 browser to shoot with, and a committed image keeps the fixed URL with
-its own caching, reviewed like any other change. A runner draws text a
-little differently from a Mac, so the first run after a Mac shot opens
-one pull request of its own. Opening the pull request needs the
+its own caching, reviewed like any other change. The committed image is
+the workflow's shot, which a run with nothing changed repeats byte for
+byte. A runner draws text a little differently from a Mac, so a shot
+from `pnpm og` on a Mac is for looking at: committed, it would differ
+from every run's. Opening the pull request needs the
 repository to let Actions create them; without that, the run's summary
 links the pushed branch.
 
