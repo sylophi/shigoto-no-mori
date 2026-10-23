@@ -62,10 +62,10 @@
 //  9. The pointer committed, renamed in (or removed, for the default
 //     place) and its folder flushed. Finished at the destination.
 // 10. The finish: the engine's `finishMove`, here for git's links only
-//     (`settle` false), then in full in the first process to open the
-//     store at the new place. A crash
-//     leaves it to the next process there, and a copy's old tree takes
-//     its space until then.
+//     (`settle` false), then in full in the first engine graph to come
+//     up at the new place (the doctor's doesn't settle). A crash leaves
+//     it to the next one there, and a copy's old tree takes its space
+//     until then.
 //
 // The finish and the undo (`undoMove`) are the engine's, in its
 // dataDirMove.ts.

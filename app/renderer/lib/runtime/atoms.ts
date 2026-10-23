@@ -1,6 +1,6 @@
 // The atoms a container reads a host view or a push stream through
-// (EFFECT.md, section 10): each on the client's runtime,
-// over the links the page's api rides, which the boot seeds into the
+// (EFFECT.md, section 10): each on the client's runtime, over the links
+// the page's api rides, which the boot seeds into the
 // page's registry (clientLinksAtom) with this device's id
 // (localDeviceIdAtom) and the page's query client (queryClientAtom). A
 // request stays a React Query query.

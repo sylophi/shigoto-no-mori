@@ -1,7 +1,7 @@
 // POSIX process-group signaling for the scripts (./ScriptRuns.ts) and the
 // lifecycle scripts the engine runs: a signal goes to the process (its
 // group, when it leads one) and to the descendants still reachable by
-// their ppid (a double-forked daemon).
+// their ppid (one that called setsid() and left the group).
 import * as Effect from "effect/Effect";
 import * as Processes from "@shigomori/engine/processes";
 import { descendantsIn } from "./descendants";

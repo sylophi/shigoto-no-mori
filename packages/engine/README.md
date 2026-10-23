@@ -26,7 +26,7 @@ The engine runs in the host under Node and in the terminal binary under Bun, so 
 
 ## Commit points
 
-Each change of state in several steps has one step after which it counts as done. Each entry names that step; what a crash or an interrupt at another step leaves, and what settles it, is in the entry or its module (`EFFECT.md`, section 5). The engine's, by module under `src/`; the host's are in `app/host/README.md`.
+Each change of state in several steps has one step after which it counts as done; what a crash or an interrupt at another step leaves, and what settles it, is in the entry or its module (`EFFECT.md`, section 5). The engine's, by module under `src/`; the host's are in `app/host/README.md`.
 
 - **The worktree move** (`worktrees/moving.ts`): git's move commits it, and a `moving` row whose process is gone is finished or undone by the app's next start or `doctor --fix`. `test/Worktrees.interrupt.test.ts` interrupts it at each step, and the app's `interrupted-workflows` proof kills the terminal `sm` there.
 - **The re-key and the forget** (`worktrees/kept.ts`): the rows in one transaction, then the dirty capture's ref.

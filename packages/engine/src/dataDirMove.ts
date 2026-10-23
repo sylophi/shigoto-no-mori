@@ -159,8 +159,8 @@ const settled = <A, E, R>(
 
 // The end of a move that landed at `at`, its journal at `file`. In the
 // moving process (`settle` false) only git's links are re-pointed: its
-// store is the old place's. The first process to open the store at the
-// new place (`settle` true) then removes the old tree a copy left (its
+// store is the old place's. The first engine graph to come up at the new
+// place (`settle` true; not the doctor's) then removes the old tree a copy left (its
 // own copy only, its journal last), which waited till then so a power
 // loss before the copy reached the disk still had it; re-points every
 // link again, the journal's entries and any worktree git lists under the
