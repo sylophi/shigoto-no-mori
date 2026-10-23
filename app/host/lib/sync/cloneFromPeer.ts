@@ -13,9 +13,13 @@
 // for and renamed in once whole, then registered, the two uninterrupted,
 // so the folder asked for is either the clone, registered, or not
 // there. Up to the rename everything is undone on failure, and a sibling
-// a crash left is swept by the next clone of the same name.
+// a crash left is swept by the next clone of the same name. A checkout
+// of the same repo already at the folder (one made by hand, the way the
+// source's was) is registered as it is and landed in, its files
+// untouched.
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
 import {
+  lstat,
   mkdir,
   readdir,
   readFile,
@@ -35,6 +39,7 @@ import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { pidAlive } from "@shigomori/engine/processes";
 import { expandHome } from "@shared/paths";
+import { repoIdentity } from "@host/lib/engineOps";
 import { landingRefOf, type WorktreeSource } from "./sourceLink";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -88,6 +93,26 @@ const sweepPartials = (parent: string, name: string) =>
     }
   });
 
+// What is at the folder a clone would go to: nothing, a checkout of
+// the same repo, or anything else.
+export const cloneDestination = (
+  { parentDir, name }: SyncCloneInto,
+  identity: string | null,
+) =>
+  Effect.gen(function* () {
+    const dest = join(expandHome(parentDir), name);
+    const there = yield* Effect.promise(() =>
+      lstat(dest).then(
+        () => true,
+        () => false,
+      ),
+    );
+    if (!there) return "free" as const;
+    return identity !== null && (yield* repoIdentity(dest)) === identity
+      ? ("same-repo" as const)
+      : ("taken" as const);
+  });
+
 // An interrupt (the move's cancel) undoes the sibling like any failure.
 // During the fetch the link's reset does the failing. `register` makes
 // the checkout a project, right after the rename; answers what it does.
@@ -124,6 +149,11 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   const pending = yield* pendingIn(left);
   if (pending?.dest === left && pending.identity === identity) {
     return yield* finishRegister(left, register);
+  }
+  if (
+    (yield* cloneDestination({ parentDir, name }, identity)) === "same-repo"
+  ) {
+    return yield* register(left);
   }
   const [dest, { branch, ref, remoteUrl }] = yield* Effect.all(
     [

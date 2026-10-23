@@ -345,7 +345,7 @@ export const headlineOf = (
       : `brought ${name} from ${device}`;
   return result.cloned === undefined
     ? headline
-    : `${headline}, having cloned ${result.cloned.name} into ${result.cloned.path} on ${device} first`;
+    : `${headline}, having added ${result.cloned.name} at ${result.cloned.path} on ${device} first`;
 };
 
 const STEP_LABELS: ReadonlyMap<string, string> = new Map([

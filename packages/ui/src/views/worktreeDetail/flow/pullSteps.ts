@@ -4,6 +4,7 @@
 // headline for the step underway, and a single overall figure for the
 // bar between the two devices.
 import {
+  type SyncCloneDestination,
   type SyncCloneInto,
   type SyncPullProgress,
   type SyncPullStep,
@@ -192,8 +193,15 @@ export type CloneDestination = {
   cloneInto: SyncCloneInto;
   // The whole path, for display.
   dest: string;
+  // What is at it there, undefined until read.
+  found: SyncCloneDestination | undefined;
   setParent: (chosen: string) => void;
 };
+
+// A clone whose folder something else holds there: the footer's words,
+// which Start waits on.
+export const cloneRefusal = (clone: CloneDestination | undefined) =>
+  clone?.found === "taken" ? `${clone.dest} already exists.` : null;
 
 // What a flow lands in: the project, or the clone that makes one.
 export type LandingTarget =
