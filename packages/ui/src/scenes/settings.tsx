@@ -410,7 +410,7 @@ export function SettingsPartsScene() {
             <WorktreeTogglesView
               form={FORM}
               setForm={setForm}
-              driveBase="/Volumes/<drive>/.sm/worktrees/<project>"
+              driveBase="/Volumes/<drive>/.sm/wt/<project>"
             />
           </DeviceTogglesView>
           <IntegrationTogglesView

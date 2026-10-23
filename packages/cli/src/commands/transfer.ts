@@ -33,36 +33,13 @@ const transferFlags = {
   ref: Argument.String("worktree").pipe(Argument.optional),
   // The first positional is read and the rest let be.
   rest,
-  to: Flag.String("to").pipe(
-    Flag.withDescription("The device it goes to"),
-    Flag.optional,
-  ),
-  from: Flag.String("from").pipe(
-    Flag.withDescription("The device it comes from"),
-    Flag.optional,
-  ),
-  leaveOut: Flag.String("leave-out").pipe(
-    Flag.withDescription("nothing or gitignored"),
-    Flag.optional,
-  ),
-  source: Flag.String("source").pipe(
-    Flag.withDescription(
-      "What becomes of the original: keep, shelve or teardown",
-    ),
-    Flag.optional,
-  ),
-  cloneInto: Flag.String("clone-into").pipe(
-    Flag.withDescription("Where the other device clones the repo, lacking it"),
-    Flag.optional,
-  ),
-  setup: Flag.Boolean("setup").pipe(
-    Flag.withDescription("Run the setup script on the copy"),
-    Flag.withDefault(false),
-  ),
-  noSetup: Flag.Boolean("no-setup").pipe(
-    Flag.withDescription("Don't run the setup script on the copy"),
-    Flag.withDefault(false),
-  ),
+  to: Flag.String("to").pipe(Flag.optional),
+  from: Flag.String("from").pipe(Flag.optional),
+  leaveOut: Flag.String("leave-out").pipe(Flag.optional),
+  source: Flag.String("source").pipe(Flag.optional),
+  cloneInto: Flag.String("clone-into").pipe(Flag.optional),
+  setup: Flag.Boolean("setup").pipe(Flag.withDefault(false)),
+  noSetup: Flag.Boolean("no-setup").pipe(Flag.withDefault(false)),
 };
 
 type TransferInput = Command.Command.Config.Infer<typeof transferFlags>;
@@ -116,7 +93,7 @@ const report = ({ document, headline, result }: Transfer.Transferred) =>
     if (code !== 0) return yield* new ExitCode({ code });
   });
 
-const transferVerb = (name: "send" | "bring" | "mirror", description: string) =>
+const transferVerb = (name: "send" | "bring" | "mirror") =>
   Command.make(name, transferFlags, (input: TransferInput) =>
     Effect.gen(function* () {
       const transfer = yield* Transfer.Transfer;
@@ -138,17 +115,11 @@ const transferVerb = (name: "send" | "bring" | "mirror", description: string) =>
       );
       yield* report(done);
     }),
-  ).pipe(Command.withDescription(description));
+  );
 
-export const send = transferVerb("send", "Move a worktree to another device");
-export const bring = transferVerb(
-  "bring",
-  "Move another device's worktree here",
-);
-export const mirror = transferVerb(
-  "mirror",
-  "Keep a copy of a worktree in step on another device",
-);
+export const send = transferVerb("send");
+export const bring = transferVerb("bring");
+export const mirror = transferVerb("mirror");
 
 export const unmirror = Command.make(
   "unmirror",
@@ -158,7 +129,6 @@ export const unmirror = Command.make(
     rest,
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
-      Flag.withDescription("Stop it even if the two sides aren't in step"),
       Flag.withDefault(false),
     ),
   },
@@ -194,7 +164,7 @@ export const unmirror = Command.make(
       }
       if (code !== 0) return yield* new ExitCode({ code });
     }),
-).pipe(Command.withDescription("Stop a mirror and remove its copy"));
+);
 
 export const mirrors = Command.make("mirrors", { rest }, (input) =>
   Effect.gen(function* () {
@@ -231,7 +201,7 @@ export const mirrors = Command.make("mirrors", { rest }, (input) =>
       ),
     );
   }),
-).pipe(Command.withDescription("The mirrors this device is part of"));
+);
 
 // What a device's block says in the devices table, beside the host's
 // words for the verb it refuses (host/lib/control/plan.ts BLOCK_REASON):
@@ -286,7 +256,7 @@ export const devices = Command.make(
         ),
       );
     }),
-).pipe(Command.withDescription("The account's other devices"));
+);
 
 // list --remote [--from <device>]: the project's worktrees on the other
 // devices, the names bring and mirror --from take.

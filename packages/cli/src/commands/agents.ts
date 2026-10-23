@@ -85,7 +85,7 @@ const bind = Command.make(
         ),
       );
     }),
-).pipe(Command.withDescription("Bind an agent session to a worktree"));
+);
 
 const unbind = Command.make("unbind", { ...sessionFlags, rest }, (input) =>
   Effect.gen(function* () {
@@ -101,7 +101,7 @@ const unbind = Command.make("unbind", { ...sessionFlags, rest }, (input) =>
             : `${named} wasn't bound`,
         );
   }),
-).pipe(Command.withDescription("Unbind an agent session"));
+);
 
 const idle = Command.make("idle", worktreeArgs, (input) =>
   Effect.gen(function* () {
@@ -120,7 +120,7 @@ const idle = Command.make("idle", worktreeArgs, (input) =>
       ),
     );
   }),
-).pipe(Command.withDescription("Mark a worktree's agent sessions idle"));
+);
 
 const resume = Command.make(
   "resume",
@@ -146,7 +146,7 @@ const resume = Command.make(
             ),
           );
     }),
-).pipe(Command.withDescription("Resume an agent session in a terminal"));
+);
 
 // What the installed hooks run. Always exits 0 with nothing on stdout:
 // a hook's exit code and output are instructions to its harness (2
@@ -172,7 +172,7 @@ const event = Command.make(
         (yield* Agents.Agents).event(harness.value, raw, yield* cwd),
       );
     }),
-).pipe(Command.withDescription("Report a session's lifecycle event (stdin)"));
+);
 
 const setHooks = (name: "install" | "uninstall") =>
   Command.make(
@@ -203,12 +203,6 @@ const setHooks = (name: "install" | "uninstall") =>
           );
         }
       }),
-  ).pipe(
-    Command.withDescription(
-      name === "install"
-        ? "Install the hooks that report agent sessions"
-        : "Remove those hooks",
-    ),
   );
 
 const status = Command.make("status", { rest }, () =>
@@ -227,13 +221,12 @@ const status = Command.make("status", { rest }, () =>
     ]);
     for (const line of alignRows(rows)) yield* out(line);
   }),
-).pipe(Command.withDescription("Show each harness's hooks"));
+);
 
 const install = setHooks("install");
 const uninstall = setHooks("uninstall");
 
 export const agentsCommand = Command.make("agents").pipe(
-  Command.withDescription("Agent integrations: which session works where"),
   Command.withSubcommands([
     install,
     uninstall,

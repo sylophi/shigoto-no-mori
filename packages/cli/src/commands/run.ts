@@ -112,4 +112,4 @@ export const runCommand = Command.make(
         },
       });
     }),
-).pipe(Command.withDescription("List or run the worktree's scripts"));
+);

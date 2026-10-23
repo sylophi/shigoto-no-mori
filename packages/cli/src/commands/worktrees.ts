@@ -89,23 +89,10 @@ const list = Command.make(
   "list",
   {
     ...worktreeFlags,
-    all: Flag.Boolean("all").pipe(
-      Flag.withAlias("a"),
-      Flag.withDescription("Every project's worktrees"),
-      Flag.withDefault(false),
-    ),
-    identities: Flag.Boolean("identities").pipe(
-      Flag.withDescription("Which worktrees exist, without probing each"),
-      Flag.withDefault(false),
-    ),
-    primaryRef: Flag.Boolean("primary-ref").pipe(
-      Flag.withDescription("With --identities, each project's primary ref"),
-      Flag.withDefault(false),
-    ),
-    remote: Flag.Boolean("remote").pipe(
-      Flag.withDescription("The project's worktrees on the other devices"),
-      Flag.withDefault(false),
-    ),
+    all: Flag.Boolean("all").pipe(Flag.withAlias("a"), Flag.withDefault(false)),
+    identities: Flag.Boolean("identities").pipe(Flag.withDefault(false)),
+    primaryRef: Flag.Boolean("primary-ref").pipe(Flag.withDefault(false)),
+    remote: Flag.Boolean("remote").pipe(Flag.withDefault(false)),
     from: Flag.String("from").pipe(Flag.optional),
     // Positionals are let be.
     rest,
@@ -184,7 +171,7 @@ const list = Command.make(
         current,
       });
     }),
-).pipe(Command.withDescription("The worktrees, with their sync and changes"));
+);
 
 // The full table: sync, changes, flags and title, with the marker
 // column (`@` at the cwd's worktree) when there is a cwd to mark.
@@ -275,7 +262,7 @@ const path = Command.make(
           })
         : out(worktree.path);
     }),
-).pipe(Command.withDescription("Print a worktree's folder"));
+);
 
 // The deep link that opens a worktree's page in the app. It names this
 // data dir's device, so a link printed on another machine (over ssh, by
@@ -300,15 +287,12 @@ export const link = Command.make(
       const { json } = yield* Effect.service(Output);
       yield* json ? emit({ ok: true, url, worktree: worktree.name }) : out(url);
     }),
-).pipe(
-  Command.withDescription("Print a link that opens the worktree in the app"),
 );
 
 // The verbs stand at the top level and under `sm worktrees`.
 export { list, path };
 
 export const worktreesCommand = Command.make("worktrees").pipe(
-  Command.withDescription("Worktree commands (the prefix is optional)"),
   Command.withSubcommands([
     list,
     path,

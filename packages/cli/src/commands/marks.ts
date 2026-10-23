@@ -34,12 +34,6 @@ const shelf = (name: "shelve" | "unshelve") =>
               ),
             );
       }),
-  ).pipe(
-    Command.withDescription(
-      name === "shelve"
-        ? "Put a worktree out of focus"
-        : "Bring a worktree back into focus",
-    ),
   );
 
 export const shelve = shelf("shelve");
@@ -92,4 +86,4 @@ export const autopull = Command.make(
         `${worktree}: ${label} ${marked.has(located.worktree.id) ? "on" : "off"}`,
       );
     }),
-).pipe(Command.withDescription(`Set or show a worktree's ${label} mark`));
+);

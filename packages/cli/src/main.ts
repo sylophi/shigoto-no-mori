@@ -106,7 +106,6 @@ const loaded = <Name extends string, Input, E, R>(
     Command.provide(services),
   );
 const sm = Command.make("sm").pipe(
-  Command.withDescription("Shigoto no Mori"),
   Command.withSubcommands([
     configCommand.pipe(Command.provide(services)),
     loaded(projectsCommand),

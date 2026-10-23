@@ -9,17 +9,10 @@ import { note, Output, styles } from "./output.ts";
 export const removeFlags = {
   force: Flag.Boolean("force").pipe(
     Flag.withAlias("f"),
-    Flag.withDescription("Remove it with uncommitted changes"),
     Flag.withDefault(false),
   ),
-  keepBranch: Flag.Boolean("keep-branch").pipe(
-    Flag.withDescription("Keep its branch"),
-    Flag.withDefault(false),
-  ),
-  skipCleanup: Flag.Boolean("skip-cleanup").pipe(
-    Flag.withDescription("Skip its teardown and port release"),
-    Flag.withDefault(false),
-  ),
+  keepBranch: Flag.Boolean("keep-branch").pipe(Flag.withDefault(false)),
+  skipCleanup: Flag.Boolean("skip-cleanup").pipe(Flag.withDefault(false)),
 };
 
 // Where a shell standing in the removed folder goes: the project's

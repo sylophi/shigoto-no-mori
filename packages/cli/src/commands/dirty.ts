@@ -18,7 +18,6 @@ export const dirty = Command.make(
     args: Argument.String("args").pipe(Argument.variadic()),
     force: Flag.Boolean("force").pipe(
       Flag.withAlias("f"),
-      Flag.withDescription("Apply over uncommitted changes"),
       Flag.withDefault(false),
     ),
   },
@@ -62,8 +61,4 @@ export const dirty = Command.make(
             ),
           );
     }),
-).pipe(
-  Command.withDescription("Capture or apply a worktree's uncommitted state"),
-  Command.provideEffectDiscard(refuseUnmigrated),
-  changing,
-);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);

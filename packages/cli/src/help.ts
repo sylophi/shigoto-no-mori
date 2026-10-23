@@ -41,12 +41,12 @@ const catalog = (names: Names) => {
       [
         "update [--check]",
         "Update the app to the latest release",
-        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. Only a version above the running one is offered, alpha before beta before rc before the full release: a prerelease build takes any later prerelease or full release, a full build only full releases.",
+        "Checks GitHub releases, downloads, verifies and installs without opening the app (the linked CLI updates with it), restarting a running app into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
       ],
       [
         "doctor [--fix] [--yes]",
         "Check the installation and data dir",
-        "A grouped checklist: the environment (git, gh, the app bundle behind this binary, PATH shadowing, the shell hook), the data dir (the pointer file, config, registry and state parse, stale locks, leftover update downloads and worktree marks, port-pool leases, global launchers, the terrier registry), processes a crashed app left running, then each project, terrier's included (its repo, git's worktree metadata vs the disk, moved worktrees, scripts, carry-over, launchers, leftover transfer refs). Exits non-zero when anything failed. --fix applies only the unambiguously safe repairs, asking before each one that deletes something (--yes skips the prompts); anything with a judgment call in it is reported, never touched. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.",
+        "Checks the environment, the data dir, each project, and the processes a crashed app left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts); anything else is reported. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.",
       ],
       [
         "nuke --yes [--keep-app]",
@@ -546,8 +546,9 @@ export const helpPages = (look: HelpLook) => {
   const usageLine = (usage: string) =>
     `${paint.bold("Usage:")} ${bin} ${colorUsage(usage, paint)}`;
 
-  // The base page: General plus one pointer line per namespace. `full`
-  // expands every group in place.
+  // The base page: General's one-liners (`help <command>` has the
+  // detail) plus one pointer line per namespace. `full` expands every
+  // group in place.
   const page = (full: boolean): string => {
     const shown: ReadonlyArray<readonly [string, ReadonlyArray<Item>]> = full
       ? groups
@@ -555,7 +556,7 @@ export const helpPages = (look: HelpLook) => {
           [
             "Commands",
             [
-              ...items.general,
+              ...items.general.map(([usage, desc]): Item => [usage, desc, ""]),
               ...namespaces.map(
                 (ns): Item => [
                   `${ns.name} <command>`,

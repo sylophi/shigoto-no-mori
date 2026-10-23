@@ -109,7 +109,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
         renderTable(["KEY", "VALUE", "DESCRIPTION"], rows, stdoutColor),
       );
     }),
-  ).pipe(Command.withDescription("Show every setting"));
+  );
 
   const get = Command.make("get", { key: Argument.String("key") }, ({ key }) =>
     Effect.gen(function* () {
@@ -121,7 +121,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       // Nothing for an unset key, so command substitution stays clean.
       if (setting.value !== null) yield* out(rendered(setting.value));
     }),
-  ).pipe(Command.withDescription("Print one setting's effective value"));
+  );
 
   const read = Command.make("read", { rest }, () =>
     Effect.gen(function* () {
@@ -140,7 +140,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
         config: settings.scope.kind === "device" ? (stored ?? {}) : stored,
       });
     }),
-  ).pipe(Command.withDescription("Print the settings as stored (--json)"));
+  );
 
   const set = Command.make(
     "set",
@@ -160,7 +160,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
           ),
         );
       }),
-  ).pipe(Command.withDescription("Change a setting"));
+  );
 
   const unset = Command.make(
     "unset",
@@ -172,7 +172,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
         yield* config.unset(settings.scope, key);
         yield* reportUnset(settings, key);
       }),
-  ).pipe(Command.withDescription("Reset a setting to its default"));
+  );
 
   // The whole document in $VISUAL or $EDITOR, written back as one save
   // once the editor quits. The store holds the settings, so the editor
@@ -246,7 +246,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       );
       rmSync(dir, { recursive: true, force: true });
     }),
-  ).pipe(Command.withDescription("Edit the settings in $VISUAL or $EDITOR"));
+  );
 
   return [list, get, read, set, unset, edit, launcherVerb(resolve)] as const;
 }
@@ -258,6 +258,5 @@ const device: Settings = {
 };
 
 export const configCommand = Command.make("config").pipe(
-  Command.withDescription("Global settings"),
   Command.withSubcommands(configVerbs(Effect.succeed(device))),
 );

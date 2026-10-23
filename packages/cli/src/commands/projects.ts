@@ -35,9 +35,6 @@ import { configVerbs, type Settings } from "./config.ts";
 import { carryOverVerb } from "./configLists.ts";
 
 const refreshIconsFlag = Flag.Boolean("refresh-icons").pipe(
-  Flag.withDescription(
-    "Look again for icons of projects remembered as having none",
-  ),
   Flag.withDefault(false),
 );
 
@@ -68,7 +65,7 @@ const list = Command.make(
         ),
       );
     }),
-).pipe(Command.withDescription("List the projects, terrier's included"));
+);
 
 const icon = Command.make(
   "icon",
@@ -98,7 +95,7 @@ const icon = Command.make(
         onSome: ({ path }) => out(path),
       });
     }),
-).pipe(Command.withDescription("Print the project's icon"));
+);
 
 // A project's settings, by the flags that name it.
 const settingsFor = (flags: Parameters<typeof resolveProject>[0]) =>
@@ -116,18 +113,9 @@ const settingsFor = (flags: Parameters<typeof resolveProject>[0]) =>
 // The shorthand flags that set the scripts and the default branch:
 // before any verb, and not together with one.
 const shorthandFlags = {
-  setup: Flag.String("setup").pipe(
-    Flag.withDescription("Set the setup script ('' clears it)"),
-    Flag.optional,
-  ),
-  teardown: Flag.String("teardown").pipe(
-    Flag.withDescription("Set the teardown script ('' clears it)"),
-    Flag.optional,
-  ),
-  defaultBranch: Flag.String("default-branch").pipe(
-    Flag.withDescription("Set the default branch"),
-    Flag.optional,
-  ),
+  setup: Flag.String("setup").pipe(Flag.optional),
+  teardown: Flag.String("teardown").pipe(Flag.optional),
+  defaultBranch: Flag.String("default-branch").pipe(Flag.optional),
 };
 
 // A script flag as the patch takes it: none untouched, an empty one
@@ -190,7 +178,6 @@ const settingsOf = Command.make("config", shorthandFlags, (input) =>
 const projectSettings = Effect.flatMap(settingsOf, settingsFor);
 
 const projectConfig = settingsOf.pipe(
-  Command.withDescription("A project's settings"),
   Command.withSubcommands([
     ...configVerbs(Effect.map(projectSettings, ({ settings }) => settings)),
     carryOverVerb(projectSettings),
@@ -199,7 +186,6 @@ const projectConfig = settingsOf.pipe(
 
 const yesFlag = Flag.Boolean("yes").pipe(
   Flag.withAlias("y"),
-  Flag.withDescription("Skip the confirmation"),
   Flag.withDefault(false),
 );
 
@@ -263,11 +249,7 @@ const add = Command.make(
   {
     path: Argument.String("path").pipe(Argument.withDefault(".")),
     rest,
-    all: Flag.Boolean("all").pipe(
-      Flag.withAlias("a"),
-      Flag.withDescription("Every repo under the folder"),
-      Flag.withDefault(false),
-    ),
+    all: Flag.Boolean("all").pipe(Flag.withAlias("a"), Flag.withDefault(false)),
     yes: yesFlag,
   },
   (input) =>
@@ -279,7 +261,7 @@ const add = Command.make(
       const { json } = yield* Effect.service(Output);
       yield* json ? emit(project) : announce(project);
     }),
-).pipe(Command.withDescription("Add the repo a folder is in as a project"));
+);
 
 const remove = Command.make(
   "remove",
@@ -327,10 +309,7 @@ const remove = Command.make(
         ? emit({ ok: true, removed: project.name, path: project.path })
         : out(`removed ${project.name} (${project.path})`);
     }),
-).pipe(
-  Command.withDescription("Remove a project. Its checkouts stay on disk"),
-  changing,
-);
+).pipe(changing);
 
 // For a repo moved or renamed by hand: the last positional is where it
 // is now, the project before it.
@@ -365,9 +344,8 @@ const relocate = Command.make(
             styles(stdoutColor).green(`relocated ${row.name} to ${row.path}`),
           );
     }),
-).pipe(Command.withDescription("Point a project at its moved repo"), changing);
+).pipe(changing);
 
 export const projectsCommand = Command.make("projects").pipe(
-  Command.withDescription("Project commands"),
   Command.withSubcommands([list, add, remove, relocate, icon, projectConfig]),
 );

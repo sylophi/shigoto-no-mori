@@ -177,7 +177,7 @@ export function LaunchToolsPanelView({
             setForm((prev) => ({ ...prev, launchScripts: v }))
           }
           label="Show scripts in the Launch section"
-          description="Adds a row of the worktree's scripts under the launch tools. Shows as many as fit on one line, ordered the same way the Scripts section sorts them. Under a manual order, pinned scripts are the only ones shown, and all of them are."
+          description="A row of the worktree's scripts under the launch tools, in the Scripts section's order, as many as fit. Under a manual order, every pinned script and only those."
         />
       </section>
     </>

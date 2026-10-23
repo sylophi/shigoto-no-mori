@@ -56,7 +56,7 @@ export function WorktreeTogglesView({
         checked={form.autoPullNew}
         onCheckedChange={setField("autoPullNew")}
         label="Start new worktrees with auto-pull on"
-        description="Applies to worktrees you create from now on, and to the primary checkout of projects you add. Existing worktrees aren't changed, and each worktree's own auto-pull toggle still wins."
+        description="For worktrees you create from now on and the primary checkout of projects you add. A worktree's own toggle still wins."
       />
       {/* A sub-option of the row above: indented past its switch so
             the nesting reads without the disabled state doing the
@@ -226,7 +226,7 @@ export function IntegrationTogglesView({
         checked={form.autoPopulateInstall}
         onCheckedChange={setField("autoPopulateInstall")}
         label="Auto-populate install command"
-        description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
+        description="When adding a project with a package.json, seed the setup script with its package manager's install command (e.g. pnpm install)."
       />
       <ToggleRowView
         checked={form.portPool && portPoolInstalled}

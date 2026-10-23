@@ -59,14 +59,8 @@ export const update = Command.make(
   "update",
   {
     rest,
-    check: Flag.Boolean("check").pipe(
-      Flag.withDescription("Only say whether there is an update"),
-      Flag.withDefault(false),
-    ),
-    finishInstall: Flag.Boolean("finish-install").pipe(
-      Flag.withDescription("Install once the app has quit (the app's)"),
-      Flag.withDefault(false),
-    ),
+    check: Flag.Boolean("check").pipe(Flag.withDefault(false)),
+    finishInstall: Flag.Boolean("finish-install").pipe(Flag.withDefault(false)),
     pid: Flag.String("pid").pipe(Flag.optional),
     feedUrl: Flag.String("feed-url").pipe(Flag.optional),
     releasesUrl: Flag.String("releases-url").pipe(Flag.optional),
@@ -141,4 +135,4 @@ export const update = Command.make(
           );
       }
     }).pipe(Effect.scoped),
-).pipe(Command.withDescription("Update the app, and this command with it"));
+);

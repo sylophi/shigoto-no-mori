@@ -54,7 +54,7 @@ const init = Command.make(
       // The snippet ends its own last line.
       yield* out(wrapperSnippet(yield* names, shell).replace(/\n$/, ""));
     }),
-).pipe(Command.withDescription("Print the wrapper the hook evals"));
+);
 
 const installCommand = Command.make(
   "install",
@@ -89,8 +89,6 @@ const installCommand = Command.make(
         ),
       );
     }),
-).pipe(
-  Command.withDescription("Hook shell integration into your shell config"),
 );
 
 // Every shell's config, as it only removes what is recognizably ours:
@@ -127,7 +125,7 @@ const uninstallCommand = Command.make("uninstall", {}, () =>
     // Each failure is reported above.
     if (failed) return yield* new ExitCode({ code: 1 });
   }),
-).pipe(Command.withDescription("Remove the hook from every shell's config"));
+);
 
 const statusCommand = Command.make("status", {}, () =>
   Effect.gen(function* () {
@@ -165,12 +163,11 @@ const statusCommand = Command.make("status", {}, () =>
           `Run \`${binaryName} shell install\` to stop cd/create from nesting subshells.`,
         );
   }),
-).pipe(Command.withDescription("Show hook and session state"));
+);
 
 // Needs Paths, the login shell and the platform alone, never the
 // store: init runs in every new shell.
 export const shellCommand = Command.make("shell").pipe(
-  Command.withDescription("Shell integration: cd without subshells"),
   Command.withSubcommands([
     installCommand,
     uninstallCommand,
@@ -217,11 +214,7 @@ const menuProject = (
     ? pickProject(at, at.current?.project.id)
     : projectAt(at, project);
 
-const enterCommand = (
-  name: "cd" | "switch",
-  acrossProjects: boolean,
-  description: string,
-) =>
+const enterCommand = (name: "cd" | "switch", acrossProjects: boolean) =>
   Command.make(
     name,
     {
@@ -267,12 +260,8 @@ const enterCommand = (
         }
         yield* enter(worktree.name, worktree.path, cdFile);
       }),
-  ).pipe(Command.withDescription(description));
+  );
 
-export const cdCommand = enterCommand("cd", true, "Enter a worktree");
+export const cdCommand = enterCommand("cd", true);
 
-export const switchCommand = enterCommand(
-  "switch",
-  false,
-  "Enter one of this project's worktrees",
-);
+export const switchCommand = enterCommand("switch", false);

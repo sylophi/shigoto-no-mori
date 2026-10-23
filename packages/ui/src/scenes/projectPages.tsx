@@ -385,10 +385,7 @@ export function ProjectPagesPartsScene() {
               batchRunning={false}
               proposedPaths={
                 new Map([
-                  [
-                    external.id,
-                    `~/.sm/worktrees/shigoto-no-mori/${external.branch}`,
-                  ],
+                  [external.id, `~/.sm/wt/shigoto-no-mori/${external.branch}`],
                 ])
               }
               home={HOME}

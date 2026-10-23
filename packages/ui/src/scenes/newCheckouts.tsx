@@ -48,7 +48,7 @@ const DEV = `${HOME}/dev`;
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 const WORKTREES: Worktree[] = forests[LOCAL_DEVICE_ID]?.worktrees[SM.id] ?? [];
 const WORKTREE_BY_BRANCH = new Map(WORKTREES.map((w) => [w.branch, w]));
-const DEST_ROOT = `${HOME}/.sm/worktrees/shigoto-no-mori`;
+const DEST_ROOT = "~/.sm/wt/shigoto-no-mori";
 const CANDIDATES = fakePullRequestCandidates();
 const DEVICE_TABS = deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID]);
 
