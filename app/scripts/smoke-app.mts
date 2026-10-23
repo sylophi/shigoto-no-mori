@@ -28,7 +28,7 @@
 // attach to as to the dev app, until this script is stopped.
 //
 // With --update-installed <installed .app> <its data dir>, the step
-// before a cut instead (app/lab/release.md, gate 3): the app installed
+// before a cut instead (app/lab/release.md, gate 2): the app installed
 // on this machine, running and signed in, takes the build through
 // Restart to update (updateInstalled, below).
 //
@@ -523,7 +523,7 @@ function runningFrom(executable: string): number | null {
   return line === undefined ? null : Number.parseInt(line, 10);
 }
 
-// The step before a cut (app/lab/release.md, gate 3): the app installed
+// The step before a cut (app/lab/release.md, gate 2): the app installed
 // on this machine, signed in on its own data folder, takes the candidate
 // `bundle` through Settings' button and comes back on it, signed in. The
 // candidate is built as the next version up from the installed one, so

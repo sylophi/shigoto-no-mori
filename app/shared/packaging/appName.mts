@@ -13,10 +13,10 @@ import { join } from "node:path";
 // it between instances to clone a sign-in).
 export const CLERK_TOKEN_STORE = "clerk-tokens";
 
-// Profiles: a second, third, ... instance of a dev run or a test
-// flavor on one machine, each a separate device (its own userData, so
-// its own single-instance lock, hub credential and Clerk tokens). Never
-// a release build's (profileFromEnv). The env var names the profile.
+// Profiles: a second, third, ... instance of a dev run on one machine,
+// each a separate device (its own userData, so its own single-instance
+// lock, hub credential and Clerk tokens). Never a packaged build's
+// (profileFromEnv). The env var names the profile.
 // The launcher that sets it also sets SHIGOMORI_DATA_DIR to the
 // profile's own data dir, and main refuses a profile without one: two
 // devices over the same forest would be a lie the hub cannot see
@@ -61,14 +61,13 @@ function devProfileFromEnv(
   return raw;
 }
 
-// The profile a build runs as, or null: a dev run's, or a test flavor's
-// (the lab's walks run one build as two devices). A release build never
-// runs as one, whatever its environment says.
+// The profile a dev run runs as, or null. A packaged build never runs
+// as one, whatever its environment says.
 export function profileFromEnv(
-  build: { readonly packaged: boolean; readonly debuggable: boolean },
+  packaged: boolean,
   env: Record<string, string | undefined>,
 ): string | null {
-  return build.packaged && !build.debuggable ? null : devProfileFromEnv(env);
+  return packaged ? null : devProfileFromEnv(env);
 }
 
 // The folder in the plain dev userData that holds the profiles'.

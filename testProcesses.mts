@@ -1,4 +1,4 @@
-// The one owner of what a proof, a walk or a lab run starts: it ends
+// The one owner of what a proof or a lab run starts: it ends
 // with them, however they end. A case that fails or runs out of time, a
 // lab run that throws, Ctrl-C, a kill or the terminal closing end every
 // process this one started and everything under it, the processes that

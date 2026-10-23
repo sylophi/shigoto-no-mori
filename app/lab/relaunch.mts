@@ -16,7 +16,7 @@
 // Run it on a test flavor's build, which shares nothing with the
 // installed app (lab/dev-app.md, "Packaged build, as a test flavor"),
 // and take what it left off the machine after (`--keep-app` keeps the
-// bundle, which the walks run too):
+// bundle for another run):
 //   SM_FLAVOR=lab pnpm package
 //   node lab/relaunch.mts "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app"
 //   "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app/Contents/Resources/smlab" nuke --yes --keep-app
