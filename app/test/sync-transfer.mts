@@ -1380,6 +1380,11 @@ it("transplant (dirty): the capture lands applied with its index and force remov
       content,
     );
   }
+  assert.equal(
+    existsSync(join(dirtyTransplant.worktree.path, "dropped.txt")),
+    false,
+    "the overlooked delete came back",
+  );
   // Here the overlooked edits are edits like any other.
   assert.equal(
     (
