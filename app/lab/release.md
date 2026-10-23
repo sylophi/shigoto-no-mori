@@ -16,7 +16,9 @@ node scripts/smoke-app.mts "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mo
 ```
 
 While the smoke serves, check with weblab attached to `127.0.0.1:9341`
-the first run, a terminal and the pages the cut changes.
+the first run, a terminal and the pages the cut changes. A page that
+needs an account is checked on a dev profile instead: Clerk's dev
+instance refuses a test flavor's origin.
 
 ## 2. The installed prerelease takes the tip through "Restart to update"
 
