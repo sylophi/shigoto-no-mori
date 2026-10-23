@@ -325,6 +325,16 @@ async function serveRelease(
   return { url: `http://127.0.0.1:${port}/releases`, server };
 }
 
+// Whether an app started after `since` published its loopback.json
+// (an earlier app can leave its own behind).
+function loopbackSince(dataDir: string, since: number): Promise<boolean> {
+  const loopback = join(dataDir, "loopback.json");
+  return until(
+    () => (statSync(loopback, { throwIfNoEntry: false })?.mtimeMs ?? 0) > since,
+    OPEN_WITHIN_MS,
+  );
+}
+
 // Settings' "Restart to update", pressed as the window's button does
 // (press-restart-to-update.mts): its answer, or why it failed.
 function pressRestartToUpdate(dataDir: string): string | null {
@@ -458,6 +468,7 @@ async function update(identity: string) {
     // Gone, so the end has no pid of it to stop: another process may
     // take the number.
     opened.delete(failed.pid);
+    const startedAt = Date.now();
     const again = spawn(executableIn(installed), [], {
       env: {
         ...process.env,
@@ -483,6 +494,11 @@ async function update(identity: string) {
         `the app started again didn't have ${next} ready: ${JSON.stringify(ready?.state)}`,
       );
     }
+    // The updater's state and loopback.json are written by different
+    // processes, so an app can read "ready" before it can be dialed.
+    if (!(await loopbackSince(dataDir, startedAt))) {
+      fail("the app started again didn't publish a fresh loopback");
+    }
     const pressedAt = Date.now();
     const refused = pressRestartToUpdate(dataDir);
     if (refused !== null) fail(`Restart to update failed: ${refused}`);
@@ -502,13 +518,7 @@ async function update(identity: string) {
     if (versionOf(installed) !== next) {
       fail(`the app came back as ${versionOf(installed)}, not ${next}`);
     }
-    const loopback = join(dataDir, "loopback.json");
-    if (
-      !(await until(
-        () => existsSync(loopback) && statSync(loopback).mtimeMs > pressedAt,
-        OPEN_WITHIN_MS,
-      ))
-    ) {
+    if (!(await loopbackSince(dataDir, pressedAt))) {
       fail("the relaunched app didn't open its store on the same data folder");
     }
     const leftovers = readdirSync(installedDir).filter(
@@ -610,6 +620,7 @@ async function updateInstalled(
       fail("the installed app didn't quit");
     }
     owed = true;
+    const startedAt = Date.now();
     openInstalled(installed, "--env", `SHIGOMORI_UPDATE_RELEASES_URL=${url}`);
     await until(() => {
       const status = statusIn(dataDir);
@@ -627,6 +638,9 @@ async function updateInstalled(
     console.log(
       `the installed app: ${next} staged, pressing Restart to update`,
     );
+    if (!(await loopbackSince(dataDir, startedAt))) {
+      fail("the reopened app didn't publish a fresh loopback");
+    }
     const refused = pressRestartToUpdate(dataDir);
     if (refused !== null) fail(`Restart to update failed: ${refused}`);
     const back = await until(() => {
