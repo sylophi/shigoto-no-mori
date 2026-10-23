@@ -1,8 +1,9 @@
 // A busy prompt (electron/busyPrompt.ts) that follows the work it names
 // while it is up: the host is asked again every `every` ms, and when the
 // words change the prompt is taken down and asked again in the new ones.
-// With nothing left to interrupt it goes ahead, since the person already
-// asked to quit or restart.
+// With nothing left to interrupt, read twice in a row (a loop typed at a
+// shell hands the terminal back between its commands), it goes ahead,
+// since the person already asked to quit or restart.
 import * as Option from "effect/Option";
 
 type Following = {
@@ -26,6 +27,7 @@ async function ask(options: Following, shown: string): Promise<boolean> {
   const changed = new AbortController();
   let next: string | null = shown;
   let answered = false;
+  let idleOnce = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const poll = () => {
     timer = setTimeout(() => {
@@ -35,7 +37,13 @@ async function ask(options: Following, shown: string): Promise<boolean> {
         .catch(() => Option.none<string | null>())
         .then((now) => {
           if (answered) return;
-          if (Option.isNone(now) || now.value === shown) return poll();
+          if (Option.isNone(now)) return poll();
+          if (now.value === null && !idleOnce) {
+            idleOnce = true;
+            return poll();
+          }
+          idleOnce = false;
+          if (now.value === shown) return poll();
           next = now.value;
           changed.abort();
         });

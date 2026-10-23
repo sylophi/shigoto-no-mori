@@ -11,8 +11,8 @@
 //   - the prompt follows the work while it is up
 //     (main/core/host/busyPrompt.ts): a move that ends takes it down
 //     and the quit goes ahead, words that change ask again in the new
-//     ones, a re-read the host doesn't answer leaves it up, and the
-//     person's own answer stands.
+//     ones, one idle re-read or one the host doesn't answer leaves it
+//     up, and the person's own answer stands.
 // The update-button walk drives the same on the packaged app: a job in
 // a terminal, Restart to update, and the busy dialog.
 //
@@ -123,6 +123,13 @@ it("words that change while it is up ask again in the new ones", async () => {
   const prompt = following([ARRIVING, PUSHING], [undefined, false]);
   assert.equal(await prompt.result, false);
   assert.deepEqual(prompt.shown, [ARRIVING, PUSHING]);
+});
+
+it("one idle re-read between busy ones leaves the prompt up", async () => {
+  const prompt = following([ARRIVING, null, ARRIVING], [false]);
+  assert.equal(await prompt.result, false);
+  assert.deepEqual(prompt.shown, [ARRIVING]);
+  assert.equal(prompt.takenDown(), 0);
 });
 
 it("a re-read the host doesn't answer in time leaves the prompt up", async () => {

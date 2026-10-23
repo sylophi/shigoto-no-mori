@@ -513,6 +513,10 @@ const MirrorOpenStreamPayloadSchema = strict(
     ...MirrorWorktreePayloadSchema.struct.fields,
     channelId: HexId32Schema,
     peerWorktreeId: Schema.optional(WorktreeIdSchema),
+    // A move's files step rather than a live mirror, and whether its
+    // files come into the served worktree or leave it: the serving side
+    // counts it as under way while it runs, as a quit asks.
+    transfer: Schema.optional(Schema.Literals(["in", "out"])),
   }),
 );
 export type MirrorOpenStreamPayload = typeof MirrorOpenStreamPayloadSchema.Type;
