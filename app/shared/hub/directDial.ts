@@ -3,10 +3,7 @@
 // the peer for its connect info (the hub link's one ask, a single round
 // trip), then dials the returned candidates, each a complete URL
 // (ws:// interface candidates, the wss:// tunnel endpoint) with its own
-// single-use ticket. The result has the DeviceConnection shape
-// (shared/remote/deviceLink.ts; PeerConnection below), so everything
-// downstream (the bridge cache, sync, port-forward) stays transport
-// agnostic.
+// single-use ticket. The result is a PeerConnection (below).
 //
 // DIAL STRATEGY: a deadline for each of the attempt's two legs, the
 // ask and then the candidate race, so a wedged peer that never answers
@@ -94,9 +91,9 @@ import { newConnectionId } from "@shigomori/engine/rpcClient";
 import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 
-// The DeviceConnection shape, so everything downstream of a direct
-// dial (the bridge cache, sync, port-forward) is transport agnostic,
-// plus the two facts the connectInfo answer carried beside the
+// A DialedDevice (shared/remote/deviceLink.ts) less its link, so
+// everything downstream of a direct dial (the bridge cache, sync,
+// port-forward) is transport agnostic, plus the two facts the connectInfo answer carried beside the
 // candidates: whether the peer runs this device's commands, and
 // whether it shares with this device at all. The bridge keeps them
 // current from the peer's commandAccessChanged and sharing:changed
