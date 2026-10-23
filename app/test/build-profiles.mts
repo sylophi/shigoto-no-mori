@@ -12,16 +12,13 @@ import { derive, FLAVORS } from "@shigomori/engine/flavor";
 const env = { [DEV_PROFILE_ENV]: "walk-a" };
 
 it("a release build ignores a profile in its environment", () => {
-  for (const flavor of ["prod", "v3"] as const) {
-    assert.equal(
-      profileFromEnv(
-        { packaged: true, debuggable: FLAVORS[flavor].debuggable },
-        env,
-      ),
-      null,
-      flavor,
-    );
-  }
+  assert.equal(
+    profileFromEnv(
+      { packaged: true, debuggable: FLAVORS.prod.debuggable },
+      env,
+    ),
+    null,
+  );
 });
 
 it("a dev run and a packaged test flavor run as the profile named", () => {

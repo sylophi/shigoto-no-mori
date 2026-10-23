@@ -7,9 +7,10 @@ it bundles, and the device hub (`hub/`) it talks to, are siblings one
 level up.
 
 - `DESIGN.md`: rules for the visual layer.
-- `lab/dev-app.md`: the three builds (prod, v3, dev), each with its
-  own name, bundle id, scheme, data dir, userData, logs and `sm`, from
-  one table (`packages/engine/src/flavor.ts`), so they run side by side.
+- `lab/dev-app.md`: the builds (prod, dev and the test flavors), each
+  with its own name, bundle id, scheme, data dir, userData, logs and
+  `sm`, from one table (`packages/engine/src/flavor.ts`), so they run
+  side by side.
 - `lab/README.md`: testing by hand on the real UI, driven with weblab:
   the fake host (any screen posed in a browser) and device windows
   (the real app as several devices on one machine).

@@ -54,7 +54,7 @@ loadEnv();
 
 // The flavor this build is made as (SM_FLAVOR, prod when unset), whose
 // row in the flavor table names the bundle, its id, its scheme and its
-// `sm`, so a v3 build installs beside the prod app.
+// `sm`, so a test flavor installs beside the prod app.
 const flavor = buildFlavor(process.env);
 const names = flavorNames(flavor);
 

@@ -41,7 +41,7 @@ const catalog = (names: Names) => {
       [
         "update [--check]",
         "Update the app to the latest release",
-        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. Only a version above the running one is offered, alpha before beta before rc before the full release: a prerelease build takes any later prerelease or full release, a full build only full releases, and a v3 build only the newest prerelease of 3.0.0.",
+        "Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. Only a version above the running one is offered, alpha before beta before rc before the full release: a prerelease build takes any later prerelease or full release, a full build only full releases.",
       ],
       [
         "doctor [--fix] [--yes]",
@@ -536,7 +536,7 @@ function section(
 
 export type HelpLook = {
   readonly names: Names;
-  // The build that isn't prod (v3, dev, a test flavor), which the
+  // The build that isn't prod (dev, a test flavor), which the
   // title names.
   readonly unshipped: string | null;
   readonly color: boolean;

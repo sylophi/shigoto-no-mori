@@ -4,7 +4,7 @@
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { parse, type SemVer } from "semver";
-import { APP_REPO, isV3Release } from "./flavor.ts";
+import { APP_REPO } from "./flavor.ts";
 
 // GitHub's list of the app's releases, the API's one page maximum: the
 // updater's release list and the app's changelog alike.
@@ -85,20 +85,16 @@ const zipAssetUrl = (release: GitHubRelease, marker: string) =>
 // The release a build moves to, or undefined when none is ahead. Only a
 // release above the build in semver's order is offered, which ranks
 // alpha below beta below rc below the full release, so a build never
-// moves back a stage. A prerelease build (`releases`) takes the highest
-// later prerelease, of any stage, or full release, and a full build full
-// releases alone. Neither takes a prerelease of 3.0.0 (flavor.ts
-// isV3Release). A v3 build (`v3`) takes those alone: a full release,
-// 3.0.0 included, is another flavor's bundle. Either way a release
-// flagged prerelease under a full release's tag stays hidden, as the
-// update server hides it, and one without its zip for this arch yet (the
-// workflow uploads assets minutes after the tag) is skipped, as the
-// update server skips it.
+// moves back a stage. A prerelease build takes the highest later
+// prerelease, of any stage, or full release, and a full build full
+// releases alone. Either way a release flagged prerelease under a full
+// release's tag stays hidden, as the update server hides it, and one
+// without its zip for this arch yet (the workflow uploads assets minutes
+// after the tag) is skipped, as the update server skips it.
 export const pickRelease = (
   current: SemVer,
   releases: ReadonlyArray<GitHubRelease>,
   arch: string,
-  line: "releases" | "v3" = "releases",
 ): ReleaseInfo | undefined => {
   const onPrerelease = current.prerelease.length > 0;
   const marker = `-darwin-${arch}-`;
@@ -109,11 +105,7 @@ export const pickRelease = (
     const version = parse(tag);
     if (version === null || version.compare(current) <= 0) continue;
     if (best !== null && version.compare(best.version) <= 0) continue;
-    if (line === "v3") {
-      if (!isV3Release(tag)) continue;
-    } else if (isV3Release(tag)) {
-      continue;
-    } else if (version.prerelease.length > 0) {
+    if (version.prerelease.length > 0) {
       if (!onPrerelease) continue;
     } else if (release?.prerelease === true) {
       continue;

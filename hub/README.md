@@ -337,9 +337,7 @@ renderer lives on a custom-scheme origin and authenticates Clerk's
 Frontend API with an `Authorization` header, which Clerk rejects from
 an origin it does not know (`origin_authorization_headers_conflict`,
 the same rule browser extensions hit). Add the renderer origins to
-the instance's `allowed_origins` once per instance (prod and dev's, and
-the v3 build's on the instance it points at, until v3 merges into
-main):
+the instance's `allowed_origins` once per instance (prod's and dev's):
 
 The PATCH replaces the whole list, so read it first and send it back
 with the origin added. The dashboard's Native applications page does
@@ -352,14 +350,14 @@ curl -s https://api.clerk.com/v1/instance \
 curl -X PATCH https://api.clerk.com/v1/instance \
   -H "Authorization: Bearer <CLERK_SECRET_KEY>" \
   -H "Content-type: application/json" \
-  -d '{"allowed_origins": ["shigomori-dev://app", "shigomori-v3://app"]}'
+  -d '{"allowed_origins": ["shigomori-dev://app"]}'
 ```
 
 The second call's list is the first call's answer plus the new origin;
-the one above is the dev instance's with the v3 build's added. Read it
-back the same way afterwards. Without it, desktop sign-in fails on
-every Frontend API call after the first (the web client is unaffected:
-a browser origin authenticates the browser way).
+the one above is the dev instance's. Read it back the same way
+afterwards. Without it, desktop sign-in fails on every Frontend API
+call after the first (the web client is unaffected: a browser origin
+authenticates the browser way).
 
 A PRODUCTION instance additionally enforces an allowlist of OAuth
 redirect URLs (development instances do not, so dev never trips it).

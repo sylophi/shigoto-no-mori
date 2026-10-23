@@ -47,14 +47,14 @@ export APPLE_SIGNING_IDENTITY="<the Developer ID Application identity>"
 1. Set the version to the installed one's `.1` (`3.0.0-beta.2.1` over
    `beta.2`, so the tag cut after it is still an update), without
    committing it: `pnpm pkg set version=<installed>.1`.
-2. Package it as the release job would, on the prereleases' account
-   config. With `APPLE_SIGNING_IDENTITY` set, the package step fails
-   unless the bundle comes out signed by it.
+2. Package it as the release job would, on prod's account config. With
+   `APPLE_SIGNING_IDENTITY` set, the package step fails unless the
+   bundle comes out signed by it.
 
    ```sh
-   SM_FLAVOR=v3 \
-   SM_DEVICE_HUB_URL="$(gh variable get SM_PREVIEW_DEVICE_HUB_URL)" \
-   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY="$(gh variable get SM_PREVIEW_ACCOUNT_CLERK_PUBLISHABLE_KEY)" \
+   SM_DEVICE_HUB_URL="$(gh variable get SM_DEVICE_HUB_URL)" \
+   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY="$(gh variable get SM_ACCOUNT_CLERK_PUBLISHABLE_KEY)" \
+   SM_ACCOUNT_WEB_ORIGIN="$(gh variable get SM_ACCOUNT_WEB_ORIGIN)" \
    pnpm package
    ```
 

@@ -1471,15 +1471,14 @@ describe("app", () => {
       "restarting Shigoto no Mori to install 9.9.9",
     );
     assert.equal(
-      updateSaid(restarting, flavorNames("v3").appName, String),
-      "restarting Shigoto no Mori (v3) to install 9.9.9",
+      updateSaid(restarting, flavorNames("lab").appName, String),
+      "restarting Shigoto no Mori (lab) to install 9.9.9",
     );
   });
 
   it("names the app it opened or couldn't, each flavor's own", async () => {
     for (const [flavor, line] of [
       ["prod", "opened Shigoto no Mori"],
-      ["v3", "opened Shigoto no Mori (v3)"],
       ["lab", "opened Shigoto no Mori (lab)"],
     ] as const) {
       const binary = builtBinary(flavor);

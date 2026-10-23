@@ -5,7 +5,6 @@ import {
   FLAVORS,
   type FlavorNames,
   flavorNames,
-  flavorOfVersion,
   isFlavor,
   isTestFlavor,
 } from "../src/flavor.ts";
@@ -32,15 +31,24 @@ it("gives every flavor its own names", () => {
   }
 });
 
-it("derives a test flavor's names by the rule v3 already fits", () => {
-  const { updates: _updates, debuggable: _debuggable, ...v3 } = FLAVORS.v3;
-  const { updates, debuggable, ...derived } = derive("v3");
-  assert.deepEqual(derived, v3);
-  assert.equal(updates, null);
-  assert.equal(debuggable, true);
+it("derives a test flavor's names from its word", () => {
+  assert.deepEqual(derive("lab"), {
+    appName: "Shigoto no Mori (lab)",
+    userDataDir: "Shigoto no Mori (lab)",
+    bundleId: "com.sylophi.shigomori.lab",
+    scheme: "shigomori-lab",
+    dataDir: ".smlab",
+    legacyDataDir: null,
+    configDir: "shigomori-lab",
+    pointer: "data-dir",
+    legacyPointer: null,
+    binaryName: "smlab",
+    alias: "shigomori-lab",
+    updates: false,
+    debuggable: true,
+  });
   assert.equal(flavorNames("lab").binaryName, "smlab");
-  assert.equal(flavorNames("lab").appName, "Shigoto no Mori (lab)");
-  for (const flavor of ["prod", "v3", "dev"] as const) {
+  for (const flavor of ["prod", "dev"] as const) {
     assert.equal(flavorNames(flavor).debuggable, false, flavor);
   }
 });
@@ -49,10 +57,9 @@ it("takes a word for a test flavor, not a build's or one whose names are a build
   for (const word of ["lab", "exp", "a1", "smoke"]) {
     assert.ok(isTestFlavor(word) && isFlavor(word), word);
   }
-  // `d` and `v3` would be dev's and v3's own names, the rest no word.
+  // `d` would be dev's own names, the rest no word.
   for (const word of [
     "prod",
-    "v3",
     "dev",
     "d",
     "",
@@ -68,7 +75,7 @@ it("takes a word for a test flavor, not a build's or one whose names are a build
 // Nothing a test flavor puts on the machine is another build's: every
 // file and folder, the keychain item, the shell hook's block, the agent
 // hooks' command, the bundle id and the scheme.
-it("leaves a test flavor sharing nothing with prod, v3 or dev", () => {
+it("leaves a test flavor sharing nothing with prod or dev", () => {
   const place = {
     home: "/Users/someone",
     configHome: "/Users/someone/.config",
@@ -80,21 +87,10 @@ it("leaves a test flavor sharing nothing with prod, v3 or dev", () => {
       (value) => value.toLowerCase(),
     );
   };
-  const builds = new Set(["prod", "v3", "dev"].flatMap(everything));
+  const builds = new Set(["prod", "dev"].flatMap(everything));
   for (const word of ["lab", "exp", "smoke"]) {
     for (const value of everything(word)) {
       assert.ok(!builds.has(value), `${word}: ${value}`);
     }
   }
-});
-
-it("builds an alpha, beta or rc of 3.0.0 as v3 and anything else as prod", () => {
-  assert.equal(flavorOfVersion("v3.0.0-alpha.1"), "v3");
-  assert.equal(flavorOfVersion("3.0.0-beta.2"), "v3");
-  assert.equal(flavorOfVersion("v3.0.0-beta"), "v3");
-  assert.equal(flavorOfVersion("v3.0.0-rc.1"), "v3");
-  assert.equal(flavorOfVersion("v3.0.0"), "prod");
-  assert.equal(flavorOfVersion("v3.1.0-beta.1"), "prod");
-  assert.equal(flavorOfVersion("v2.40.0-beta.1"), "prod");
-  assert.equal(flavorOfVersion("v3.0.0-alphax.1"), "prod");
 });

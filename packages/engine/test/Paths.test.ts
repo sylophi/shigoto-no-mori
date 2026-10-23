@@ -113,16 +113,16 @@ it("reads an unset HOME as the working directory", async () => {
   assert.equal((await resolve({}, false)).dataDir, ".sm");
 });
 
-it("gives the v3 flavor its own folder, with nothing pre-2.0 to adopt", async () => {
+it("gives a test flavor its own folder, with nothing pre-2.0 to adopt", async () => {
   mkdirSync(join(home, ".sm"));
   writeFileSync(join(home, ".sm", "store.db"), "");
   mkdirSync(join(home, "shigomori"));
   writeFileSync(join(home, "shigomori", "state.json"), "{}");
   pointTo(join(home, "prod-moved"));
-  const paths = await resolve({}, true, "v3");
-  assert.equal(paths.dataDir, join(home, ".smv3"));
+  const paths = await resolve({}, true, "lab");
+  assert.equal(paths.dataDir, join(home, ".smlab"));
   assert.equal(paths.dataDirSource, "default");
-  assert.equal(paths.binaryName, "smv3");
+  assert.equal(paths.binaryName, "smlab");
 });
 
 it("finds a data dir a rename landed before its pointer moved, from two processes at once", async () => {

@@ -533,8 +533,7 @@ const hubRedeploy: Scenario = {
   name: "hub-redeploy",
   does: "The dev hub is deployed again from this checkout's hub/ (wrangler deploy --env dev), which restarts its Durable Objects and drops every socket.",
   boundMs: 60_000,
-  // The dev hub is shared: every v3 build talks to it, the installed
-  // betas among them, and it may run behind release/v3 on purpose.
+  // The dev hub is shared: every dev build talks to it.
   onlyNamed: true,
   async run(lab) {
     changeHost(lab);
@@ -923,20 +922,20 @@ const git = (...args: string[]) =>
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-// Why this checkout's hub is not release/v3's as GitHub has it now, or
-// null when it is: fetched first, since a stale origin/release/v3 would
-// pass old hub code as current, and a file git doesn't track counts.
-export function hubDiffersFromRelease(): string | null {
+// Why this checkout's hub is not main's as GitHub has it now, or null
+// when it is: fetched first, since a stale origin/main would pass old
+// hub code as current, and a file git doesn't track counts.
+export function hubDiffersFromMain(): string | null {
   const paths = ["--", "hub", "packages/contracts"];
   try {
-    git("fetch", "-q", "origin", "release/v3");
+    git("fetch", "-q", "origin", "main");
   } catch {
-    return "release/v3 could not be fetched";
+    return "main could not be fetched";
   }
   try {
-    git("diff", "--quiet", "origin/release/v3", ...paths);
+    git("diff", "--quiet", "origin/main", ...paths);
   } catch {
-    return "this checkout's hub differs from release/v3";
+    return "this checkout's hub differs from main";
   }
   if (git("ls-files", "--others", "--exclude-standard", ...paths) !== "") {
     return "this checkout's hub has files git doesn't track";

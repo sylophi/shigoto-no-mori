@@ -11,16 +11,13 @@ import { derive, FLAVORS } from "@shigomori/engine/flavor";
 const argv = ["/Applications/App.app/Contents/MacOS/App", LAB_FLAG];
 
 it("a shipped build ignores the lab's flag", () => {
-  for (const flavor of ["prod", "v3"] as const) {
-    assert.equal(
-      startedForLab(argv, {
-        packaged: true,
-        debuggable: FLAVORS[flavor].debuggable,
-      }),
-      false,
-      flavor,
-    );
-  }
+  assert.equal(
+    startedForLab(argv, {
+      packaged: true,
+      debuggable: FLAVORS.prod.debuggable,
+    }),
+    false,
+  );
 });
 
 it("a dev run and a packaged test flavor take it, when given", () => {

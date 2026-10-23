@@ -1,5 +1,5 @@
 // Builds the terminal binary:
-// `node build.mts [outfile] [--flavor=prod|v3|dev|<test word>] [--version=<v>]`,
+// `node build.mts [outfile] [--flavor=prod|dev|<test word>] [--version=<v>]`,
 // dev without a flavor, and the version a release stamps ("dev" without
 // one).
 // Bun compiles it to bytecode, which starts faster, and the binary is

@@ -2,9 +2,9 @@
 // The packaged build's flavor (SM_FLAVOR, shared/packaging/buildFlavor.mts),
 // or dev; naming and data dir policy are the flavor table's
 // (packages/engine/src/flavor.ts).
-//   default        -> dist-cli/sm   targets ~/.sm  (bundled with the app)
-//   SM_FLAVOR=v3   -> dist-cli/smv3 targets ~/.smv3 (bundled with a v3 build)
-//   --dev          -> dist-cli/smd  targets ~/.smd (built by `pnpm dev`)
+//   default          -> dist-cli/sm       targets ~/.sm (bundled with the app)
+//   SM_FLAVOR=<word> -> dist-cli/sm<word> targets ~/.sm<word> (a test flavor's)
+//   --dev            -> dist-cli/smd      targets ~/.smd (built by `pnpm dev`)
 // The binary finds the darwin helper beside itself, as the app's
 // Resources ship them, so the build gets a copy of the one in
 // dist-macfs/ (build it first, as dev-cli.mts and install-cli.mts do).

@@ -497,7 +497,7 @@ export const layer = Layer.effectDiscard(
     // test flavor the lab hands a stand-in list.
     const { feedUrl, releasesUrl } = updateEndpoints();
     const standIn = names.debuggable && Boolean(feedUrl || releasesUrl);
-    if (!app.isPackaged || (names.updates === null && !standIn)) {
+    if (!app.isPackaged || (!names.updates && !standIn)) {
       setState({ kind: "unsupported" });
       return;
     }
