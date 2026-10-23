@@ -14,7 +14,7 @@
 // in System Settings > Privacy & Security > Accessibility.
 //
 // Run it on a test flavor's build, which shares nothing with the
-// installed apps (lab/dev-app.md, "Packaged build, as a test flavor"),
+// installed app (lab/dev-app.md, "Packaged build, as a test flavor"),
 // and take what it left off the machine after (`--keep-app` keeps the
 // bundle, which the walks run too):
 //   SM_FLAVOR=lab pnpm package

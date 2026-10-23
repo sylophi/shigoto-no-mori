@@ -30,7 +30,7 @@ one place (`main/flavor.ts`), which hands it to the host.
 | file-sync state       | `<data dir>/file-sync`                          | `<data dir>/file-sync`                                                   |
 | Single-instance lock  | in its userData                                 | in its userData                                                          |
 | CLI                   | `sm`, `shigomori` (bundled)                     | `smd`, `shigomori-dev` (`dist-cli/smd`)                                  |
-| Updates               | full releases, and its own rc line              | none                                                                     |
+| Updates               | the app's releases                              | none                                                                     |
 | Hub and Clerk config  | Baked in at build time                          | `.env.local` (`hub-dev.shigomori.com`)                                   |
 
 Settings' Danger zone (Nuke everything) returns a build to a fresh
@@ -316,7 +316,7 @@ removed one the next time they read the registry. A relaunch after
   test flavor: every name follows from it (`Shigoto no Mori (lab)`,
   `com.sylophi.shigomori.lab`, `shigomori-lab://`, `~/.smlab`,
   `smlab`; `packages/engine/src/flavor.ts` `derive`), so it runs
-  beside the installed apps and the dev app and shares nothing with
+  beside the installed app and the dev app and shares nothing with
   them (`packages/engine/src/footprint.ts` lists what it puts on the
   machine). It has no updates and no login item, is never signed with
   a Developer ID (forge refuses with `APPLE_SIGNING_IDENTITY` set), so
@@ -336,8 +336,9 @@ removed one the next time they read the registry. A relaunch after
   `--serve` leaves the app up on a third with the port open until it
   is stopped, and deletes that folder. `smlab nuke --yes` then takes
   everything of the build off the machine, its bundle too.
-- **Packaged prod build** (`pnpm make`). The only way to test a packaged scheme registration under the
-  real names. Without `APPLE_SIGNING_IDENTITY` in the build
+- **Packaged prod build** (`pnpm make`). The only way to test a
+  packaged scheme registration under the real names. Without
+  `APPLE_SIGNING_IDENTITY` in the build
   environment the bundle is unsigned and, like dev, runs on
   Chromium's mock keychain: the real keychain is exercised only by a
   Developer-ID-signed build (the release workflow). A local prod

@@ -156,10 +156,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # The account service config baked into the bundle: a packaged
-          # app only sees build-time env, so a build without it ships
-          # with remote features unconfigured. They are repository
-          # Actions variables (they are not secrets).
+          # Baked into the bundle, since a packaged app sees only
+          # build-time env. Repository Actions variables, not secrets.
           SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
           SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
           SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
