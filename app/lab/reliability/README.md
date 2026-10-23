@@ -78,22 +78,9 @@ sign itself out. Run one before the worktree goes: the account holds
 
 ## The scenarios
 
-| Name | What happens | Bound |
-| --- | --- | --- |
-| `network-drop` | The clients' network goes for 20 to 60 s (flows stall, new ones are refused, the pages report offline) and comes back changed: the stalled flows are cut. A tab has to stop reading the host as Connected within 10 s and a window within 15 s. The terminal runs `devices`, `list --remote` and a `send` meanwhile. | 30 s |
-| `network-blip` | Every flow stalls for 5 to 15 s and resumes, with no offline event. | 30 s |
-| `hub-redeploy` | The dev hub is deployed again from this checkout, which restarts its Durable Objects and drops every socket. Runs only when named: the dev hub is shared (every dev build talks to it). Named, it is skipped when this checkout's `hub/` or contracts differ from main as fetched then, untracked files included. | 60 s |
-| `host-kill` | B's host process is killed, and its shell forks it again. | 60 s |
-| `app-relaunch` | B's whole dev app quits and launches again. | 60 s from the relaunch |
-| `laptop-sleep` | The clients' machine sleeps for 30 to 120 s (past a hub ticket's 60 s life about half the time): every tab hidden and frozen, A and C stopped (SIGSTOP), the network gone. Then the network comes back changed, the apps go on (SIGCONT) and their windows hear the network come back, as a wake tells them, and the tabs wake. | 30 s |
-| `host-sleep` | B's machine sleeps for 30 to 120 s: its whole app stopped, cloudflared and all, its sockets silent but open. Every page must stop reading B as Connected within 65 s, the link's heartbeat (a shorter sleep only notes it), the terminal runs its verbs meanwhile, and all find B again once it goes on. | 60 s |
-| `desk-host-kill` | A's own host process is killed. Its windows and the terminal have to find it once its shell forks it again. | 30 s |
-| `reload-and-second-tab` | The tab is reloaded, a second tab of the profile opened, then closed, each step recovering. | 30 s each |
-| `reload-and-third-window` | A's first window is reloaded, a third window opened (New Window), then closed, each step recovering. | 30 s each |
-| `two-tabs-redial` | A second tab is opened and both tabs' flows are cut at once, three times, so both dial the host together; each tab recovers each time. A host minting a device's direct tickets as one set refuses one of the two, which has to ask again. | 30 s each |
-| `token-expiry` | Every tab sleeps (hidden and frozen) and every window goes offline, the network gone for 75 s, past the Clerk session token's and a hub ticket's minute. They wake on a changed network and dial everything again, then each page mints a fresh Clerk token and reads the device list. Real time passes rather than the page's clock moving, which would skew the page against every other device. The hub credential itself never expires. | 30 s |
-| `clock-skew` | Every page's clock runs two hours ahead of the other devices' and every flow is cut, so each connection is dialed again on the skewed clock. Then the pages reload, which puts their clocks right, and recover again. | 30 s each |
-| `sign-out-with-sibling` | A second tab is opened, and the first signs out of the account while the browser's Clerk session stays (what the Sign out button does when the tab's Clerk holds no session): both read signed out within the bound and stay so, nothing enrolls again, and the host no longer lists the browser. Leaves the profile signed out, so it runs only when named, and last. | 20 s |
+The scenarios are `ALL_SCENARIOS` in `scenarios.mts`, each with what
+it does and its bound. The report gives the bounds in its summary
+table, and under Scenarios what each one that ran does.
 
 A scenario runs only when a client it acts on runs. Every scenario
 changes B's worktrees (`smd`, against B's data dir) while the clients

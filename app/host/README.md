@@ -79,8 +79,8 @@ commits it (`EFFECT.md`, section 5); the engine's are in
   another volume holds the store's write lock for its length, so no
   store write tears the copy. The recovery keeps the journal until
   every step it owes is done, and one it can't read stays, for a look.
-  The steps and the undo are in the module's header; the lock that
-  makes the move the one change under way is the engine's.
+  The steps are in the module's header. The finish, the undo and the
+  lock that makes the move the one change under way are the engine's.
 - **Nuke** (`lib/nuke.ts`, then the shell's `main/electron/nuke.ts`):
   the marker the shell writes in userData commits it. The start that
   finds it deletes what it names and userData, the marker last, and

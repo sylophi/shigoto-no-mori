@@ -1,10 +1,20 @@
-// What makes a data-folder move the one change under way (the engine's
-// README, Commit points): a database of its own beside the pointer file,
-// where every process of the flavor finds it wherever the data dir is.
-// A change that writes holds it shared for its run (`guard`), at the
-// engine's entry points; a move, and the recovery of one, holds it
-// alone. SQLite's locks are the kernel's, so a hold goes with its
-// process, however that ends, and nothing reads a pid to tell.
+// What makes a data-folder move the one change under way: a database of
+// its own beside the pointer file, where every process of the flavor
+// finds it wherever the data dir is. A change that writes holds it
+// shared for its run (`guard`), at the engine's entry points; a move,
+// and the recovery of one, holds it alone. SQLite's locks are the
+// kernel's, so a hold goes with its process, however that ends, and
+// nothing reads a pid to tell.
+//
+// The entry points: every call that changes code (what a peer needs the
+// `changeCode` grant for), a landing's create, capture and apply as one
+// change wherever it is asked from, every change the host makes through
+// the engine (`asChange`), the auto-pull's fast-forward, and each
+// terminal command that changes a worktree on disk (`changing`, and
+// `changingWithFix` for the doctor's `--fix`). A write that only touches
+// the store holds nothing: from before the journal's first write until
+// after it is gone, the store refuses every write but the move's
+// (`dataDirMoveJournal.ts`).
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";

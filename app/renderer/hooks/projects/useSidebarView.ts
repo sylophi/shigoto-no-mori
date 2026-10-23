@@ -31,19 +31,12 @@ export function useSetSidebarView() {
   );
 }
 
-// The keymap's sidebarLayout (Tab) flips the layout without reaching
-// for the footer toggle. It lives
-// here, with the read and the write, so the two-way flip sits next to
-// the default it alternates around and doesn't depend on which
-// component happens to paint the toggle.
-//
-// `enabled` is how the caller says the flip is meaningful right now.
-// Arrange mode is a projects-tree affordance, so the tree can't be
-// swapped out from under a drag.
-//
-// Worth knowing: Tab is a bare key, and taking it costs
-// forward focus traversal for the whole window, not just the sidebar.
-// Shift+Tab still walks backwards, and pointer focus is untouched.
+// The keymap's sidebarLayout (Tab) flips the layout. It lives here,
+// with the read and the write, so it doesn't depend on which component
+// paints the toggle. The caller turns it off where a flip means
+// nothing, and in arrange mode, so the tree isn't swapped out from under
+// a drag. Tab is a bare key: taking it costs the whole window forward
+// focus traversal, while Shift+Tab and pointer focus are untouched.
 export function useSidebarViewHotkey(enabled: boolean): void {
   const registry = useRegistry();
   const { mutate: setView } = useSetSidebarView();
@@ -51,12 +44,9 @@ export function useSidebarViewHotkey(enabled: boolean): void {
   useKeymapAction(
     "sidebarLayout",
     () => {
-      // Read at press time rather than closing over the rendered value:
-      // the optimistic write lands in the cache a microtask after the
-      // press, but the rendered value only catches up a re-render
-      // later, and that re-render rebuilds the whole sidebar row model.
-      // Two quick presses off the stale value would write the same
-      // layout twice and leave the sidebar one flip behind the keyboard.
+      // Read at press time: the rendered value catches up only a
+      // re-render after the optimistic write, so two quick presses off
+      // it would write the same layout twice.
       const view = clientConfigNow(registry)?.sidebarView ?? "projects";
       setView(view === "inbox" ? "projects" : "inbox");
     },

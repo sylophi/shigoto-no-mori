@@ -399,17 +399,19 @@ export const layer = Layer.effect(Registry, make);
 
 ## 10. Views and containers
 
-The renderer's rule lives in `app/DESIGN.md` ("Views and containers").
-In short: a view takes data and callbacks and only draws; a container
-binds data to a view and has no markup of its own; nothing in the
-renderer touches a global. Ongoing state is a view, a refresh is a
-request, and an action is a request. A host view (a streaming RPC)
-reaches a container as an atom on the client's runtime; its refresh
-is a call that reads the view now and answers once that read landed
-(`Views.refresh` in `app/host/lib/Views.ts`), so a spinner bound to it
-ends on time. A request (a value computed when asked, or an action) is
-a React Query query or mutation; a push never feeds a reactivity key.
-Requests don't go through `effect/reactivity`'s AtomRpc: its
+The renderer's rule for views and containers lives in `app/DESIGN.md`
+("Views and containers"); where a container's data comes from is this
+section's. Ongoing state is a view, a refresh is a request, and an
+action is a request. A host view (a streaming RPC) reaches a container
+as an atom on the client's runtime, and is live, so nothing
+invalidates it; its refresh is a call that reads the view now and
+answers once that read landed (`Views.refresh` in
+`app/host/lib/Views.ts`), so a spinner bound to it ends on time. State
+kept from a push stream is an atom too. A request (a value computed
+when asked, or an action) is a React Query query or mutation; a push
+never feeds a reactivity key. A family becomes a view once the host
+holds it as state and serves a view of it; a one-off read stays a
+query. Requests don't go through `effect/reactivity`'s AtomRpc: its
 reactivity keys would be the push-to-key mapping
 (`renderer/lib/hostWatch.ts`) under another name, and what React Query
 gives a request (its error toasts, focus refetch, staleness, abort on

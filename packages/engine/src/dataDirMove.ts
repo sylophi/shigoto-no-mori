@@ -1,8 +1,8 @@
 // The data-folder move's recovery and the steps of it the engine owns:
 // while a move's journal is in the data dir the store refuses every
-// write but the move's own, and every process that comes up settles the
-// journal first, holding the data-folder lock alone (`DataDirLock`), or
-// keeps refusing. The move itself is the app's
+// write but the move's own, and every engine graph but the doctor's
+// settles the journal as it comes up, holding the data-folder lock alone
+// (`DataDirLock`), or keeps refusing. The move itself is the app's
 // (app/host/lib/dataDirMove.ts); the journal and the store's refusal are
 // `dataDirMoveJournal.ts`'s.
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
@@ -138,7 +138,7 @@ const removeOwnCopy = (dir: string) =>
   });
 
 // A step of a finish or an undo that failed keeps the journal, for the
-// next process to open the store to carry on.
+// next engine graph to come up (not the doctor's) to carry on.
 const settled = <A, E, R>(
   step: Effect.Effect<A, E, R>,
   what: string,
@@ -159,14 +159,14 @@ const settled = <A, E, R>(
 
 // The end of a move that landed at `at`, its journal at `file`. In the
 // moving process (`settle` false) only git's links are re-pointed: its
-// store is the old place's. The first process to open the store at the
-// new place (`settle` true) then removes the old tree a copy left (its
-// own copy only, its journal last), which waited till then so a power
-// loss before the copy reached the disk still had it; re-points every
-// link again, the journal's entries and any worktree git lists under the
-// old folder; carries each entry's port-pool lease; removes the journal;
-// and lets the store write, last. Each step is idempotent, so a process
-// that finds the journal runs it again.
+// store is the old place's. The first engine graph to come up at the
+// new place (`settle` true; not the doctor's) then removes the old tree
+// a copy left (its own copy only, its journal last), which waited till
+// then so a power loss before the copy reached the disk still had it;
+// re-points every link again, the journal's entries and any worktree
+// git lists under the old folder; carries each entry's port-pool lease;
+// removes the journal; and lets the store write, last. Each step is
+// idempotent, so a process that finds the journal runs it again.
 export const finishMove = (
   journal: Journal,
   at: string,
@@ -392,8 +392,9 @@ export const resumeDataDirMove = (at: string) =>
     yield* undoMove(journal.value, at, file);
   });
 
-// Every engine graph settles what a move left in its data dir as it
-// comes up, before anything reads a worktree by its id. A failure, or a
+// Every engine graph built on `engineServices` (all but the doctor's,
+// `doctorLayer`) settles what a move left in its data dir as it comes
+// up, before anything reads a worktree by its id. A failure, or a
 // move under way that keeps the lock, is a log line: the store keeps
 // refusing writes, and the next process tries again.
 export const settleLayer = Layer.effectDiscard(

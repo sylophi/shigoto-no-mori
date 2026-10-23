@@ -165,22 +165,10 @@ with no `window`, so a view must not reach for the runtime.
   lays out by the window's width, a container query (`@min-[48rem]:`),
   never the viewport's (`md:`). The host API comes through the runtime,
   not `window.api`.
-- A container's data is one of two kinds. A **host view**, state the
-  host holds and keeps current (the `watch` views: change status, file
-  diffs and hunks, branch history, stashes, operations, the project's
-  pull requests, `terminals:list`), is an atom (`@effect/atom-react`)
-  on the client's runtime (`renderer/lib/runtime/atoms.ts`): it is
-  live, so nothing invalidates it. So is the state kept from a push
-  stream (a device's script runs, its worktree lifecycle, the hub's
-  status). A **request**, a value the host computes once when asked
-  and does not hold (a pull request's detail from GitHub, a git blob,
-  a file's contents, branches, the account, launchers, villagers, the
-  updater's check), is a React Query query, and so is an action. A
-  family becomes a view once the host holds it as state and serves a
-  view of it; a one-off read stays a query. A push never feeds a
-  reactivity key, which would be invalidation under another name.
-  Atoms live in the app's hooks and containers, never in
-  `@shigomori/ui`.
+- A container's data is a host view or the state kept from a push
+  stream (an atom on the client's runtime), or a request (a React Query
+  query), as `EFFECT.md` section 10 says. Atoms live in the app's hooks
+  and containers, never in `@shigomori/ui`.
 
 ## Sizing: one density in the components, the phone's in phone.css
 
