@@ -72,7 +72,7 @@ export function CrashScene() {
         action={{ label: "Reload", onClick: noop }}
       />
       <p className="p-4 text-xs text-muted-foreground">
-        v2.1.0 is available. <WhatsNewLinkView onOpen={noop} />
+        v3.1.0 is available. <WhatsNewLinkView onOpen={noop} />
       </p>
     </div>
   );

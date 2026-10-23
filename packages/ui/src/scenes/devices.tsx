@@ -108,7 +108,7 @@ function row(
       name={device.name}
       showId={showId}
       status={status}
-      appVersion={status.reachable || isThisDevice ? "2.0.3" : ""}
+      appVersion={status.reachable || isThisDevice ? "3.0.3" : ""}
       tunnel={isThisDevice ? "up" : undefined}
       access={access}
       renaming={renaming}

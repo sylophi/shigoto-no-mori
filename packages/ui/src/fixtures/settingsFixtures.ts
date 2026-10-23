@@ -121,7 +121,7 @@ export const FAKE_DOCTOR_REPORT: DoctorReport = {
       id: "cli",
       title: "CLI",
       status: "ok",
-      detail: "`sm` 2.0.3 on PATH",
+      detail: "`sm` 3.0.3 on PATH",
     },
     {
       group: "Install",

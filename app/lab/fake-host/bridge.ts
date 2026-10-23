@@ -1660,7 +1660,7 @@ function posedMigration(): MigrationProgress {
 // ?notSharing=tp,mini: the devices with sharing off, which then serve
 // this page nothing.
 const notSharing = new Set<string>();
-const FAKE_UPDATE_VERSION = "2.1.0";
+const FAKE_UPDATE_VERSION = "3.1.0";
 
 function initPresence(): void {
   const pose = new URLSearchParams(location.search);
