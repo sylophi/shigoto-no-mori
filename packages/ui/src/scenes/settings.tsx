@@ -97,7 +97,7 @@ import { deviceById, deviceTabs } from "./world.ts";
 
 const noop = () => {};
 const HOME = "/Users/rin";
-const VERSION = "2.0.3";
+const VERSION = "3.0.3";
 const COMMIT = "fake-host";
 const FORM: SettingsFormState = fromConfig(fakeGlobalConfig, {
   theme: "system",
@@ -108,7 +108,7 @@ const setForm: Dispatch<SetStateAction<SettingsFormState>> = noop;
 const SECTIONS = settingsSections(true, true, true);
 const STAGED = {
   kind: "ready",
-  version: "2.1.0",
+  version: "3.1.0",
   releaseDate: null,
 } as const;
 

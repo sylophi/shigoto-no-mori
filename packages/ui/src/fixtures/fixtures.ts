@@ -16,7 +16,7 @@ import type {
 } from "@shigomori/contracts/schemas";
 
 export const FAKE_ACCOUNT_ID = "user_2rin8xk3";
-export const FAKE_APP_VERSION = "2.0.3";
+export const FAKE_APP_VERSION = "3.0.3";
 
 export const LOCAL_DEVICE_ID = "dev_8f3ac2e1";
 export const THINKPAD_ID = "dev_1c94b0da";
@@ -808,14 +808,14 @@ export function addLiveEdgeRuns(): void {
 // ---- releases ----
 
 // The changelog's GitHub releases, newest first as the API lists
-// them: the staged 2.1.0 (?updates) with a screenshot, a beta that
-// only a device on a prerelease sees, the fake host's own 2.0.3, and two
+// them: the staged 3.1.0 (?updates) with a screenshot, a beta that
+// only a device on a prerelease sees, the fake host's own 3.0.3, and two
 // before it. The notes follow the real ones' shape.
 const RELEASES_URL = "https://github.com/sylophi/shigoto-no-mori/releases/tag";
 
 export const fakeReleases: Release[] = [
   {
-    version: "2.1.0",
+    version: "3.1.0",
     notes: [
       "This release lets you do a lot more from ⌘K and lets PRs merge themselves once they're ready.",
       "",
@@ -831,21 +831,21 @@ export const fakeReleases: Release[] = [
       "- In light mode, hover stripes now show up on settings rows. ([#425](https://github.com/sylophi/shigoto-no-mori/pull/425))",
       "- A device that's still connecting now shows amber, and an offline one shows gray. ([#419](https://github.com/sylophi/shigoto-no-mori/pull/419))",
       "",
-      "**Full Changelog**: https://github.com/sylophi/shigoto-no-mori/compare/v2.0.3...v2.1.0",
+      "**Full Changelog**: https://github.com/sylophi/shigoto-no-mori/compare/v3.0.3...v3.1.0",
     ].join("\n"),
     publishedAt: new Date(now - 2 * HOUR).toISOString(),
     prerelease: false,
-    url: `${RELEASES_URL}/v2.1.0`,
+    url: `${RELEASES_URL}/v3.1.0`,
   },
   {
-    version: "2.1.0-beta.1",
+    version: "3.1.0-beta.1",
     notes: "A first look at the new ⌘K pane.",
     publishedAt: new Date(now - 2 * DAY).toISOString(),
     prerelease: true,
-    url: `${RELEASES_URL}/v2.1.0-beta.1`,
+    url: `${RELEASES_URL}/v3.1.0-beta.1`,
   },
   {
-    version: "2.0.3",
+    version: "3.0.3",
     notes: [
       "**Toasts that match the theme** ([#422](https://github.com/sylophi/shigoto-no-mori/pull/422))",
       "Each one is tinted by its tone, with the theme's buttons and font.",
@@ -856,22 +856,22 @@ export const fakeReleases: Release[] = [
     ].join("\n"),
     publishedAt: new Date(now - 3 * DAY).toISOString(),
     prerelease: false,
-    url: `${RELEASES_URL}/v2.0.3`,
+    url: `${RELEASES_URL}/v3.0.3`,
   },
   {
-    version: "2.0.2",
+    version: "3.0.2",
     notes:
       "- Village news cards dismiss with a click anywhere on them. ([#420](https://github.com/sylophi/shigoto-no-mori/pull/420))",
     publishedAt: new Date(now - 5 * DAY).toISOString(),
     prerelease: false,
-    url: `${RELEASES_URL}/v2.0.2`,
+    url: `${RELEASES_URL}/v3.0.2`,
   },
   {
-    version: "2.0.1",
+    version: "3.0.1",
     notes:
       '- Release builds no longer report their commit as "dirty". ([#418](https://github.com/sylophi/shigoto-no-mori/pull/418))',
     publishedAt: new Date(now - 6 * DAY).toISOString(),
     prerelease: false,
-    url: `${RELEASES_URL}/v2.0.1`,
+    url: `${RELEASES_URL}/v3.0.1`,
   },
 ];

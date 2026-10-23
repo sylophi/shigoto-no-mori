@@ -5,16 +5,19 @@
    and kanji watermark. */
 
 /* Latin, plus the latin-ext subset for the odd accented letter (the ō
-   in Dōbutsu). Unicode ranges as fontsource publishes them. */
+   in Dōbutsu). Unicode ranges as fontsource publishes them, except that
+   the latin faces leave out the backtick and six spacing accents: Zen
+   marks them as combining marks, which shaping draws with no width, so
+   they come from the next face in --sans. */
 @font-face {
   font-family: "Zen Maru Gothic";
   font-weight: 500;
   font-display: swap;
   src: url("../fonts/zen-maru-gothic-latin-500-normal.woff2") format("woff2");
   unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
-    U+2215, U+FEFF, U+FFFD;
+    U+0000-005F, U+0061-00A7, U+00A9-00B3, U+00B5-00B7, U+00B9-00FF, U+0131,
+    U+0152-0153, U+02BB-02BC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Zen Maru Gothic";
@@ -22,9 +25,9 @@
   font-display: swap;
   src: url("../fonts/zen-maru-gothic-latin-700-normal.woff2") format("woff2");
   unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
-    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
-    U+2215, U+FEFF, U+FFFD;
+    U+0000-005F, U+0061-00A7, U+00A9-00B3, U+00B5-00B7, U+00B9-00FF, U+0131,
+    U+0152-0153, U+02BB-02BC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC,
+    U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
   font-family: "Zen Maru Gothic";
@@ -1021,6 +1024,9 @@
   }
   .keys span {
     color: var(--muted-foreground);
+  }
+  .launch-cards {
+    margin-top: 3rem;
   }
   .note {
     margin-top: 1.5rem;

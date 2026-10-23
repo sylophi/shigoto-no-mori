@@ -30,7 +30,7 @@ export const fixtureAliases = {
 };
 
 export const fixtureDefine = {
-  __APP_VERSION__: JSON.stringify("2.0.3"),
+  __APP_VERSION__: JSON.stringify("3.0.3"),
   __APP_COMMIT__: JSON.stringify("fake-host"),
 };
 
