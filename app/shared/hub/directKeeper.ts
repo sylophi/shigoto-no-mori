@@ -5,13 +5,13 @@
 // click.
 //
 // A refused ticket and the host's lockout ride the same ladder: the
-// lockout expires on its own, and a refused dial doesn't extend it. A
-// peer with no listener (a web client) parks until it re-enters the roster
-// (its app restarted, or our own hub link came back), or every desktop
-// would redial every open tab forever.
+// lockout expires on its own, and a connection the lockout refuses
+// doesn't extend it. A peer with no listener (a web client) parks until
+// it re-enters the roster (its app restarted, or our own hub link came
+// back), or every desktop would redial every open tab forever.
 //
-// The only caller of the bridge's dialPeer, so keeper state and the
-// session cache can't drift. Pure shared code (no node builtins, no
+// The keeper is the only caller of the bridge's dialPeer, so its state
+// and the session cache can't drift. Pure shared code (no node builtins, no
 // electron).
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
@@ -181,7 +181,7 @@ export const make = (
         const live = new Set(online);
         for (const [deviceId, state] of states) {
           if (!live.has(deviceId)) {
-            // Its sessions are the presence sweep's.
+            // Its sessions are the presence sweep's (directPresence.ts).
             forget(state);
             states.delete(deviceId);
           }

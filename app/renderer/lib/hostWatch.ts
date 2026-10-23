@@ -1,9 +1,10 @@
 // Push-driven invalidation of one device's requests, for this machine
 // (renderer/boot.tsx) and each peer (remoteDeviceSync): the families the
 // host doesn't serve as views (EFFECT.md, section 10). No reachability
-// gate: a push from a device is its session speaking, and the
-// session-landed sweep (remoteDeviceSync's noteSessions) covers what
-// changed while one was down.
+// gate: a push from a device is its session speaking, invalidating a
+// device nothing caches under matches no query, and the session-landed
+// sweep (remoteDeviceSync's noteSessions) covers what changed while one
+// was down.
 import { gitContract } from "@shigomori/contracts/modules/git";
 import type { QueryClient } from "@tanstack/react-query";
 import { invalidateBranchState } from "@/hooks/git/useBranches";

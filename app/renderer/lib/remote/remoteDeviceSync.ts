@@ -42,9 +42,9 @@ import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
 
 // The device list is the shared query entry, read with staleTime
 // Infinity so a reconcile reuses the cache. An account change, a socket
-// reconnect and an unknown roster id ask for a refetch; its landing
-// reconciles (the cache subscription), and a failed one leaves the
-// store as it was.
+// reconnect, and a roster naming an unknown device or dropping one ask
+// for a refetch; its landing reconciles (the cache subscription), and a
+// failed one leaves the store as it was.
 
 // The last phase the hub socket reported, kept so a transition into
 // connected can be spotted at all.
@@ -61,8 +61,8 @@ const deviceListHash = hashKey(queryKeys.accountDevices());
 
 // One api per hub deviceId, built on first reachable sighting and
 // kept: the transport forwards through the bridge, whose session for
-// that peer the host's keeper keeps, so the api never goes stale the
-// way a dead socket does.
+// that peer the direct plane's keeper redials, so the api never goes
+// stale the way a dead socket does.
 // Its pushes reach the cache from the same moment (watchPeer), until
 // the account is left (`unwatch`).
 const apis = new Map<string, { api: RemoteDeviceApi; unwatch: () => void }>();

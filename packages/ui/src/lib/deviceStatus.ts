@@ -58,8 +58,9 @@ export const THIS_DEVICE_VIEW: DeviceStatusView = {
   reachable: true,
 };
 
-// The same machine while its host is down (stopped, or stopped by the
-// shell's watchdog) until a new one answers: its pages can't load.
+// The same machine while the window's link to its host is down (the
+// host stopped, or the shell's watchdog stopped one that went silent)
+// until a new one answers: its pages can't load.
 export const THIS_DEVICE_NOT_RESPONDING_VIEW: DeviceStatusView = {
   tone: "rose",
   label: "Not responding",

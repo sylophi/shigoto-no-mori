@@ -76,15 +76,15 @@ const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // and only times out. The wildcard is why that costs only the attempt:
 // without it the name would answer NXDOMAIN, which the OS resolver
 // caches for the zone's negative TTL (30 minutes on Cloudflare), during
-// which no probe from this machine could succeed. A child that only
-// survived its spawn isn't routable yet, and a web client (tunnel only)
+// which no probe from this machine could succeed. A child that survived
+// its spawn says nothing about routing, and a web client (tunnel only)
 // would spend keeper rungs on it.
 const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [5_000, 8_000];
 // The ladder for a tunnel the Worker reused, which is every launch
 // after a device's first. Its hostname resolved before, so there is no
 // propagation to wait out: all a probe waits on is the connector
 // registering at the edge, a second or two. On the ladder above, a web
-// client would wait five seconds to reach every launch.
+// client couldn't reach a device for five seconds after each launch.
 const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
   1_000, 2_000, 4_000, 8_000,
 ];
@@ -218,7 +218,7 @@ export interface Options {
   ) => Effect.Effect<TunnelProvision, TunnelProvisionError>;
   // One readiness probe attempt: true when the hostname routes from
   // the edge to the local listener. The default GETs the hostname over
-  // HTTPS and reads any edge answer that the LISTENER produced (the
+  // HTTPS and reads any edge answer that the listener produced (the
   // 426 a ws server earns for a non-upgrade GET) as routable.
   readonly probe?: ((hostname: string) => Effect.Effect<boolean>) | undefined;
   // Where the live child's pid is recorded, for the next host to reap
@@ -322,10 +322,9 @@ interface Memory {
   readonly wantedPort: number | null;
   // The last successful provision, held in memory only, so a crash
   // restart re-spawns without a Worker round trip while the port is
-  // unchanged. Reuse requires the previous
-  // child to have reached probed readiness (`ready`): a child that died
-  // without ever becoming routable may be holding a dead token, so its
-  // successor re-provisions.
+  // unchanged. Reuse requires the previous child to have reached probed
+  // readiness (`ready`): a child that died without ever becoming
+  // routable may be holding a dead token, so its successor re-provisions.
   readonly provision: {
     readonly port: number;
     readonly hostname: string;

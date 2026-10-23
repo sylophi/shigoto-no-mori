@@ -5,7 +5,9 @@
 //
 // - Signed in, no credential: enroll with a fresh token (skipCache, so
 //   the hub never sees one mid-expiry), once per Clerk user per session
-//   (armedFor). Having seen the device enrolled counts as that attempt:
+//   (armedFor): the effect re-runs on any status change, and a failed
+//   enroll must not loop (the account page offers a retry). Having seen
+//   the device enrolled counts as that attempt:
 //   a credential that goes while the session lives was signed out, and
 //   enrolling again would undo it.
 // - Signed in as a different user than the credential's: sign the

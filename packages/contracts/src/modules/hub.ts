@@ -32,7 +32,9 @@ const HubSocketStatusSchema = Schema.Union([
 // off: not wanted (listener down, opted out, signed out). no-binary:
 // wanted, but no usable cloudflared. unconfigured: the Worker has no
 // tunnel env. starting: provisioning, spawning or probing readiness.
-// up: probed routable and advertised. error: the last attempt failed.
+// up: probed routable and advertised. error: the last attempt failed,
+// and a restart is scheduled, or, for a denied provision, nothing
+// retries until the next reconcile.
 const TunnelStateSchema = Schema.Literals([
   "off",
   "no-binary",
