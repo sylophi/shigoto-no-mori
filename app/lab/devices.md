@@ -58,7 +58,8 @@ the bridge's answers, the other device's window, and the disk.
   worktree page's footer: Mirror, and Transplant under Options) or through
   the api's `sync` and `mirror`, then watch both windows
   and the disk. What each should do is in its contract
-  (`packages/contracts/src/modules/`) and in `bridge.md`. Two mirror cases
+  (`packages/contracts/src/modules/`), and `bridge.md` says what each
+  call returns. Two mirror cases
   worth a look: relocate a mirrored original on the device running
   it (its session leaves `api.run(api.mirror.list())`, and the other
   device's page for the copy stops saying it is mirrored), and a

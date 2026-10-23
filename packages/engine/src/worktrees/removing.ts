@@ -2,10 +2,10 @@
 // the checkout and branch going.
 //
 // git's remove is its commit point. A git killed before the `.git` went
-// leaves a checkout that reads as dirty, or clean if only ignored files
-// went, which a removal takes (`--skip-cleanup` past a teardown that
-// fails on what is left); one killed after leaves a half-removed
-// checkout (below).
+// leaves a checkout that reads as dirty, which a forced removal takes,
+// or as clean if only ignored files went (`--skip-cleanup` gets past a
+// teardown that fails on what is left). One killed after leaves a
+// half-removed checkout (below).
 import { lifecycleCommand } from "@shigomori/contracts/lifecycleScripts";
 import type { LifecycleSlot } from "@shigomori/contracts/schemas/scripts";
 import type * as Duration from "effect/Duration";

@@ -79,7 +79,8 @@ sign itself out. Run one before the worktree goes: the account holds
 ## The scenarios
 
 The scenarios are `ALL_SCENARIOS` in `scenarios.mts`, each with what
-it does and its bound, which the report lists under Scenarios.
+it does and its bound. The report gives the bounds in its summary
+table, and under Scenarios what each one that ran does.
 
 A scenario runs only when a client it acts on runs. Every scenario
 changes B's worktrees (`smd`, against B's data dir) while the clients

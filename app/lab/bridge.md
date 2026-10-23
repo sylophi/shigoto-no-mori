@@ -39,12 +39,12 @@ The lab's scripts read it through `reliability/pageApi.mts`.
 | `api.sync.teardownSource({direction, deviceId, projectId, worktreeId})` | A transplant's second half: removes the source while it is still what moved. |
 | `api.sync.ignoredPaths({projectId, worktreeId})` | A worktree's ignored files (`paths`, `total`) and the rules behind them (`patterns`). |
 | `api.sync.worktreeFolder({projectId, worktreeId, relative, ruleIgnored})` | One folder of a worktree, with git's ignore verdict per entry. |
-| `api.worktrees.readFile({projectId, worktreeId, path})` | One file: `text` with its contents, or `binary`, `tooLarge` or `missing`. |
+| `api.worktrees.readFile({projectId, worktreeId, path})` | One file: `text` with its contents, or `binary`, `media`, `tooLarge` or `missing`. |
 | `api.projects.carryOverListing({...})` | One folder of a project, across its checkouts on that device. |
 | `api.portForward.start({deviceId, remotePort})` | Forwards a peer's loopback port; returns `localPort`. |
 | `api.mirror.startTo({targetDeviceId, projectId, worktreeId, ...})` | Copies a worktree to a peer and keeps the two mirrored; returns the copy and its `session` (`startFrom` asks a peer to mirror towards here). |
 | `api.mirror.list()` | This device's mirror sessions, and the streams it serves for peers. |
-| `api.mirror.stop({session, force?})` / `pause({session})` / `resume({session})` | Controls a session this device runs. Stop removes the peer's copy, and unforced it is refused unless the copy holds nothing the original lacks. |
+| `api.mirror.stop({session, force?})` / `pause({session})` / `resume({session})` | Controls a session this device runs. Stop removes the peer's copy (not when the original is gone), and unforced it is refused unless the copy holds nothing the original lacks. |
 | `api.mirror.setIgnores({session, ignoreMode, ignores})` | Changes what a running mirror leaves out; returns the new `session`. |
 | `api.mirror.history({localWorktreeId})` | The mirror's events, kept by the device that runs it. |
 

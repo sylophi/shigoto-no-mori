@@ -173,9 +173,9 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
 // read with no git: each path the allowlist counts (a ref is written by
 // a rename into place, so a new inode; a stopped operation's directory
 // counts by being there). Two equal readings mean nothing the allowlist
-// cares about moved between them. And apart, each
-// checkout's index by its stamp (written by a rename into place too),
-// for the index's own signal. A file that isn't there reads as absent;
+// cares about moved between them. And apart, each checkout's index by
+// its stamp (written by a rename into place too), for the index's own
+// signal. A file that isn't there reads as absent;
 // any other failure (a directory git removed mid-walk, a volume that
 // stalls) fails the reading, which the caller skips rather than read as
 // a change.

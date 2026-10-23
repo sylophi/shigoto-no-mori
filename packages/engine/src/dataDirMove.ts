@@ -1,8 +1,8 @@
 // The data-folder move's recovery and the steps of it the engine owns:
 // while a move's journal is in the data dir the store refuses every
-// write but the move's own, and every process that comes up settles the
-// journal first, holding the data-folder lock alone (`DataDirLock`), or
-// keeps refusing. The move itself is the app's
+// write but the move's own, and every engine graph but the doctor's
+// settles the journal as it comes up, holding the data-folder lock alone
+// (`DataDirLock`), or keeps refusing. The move itself is the app's
 // (app/host/lib/dataDirMove.ts); the journal and the store's refusal are
 // `dataDirMoveJournal.ts`'s.
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
@@ -392,8 +392,9 @@ export const resumeDataDirMove = (at: string) =>
     yield* undoMove(journal.value, at, file);
   });
 
-// Every engine graph settles what a move left in its data dir as it
-// comes up, before anything reads a worktree by its id. A failure, or a
+// Every engine graph built on `engineServices` (all but the doctor's,
+// `doctorLayer`) settles what a move left in its data dir as it comes
+// up, before anything reads a worktree by its id. A failure, or a
 // move under way that keeps the lock, is a log line: the store keeps
 // refusing writes, and the next process tries again.
 export const settleLayer = Layer.effectDiscard(

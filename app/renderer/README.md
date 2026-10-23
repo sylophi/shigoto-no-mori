@@ -16,10 +16,10 @@ containers, hooks, stores and routes over the views in `@shigomori/ui`
   `View` from. A container draws no markup of its own.
 - `hooks/<area>/`: where a container's data comes from (`EFFECT.md`,
   section 10), unless one container alone reads it, which may ask in
-  place. An atom is `lib/runtime/atoms.ts`'s, read through
-  `lib/runtime/viewHooks.ts`; a request's key comes from
-  `lib/queryKeys.ts`. A hook under
-  `hooks/remote/` scopes its calls to a device (`useHostScope`). A hook
+  place. An atom is built with `lib/runtime/atoms.ts` and read
+  through `lib/runtime/viewHooks.ts`; a request's key comes from
+  `lib/queryKeys.ts`. A hook under `hooks/remote/` scopes its calls
+  to a device (`useHostScope`). A hook
   of the page's own logic (which device is picked, where a click goes,
   what a menu offers) sits with the containers of the area it belongs
   to (`components/shared/DeviceTabs.tsx`'s `useDeviceTabs`,

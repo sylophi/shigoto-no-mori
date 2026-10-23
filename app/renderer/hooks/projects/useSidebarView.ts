@@ -35,9 +35,8 @@ export function useSetSidebarView() {
 // with the read and the write, so it doesn't depend on which component
 // paints the toggle. The caller turns it off where a flip means
 // nothing, and in arrange mode, so the tree isn't swapped out from under
-// a drag. Tab is a bare key: taking it
-// costs the whole window forward focus traversal, while Shift+Tab and
-// pointer focus are untouched.
+// a drag. Tab is a bare key: taking it costs the whole window forward
+// focus traversal, while Shift+Tab and pointer focus are untouched.
 export function useSidebarViewHotkey(enabled: boolean): void {
   const registry = useRegistry();
   const { mutate: setView } = useSetSidebarView();

@@ -61,8 +61,9 @@
 //     undoes (a copy).
 //  9. The pointer committed, renamed in (or removed, for the default
 //     place) and its folder flushed. Finished at the destination.
-// 10. The finish: git's repair here, then the engine's `finishMove` in
-//     the first process to open the store at the new place. A crash
+// 10. The finish: the engine's `finishMove`, here for git's links only
+//     (`settle` false), then in full in the first process to open the
+//     store at the new place. A crash
 //     leaves it to the next process there, and a copy's old tree takes
 //     its space until then.
 //
