@@ -1,12 +1,11 @@
 // One line of truth about a mirror session, shared by the header
 // pill, the dialogs and the sidebar row so every surface ranks the
 // same news the same way: a stop under way, a runner out of reach or
-// restarting (the session is then its last word), a pause (a person's,
-// then the copy's device turning the mirror away), a halt, a
-// lost link, a stored error, then the git half's verdict, then
-// conflicts, then problems, then the ordinary lifecycle. The label is
-// one or two words. The surfaces add "mirror" or the peer's name
-// themselves.
+// restarting (the session is then its last word), a person's pause, a
+// halt, the copy's device turning the mirror away, a lost link, a
+// stored error, then the git half's verdict, then conflicts, then
+// problems, then the ordinary lifecycle. The label is one or two words.
+// The surfaces add "mirror" or the peer's name themselves.
 import {
   isHaltedStatus,
   type MirrorDaemonStatus,
@@ -142,6 +141,15 @@ export function describeMirror(
     return look("amber", "Restarting", "the mirror engine is restarting", true);
   }
   if (session.paused) return { ...look("slate", "Paused"), paused: true };
+  // A halt waits on a person, whatever the switch: it doesn't pick up
+  // by itself.
+  if (isHaltedStatus(session.status)) {
+    return look(
+      "rose",
+      "Halted",
+      HALT_DETAIL[session.status] ?? session.statusText,
+    );
+  }
   // The engine's connect error and the git half's off both follow from
   // it, and it resumes by itself once the switch is on.
   if (context.copyOff !== undefined) {
@@ -153,13 +161,6 @@ export function describeMirror(
       ),
       paused: true,
     };
-  }
-  if (isHaltedStatus(session.status)) {
-    return look(
-      "rose",
-      "Halted",
-      HALT_DETAIL[session.status] ?? session.statusText,
-    );
   }
   // A lost link outranks what it causes: the engine's connect error,
   // and the git half's failure to reach the other side, are both the

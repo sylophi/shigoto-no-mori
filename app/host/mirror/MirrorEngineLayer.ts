@@ -30,6 +30,7 @@ import {
 import {
   endMirrorsWithPeers,
   isOrphanedTransfer,
+  isRecreating,
   LEFT_ACCOUNT_DETAIL,
   mirrorSessions,
   settleMirrorBookkeeping,
@@ -316,27 +317,34 @@ const make = (options: {
     });
 
     // A peer coming to take this device's calls (its link up, both of
-    // its switches on): the sessions into it that wait on the link and
-    // that nobody paused reconnect at once, not at the engine's next
-    // retry, and git looks again.
-    yield* reach.admissions.pipe(
-      Stream.runForEach((deviceId) =>
-        Effect.gen(function* () {
-          for (const raw of yield* daemon.sessions) {
-            if (
-              raw.deviceId !== deviceId ||
-              raw.paused ||
-              !LINK_LOST.has(raw.status)
-            ) {
-              continue;
-            }
-            yield* Effect.ignoreCause(daemon.resume(raw.session), {
+    // its switches on): git looks again, and the sessions into it that
+    // wait on the link, that nobody paused and that no re-open holds
+    // reconnect at once, not at the engine's next retry. Side by side,
+    // each admission on its own: a resume waits on its reconnect, and
+    // one asked off a snapshot older than a pause would undo the pause.
+    const admit = (deviceId: string) =>
+      Effect.gen(function* () {
+        follower.onPeerAdmitted(deviceId);
+        const waiting = (yield* daemon.sessions).filter(
+          (raw) =>
+            raw.deviceId === deviceId &&
+            !raw.paused &&
+            LINK_LOST.has(raw.status) &&
+            !isRecreating(raw.session),
+        );
+        yield* Effect.forEach(
+          waiting,
+          (raw) =>
+            Effect.ignoreCause(daemon.resume(raw.session), {
               log: "Warn",
               message: "[mirror] a session didn't reconnect",
-            });
-          }
-          follower.onPeerAdmitted(deviceId);
-        }),
+            }),
+          { concurrency: "unbounded", discard: true },
+        );
+      });
+    yield* reach.admissions.pipe(
+      Stream.runForEach((deviceId) =>
+        Effect.sync(() => runFork(admit(deviceId))),
       ),
       Effect.forkScoped,
     );

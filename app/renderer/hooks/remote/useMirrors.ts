@@ -51,8 +51,11 @@ import { useApi } from "@/lib/runtime/pageApi";
 import { useAcceptsCommands } from "@/hooks/account/useAccount";
 import { useSharing } from "@/hooks/account/useSharing";
 import { useAtomValue } from "@effect/atom-react";
-import type { CopySwitchOff } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { remoteDevicesAtom } from "@/lib/remote/devices";
+import {
+  copySwitchOff,
+  type CopySwitchOff,
+} from "@shigomori/ui/lib/commandAccessCopy.ts";
+import { type RemoteDevice, remoteDevicesAtom } from "@/lib/remote/devices";
 
 const EMPTY: MirrorListResult = {
   daemon: "stopped",
@@ -115,30 +118,30 @@ export function useMirrorHereBlocker(peerLabel: string): string | undefined {
   );
 }
 
-// The switch that is off on the device holding a mirror's copy, which
-// turns the mirror away until it is on, and that device as the words
-// name it: this device's own switch, or a peer's as its link reports
-// it. Sharing first, as "Mirror here" names them.
+// The switch that is off on the device holding a mirror's copy
+// (copySwitchOff), and that device as the words name it.
 export function useCopyOff(
   deviceId: string | undefined,
 ): { device: string; off: CopySwitchOff } | undefined {
   const localDeviceId = useApi().deviceId;
   const acceptsCommands = useAcceptsCommands().data;
   const sharing = useSharing().data;
-  const peer = useAtomValue(remoteDevicesAtom, (devices) => {
-    const device = devices.find((entry) => entry.deviceId === deviceId);
-    if (device?.status.phase === "notSharing") return "sharing";
-    return device?.acceptsCommands === false ? "control" : undefined;
-  });
+  const entryOf = (devices: readonly RemoteDevice[]) =>
+    devices.find((entry) => entry.deviceId === deviceId);
+  const peerSharing = useAtomValue(
+    remoteDevicesAtom,
+    (devices) => entryOf(devices)?.status.phase !== "notSharing",
+  );
+  const peerAcceptsCommands = useAtomValue(
+    remoteDevicesAtom,
+    (devices) => entryOf(devices)?.acceptsCommands,
+  );
   const device = useDeviceName(deviceId ?? "");
-  const off =
-    deviceId !== localDeviceId
-      ? peer
-      : sharing === false
-        ? "sharing"
-        : acceptsCommands === false
-          ? "control"
-          : undefined;
+  const off = copySwitchOff({
+    here: deviceId === localDeviceId,
+    own: { acceptsCommands, sharing },
+    peer: { acceptsCommands: peerAcceptsCommands, sharing: peerSharing },
+  });
   return off === undefined ? undefined : { device, off };
 }
 

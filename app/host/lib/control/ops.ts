@@ -656,10 +656,10 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
       afar.api.stop({ session: afar.session.session, force }),
     );
     // The copy the peer could not remove is the one HERE: the peer
-    // removes it through this device's command-access switch, which
-    // need not be on for a peer this device only asked something of.
-    // The session is gone either way, so this device's own forced
-    // delete finishes what the runner's stop would have.
+    // removes it through this device's switches, which may have gone
+    // off since (the mirror paused by them). The session is gone either
+    // way, so this device's own forced delete finishes what the
+    // runner's stop would have.
     if (copyStayed !== undefined) {
       const removed = yield* (yield* Worktrees.Worktrees).remove(
         {

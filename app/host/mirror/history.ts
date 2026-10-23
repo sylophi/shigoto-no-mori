@@ -191,9 +191,21 @@ export function createMirrorHistory(deps: {
         connected,
         lostConnection: lost,
         halted: isHaltedStatus(session.status),
-        lastError: session.lastError ?? "",
+        // While the link is down, its connect error is the loss the
+        // "disconnected" row says, worded from this side and naming the
+        // other device by its id: the error last noted stands until
+        // the link is back.
+        lastError: connected
+          ? (session.lastError ?? "")
+          : (previous?.lastError ?? ""),
         conflicts: session.conflicts.length + session.excludedConflicts,
-        git: git?.status ?? null,
+        // An off follow says nothing of the git state (the peer turned
+        // this device away, or isn't reached): the verdict before it
+        // stands, so trouble cleared after it still reads as cleared.
+        git:
+          git?.status === "off"
+            ? (previous?.git ?? null)
+            : (git?.status ?? null),
       };
       seen.set(session.session, next);
       if (previous === undefined) continue;

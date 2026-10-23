@@ -9,9 +9,11 @@
 // Syncing, the first pass reads as Syncing throughout, and an engine
 // that keeps stopping reads as failing, saying why, where one starting
 // reads as restarting. A switch off on the copy's device reads as
-// paused until it is on, naming the switch, after a person's pause,
-// and a lost link reads as reconnecting without the engine's connect
-// error, which names the device by its id.
+// paused until it is on, naming the switch, after a person's pause and
+// a halt, and a lost link reads as reconnecting without the engine's
+// connect error, which names the device by its id. The switch is this
+// device's own when the copy is here and the peer's as its link
+// reports it otherwise, sharing first.
 //
 // Run: pnpm test mirror-status.
 import assert from "node:assert/strict";
@@ -19,6 +21,7 @@ import type {
   MirrorSession,
   MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
+import { copySwitchOff } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { describeMirror } from "@shigomori/ui/views/worktreeDetail/mirror/mirrorStatus.ts";
 import { it } from "vitest";
 import { mirrorEndpoint, rawMirrorSession } from "./lib/mirrorFakes.mts";
@@ -159,4 +162,43 @@ it("a switch off on the copy's device reads as paused until it is on, naming the
     const lost = view(status, 3, {}, away);
     assert.deepEqual([lost.label, lost.detail], ["Reconnecting", detail]);
   }
+});
+
+it("a halt reads as halted whatever the copy's device's switch, since it waits on a person", () => {
+  const halted = view(
+    "halted-on-root-emptied",
+    3,
+    { copyOff: { device: "Studio Mac", off: "control" } },
+    { git: { status: "off", detail: "" } },
+  );
+  assert.deepEqual([halted.label, halted.paused], ["Halted", undefined]);
+});
+
+it("the switch off on the copy's device is this device's own when the copy is here and the peer's as its link reports it otherwise, sharing first, and one not read yet counts as on", () => {
+  const switches = {
+    own: { acceptsCommands: false, sharing: true },
+    peer: { acceptsCommands: true, sharing: false },
+  };
+  assert.equal(copySwitchOff({ here: true, ...switches }), "control");
+  assert.equal(copySwitchOff({ here: false, ...switches }), "sharing");
+  assert.equal(
+    copySwitchOff({
+      here: false,
+      own: { acceptsCommands: false, sharing: false },
+      peer: { acceptsCommands: false, sharing: false },
+    }),
+    "sharing",
+  );
+  assert.equal(
+    copySwitchOff({
+      here: true,
+      own: {},
+      peer: { acceptsCommands: false },
+    }),
+    undefined,
+  );
+  assert.equal(
+    copySwitchOff({ here: false, own: {}, peer: { sharing: true } }),
+    undefined,
+  );
 });

@@ -32,6 +32,9 @@
 //     missing ceiling, not the settle ceiling,
 //   - a daemon restarting keeps the list and the git follower's verdict
 //     its sessions had, and the threads note nothing of it,
+//   - a thread says a lost link and its return, never the connect error
+//     meanwhile, which names the other device by its id, and an error
+//     from before stands until the link is back,
 //   - a peer coming to take this device's calls reconnects its sessions
 //     waiting on the link, none paused or halted and no other
 //     device's, and git looks at its sessions again,
@@ -662,6 +665,62 @@ it("a daemon restarting keeps the list and the follower's verdict, and the threa
   );
 });
 
+it("a thread says a lost link and its return, never the connect error meanwhile, which names the other device by its id, and an error from before stands until the link is back", async () => {
+  const { state, history } = await harness(() => ({ ok: true }));
+  const at = (
+    connected: boolean,
+    fields: Partial<Parameters<typeof rawMirrorSession>[0]> = {},
+  ) =>
+    rawMirrorSession({
+      session: "s1",
+      localRoot: root,
+      localWorktreeId: "w-link",
+      labels: { [MIRROR_LABEL_MODE]: "mirror" },
+      status: connected ? "watching" : "connecting-remote",
+      local: mirrorEndpoint({ connected: true }),
+      remote: mirrorEndpoint({ connected }),
+      ...fields,
+    });
+  // The link's rows and the engine's errors: the git follower, which has
+  // no project to read here, notes its own.
+  const kinds = () =>
+    history("w-link")
+      .map((event) => event.kind)
+      .filter((kind) => !kind.startsWith("git-"));
+  await state([at(true)]);
+  await state([
+    at(false, {
+      lastError:
+        "unable to connect to beta: no direct connection to 0123456789abcdef",
+    }),
+  ]);
+  await state([
+    at(false, {
+      lastError:
+        "unable to connect to beta: this device is not permitted to run commands on the remote machine",
+    }),
+  ]);
+  await state([at(true)]);
+  assert.deepEqual(kinds(), ["connected", "disconnected"]);
+  assert.ok(
+    !history("w-link").some((event) =>
+      event.detail.includes("0123456789abcdef"),
+    ),
+  );
+  await state([at(true, { lastError: "a scan failed" })]);
+  await state([at(false, { lastError: "no direct connection to 0123" })]);
+  await state([at(true)]);
+  // Newest first.
+  assert.deepEqual(kinds(), [
+    "recovered",
+    "connected",
+    "disconnected",
+    "error",
+    "connected",
+    "disconnected",
+  ]);
+});
+
 it("a peer coming to take this device's calls reconnects its sessions waiting on the link at once, none paused or halted and no other device's, and git looks at its sessions again", async () => {
   const admissions = Effect.runSync(PubSub.unbounded<string>());
   const asked: string[] = [];
@@ -715,9 +774,13 @@ it("a peer coming to take this device's calls reconnects its sessions waiting on
     requests()
       .filter((request) => request.startsWith("resume"))
       .sort();
-  await waitFor(() => resumed().length === 2, "the sessions to reconnect");
+  await waitFor(
+    () => resumed().length >= 2 && asked.length >= 4,
+    "the sessions to reconnect and git to look again",
+  );
+  // The resumes are asked side by side: any third would be in by now.
+  await settleTurns();
   assert.deepEqual(resumed(), ["resume dialing", "resume lost"]);
-  await waitFor(() => asked.length === 4, "git to look again");
   assert.deepEqual(asked, ["B", "B", "B", "B"]);
 });
 

@@ -390,6 +390,22 @@ const registered = (
   online: true,
 });
 
+// This device reported signed in with "Allow control from other
+// devices" on, which a peer's "Mirror here" lands through.
+const allowControl = () =>
+  runHost(
+    Effect.flatMap(HostAccount.HostAccount, (account) =>
+      account.set({
+        hubUrl: "http://127.0.0.1:9",
+        accountId: "account",
+        credential: "",
+        deviceKey: "",
+        webOrigin: "",
+        acceptsCommands: true,
+      }),
+    ),
+  );
+
 // The mirror engine's stand-in: records what the control layer asks
 // of it and reports the sessions it was asked to create. `git` is the
 // follower's verdict the stop guard reads.
@@ -1185,18 +1201,7 @@ it("mirror --from: refused here while either of this device's switches is off, n
     cliFailureMessage(controlOff, "no error doc"),
     /Turn on “Allow control from other devices” on this device's account page to mirror here/,
   );
-  await runHost(
-    Effect.flatMap(HostAccount.HostAccount, (account) =>
-      account.set({
-        hubUrl: "http://127.0.0.1:9",
-        accountId: "account",
-        credential: "",
-        deviceKey: "",
-        webOrigin: "",
-        acceptsCommands: true,
-      }),
-    ),
-  );
+  await allowControl();
   await runHost(
     Effect.flatMap(Sharing.Sharing, (sharing) => sharing.set(false)),
   );
@@ -1315,6 +1320,7 @@ it("mirror --from of the peer's primary: lands as a worktree on mirror/main in m
   // lands as a worktree on mirror/main in a mirror- folder, the
   // session is labelled for the follower, and the peer's primary
   // stays. Named by its folder, as list --remote shows it.
+  await allowControl();
   const primaryMainBefore = await gitOut(sourceRepo, "rev-parse", "HEAD");
   const fromPrimary = transferDoc(
     await sm(

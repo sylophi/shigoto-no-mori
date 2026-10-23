@@ -339,6 +339,10 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
     title: "Fox",
   });
   write("running-scripts.json", { ownerPid: 99999, scripts: [] });
+  // 2.x's mirror invitations, which 3.x drops unread.
+  write("file-sync/mirror-invites.json", [
+    { deviceId: "B", projectId: "A", worktreeId: "aaaaaaaaaaaa" },
+  ]);
   write("updater.json", { channel: "stable" });
   const listing = async () => ({
     projects: await rows("projects"),
@@ -356,6 +360,7 @@ it("deletes the v2 files once the store is verified to hold what they said, and 
     "config.json",
     "state.json",
     "running-scripts.json",
+    "file-sync/mirror-invites.json",
     "projects",
   ]) {
     assert.ok(!existsSync(join(dataDir, file)), file);

@@ -65,8 +65,9 @@ the bridge's answers, the other device's window, and the disk.
   delete the CLI refuses (dirty tree, no force) leaves the mirror
   running.
 - **Command access.** A device that just enrolled accepts no commands,
-  so moves onto it are refused (the dialogs show it read-only) until
-  its switch is on: Allow control on its account page, or
+  so moves onto it are refused (the dialogs show it read-only), and its
+  own "Mirror here" stays off, until its switch is on: Allow control
+  on its account page, or
   `api.run(api.account.setAcceptsCommands(true))`. Turn it off on one
   device to see the other's asks refused and what the UI says. A mirror
   into it stops writing then and reads paused, naming the switch, and

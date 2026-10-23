@@ -305,6 +305,9 @@ const rootLooks = new Set<string>();
 // leftover sweep below must not race it to the terminate.
 const recreating = new Set<string>();
 
+export const isRecreating = (session: string): boolean =>
+  recreating.has(session);
+
 export const whileRecreating = <A, E, R>(
   session: string,
   run: Effect.Effect<A, E, R>,
