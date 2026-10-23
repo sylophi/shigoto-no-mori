@@ -16,7 +16,7 @@ import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 // launchd's environment, not the owner's shell, so at runtime
 // process.env carries none of these. Capturing them at package time is
 // how a shipped build arrives configured. Every value is a public
-// endpoint or a public OAuth client_id by design
+// endpoint or Clerk's publishable key by design
 // (packages/contracts/src/accountServiceConfig.ts), so inlining them
 // leaks nothing.
 // An explicit define of one named constant rather than envPrefix +

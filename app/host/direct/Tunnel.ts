@@ -449,11 +449,11 @@ const make = (options: Options) =>
     // provision, for `recheck`.
     const rechecks = yield* Ref.make(Option.none<Queue.Queue<void>>());
 
-    // A spawned child's readiness: probes on the ladder until routable, up
-    // to the deadline, then advertises. After "up" the child's exit is
-    // the down signal, and `recheck` (a wake, a peer's dial that reached
-    // nothing) asks a live child again, since a sleep or a wedge leaves a
-    // connector that runs but routes nothing.
+    // A spawned child's readiness: probes on the ladder until it routes,
+    // and is advertised then, or until the deadline passes. After "up"
+    // the child's exit is the down signal, and `recheck` (a wake, a
+    // peer's dial that reached nothing) asks a live child again, since a
+    // sleep or a wedge leaves a connector that runs but routes nothing.
     const probe = (hostname: string, fresh: boolean, spawnedAt: number) => {
       const delaysMs = fresh
         ? TUNNEL_PROBE_DELAYS_MS
