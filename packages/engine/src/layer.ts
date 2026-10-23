@@ -27,7 +27,6 @@ import * as Lifecycle from "./Lifecycle.ts";
 import * as Migration from "./Migration.ts";
 import * as MirrorAgreements from "./MirrorAgreements.ts";
 import * as MirrorHistory from "./MirrorHistory.ts";
-import * as MirrorInvites from "./MirrorInvites.ts";
 import * as Open from "./Open.ts";
 import * as Paths from "./Paths.ts";
 import * as Projects from "./Projects.ts";
@@ -108,7 +107,6 @@ const services = (options: EngineOptions) =>
         RunningScripts.layer,
         MirrorAgreements.layer,
         MirrorHistory.layer,
-        MirrorInvites.layer,
       ),
     ),
     Layer.provideMerge(

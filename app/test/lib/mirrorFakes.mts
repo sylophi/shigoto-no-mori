@@ -67,7 +67,6 @@ export const inertMirrorImpl = (
   refreshGit: () => Effect.succeed(undefined),
   history: () => [],
   noteEvent: () => {},
-  releaseCopy: () => Effect.void,
   forgetHistory: () => {},
   moveHistory: () => {},
   localProjectChanged: () => {},

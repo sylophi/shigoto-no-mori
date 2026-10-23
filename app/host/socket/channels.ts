@@ -61,7 +61,6 @@ type Channel = {
   readonly endpoint: ChannelEndpoint;
   // This side's bytes the caller has not read yet.
   readonly outbound: Uint8Array[];
-  readonly invited: boolean;
   queued: number;
   paused: boolean;
   // The next read to answer, and the reads waiting, by number.
@@ -120,9 +119,9 @@ export type HostChannels = LinkChannels & {
   ) => Effect.Effect<void, Failure>;
   readonly end: (channelId: string) => Effect.Effect<void, Failure>;
   readonly reset: (channelId: string) => Effect.Effect<void>;
-  // The command switch turned off: every channel a gated call opened
-  // goes, and the ones an invited call opened stay.
-  readonly dropUninvited: () => void;
+  // A switch turned off: every channel goes, and the link takes new ones
+  // once both are on again.
+  readonly dropAll: () => void;
   // The link is gone: every channel resets, and attach refuses.
   readonly closeAll: () => void;
 };
@@ -216,7 +215,7 @@ export function makeHostChannels(): HostChannels {
     });
 
   return {
-    attach(channelId, endpoint, opts) {
+    attach(channelId, endpoint) {
       if (dead) throw new ChannelRefusedError({ reason: "no-byte-channels" });
       if (channels.has(channelId))
         throw new ChannelRefusedError({ reason: "channel-taken" });
@@ -226,7 +225,6 @@ export function makeHostChannels(): HostChannels {
       const channel: Channel = {
         endpoint,
         outbound: [],
-        invited: opts?.invited === true,
         queued: 0,
         paused: false,
         nextRead: 0,
@@ -367,9 +365,8 @@ export function makeHostChannels(): HostChannels {
         tombstone(channelId);
       }),
 
-    dropUninvited() {
+    dropAll() {
       for (const [channelId, channel] of channels) {
-        if (channel.invited) continue;
         drop(channelId, channel);
         channel.endpoint.onReset();
       }

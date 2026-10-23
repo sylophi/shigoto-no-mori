@@ -59,7 +59,7 @@ import * as Ops from "@host/lib/engineOps";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { dataDir } from "@shared/paths";
 import * as Sharing from "@host/lib/Sharing";
-import { mirrorInviteAdmits, mirrorInviteSees } from "@host/mirror/invites";
+import * as PeerReach from "@host/ipc/PeerReach";
 import * as Loopback from "@host/socket/Loopback";
 import * as DeviceLink from "@host/socket/DeviceLink";
 import {
@@ -137,11 +137,7 @@ export const deviceLinkLayer = () =>
         localKey: () => remote.now()?.hub.localKey() ?? null,
       },
       isCommandGranted: acceptsPeerCommands,
-      // The switches' one exception: the mirrors this device asked for.
-      isInvited: mirrorInviteAdmits,
     },
-    // Not sharing, a mirror it asked for still follows its copy here.
-    seesPush: mirrorInviteSees,
     services: Graph.services,
   });
 
@@ -237,6 +233,10 @@ export function onPeerPush(listener: PeerPushListener): () => void {
   };
 }
 
+// Each peer as it comes to take this device's calls (PeerReach's
+// admissions), off the status snapshots.
+export const peerAdmissions = Effect.runSync(PeerReach.makeAdmissions);
+
 // The window-facing hub module, which also lends its invokeOnPeer to
 // the host's peer reach (handlers.ts).
 export const hubHandlers = () => {
@@ -307,8 +307,10 @@ export const remotePlanesLayer = Layer.effectDiscard(
         connection: () => hub,
         localDeviceId: deviceIdNow,
         localAppVersion: () => hostFacts().appVersion,
-        broadcastStatus: (status) =>
-          broadcastAll(hubContract, "statusChanged", status),
+        broadcastStatus: (status) => {
+          peerAdmissions.note(status);
+          broadcastAll(hubContract, "statusChanged", status);
+        },
         broadcastPeerPush: (push) => {
           broadcastAll(hubContract, "peerPush", push);
           for (const listener of peerPushListeners) listener(push);

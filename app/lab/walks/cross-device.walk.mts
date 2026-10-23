@@ -408,6 +408,7 @@ it("brings the other device's worktree to a device without the project: it clone
 
 it("mirrors the other device's worktree to a device without the project: it clones first", async () => {
   const e = await devices.add("e", blank);
+  await setControl(e.page, true);
   const name = await quickCreate(a, projectOn(a));
   await openPeerWorktree(e.page, "a", name);
   await mirror(e);

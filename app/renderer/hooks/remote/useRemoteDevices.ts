@@ -116,7 +116,7 @@ export function useScopedDeviceLabel(): string {
 // Either party of a cross-device pair by name, where either may be
 // this machine, which the registry does not list: "this device" for
 // it, a peer's label otherwise.
-function useDeviceName(deviceId: string): string {
+export function useDeviceName(deviceId: string): string {
   const localDeviceId = useApi().deviceId;
   const label = useRemoteDevice(deviceId)?.label;
   if (deviceId === localDeviceId) return "this device";

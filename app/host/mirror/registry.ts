@@ -22,11 +22,6 @@ import {
 import { errorWordsOf } from "@host/lib/errorWords";
 import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
 import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
-import {
-  dropMirrorInvitesWithPeers,
-  forgetMirrorInvitesOf,
-  moveMirrorInvitesOf,
-} from "@host/mirror/invites";
 import { log } from "@shared/log";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Ops from "@host/lib/engineOps";
@@ -213,20 +208,16 @@ export const findSession = (daemon: MirrorEngine["Service"], session: string) =>
 //
 // A session that refuses to stop is logged, not thrown: the delete is
 // what was asked for, and a stuck mirror must not be what blocks it.
-// A copy a peer mirrored into here takes its invitation with it
-// (invites.ts), daemon or no daemon.
 //
 // A daemon that is not running (restarting, or still starting at
 // boot) ends nothing, so the id waits in `pendingStops` and the first
 // snapshot of a running daemon ends what it names
 // (settleMirrorBookkeeping). The copy a peer holds stays a worktree of
-// its own, and its device is told it is no longer mirrored
-// (mirror:release).
+// its own.
 const pendingStops = new Set<string>();
 
 export const stopMirrorsForWorktree = (localWorktreeId: string) =>
   Effect.gen(function* () {
-    yield* forgetMirrorInvitesOf(localWorktreeId);
     // Absent (a check that never mounts the daemon) there is nothing
     // mirroring anything.
     const daemon = yield* engineOrNull;
@@ -248,26 +239,24 @@ const endSessionsOnWorktree = (
     Effect.forEach(
       sessions.filter((raw) => raw.localWorktreeId === localWorktreeId),
       (raw) =>
-        daemon.terminate(raw.session).pipe(
-          Effect.andThen(
-            isTransferSession(raw) ? Effect.void : daemon.releaseCopy(raw),
-          ),
-          Effect.catch((error) =>
-            Effect.sync(() =>
-              log.warn(
-                `[mirror] could not stop the mirror of a worktree being deleted: ${errorWordsOf(error)}`,
+        daemon
+          .terminate(raw.session)
+          .pipe(
+            Effect.catch((error) =>
+              Effect.sync(() =>
+                log.warn(
+                  `[mirror] could not stop the mirror of a worktree being deleted: ${errorWordsOf(error)}`,
+                ),
               ),
             ),
           ),
-        ),
       { concurrency: "unbounded", discard: true },
     ),
   );
 
 // Ends a mirror and leaves its copy where it is, an ordinary worktree
-// of its device: the end of a mirror
-// whose original is gone (the copy is then the only one left). The
-// original's thread says why.
+// of its device: the end of a mirror whose original is gone (the copy
+// is then the only one left). The original's thread says why.
 export const endMirrorKeepingCopy = (
   daemon: MirrorEngine["Service"],
   raw: MirrorSessionRaw,
@@ -275,7 +264,6 @@ export const endMirrorKeepingCopy = (
 ) =>
   Effect.gen(function* () {
     yield* daemon.terminate(raw.session);
-    yield* daemon.releaseCopy(raw);
     daemon.noteEvent(localWorktreeIdOf(raw), "stopped", detail);
   });
 
@@ -316,6 +304,9 @@ const rootLooks = new Set<string>();
 // re-open ends the old one itself once the new one is up, so the
 // leftover sweep below must not race it to the terminate.
 const recreating = new Set<string>();
+
+export const isRecreating = (session: string): boolean =>
+  recreating.has(session);
 
 export const whileRecreating = <A, E, R>(
   session: string,
@@ -449,8 +440,8 @@ const endOnce = <E, R>(session: string, end: Effect.Effect<unknown, E, R>) =>
   );
 
 // A worktree here was re-keyed: its id is path derived, so a move put it
-// under a new one. What is kept under the old id follows: the invitation
-// of a copy it was, its thread, and each session on it, re-opened on the
+// under a new one. What is kept under the old id follows: its thread,
+// and each session on it, re-opened on the
 // new path (MirrorEngine's recreate, the git follower's agreement
 // carried across by the replaces label). The engine halted the old
 // session the moment its root went, so nothing crossed meanwhile. A
@@ -464,7 +455,6 @@ export const moveMirrorsOfWorktree = (
   moved: { id: string; path: string },
 ) =>
   Effect.gen(function* () {
-    yield* moveMirrorInvitesOf(oldId, moved.id);
     const daemon = yield* engineOrNull;
     if (daemon === null) return;
     daemon.moveHistory(oldId, moved.id);
@@ -495,13 +485,7 @@ export const moveMirrorsOfWorktree = (
             ),
             Effect.catch((error) =>
               Effect.gen(function* () {
-                yield* endOnce(
-                  raw.session,
-                  Effect.andThen(
-                    daemon.terminate(raw.session),
-                    daemon.releaseCopy(raw),
-                  ),
-                );
+                yield* endOnce(raw.session, daemon.terminate(raw.session));
                 daemon.noteEvent(
                   moved.id,
                   "stopped",
@@ -556,15 +540,12 @@ export function createNoAccountSweep(deps: {
 // stopMirrorsForWorktree. With `transfers`, the one-shot transfer
 // sessions with such a peer go too: their tokens stay live, so the
 // orphan reaper never would, and their wait then fails the transfer.
-// The invitations such peers held go too (invites.ts), daemon or no
-// daemon.
 export const endMirrorsWithPeers = (
   stillOnAccount: (deviceId: string) => boolean,
   detail: string,
   opts: { transfers?: boolean } = {},
 ) =>
   Effect.gen(function* () {
-    yield* dropMirrorInvitesWithPeers(stillOnAccount);
     const daemon = yield* engineOrNull;
     // A daemon that isn't running ends nothing: the sessions it brings
     // back are swept as they come (createNoAccountSweep).

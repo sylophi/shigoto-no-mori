@@ -19,9 +19,9 @@ import {
 } from "./migrations/importJson.ts";
 import { agentSessions } from "./migrations/agentSessions.ts";
 import { changes } from "./migrations/changes.ts";
+import { dropMirrorInvites } from "./migrations/dropMirrorInvites.ts";
 import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
 import { mirrorHistory } from "./migrations/mirrorHistory.ts";
-import { mirrorInvites } from "./migrations/mirrorInvites.ts";
 import { moving } from "./migrations/moving.ts";
 import { runningScripts } from "./migrations/runningScripts.ts";
 import { tables } from "./migrations/tables.ts";
@@ -109,11 +109,11 @@ const history = (platform: Platform, lenient: boolean) => ({
   "8_running_scripts": runningScripts,
   "9_mirror_agreements": Effect.provideContext(mirrorAgreements, platform),
   "10_mirror_history": Effect.provideContext(mirrorHistory, platform),
-  "11_mirror_invites": Effect.provideContext(mirrorInvites, platform),
   "12_v2_import": v2Import,
   "13_moving": moving,
   "14_wt_moves_watched": wtMovesWatched,
   "15_worktree_terminals": worktreeTerminals,
+  "16_drop_mirror_invites": dropMirrorInvites,
 });
 
 // Whether the store holds what a 2.x data dir's files said: the files

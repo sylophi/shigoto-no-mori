@@ -23,7 +23,11 @@ import {
   DestinationProvider,
   LocalHostScope,
 } from "@/hooks/remote/useHostScope";
-import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
+import {
+  useCopyOff,
+  useMirrors,
+  useStartMirror,
+} from "@/hooks/remote/useMirrors";
 import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { LandedPath } from "../flow/FlowChrome";
@@ -291,6 +295,7 @@ function MirrorLive({
   const live: MirrorSession | undefined = sessions.find(
     (entry) => entry.session === session,
   );
+  const copyOff = useCopyOff(live?.deviceId);
   return (
     <MirrorLiveView
       {...props}
@@ -301,6 +306,7 @@ function MirrorLive({
           : describeMirror(live, {
               engine: daemon,
               engineFailure: daemonFailure,
+              copyOff,
             })
       }
       summary={live === undefined ? null : sessionSummary(live)}

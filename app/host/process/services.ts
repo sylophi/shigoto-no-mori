@@ -24,6 +24,7 @@ import type * as Worktrees from "@host/lib/Worktrees";
 import type * as AccountPeers from "@host/lib/control/AccountPeers";
 import type * as DeviceId from "@host/lib/config/DeviceId";
 import type * as DataDirHolders from "@host/lib/DataDirHolders";
+import type * as HostAccount from "@host/lib/HostAccount";
 import type * as HostFacts from "@host/lib/HostFacts";
 import type * as Shell from "@host/lib/Shell";
 import type * as PeerReach from "@host/ipc/PeerReach";
@@ -52,6 +53,7 @@ export type HostServices =
   | Worktrees.Worktrees
   | Engine.Services
   | BackgroundFetch.BackgroundFetch
+  | HostAccount.HostAccount
   | HostFacts.HostFacts
   | Shell.Shell
   | DeviceId.DeviceId

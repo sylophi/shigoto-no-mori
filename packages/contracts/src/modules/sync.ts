@@ -434,18 +434,12 @@ export const syncContract = defineContract(
     "hasCommits",
     SyncHasCommitsPayloadSchema,
     SyncHasCommitsResultSchema,
-    {
-      remote: true,
-      gated: true,
-      grant: "browseFiles",
-      invitable: "project",
-    },
+    { remote: true, gated: true, grant: "browseFiles" },
   ),
   invoke("openSource", SyncOpenSourcePayloadSchema, VoidSchema, {
     remote: true,
     gated: true,
     grant: "browseFiles",
-    invitable: "copy",
   }),
   // receiveBundle lands under refs/shigomori/, never a branch, so the
   // project is scope enough.
@@ -457,7 +451,6 @@ export const syncContract = defineContract(
       remote: true,
       gated: true,
       grant: "changeCode",
-      invitable: "landing",
       busy: "land",
     },
   ),
@@ -465,7 +458,6 @@ export const syncContract = defineContract(
     remote: true,
     gated: true,
     grant: "changeCode",
-    invitable: "project",
   }),
   // gated keeps the web client's refusal of them.
   invoke(

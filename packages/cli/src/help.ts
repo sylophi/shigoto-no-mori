@@ -146,7 +146,7 @@ const catalog = (names: Names) => {
       [
         "worktrees mirror [<name>] [--to <device> | --from <device>]",
         "Keep a worktree in step on two devices",
-        "send or bring that stays: files, commits, staging and branch moves follow each other both ways until unmirror. With --to (or neither) the copy lands on the other device. With --from, <name> is the other device's worktree and the copy lands here, at the path printed. The mirror runs on the device holding the original, so --from asks the other device to run it. This device's own command access is not needed, since it asked. Asking again answers with the running mirror. Takes --leave-out and --setup / --no-setup like send, and with --to (or neither) --clone-into.",
+        'send or bring that stays: files, commits, staging and branch moves follow each other both ways until unmirror. With --to (or neither) the copy lands on the other device. With --from, <name> is the other device\'s worktree and the copy lands here, at the path printed. The mirror runs on the device holding the original, so --from asks the other device to run it, and it writes the copy here: this device needs "Allow control from other devices" and "Share with other devices" on. Asking again answers with the running mirror. Takes --leave-out and --setup / --no-setup like send, and with --to (or neither) --clone-into.',
       ],
       [
         "worktrees unmirror [<name>] [-f]",

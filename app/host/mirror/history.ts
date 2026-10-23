@@ -27,6 +27,34 @@ const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
   "disconnected",
 ]);
 
+// The words of the engine's errors for a cut stream, however the sync
+// wraps them: its remote endpoint client's requests and responses
+// ("beta polling error: unable to receive poll response: … EOF"), and
+// the file copy's own encoding over the stream, for a cut mid-copy.
+// This side's own failures carry none of them, but for its message
+// codec's below. A peer whose serve ends (it quit or died, or couldn't
+// read a huge tree's request, past its size cap) reads as a cut too:
+// Mutagen carries no cause across it. Its disk full doesn't end it:
+// the file is skipped and comes back as a transition problem.
+const LINK_WORDS = [
+  "unable to send ",
+  "unable to receive ",
+  "unable to decode transmission",
+  "unable to encode transmission",
+  "unable to flush encoded messages",
+];
+// The message codec's own failures under those words, which aren't a
+// cut: a message coming in past its size cap (a huge tree's snapshot),
+// or one that can't be marshaled or parsed.
+const CODEC_WORDS = [
+  "message size too large",
+  "unable to marshal message",
+  "unable to unmarshal message",
+];
+const isLinkError = (error: string) =>
+  LINK_WORDS.some((words) => error.includes(words)) &&
+  !CODEC_WORDS.some((words) => error.includes(words));
+
 // What the recorder remembers of a session between two snapshots, the
 // facts whose change is an event.
 type Seen = {
@@ -174,6 +202,7 @@ export function createMirrorHistory(deps: {
       const git = gitStatusOf(session.session);
       const previous = seen.get(session.session);
       const connected = session.local.connected && session.remote.connected;
+      const error = session.lastError ?? "";
       // A session's first connection is the expected course after
       // "started" and stays quiet, like the first git agreement below:
       // only a connection regained after a noted loss is news. A
@@ -191,9 +220,24 @@ export function createMirrorHistory(deps: {
         connected,
         lostConnection: lost,
         halted: isHaltedStatus(session.status),
-        lastError: session.lastError ?? "",
+        // The link's own error (its stream cut: the peer away, or a
+        // switch of its off) is the loss the "disconnected" row says,
+        // read too just after the link is back, until the sync's start
+        // clears it, and none while the link is down isn't a recovery:
+        // the error last noted stands. The sync's own (a disk full),
+        // which also leaves the link down, is noted.
+        lastError:
+          isLinkError(error) || (!connected && error === "")
+            ? (previous?.lastError ?? "")
+            : error,
         conflicts: session.conflicts.length + session.excludedConflicts,
-        git: git?.status ?? null,
+        // An off follow says nothing of the git state (the peer turned
+        // this device away, or isn't reached): the verdict before it
+        // stands, so trouble cleared after it still reads as cleared.
+        git:
+          git?.status === "off"
+            ? (previous?.git ?? null)
+            : (git?.status ?? null),
       };
       seen.set(session.session, next);
       if (previous === undefined) continue;

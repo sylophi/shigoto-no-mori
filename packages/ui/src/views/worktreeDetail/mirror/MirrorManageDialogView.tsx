@@ -154,7 +154,10 @@ export function MirrorManageDialogView({
           <div className="flex min-w-0 flex-col gap-5">
             <div className="space-y-2">
               {pair}
-              <Facts session={session} />
+              <Facts
+                session={session}
+                paused={session.paused || view.paused === true}
+              />
             </div>
             <Notice
               session={session}
@@ -332,10 +335,16 @@ function PairEnd({
 // The mirror's figures in one quiet line under the pair: how long it
 // has run, how much the original holds, whether git agrees (its detail
 // on hover). A paused session reports no files and git off, because
-// the engine tears its scan down while paused, so the line says
-// "paused" instead of figures that read as a mirror that lost
-// everything.
-function Facts({ session }: { session: MirrorSession }) {
+// the engine tears its scan down while paused (or while the copy's
+// device turns it away), so the line says "paused" instead of figures
+// that read as a mirror that lost everything.
+function Facts({
+  session,
+  paused,
+}: {
+  session: MirrorSession;
+  paused: boolean;
+}) {
   const git = gitVerdict(session.git);
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 px-1 text-xs text-muted-foreground">
@@ -348,7 +357,7 @@ function Facts({ session }: { session: MirrorSession }) {
         )}
       </span>
       <span aria-hidden>·</span>
-      {session.paused ? (
+      {paused ? (
         <span>paused</span>
       ) : (
         <>

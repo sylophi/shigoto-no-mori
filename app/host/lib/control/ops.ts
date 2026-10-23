@@ -7,10 +7,9 @@
 // with the caller's context, so progress streams back down the control
 // wire and a closed socket aborts like a closed window. A mirror runs
 // on the device holding the original, so `mirror --from` is the
-// mirror:startFrom the "Mirror here" dialog runs: it invites the
-// mirror, asks the peer to run its mirror:startTo into this device,
-// and relays the peer's progress. Nothing here moves a byte or touches
-// git itself.
+// mirror:startFrom the "Mirror here" dialog runs: it asks the peer to
+// run its mirror:startTo into this device, and relays the peer's
+// progress. Nothing here moves a byte or touches git itself.
 import type { HostServices } from "@host/process/services";
 import { type CallFailure, callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
@@ -554,7 +553,6 @@ export const bring = settled<"bring">((input, ctx) =>
           sourceDeviceId: found.device.deviceId,
           sourceProjectId: found.projectId,
           sourceWorktreeId: found.worktree.id,
-          sourceIdentity: identity,
           ...choice,
         },
         ctx,
@@ -658,10 +656,10 @@ export const mirrorStop = (({ force, ...target }, ctx) =>
       afar.api.stop({ session: afar.session.session, force }),
     );
     // The copy the peer could not remove is the one HERE: the peer
-    // removes it through this device's command-access switch, which
-    // need not be on for a peer this device only asked something of.
-    // The session is gone either way, so this device's own forced
-    // delete finishes what the runner's stop would have.
+    // removes it through this device's switches, which may have gone
+    // off since (the mirror paused by them). The session is gone either
+    // way, so this device's own forced delete finishes what the
+    // runner's stop would have.
     if (copyStayed !== undefined) {
       const removed = yield* (yield* Worktrees.Worktrees).remove(
         {

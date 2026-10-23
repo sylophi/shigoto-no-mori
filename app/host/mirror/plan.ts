@@ -22,25 +22,21 @@ import type { MirrorCreateInput } from "./MirrorEngine";
 const decodeMirrorSession = Schema.decodeUnknownSync(MirrorSessionSchema);
 
 // One mirror per worktree: a worktree that already runs a session is
-// mirrored, and one a peer mirrors into (it serves the stream, or holds
-// the invitation of a mirror it asked for) is a copy, which a second
-// mirror would chain off. Either start would only fail later on the
-// branch, or worse, land. Null when the worktree may start one.
+// mirrored, and one a peer mirrors into (it serves the stream) is a
+// copy, which a second mirror would chain off. Either start would only
+// fail later on the branch, or worse, land. Null when the worktree may
+// start one.
 export function mirrorStartRefusal(
   worktreeId: string,
   held: {
     readonly sessions: readonly MirrorSessionRaw[];
     readonly servedWorktreeIds: readonly string[];
-    readonly invitedCopyIds: readonly (string | undefined)[];
   },
 ): string | null {
   if (held.sessions.some((raw) => localWorktreeIdOf(raw) === worktreeId)) {
     return "This worktree is already mirrored. Open its Mirror button to manage that one.";
   }
-  if (
-    held.servedWorktreeIds.includes(worktreeId) ||
-    held.invitedCopyIds.includes(worktreeId)
-  ) {
+  if (held.servedWorktreeIds.includes(worktreeId)) {
     return "This worktree is a mirror's copy. Mirror the original instead.";
   }
   return null;

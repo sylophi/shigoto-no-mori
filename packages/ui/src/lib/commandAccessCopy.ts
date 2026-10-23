@@ -22,8 +22,43 @@ export function peerTerminalsHiddenNote(deviceLabel: string): string {
   return `Terminals stay hidden until ${allowsControl(deviceLabel)}.`;
 }
 
+// A mirror's, while the device holding its copy turns it away: the line
+// beside its "Paused", by the switch that is off there.
+export function mirrorPausedUntil(
+  deviceLabel: string,
+  off: CopySwitchOff,
+): string {
+  return `until ${off === "control" ? allowsControl(deviceLabel) : sharesData(deviceLabel)}`;
+}
+
+export type CopySwitchOff = "control" | "sharing";
+
+type Switches = {
+  readonly acceptsCommands?: boolean;
+  readonly sharing?: boolean;
+};
+
+// The switch that is off on the device holding a mirror's copy, which
+// turns the mirror away until it is on: this device's own, as its
+// settings read, when the copy is here, or a peer's as this device's
+// link reports it (a peer not sharing lists as such). Sharing first, as
+// "Mirror here" names them. A switch not read yet counts as on.
+export function copySwitchOff(copy: {
+  readonly here: boolean;
+  readonly own: Switches;
+  readonly peer: Switches;
+}): CopySwitchOff | undefined {
+  const switches = copy.here ? copy.own : copy.peer;
+  if (switches.sharing === false) return "sharing";
+  return switches.acceptsCommands === false ? "control" : undefined;
+}
+
 function allowsControl(deviceLabel: string): string {
   return `${deviceLabel} turns on “Allow control from other devices” on its account page`;
+}
+
+function sharesData(deviceLabel: string): string {
+  return `${deviceLabel} turns on “Share with other devices” on its account page`;
 }
 
 // Whether THIS device may command a device: the other machine's own

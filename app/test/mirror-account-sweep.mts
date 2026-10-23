@@ -25,7 +25,6 @@
 import assert from "node:assert/strict";
 import type { MirrorSessionRaw } from "@shigomori/contracts/modules/mirror";
 import type { AccountFacts } from "@shigomori/contracts/modules/session";
-import * as MirrorInvites from "@shigomori/engine/MirrorInvites";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -78,10 +77,6 @@ async function startHost() {
   const ended: string[] = [];
   const notes: string[] = [];
   const changes = Effect.runSync(PubSub.unbounded<void>({ replay: 1 }));
-  const noInvites = MirrorInvites.MirrorInvites.of({
-    load: Effect.succeed([]),
-    save: () => Effect.void,
-  });
   const terminate = (session: string) =>
     Effect.sync(() => {
       ended.push(session);
@@ -98,10 +93,7 @@ async function startHost() {
     leaveAccount: Effect.suspend(() =>
       endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
         transfers: true,
-      }).pipe(
-        Effect.provideService(MirrorEngine, engine),
-        Effect.provideService(MirrorInvites.MirrorInvites, noInvites),
-      ),
+      }).pipe(Effect.provideService(MirrorEngine, engine)),
     ),
   });
   const daemon = MirrorDaemon.MirrorDaemon.of({
