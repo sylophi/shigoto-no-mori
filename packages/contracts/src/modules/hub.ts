@@ -3,8 +3,9 @@ import { DeviceIdSchema } from "../hubProtocol.ts";
 import { push, defineContract, invoke, view } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
-// The one hub socket lives in the host (the Durable Object supersedes a
-// second one per device), so windows reach peers through it.
+// The hub socket lives with the bridge, in the host (one per desktop
+// device: the Durable Object supersedes a second) or in the web shell's
+// page, so windows reach peers through it.
 // Client-scoped, so the bridge can never be served back to a peer.
 
 const HubSocketStatusSchema = Schema.Union([
@@ -29,6 +30,12 @@ const HubSocketStatusSchema = Schema.Union([
   Schema.Struct({ phase: Schema.Literal("stopped") }),
 ]);
 
+// off: not wanted (listener down, opted out, signed out). no-binary:
+// wanted, but no usable cloudflared. unconfigured: the Worker has no
+// tunnel env. starting: provisioning, spawning or probing readiness.
+// up: probed routable and advertised. error: the last attempt failed,
+// and a restart is scheduled, or, for a denied provision, nothing
+// retries until the next reconcile.
 const TunnelStateSchema = Schema.Literals([
   "off",
   "no-binary",

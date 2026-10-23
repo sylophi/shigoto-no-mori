@@ -1,19 +1,7 @@
-// What one registry row says about a device's state, in one place so
-// every row answers the same way.
-//
-// Two sources answer different halves of the question. The LIVE hub
-// store (useRemoteDevices) knows whether a peer is in the roster right
-// now and whether a direct session is up -- that is deviceStatusView's
-// vocabulary and it is what the dot must show. The account registry's
-// DeviceInfo knows when the machine was last seen at all, which is the
-// only thing worth saying about a device that is simply switched off.
-//
-// "Off" is deliberately not what an offline row reads: a machine that
-// is not running the app is the NORMAL state of a laptop in a bag, so
-// it gets no color at all (slate) and the last-seen time as its whole
-// label -- "last seen 3h ago" already says offline -- never the rose
-// an error would earn. Amber is the dial in flight (connecting,
-// reconnecting), so a row wearing it is one that is trying.
+// What a registry row says about a device: the dot from the live hub
+// store, and for an offline peer the registry's last-seen time, in
+// slate rather than rose, since a laptop in a bag is the normal case.
+// Amber is a dial in flight.
 import type { HubStatus, TunnelState } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import { formatRelativeTime } from "../../lib/relativeTime.ts";
@@ -23,19 +11,11 @@ import {
   type RemoteDeviceStatus,
 } from "../../lib/deviceStatus.ts";
 
-// The same triple every other device surface renders: tone, label,
-// reachable. A registry row differs only in how it ANSWERS that, not in
-// what it answers.
 export type DeviceRowStatus = DeviceStatusView;
 
-// What THIS device's row says about its tunnel endpoint, or null when
-// there is nothing worth saying: "up" joins the row's state phrase
-// instead, and "off" means the listener itself is down (signed out,
-// or direct connections switched off), so a tunnel is not the missing
-// piece. The copy states the CONSEQUENCE, not the state: data is
-// direct or nothing, so without a tunnel a peer on another network
-// cannot reach this machine at all, which is the single most common
-// reason its forest never loads over there.
+// This device's tunnel note, or null ("up" joins the state phrase,
+// "off" means the listener is down). It states the consequence, the
+// commonest reason a peer on another network can't load this forest.
 const LOCAL_ONLY =
   "other devices can only reach this machine over the local network.";
 
@@ -54,13 +34,9 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
   }
 }
 
-// This machine never appears in the hub store, and running the app is
-// not the same as being on the account: its presence to the other
-// devices IS its hub socket (a browser's especially), so its row reads
-// that. A connected socket is "Online" (the roster word, not
-// "Connected", which is what a direct session to a peer earns). Any
-// other phase is the same honest transport fact a peer row would show.
-// No snapshot yet (null) reads as online, the common case.
+// This machine is never in the hub store: its row reads its own socket,
+// "Online" when connected (the roster word; "Connected" is a peer's
+// session). No snapshot yet (null) reads as online, the common case.
 export function thisDeviceRowStatus(
   socket: HubStatus["socket"] | null,
 ): DeviceRowStatus {
@@ -78,9 +54,8 @@ export function peerRowStatus(
   // The registry's clock (useNow), for the "last seen" label.
   now: number,
 ): DeviceRowStatus {
-  // A peer absent from the hub roster -- or with no store entry at
-  // all, which is the same fact before the first reconcile lands -- is
-  // off, not broken.
+  // A peer absent from the roster, or with no store entry yet (the same
+  // fact before the first reconcile lands), is off, not broken.
   if (hubStatus === undefined || hubStatus.phase === "stopped") {
     return {
       tone: "slate",
@@ -93,8 +68,5 @@ export function peerRowStatus(
       reachable: false,
     };
   }
-  // Every other phase (connected, online, connecting, reconnecting,
-  // blocked) is a live transport fact, so the shared presentation
-  // mapping owns it outright.
   return deviceStatusView(hubStatus);
 }

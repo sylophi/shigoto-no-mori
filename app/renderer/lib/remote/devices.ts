@@ -1,14 +1,6 @@
-// Renderer registry of remote devices: the account's devices,
-// deviceId-keyed. There is no per-device supervisor in the renderer.
-// The one hub socket lives in the host and a device's status DERIVES from
-// the bridge: remoteDeviceSync.ts rebuilds the list wholesale from the
-// account's device list (a query) and the hub's status (an atom), on
-// boot, on account changes and on every hub status change, into an
-// atom on the page's registry, so device status renders live without
-// prop threading.
-//
-// This file is renderer-only. It is NOT the transport machinery (that
-// is the hub bridge in main); it is the renderer's wiring around it.
+// The account's devices with their live status, an atom
+// remoteDeviceSync rebuilds wholesale from the device list and the
+// hub's status.
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import type { HostApi } from "@/lib/runtime/Api";
@@ -42,7 +34,7 @@ export type RemoteDevice = {
   // read-only note and disabled control reads (useCommandAccess).
   acceptsCommands?: boolean;
   // Set while the peer's session is up and it shares, or while it's
-  // rostered with no session: a call while the host's keeper
+  // rostered with no session: a call while the direct plane's keeper
   // (shared/hub/directKeeper.ts) dials joins the dial, and
   // remoteDeviceSync refetches when the session lands. Host calls route
   // over the hub bridge onto the device link. Client-scoped calls reject
@@ -56,13 +48,8 @@ export const remoteDevicesAtom = Atom.keepAlive(
   Atom.make<readonly RemoteDevice[]>([]),
 );
 
-// Field equality for the status union, so a rebuild that lands on the
-// same phase (and the same per-phase detail) is recognized as no
-// change. A generic shallow own-key compare instead of a per-phase
-// switch, so a new phase or a new field on an existing one is compared
-// rather than silently landing in a default-true arm. Every arm of the
-// union is a flat object of primitives, which is what makes shallow
-// exact here.
+// Shallow: every arm of the union is a flat object of primitives, so a
+// new field is compared with no switch to update.
 function sameStatus(a: RemoteDeviceStatus, b: RemoteDeviceStatus): boolean {
   const right = new Map<string, unknown>(Object.entries(b));
   const left = Object.entries(a);
@@ -87,15 +74,9 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
   );
 }
 
-// Replace the list wholesale. Called by remoteDeviceSync.ts on boot,
-// on account changes and on hub status changes. The rebuild arrives
-// on every hub transition, most of which change nothing for most
-// devices, so unchanged entries keep their previous object identity
-// (a memoized row skips its re-render) and a fully identical rebuild
-// bails without notifying at all. The dedupe is keyed by deviceId, not
-// array index, so a roster reorder or an add/remove does not churn
-// every row behind the shifted one. A pure reorder still notifies
-// (positions changed) while keeping each row's identity.
+// Unchanged entries keep their identity (keyed by deviceId), and an
+// identical rebuild doesn't notify: most hub transitions change
+// nothing.
 export function setRemoteDevices(
   registry: AtomRegistry.AtomRegistry,
   devices: readonly RemoteDevice[],

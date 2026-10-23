@@ -7,29 +7,11 @@
 // the host serves it to its windows (host/process/handlers.ts) and
 // the web bridge serves it in-page (web/ipc/register.ts).
 //
-// DIRECT OR NOTHING: the session cache here is
-// the single peer-session chokepoint every consumer shares (renderer
-// invokes and subscriptions, sync, port-forward), and every session in
-// it is a DIRECT websocket from the injected dialer. There is no hub
-// fallback: a failed dial rejects with the dialer's typed error
-// (NoDialableCandidateError for the structural
-// nothing-this-platform-can-dial verdict, a transient error otherwise),
-// and the entry drops. The device hub rides underneath only as the
-// dialer's connectInfo ask, never as a data path.
-// The web bridge injects the same dialer with a wss-only candidate
-// filter: a browser page cannot dial ws:// from
-// https (mixed content), but wss tunnel URLs dial fine.
-//
-// SUPERVISED, NOT LAZY: dialPeer is the ONLY entry that
-// starts a dial, and its only caller is the presence-driven keeper
-// (shared/hub/directKeeper.ts, wired in directPlane.ts). The
-// contract surface (invokePeer, the one channel left that touches a
-// session) rides whatever session the keeper holds -- an invoke joins
-// an in-flight dial but a cache miss rejects at once instead of
-// dialing, so no user action is ever what triggers a dial and no
-// renderer retry loop can pace one. The rejection folds in the
-// keeper's last failure so the renderer surfaces the honest cause
-// rather than a bare "not connected".
+// Every session here is a direct socket from the injected dialer, with
+// no hub fallback, and the keeper is dialPeer's only caller: an invoke
+// joins an in-flight dial, and a miss rejects at once with the keeper's
+// last failure. The web bridge's dialer takes wss candidates only
+// (mixed content).
 import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
 
 type DirectPeerFacts = Pick<
@@ -133,7 +115,7 @@ export const servedWatchPeer =
 
 type HubHandlerDeps = {
   status(): HubStatus;
-  // The direct dial (shared/hub/directDial.ts), the ONLY way a peer
+  // The direct dial (shared/hub/directDial.ts), the only way a peer
   // session comes to exist. The hub connection is not a dep here on
   // purpose: nothing in the bridge may ask the device hub anything, so
   // the connectInfo ask stays private to the dialer.
@@ -144,7 +126,7 @@ type HubHandlerDeps = {
   // so the owner can fan a fresh status snapshot out exactly like the
   // hub's own transitions.
   onDirectChange?: () => void;
-  // Fired when an ESTABLISHED session dies on its own (the transport's
+  // Fired when an established session dies on its own (the transport's
   // self-close): the keeper's redial signal. Owner-initiated closes
   // (roster sweep, quit) never fire it, or quit would schedule dials
   // against a host being torn down and a sweep would redial a peer the
@@ -177,7 +159,7 @@ export type HubHandlers = Handlers<typeof hubContract> & {
     input: { deviceId: string; channel: string; input?: unknown },
     observer: ViewObserver<unknown>,
   ): () => void;
-  // Each ESTABLISHED direct session's facts, keyed by deviceId, as
+  // Each established direct session's facts, keyed by deviceId, as
   // HubStatus carries them: the appVersion its welcome confirmed
   // (membership is what "has a direct session" means: the renderer
   // derives connectedness from the keys, and the skew check reads the
@@ -195,7 +177,7 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // plane", so a peer the control plane no longer vouches for loses
   // its direct wire too.
   dropDirectPeersNotIn(online: readonly string[]): void;
-  // Probe every ESTABLISHED direct session now (the transport's
+  // Probe every established direct session now (the transport's
   // wake-time probe), so a session that died while the machine slept
   // is found out in seconds and the keeper redials it, instead of the
   // renderer reading "Connected" off a corpse until the next heartbeat
@@ -204,7 +186,7 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   probeDirectPeers(): void;
   // The peer's direct session's byte channels (shared/remote/
   // channels.ts), for a caller that attaches its end under a minted id
-  // BEFORE opening the far end with forward:open / mirror:openStream. Same
+  // before opening the far end with forward:open / mirror:openStream. Same
   // session rules as invokePeer: joins an in-flight keeper dial,
   // rejects at once with the keeper's reason when there is none.
   peerChannels(deviceId: string): Promise<ChannelMux>;
@@ -270,7 +252,7 @@ function hubHandlers(
     peers.delete(deviceId);
     // Only an actual transition notifies: dropping an entry whose dial
     // never completed changed nothing on the status surface. The
-    // keeper hears about SELF-closes only (see onPeerDropped above),
+    // keeper hears about self-closes only (see onPeerDropped above),
     // and after the delete, so its redial finds an empty slot.
     if (cached.version !== null) {
       deps.onDirectChange?.();
@@ -288,7 +270,7 @@ function hubHandlers(
   function openPeer(deviceId: string): PeerEntry {
     const existing = peers.get(deviceId);
     if (existing !== undefined) return existing;
-    // A failed dial fails THROUGH here untouched: the dialer's errors are
+    // A failed dial fails through here untouched: the dialer's errors are
     // typed (structural vs transient) and user-explainable, and there is
     // deliberately nothing to fall back to.
     const entry: PeerEntry = {
@@ -345,7 +327,7 @@ function hubHandlers(
   // still be an in-flight keeper dial: awaiting it is what makes an
   // invoke racing the eager dial seamless instead of flaky, and a
   // failed dial rejects the invoke with the dialer's typed error. A
-  // MISS never dials (see the header): the peer is offline, or the
+  // miss never dials (see the header): the peer is offline, or the
   // keeper is between attempts, and the rejection says which.
   function requirePeer(deviceId: string): Promise<PeerConnection> {
     const entry = peers.get(deviceId);
@@ -443,7 +425,7 @@ function hubHandlers(
     },
 
     // Both sweeps below cover mid-dial entries too, not just
-    // established sessions: a dial completing AFTER its peer left the
+    // established sessions: a dial completing after its peer left the
     // roster would otherwise install a live session for a device the
     // control plane stopped vouching for (including a just-revoked
     // one), and quit would leave an in-flight dial's sockets open.

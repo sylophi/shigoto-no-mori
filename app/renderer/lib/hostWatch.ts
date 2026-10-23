@@ -1,30 +1,10 @@
-// Push-driven upkeep of the requests (React Query) for ONE device, the
-// same for this machine and every peer: the host's broadcasts, received
-// over whatever wire the device's api rides, read again what they move
-// in that device's cache. The boot calls it for this machine
-// (renderer/boot.tsx) and remoteDeviceSync for each peer the moment it
-// builds the peer's api. A bridge kept while these families are
-// requests (EFFECT.md, section 10): a project's git reads (its
-// branches, a commit's or a stash's diff), a worktree's own (its data,
-// files and changes), a project's settings and the launch tools, and,
-// on its refs moving, an open page's pull request, none of which the
-// host serves as a view. A family the host comes to serve as a view
-// leaves it.
-//
-// No reachability gate on purpose: a push from a device IS that
-// device's session speaking, and invalidating a device nothing caches
-// under matches no query. Sessions are supervised desired state owned
-// by the host's keeper (shared/hub/directKeeper.ts), and the session-landed
-// sweep (remoteDeviceSync's noteSessions) covers whatever changed
-// while a session was down, so this never needs to know a session's
-// lifecycle.
-//
-// Not here: what the host serves as views (projects, worktrees,
-// mirrors, running scripts, ports, terminals, the config, sharing and
-// the shared settings are atoms that stream, and nothing invalidates
-// them), a peer's shared settings (folded into this device's own copy,
-// lib/remote/sharedSettingsSync.ts), and the pushes that are atoms of
-// their own (the script runs, the worktree lifecycle, the git fetches).
+// Push-driven invalidation of one device's requests, for this machine
+// (renderer/boot.tsx) and each peer (remoteDeviceSync): the families the
+// host doesn't serve as views (EFFECT.md, section 10). No reachability
+// gate: a push from a device is its session speaking, invalidating a
+// device nothing caches under matches no query, and the session-landed
+// sweep (remoteDeviceSync's noteSessions) covers what changed while one
+// was down.
 import { gitContract } from "@shigomori/contracts/modules/git";
 import type { QueryClient } from "@tanstack/react-query";
 import { invalidateBranchState } from "@/hooks/git/useBranches";

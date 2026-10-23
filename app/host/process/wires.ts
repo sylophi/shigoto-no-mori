@@ -283,19 +283,12 @@ const serveConnectInfo = makeConnectInfo({
     ),
 });
 
-// The hub socket and the direct plane (shared/hub/directPlane.ts) it
-// brokers, for the length of the graph: the dialer, the window-facing
-// hub handlers, the status snapshot and the presence reconcile,
-// assembled identically for the web bridge. Connecting itself is gated
-// in refreshHubConnection below (signed out or unconfigured means no
-// socket). The hub's status transitions go to the direct plane, which
-// fans a snapshot out and reconciles direct-session presence on each.
-// Peer pushes arrive over direct sessions only, never over the device
-// hub. Closing it closes the socket, so the Durable Object sees a clean
-// departure instead of waiting out a dead connection, and then the
-// outbound links, or each remote host would keep a dead socket in its
-// per-device slot and land the next start on the supersede path
-// instead of a clean reconnect.
+// The hub socket and the direct plane it brokers
+// (shared/hub/directPlane.ts), for the length of the graph. Connecting
+// is gated in refreshHubConnection below. Closing it closes the socket
+// first, so the Durable Object sees a clean departure, then the
+// outbound links, or each peer would land our next start on the
+// supersede path.
 const remote = layerLatch<{
   readonly hub: HubConnection;
   readonly plane: DirectPlane.DirectPlane;
