@@ -256,6 +256,21 @@ const endSessionsOnWorktree = (
     ),
   );
 
+// A session's end, noted on the original's thread. A moved original's
+// is the worktree it became (a waiting session's labels don't say it
+// yet), its thread carried there first, so a worktree made at the old
+// folder doesn't inherit it.
+const noteEnded = (
+  daemon: MirrorEngine["Service"],
+  raw: MirrorSessionRaw,
+  detail: string,
+  worktreeId = worktreeIdNow(raw),
+) => {
+  if (worktreeId === "") return;
+  daemon.moveHistory(localWorktreeIdOf(raw), worktreeId);
+  daemon.noteEvent(worktreeId, "stopped", detail);
+};
+
 // Ends a mirror and leaves its copy where it is, an ordinary worktree
 // of its device: the end of a mirror whose original is gone (the copy
 // is then the only one left). The original's thread says why.
@@ -263,11 +278,11 @@ export const endMirrorKeepingCopy = (
   daemon: MirrorEngine["Service"],
   raw: MirrorSessionRaw,
   detail: string,
-  worktreeId = localWorktreeIdOf(raw),
+  worktreeId?: string,
 ) =>
   Effect.gen(function* () {
     yield* daemon.terminate(raw.session);
-    daemon.noteEvent(worktreeId, "stopped", detail);
+    noteEnded(daemon, raw, detail, worktreeId);
   });
 
 export const ORIGINAL_GONE_DETAIL =
@@ -280,7 +295,7 @@ const PEER_LATE_DETAIL =
   "This worktree moved, and the other device wasn't reached within 2 minutes to re-open the mirror, so the mirror ended. The copy on the other device stays as a worktree.";
 
 const MIRRORED_AGAIN_DETAIL =
-  "This worktree moved, and it was mirrored again before the other device could be reached to re-open this mirror, so this one ended. The copy on the other device stays as a worktree.";
+  "This worktree moved, and it was mirrored again before the device its earlier mirror waited on could be reached to re-open that one, so that mirror ended. Its copy there stays as a worktree.";
 
 // The bookkeeping every snapshot of a running daemon is checked
 // against (the root wires it to the daemon's onChange):
@@ -326,9 +341,13 @@ const waitingOnPeer = new Map<string, { id: string; since: Stamp }>();
 
 // The longest a re-open waits for the peer: a peer coming up just after
 // this device. A re-open is a new session, with no record of what the
-// two sides last agreed on, so whatever changed on either side while it
-// waited comes back as a creation or a conflict, which sessions.ts's
-// reopenMirror refuses on a pair that isn't settled.
+// two sides last agreed on, so whatever changed on either side since
+// the old session's last cycle comes back as a creation or a conflict,
+// which sessions.ts's reopenMirror refuses on a pair that isn't
+// settled. That includes the time the app was closed, which no wait
+// bounds: the bound keeps the wait from adding much to it. A peer
+// that comes later (asleep, or a v3 migration's peer upgraded later)
+// finds the mirror ended, its copy kept.
 const PEER_WAIT_MS = 2 * 60_000;
 
 // The worktree a session's local side is now: a waiting one's is the
@@ -430,13 +449,8 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
         if (rootLooks.has(raw.session)) return;
         rootLooks.add(raw.session);
         const waiting = waitingOnPeer.get(raw.session);
-        // The end of a moved original's mirror is noted on the worktree
-        // it became, its thread carried there first.
         const end = (detail: string, worktreeId?: string) =>
           Effect.gen(function* () {
-            if (worktreeId !== undefined) {
-              daemon.moveHistory(localWorktreeIdOf(raw), worktreeId);
-            }
             const ended = yield* endOnce(
               raw.session,
               endMirrorKeepingCopy(daemon, raw, detail, worktreeId),
@@ -455,7 +469,7 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
                 () => false,
               ),
             ));
-          if (taken) yield* end(FOLDER_TAKEN_DETAIL, waiting.id);
+          if (taken) yield* end(FOLDER_TAKEN_DETAIL);
           else rootLooks.delete(raw.session);
           return;
         }
@@ -543,10 +557,11 @@ const endOnce = <E, R>(session: string, end: Effect.Effect<unknown, E, R>) =>
 // so nothing crossed meanwhile. A daemon that isn't running re-opens
 // nothing: its first snapshot finds the session's root gone and the
 // move recorded, and the bookkeeping runs this again once the peer
-// takes this device's calls (settleMirrorBookkeeping). A re-open the
-// peer cannot answer (it is away: the engine opens a session only
-// against both sides) ends the mirror instead, the copy kept, and the
-// thread says so.
+// takes this device's calls, within 2 minutes (settleMirrorBookkeeping).
+// A re-open the peer cannot answer (it is away: the engine opens a
+// session only against both sides) ends the mirror instead, the copy
+// kept, and the thread says so. A session waiting to re-open into the
+// worktree that moved is the moved one's now (worktreeIdNow).
 export const moveMirrorsOfWorktree = (
   oldId: string,
   moved: { id: string; path: string },
@@ -555,6 +570,11 @@ export const moveMirrorsOfWorktree = (
     const daemon = yield* engineOrNull;
     if (daemon === null) return;
     daemon.moveHistory(oldId, moved.id);
+    for (const [session, waiting] of waitingOnPeer) {
+      if (waiting.id === oldId) {
+        waitingOnPeer.set(session, { ...waiting, id: moved.id });
+      }
+    }
     if ((yield* daemon.status) !== "running") return;
     const sessions = (yield* mirrorSessions(daemon)).filter(
       (raw) => localWorktreeIdOf(raw) === oldId,
@@ -720,11 +740,7 @@ const endSessions = (
       daemon.terminate(raw.session).pipe(
         Effect.tap(() =>
           Effect.sync(() => {
-            if (isTransferSession(raw)) return;
-            const localWorktreeId = localWorktreeIdOf(raw);
-            if (localWorktreeId !== "") {
-              daemon.noteEvent(localWorktreeId, "stopped", detail);
-            }
+            if (!isTransferSession(raw)) noteEnded(daemon, raw, detail);
           }),
         ),
         Effect.catch((error) =>

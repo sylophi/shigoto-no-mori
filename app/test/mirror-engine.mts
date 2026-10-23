@@ -1300,8 +1300,15 @@ it("a moved original keeps its mirror across a start with the peer reached late:
 });
 
 it("a moved original's mirror waiting on its peer ends, its copy kept, when a worktree is made at the old folder, never mirroring that one", async () => {
-  const { requests, history, project, original, moved } =
+  const { requests, history, engine, project, original, moved } =
     await movedOriginalWithPeerAway("taken");
+  // A note on the old id's thread during the wait, which the end
+  // carries to the worktree the original became.
+  await engine((mirrors) =>
+    Effect.sync(() =>
+      mirrors.noteEvent(original.id, "paused", "noted during the wait"),
+    ),
+  );
   const made = await Effect.runPromiseWith(await hostContext())(
     Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
       worktrees.create(
@@ -1321,6 +1328,9 @@ it("a moved original's mirror waiting on its peer ends, its copy kept, when a wo
   const stopped = history(moved.id).find((event) => event.kind === "stopped");
   assert.match(stopped?.detail ?? "", /took its old folder/);
   // The thread went with the worktree, not to the one at its old folder.
+  assert.ok(
+    history(moved.id).some(({ detail }) => detail === "noted during the wait"),
+  );
   assert.deepEqual(history(original.id), []);
 });
 
