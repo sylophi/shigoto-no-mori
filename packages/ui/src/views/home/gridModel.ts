@@ -1,8 +1,6 @@
 // The home page's grid, worked out from what the sidebar and the
 // palette already build: the list's project rows under their owners,
 // and per project where its tile lands and what its work comes to.
-// Kept apart from the page so the proof can drive it
-// (test/project-grid.mts).
 import type { GroupWork } from "./ProjectGridView.tsx";
 import {
   worktreeLastActivityAt,

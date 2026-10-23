@@ -20,14 +20,14 @@ import { parseArgs } from "node:util";
 import { guideCommand } from "@shigomori/engine/agentGuide";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import type { Page } from "playwright-core";
-import { onRunEnd } from "../../../testProcesses.mts";
+import { onRunEnd } from "../../../test/testProcesses.mts";
 import { DevApp } from "../reliability/devApp.mts";
 import { pageApi, withPageApi } from "../reliability/pageApi.mts";
-import { isolateGit } from "../../../gitIsolation.ts";
+import { isolateGit } from "../../../test/gitIsolation.ts";
 import { appDir, git, repoDir, sleep, waitFor } from "../reliability/util.mts";
 
 // The fixture repository's git, the app's and the agents' off this
-// repository and this machine's config (../../../gitIsolation.ts).
+// repository and this machine's config (../../../test/gitIsolation.ts).
 isolateGit();
 
 type Harness = "claude" | "codex";
@@ -522,7 +522,7 @@ function median(values: readonly number[]): number | null {
     : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
 }
 
-// What the run started, ended however it ends (../../../testProcesses.mts): the
+// What the run started, ended however it ends (../../../test/testProcesses.mts): the
 // agents' and the guide server's processes, the Terminal it opened, the
 // app with its helpers.
 const children = new Set<ChildProcess>();

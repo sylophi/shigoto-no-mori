@@ -111,9 +111,8 @@ Rules that keep both themes cheap to maintain:
   an inset tray) and a popup's footer `data-slot="footer-row"` (a
   muted band).
 - The full dependency list lives in the CONTRACT header of
-  `packages/ui/src/styles/doubutsu.css`; `pnpm test theme-contract` (run
-  by lefthook pre-commit) verifies every hook still exists. If it fails,
-  either restore the hook or update the CSS + CONTRACT together.
+  `packages/ui/src/styles/doubutsu.css`. A change to a hook it lists
+  updates the CSS and the CONTRACT together.
 - **A dialog is a `ModalShell`** (`primitives/modal-shell.tsx`), Base
   UI's dialog: focus stays inside it while it is open and goes back to
   what opened it when it closes, and the page under it is hidden from
@@ -140,13 +139,12 @@ running app (no queries, atoms, stores, router, the page's api). A
 **container** binds data to a view and has no markup of its own: it
 writes no element, only views and the primitives they are built from
 (a menu's items, a modal's shell, a status dot), with the props those
-take, a class among them (`app/test/containers.mts` holds it). Views live in `@shigomori/ui` (`packages/ui/src/views`),
+take, a class among them. Views live in `@shigomori/ui` (`packages/ui/src/views`),
 which cannot import the app: what a view needs from the app's hooks or
 store is a type defined in the package, and a link it opens goes
 through `useOutside`. Containers stay in `renderer/components`. The
-marketing site renders the views over fixture scenes, and the lab's
-`scenes` proof renders every view in Node with no `window`, so a view
-that reaches for the runtime fails the commit.
+marketing site renders the views over fixture scenes at build time,
+with no `window`, so a view must not reach for the runtime.
 
 - Name the view `<Thing>View`; the container keeps the plain name and
   the public props the rest of the app already uses.
@@ -166,7 +164,7 @@ that reaches for the runtime fails the commit.
   (`navigator.clipboard`, as `CopyButton` does), which draws nothing. It
   lays out by the window's width, a container query (`@min-[48rem]:`),
   never the viewport's (`md:`). The host API comes through the runtime,
-  not `window.api`. `@shigomori/ui`'s boundary proof holds all three.
+  not `window.api`.
 - A container's data is one of two kinds. A **host view**, state the
   host holds and keeps current (the `watch` views: change status, file
   diffs and hunks, branch history, stashes, operations, the project's
@@ -227,8 +225,6 @@ Rules that keep that working:
   `hover:` variant is already gated that way (index.css). Hand-written
   theme CSS has to do it itself, and may pair it with `:active` for a
   pressed state (doubutsu's stripes do).
-- The `data-*` hooks phone.css selects are verified by
-  `pnpm test theme-contract`, like doubutsu's.
 - When changing UI, check it at phone width as well. The fake host's
   web flavor (`lab/fake-host/README.md`) renders the phone layout at
   any viewport under 768px with no sign-in.

@@ -127,7 +127,7 @@ const ControlTransferEventSchema = Schema.Union([
 ]);
 export type ControlTransferEvent = typeof ControlTransferEventSchema.Type;
 
-export const ControlPeerWorktreeSchema = strict(
+const ControlPeerWorktreeSchema = strict(
   Schema.Struct({
     device: ControlDeviceRefSchema,
     projectId: Schema.String,

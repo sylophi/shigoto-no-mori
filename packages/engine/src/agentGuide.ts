@@ -26,7 +26,7 @@ const toml = (text: string) => JSON.stringify(text);
 
 // The agent's role, as each harness's system-level instructions: it
 // starts idle, and the person types their question.
-export const GUIDE_SYSTEM_PROMPT =
+const GUIDE_SYSTEM_PROMPT =
   "You are helping someone with a question about Shigoto no Mori, the app whose source and documentation are in `source/` here. Answer from the source, `skills/` and the READMEs; say when the answer is not there. Offer a walkthrough only if asked.";
 
 // The harness with the guide's role, its tools `sm guide mcp` on

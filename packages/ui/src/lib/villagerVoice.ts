@@ -15,8 +15,6 @@
 // - The moment scales with rarity (DESIGN.md, "Village life: rarity").
 //   Special characters have no catchphrase, so a rare or legendary one
 //   speaks through their quote instead, and stays on screen longer.
-//
-// Pure, so test/villager-voice.mts drives it under plain Node.
 import type {
   VillagerProfile,
   VillagerProfiles,
@@ -53,7 +51,7 @@ export interface VillagerLine {
 // The character a worktree is named after: its name, or its name
 // before a numeric suffix (`sheldon-2`, a second Sheldon worktree).
 // Null for any other name.
-export function speakerSlug(
+function speakerSlug(
   worktreeName: string,
   profiles: VillagerProfiles,
 ): string | null {
@@ -223,7 +221,7 @@ const RANK: Record<VillagerRarity, number> = {
   legendary: 2,
 };
 
-export function rarest(speakers: readonly Speaker[]): VillagerRarity {
+function rarest(speakers: readonly Speaker[]): VillagerRarity {
   return speakers.reduce<VillagerRarity>(
     (top, { rarity }) => (RANK[rarity] > RANK[top] ? rarity : top),
     "common",

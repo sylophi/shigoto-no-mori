@@ -9,7 +9,7 @@ import { DeviceIconSchema } from "../deviceIcon.ts";
 
 // accountId is empty when signed out. configured: the service env vars
 // are set.
-export const AccountStatusSchema = Schema.Struct({
+const AccountStatusSchema = Schema.Struct({
   configured: Schema.Boolean,
   signedIn: Schema.Boolean,
   accountId: Schema.String,

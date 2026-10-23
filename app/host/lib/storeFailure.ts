@@ -68,6 +68,6 @@ export async function storeFailureReport(
 
 // Whether a newer version of the app made the store that would not
 // open.
-export const madeByNewer = (error: unknown): boolean =>
+const madeByNewer = (error: unknown): boolean =>
   error instanceof StoreOpenError &&
   storeErrorOf(error.cause)?.category === "newer";

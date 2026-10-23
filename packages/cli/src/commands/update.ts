@@ -31,7 +31,7 @@ const running: Updater.Running = {
 };
 
 // A phase as the spinner says it, `appName` being the flavor's app.
-export const said = (
+const said = (
   progress: Updater.Progress,
   appName: string,
   dim: (text: string) => string,

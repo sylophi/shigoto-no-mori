@@ -1,7 +1,6 @@
 // The Visitors section's model: the visit log (visitLog.ts) tallied by
 // villager, and the album it fills, a slot for every character and a
-// sticker in it once they have come by. Pure, so
-// test/villager-visitors.mts drives it under plain Node.
+// sticker in it once they have come by.
 import type {
   VillagerProfile,
   VillagerProfiles,

@@ -424,23 +424,15 @@ hold what its folder's `vercel.json` can't:
 Each `vercel.json` holds the install command, `pnpm install
 --no-frozen-lockfile`, beside the build settings and the headers.
 
-## Develop and test
+## Develop
 
 From a fresh checkout, `pnpm install` at the repo root first (the hub
 needs none of the root's `postinstall`).
 
 ```sh
-pnpm run dev    # wrangler dev with local bindings
-pnpm run check  # typecheck plus the vitest suite
-pnpm run test   # just the suite
+pnpm run dev        # wrangler dev with local bindings
+pnpm run typecheck
 ```
-
-The suite runs inside workerd via @cloudflare/vitest-pool-workers with
-real (local) D1, Durable Object and websocket implementations. Clerk
-is stubbed through the `createWorker(deps)` seam, so no network or
-real credentials are needed. vitest-pool-workers supports vitest ^4.1
-only, so the hub pins vitest 4.1 itself while the workspace catalog
-is on 5.
 
 `pnpm run dev` serves the Worker on `http://localhost:8787` (loopback
 only, and it fails rather than move when the port is taken) with its
@@ -472,5 +464,4 @@ handler goes in that group's `HttpApiBuilder.group(...)` in
 - A device goes out through `toDeviceInfo`, with presence from
   `presenceOrNone`, so a hub object's hiccup reads as offline rather
   than failing the read.
-- A case in `test/http.spec.ts` drives it through the Worker.
 

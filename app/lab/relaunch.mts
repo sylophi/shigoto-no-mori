@@ -28,7 +28,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { onRunEnd, signalIfAlive } from "../../testProcesses.mts";
+import { onRunEnd, signalIfAlive } from "../../test/testProcesses.mts";
 
 const given = process.argv.slice(2).find((arg) => !arg.startsWith("--"));
 if (given === undefined || !existsSync(given)) {
@@ -148,7 +148,7 @@ if (pidOfApp() !== null) {
   process.exit(2);
 }
 // The app runs from LaunchServices, not as this script's child, so it
-// is quit here however the run ends (../../testProcesses.mts): a failure, an
+// is quit here however the run ends (../../test/testProcesses.mts): a failure, an
 // exit, a signal.
 onRunEnd(() => {
   for (const pid of pidsOfApp()) signalIfAlive(pid, "SIGKILL");

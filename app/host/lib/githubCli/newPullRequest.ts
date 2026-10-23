@@ -409,7 +409,7 @@ export const stageAttachmentFromUrl = Effect.fn(
   "NewPullRequest.stageAttachmentFromUrl",
 )(function* (
   source: { readonly id: string; readonly stem: string; readonly url: string },
-  // The proofs serve their files from this machine.
+  // A link to a private host is refused unless privateHosts is set.
   opts: { privateHosts?: boolean } = {},
 ) {
   const fs = yield* FileSystem.FileSystem;

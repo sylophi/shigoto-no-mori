@@ -142,7 +142,7 @@ function waitAsk(entry: string) {
 // How long the text a session keeps may run, in characters: a line for
 // a title or a prompt's call, a few for a closing message.
 const AGENT_LINE_MAX = 120;
-export const AGENT_MESSAGE_MAX = 400;
+const AGENT_MESSAGE_MAX = 400;
 
 // A value of a tool's input, whose shape is the tool's own: its text,
 // else "".
@@ -180,7 +180,7 @@ function waitNeed(event: AgentEvent): string {
 
 // Text on one line, whitespace runs folded to a space, cut to `max`
 // characters with an ellipsis.
-export function clipLine(line: string, max: number): string {
+function clipLine(line: string, max: number): string {
   const folded = line.split(/\s+/).filter(Boolean).join(" ");
   const chars = [...folded];
   return chars.length <= max ? folded : `${chars.slice(0, max - 1).join("")}…`;

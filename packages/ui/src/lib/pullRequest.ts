@@ -265,16 +265,6 @@ export function ownBranchPullRequest(
   return pr !== null && isBranchsPullRequest(pr) ? pr : null;
 }
 
-// A device's branch to PR map, without the PRs that aren't their
-// branch's own.
-export function ownBranchPullRequests(
-  prs: Record<string, PullRequest>,
-): Record<string, PullRequest> {
-  return Object.fromEntries(
-    Object.entries(prs).filter(([, pr]) => isBranchsPullRequest(pr)),
-  );
-}
-
 // GitHub computes mergeStateStatus in the background, so right after a
 // PR is marked ready gh still reports DRAFT (or UNKNOWN) for a while
 // even though isDraft has already flipped. The worktree page polls

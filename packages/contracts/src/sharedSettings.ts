@@ -131,7 +131,7 @@ export type LeaveOutPreset = typeof LeaveOutPresetSchema.Type;
 const decodeLeaveOutPreset = Schema.decodeUnknownOption(LeaveOutPresetSchema);
 export type LeaveOutPresetBase = LeaveOutPreset["base"];
 
-export const NO_LEAVE_OUT_PRESET: LeaveOutPreset = {
+const NO_LEAVE_OUT_PRESET: LeaveOutPreset = {
   base: "everything",
   leftOut: [],
   brought: [],
@@ -188,7 +188,7 @@ function nextSharedSettingStamp(doc: SharedSettingsDoc, now: number): number {
 
 // Answers `base` itself when nothing changed, which is what stops two
 // copies announcing the same state at each other forever.
-export function mergeSharedSettings(
+function mergeSharedSettings(
   base: SharedSettingsDoc,
   incoming: SharedSettingsDoc,
 ): SharedSettingsDoc {
@@ -208,7 +208,7 @@ export function mergeSharedSettings(
   return entries === null ? base : { entries };
 }
 
-export function sharedSettingsAhead(
+function sharedSettingsAhead(
   from: SharedSettingsDoc,
   against: SharedSettingsDoc,
 ): SharedSettingsDoc {
@@ -222,7 +222,7 @@ export function sharedSettingsAhead(
 
 // Re-picking the held value is not a write: a fresh stamp would outrank
 // a different pick made elsewhere meanwhile.
-export function withSharedSetting(
+function withSharedSetting(
   doc: SharedSettingsDoc,
   key: string,
   value: SharedSettingValue,

@@ -1,6 +1,4 @@
-// The per-test teardown, apart from checkKit.mts because it needs
-// vitest at load, and plain scripts (test/bench) import the kit:
-// loading vitest outside its runner changes how a script shuts down.
+// The per-test teardown.
 import { onTestFinished } from "vitest";
 import type { Track } from "./checkKit.mts";
 

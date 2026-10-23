@@ -3,13 +3,13 @@
 // ports, so they run one file at a time, each in a process of its own.
 import { join } from "node:path";
 import { defineConfig } from "vitest/config";
-import { isolateGit } from "../gitIsolation";
-import { ownTestTemp } from "../testTemp.mts";
+import { isolateGit } from "../test/gitIsolation";
+import { ownTestTemp } from "../test/testTemp.mts";
 import { dedupe } from "./vite.dedupe";
 
 // Before any proof's process forks, so none inherits a way into this
-// repository (../gitIsolation.ts), and every one leaves its temp files
-// in the run's folder (../testTemp.mts).
+// repository (../test/gitIsolation.ts), and every one leaves its temp files
+// in the run's folder (../test/testTemp.mts).
 isolateGit();
 ownTestTemp("app");
 
@@ -28,8 +28,7 @@ export default defineConfig({
   },
   test: {
     include: ["test/*.mts"],
-    exclude: ["test/run.mts"],
-    setupFiles: ["../testProcesses.setup.mts", "test/lib/hostSetup.mts"],
+    setupFiles: ["../test/testProcesses.setup.mts", "test/lib/hostSetup.mts"],
     pool: "forks",
     fileParallelism: false,
     // A check can build sm from a cold Go cache, or drive a whole

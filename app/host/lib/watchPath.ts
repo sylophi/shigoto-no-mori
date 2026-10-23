@@ -48,8 +48,7 @@ const done = (): void => {
   else next();
 };
 
-// How a path is opened to see whether it can be watched: the real open
-// unless a proof stands in for it.
+// How a path is opened to see whether it can be watched.
 type Opener = (path: string) => Promise<{
   stat(): Promise<{ isDirectory(): boolean; isFile(): boolean }>;
   close(): Promise<void>;
@@ -83,7 +82,7 @@ const opened = (path: string, openPath: Opener): Promise<string | null> => {
 // An open of `path` that did not come back within `within`, in words.
 // Off the startup disk, that is macOS holding it for the Files and
 // Folders prompt.
-export const heldOpen = (path: string, within: Duration.Input): string =>
+const heldOpen = (path: string, within: Duration.Input): string =>
   path.startsWith("/Volumes/")
     ? "is waiting for permission to read files on a removable or network volume (System Settings, Privacy & Security, Files and Folders)"
     : `did not open within ${Duration.format(Duration.fromInputUnsafe(within))}`;
@@ -96,7 +95,7 @@ export type Probe = {
 
 // Why `path` can't be watched right now, or none when its open came
 // back in time on a folder or a file.
-export const unwatchable = (
+const unwatchable = (
   path: string,
   probe: Probe = {},
 ): Effect.Effect<Option.Option<string>> => {

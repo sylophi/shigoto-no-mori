@@ -23,7 +23,7 @@ type Deps = {
 // session that stayed up) is asked again at the next renewal. A refusal
 // (commands or sharing off on the peer) is the peer's answer, not a
 // failure: it waits for the next focus or landing.
-export function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
+function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   // The latest ask per device, from a count that never goes back, so the
   // answer to a superseded one (from before a blur, say) schedules

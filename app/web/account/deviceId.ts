@@ -26,8 +26,7 @@ export function readWebDeviceId(storage: KeyValueStorage): string | null {
 
 // Reads the persisted id, minting and persisting one when it is missing
 // or malformed. Idempotent: repeat calls against the same storage return
-// the same id. crypto.randomUUID is a WebCrypto global in browsers and
-// node 22 alike, so the headless check can drive this too.
+// the same id.
 export function getWebDeviceId(storage: KeyValueStorage): string {
   const found = readWebDeviceId(storage);
   if (found !== null) return found;

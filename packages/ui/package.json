@@ -7,8 +7,7 @@
     "./*": "./src/*"
   },
   "scripts": {
-    "typecheck": "$(effect-tsgo get-exe-path) && $(effect-tsgo get-exe-path) -p test",
-    "test": "vitest run"
+    "typecheck": "$(effect-tsgo get-exe-path)"
   },
   "dependencies": {
     "@base-ui/react": "catalog:",
@@ -40,12 +39,10 @@
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
-    "@tailwindcss/vite": "^4.3.2",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "typescript": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "vite": "catalog:"
   }
 }

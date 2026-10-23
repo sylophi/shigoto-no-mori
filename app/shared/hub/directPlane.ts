@@ -241,9 +241,8 @@ export const make = (
         // newly present peers at once). The rule itself (including the
         // do-nothing-when-our-hub-is-down gate, and the close-everything
         // verdict of a stopped or revoked socket) lives in
-        // directPresence.ts, where the direct-plane check pins it. The
-        // host half is narrowed once here, so its absence (the web
-        // bridge) passes plain undefined through.
+        // directPresence.ts. The host half is narrowed once here, so its
+        // absence (the web bridge) passes plain undefined through.
         const host = deps.host;
         applyDirectPresence(current.socket, current.onlineDeviceIds, {
           closeHostPeersNotIn:

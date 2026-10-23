@@ -1,16 +1,15 @@
 // The browser hub connection: the shared lifecycle core
 // in shared/hub/connection.ts bound to the browser WebSocket global
-// (no node ws), so it runs in a plain browser and, under node 22 (which
-// ships a global WebSocket client), in the headless web-hub test.
+// (no node ws), so it runs in a plain browser.
 //
 // A web client runs no direct listener, so it supplies no connectInfo
 // server and its link refuses every peer's ask as serving no listener
 // (a verdict the asking dialer parks on).
 //
-// This file must stay electron-free and node-builtin-free (pnpm test
-// host-boundary): everything platform specific arrives through browser
-// globals or the injected HubConnectOpts (deviceId, accountId, the
-// credential-backed ticket mint).
+// This file must stay electron-free and node-builtin-free: everything
+// platform specific arrives through browser globals or the injected
+// HubConnectOpts (deviceId, accountId, the credential-backed ticket
+// mint).
 import { HubLinkDownError } from "@shared/hub/link";
 import * as Shared from "@shared/hub/connection";
 

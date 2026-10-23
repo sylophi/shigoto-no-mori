@@ -16,8 +16,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shigomori-hub",
   "main": "src/index.ts",
-  // Recent, and within the range supported by the workerd that
-  // @cloudflare/vitest-pool-workers runs the test suite on.
+  // Recent, and within the range the workerd of `wrangler dev`
+  // supports.
   "compatibility_date": "2026-08-01",
   "durable_objects": {
     "bindings": [
@@ -42,8 +42,7 @@
       "binding": "DB",
       "database_name": "shigomori-hub",
       // The deployed production database's id (printed by `wrangler
-      // d1 create`, not a secret). Local dev and the vitest suite
-      // ignore it.
+      // d1 create`, not a secret). Local dev ignores it.
       "database_id": "1b5905c8-53a0-4e90-851d-f011aa539ef1",
       "migrations_dir": "migrations",
     },

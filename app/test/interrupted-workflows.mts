@@ -45,7 +45,7 @@ import {
   waitFor,
 } from "./lib/checkKit.mts";
 import { addProject, builtSm, hostEngine } from "./lib/smBinary.mts";
-import { own, pidIn } from "../../testProcesses.mts";
+import { own, pidIn } from "../../test/testProcesses.mts";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 
 const gitEnv = scrubbedGitEnv();

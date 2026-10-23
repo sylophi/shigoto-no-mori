@@ -1,8 +1,7 @@
 // The hub Worker's device and ticket routes, through the client derived
 // from the shared HubApi (packages/contracts/src/hubApi.ts), behind the
 // Promise face the account layer calls. Pure: it takes a base URL and
-// an injected fetch and imports no electron and no node builtins, so
-// the account proof drives every method with a recording fetch stub.
+// an injected fetch and imports no electron and no node builtins.
 //
 // A call rejects with the hub's refusal as its contract error
 // (HubDeviceRevokedError, HubUnknownDeviceError, ...), with

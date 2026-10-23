@@ -4,7 +4,7 @@
 // SymmetricState and HandshakeState (section 5), the methods carry its
 // names, and the comments cite its sections. The primitives come from
 // the noble libraries; nothing below the handshake pattern is written
-// here. Checked against the cacophony test vectors (pnpm test noise).
+// here.
 //
 // IK (section 7.5): the initiator knows the responder's static key
 // before it starts, from the hub's roster, and sends its own, encrypted,
@@ -270,8 +270,8 @@ export class HandshakeState {
   private next = 0;
 
   // Initialize(handshake_pattern, initiator, prologue, s, e, rs, re).
-  // The initiator passes rs, the responder's static public key; `e` is
-  // given only by the test vectors, which fix the ephemeral keys.
+  // The initiator passes rs, the responder's static public key. `e`
+  // fixes the ephemeral key pair, which a handshake otherwise makes.
   constructor(opts: {
     readonly initiator: boolean;
     readonly prologue: Uint8Array;

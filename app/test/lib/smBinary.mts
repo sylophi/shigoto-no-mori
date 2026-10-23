@@ -5,8 +5,6 @@
 // terminal beside the app would. The binary is the prod flavor's, built
 // once per state of its sources (packages/cli/test/lib/binary.ts), so
 // the proofs after the first in a run skip the build.
-//
-// covers: packages/cli/** packages/engine/src/** macfs/**
 import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -90,32 +88,4 @@ export async function addProject(
   const project = docs.findLast((doc) => typeof doc.id === "string");
   assert.ok(project, `projects add emitted no project for ${path}`);
   return Schema.decodeUnknownSync(ProjectSchema)(project);
-}
-
-// A second device's engine, on a data dir of its own, for a proof that
-// plays both sides in one process: an effect given its context runs
-// there.
-export async function secondEngine(dataDir: string) {
-  const Engine = await import("@host/lib/Engine");
-  const runtime = ManagedRuntime.make(
-    Engine.layer({ flavor: "prod", macfs: builtMacfs(), sm: "sm" }).pipe(
-      Layer.provideMerge(Migration.layer),
-      Layer.provideMerge(NodeServices.layer),
-    ),
-  );
-  // The engine reads the environment as its graph is built.
-  const own = process.env["SHIGOMORI_DATA_DIR"];
-  process.env["SHIGOMORI_DATA_DIR"] = dataDir;
-  try {
-    await runtime.context();
-  } finally {
-    process.env["SHIGOMORI_DATA_DIR"] = own;
-  }
-  return {
-    runPromise: runtime.runPromise,
-    // For an effect of the host's to run on, in place of the host's
-    // engine (Effect.provide).
-    context: () => runtime.context(),
-    close: () => runtime.dispose(),
-  };
 }

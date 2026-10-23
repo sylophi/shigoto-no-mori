@@ -33,7 +33,7 @@ export const controlHandlers = {
 // A transfer as its caller follows it: each step of its progress as the
 // op notifies it, then its answer, on one stream. Interrupting the
 // stream (the caller gone) interrupts the op.
-export const followTransfer =
+const followTransfer =
   <I>(
     op: (
       input: I,

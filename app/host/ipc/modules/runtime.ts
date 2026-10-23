@@ -79,7 +79,7 @@ const underWayByName = (
 // the user has read why (the shell's dialog, whose one button
 // restarts and whose dismissal quits).
 
-export const afterFailedMove = ({
+const afterFailedMove = ({
   watchersStopped,
   unattended,
 }: {

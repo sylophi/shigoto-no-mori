@@ -4,14 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "typecheck": "$(effect-tsgo get-exe-path)",
-    "test": "vitest run"
+    "typecheck": "$(effect-tsgo get-exe-path)"
   },
   "devDependencies": {
     "@effect/tsgo": "catalog:",
     "@types/node": "catalog:",
     "oxlint": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   }
 }

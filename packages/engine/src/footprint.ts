@@ -4,8 +4,8 @@
 // nuke removes the files and folders, and the entries in shared places
 // go with the host's half (the shell hook block, the agent hooks, the
 // login item, the device on the hub). So nothing of one build is
-// another's (flavor.test.ts), and nothing of a nuked build stays (the
-// terminal's `nuke`, commands/nuke.ts).
+// another's, and nothing of a nuked build stays (the terminal's `nuke`,
+// commands/nuke.ts).
 import { join } from "node:path";
 import { type Flavor, flavorNames } from "./flavor.ts";
 

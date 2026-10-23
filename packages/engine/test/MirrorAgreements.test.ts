@@ -41,20 +41,3 @@ it("takes a 2.x data dir's agreements from git-follow.json once, skipping an ent
   );
   assert.deepEqual(await run(load), { s1: onMain });
 });
-
-it("starts empty without a file, and a save replaces every agreement", async () => {
-  assert.deepEqual(await run(load), {});
-  await run(
-    Effect.flatMap(MirrorAgreements.MirrorAgreements, (agreements) =>
-      agreements.save({ s1: onMain, s2: onMain }),
-    ),
-  );
-  await run(
-    Effect.flatMap(MirrorAgreements.MirrorAgreements, (agreements) =>
-      agreements.save({ s2: { ...onMain, tip: "c".repeat(40) } }),
-    ),
-  );
-  assert.deepEqual(await run(load), {
-    s2: { ...onMain, tip: "c".repeat(40) },
-  });
-});

@@ -17,7 +17,7 @@ import {
 import { PortNumberSchema } from "./schemas/ports.ts";
 
 // A control-frame budget, in bytes of serialized JSON. The worst-case
-// presence roster must fit (hub.spec.ts asserts it).
+// presence roster must fit.
 export const MAX_HUB_MESSAGE_BYTES = 64 * 1024;
 
 // A UTF-16 unit is one to three UTF-8 bytes, so only the band between
@@ -31,7 +31,7 @@ export function hubTextWithinLimit(text: string): boolean {
 
 // The client's cap on a presence roster (the DO runs no admission gate
 // against it), bounding what a hostile DO can make it allocate.
-export const MAX_ONLINE_DEVICES = 64;
+const MAX_ONLINE_DEVICES = 64;
 
 // Sign-up is public and each device can provision a tunnel and DNS
 // record on the shared Cloudflare account. A browser profile counts.

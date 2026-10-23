@@ -59,9 +59,7 @@
 // owner here would fight the keeper's ladder, so this file deliberately
 // carries none.
 //
-// Pure browser-global-plus-shared code: no node builtins, no electron,
-// so the direct-plane check drives it headlessly under node (whose
-// global WebSocket serves dialDevice).
+// Pure browser-global-plus-shared code: no node builtins, no electron.
 import type { KeyPair } from "@shared/crypto/noise";
 import type { DeviceKind } from "@shigomori/contracts/modules/link";
 import * as Cause from "effect/Cause";

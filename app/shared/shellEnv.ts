@@ -11,8 +11,7 @@
 // startup: what a Finder launch carries, then whatever the user's login
 // shell exports, then the overrides a launcher sets for the app itself.
 // Every launch then looks the same however it was started, and the
-// shell's exports reach every child. Electron-free, so test/shell-env.mts
-// drives it under plain node.
+// shell's exports reach every child.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -46,7 +45,7 @@ const LAUNCHD_KEYS = [
 
 // launchd's PATH for GUI apps, the one the shell's startup files build
 // on (path_helper in /etc/zprofile, then the user's additions).
-export const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 // The app's and the CLI's own contract, never a shell profile's to
 // set: a Finder launch never saw a profile's SHIGOMORI_* and still
@@ -86,14 +85,14 @@ const MAX_OUTPUT = 4 * 1024 * 1024;
 // seconds while the machine is still logging in, so the wait is for a
 // slow shell, not a typical one. Past it the app runs on the
 // Finder-launch environment.
-export const CAPTURE_TIMEOUT_MS = 20_000;
+const CAPTURE_TIMEOUT_MS = 20_000;
 
 // How long output may trail the shell's exit.
 const EXIT_GRACE_MS = 250;
 
 // The user's login shell, the account's first: $SHELL is whatever the
 // launcher had.
-export const loginShell = (launchEnv: NodeJS.ProcessEnv) =>
+const loginShell = (launchEnv: NodeJS.ProcessEnv) =>
   loginShellOf({
     environment: "launcher",
     shellVar: launchEnv["SHELL"] ?? "",
@@ -107,7 +106,7 @@ export const loginShell = (launchEnv: NodeJS.ProcessEnv) =>
 // launchd's variables out of whatever launch environment this one got.
 // SHELL names the shell the capture runs, so a child asking for the
 // login shell (the script runner) gets the one whose exports it sees.
-export function launchBaseEnv(
+function launchBaseEnv(
   launchEnv: NodeJS.ProcessEnv,
   shell: string | null,
 ): Env {
@@ -123,7 +122,7 @@ export function launchBaseEnv(
 
 // The variables between the sentinels, NUL-separated as `env -0`
 // prints them, so a multi-line value survives. Null until END is there.
-export function parseShellEnv(stdout: string): Env | null {
+function parseShellEnv(stdout: string): Env | null {
   const start = stdout.indexOf(START);
   if (start < 0) return null;
   const end = stdout.indexOf(END, start + START.length);
@@ -183,7 +182,7 @@ export const outputUntil = (
 // SIGKILLed either way: an interactive zsh ignores SIGTERM. It shares
 // the app's process group, so what its startup files left behind is
 // not signalled with it.
-export const captureShellEnv = (
+const captureShellEnv = (
   shell: string,
   base: Env,
   timeoutMs = CAPTURE_TIMEOUT_MS,
@@ -225,7 +224,7 @@ export const captureShellEnv = (
 // launcher's overrides for the app. A failed capture leaves the base
 // alone: however the app was started, nothing else of its launcher
 // gets through.
-export function mergeShellEnv(
+function mergeShellEnv(
   base: Env,
   captured: Env | null,
   launchEnv: NodeJS.ProcessEnv,
@@ -247,7 +246,7 @@ export function mergeShellEnv(
 // Makes `env` the process environment. Node's process.env writes
 // through to the C environ, so Electron's own helper processes see the
 // rebuilt one as well as everything spawned from here.
-export function replaceProcessEnv(env: Env): void {
+function replaceProcessEnv(env: Env): void {
   for (const key of Object.keys(process.env)) {
     if (!Object.hasOwn(env, key)) delete process.env[key];
   }

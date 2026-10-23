@@ -23,7 +23,7 @@
 // not as a guess: only a ticket never issued counts toward the
 // listener's lockout.
 //
-// This file must stay Electron free (pnpm test host-boundary).
+// This file must stay Electron free.
 import {
   type DirectCandidateKind,
   DIRECT_TICKET_TTL_MS,
@@ -35,7 +35,7 @@ import { STALE_TICKET } from "@shared/remote/sealedSocket";
 // The distinguishing prefix, following the hub worker's smrt_/smdc_
 // convention (hub/src/ticket.ts): smpt_ for a peer-to-peer connect
 // ticket. Purely cosmetic for logs and debugging, never parsed.
-export const DIRECT_TICKET_PREFIX = "smpt_";
+const DIRECT_TICKET_PREFIX = "smpt_";
 
 // Total pending tickets held at once, across every peer. Per-connection
 // replacement and the per-device cap already bound each peer, so this

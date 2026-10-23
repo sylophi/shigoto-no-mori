@@ -83,7 +83,7 @@ export const FLAVORS: Readonly<Record<"prod" | "dev", FlavorNames>> = {
 };
 
 // A test flavor's names, from its word.
-export const derive = (word: string): FlavorNames => ({
+const derive = (word: string): FlavorNames => ({
   appName: `Shigoto no Mori (${word})`,
   userDataDir: `Shigoto no Mori (${word})`,
   bundleId: `com.sylophi.shigomori.${word}`,

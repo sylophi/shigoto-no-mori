@@ -31,9 +31,7 @@ function validLaunchers(state: SettingsFormState): LauncherCommand[] {
 // carries an EXPLICIT value, default included: absent means keep, so
 // only an explicit default reverts a key (the host then stores it by
 // omission).
-export function toDeviceSettingsPatch(
-  state: SettingsFormState,
-): DeviceSettingsPatch {
+function toDeviceSettingsPatch(state: SettingsFormState): DeviceSettingsPatch {
   return {
     deleteBranchOnRemove: state.deleteBranchOnRemove,
     autoPopulateInstall: state.autoPopulateInstall,
@@ -67,7 +65,7 @@ function toLocalDeviceSettingsPatch(
 
 // Appearance saves through the client-scoped store, each key omitted
 // at its default.
-export function toClientConfig(state: SettingsFormState): ClientConfig {
+function toClientConfig(state: SettingsFormState): ClientConfig {
   return {
     theme: storedClientSetting("theme", state.theme),
     doubutsu: storedClientSetting("doubutsu", state.doubutsu),
@@ -116,7 +114,7 @@ export function toClientConfig(state: SettingsFormState): ClientConfig {
 
 // What a Save writes: each store's keys the form changed from what it
 // last saved, nothing else.
-export function settingsWrites(
+function settingsWrites(
   saved: SettingsFormState,
   state: SettingsFormState,
 ): { devicePatch: DeviceSettingsPatch; clientPatch: Partial<ClientConfig> } {

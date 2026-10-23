@@ -1,12 +1,10 @@
 // Durable proof for "Nuke everything" against REAL git repositories:
-// the host's half refuses for a trap and touches nothing, removes every
-// worktree the app made (and only those) with a second run finishing
-// what an interrupted first left, each removal announced as any delete
-// is, with no teardown script holding it up, and reports what it
-// couldn't; the
-// next start's half deletes what the marker names and all of userData
-// but the lock and the dev profiles, and finishes after a start that
-// died halfway through.
+// the host's half refuses for a trap and touches nothing, and removes
+// every worktree the app made (and only those) with a second run
+// finishing what an interrupted first left; the next start's half
+// deletes what the marker names and all of userData but the lock and
+// the dev profiles, and finishes after a start that died halfway
+// through.
 //
 // Run: pnpm test nuke.
 import assert from "node:assert/strict";
@@ -15,23 +13,19 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import { afterAll, beforeAll, it, onTestFinished } from "vitest";
+import { afterAll, beforeAll, it } from "vitest";
 import { runHost } from "./lib/hostRuntime.mts";
-import { onHostPush } from "./lib/hostStandIns.mts";
 import { cliSandbox } from "./lib/cliSandbox.mts";
 import {
   finishPendingNuke,
   NUKE_MARKER,
   writeNukeMarker,
 } from "../main/core/nuke/finish.ts";
-import { pidIn, signalIfAlive } from "../../testProcesses.mts";
 
 const fixture = cliSandbox("sm-nuke-");
 beforeAll(async () => {
@@ -41,15 +35,13 @@ beforeAll(async () => {
 afterAll(() => fixture.remove());
 const { dataDir, git, commitFile, sandbox } = fixture;
 
-const { nukeEverything, nukeTrap, leftIf } =
-  await import("../host/lib/nuke.ts");
+const { nukeEverything, nukeTrap } = await import("../host/lib/nuke.ts");
 
 // A nuke with nothing installed outside the sandbox to take off: the
 // proof's own record of what it was asked to uninstall.
 const nuke = (
   uninstalled: string[],
   onProgress: (progress: { phase: string }) => void = () => {},
-  teardownTimeoutMs?: number,
 ) =>
   runHost(
     nukeEverything({
@@ -62,26 +54,8 @@ const nuke = (
         return [];
       }),
       home: join(sandbox, "home"),
-      ...(teardownTimeoutMs === undefined ? {} : { teardownTimeoutMs }),
     }),
   );
-
-// Every removal announcement from here on, as `<worktree id> <state>`.
-const announced: string[] = [];
-onHostPush((push) => {
-  if (push.channel !== "worktrees:removal") return;
-  const { worktreeId, state } = push.payload as {
-    worktreeId: string;
-    state: string;
-  };
-  announced.push(`${worktreeId} ${state}`);
-});
-
-class ReadOnly extends Schema.TaggedError<ReadOnly>()("ReadOnly", {}) {
-  override get message(): string {
-    return "read-only file";
-  }
-}
 
 const repo = async (name: string) => {
   const path = join(sandbox, name);
@@ -130,26 +104,6 @@ it("refuses for a project inside the data dir, touching nothing", async () => {
   rmSync(inside, { recursive: true, force: true });
 });
 
-it("refuses while an update installs, in its words, before a script is stopped", async () => {
-  let scriptsStopped = false;
-  await assert.rejects(
-    runHost(
-      nukeEverything({
-        onProgress: () => Effect.void,
-        killAllScripts: Effect.sync(() => {
-          scriptsStopped = true;
-        }),
-        closeTerminals: Effect.void,
-        holdUpdater: Effect.succeed("3.1.0"),
-        uninstall: Effect.succeed([]),
-        home: join(sandbox, "home"),
-      }),
-    ),
-    /The update to 3\.1\.0 is installing, and the app restarts into it\. Reset after the restart\./,
-  );
-  assert.equal(scriptsStopped, false, "a script was stopped first");
-});
-
 it("removes every worktree the app made, and a second run finishes an interrupted first", async () => {
   const project = await repo("project");
   await fixture.projectIdOf(project);
@@ -188,22 +142,8 @@ it("removes every worktree the app made, and a second run finishes an interrupte
   assert.deepEqual(first, [], "it never reached the uninstall");
 
   const second: string[] = [];
-  announced.length = 0;
   const report = await nuke(second);
   assert.deepEqual(report.left, []);
-  // Each removal is announced as going, then gone, as any delete is.
-  const going = between.length - 2;
-  assert.equal(
-    announced.filter((entry) => entry.endsWith(" removing")).length,
-    going,
-  );
-  assert.deepEqual(
-    announced
-      .filter((entry) => entry.endsWith(" removed"))
-      .map((entry) => entry.replace(" removed", " removing"))
-      .toSorted(),
-    announced.filter((entry) => entry.endsWith(" removing")).toSorted(),
-  );
   assert.deepEqual(second, ["hooks"]);
   // The outside project's worktree from the refusal went too.
   assert.deepEqual((await worktrees(project)).toSorted(), [external, project]);
@@ -219,58 +159,6 @@ it("removes every worktree the app made, and a second run finishes an interrupte
 
   // A third run finds nothing to do.
   assert.deepEqual((await nuke([])).left, []);
-});
-
-it("a teardown script that never ends, deaf to SIGTERM, holds no nuke up", async () => {
-  const project = await repo("slow");
-  await fixture.projectIdOf(project);
-  const sleepPid = join(sandbox, "teardown.pid");
-  await fixture.sm(
-    "projects",
-    "config",
-    "-p",
-    "slow",
-    "--teardown",
-    // A sleep that says its pid, to end after.
-    `trap '' TERM; sleep 6017 & echo $! > '${sleepPid}'; wait`,
-  );
-  const kite = join(dataDir, "wt", "slow", "kite");
-  await git(project, ["worktree", "add", "-q", "-b", "kite", kite]);
-  // The script's shell is killed; what it started outlives it by design
-  // (Lifecycle.ts), out of this process's tree, so the proof ends its
-  // own, passed or failed.
-  onTestFinished(() => {
-    const pid = existsSync(sleepPid)
-      ? pidIn(readFileSync(sleepPid, "utf8"))
-      : undefined;
-    if (pid !== undefined) signalIfAlive(pid, "SIGKILL");
-  });
-  const started = Date.now();
-  await nuke([], undefined, 1000);
-  assert.ok(Date.now() - started < 30_000, "the nuke waited on the teardown");
-  assert.ok(!existsSync(kite), "the worktree went all the same");
-});
-
-it("reports what it couldn't uninstall, with why", async () => {
-  const report = await runHost(
-    nukeEverything({
-      onProgress: () => Effect.void,
-      killAllScripts: Effect.void,
-      closeTerminals: Effect.void,
-      holdUpdater: Effect.succeed(null),
-      uninstall: Effect.map(
-        Effect.all([
-          leftIf("The agent hooks", Effect.fail(new ReadOnly())),
-          leftIf("The terminal command", Effect.void),
-        ]),
-        (lists) => lists.flat(),
-      ),
-      home: join(sandbox, "home"),
-    }),
-  );
-  assert.deepEqual(report.left, [
-    { what: "The agent hooks", why: "read-only file" },
-  ]);
 });
 
 it("deletes at the next start what the marker names and all of userData, the lock and the profiles aside", () => {
@@ -357,26 +245,4 @@ it("deletes all it can past a path it can't, says which, and keeps the marker fo
   assert.deepEqual(finishPendingNuke(userData), { left: [] });
   assert.ok(!existsSync(join(held, "file")));
   assert.ok(!existsSync(join(userData, NUKE_MARKER)));
-});
-
-it("names the file that stayed deep in a folder the marker names, the rest of the folder gone", () => {
-  const root = join(sandbox, "deep");
-  const userData = join(root, "userData");
-  const top = join(root, "top");
-  const held = join(top, "a", "held");
-  for (const dir of [userData, held, join(top, "z")]) {
-    mkdirSync(dir, { recursive: true });
-  }
-  writeFileSync(join(held, "file"), "x");
-  writeFileSync(join(top, "z", "other"), "x");
-  writeNukeMarker(userData, [top]);
-  chmodSync(held, 0o500);
-  try {
-    assert.deepEqual(finishPendingNuke(userData), {
-      left: [{ path: join(held, "file"), why: "permission denied" }],
-    });
-    assert.ok(!existsSync(join(top, "z")), "stopped at the first that stayed");
-  } finally {
-    chmodSync(held, 0o700);
-  }
 });

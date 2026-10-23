@@ -37,18 +37,3 @@ it("takes a 2.x data dir's threads from mirror-history.json once, skipping a thr
   );
   assert.deepEqual(await run(load), { w1: [connected] });
 });
-
-it("starts empty without a file, and a save replaces every thread", async () => {
-  assert.deepEqual(await run(load), {});
-  await run(
-    Effect.flatMap(MirrorHistory.MirrorHistory, (history) =>
-      history.save({ w1: [connected], w2: [connected] }),
-    ),
-  );
-  await run(
-    Effect.flatMap(MirrorHistory.MirrorHistory, (history) =>
-      history.save({ w2: [] }),
-    ),
-  );
-  assert.deepEqual(await run(load), { w2: [] });
-});

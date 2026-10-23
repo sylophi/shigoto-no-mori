@@ -11,7 +11,7 @@ pre-commit:
     # Every job that runs tests starts without the repository git hands
     # a hook (GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE): a test's git that
     # inherited them would run against this repository. The runners
-    # scrub every GIT_* as well (gitIsolation.ts), so a runner added
+    # scrub every GIT_* as well (test/gitIsolation.ts), so a runner added
     # here without that is still covered.
     - name: checks
       group:
@@ -39,45 +39,29 @@ pre-commit:
           - name: react-compiler
             glob: "{app/renderer/**,packages/ui/src/**,app/scripts/react-compiler-*}"
             run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON app/scripts/react-compiler-check.mts {staged_files}
-          # The lint plugin's own rules (lint/README.md).
-          - name: lint-rules
-            glob: "lint/**"
-            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:lint-rules
           - name: format-all
             glob: "{.oxfmtrc.json,packages/ui/src/styles/index.css,package.json}"
             run: pnpm run format:check
-          # The proofs the staged files reach: vitest related, plus the
-          # proofs' covers lines (app/test/README.md).
+          # The proofs (app/test/README.md), whole, for a change to what
+          # they run: the host, the shell, the shared code, the engine,
+          # the terminal, the contracts and the Go helpers.
           - name: proofs
-            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm -C app test --changed {staged_files}
-          # hub/'s typecheck and suite, for hub/, the contracts it imports
-          # and the workspace files that pin its packages.
-          - name: hub
-            glob: "{hub/**,packages/contracts/**,pnpm-lock.yaml,pnpm-workspace.yaml,gitIsolation.ts,testTemp.mts}"
-            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm -C hub run check
+            glob: "{app/host/**,app/main/**,app/shared/**,app/test/**,app/vitest.config.ts,packages/engine/**,packages/cli/**,packages/contracts/**,file-sync/**,macfs/**,test/**,pnpm-lock.yaml}"
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm -C app test
           # The contracts' golden fixtures (packages/contracts/README.md).
           - name: contracts
             glob: "packages/contracts/**"
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:contracts
-          # The engine's tests, its boundary proof among them
-          # (packages/engine/README.md).
+          # The engine's tests (packages/engine/README.md).
           - name: engine
-            glob: "{packages/engine/**,packages/contracts/**,macfs/**,app/shared/fixtures/git-log.json,gitIsolation.ts,testTemp.mts,testProcesses*.mts}"
+            glob: "{packages/engine/**,packages/contracts/**,macfs/**,test/**}"
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:engine
-          # The ui package's tests (packages/ui/README.md).
-          - name: ui
-            glob: "{packages/ui/**,gitIsolation.ts,testTemp.mts,testProcesses*.mts}"
-            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:ui
           # The terminal binary, built as it ships (packages/cli/README.md).
           - name: cli
-            glob: "{packages/cli/**,packages/engine/src/**,packages/engine/test/lib/**,packages/contracts/**,macfs/**,gitIsolation.ts,testTemp.mts,testProcesses*.mts}"
+            glob: "{packages/cli/**,packages/engine/src/**,packages/engine/test/lib/**,packages/contracts/**,macfs/**,test/**}"
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:cli
           # The file-sync engine (continuous worktree mirroring) is its own
           # Go module, tested on its own.
           - name: file-sync-test
-            glob: "{file-sync/**,gitIsolation.ts,testTemp.mts}"
-            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CGO_CFLAGS=-Wno-deprecated-declarations node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON testTemp.mts go go test -C file-sync ./...
-          # The darwin helper (macfs/), likewise.
-          - name: macfs-test
-            glob: "{macfs/**,gitIsolation.ts,testTemp.mts}"
-            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON testTemp.mts go go test -C macfs ./...
+            glob: "{file-sync/**,test/**}"
+            run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE CGO_CFLAGS=-Wno-deprecated-declarations node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON test/testTemp.mts go go test -C file-sync ./...

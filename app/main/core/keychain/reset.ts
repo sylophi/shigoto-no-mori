@@ -1,8 +1,7 @@
 // The one-time reset of the app's macOS Safe Storage keychain item, the
 // pure decision around it. The Electron wiring (app name, userData,
 // the marker file) is main/electron/keychain.ts, and the real deletion
-// lives in ./security.ts, so this file can be driven under plain node
-// (test/keychain.mts).
+// lives in ./security.ts.
 //
 // Why a reset exists at all. Electron's safeStorage keeps its
 // encryption key in the login keychain as one generic-password item,

@@ -7,10 +7,10 @@
 // lives as long as the scope it is made in, whose close takes the
 // socket down.
 //
-// This file must stay electron-free and node-builtin-free (pnpm test
-// host-boundary): everything platform specific lives in the injected
-// adapter, and everything account flavored (deviceId, accountId, the
-// credential-backed ticket mint) arrives through HubConnectOpts.
+// This file must stay electron-free and node-builtin-free: everything
+// platform specific lives in the injected adapter, and everything
+// account flavored (deviceId, accountId, the credential-backed ticket
+// mint) arrives through HubConnectOpts.
 import {
   HubRateLimitedError,
   isHubDeviceRevoked,

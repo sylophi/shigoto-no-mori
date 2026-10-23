@@ -1,8 +1,6 @@
 // Every scene, by name: a picture of the app, drawn by its own views
-// over the fixtures (../fixtures). The marketing site shows them, the
-// lab's viewer (app/lab/fake-host/scenes.html) draws one at a time, and
-// test/scenes.test.tsx renders each to prove it still needs no app, and
-// that every view is in one.
+// over the fixtures (../fixtures). The marketing site shows them, and the
+// lab's viewer (app/lab/fake-host/scenes.html) draws one at a time.
 import type { ComponentType } from "react";
 import type { SceneWindow } from "./frame.tsx";
 import {

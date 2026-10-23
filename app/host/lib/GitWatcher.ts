@@ -101,14 +101,13 @@ const INDEX = /^(worktrees\/[^/]+\/)?index$/;
 // app runs, its own reads of the rows included.
 const GIT_SEGMENT = /(^|\/)\.git(\/|$)/;
 
-export function isWorkingTreeChange(file: string): boolean {
+function isWorkingTreeChange(file: string): boolean {
   const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
   return !GIT_SEGMENT.test(normalized);
 }
 
-// Exported for the git-watcher check, which pins the allowlist: the
-// loop-safety of this watcher rests on it.
-export function isRelevantGitPath(file: string): boolean {
+// The allowlist: the loop-safety of this watcher rests on it.
+function isRelevantGitPath(file: string): boolean {
   // Every ref write goes through a `.lock` sibling that is renamed
   // into place. The rename lands as an event for the final name, so
   // the lock itself is noise.
@@ -118,8 +117,7 @@ export function isRelevantGitPath(file: string): boolean {
   return RELEVANT.some((pattern) => pattern.test(normalized));
 }
 
-// Exported for the git-watcher check, as the allowlist is.
-export function isIndexPath(file: string): boolean {
+function isIndexPath(file: string): boolean {
   const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
   return INDEX.test(normalized);
 }
@@ -277,8 +275,7 @@ export type GitWatcherDeps = {
   onChange: (projectId: string) => void;
   // A file changed in one of the project's working trees.
   onFilesChanged: (projectId: string) => void;
-  // The projects to follow. Defaults to the registry. The git-watcher
-  // check injects its own list against a sandbox repository.
+  // The projects to follow. Defaults to the registry.
   projects?: () => Project[];
   // Test seams: how a path is watched, and how often the watcher
   // reconciles regardless. Real callers take the defaults.
