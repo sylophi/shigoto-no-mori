@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Stream from "effect/Stream";
 import { FileSync } from "@host/fileSync/FileSync";
+import { EngineChanges } from "@host/lib/Engine";
 import { dataDir } from "@shared/paths";
 import { findProjectAndWorktree } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
@@ -61,7 +62,13 @@ function forgetServing(signals: MirrorSignals["Service"], key: string): void {
 // session from before the copy moved (the v3 migration's move into
 // wt/) names it by its old id, which the lookup follows.
 export const serveStream = Effect.fn("Mirror.serveStream")(function* (
-  { projectId, worktreeId, channelId, peerWorktreeId }: MirrorOpenStreamPayload,
+  {
+    projectId,
+    worktreeId,
+    channelId,
+    peerWorktreeId,
+    transfer,
+  }: MirrorOpenStreamPayload,
   ctx: HandlerContext,
 ) {
   requireChannels(ctx, channelId);
@@ -111,6 +118,17 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
     // oxlint-disable-next-line shigomori/no-wall-clock -- when serving began, for display
     since: Date.now(),
   });
+  // A move's files step is under way for as long as the child serves
+  // it, so a quit here asks about it as about the landing before it.
+  if (transfer !== undefined) {
+    yield* (yield* EngineChanges)
+      .counted(
+        Effect.never,
+        { projectId, worktreeId: worktree.id },
+        transfer === "in" ? "land" : "send",
+      )
+      .pipe(Effect.forkIn(child.scope));
+  }
   // A stage or unstage in the served worktree is the one git change the
   // peer's follower cannot learn from the git-directory watcher. Told
   // under the id the peer's session holds, and this device's own, for as

@@ -1564,7 +1564,11 @@ const labelled = (labels: Record<string, string>) =>
   ({ session: "old", labels }) as MirrorSessionRaw;
 
 it("a session's mode says what it is, and a re-open carries it", () => {
-  const token = beginTransfer();
+  const token = beginTransfer({
+    deviceId: "peer",
+    worktreeId: "wt",
+    transfer: "in",
+  });
   const transfer = labelled({ [MIRROR_LABEL_MODE]: transferModeFor(token) });
   assert.ok(isTransferSession(transfer));
   assert.ok(!isOrphanedTransfer(transfer));

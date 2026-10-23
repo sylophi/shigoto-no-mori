@@ -40,7 +40,8 @@ machine the window runs on.
   drives it under plain node: the account's credential store and
   default device name and icon, the guide, the keychain reset,
   liveness's rate limits, the hold on its host (`host/`: the watchdog,
-  the restart ledger, the busy asks), the start after a nuke, and the
+  the restart ledger, the busy asks and the prompt that follows them),
+  the start after a nuke, and the
   shell's own JSON files (`files/`: the ones it writes on the way out,
   synchronously, and the rest on `FileSystem`).
 
