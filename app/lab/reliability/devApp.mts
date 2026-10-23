@@ -297,7 +297,7 @@ export class DevApp {
   }
 
   // The whole tree at once, for a run ending where nothing can be
-  // awaited (../../../testProcesses.mts): its helpers are in it, so none is left
+  // awaited (../../../test/testProcesses.mts): its helpers are in it, so none is left
   // to reap.
   kill(): void {
     const launched = this.launched;

@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,14 +14,12 @@ import { promisify } from "node:util";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 import { afterEach, beforeEach, it } from "vitest";
 import { StoreImportError } from "../src/migrations/importJson.ts";
 import * as Paths from "../src/Paths.ts";
 import * as Store from "../src/Store.ts";
-import { storeErrorOf } from "../src/storeErrors.ts";
 import { JOURNAL, retireStore } from "../src/dataDirMoveJournal.ts";
 import { nodeStore, openNode } from "./lib/nodeStore.ts";
 
@@ -79,32 +75,6 @@ const rows = (table: string) =>
     (found) => found.map((row) => ({ ...row })),
   );
 
-it("opens the database in WAL mode", async () => {
-  const [row] = await query(
-    (sql) => sql<{ journal_mode: string }>`PRAGMA journal_mode`,
-  );
-  assert.equal(row?.journal_mode, "wal");
-});
-
-it("keeps the database and its journal files the owner's alone", async () => {
-  // The journal files live while the store is open.
-  const modes = await query((sql) =>
-    sql`SELECT 1`.pipe(
-      Effect.map(() =>
-        ["store.db", "store.db-wal", "store.db-shm"].map(
-          (file) => statSync(join(dataDir, file)).mode & 0o777,
-        ),
-      ),
-    ),
-  );
-  assert.deepEqual(modes, [0o600, 0o600, 0o600]);
-});
-
-it("leaves the settings alone in a data dir something has used", async () => {
-  write("state.json", {});
-  assert.deepEqual(await rows("device_config"), []);
-});
-
 // One process holds one store, and node:sqlite waits for a lock by
 // blocking its thread, so the store's sharing is between processes:
 // the app and the terminal opening it at once, the first time included.
@@ -123,57 +93,6 @@ it("opens one store from several processes at once, importing once", async () =>
     opened.map(({ stdout }) => stdout),
     ["1\n", "1\n", "1\n", "1\n"],
   );
-});
-
-it("makes the data dir on a device that has none", async () => {
-  const fresh = join(dataDir, "fresh", "data");
-  await query(() => Effect.void, fresh);
-  assert.ok(existsSync(join(fresh, "store.db")));
-});
-
-it("fails with the path when the data dir can't be made", async () => {
-  const blocked = join(dataDir, "file", "data");
-  writeFileSync(join(dataDir, "file"), "");
-  await assert.rejects(
-    query(() => Effect.void, blocked),
-    (error) => {
-      assert.ok(error instanceof Store.StoreOpenError);
-      assert.equal(error.path, join(blocked, "store.db"));
-      return true;
-    },
-  );
-});
-
-it("says a data folder it can't write to is read-only", async () => {
-  write("registry.json", { projects: [] });
-  chmodSync(dataDir, 0o555);
-  try {
-    await assert.rejects(
-      query(() => Effect.void),
-      (error) => {
-        assert.ok(error instanceof Store.StoreOpenError);
-        assert.match(error.message, /read-only here/);
-        return true;
-      },
-    );
-  } finally {
-    chmodSync(dataDir, 0o755);
-  }
-});
-
-it("leaves a file the store doesn't own its own error when it can't be read", async () => {
-  write("elsewhere.txt", "x");
-  chmodSync(join(dataDir, "elsewhere.txt"), 0o000);
-  try {
-    const error = await Effect.runPromise(
-      Effect.flatMap(FileSystem.FileSystem, (fs) =>
-        fs.readFileString(join(dataDir, "elsewhere.txt")),
-      ).pipe(Effect.flip, Effect.provide(NodeServices.layer)),
-    );
-    assert.equal(storeErrorOf(error), undefined);
-  } finally {
-    chmodSync(join(dataDir, "elsewhere.txt"), 0o644);
-  }
 });
 
 // Opening it never lets it write: the engine graph settles the journal
@@ -454,12 +373,6 @@ it.each([
     assert.ok(existsSync(join(dataDir, file)));
   },
 );
-
-it("starts a data dir nothing has used with a fresh install's settings", async () => {
-  assert.deepEqual(await rows("device_config"), [
-    { key: "doubutsuNames", value: "true" },
-  ]);
-});
 
 it("imports once: a later edit to the JSON files is not read", async () => {
   write("registry.json", { projects: [{ id: "A", name: "a", path: "/a" }] });

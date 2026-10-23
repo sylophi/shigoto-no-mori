@@ -9,9 +9,7 @@
 // The gate matters as much as the closes: when OUR OWN hub link is
 // down, the roster is not knowledge about the peers, it is knowledge
 // about us, so acting on it would sever perfectly working direct
-// connections during a device-hub outage. Pure and electron-free, so
-// the host's presence wiring and the direct-plane check drive the
-// identical rule.
+// connections during a device-hub outage. Pure and electron-free.
 import {
   credentialRevoked,
   type SupervisorStatus,

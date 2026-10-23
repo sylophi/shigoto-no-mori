@@ -1,11 +1,10 @@
 // The default name a web device enrolls under: a short, human-readable
 // "browser on OS" derived from the user agent and, where the browser
 // offers them, its client hints. The web analogue of the desktop's
-// computer-name default. Pure string work so the headless bridge check
-// can assert the mapping without a browser. Deliberately coarse: user
-// agents lie and freeze, so this only needs to tell "Chrome on macOS"
-// apart from "Firefox on Windows" in the device list, and the user can
-// rename the device afterwards.
+// computer-name default. Deliberately coarse: user agents lie and
+// freeze, so this only needs to tell "Chrome on macOS" apart from
+// "Firefox on Windows" in the device list, and the user can rename the
+// device afterwards.
 //
 // The hints exist because every Chromium fork's user agent string says
 // "Chrome": Edge, Brave, Opera and the rest all enroll as Chrome from

@@ -21,7 +21,7 @@ export const DEVICE_CREDENTIAL_PREFIX = "smdc_";
 // valid, the DO's stored random is. It exists because GET /connect is
 // unauthenticated: without it anyone could name a Durable Object of
 // their choosing per request, each one a billed DO request.
-export const TICKET_PREFIX = "smrt_";
+const TICKET_PREFIX = "smrt_";
 
 // How long a minted ticket stays valid. Long enough to open one TLS
 // websocket, short enough that a leaked URL goes stale before it is

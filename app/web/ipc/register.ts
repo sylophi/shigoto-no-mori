@@ -10,9 +10,7 @@
 // renderer components mount unmodified.
 //
 // Every platform fact arrives through WebBridgeDeps rather than a
-// browser global read at module scope, so the headless bridge check
-// drives the whole factory under node with in-memory storage and a
-// recording fetch.
+// browser global read at module scope.
 import { hubConnectInputs } from "@shared/account/hubConnect";
 import { createAccountService } from "@shared/account/service";
 import { makeAccountHandlers } from "@shared/account/handlers";
@@ -91,8 +89,7 @@ export type WebBridgeDeps = {
   appVersion: string;
   fetchImpl?: typeof fetch;
   // Test seam: the candidate kinds the tab dials. A browser page dials
-  // the wss tunnel only (mixed content forbids ws:// under https), which
-  // a proof cannot serve, so a proof dials the listener's lan candidate.
+  // the wss tunnel only (mixed content forbids ws:// under https).
   dialableKinds?: ReadonlyArray<"lan" | "tunnel">;
   // navigator.locks, which every tab of the profile shares.
   locks?: Pick<LockManager, "request">;

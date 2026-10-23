@@ -87,8 +87,8 @@ export const roster = Effect.gen(function* () {
 // standingOf puts command access first, since a send without a
 // checkout clones one. The checkout is read fresh off the peer and the
 // command access off the status snapshot. A read leaves the access
-// out, since reads are ungated. The wording is the CLI's, pinned by
-// test/control.mts. The dialogs word the same blocks for their verbs.
+// out, since reads are ungated. The wording is the CLI's. The dialogs
+// word the same blocks for their verbs.
 export const standingsOf = (
   devices: DeviceInfo[],
   identity: string | null,

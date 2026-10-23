@@ -39,7 +39,7 @@ import type * as Stream from "effect/Stream";
 // Fails closed on a host call that never classified itself: a host
 // invoke must say whether it is remote, a remote one whether it is
 // gated, and a remote gated one which consent line covers it.
-export function classificationGap(call: ContractCall): string | null {
+function classificationGap(call: ContractCall): string | null {
   if (isPush(call)) return null;
   const host = annotation(call, Scope) === "host";
   const remote = annotation(call, Remote);

@@ -310,7 +310,7 @@ removed one the next time they read the registry. A relaunch after
 - **Local hub** (`pnpm -C ../hub dev`). Set `SM_DEVICE_HUB_URL` to
   `http://localhost:8787` to run against a Worker on this machine
   instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in the repo root's
-  `hub/.dev.vars`, see `hub/README.md`, "Develop and test".
+  `hub/.dev.vars`, see `hub/README.md`, "Develop".
 - **Packaged build, as a test flavor** (`SM_FLAVOR=<word> pnpm
   package`, `lab` by convention). A word that is no build's makes a
   test flavor: every name follows from it (`Shigoto no Mori (lab)`,

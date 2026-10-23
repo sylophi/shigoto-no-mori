@@ -56,13 +56,9 @@ import {
   GIT_IDENTITY,
   isolateGit,
   repositoryRoot,
-} from "../../../../gitIsolation.ts";
+} from "../../../../test/gitIsolation.ts";
 import { macfs } from "./macfs.ts";
-import { SYNC_SPAWN } from "../../../../testProcesses.mts";
-
-// The darwin helper, for the tests that take it with the sandbox's
-// environment.
-export { macfs };
+import { SYNC_SPAWN } from "../../../../test/testProcesses.mts";
 
 // The services a harness case calls.
 export type Engine =

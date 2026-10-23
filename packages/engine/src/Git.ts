@@ -74,7 +74,6 @@ export {
   GitRefusedError,
   BranchNotMergedError,
   CloneDestinationError,
-  DISCARD_REF_PREFIX,
   GitCommandError,
   GitOutputTooLargeError,
   NestedRepositoryError,

@@ -5,7 +5,7 @@
 // modules register on: it answers one question, handed in at creation
 // as a function.
 //
-// This file must stay Electron free (pnpm test host-boundary).
+// This file must stay Electron free.
 // Everything Electron or account flavored (deviceId, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts, which
 // the host composes.
@@ -87,7 +87,6 @@ function openWsSocket(url: string): Shared.HubSocketAdapter {
 
 // The connection, for the length of the scope it is made in.
 // `serveConnectInfo` answers peers' connectInfo asks (wires.ts wires the
-// direct listener's). Absent on a dial-only device (the check
-// fixtures'), whose link refuses every ask as serving no listener.
+// direct listener's).
 export const make = (opts: HubConnectionOpts) =>
   Shared.make({ ...opts, openSocket: openWsSocket });

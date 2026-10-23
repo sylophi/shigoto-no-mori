@@ -152,7 +152,7 @@ export class Registry extends Context.Service<
 
 // The stored order over a list: the projects it names first, in its
 // order, then the rest in list order.
-export function orderProjects<P extends { readonly path: string }>(
+function orderProjects<P extends { readonly path: string }>(
   projects: ReadonlyArray<P>,
   order: ReadonlyArray<string>,
 ): ReadonlyArray<P> {
@@ -166,7 +166,7 @@ export function orderProjects<P extends { readonly path: string }>(
 
 // The paths `stored` holds and `order` doesn't, each put back behind the
 // path it followed (first when it followed none).
-export function keepUnlisted(
+function keepUnlisted(
   order: ReadonlyArray<string>,
   stored: ReadonlyArray<string>,
 ): ReadonlyArray<string> {

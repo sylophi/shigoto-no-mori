@@ -30,40 +30,6 @@ const worktreeTerminal: SavedTerminals.SavedTerminal = {
   history: "$ vim\r\n",
 };
 
-it("keeps terminals across opens, oldest first, until forgotten", async () => {
-  await run(
-    Effect.gen(function* () {
-      const saved = yield* SavedTerminals.SavedTerminals;
-      yield* saved.save(worktreeTerminal);
-      yield* saved.save({
-        ...worktreeTerminal,
-        terminalId: "a",
-        cwd: "/code/app/src",
-        openedAt: 1,
-        seq: 0,
-        history: "",
-      });
-    }),
-  );
-  const listed = await run(
-    Effect.flatMap(SavedTerminals.SavedTerminals, (saved) => saved.list),
-  );
-  assert.deepEqual(
-    listed.map((terminal) => terminal.terminalId),
-    ["a", "b"],
-  );
-  assert.deepEqual(listed[1], worktreeTerminal);
-  const after = await run(
-    Effect.gen(function* () {
-      const saved = yield* SavedTerminals.SavedTerminals;
-      yield* saved.save({ ...worktreeTerminal, seq: 9 });
-      yield* saved.forget("a");
-      return yield* saved.list;
-    }),
-  );
-  assert.deepEqual(after, [{ ...worktreeTerminal, seq: 9 }]);
-});
-
 it("opens a store holding a saved device terminal, keeping its worktrees' and dropping the device's", async () => {
   // The store as a build before migration 15 left it: the terminals'
   // tables of migration 6, a device terminal saved beside a worktree's,

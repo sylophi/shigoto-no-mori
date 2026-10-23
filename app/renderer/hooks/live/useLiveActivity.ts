@@ -56,7 +56,7 @@ const runningScriptsAtom = Atom.family((deviceId: string) =>
 // peer's while that peer runs commands from here (its registry entry),
 // or before the registry says. A peer that refuses lists none, settled,
 // rather than a view the refusal keeps asking.
-export function readsRunsOf(
+function readsRunsOf(
   localDeviceId: string,
   deviceId: string,
   accepts: boolean | undefined,

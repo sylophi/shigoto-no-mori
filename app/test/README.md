@@ -1,136 +1,38 @@
 # Tests
 
-The programmatic checks: proofs that run unattended, with no window,
-account or second device. Testing by hand, on the real UI, is the
-lab's (`../lab/README.md`).
+The proofs: what the app does where it deletes or moves the user's
+files, end to end (the scope is in `../../AGENTS.md`). Each is a vitest
+file here, and `lib/` holds what they share.
 
-Each proof is a vitest file at the top of this directory, and `lib/`
-holds what they share. They run one file at a time, each in a process
-of its own (`../vitest.config.ts`), since they spawn real git, the real
-`sm` and file-sync binaries, sockets and workerd, and some bind fixed
-ports. `pnpm test` runs them all, `pnpm test <name>` runs one, and
-flags pass through to vitest (`run.mts`, the runner, has the other
-forms). CI runs every one on each pull request (`pnpm test`, in
-`.github/workflows/checks.yml`). The hub has its own suite in
-`../../hub`, which lefthook runs for a change under `hub/`, to an app
-file the hub imports, or to the workspace's lockfile or settings (the
-glob in `lefthook.yml`).
+- `nuke.mts`: the nuke refuses its traps and removes only the
+  worktrees the app made, and the next start deletes only what its
+  marker names.
+- `worktree-removals.mts`: a removal takes only the worktrees its plan
+  named, and refuses one a script dirtied before any teardown.
+- `interrupted-workflows.mts`: the terminal `sm` killed in a worktree
+  move or removal, and the migration's move into `wt/` killed at each
+  step, finished or undone by the next start and by `sm doctor --fix`.
+- `data-dir-move.mts`: a data-folder move cut short, finished or undone
+  at the next start, never deleting a folder it didn't make, and
+  refused while a worktree is in transit.
+- `sync-transfer.mts`: a move between devices takes the source only
+  once the copy holds it, and a cancelled one keeps nothing that could.
+- `mirror.mts`, `mirror-engine.mts`: a mirror never deletes or
+  overwrites what isn't its own.
+- `control.mts`: an unmirror removes the copy only once the follower
+  holds it, and never the original.
 
-On commit, lefthook runs the proofs the staged files reach
-(`pnpm test --changed <path>...`), and `lefthook run pre-commit
---all-files` runs the lot. The paths are repo-relative, the way
-lefthook passes them. A proof is reached through:
+They run one file at a time, each in a process of its own
+(`../vitest.config.ts`), since they spawn real git, the real `sm` and
+file-sync binaries and sockets. `pnpm test` runs them all, and
+`pnpm test <name>` the files whose name holds it. lefthook runs them
+for a change to what they run (`../../lefthook.yml`), and CI on each
+pull request.
 
-- its imports, followed through the whole graph by `vitest related`.
-  Type-only imports don't count: they are gone once vite strips the
-  types, and typecheck holds the types.
-- a `// covers:` line in it, or in any module it imports, naming
-  repo-relative globs for what reaches it without an import:
-
-  ```ts
-  // covers: app/shared/fixtures/**
-  ```
-
-  A changed path that matches a covers glob hands the file declaring
-  it to `vitest related` (`lib/covers.mts`), so a proof that builds
-  `sm` covers `packages/cli/**` through `lib/smBinary.mts`. Add a line for a
-  file the proof reads off disk, a directory it scans or a binary it
-  builds. The globs are `path.matchesGlob`'s, so `**` skips dotfiles.
-  `proof-selection` fails on a covers glob that matches no tracked
-  file.
-
-`lib/checkKit.mts` covers `../vitest.config.ts`, so a change to the
-config runs every proof that imports the kit. That includes
-`keychain`, which writes to the login keychain, but only an item it
-creates and deletes itself, and CI runners are thrown away after each
-run.
-
-A view is proved by its markup (`renderToString`, no DOM). A proof of
-the window's wiring, that a container draws a control and its click or
-a push reaches the right call, mounts the real components in a DOM
-instead: `// @vitest-environment happy-dom` at the top of the file
-(`guide-wiring.mts`). Only that kind: a proof doesn't move off the
-markup without a reason a markup can't answer.
-
-To add one, add `<name>.mts` here, named for what it proves (the
-module or the behaviour: `clone.mts`, `git-watcher.mts`), with a
-covers line for anything it depends on without importing it. A rule
-that lives in a package (a contracts predicate, an engine service) is
-tested in that package's suite; a proof here tests what the app does
-with it.
-
-No proof's git can reach this repository. The runner and the vitest
-config isolate every proof's process (`../../gitIsolation.ts`, which
-the engine's and the terminal's test configs apply too): every `GIT_*`
-variable is removed, so the pre-commit hook's `GIT_DIR` and
-`GIT_INDEX_FILE` never get through, and `GIT_CEILING_DIRECTORIES` stops
-a git started in a folder inside the repository from finding it.
-`git-isolation` fails if either gets through. A proof still builds its
-repositories under the temp dir and runs git there, through
-`sandboxGit` or `scrubProcessGitEnv` (`lib/checkKit.mts`), which apply
-the same isolation (`../../gitIsolation.ts`) with a fixture's identity.
-
-Every run's temp files go in a folder of the run's own,
-`$TMPDIR/sm-test/<family>/<id>/`: the runner and each vitest config
-point TMPDIR there before a test starts (`../../testTemp.mts`), so a
-proof needs no cleanup of its own for what a killed process leaves.
-XDG_CONFIG_HOME points into it too, so the data dir's pointer and the
-data-folder lock are the run's, not the machine's; pnpm's and Bun's own
-settings are linked in from the user's.
-The folder goes as the run exits, and a run killed before that leaves
-a folder the next run of any suite sweeps (`test-temp`). Nothing
-outlives a run, so a build the proofs share (`lib/smBinary.mts`) is
-made once per run.
-
-A case that waits on real git, processes or sockets runs slower on a
-loaded machine. One that fails under load and passes alone is waiting
-on a deadline too short for that: give it one that fits, or wait on
-the condition (`waitFor`), rather than retrying.
-
-## Shared fakes
-
-`lib/` holds the stand-ins the proofs share, so a proof sets up only
-what it alone is about.
-
-- `hubStub.mts`, the stub device hub: a ws server playing the hub's
-  Durable Object (relay, presence, nacks, supersede), with counters a
-  proof reads to show a frame never rode it, and `testDeviceKey`, the
-  key every test device seals with. `hubBoot.mts` boots a REAL hub
-  connection on it.
-- `directBoot.mts`, the direct sandbox: two devices on a REAL direct
-  link, named by their part in it, `DIALER` and `LISTENER`, in every
-  proof. `startDirectListener` is the listener (its ticket store, its
-  roster, its command and sharing switches, the proof's own handlers
-  through `registerHandlers`). `dialing` and `dialListener` dial it
-  straight, sealed with the test keys, each default (who dials, who it
-  expects, the ticket, the deadline, the socket) a parameter.
-  `bridgeTo` puts the dialer's REAL direct plane in front of a
-  listener through a stub hub of its own (`supervised` lets the keeper
-  dial), and `bootDirectWire` is the whole wire the transfer proofs
-  ride: the listener serving the proof's contracts, the dialer's
-  session up, and `toListener`, a transport aimed at the listener.
-- `cliSandbox.mts`: one temp tree holding the data dir and the repos,
-  the terminal `sm` on it, git over the scrubbed environment, and the
-  repo fixtures (`initRepo`, `cloneRepo` for the same project on the
-  other device, `addWorktree`, `commitFile`).
-- `mirrorFakes.mts`: a session as the mirror daemon reports one
-  (`rawMirrorSession`, `mirrorEndpoint`) and a mirror impl with nothing
-  behind it (`inertMirrorImpl`), for a proof to fill in with what it is
-  about.
-- `hostRuntime.mts`: the host's services, up for every proof's file
-  (`hostSetup.mts`, vitest's setup file). A proof runs a handler on
-  them with `runHost(handlers.call(input))`, and one that drives the
-  host's engine calls points the host's data dir at the file's engine
-  first (`initDataDirAt(engineDataDir)`).
-
-A proof of something on the direct link starts from the listener and
-adds its handlers:
-
-```ts
-const listener = await startDirectListener(trackTest, {
-  registerHandlers: (binding) => binding.handle(ECHO, async (_ctx, raw) => raw),
-});
-const connection = await dialListener(trackTest, listener);
-```
-
-and one of a transfer from `bootDirectWire(track, { contracts })`.
+No proof's git can reach this repository: the vitest config removes
+every `GIT_*` variable and sets `GIT_CEILING_DIRECTORIES`
+(`../../test/gitIsolation.ts`), and a proof runs git through
+`sandboxGit` or `scrubProcessGitEnv` (`lib/checkKit.mts`), which add a
+fixture's identity. A run's temp files and its `XDG_CONFIG_HOME` are in
+a folder of its own (`../../test/testTemp.mts`), removed as the run
+exits, so a proof cleans up nothing of its own.

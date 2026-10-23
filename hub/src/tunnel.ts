@@ -10,9 +10,8 @@
 // port only rewrites the remotely managed ingress config, and revoke
 // can find the tunnel to tear down from the ids alone.
 //
-// Every Cloudflare API call goes through the injected fetch
-// (HubDeps.cfFetch), following the createWorker(deps) Clerk seam, so
-// the vitest suite stubs the CF API inside workerd with no network.
+// Every Cloudflare API call goes through HubDeps.cfFetch, the global
+// fetch unless createWorker is handed another.
 import type { Env } from "./env.ts";
 import { sha256Hex } from "./crypto.ts";
 

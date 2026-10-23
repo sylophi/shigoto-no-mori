@@ -83,8 +83,7 @@ smd worktrees unmirror [<name>] [-f]               # mirror.stop, through the pe
 ```
 
 With the app not running (or another profile's data dir) every verb
-fails with `app-not-running`. `pnpm test control` covers the verbs
-without an app.
+fails with `app-not-running`.
 
 
 ## DOM hooks

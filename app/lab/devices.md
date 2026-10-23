@@ -59,7 +59,7 @@ the bridge's answers, the other device's window, and the disk.
   the api's `sync` and `mirror`, then watch both windows
   and the disk. What each should do is in its contract
   (`packages/contracts/src/modules/`) and in `bridge.md`. Two mirror cases
-  no proof covers: relocate a mirrored original on the device running
+  worth a look: relocate a mirrored original on the device running
   it (its session leaves `api.run(api.mirror.list())`, and the other
   device's page for the copy stops saying it is mirrored), and a
   delete the CLI refuses (dirty tree, no force) leaves the mirror

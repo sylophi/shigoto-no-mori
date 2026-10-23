@@ -1,6 +1,6 @@
 # ui
 
-What the app draws, apart from the app: the views, the primitives they are built from, the stylesheets and the fixture world, so the desktop window, the web client, the marketing site and the scenes proof draw the same thing (`app/DESIGN.md`, "Views and containers"). The app keeps the containers, hooks, store and routes, and imports the rest from here.
+What the app draws, apart from the app: the views, the primitives they are built from, the stylesheets and the fixture world, so the desktop window, the web client, the marketing site and the lab's scene viewer draw the same thing (`app/DESIGN.md`, "Views and containers"). The app keeps the containers, hooks, store and routes, and imports the rest from here.
 
 - `src/views/`: the views (`app/DESIGN.md`, "Views and containers"), by area, as their containers are under `app/renderer/components`, and the models only they read. A view takes data and callbacks and draws; its container stays in the app.
 - `src/views/*/build*.ts`, `gridModel.ts`, `projectListSections.ts`: the row builders of the sidebar, the inbox, the home grid and the palette. Pure functions over what the app's hooks read (`src/lib/forest.ts` names those inputs), so a scene builds rows the same way the app does.
@@ -17,8 +17,6 @@ What the app draws, apart from the app: the views, the primitives they are built
 Consumers import a module by its path under `src/`, with its extension: `@shigomori/ui/primitives/button.tsx`, `@shigomori/ui/lib/utils.ts`. Inside the package, imports are relative with the extension.
 
 The package declares its runtime dependencies itself, at the catalog's versions, and keeps them in its own `node_modules`. Every build of the renderer tree resolves the ones it shares with the app once, from the app (`app/vite.dedupe.ts`), so the primitives and the app share one React and one Base UI. The stylesheet names this package's sources for Tailwind; a stylesheet that imports it names its own (`app/renderer/app.css`).
-
-Two proofs run in Node (`pnpm run check:ui` from the root). `test/boundary.test.ts` holds what the sources may import (the package's own dependencies, the contracts and each other, never the app, Node, Electron or the host bridge), that a view or primitive reads no global and no viewport width or height, and that the stylesheets, as compiled with Tailwind and `insideTheRoot`, select nothing outside a theme root but the package's own classes and data attributes. `test/scenes.test.tsx` renders every scene with no window, no router and no query client, and fails on a view no scene draws.
 
 ## Adding a scene
 

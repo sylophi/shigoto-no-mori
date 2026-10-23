@@ -9,7 +9,7 @@ const DESCRIPTION_STALE_MS = 60 * 60_000;
 // A project's GitHub About text, scoped to (device, project). An answer
 // stands as long as the host keeps it (GithubCli's DESCRIPTION_TTL); a
 // failed read (gh signed out, the network) is asked again.
-export function repoDescriptionQueryOptions(
+function repoDescriptionQueryOptions(
   projectId: string,
   scope: Pick<HostScope, "deviceId"> & { api: HostScope["api"] | undefined },
 ) {

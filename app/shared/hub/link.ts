@@ -27,9 +27,9 @@
 // misrouted `from` nor a party in the middle mints tickets.
 //
 // Pure on purpose: the shared frame and envelope schemas and an
-// injected send function. No node builtins, no ws, no electron, so the
-// hub-link check drives it headlessly and the host wraps it around a
-// real socket.
+// injected send function. No node builtins, no ws, no electron: the
+// desktop's and the browser's connections each wrap it around their
+// own socket.
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -51,7 +51,7 @@ import { HandshakeState, type KeyPair } from "@shared/crypto/noise";
 import { log } from "@shared/log";
 
 // The one ask this wire serves.
-export const CONNECT_INFO_ASK = "connectInfo";
+const CONNECT_INFO_ASK = "connectInfo";
 
 // The code on an answer from a device that serves no direct listener
 // (the web client, by construction). A structural fact about that
@@ -70,7 +70,7 @@ const utf8Decoder = new TextDecoder();
 
 // What both sides of one ask mix into its handshake, so a sealed ask
 // relayed to any other device, or the other way round, does not read.
-export function relayPrologue(askerId: string, askedId: string): Uint8Array {
+function relayPrologue(askerId: string, askedId: string): Uint8Array {
   return utf8Encoder.encode(`sm-relay-v1:${askerId}>${askedId}`);
 }
 
@@ -83,7 +83,7 @@ export function relayPrologue(askerId: string, askedId: string): Uint8Array {
 // tickets were long since spent, or replaces that connection's pending
 // set as a fresh ask would, which keying the tickets per connection
 // already bounds (host/direct/tickets.ts).
-export const SEEN_ASK_RETENTION_MS = 10 * 60_000;
+const SEEN_ASK_RETENTION_MS = 10 * 60_000;
 
 // The asks a device has read, by their handshake hash, each until its
 // retention ends: what turns a replayed ask away. Kept by the hub
@@ -92,7 +92,7 @@ export type SeenAsks = Map<string, number>;
 
 // Whether an ask with this handshake hash, received now, is one to
 // answer, noting it if so.
-export function freshAsk(seen: SeenAsks, hash: string, now: number): boolean {
+function freshAsk(seen: SeenAsks, hash: string, now: number): boolean {
   for (const [key, until] of seen) {
     if (until <= now) seen.delete(key);
   }
@@ -105,7 +105,7 @@ export function freshAsk(seen: SeenAsks, hash: string, now: number): boolean {
 // or a presence list it vanished from). A pending ask to it rejects
 // with this so a caller sees "that device is offline" distinctly from a
 // refusal.
-export class HubPeerOfflineError extends Error {
+class HubPeerOfflineError extends Error {
   constructor(deviceId: string) {
     super(`hub peer is offline (device ${deviceId})`);
     this.name = "HubPeerOfflineError";
@@ -122,7 +122,7 @@ export class HubLinkDownError extends Error {
 }
 
 // The peer never answered within the ask's budget.
-export class HubAskTimeoutError extends Error {
+class HubAskTimeoutError extends Error {
   constructor(deviceId: string, timeoutMs: number) {
     super(`hub peer ${deviceId} did not answer within ${timeoutMs}ms`);
     this.name = "HubAskTimeoutError";

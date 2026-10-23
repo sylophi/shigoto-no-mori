@@ -12,7 +12,7 @@ import {
 // or pasted as one). Each is written into the text as a reference to
 // `./<name>`, which is how gh's --attach finds where an uploaded file
 // goes (the host points the reference at the staged copy). Pure, so the
-// dialog and the proofs share it.
+// dialog's views and the app's draft store share it.
 
 export interface Attachment {
   // The host's staging id, 16 hex characters.

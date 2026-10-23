@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { isolatedGitEnv } from "../../../../gitIsolation.ts";
+import { isolatedGitEnv } from "../../../../test/gitIsolation.ts";
 
 const dir = join(import.meta.dirname, "..", "..", "..", "..", "macfs");
 let built: string | undefined;

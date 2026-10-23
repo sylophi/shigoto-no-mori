@@ -17,10 +17,9 @@
 //
 // Deterministic on purpose: the ladder is fixed with no random jitter
 // (the renderer runtime forbids Math.random anyway), and time is the
-// Clock of the context the supervisor is made in, so a test on a
-// TestClock asserts the ladder and the reset without sleeping real
-// seconds. Uptime is monotonic elapsed time (`@shigomori/engine/elapsed`):
-// a sleep and a clock step are no time at all.
+// Clock of the context the supervisor is made in. Uptime is monotonic
+// elapsed time (`@shigomori/engine/elapsed`): a sleep and a clock step
+// are no time at all.
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -41,7 +40,7 @@ import {
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
-// jitter-free so a test asserts the exact sequence.
+// jitter-free.
 export const BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
   1_000, 2_000, 4_000, 8_000, 16_000,
 ];
@@ -62,8 +61,7 @@ export type SupervisedConnection = Pick<DeviceConnection, "probe">;
 // handler, answering with the established connection, which lives as
 // long as the scope it was opened in: the supervisor closes that scope
 // once the connection dropped or the supervisor's own scope closes.
-// The owner (the hub connection) supplies it, and a test can drive a
-// stub instead of a real socket.
+// The owner (the hub connection) supplies it.
 type ConnectFn = (
   onClose: (code: number | null) => void,
 ) => Effect.Effect<SupervisedConnection, unknown, Scope.Scope>;

@@ -1,6 +1,6 @@
 // The terminal binary as its sources are now, for the cli's tests and
 // the app's proofs: built once per flavor and state of its sources into
-// the run's temp dir (../../../../testTemp.mts), keyed by a hash of
+// the run's temp dir (../../../../test/testTemp.mts), keyed by a hash of
 // them, with the darwin helper beside it, where the binary looks. No
 // side effects on import.
 import { execFileSync } from "node:child_process";
@@ -16,7 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { flavorNames, type Flavor } from "@shigomori/engine/flavor";
-import { isolatedGitEnv } from "../../../../gitIsolation.ts";
+import { isolatedGitEnv } from "../../../../test/gitIsolation.ts";
 import { macfs } from "../../../engine/test/lib/macfs.ts";
 
 const repoRoot = join(import.meta.dirname, "..", "..", "..", "..");

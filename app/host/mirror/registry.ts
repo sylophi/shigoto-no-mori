@@ -69,7 +69,7 @@ function transferTokenOf(labels: Record<string, string>): string | null {
     : null;
 }
 
-export const isTransferSession = (session: {
+const isTransferSession = (session: {
   labels: Record<string, string>;
 }): boolean => transferTokenOf(session.labels) !== null;
 
@@ -734,8 +734,7 @@ export const endMirrorsWithPeers = (
 export const LEFT_ACCOUNT_DETAIL =
   "This device left the account. The copy stays as a worktree.";
 
-export const COPY_GONE_DETAIL =
-  "The copy on the other device was deleted or moved";
+const COPY_GONE_DETAIL = "The copy on the other device was deleted or moved";
 
 const decodeRemoval = Schema.decodeUnknownOption(WorktreeRemovalSchema);
 

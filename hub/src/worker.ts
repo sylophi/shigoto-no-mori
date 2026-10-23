@@ -64,11 +64,10 @@ import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 export interface HubDeps {
   // Resolves the enroll bearer (a Clerk session token) to the owning
   // account, or null when it does not verify; throws when it could not
-  // be checked. Injected so the test suite never talks to real Clerk.
+  // be checked.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
-  // The fetch the Cloudflare tunnel API is called through, injected
-  // like verifyLogin so the suite stubs the CF API inside workerd.
-  // Defaults to the global fetch.
+  // The fetch the Cloudflare tunnel API is called through. Defaults to
+  // the global fetch.
   cfFetch?: typeof fetch;
 }
 
@@ -434,8 +433,8 @@ const OPEN_ROUTES: ReadonlySet<string> = new Set(
 // identity yet, and the work worth bounding happens before one could be
 // established. Cloudflare sets CF-Connecting-IP on every request that
 // arrives through the edge and a client cannot strip it, so its absence
-// means the request did not come through the edge at all (the suite, a
-// bare `wrangler dev`), where there is nothing to protect. A limiter
+// means the request did not come through the edge at all (a bare
+// `wrangler dev`), where there is nothing to protect. A limiter
 // failure fails open: throttling is a cost guard, and it must never be
 // the reason a device cannot reach its hub. It runs on a matched route,
 // before the route's auth; a preflight never reaches it (cors answers
@@ -518,8 +517,7 @@ const cors = HttpRouter.middleware(
 // ---- The Worker ----
 
 export function createWorker(deps: HubDeps): HubWorker {
-  // The handler for each environment, built on its first request. One
-  // deployment has one, and the suite stands in a few of its own.
+  // The handler for each environment, built on its first request.
   const built = new WeakMap<
     Env,
     (request: Request, context: Context.Context<WaitUntil>) => Promise<Response>

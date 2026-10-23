@@ -24,8 +24,7 @@ const QUERIES = new RegExp(
   "g",
 );
 
-export const withoutQueries = (data: string): string =>
-  data.replace(QUERIES, "");
+const withoutQueries = (data: string): string => data.replace(QUERIES, "");
 
 // How much output a terminal keeps, in UTF-16 code units: a few
 // screens of a full-screen program's redraws, or thousands of lines of

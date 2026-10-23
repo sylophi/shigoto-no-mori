@@ -64,7 +64,7 @@ const KEY_TAG_PREFIX = "key:";
 // above that. Terminal and file traffic ride the device links, never
 // this one. The bucket lives in memory: an object that hibernated was
 // idle, so starting it full again loses nothing.
-export const RELAY_BURST = 300;
+const RELAY_BURST = 300;
 const RELAY_PER_SECOND = 30;
 
 // How long a socket may go without a ping before the hub takes it off
@@ -76,7 +76,7 @@ const RELAY_PER_SECOND = 30;
 // it every half minute. Judged when the object runs anyway (a message,
 // a roster read), never on a timer of its own, which would bill a
 // request and wake a hibernated object every time.
-export const SILENT_AFTER_MS = 90_000;
+const SILENT_AFTER_MS = 90_000;
 
 // The standard close code for a message over the size the socket
 // accepts.
@@ -129,9 +129,7 @@ export class DeviceHub extends DurableObject<Env> {
     { tokens: number; at: number }
   >();
   // The clock of the tickets' expiry, the relay budget, the silence
-  // sweep and the sockets' connection order, which the proofs stop: real
-  // time on a loaded runner outlasts any window short enough to wait
-  // out.
+  // sweep and the sockets' connection order.
   clock: () => number = () => Date.now();
 
   constructor(ctx: DurableObjectState, env: Env) {

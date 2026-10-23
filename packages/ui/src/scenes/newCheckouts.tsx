@@ -77,7 +77,7 @@ function newWorktreePage(form: ReactNode) {
 }
 
 // What every form here shares but its source and its folder.
-export const NEW_WORKTREE_FORM = {
+const NEW_WORKTREE_FORM = {
   onMode: noop,
   prOptionOff: undefined,
   busy: false,

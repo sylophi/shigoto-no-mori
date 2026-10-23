@@ -159,22 +159,5 @@ export const layer = PortForwards.layer({ onChange: () => {} }).pipe(
   Layer.provideMerge(standIns),
 );
 
-let pushListener: (push: HostPushes.Push) => void = () => {};
-// Every push the proofs' host services make, seen as it is published.
-export const onHostPush = (listener: (push: HostPushes.Push) => void): void => {
-  pushListener = listener;
-};
-
-// The host's pushes, as HostPushes.layer, told to onHostPush first.
-export const pushesLayer = Layer.effect(
-  HostPushes.HostPushes,
-  Effect.map(HostPushes.HostPushes, (pushes) =>
-    HostPushes.HostPushes.of({
-      ...pushes,
-      publish: (push) =>
-        Effect.sync(() => pushListener(push)).pipe(
-          Effect.andThen(pushes.publish(push)),
-        ),
-    }),
-  ),
-).pipe(Layer.provide(HostPushes.layer));
+// The host's pushes, as the app makes them.
+export const pushesLayer = HostPushes.layer;

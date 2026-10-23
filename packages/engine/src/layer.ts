@@ -123,7 +123,7 @@ const services = (options: EngineOptions) =>
 export const engineServices = (options: EngineOptions) =>
   DataDirMove.settleLayer.pipe(Layer.provideMerge(services(options)));
 
-export const engineLayer = (options: EngineOptions) =>
+const engineLayer = (options: EngineOptions) =>
   engineServices(options).pipe(Layer.provideMerge(Paths.layer(options.flavor)));
 
 // The engine of the process that migrates a 2.x data dir, the app's:

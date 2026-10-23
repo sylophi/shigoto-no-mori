@@ -15,11 +15,12 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 | `app/` | The Electron desktop app and the web client |
 | `hub/` | The device hub, a Cloudflare Worker |
 | `marketing/` | The shigomori.com site, built with Astro |
-| `lint/` | The repo's own oxlint rules, with their tests |
+| `lint/` | The repo's own oxlint rules |
 | `packages/` | The workspace packages: `contracts` (what crosses a wire), `engine` (the data model, the store and git), `ui` (the views and the fixture world), and `cli` (the terminal `sm`) |
 | `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
 | `macfs/` | The macOS filesystem calls Node lacks (clone, exchange, flags, xattrs, lstat with private size, filesystem type), a Go module bundled into the app |
 | `skills/` | Agent skills for the `sm` workflow (below) |
+| `test/` | What every test runner and the lab's harnesses share: `gitIsolation.ts` keeps a run's git off this repository, `testTemp.mts` gives the run a temp folder of its own, and `testProcesses.mts` ends what the run started |
 
 The JavaScript packages are one pnpm workspace (`pnpm-workspace.yaml`)
 with one lockfile: run `pnpm install` at the root, then
@@ -31,14 +32,12 @@ the packages share. The root scripts run the app's through pnpm filters
 (`pnpm dev`, `pnpm test`), and `pnpm typecheck` runs every package's.
 `pnpm -C <package> …` works too. The repo-wide checks (`lefthook.yml`,
 `.oxlintrc.json`, `.oxfmtrc.json`, `knip.jsonc`) and their tools stay at
-the root, with `gitIsolation.ts`, which every test runner applies so no
-test's git can reach the repository. `pnpm check` runs every check CI runs.
+the root. `pnpm check` runs every check CI runs.
 
 Each folder documents itself: [`app/README.md`](app/README.md) is the
 app's layout, [`app/DESIGN.md`](app/DESIGN.md) its visual rules,
 [`app/lab/README.md`](app/lab/README.md) how to test it by hand on the
-real UI, [`app/test/README.md`](app/test/README.md) its programmatic
-checks, [`hub/README.md`](hub/README.md) the device hub,
+real UI, [`app/test/README.md`](app/test/README.md) its proofs, [`hub/README.md`](hub/README.md) the device hub,
 [`marketing/README.md`](marketing/README.md) the site,
 [`lint/README.md`](lint/README.md) the repo's lint rules, and each
 package under `packages/` has a README of its own.

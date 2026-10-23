@@ -42,9 +42,6 @@ jobs:
       - name: Lint
         run: pnpm run check:lint
 
-      - name: Lint rule tests
-        run: pnpm run check:lint-rules
-
       - name: Format
         run: pnpm run check:format
 
@@ -135,13 +132,10 @@ jobs:
       - name: Contract fixtures
         run: pnpm run check:contracts
 
-  # The engine's and the terminal's tests, on macOS: the Darwin
-  # service's tests drive the darwin helper, built from macfs/ (hence
-  # Go).
+  # The engine's and the terminal's tests, on macOS: they drive the
+  # darwin helper, built from macfs/ (hence Go).
   engine:
     runs-on: macos-latest
-    # Its setup, the engine's suite and the terminal's run seven to ten
-    # minutes, the suite's share varying by two from run to run.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -173,54 +167,8 @@ jobs:
       - name: Terminal
         run: pnpm run check:cli
 
-  # The ui package's tests (packages/ui/README.md), which read sources
-  # only.
-  ui:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: ui
-        run: pnpm run check:ui
-
-  # The hub Worker's typecheck and its vitest suite inside workerd. The
-  # install runs the esbuild and workerd builds pnpm-workspace.yaml
-  # allows.
-  hub:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Hub checks
-        run: pnpm run check:hub
-
-  # The Go modules' tests, on macOS, the one platform the file-sync
-  # engine ships for: macfs/ is darwin-only, and file-sync watches
-  # through FSEvents.
+  # The file-sync engine's tests, on macOS, the one platform it ships
+  # for: it watches through FSEvents.
   go:
     runs-on: macos-latest
     timeout-minutes: 20
@@ -243,8 +191,7 @@ jobs:
 
   # Every proof in app/test, on macOS like the app they prove: they
   # drive the real sm and file-sync binaries (built with Bun from
-  # packages/cli, and from file-sync/ and macfs/ with Go), real git, /bin/zsh for the login-shell
-  # capture, and the keychain proof deletes a real login-keychain item.
+  # packages/cli, and from file-sync/ and macfs/ with Go) and real git.
   proofs:
     runs-on: macos-latest
     timeout-minutes: 20

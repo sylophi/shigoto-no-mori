@@ -3,7 +3,7 @@ import type { Release } from "./schemas/index.ts";
 
 // Anything that doesn't parse sorts below everything, so a stray tag
 // can't pass for newest.
-export function compareVersions(a: string, b: string): number {
+function compareVersions(a: string, b: string): number {
   const left = semver.parse(a);
   const right = semver.parse(b);
   if (left === null || right === null) {

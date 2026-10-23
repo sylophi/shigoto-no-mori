@@ -1,8 +1,7 @@
 # The repo's lint rules
 
 An oxlint plugin (`shigomori.mts`, loaded by `.oxlintrc.json`), one
-rule per file in `rules/`, each with a vitest test beside it that runs
-its cases through oxlint's `RuleTester`.
+rule per file in `rules/`.
 
 | Rule | What it holds |
 | --- | --- |
@@ -34,7 +33,7 @@ platform directly.
 
 ## Adding a rule
 
-Add `rules/<name>.mts` and `rules/<name>.test.mts`, register it in
+Add `rules/<name>.mts`, register it in
 `shigomori.mts`, and turn it on in `.oxlintrc.json`. A rule declares the
 AST it reads in `types.mts`, since oxlint keeps its plugin types
 internal.

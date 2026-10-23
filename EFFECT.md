@@ -154,7 +154,7 @@ export const layer = Layer.effect(Registry, make);
 
 - `ManagedRuntime.make`, `Effect.runPromise`, `runPromiseExit` and
   their kin belong only at the edges: React, Electron callbacks, the
-  terminal entrypoint, a proof. Never inside a service, a store module
+  terminal entrypoint, a test. Never inside a service, a store module
   or a constructor.
 - Each process composes one layer graph, per subsystem, in its own
   module: the engine's, the host's, the shell's, the terminal's. No
@@ -330,7 +330,7 @@ export const layer = Layer.effect(Registry, make);
   `tracksProjectUsage`, `grant` (the consent text that covers the
   call), and `busy` (what a quit waits on the call for). A host-scoped
   call classifies itself; middleware fails closed
-  on a missing annotation, and a proof checks every group.
+  on a missing annotation.
 - Subscriptions are streaming RPCs; there are no broadcast channels. A
   client that needs a view subscribes and stops asking what changed.
 - Cancellation is RPC interruption. No cancel registries, no
@@ -351,7 +351,7 @@ export const layer = Layer.effect(Registry, make);
   parser that failed can't find the next frame, so the connection
   closes and its owner dials again. A port keeps its messages whole, so
   only the message it can't read is dropped, its calls unanswered, and
-  the port stays up (`pnpm test shell-link`).
+  the port stays up.
 - One owner retries a link, and one authority reports its liveness. A
   transport dials once (`quietProtocol` in `engine/rpcClient.ts`); a
   link that is dialed again has one owner that does it: the direct
@@ -390,30 +390,12 @@ export const layer = Layer.effect(Registry, make);
   timeout to pass is wrong. A proof gets one from `testClock()`
   (`app/test/lib/checkKit.mts`) and waits on a condition with
   `waitFor`, never on a fixed delay.
-- A proof of a time decision moves the clocks apart, as a machine
-  does: a sleep (the wall clock runs on while monotonic time and every
-  timer stand still) or a stopped process (both clocks run on and no
-  timer runs), carried past the timeouts in play, and the epoch
-  stepped forward and back with monotonic time still (`sleepingClock`
-  in `app/test/lib/checkKit.mts`, `pnpm test clock-steps`). A
-  `TestClock` jump alone is not a sleeping laptop. The proof checks
-  that the user sees the thing recover and that no committed action
-  ran twice.
 - Tests are plain vitest cases that run their effects on the runtime
   of the thing under test: the engine sandbox's `box.engine(effect)`,
   the proofs' `runHost(effect)`. Effect's guidance uses `it.effect`
   from `@effect/vitest`; the proofs already run on the host's and the
   engine's own runtimes, and keep one way to. A proof that spawns real git or the
   real `sm` keeps the forks pool and no file parallelism.
-- A boundary test (the differential clone test,
-  the golden wire fixtures, the measurements) is a proof like any other
-  and lives beside the code it guards.
-- A workflow that changes state is proved by a failure injected
-  between each pair of its external steps and by a recovery that
-  itself fails, and its cleanup is proved after a refusal and after a
-  kill, not only after success.
-- A burst of pushes is proved to cost a bounded number of calls, none
-  cancelled.
 
 ## 10. Views and containers
 

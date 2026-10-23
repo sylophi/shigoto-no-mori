@@ -124,7 +124,7 @@ const ALTERNATE = new Set([1049, 1047, 47]);
 
 // Whether `text` leaves the terminal on the alternate screen, from
 // `before` at its start, and where it last went there if it did.
-export const alternateScreen = (
+const alternateScreen = (
   text: string,
   before = false,
 ): { readonly on: boolean; readonly enteredAt: number | undefined } => {
@@ -154,7 +154,7 @@ export const alternateScreen = (
 
 // The alternate screen after a read, from where the last one left it,
 // with what of this one the next has to finish.
-export const followAlternate = (
+const followAlternate = (
   before: { readonly on: boolean; readonly carry: string },
   data: string,
 ): { readonly on: boolean; readonly carry: string } => {
@@ -172,7 +172,7 @@ export const followAlternate = (
 // alternate screen instead puts the cursor where the program left it,
 // or for 1049 where it saved it, and the fresh prompt's clear to the
 // end of the screen would wipe the lines above.
-export const replayable = (history: string, alternate: boolean): string => {
+const replayable = (history: string, alternate: boolean): string => {
   if (!alternate) return history;
   return history.slice(0, alternateScreen(history).enteredAt ?? 0);
 };

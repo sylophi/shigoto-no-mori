@@ -221,7 +221,7 @@ const KEYS = new Set([
 ]);
 
 // "Mod+Shift+N" to a chord, or null for one that isn't.
-export function parseChord(text: string): Chord | null {
+function parseChord(text: string): Chord | null {
   const parts = text.split("+");
   // "Mod++" would be a plus key, which no chord ends in; "+" splits a
   // trailing empty part off instead.
@@ -242,7 +242,7 @@ export function parseChord(text: string): Chord | null {
 }
 
 // A chord as it is stored, the modifiers in one order.
-export function chordText(chord: Chord): string {
+function chordText(chord: Chord): string {
   return [
     chord.mod && "Mod",
     chord.ctrl && "Ctrl",
@@ -327,7 +327,7 @@ const OTHER_KEYS: Readonly<Record<string, string>> = {
 
 // A chord as the screen shows it: the Mac's glyphs (⌃⌥⇧⌘K) on macOS,
 // names joined with + elsewhere.
-export function chordLabel(chord: Chord, mac: boolean): string {
+function chordLabel(chord: Chord, mac: boolean): string {
   const keys = pressed(chord, mac);
   if (mac) {
     return [

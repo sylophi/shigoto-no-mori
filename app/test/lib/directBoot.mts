@@ -41,7 +41,6 @@ import {
   type ContractModule,
   keyOf,
 } from "@shigomori/contracts/contract";
-import type { DirectCandidateKind } from "@shigomori/contracts/modules/direct";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import type { HubPeerPush } from "@shigomori/contracts/modules/hub";
@@ -50,22 +49,8 @@ import { createServed, resolvePush, type View } from "@shared/ipc/served";
 import { allContractModules } from "@shigomori/contracts/allModules";
 import type { HostServices } from "@host/process/services";
 import { hostContext } from "./hostRuntime.mts";
-import type {
-  ClientTransport,
-  HandlerContext,
-  Link,
-} from "@shared/ipc/transport";
+import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import { WebSocket as WsClient } from "ws";
-import type { KeyPair } from "@shared/crypto/noise";
-import {
-  type DeviceConnection,
-  type DeviceLinkOptions,
-  dialDevice,
-  RemoteConnectError,
-} from "@shared/remote/deviceLink";
-import * as Clock from "effect/Clock";
-import * as Deferred from "effect/Deferred";
-import * as Fiber from "effect/Fiber";
 import { startStubHub, type StubHub, testDeviceKey } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";
 import { type Track, waitFor } from "./checkKit.mts";
@@ -134,7 +119,7 @@ export type DirectListenerOpts = {
   provide?: Layer.Layer<never>;
 };
 
-export type DirectListener = {
+type DirectListener = {
   deviceId: string;
   binding: WsServerBinding;
   tickets: ConnectTicketStore;
@@ -162,7 +147,7 @@ export type DirectListener = {
 // set, mounts the check's contracts or test channels on the binding
 // before it starts, and `start` overrides the start opts (the hello
 // and liveness seams, the admitted web origin).
-export async function startDirectListener(
+async function startDirectListener(
   track: Track,
   opts: DirectListenerOpts = {},
 ): Promise<DirectListener> {
@@ -232,8 +217,6 @@ export async function startDirectListener(
             set: (on) => SubscriptionRef.set(sharing, on),
           }),
         ),
-        // The store says nothing here: the views a proof reads are
-        // host-views.mts's.
         Layer.succeed(StoreChanges.StoreChanges, {
           subscribe: Effect.succeed(Stream.never),
           release: Effect.void,
@@ -331,44 +314,10 @@ export async function startDirectListener(
   };
 }
 
-// The connection a check's tickets are minted for, unless it names
-// another.
-export const ONE_CONNECTION = "c".repeat(32);
-
-// Mints `count` connect tickets of one candidate kind for `peer`'s
-// `connectionId`, failing the check when the store refuses. A loopback
-// dial with no CF-Connecting-IP arrives as a "lan" candidate, hence the
-// default.
-export function mintTickets(
-  store: Pick<ConnectTicketStore, "mint">,
-  peer: string,
-  count: number,
-  kind: DirectCandidateKind = "lan",
-  connectionId = ONE_CONNECTION,
-): string[] {
-  const tickets = store.mint(
-    { deviceId: peer, connectionId },
-    Array.from({ length: count }, () => kind),
-  );
-  assert.ok(tickets !== null, `the store refused to mint for ${peer}`);
-  return tickets;
-}
-
-// The one-ticket case of mintTickets, for a check that dials once.
-export function mintTicket(
-  store: Pick<ConnectTicketStore, "mint">,
-  peer: string,
-  kind: DirectCandidateKind = "lan",
-): string {
-  const [ticket] = mintTickets(store, peer, 1, kind);
-  assert.ok(ticket !== undefined, `the store minted no ticket for ${peer}`);
-  return ticket;
-}
-
-export type BrokerListener = Pick<DirectListener, "tickets" | "listenerPort"> &
+type BrokerListener = Pick<DirectListener, "tickets" | "listenerPort"> &
   Partial<Pick<DirectListener, "acceptsCommands" | "sharesData">>;
 
-export type BridgeOpts = {
+type BridgeOpts = {
   // The listener's hub device, LISTENER unless a check names another.
   listenerId?: string;
   onMinted?: (tickets: string[]) => void;
@@ -388,7 +337,7 @@ export type BridgeOpts = {
   supervised?: boolean;
 };
 
-export type Bridged = {
+type Bridged = {
   stub: StubHub;
   dialer: BootedDevice;
   plane: DirectPlane;
@@ -402,7 +351,7 @@ export type Bridged = {
 // server (the ONLY thing the hub wire answers, wired as the host wires
 // it), and the dialer's REAL direct plane asks it. The plane stops with
 // the test, closing its sessions.
-export async function bridgeTo(
+async function bridgeTo(
   track: Track,
   listener: BrokerListener,
   opts: BridgeOpts = {},
@@ -509,7 +458,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
   return { ...bridged, listener, toListener };
 }
 
-export type DirectBridgeOpts = Pick<
+type DirectBridgeOpts = Pick<
   BridgeOpts,
   "onStatusChange" | "onPeerPush" | "dialableKinds" | "deadlineMs" | "context"
 >;
@@ -520,7 +469,7 @@ export type DirectBridgeOpts = Pick<
 // connection, for a check whose peer is no listener (a wedged or raw
 // one). The fan-out sinks are observation seams the scenarios read. The
 // plane lives until `stop`.
-export function makeDirectBridge(
+function makeDirectBridge(
   dialer: Pick<BootedDevice, "connection">,
   opts: DirectBridgeOpts = {},
 ): { plane: DirectPlane; bridge: HubHandlers; stop: () => Promise<void> } {
@@ -546,22 +495,11 @@ export function makeDirectBridge(
   };
 }
 
-export type PeerTransport = {
+type PeerTransport = {
   transport: ClientTransport;
   invokeCount(channel: string): number;
   channels(): ReturnType<HubHandlers["peerChannels"]>;
 };
-
-// A transport's invokes as a link's calls, for an effect client over it
-// (shared/ipc/effectClient.ts): a call it cancels interrupts, and its
-// failure is what a link's would be.
-export const linkOver = (transport: ClientTransport): Pick<Link, "call"> => ({
-  call: (channel, input) =>
-    Effect.tryPromise({
-      try: (signal) => transport.invoke(channel, input, { signal }),
-      catch: callFailureOf,
-    }),
-});
 
 // A ClientTransport riding the bridge's cached direct session, with a
 // per-channel invoke counter so a transfer check can pin poll-side
@@ -596,146 +534,4 @@ function bridgePeerTransport(
     // resolving like invokePeer does.
     channels: () => bridge.peerChannels(deviceId),
   };
-}
-
-export type DialOpts = {
-  // Who dials: DIALER unless a check plays another device.
-  dialer?: string;
-  // The identity the dial pins: the listener's own unless a check means
-  // to reach the wrong one.
-  expects?: string;
-  // Minted for the dialer unless a check presents its own.
-  ticket?: string;
-  // The key the dialer seals with: its test key unless a check names
-  // another.
-  localKey?: KeyPair;
-  // ws://127.0.0.1:<the listener's port> unless the dial goes another
-  // way (a proxy, a shaped link).
-  url?: string;
-  deadlineMs?: number;
-  // The socket the dial opens: plain ws unless a check hooks it (a
-  // header, a frame counter).
-  openSocket?: DeviceLinkOptions["openSocket"];
-  onClose?: () => void;
-  protocolVersion?: number;
-  deviceKind?: "desktop" | "web";
-  // The clock the link's timings read: the live one unless a check
-  // steps it.
-  clock?: Clock.Clock;
-};
-
-// A dial in its two steps, as the direct race takes it (dialDevice's
-// gate), for checks that hold a link between its socket's open and its
-// hello: `whenOpen`, then `authenticate()` for the link, or `abandon()`.
-// The link is up until its `close`, and `onClose` hears it end on its
-// own.
-export type PendingDial = {
-  whenOpen: Promise<void>;
-  authenticate(): Promise<DeviceConnection>;
-  abandon(): void;
-};
-
-function pendingDial(
-  options: DeviceLinkOptions,
-  onClose: () => void,
-  clock: Clock.Clock | undefined,
-): PendingDial {
-  const opened = Deferred.makeUnsafe<void, RemoteConnectError>();
-  const helloAsked = Deferred.makeUnsafe<void>();
-  const welcomed = Deferred.makeUnsafe<DeviceConnection, RemoteConnectError>();
-  let established = false;
-  let ownerClosed = false;
-  const close = () => {
-    ownerClosed = true;
-    Effect.runFork(Fiber.interrupt(fiber));
-  };
-  const fiber = Effect.runFork(
-    Effect.gen(function* () {
-      const {
-        dropped,
-        link: _,
-        ...dialed
-      } = yield* dialDevice(options, {
-        opened,
-        helloAsked,
-      });
-      established = true;
-      yield* Deferred.succeed(welcomed, { ...dialed, close });
-      yield* dropped;
-    }).pipe(
-      Effect.scoped,
-      clock === undefined
-        ? (dial) => dial
-        : Effect.provideService(Clock.Clock, clock),
-      Effect.catch((failed) =>
-        Effect.andThen(
-          Deferred.fail(opened, failed),
-          Deferred.fail(welcomed, failed),
-        ),
-      ),
-    ),
-  );
-  fiber.addObserver(() => {
-    if (established && !ownerClosed) onClose();
-    const closed = new RemoteConnectError("connection closed", null, false);
-    Effect.runSync(
-      Deferred.fail(opened, closed).pipe(
-        Effect.andThen(Deferred.fail(welcomed, closed)),
-      ),
-    );
-  });
-  const whenOpen = Effect.runPromise(Deferred.await(opened));
-  whenOpen.catch(() => {});
-  const connected = Effect.runPromise(Deferred.await(welcomed));
-  connected.catch(() => {});
-  return {
-    whenOpen,
-    authenticate() {
-      Effect.runSync(Deferred.succeed(helloAsked, undefined));
-      return connected;
-    },
-    abandon: close,
-  };
-}
-
-// A dial straight at a listener, sealed with the test keys, before its
-// handshake: `.authenticate()` links it or fails.
-export function dialing(
-  listener: Pick<DirectListener, "port" | "tickets" | "deviceId">,
-  opts: DialOpts = {},
-) {
-  const dialer = opts.dialer ?? DIALER;
-  const expects = opts.expects ?? listener.deviceId;
-  return pendingDial(
-    {
-      url: opts.url ?? `ws://127.0.0.1:${listener.port}`,
-      ticket: opts.ticket ?? mintTicket(listener.tickets, dialer),
-      seal: {
-        localKey: opts.localKey ?? testDeviceKey(dialer).pair,
-        remoteKey: testDeviceKey(expects).pair.publicKey,
-      },
-      appVersion: "1.0.0",
-      localDeviceId: dialer,
-      expectedDeviceId: expects,
-      openSocket: opts.openSocket ?? ((url) => new WsClient(url)),
-      deadlineMs: opts.deadlineMs ?? DIAL_DEADLINE_MS,
-      ...(opts.deviceKind === undefined ? {} : { deviceKind: opts.deviceKind }),
-      ...(opts.protocolVersion === undefined
-        ? {}
-        : { protocolVersion: opts.protocolVersion }),
-    },
-    opts.onClose ?? (() => {}),
-    opts.clock,
-  );
-}
-
-// One link to a listener, closed with the test.
-export async function dialListener(
-  track: Track,
-  listener: Pick<DirectListener, "port" | "tickets" | "deviceId">,
-  opts: DialOpts = {},
-): Promise<DeviceConnection> {
-  const connection = await dialing(listener, opts).authenticate();
-  track(() => connection.close());
-  return connection;
 }

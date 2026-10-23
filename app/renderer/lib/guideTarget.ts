@@ -6,8 +6,7 @@
 
 export const GUIDE_TARGET = "data-guide-target";
 
-// What an element is read by here, which a DOM element and a proof's fake
-// both are.
+// What an element is read by here.
 export interface TargetLike {
   readonly tagName: string;
   readonly textContent: string | null;

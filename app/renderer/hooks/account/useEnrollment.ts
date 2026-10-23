@@ -155,7 +155,7 @@ export function useFinishRedirectSignIn(): void {
 // Where this device's enrollment stands. `again` decides on the Clerk
 // session alone, for a device that reads enrolled and still needs one
 // of the two (useEnrollment).
-export function enrollmentStep(facts: {
+function enrollmentStep(facts: {
   readonly enrolled: boolean;
   readonly enrolling: boolean;
   readonly sessionLives: boolean;

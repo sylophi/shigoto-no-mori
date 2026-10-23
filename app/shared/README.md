@@ -27,7 +27,3 @@ is here is the app's own.
   `releases.ts`, `ports/`, `villagers/`.
 - `packaging/`: the build's own modules (the flavor's names, the
   bundled binaries, signing, the dmg), run by forge and the scripts.
-
-A rule the contracts hold (a predicate, a schema's check) is tested in
-the contracts' suite; a case here, or in a proof in `app/test`, tests
-what the app does with it.

@@ -30,7 +30,7 @@ type AutoPullSkipReason =
   | "dirty"
   | "busy";
 
-export type AutoPullOutcome =
+type AutoPullOutcome =
   | { kind: "pulled"; commits: number }
   | { kind: "skipped"; reason: AutoPullSkipReason }
   | { kind: "failed"; message: string };
@@ -44,7 +44,7 @@ const skipped = (reason: AutoPullSkipReason): AutoPullOutcome => ({
 // nothing local stands in the way. `busy` is the caller's knowledge of
 // processes the app started in this worktree. Git cannot see those,
 // and it is required so no caller forgets to ask.
-export const autoPullWorktree = Effect.fnUntraced(function* (
+const autoPullWorktree = Effect.fnUntraced(function* (
   worktree: Pick<WorktreeIdentity, "projectId" | "id" | "path" | "detached">,
   options: { busy: boolean },
 ) {
@@ -80,7 +80,7 @@ export const autoPullWorktree = Effect.fnUntraced(function* (
   );
 });
 
-export interface AutoPullSweepResult {
+interface AutoPullSweepResult {
   pulled: { worktree: WorktreeIdentity; commits: number }[];
   failed: { worktree: WorktreeIdentity; message: string }[];
 }

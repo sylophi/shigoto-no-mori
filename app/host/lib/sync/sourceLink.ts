@@ -82,7 +82,7 @@ type SourceServices = Engine.Services | ChildProcessSpawner.ChildProcessSpawner;
 
 // ---- The link: JSON lines and raw bytes over one channel.
 
-export const LINK_GONE = "the other device went away mid-transfer";
+const LINK_GONE = "the other device went away mid-transfer";
 // A message is a line of JSON, and none is anywhere near this: a line
 // that is, is a broken peer.
 const MAX_LINE_BYTES = 1 << 20;
@@ -126,7 +126,7 @@ export type Link = {
   closed: Deferred.Deferred<void>;
 };
 
-export function attachLink(
+function attachLink(
   attach: (endpoint: ChannelEndpoint) => ChannelHandle,
 ): Link {
   // Bytes the other end sent that nothing has read yet, each with the
@@ -338,7 +338,7 @@ const RequestSchema = Schema.Union([
   strict(Schema.Struct({ progress: ProgressFrameSchema })),
 ]);
 
-export const BundleAnswerSchema = strict(
+const BundleAnswerSchema = strict(
   Schema.Struct({
     bundle: strict(Schema.Struct({ bytes: Schema.Natural })),
   }),

@@ -21,10 +21,9 @@ type ThemeHeaderProps = DevAffordance & {
 // they answer different questions, "which shell" vs "which build").
 
 // Both headers always render; `doubutsu-only` / `v1-only` pick which
-// shows. A JS branch on the theme would fork this component per theme
-// and be invisible to `pnpm test theme-contract`. SidebarHeader binds
-// the dev mark (a client fact off the preload bridge) and its one-way
-// reveal.
+// shows. A JS branch on the theme would fork this component per theme.
+// SidebarHeader binds the dev mark (a client fact off the preload
+// bridge) and its one-way reveal.
 export function SidebarHeaderView({
   hasLocalHost,
   ...dev

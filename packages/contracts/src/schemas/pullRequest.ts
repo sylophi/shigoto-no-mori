@@ -381,9 +381,11 @@ export type PullRequestOptions = typeof PullRequestOptionsSchema.Type;
 
 // Referred to in the body as `./<name>`, staged on the host, uploaded by
 // gh's --attach.
+/** @public the wire fixtures read it, through the barrel */
 export const AttachmentIdSchema = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{16}$/),
 );
+/** @public the wire fixtures read it, through the barrel */
 export const AttachmentNameSchema = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/),
 );
