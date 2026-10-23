@@ -25,11 +25,10 @@ export interface ThemeOption<Id extends string> {
   // The swatch's tooltip in the picker.
   blurb: string;
   // Alternates to this palette that differ in a detail (latte's
-  // greens), kept out of the picker while their fate is open. Only the
-  // hidden hotkey reaches them (hooks/ui/usePaletteVariantHotkey.ts),
-  // and it steps light picks alone for now. The swatch stands for them
-  // all: it shows chosen, in the variant's colors, while one is the
-  // pick.
+  // greens), off the picker. Only the hidden hotkey reaches them
+  // (hooks/ui/usePaletteVariantHotkey.ts), and it steps light picks
+  // alone. The swatch stands for them all: it shows chosen, in the
+  // variant's colors, while one is the pick.
   variants?: readonly Id[];
 }
 

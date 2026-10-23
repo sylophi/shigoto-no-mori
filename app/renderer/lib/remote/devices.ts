@@ -41,17 +41,12 @@ export type RemoteDevice = {
   // session is established and its dial's answer says. What every
   // read-only note and disabled control reads (useCommandAccess).
   acceptsCommands?: boolean;
-  // Present while the peer is online in the roster, whether or not a
-  // direct session exists yet. Nothing here ever opens one: sessions
-  // are supervised desired state owned by the host's keeper
-  // (shared/hub/directKeeper.ts), which dials every rostered peer
-  // eagerly and redials forever. The api ships early anyway so a view
-  // can stand ready through the dial window -- a call landing on the
-  // in-flight dial joins it, one landing on no session rejects, and
-  // the online-to-connected transition refetches it
-  // (remoteDeviceSync.ts). Host calls route over the hub bridge onto
-  // the device link. Client-scoped calls reject (lib/runtime/Api.ts,
-  // peerApi).
+  // Set while the peer's session is up and it shares, or while it's
+  // rostered with no session: a call while the host's keeper
+  // (shared/hub/directKeeper.ts) dials joins the dial, and
+  // remoteDeviceSync refetches when the session lands. Host calls route
+  // over the hub bridge onto the device link. Client-scoped calls reject
+  // (lib/runtime/Api.ts, peerApi).
   api?: RemoteDeviceApi;
 };
 

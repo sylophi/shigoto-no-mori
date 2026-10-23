@@ -445,17 +445,15 @@ const make = (options: Options) =>
       }
     });
 
-    // The readiness probe chain for a freshly spawned child: attempts on
-    // the probe ladder until routable, then advertise. A child that is
-    // merely not routable yet is kept and probed on (the ladder's note),
-    // up to the deadline. Not polled after "up": the child's exit is the
-    // down signal, and `recheck` (a wake, a peer's dial that reached
-    // nothing) asks a live child again, since a sleep or a wedge leaves
-    // a connector that is running but routes nothing.
     // Set while a child is up, or the runner asks the Worker for a
     // provision, for `recheck`.
     const rechecks = yield* Ref.make(Option.none<Queue.Queue<void>>());
 
+    // A spawned child's readiness: probes on the ladder until it routes,
+    // and is advertised then, or until the deadline passes. After "up"
+    // the child's exit is the down signal, and `recheck` (a wake, a
+    // peer's dial that reached nothing) asks a live child again, since a
+    // sleep or a wedge leaves a connector that runs but routes nothing.
     const probe = (hostname: string, fresh: boolean, spawnedAt: number) => {
       const delaysMs = fresh
         ? TUNNEL_PROBE_DELAYS_MS

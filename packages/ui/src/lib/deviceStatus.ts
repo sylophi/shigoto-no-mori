@@ -24,12 +24,9 @@ export type DeviceStatusView = {
   // phase maps to a renderable dot by construction.
   tone: StatusTone;
   label: string;
-  // True when using the device's api can work right now: a direct
-  // session is up ("connected"), or the peer is in the hub roster
-  // and the keeper is establishing one ("online"). The ONE vocabulary
-  // for reach-gated affordances (editing a peer's settings, offering it
-  // as a new-worktree target), so components stop each spelling the same
-  // predicate their own way.
+  // Whether the device's api works now: only while a direct session is
+  // up ("connected"). The one test for reach-gated controls (editing a
+  // peer's settings, offering it as a new-worktree target).
   reachable: boolean;
 };
 
@@ -43,14 +40,9 @@ function presentationOf(status: RemoteDeviceStatus): {
   switch (status.phase) {
     case "connected":
       return { tone: "emerald", label: "Connected" };
-    // The peer is in the hub roster but no direct session is
-    // established (data is direct or nothing). "Online" is reserved
-    // for a peer this window can actually use, so the roster fact
-    // alone reads as the dial it is: the keeper dials on presence and
-    // redials forever, and success flips this to "Connected" on its
-    // own. A peer whose tunnel is starting (or a browser waiting on
-    // one) can sit here until it routes, which is why the label says
-    // what is being waited for rather than claiming presence. Amber, like
+    // Rostered, no direct session yet: the keeper dials on presence and
+    // redials forever, so it reads as the dial it is. A peer whose
+    // tunnel is starting can sit here until it routes. Amber, like
     // reconnecting: both are a dial still in flight.
     case "online":
     case "connecting":

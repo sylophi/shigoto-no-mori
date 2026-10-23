@@ -279,10 +279,11 @@ export const layer = Layer.effect(Registry, make);
   services: `FileSystem`, `Path`, `effect/process`, `Clock`, `Random`,
   `Config`. A service never imports `node:fs`, `node:child_process`,
   `node:os` or `node:path`, and never reads `process.env`. Nothing in
-  a service, `app/shared`, the host, the shell, the engine or the
-  contracts reads `Date.now()` or `new Date()` (`no-wall-clock`); code
-  there that is not Effect takes `now` as a parameter, as
-  `host/direct/tickets.ts` does, and measures with `performance.now()`.
+  a service, `app/shared`, the host, the shell, the engine, the
+  contracts or the terminal `sm` reads `Date.now()` or `new Date()`
+  (`no-wall-clock`); code there that is not Effect takes `now` as a
+  parameter, as `host/direct/tickets.ts` does, and measures with
+  `performance.now()`.
 - Every time decision names its meaning, its owner and its clock. An
   instant (a date shown to a person, a persisted record, file metadata,
   an authority's token expiry, a time compared with another device's)

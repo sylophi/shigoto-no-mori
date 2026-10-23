@@ -3,9 +3,7 @@
 // the peer for its connect info (the hub link's one ask, a single round
 // trip), then dials the returned candidates, each a complete URL
 // (ws:// interface candidates, the wss:// tunnel endpoint) with its own
-// single-use ticket. The result is the SAME DeviceConnection shape the
-// LAN client resolves, so everything downstream (the bridge cache,
-// sync, port-forward) stays transport agnostic.
+// single-use ticket. The result is a PeerConnection (below).
 //
 // DIAL STRATEGY: a deadline for each of the attempt's two legs, the
 // ask and then the candidate race, so a wedged peer that never answers
@@ -40,14 +38,12 @@
 // The refusal is remembered and decides the attempt only if no
 // candidate wins (at exhaustion or at the deadline).
 //
-// STRUCTURAL VERDICTS: two answers to the ask are facts about the peer
-// rather than failed calls, so they reject typed
-// (NoDialableCandidateError) instead of as the plain refusal they
-// arrive as, or eager supervision would redial them on the ladder's
-// cap forever:
-//
-//   - the peer serves no direct listener (a web client, by
-//     construction), answered with NO_LISTENER_CODE.
+// STRUCTURAL VERDICT: one answer to the ask is a fact about the peer
+// rather than a failed call, so it rejects typed
+// (NoDialableCandidateError) instead of as the plain refusal it arrives
+// as, or eager supervision would redial it on the ladder's cap forever:
+// the peer serves no direct listener (a web client, by construction),
+// answered with NO_LISTENER_CODE.
 //
 // Every other failure of the ask (hub blip, peer mid-boot, timeout, a
 // refusal carrying a plain message, a peer speaking another shape of
@@ -95,9 +91,9 @@ import { newConnectionId } from "@shigomori/engine/rpcClient";
 import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 
-// The DeviceConnection shape, so everything downstream of a direct
-// dial (the bridge cache, sync, port-forward) is transport agnostic,
-// plus the two facts the connectInfo answer carried beside the
+// A DialedDevice (shared/remote/deviceLink.ts) less its link, so
+// everything downstream of a direct dial (the bridge cache, sync,
+// port-forward) is transport agnostic, plus the two facts the connectInfo answer carried beside the
 // candidates: whether the peer runs this device's commands, and
 // whether it shares with this device at all. The bridge keeps them
 // current from the peer's commandAccessChanged and sharing:changed

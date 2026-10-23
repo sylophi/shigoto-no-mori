@@ -7,36 +7,7 @@
 // supervisor here: the one hub socket lives in the host, so a hub
 // device's status DERIVES from the bridge instead of being driven.
 //
-// Status mapping, chosen to lie the least given the
-// RemoteDeviceStatus vocabulary:
-//   - the hub socket stopped: no devices at all. The socket is stopped
-//     exactly while this device is signed out (the host's hub refresh),
-//     and a signed-out window shows no peers, whatever the cached
-//     device list still says.
-//   - a direct session established (a peerAppVersions key): phase
-//     "connected" with the appVersion the session's welcome confirmed
-//     and the command access the peer reports (peerAcceptsCommands),
-//     WHATEVER the hub socket is doing. Data is direct or nothing, so
-//     an established direct session is the only thing "connected" may
-//     mean, and it is also sufficient: the device hub is orchestration
-//     only, and a live session survives our own hub outage by design
-//     (shared/hub/directPresence.ts), so a hub blip must not grey out a
-//     peer whose data wire is fine.
-//   - no session and the hub socket not connected: mirror the socket's
-//     supervisor phase (connecting, backoff, blocked and so on),
-//     because nothing can be dialed while the socket is down and the
-//     socket's state is the honest reason.
-//   - socket connected, the peer in the roster, no direct session:
-//     phase "online" (renderer-local). The roster fact shows, nothing
-//     claims a data wire, and the host's keeper is already dialing or
-//     backing off toward one (sessions are supervised desired state),
-//     so the normal resolution is the next snapshot flipping the
-//     device to "connected" with no action here.
-//   - socket connected but the peer absent from the roster: phase
-//     "stopped", which renders as the neutral slate "Off" dot. "idle"
-//     would render as "Connecting" (a lie, nothing is trying) and
-//     "blocked" as a rose error (alarming for a machine that is simply
-//     switched off), so the slate "Off" is the least-lying option.
+// Each peer's status is buildEntry's, one branch per case.
 import { departed } from "@shigomori/contracts/schemas/config";
 import { fetchAgain } from "@/lib/askAgain";
 import { throughCancel } from "@/lib/queryClientOptions";

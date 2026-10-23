@@ -175,19 +175,13 @@ export const make = (
       return {
         socket: current.socket,
         onlineDeviceIds: current.onlineDeviceIds,
-        // Folded into the snapshot so the renderer stops polling
-        // peerInfo per device on every reconcile. Every data
-        // session is direct now, so the direct sessions'
-        // welcome-confirmed versions are the whole surface, and
-        // membership here IS the direct-session set (the renderer
-        // derives connectedness from the keys).
+        // Each established direct session's version, command access
+        // and sharing. peerAppVersions' keys are the direct-session set
+        // (the renderer derives connectedness from them).
         ...handlers.directPeers(),
-        // THIS device's tunnel endpoint state. The
-        // state only, never the hostname or token. Absent without a host
-        // half (the web bridge runs no cloudflared). HubStatus is the
-        // remote-plane snapshot (hub control plane plus the direct data
-        // plane it brokers), which is why the tunnel and direct surfaces
-        // ride it.
+        // This device's tunnel state, never its hostname or token.
+        // Absent without a host half (the web bridge runs no
+        // cloudflared).
         ...(deps.host === undefined ? {} : { tunnel: deps.host.tunnelState() }),
       };
     }

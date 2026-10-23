@@ -43,7 +43,7 @@ A rule in doubutsu.css reaches every color through a token, never a
 literal, so a palette can move it. Settings paints its swatches with the
 same blocks (each swatch is a theme root of its own), so a new palette is
 one CSS block plus a catalog entry. Palettes that differ in a detail
-(latte's greens) can wait as variants: ids of their own behind one
+(latte's greens) are variants: ids of their own behind one
 swatch, left out of the picker and reached only by Ctrl+Alt+Shift+L
 (packages/ui/src/lib/themes.ts).
 
@@ -78,7 +78,7 @@ Rules that keep both themes cheap to maintain:
 - **Hover hints are the app's tooltip**, `SimpleTooltip` from
   `primitives/tooltip.tsx`, never a `title` attribute: the browser's tooltip
   wears neither theme. `shigomori/no-native-tooltip` (oxlint) catches
-  `title` on DOM elements, and the `ui/` wrappers leave `title` out of
+  `title` on DOM elements, and the primitives leave `title` out of
   their props. The tooltip is visual only, so an icon-only control
   still needs its `aria-label`.
 - **A tooltip is for text that's cut off or a control that's unclear**,
@@ -298,7 +298,7 @@ villager data downloaded into that device's data dir
 (`host/lib/VillagerData.ts`), so it covers every device's worktrees
 that window shows. A web client offers none: it has no device of its
 own to hold the data. Every doubutsu character has a
-rarity, like a card's (`shared/villagers/rarity.ts`):
+rarity, like a card's (`lib/villagers/rarity.ts`):
 
 - **Common**: regular villagers.
 - **Rare**: special characters that aren't regular villagers (Katrina,
