@@ -16,6 +16,10 @@ jobs:
     defaults:
       run:
         working-directory: app
+    # Every tag builds prod (SM_FLAVOR unset), its bundle where forge
+    # packs it.
+    env:
+      APP_PATH: out/Shigoto no Mori-darwin-arm64/Shigoto no Mori.app
     steps:
       # Every action is pinned to a commit digest rather than a tag,
       # because a tag is mutable and this job holds the signing
@@ -99,43 +103,6 @@ jobs:
         working-directory: .
         run: pnpm install --frozen-lockfile
 
-      # The flavor (packages/engine/src/flavor.ts): a v3.0.0-alpha.N,
-      # -beta.N or -rc.N tag builds the v3 app, which installs beside the
-      # prod one under its own name, folders and `smv3`, and points at
-      # the dev hub (the SM_PREVIEW_ variables, every build before prod's)
-      # until v3 merges into main; anything else builds prod. The
-      # later steps read SM_FLAVOR, the app's name and the account
-      # config from the job's environment.
-      - name: Pick the flavor
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-          PROD_HUB: ${{ vars.SM_DEVICE_HUB_URL }}
-          PROD_CLERK: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
-          PROD_WEB: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
-          PREVIEW_HUB: ${{ vars.SM_PREVIEW_DEVICE_HUB_URL }}
-          PREVIEW_CLERK: ${{ vars.SM_PREVIEW_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
-        run: |
-          FLAVOR="$(node --input-type=module -e '
-            import { flavorOfVersion } from "@shigomori/engine/flavor";
-            console.log(flavorOfVersion(process.env.TAG));
-          ')"
-          APP_NAME="$(FLAVOR="$FLAVOR" node --input-type=module -e '
-            import { flavorNames } from "@shigomori/engine/flavor";
-            console.log(flavorNames(process.env.FLAVOR).appName);
-          ')"
-          {
-            echo "SM_FLAVOR=$FLAVOR"
-            echo "SM_APP_NAME=$APP_NAME"
-            if [[ "$FLAVOR" == v3 ]]; then
-              echo "SM_DEVICE_HUB_URL=$PREVIEW_HUB"
-              echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$PREVIEW_CLERK"
-            else
-              echo "SM_DEVICE_HUB_URL=$PROD_HUB"
-              echo "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY=$PROD_CLERK"
-              echo "SM_ACCOUNT_WEB_ORIGIN=$PROD_WEB"
-            fi
-          } >> "$GITHUB_ENV"
-
       # The prePackage hook regenerates the third-party notices. Stale
       # committed copies would ship a build reporting a "-dirty" commit,
       # so refuse here, naming the fix, rather than build it.
@@ -180,10 +147,8 @@ jobs:
       # features. An unset repository variable expands to "", so warn
       # loudly instead of shipping an unconfigured release in silence.
       - name: Warn when the account service config is unset
-        run: |
-          if [[ -z "$SM_DEVICE_HUB_URL" || -z "$SM_ACCOUNT_CLERK_PUBLISHABLE_KEY" ]]; then
-            echo "::warning::The hub URL or the Clerk publishable key is not set as a repository variable for the $SM_FLAVOR flavor, so this build ships with remote features unconfigured"
-          fi
+        if: vars.SM_DEVICE_HUB_URL == '' || vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY == ''
+        run: echo "::warning::SM_DEVICE_HUB_URL or SM_ACCOUNT_CLERK_PUBLISHABLE_KEY is not set as a repository variable, so this build ships with remote features unconfigured"
 
       - name: Build distributables
         env:
@@ -191,15 +156,17 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        # The account service config baked into the bundle comes
-        # from the flavor step: a packaged app only sees build-time env,
-        # so a build without it ships with remote features unconfigured.
-        # They are repository Actions variables (they are not secrets).
+          # The account service config baked into the bundle: a packaged
+          # app only sees build-time env, so a build without it ships
+          # with remote features unconfigured. They are repository
+          # Actions variables (they are not secrets).
+          SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
+          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
+          SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
         run: pnpm exec electron-forge publish --dry-run
 
       - name: Verify signing and notarization
         run: |
-          APP_PATH="out/$SM_APP_NAME-darwin-arm64/$SM_APP_NAME.app"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           spctl --assess --type execute --verbose "$APP_PATH"
           xcrun stapler validate "$APP_PATH"
@@ -216,26 +183,22 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          BINARY_NAME="$(node --input-type=module -e '
-            import { flavorNames } from "@shigomori/engine/flavor";
-            console.log(flavorNames(process.env.SM_FLAVOR).binaryName);
-          ')"
-          SM="$PWD/out/$SM_APP_NAME-darwin-arm64/$SM_APP_NAME.app/Contents/Resources/$BINARY_NAME"
+          SM="$PWD/$APP_PATH/Contents/Resources/sm"
           export SHIGOMORI_DATA_DIR="$RUNNER_TEMP/sm-empty-data"
           mkdir -p "$SHIGOMORI_DATA_DIR"
           cd "$RUNNER_TEMP"
 
           VERSION_OUT="$("$SM" --version)"
-          echo "$BINARY_NAME --version: $VERSION_OUT"
+          echo "sm --version: $VERSION_OUT"
           if [[ "$VERSION_OUT" != *"${TAG#v}"* ]]; then
-            echo "$BINARY_NAME --version did not name ${TAG#v}."
+            echo "sm --version did not name ${TAG#v}."
             exit 1
           fi
 
           PROJECTS_OUT="$("$SM" --json projects list)"
-          echo "$BINARY_NAME --json projects list: $PROJECTS_OUT"
+          echo "sm --json projects list: $PROJECTS_OUT"
           if [[ "$PROJECTS_OUT" != "[]" ]]; then
-            echo "$BINARY_NAME did not read an empty store."
+            echo "sm did not read an empty store."
             exit 1
           fi
 
@@ -243,9 +206,9 @@ jobs:
           CHECK_OUT="$("$SM" --json update --check 2>&1)"
           CHECK_EXIT=$?
           set -e
-          echo "$BINARY_NAME --json update --check (exit $CHECK_EXIT): $CHECK_OUT"
+          echo "sm --json update --check (exit $CHECK_EXIT): $CHECK_OUT"
           if (( CHECK_EXIT >= 126 )) || [[ -z "$CHECK_OUT" ]]; then
-            echo "$BINARY_NAME update --check failed to start."
+            echo "sm update --check failed to start."
             exit 1
           fi
 
@@ -259,7 +222,7 @@ jobs:
       - name: Launch the signed app
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: node scripts/smoke-app.mts "out/$SM_APP_NAME-darwin-arm64/$SM_APP_NAME.app"
+        run: node scripts/smoke-app.mts "$APP_PATH"
 
       - name: Upload assets to release
         env:

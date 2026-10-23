@@ -20,7 +20,7 @@ import {
 } from "./lab.mts";
 import {
   ALL_SCENARIOS,
-  hubDiffersFromRelease,
+  hubDiffersFromMain,
   recovered,
   showProject,
   silentFailures,
@@ -97,7 +97,7 @@ chosen = [
 const differs =
   chosen.some((scenario) => scenario.name === "hub-redeploy") &&
   !values["deploy-local-hub"]
-    ? hubDiffersFromRelease()
+    ? hubDiffersFromMain()
     : null;
 if (differs !== null) {
   console.log(

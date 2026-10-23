@@ -149,57 +149,6 @@ describe("pickRelease", () => {
     );
   });
 
-  // The prereleases of 3.0.0 are the v3 flavor's bundle, which
-  // installs beside prod under its own name and data folder.
-  const v3Releases = [
-    labRelease("v3.0.0-alpha.1"),
-    labRelease("v3.0.0-alpha.2"),
-    labRelease("v3.0.0-beta.1"),
-  ];
-
-  it("never offers a prod build a prerelease of 3.0.0", () => {
-    // A full build, and prerelease builds below them.
-    for (const build of ["2.34.1", "2.9.0-beta.2", "2.99.0-rc.1"]) {
-      assert.equal(
-        pickRelease(semver(build), v3Releases, "arm64"),
-        undefined,
-        build,
-      );
-    }
-    assert.equal(
-      pickRelease(
-        semver("2.34.1"),
-        [...v3Releases, labRelease("v3.0.0")],
-        "arm64",
-      )?.version,
-      "3.0.0",
-    );
-  });
-
-  it("offers a v3 build the 3.0.0 prereleases alone", () => {
-    const all = withAlso(
-      ...v3Releases,
-      labRelease("v3.0.0-rc.1"),
-      labRelease("v3.0.0"),
-      labRelease("v3.1.0-beta.1"),
-      labRelease("v3.0.1-alpha.1"),
-    );
-    const v3 = (build: string) =>
-      pickRelease(semver(build), all, "arm64", "v3")?.version;
-    assert.equal(v3("3.0.0-alpha.1"), "3.0.0-rc.1");
-    assert.equal(v3("3.0.0-beta.1"), "3.0.0-rc.1");
-    assert.equal(v3("3.0.0-rc.1"), undefined);
-    assert.equal(
-      pickRelease(
-        semver("3.0.0-alpha.1"),
-        withAlso(labRelease("v3.0.0-alpha.2")),
-        "arm64",
-        "v3",
-      )?.version,
-      "3.0.0-alpha.2",
-    );
-  });
-
   it("needs this arch's zip", () => {
     assert.equal(
       pickRelease(current, withAlso(labRelease("v2.0.0-beta.3")), "x64"),
