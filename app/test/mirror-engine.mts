@@ -59,7 +59,10 @@
 //     copy kept and its thread on the worktree it became, when a
 //     worktree is made at the old folder meanwhile, when the one it
 //     became is mirrored meanwhile, or when the peer comes past 2
-//     minutes.
+//     minutes. The end is noted there even when the daemon drops the
+//     session before it answers the terminate, a Stop while it waits
+//     says so, and a move back to the old folder leaves the mirror the
+//     worktree's own again, paused.
 //
 // Run: pnpm test mirror-engine.
 import assert from "node:assert/strict";
@@ -109,10 +112,11 @@ import { makeGitFollower } from "../host/mirror/gitFollow.ts";
 import { createMirrorHistory } from "../host/mirror/history.ts";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "../host/mirror/registry.ts";
 import { transferFilesOnce } from "../host/mirror/oneShot.ts";
-import { mirrorList } from "../host/mirror/sessions.ts";
+import { mirrorList, stopMirror } from "../host/mirror/sessions.ts";
 import { MIRROR_LABEL_MODE } from "@shigomori/contracts/modules/mirror";
 import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import {
+  delay,
   sandboxGit,
   scrubProcessGitEnv,
   settleTurns,
@@ -1184,8 +1188,9 @@ it("a worktree made where a moved one was ends its mirror when it goes, never re
 // trying to connect. The bookkeeping has looked and paused it. `reach`
 // brings B in. The session's id and the worktree's name are the
 // check's own: the bookkeeping's marks (registry.ts) and the data
-// folder outlive a check.
-async function movedOriginalWithPeerAway(id: string) {
+// folder outlive a check. With `holdTerminate`, the daemon holds each
+// terminate until the check answers it.
+async function movedOriginalWithPeerAway(id: string, holdTerminate = false) {
   scrubProcessGitEnv();
   const git = sandboxGit();
   const admissions = Effect.runSync(PubSub.unbounded<string>());
@@ -1206,14 +1211,16 @@ async function movedOriginalWithPeerAway(id: string) {
   // The engine opens a session only against both sides, so a create
   // fails while the peer is out of reach.
   const mirror = await harness((request) =>
-    request.op !== "create"
-      ? { ok: true }
-      : reached
-        ? { ok: true, session: "reopened" }
-        : {
-            ok: false,
-            error: "unable to connect to beta: no direct connection to B",
-          },
+    request.op === "terminate" && holdTerminate
+      ? null
+      : request.op !== "create"
+        ? { ok: true }
+        : reached
+          ? { ok: true, session: "reopened" }
+          : {
+              ok: false,
+              error: "unable to connect to beta: no direct connection to B",
+            },
   );
   const base = tempDir("sm-mirror-late-peer-", trackTest);
   const repo = join(base, "repo");
@@ -1274,6 +1281,20 @@ async function movedOriginalWithPeerAway(id: string) {
       reached = true;
       PubSub.publishUnsafe(admissions, "B");
     },
+    // A worktree made at the old folder, which takes the old id, as ids
+    // are path derived.
+    takeOldFolder: async () => {
+      const made = await Effect.runPromiseWith(await hostContext())(
+        Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+          worktrees.create(
+            project,
+            { name: `otter-${id}`, branch: "fox", skipSetup: true },
+            { report: () => Effect.void, color: false },
+          ),
+        ),
+      );
+      assert.equal(made.worktree.id, original.id);
+    },
   };
 }
 
@@ -1300,7 +1321,7 @@ it("a moved original keeps its mirror across a start with the peer reached late:
 });
 
 it("a moved original's mirror waiting on its peer ends, its copy kept, when a worktree is made at the old folder, never mirroring that one", async () => {
-  const { requests, history, engine, project, original, moved } =
+  const { requests, history, engine, original, moved, takeOldFolder } =
     await movedOriginalWithPeerAway("taken");
   // A note on the old id's thread during the wait, which the end
   // carries to the worktree the original became.
@@ -1309,17 +1330,7 @@ it("a moved original's mirror waiting on its peer ends, its copy kept, when a wo
       mirrors.noteEvent(original.id, "paused", "noted during the wait"),
     ),
   );
-  const made = await Effect.runPromiseWith(await hostContext())(
-    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
-      worktrees.create(
-        project,
-        { name: "otter-taken", branch: "fox", skipSetup: true },
-        { report: () => Effect.void, color: false },
-      ),
-    ),
-  );
-  // The old folder's id, as ids are path derived.
-  assert.equal(made.worktree.id, original.id);
+  await takeOldFolder();
   await waitFor(
     () => requests().includes("terminate taken"),
     "the waiting mirror to end",
@@ -1370,4 +1381,63 @@ it("a moved original's mirror waiting on its peer ends, its copy kept, when the 
   assert.deepEqual(requests(), ["pause twice", "terminate twice"]);
   const stopped = history(moved.id).find((event) => event.kind === "stopped");
   assert.match(stopped?.detail ?? "", /mirrored again/);
+});
+
+it("a waiting mirror's end is noted on the worktree the original became when the daemon's snapshot without the session comes before the terminate's answer", async () => {
+  const {
+    requests,
+    held,
+    answerHeld,
+    state,
+    history,
+    original,
+    moved,
+    takeOldFolder,
+  } = await movedOriginalWithPeerAway("raced", true);
+  await takeOldFolder();
+  await waitFor(
+    () => requests().includes("terminate raced"),
+    "the waiting mirror's terminate",
+  );
+  // The daemon drops the session, and the bookkeeping forgets its wait,
+  // before the terminate is answered.
+  await state([]);
+  const [asked] = held.splice(0);
+  assert.ok(asked !== undefined);
+  await answerHeld(asked, { ok: true });
+  const stopped = history(moved.id).find((event) => event.kind === "stopped");
+  assert.match(stopped?.detail ?? "", /took its old folder/);
+  assert.ok(!history(original.id).some((event) => event.kind === "stopped"));
+});
+
+it("a moved original's mirror waiting on its peer is that worktree's own again, paused, when it moves back to its folder: neither ended nor re-opened", async () => {
+  const { requests, run, reach, history, project, original, moved } =
+    await movedOriginalWithPeerAway("back");
+  await run(
+    Effect.gen(function* () {
+      const worktrees = yield* Worktrees.Worktrees;
+      const row = (yield* worktrees.identities(project)).find(
+        (worktree) => worktree.id === moved.id,
+      );
+      assert.ok(row !== undefined);
+      yield* worktrees.move({ project, worktree: row }, original.path);
+    }),
+  );
+  reach();
+  // Nothing to wait for: the looks that would end or re-open it read
+  // the disk, which no number of turns settles.
+  await delay(250);
+  assert.deepEqual(requests(), ["pause back"]);
+  assert.ok(!history(original.id).some((event) => event.kind === "stopped"));
+});
+
+it("a Stop of a moved original's mirror waiting on its peer ends it, its copy kept, as stopped while it waited, not as removed", async () => {
+  const { requests, run, history, moved } =
+    await movedOriginalWithPeerAway("stop");
+  assert.deepEqual(await run(stopMirror("stop", false)), {
+    removedCopy: false,
+  });
+  assert.deepEqual(requests(), ["pause stop", "terminate stop"]);
+  const stopped = history(moved.id).find((event) => event.kind === "stopped");
+  assert.match(stopped?.detail ?? "", /was stopped before the other device/);
 });
