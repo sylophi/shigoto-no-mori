@@ -9,15 +9,15 @@
 // ask and then the candidate race, so a wedged peer that never answers
 // cannot hold the bridge's dial forever, and an answer that came late
 // (a peer just woken) leaves the race its whole budget. All candidate
-// SOCKETS open concurrently, each sealed with its own ticket to the key
+// sockets open concurrently, each sealed with its own ticket to the key
 // the hub's roster names for the peer (shared/remote/sealedSocket.ts),
 // so whoever answers a candidate address, only the peer completes the
-// handshake. The HELLOS are serialized: at most one hello is in flight,
+// handshake. The hellos are serialized: at most one hello is in flight,
 // the next candidate's hello goes out only after the previous handshake
 // failed, and losers whose hello was never sent are closed pre-auth.
 // Serialization is what makes a multi-candidate dial safe against the
 // host's one-authed-socket-per-device supersede rule: with concurrent
-// hellos the SLOWER candidate's hello would land after the winner was
+// hellos the slower candidate's hello would land after the winner was
 // cached and supersede-kill the fresh session, so the first invoke on
 // it would reject. An abandoned pre-auth socket costs the host only its
 // own candidate's ticket and supersedes nothing, so a junk candidate
@@ -32,7 +32,7 @@
 // keys on client IP, and benches whoever dials next even with a perfect
 // ticket.
 //
-// A blocked verdict decides the attempt, but it does NOT end the race:
+// A blocked verdict decides the attempt, but it does not end the race:
 // a refusing far end has proved nothing, and a LAN address may be held
 // by a squatter, which must not deny a dial the tunnel can still win.
 // The refusal is remembered and decides the attempt only if no
@@ -49,15 +49,8 @@
 // refusal carrying a plain message, a peer speaking another shape of
 // the wire and so never answering) stays transient.
 //
-// ONE ATTEMPT, NO POLICY: connectDirect is a single dial under a
-// single deadline, and a failure rejects typed with no retry and no
-// memo. Retry lives in exactly one place, the presence-driven keeper
-// (shared/hub/directKeeper.ts), which paces redials on the shared
-// backoff ladder and parks on a peer with no listener. Data is direct
-// or nothing: there is no hub fallback behind these failures, the
-// typed rejection IS the outcome the caller surfaces. A second retry
-// owner here would fight the keeper's ladder, so this file deliberately
-// carries none.
+// One attempt under one deadline, no retry: retry is the keeper's
+// (shared/hub/directKeeper.ts).
 //
 // Pure browser-global-plus-shared code: no node builtins, no electron.
 import type { KeyPair } from "@shared/crypto/noise";
@@ -146,7 +139,7 @@ export type DirectDialerDeps = {
   // deviceId, so the owner can feed the same peerPush path the device
   // hub feeds.
   onAnyPush?: (deviceId: string, channel: string, payload: unknown) => void;
-  // The candidate kinds THIS platform can dial, declared to the host
+  // The candidate kinds this platform can dial, declared to the host
   // in the connectInfo input so it only mints tickets this caller can
   // spend. The web bridge declares ["tunnel"] (a browser page cannot
   // dial ws:// under https, mixed content), the app takes the default
@@ -177,7 +170,7 @@ type CandidateFailure = { candidate: DirectCandidate; error: unknown };
 const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
 
 // The exhaustion reject: every candidate retired and none refused its
-// ticket. Its message names EVERY candidate and how it
+// ticket. Its message names every candidate and how it
 // died, because the last candidate's error alone ("closed before
 // welcome (code 1006)") says nothing about which address was even
 // tried, and on a platform whose WebSocket reports no cause a refused
@@ -442,8 +435,8 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           }),
       });
       if (!info.available) {
-        // The peer's listener is down, or it has nothing THIS caller
-        // can dial. Unreachable for data RIGHT NOW, which is not the
+        // The peer's listener is down, or it has nothing this caller
+        // can dial. Unreachable for data right now, which is not the
         // same as structurally undialable: its listener may be
         // mid-boot, or the directConnections opt-out may be flipped back
         // on without any roster transition to unpark on. So this stays

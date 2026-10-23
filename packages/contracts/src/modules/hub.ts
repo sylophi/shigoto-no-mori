@@ -29,6 +29,10 @@ const HubSocketStatusSchema = Schema.Union([
   Schema.Struct({ phase: Schema.Literal("stopped") }),
 ]);
 
+// off: not wanted (listener down, opted out, signed out). no-binary:
+// wanted, but no usable cloudflared. unconfigured: the Worker has no
+// tunnel env. starting: provisioning, spawning or probing readiness.
+// up: probed routable and advertised. error: the last attempt failed.
 const TunnelStateSchema = Schema.Literals([
   "off",
   "no-binary",

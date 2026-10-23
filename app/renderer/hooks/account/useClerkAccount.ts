@@ -11,22 +11,13 @@ import { useApi } from "@/lib/runtime/pageApi";
 // sign-out is in flight (useIsMutating) without owning the mutation.
 export const CLERK_SIGN_OUT_KEY = ["clerkSignOut"] as const;
 
-// Ends the Clerk session first, then the account layer (best-effort
-// hub revoke plus local credential clear). Clerk first, so a device hub
-// hiccup in the second step cannot leave a live session that
-// ClerkAccountSync would immediately re-enroll. The account half is
-// passed as Clerk's sign-out callback: without one, clerk-js
-// window-navigates to its after-sign-out URL, reloading the renderer
-// mid-flight and racing the revoke, and inside it the revoke lands
-// before Clerk announces the session's end. ClerkAccountSync fires the
-// same account:signOut off that announcement, and the handlers'
-// in-flight guards collapse the two into one revoke.
-//
-// clerk-js returns before running the callback when its client holds
-// no session (useClerkSessionMissing: the sign-in expired while the
-// device credential stayed). The button is the only way off the
-// account then, so the account half runs on its own if Clerk skipped
-// it.
+// Ends the Clerk session, then the account layer. Clerk first, so a hub
+// hiccup in the account half can't leave a live session for
+// ClerkAccountSync to re-enroll. The account half is Clerk's sign-out
+// callback: without one clerk-js navigates away mid-revoke.
+// ClerkAccountSync fires the same signOut off Clerk's announcement, and
+// the in-flight guards make it one revoke. With no Clerk session (an
+// expired sign-in) clerk-js skips the callback, so it runs here.
 export function useClerkSignOut() {
   const api = useApi();
   const clerk = useClerk();
@@ -45,23 +36,15 @@ export function useClerkSignOut() {
   });
 }
 
-// Whether Clerk has settled on holding no session. Under a device that
-// is still enrolled, that is the person's sign-in having expired (a
-// Clerk session has a lifetime, and one that ends while the app is
-// closed is never observed by ClerkAccountSync, which leaves the
-// credential alone on purpose). Not a session "ending" in that file's
-// sense: the caller decides what the absence means for its tree.
-// False while Clerk is still loading, since that is not yet an answer.
+// Clerk has loaded and holds no session: under an enrolled device, the
+// sign-in expired (ClerkAccountSync leaves the credential alone).
 export function useClerkSessionMissing(): boolean {
   const { isLoaded, isSignedIn } = useAuth();
   return isLoaded && !isSignedIn;
 }
 
-// How the signed-in account reads to a person: the email it signs in
-// with, else a name, else the username. Null while Clerk is still
-// loading the profile, or when it holds no session to have one: the
-// Clerk user id the device hub keys on is nothing a person recognises
-// as themselves, so the caller decides how to name the account then.
+// How the signed-in account reads to a person. Null rather than the
+// Clerk user id, which no person recognises.
 export function useAccountIdentity(): string | null {
   const { user } = useUser();
   return (

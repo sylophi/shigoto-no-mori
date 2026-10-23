@@ -1,18 +1,10 @@
-// Presentation mapping for a remote device's status. One place turns
-// the phase into a tone and a label so the settings
-// chip, the sidebar badge and the account page read the same. Tones stay
-// within the four raw families the theme remaps (emerald, rose, amber,
-// sky) plus slate for off, per the doubutsu contract.
+// A device's phase as a tone and a label, the same on every surface.
 import type { StatusTone } from "../primitives/status-dot.tsx";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 
-// A remote device's derived status: the supervisor vocabulary the
-// hub socket reports, plus the two renderer-local phases the direct
-// data plane needs. "online" means the peer is in the hub roster but
-// no direct session is established (not dialed yet, or the dial
-// failed), so it is NOT rendered as connected (data is
-// direct or nothing, and a roster fact must not claim a data
-// wire). "notSharing" means a direct session is up but the peer's
+// The hub socket's phases plus two of the renderer's: "online" is
+// rostered with no direct session yet, so not connected (a roster fact
+// claims no data wire), and "notSharing" is a session whose peer's
 // sharing switch is off, so it serves nothing and gets no api.
 export type RemoteDeviceStatus =
   | HubStatus["socket"]
@@ -20,8 +12,6 @@ export type RemoteDeviceStatus =
   | { phase: "notSharing" };
 
 export type DeviceStatusView = {
-  // Exactly the closed tone set the StatusDot primitive draws, so every
-  // phase maps to a renderable dot by construction.
   tone: StatusTone;
   label: string;
   // Whether the device's api works now: only while a direct session is
@@ -60,20 +50,16 @@ function presentationOf(status: RemoteDeviceStatus): {
   }
 }
 
-// The machine this window runs on, in the same vocabulary: it has no
-// connection to describe, so it is always here, and every surface
-// that tags it (a row tag, a tooltip, a live card) reads this one
-// entry rather than spelling "This device" and emerald on its own.
+// The machine this window runs on: always here, with no connection to
+// describe.
 export const THIS_DEVICE_VIEW: DeviceStatusView = {
   tone: "emerald",
   label: "This device",
   reachable: true,
 };
 
-// The same machine while the window's link to its own host is down,
-// from the host stopping (or the shell's watchdog stopping a host that
-// went silent) until the host that replaces it answers. The one state
-// this device has to show: its pages can't load meanwhile.
+// The same machine while its host is down (stopped, or stopped by the
+// shell's watchdog) until a new one answers: its pages can't load.
 export const THIS_DEVICE_NOT_RESPONDING_VIEW: DeviceStatusView = {
   tone: "rose",
   label: "Not responding",

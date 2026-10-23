@@ -3,42 +3,27 @@
 // owns "who is signed in", the account layer owns "this device is
 // enrolled". The transitions this component drives:
 //
-// - Clerk signed in, no credential stored: mint a fresh session token
-//   (skipCache, so the device hub never sees one mid-expiry) and
-//   exchange it for a device credential via account:enroll. One
-//   automatic attempt per Clerk user per session (armedFor), re-armed
-//   by the Clerk session ending. A failure (hub down, mint failed)
-//   surfaces as the mutation's error toast, and the account UI offers
-//   a manual retry (the enroll-retry button in AccountSection). Main's
-//   in-flight guard is the authoritative dedupe for re-fired effects.
-//   Having seen the device enrolled under the user counts as that
-//   attempt: a credential that then goes while the session lives was
-//   signed out (by this window, another tab of the profile, or another
-//   device), and enrolling again would undo that sign-out.
-// - Clerk signed in as a DIFFERENT user than the stored credential:
-//   sign the account layer out first (the device hub refuses a
-//   cross-account re-enroll of the same deviceId), then the effect
-//   re-runs into the enroll branch.
-// - Clerk session ended: sign the account layer out too, but only for
-//   a session this process actually observed (sawSession). "No session
-//   at boot" is NOT a sign-out: the stored credential is long-lived and
-//   independent of Clerk (a cleared Clerk token store), and revoking it
-//   plus the command-access switch on a hunch would destroy real state.
-//   Such a mismatch instead resolves the moment the user acts (signs in
-//   → mismatch/enroll branch handle it).
-// - The hub closes this device's socket as revoked: it was removed
-//   from the account on another device. There is nothing left to keep,
-//   so the device signs out in full, Clerk session included, and lands
-//   on the signed-out page, where signing in again enrolls it afresh.
-//   Once per block (the guard clears when the socket leaves the blocked
-//   phase), so a sign-out that fails does not loop. A window whose
-//   sign-in is shared (status.sharedSignIn: a --clone-login dev
-//   profile) drops the account layer only, since ending the Clerk
-//   session would sign every window holding the clone out too, and the
-//   enroll guard, armed since it saw the device enrolled, keeps the
-//   branch above from enrolling it again on the spot. Any other block
-//   (a refused ticket, a superseded socket) is not a verdict on the
-//   account and changes nothing here.
+// - Signed in, no credential: enroll with a fresh token (skipCache, so
+//   the hub never sees one mid-expiry), once per Clerk user per session
+//   (armedFor). Having seen the device enrolled counts as that attempt:
+//   a credential that goes while the session lives was signed out, and
+//   enrolling again would undo it.
+// - Signed in as a different user than the credential's: sign the
+//   account layer out first (the hub refuses a cross-account re-enroll
+//   of the same deviceId), and the effect re-runs into the enroll
+//   branch.
+// - Clerk session ended: sign the account layer out too, but only for a
+//   session this process saw (sawSession). No session at boot isn't a
+//   sign-out: the credential is long-lived and independent of Clerk, and
+//   revoking it on a hunch would destroy real state.
+// - The hub closes this device's socket as revoked (it was removed from
+//   the account on another device): sign out in full, Clerk session
+//   included, once per block, so a failing sign-out doesn't loop. A
+//   window with a shared sign-in (status.sharedSignIn, a --clone-login
+//   dev profile) drops the account layer only, since ending the Clerk
+//   session would sign every clone out, and the enroll guard keeps it
+//   from enrolling again on the spot. Any other block (a refused ticket,
+//   a superseded socket) changes nothing here.
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/react";
 import {
@@ -64,12 +49,7 @@ export function ClerkAccountSync() {
   const configured = status?.configured === true;
   const enrolled = status?.signedIn;
   const accountId = status?.accountId;
-  // The Clerk user this process has already auto-attempted to enroll,
-  // so a failed attempt doesn't retry-loop off unrelated status churn.
-  // Cleared when the session ends, so sign-out → sign-in re-arms.
   const armedFor = useRef<string | null>(null);
-  // Whether this process ever observed a live Clerk session, gating the
-  // destructive sign-out branch to sessions that ended in-process.
   const sawSession = useRef(false);
 
   const block = useHubBlock();
@@ -78,7 +58,7 @@ export function ClerkAccountSync() {
   const clerkSignOut = useClerkSignOut();
   const clerkSignOutMutate = clerkSignOut.mutate;
   const signOutNow = sharedSignIn ? signOutMutate : clerkSignOutMutate;
-  // Either sign-out in flight. A self sign-out revokes THIS device on
+  // Either sign-out in flight. A self sign-out revokes this device on
   // the hub, which closes this device's own socket as revoked before
   // the local credential clears, so the block below is seen mid
   // sign-out too, and must not read as a removal by someone else.

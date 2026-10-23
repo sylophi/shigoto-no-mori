@@ -67,7 +67,7 @@ const TUNNEL_BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
 const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 
 // The readiness probe schedule: a fresh child is advertised only once
-// its hostname actually ROUTES from the edge to the local listener
+// its hostname actually routes from the edge to the local listener
 // (edge registration plus, for a first-ever tunnel, CNAME propagation).
 // Attempts are spaced on this ladder (capped at the last rung) up to
 // the deadline below. The first attempt waits 5 s for CNAME
@@ -76,20 +76,15 @@ const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // and only times out. The wildcard is why that costs only the attempt:
 // without it the name would answer NXDOMAIN, which the OS resolver
 // caches for the zone's negative TTL (30 minutes on Cloudflare), during
-// which no probe from this machine could succeed. A child that merely
-// survives a spawn says nothing about routability, and a web client
-// whose ONLY candidate is the tunnel would burn its keeper's backoff
-// rungs against a not-yet-routable advertisement (a transient failure,
-// so it retries forever -- but each wasted rung pushes the next attempt
-// further out).
+// which no probe from this machine could succeed. A child that only
+// survived its spawn isn't routable yet, and a web client (tunnel only)
+// would spend keeper rungs on it.
 const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [5_000, 8_000];
-// The ladder for a tunnel the Worker REUSED, which is every launch
+// The ladder for a tunnel the Worker reused, which is every launch
 // after a device's first. Its hostname resolved before, so there is no
 // propagation to wait out: all a probe waits on is the connector
-// registering at the edge, a second or two.
-// Until it passes the device advertises no tunnel candidate, so on the
-// ladder above a web client (whose only candidate is the tunnel) could
-// not reach a freshly launched device for its first five seconds.
+// registering at the edge, a second or two. On the ladder above, a web
+// client would wait five seconds to reach every launch.
 const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
   1_000, 2_000, 4_000, 8_000,
 ];
@@ -111,9 +106,6 @@ const UNCONFIGURED_RETRY_MS = 5 * 60_000;
 // wedge the probe chain.
 const PROBE_ATTEMPT_TIMEOUT_MS = 5_000;
 
-// The child's argv and env. The connector token rides ONLY in
-// env.TUNNEL_TOKEN (cloudflared reads it there), never argv, so `ps`
-// output and spawn logging can never leak it.
 function cloudflaredArgs(): string[] {
   // --no-autoupdate: cloudflared otherwise checks for a newer release
   // and replaces its own binary, which would break the signature of
@@ -137,7 +129,7 @@ function cloudflaredEnv(connectorToken: string): Record<string, string> {
 // ---- binary discovery ----
 
 // `-x` semantics via the binary itself: asking cloudflared for its
-// version proves the path exists AND is executable in one probe, where
+// version proves the path exists and is executable in one probe, where
 // a bare stat would pass a stray non-executable. A path that exists
 // but will not run (a lost executable bit, Gatekeeper refusing an
 // unsigned copy, the wrong architecture) is the one case the user can
@@ -163,7 +155,7 @@ const runsAsCloudflared = (path: string) =>
 // key, see cloudflaredPath in packages/contracts/src/schemas/config.ts), then the copy
 // the app ships (the zero-install path, and the one a packaged build
 // normally takes), then PATH for a build that carries none. Null means
-// tunnels are off: the caller logs ONE clear line and reports the
+// tunnels are off: the caller logs one clear line and reports the
 // typed status, never an error loop.
 export const resolveCloudflaredBinary = Effect.fn("resolveCloudflaredBinary")(
   function* (
@@ -188,18 +180,7 @@ export const resolveCloudflaredBinary = Effect.fn("resolveCloudflaredBinary")(
 // ---- the supervised runner ----
 
 // The renderer-safe status snapshot: never the connector token.
-// Operator detail for a failure goes to the log, not here. The state
-// vocabulary is the wire's (HubStatusSchema.tunnel in
-// packages/contracts/src/modules/hub.ts), imported rather than redeclared so the
-// runner and the status surface cannot drift. off: not wanted
-// (listener down, opted out, signed out). no-binary: wanted, but no
-// usable cloudflared. unconfigured: the Worker has no tunnel env
-// (typed answer, asked again on UNCONFIGURED_RETRY_MS and at a wake).
-// starting:
-// provisioning, spawning, or probing readiness. up: the child is
-// probed-routable and the tunnel is advertised. error: the last
-// attempt failed, with either a backoff restart scheduled or (for a
-// denied provision) nothing until the next reconcile trigger.
+// Operator detail for a failure goes to the log, not here.
 type TunnelStatus = {
   state: TunnelState;
   hostname: string | null;
@@ -255,7 +236,7 @@ export class Tunnel extends Context.Service<
     // Reconciles the runner with the wanted state: null stops (sign-out,
     // account switch, directConnections off, listener down), a port
     // (re)provisions and (re)starts the child. Serialized, so an
-    // overlapping stop and start cannot interleave. Reconciling the SAME
+    // overlapping stop and start cannot interleave. Reconciling the same
     // port over a runner that is doing anything at all about it (child
     // up, retry scheduled) is a no-op, so an unrelated config write can
     // neither storm the Worker nor reset a failing runner's backoff.
@@ -339,10 +320,9 @@ const STOPPED_ROUTING = "stopped-routing";
 interface Memory {
   // The port the owner currently wants fronted, null when stopped.
   readonly wantedPort: number | null;
-  // The last successful provision, held in memory only (the token is a
-  // bearer secret: it goes into a child's env and never anywhere
-  // observable), so a crash restart re-spawns without a Worker round
-  // trip while the port is unchanged. Reuse requires the PREVIOUS
+  // The last successful provision, held in memory only, so a crash
+  // restart re-spawns without a Worker round trip while the port is
+  // unchanged. Reuse requires the previous
   // child to have reached probed readiness (`ready`): a child that died
   // without ever becoming routable may be holding a dead token, so its
   // successor re-provisions.
@@ -356,7 +336,7 @@ interface Memory {
   // The Worker answered "no tunnel env", and the runner waits to ask
   // again (UNCONFIGURED_RETRY_MS).
   readonly unconfigured: boolean;
-  // A provision was DENIED (4xx: revoked credential, older Worker
+  // A provision was denied (4xx: revoked credential, older Worker
   // deploy). Nothing retries it. The next reconcile trigger re-enters
   // instead, because only changed inputs (a re-sign-in, a redeploy) can
   // change the answer.
@@ -603,7 +583,6 @@ const make = (options: Options) =>
             const spawned = yield* spawner
               .spawn(
                 ChildProcess.make(binaryPath, cloudflaredArgs(), {
-                  // The token rides ONLY in env, never argv.
                   env: cloudflaredEnv(connectorToken),
                   extendEnv: true,
                   // Output is dropped: cloudflared logs verbosely, and
@@ -720,16 +699,8 @@ const make = (options: Options) =>
             if (wanted === null) return yield* stopNow;
             const current = yield* SubscriptionRef.get(status);
             const known = yield* Ref.get(memory);
-            // No-op whenever the port is unchanged and the runner is not
-            // "off": a live child and a scheduled retry are already the
-            // right response to this port, so an unrelated config write
-            // leaves a failing runner's ladder where it is. Three states
-            // do re-enter: "no-binary" (a config write may have just
-            // named a usable cloudflaredPath, and re-resolving is a probe
-            // with no Worker round trip and no ladder to disturb), a
-            // provision-denied park, whose ONLY recovery path is the next
-            // reconcile trigger, and an unconfigured answer, which a
-            // redeploy may have changed.
+            // No-op for the same port unless off, no-binary, denied or
+            // unconfigured (see reconcile).
             if (
               wanted.port === known.wantedPort &&
               current.state !== "off" &&

@@ -77,7 +77,7 @@ const TERMINATE_GRACE_MS = 1_500;
 // die without either end seeing a close, so the socket is watched as a
 // device link is (engine/liveness.ts, on link.ts's timings): the
 // hub's ping (HUB_PING, which the Durable Object answers without
-// waking) as the probe, and ANY inbound frame as its answer, a relay or
+// waking) as the probe, and any inbound frame as its answer, a relay or
 // presence proving the hub alive as well as a pong does. A probe (a
 // wake from sleep, a tab coming back) is a fresh ping at once. A hidden
 // tab's turns all come late, so it judges nothing until it comes back.
@@ -104,7 +104,7 @@ export type HubSocketAdapter = {
   // for orphan sockets and arms the post-close terminate grace only
   // when it exists. A browser socket has only close.
   terminate?(): void;
-  // Delivers each inbound TEXT message. The adapter drops binary
+  // Delivers each inbound text message. The adapter drops binary
   // frames: the protocol is JSON text, so they are not part of it.
   onMessage(handler: (text: string) => void): void;
   // Delivers the close code once the socket is gone. Platform error
@@ -157,7 +157,7 @@ export type HubConnection = {
   // Whether the roster is known at all: false while the hub socket is
   // down, when a missing key says nothing about the device.
   rosterKnown(): boolean;
-  // Ask the device hub to prove the socket is still there NOW, under
+  // Ask the device hub to prove the socket is still there now, under
   // the short probe window: fired on a wake from sleep or a tab coming
   // back. A socket that fails it is torn down and reported to the
   // supervisor exactly like a drop, so the redial starts in seconds
@@ -267,13 +267,10 @@ export const make = (
     }
 
     // One connect attempt: mint a fresh ticket, dial the DO, and treat
-    // the FIRST PRESENCE envelope as the accept signal (the DO sends it
+    // the first presence envelope as the accept signal (the DO sends it
     // right after accepting, and a rejected ticket never gets one, only
     // a close). The connection satisfies the supervisor's shape, with
-    // empty remote identity because the DO speaks no sm welcome. It has
-    // no byte channels and no sm transport of its own: the device hub
-    // carries JSON frames only (byte channels exist only on direct
-    // sockets), and the one peer question rides askConnectInfo. The
+    // empty remote identity because the DO speaks no sm welcome. The
     // socket lives as long as the attempt's scope, and an interrupt
     // (the supervisor stopping) cancels a mint or a half-open socket.
     const dial = (
@@ -292,7 +289,7 @@ export const make = (
           // until refresh restarts it on the next sign-in or sign-out)
           // instead of minting on the ladder forever. The message rides
           // along so the UI can name it. A mint refused because the
-          // credential was REVOKED (the device was removed from the
+          // credential was revoked (the device was removed from the
           // account while this socket was down, so it never saw the
           // revoked close) carries the revoked close code, so the
           // classifier blocks it as "revoked" and the app signs out
@@ -465,7 +462,7 @@ export const make = (
         );
 
         // A socket that stopped answering: torn down and reported to the
-        // supervisor like a drop, once, BEFORE the kill, so the
+        // supervisor like a drop, once, before the kill, so the
         // platform close it triggers stays silent however promptly it
         // lands. Closed without waiting on the platform's close
         // handshake, which against a dead peer can take a browser a

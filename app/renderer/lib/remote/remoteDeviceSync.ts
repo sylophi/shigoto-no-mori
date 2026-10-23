@@ -5,7 +5,7 @@
 // query moves in the cache (which is where account changes, this
 // window's own and everyone else's, land). There is no per-device
 // supervisor here: the one hub socket lives in the host, so a hub
-// device's status DERIVES from the bridge instead of being driven.
+// device's status derives from the bridge instead of being driven.
 //
 // Each peer's status is buildEntry's, one branch per case.
 import { departed } from "@shigomori/contracts/schemas/config";
@@ -40,24 +40,17 @@ import {
 } from "./devices";
 import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
 
-// The account device list lives in the shared react-query entry
-// (accountDevicesQueryOptions, whose comment says why there is one
-// copy). Reads here go through fetchQuery with staleTime Infinity, so
-// a reconcile reuses whatever the cache holds rather than hitting the
-// hub's HTTP endpoint on every presence and backoff transition. The
-// three facts that make the list wrong ask for a refetch instead: an
-// account change, a socket reconnect (which may follow an enroll or a
-// revoke that happened while the socket was down), and a roster naming
-// a device the list has never seen. A refetch's landing is what
-// reconciles (the cache subscription in startRemoteDeviceSync), so a
-// list change drives exactly one rebuild, and a refetch that fails
-// leaves the store as it was.
+// The device list is the shared query entry, read with staleTime
+// Infinity so a reconcile reuses the cache. An account change, a socket
+// reconnect and an unknown roster id ask for a refetch; its landing
+// reconciles (the cache subscription), and a failed one leaves the
+// store as it was.
 
-// The last phase the hub socket reported, kept so a transition INTO
+// The last phase the hub socket reported, kept so a transition into
 // connected can be spotted at all.
 let lastSocketPhase = "";
 
-// The last roster seen, so a device LEAVING it can be spotted: the
+// The last roster seen, so a device leaving it can be spotted: the
 // hub pushes no removal, and a peer that signed out or was revoked
 // looks exactly like one that went to sleep until the list is asked.
 let lastRoster: ReadonlySet<string> = new Set();
@@ -68,8 +61,8 @@ const deviceListHash = hashKey(queryKeys.accountDevices());
 
 // One api per hub deviceId, built on first reachable sighting and
 // kept: the transport forwards through the bridge, whose session for
-// that peer is supervised desired state (the host's keeper redials it
-// forever), so the api never goes stale the way a dead socket does.
+// that peer the host's keeper keeps, so the api never goes stale the
+// way a dead socket does.
 // Its pushes reach the cache from the same moment (watchPeer), until
 // the account is left (`unwatch`).
 const apis = new Map<string, { api: RemoteDeviceApi; unwatch: () => void }>();
@@ -114,7 +107,7 @@ function pageApi(): RendererApi {
 }
 
 // The devices whose direct session was live in the last snapshot seen,
-// so every snapshot can spot a session LANDING (a key newly present)
+// so every snapshot can spot a session landing (a key newly present)
 // and sweep that device's cache. Diffed on every snapshot at the
 // subscription itself, never inside the coalesced reconcile: a session
 // that dropped and redialed inside one reconcile drain would otherwise
@@ -251,17 +244,11 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
       ) ?? (await kept());
   }
   const knownIds = new Set(list.map((info) => info.deviceId));
-  // A presence roster naming a device the account list has never seen
-  // (a peer enrolled elsewhere) forces a refetch, or that device would
-  // stay invisible until a restart. Only a hub-driven pass asks
-  // (status came in), never the pass a refetch's own landing queues:
-  // a roster ghost the list will never explain would otherwise refetch
-  // forever, while this way it re-asks once per hub event.
-  // A device that left the roster may have left the account (a
-  // sign-out, a revoke on another device), which only the list can
-  // say, and which the host's own peer-side teardown (a mirror with that
-  // device) hangs off the list landing. One HTTP call per departure,
-  // like the unknown-online rule.
+  // A roster naming a device the list hasn't seen, or a device leaving
+  // the roster, asks for the list again: the hub pushes neither an
+  // enrollment nor a removal, and the host's teardown of a mirror with a
+  // departed device hangs off the list landing. Only a hub-driven pass
+  // asks, so a roster ghost re-asks once per hub event, not forever.
   let someoneLeft = false;
   if (phase === "connected") {
     for (const id of lastRoster) if (!online.has(id)) someoneLeft = true;
@@ -277,27 +264,15 @@ async function reconcileNow({ status, hubDriven }: Pass): Promise<void> {
   }
 }
 
-// Resync on every session LANDING. A device in phase "online" already
-// carries an api (see buildEntry), so its queries run and hard-reject
-// with "no direct connection". The keeper landing seconds later is
-// invisible to react-query, whose own failure budget is long spent.
-// And a session that dropped and came back (a sleep, a network change,
-// a heartbeat death) missed every push the host sent meanwhile, so its
-// cached view is stale in ways nothing else will ping. The status
-// snapshot IS the signal, and this module is its single reader, so the
-// refetch belongs here and NOWHERE else: a per-call-site retry would be
-// a second retry driver racing the keeper's ladder. Scoped to the
-// device that just landed, through invalidateDeviceSession and NOT the
-// externalChange sweep: a session coming up is not a "that host's
-// state moved" ping, and the sweep's exempt domains
-// (externalChangeExempt) fail like every other query of the device
-// while the keeper dials, so the sweep would refetch everything but
-// them.
+// Refetches a device's queries when its session lands: they rejected
+// while the keeper dialed, past react-query's retries, and a session
+// that dropped missed every push meanwhile. The snapshot is the one
+// signal, so this is the one retry driver. Scoped with
+// invalidateDeviceSession, not the externalChange sweep, whose exempt
+// domains failed too.
 //
-// A peer's sharing switch is another thing only the snapshot says. A
-// session whose peer isn't sharing is not a live one here: what the
-// peer shared is dropped from the cache as the switch goes off, and
-// it lands like a new session when the switch comes back on.
+// A peer that stops sharing is dropped from the cache, and lands like a
+// new session when it shares again.
 function noteSessions(status: HubStatus): void {
   const now = new Set(
     Object.keys(status.peerAppVersions).filter(
@@ -366,7 +341,7 @@ function leaveAccount(queryClient: QueryClient): void {
 
 // Pure and synchronous: the peer's appVersion and command access ride
 // the status snapshot (current.peerAppVersions, peerAcceptsCommands),
-// so an entry asks the peer nothing. A peerAppVersions key IS the
+// so an entry asks the peer nothing. A peerAppVersions key is the
 // established-direct-session fact, and its value is the session's
 // welcome-confirmed version.
 function buildEntry(
@@ -390,7 +365,7 @@ function buildEntry(
     status = { phase: "connected" };
     api = apiFor(info.deviceId);
   } else if (current.socket.phase === "blocked") {
-    // A blocked socket is a verdict on THIS device, not on the peers,
+    // A blocked socket is a verdict on this device, not on the peers,
     // which are as unknown as when the app is offline: off, the
     // least-lying reading for every surface at once.
     status = { phase: "stopped" };
@@ -475,21 +450,13 @@ async function drainReconciles(): Promise<void> {
   }
 }
 
-// The hub bridge's live status: its statusChanged pushes, seeded by a
-// fetch as the page boots (a push that raced the fetch is newer and
-// wins, and the stale seed must not roll the session diff back
-// either). Every snapshot reaches the sync here, in order, as it comes:
-// session landings are diffed on each one, ahead of the coalesced
-// reconcile that may skip intermediate snapshots (see liveSessions),
-// and a reader may only see the latest. Mounted by the sync for the
-// life of the page, so every reader (the tunnel marker on the devices
-// section, the web devices page's own-row status, the account sync's
-// sign-out trigger) reads the same value. Initial until the first
-// snapshot lands.
 // What a reconcile pass fetched, offered to the status while it has
 // none (hubStatusAtom), for as long as the atom runs.
 let seedFetched: ((status: HubStatus) => void) | null = null;
 
+// The hub bridge's status: its pushes, seeded by a fetch at boot that
+// any push beats. Each snapshot reaches noteSessions in order, ahead of
+// the coalesced reconcile that may skip some.
 export const hubStatusAtom = Atom.keepAlive(
   clientAtoms.atom(() => {
     let pushed = false;
@@ -545,14 +512,10 @@ export const hubStatusOf = (
   result: AsyncResult.AsyncResult<HubStatus, unknown>,
 ): HubStatus | null => (AsyncResult.isSuccess(result) ? result.value : null);
 
-// Boot wiring: follow the hub (hubStatusAtom, mounted here), the
-// account and the shared device-list cache for the life of the window.
-// The account subscription is never unsubscribed, on purpose; the
-// cache's ends with the page (`signal`), and the hub's with the page's
-// registry. The boot's query client
-// comes in rather than being reached for, because both boots
-// (renderer/boot.tsx, one for both shells) build their own, and so
-// does the push wiring each peer's api gets.
+// Boot wiring, for the life of the window: the hub (hubStatusAtom,
+// mounted here), the account and the shared device-list cache. The
+// query client comes in rather than being reached for, since each boot
+// builds its own.
 export function startRemoteDeviceSync(
   api: RendererApi,
   queryClient: QueryClient,
@@ -565,13 +528,9 @@ export function startRemoteDeviceSync(
   boundRegistry = atoms;
   watchPeer = watch;
   // This process's own enroll, sign-out, rename or revoke. A change of
-  // ACCOUNT (a sign-out, a sign-in under another account) also drops
-  // everything built under the old one, before the refetch, so what
-  // the new account's list lands on is empty rather than the old
-  // account's devices: the cached device list (which the reconcile
-  // falls back to when a refetch fails), the per-device apis and
-  // caches, and the followers' per-device state. A rename keeps it
-  // all: same account, same peers.
+  // account first drops everything built under the old one
+  // (leaveAccount), so the new account's list lands on empty, not on
+  // the old account's devices.
   // Unknown until the seed lands. A change to signed out is a
   // departure whatever came before, and the seed never overwrites a
   // change that beat it (null is a known value here).
@@ -591,11 +550,8 @@ export function startRemoteDeviceSync(
     }
   });
   // Every list change reconciles from here, this module's own refetches
-  // included, alongside everyone else's landing in the shared cache (a
-  // window focus, the account page mounting, an invalidation from
-  // anywhere). Rebuilding off the cache is the only way a peer's rename
-  // or its removal from the account reaches this store at all: the hub
-  // pushes neither, so nothing on the wire will ever say so.
+  // included. It's the only way a peer's rename or its removal reaches
+  // this store: the hub pushes neither.
   const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || event.action.type !== "success") return;
     if (event.query.queryHash !== deviceListHash) return;
