@@ -15,7 +15,7 @@ testRule("no-wall-clock", rule, {
       filename: "/repo/packages/engine/src/Registry.test.ts",
     },
     { code: "Date.now();", filename: "/repo/packages/engine/test/sandbox.ts" },
-    { code: "Date.now();", filename: "/repo/app/lab/walks/run.ts" },
+    { code: "Date.now();", filename: "/repo/app/lab/reliability/run.mts" },
     { code: "Date.now();", filename: "/repo/packages/cli/test/cli.test.ts" },
   ],
   invalid: [

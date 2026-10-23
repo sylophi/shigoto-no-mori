@@ -13,8 +13,6 @@
 //     and the quit goes ahead, words that change ask again in the new
 //     ones, one idle re-read or one the host doesn't answer leaves it
 //     up, and the person's own answer stands.
-// The update-button walk drives the same on the packaged app: a job in
-// a terminal, Restart to update, and the busy dialog.
 //
 // Run: pnpm test busy-asks.
 import assert from "node:assert/strict";

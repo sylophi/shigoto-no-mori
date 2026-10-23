@@ -35,9 +35,6 @@
       ],
     },
     "hub": {
-      // The lab's worker, which the cross-device walks run
-      // (app/lab/walks/lib/labHub.mts).
-      "entry": ["src/lab.ts"],
       "ignoreDependencies": [
         // cloudflare:test and cloudflare:workers are workerd's built-in
         // modules, provided by @cloudflare/vitest-pool-workers.

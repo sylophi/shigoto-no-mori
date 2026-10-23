@@ -10,7 +10,6 @@ import {
   profileFromEnv,
 } from "@shared/packaging/appName.mts";
 import { envSetting } from "@shared/config";
-import { names } from "../flavor";
 
 let profile: string | null = null;
 
@@ -20,10 +19,9 @@ let profile: string | null = null;
 // at boot rather than discovered on the account page. A refused
 // profile leaves the readers seeing no profile at all.
 export function initDevProfile(): string | null {
-  const name = profileFromEnv(
-    { packaged: app.isPackaged, debuggable: names.debuggable },
-    { [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV) },
-  );
+  const name = profileFromEnv(app.isPackaged, {
+    [DEV_PROFILE_ENV]: envSetting(DEV_PROFILE_ENV),
+  });
   if (name !== null && envSetting("SHIGOMORI_DATA_DIR") === undefined) {
     throw new Error(
       `${DEV_PROFILE_ENV} needs SHIGOMORI_DATA_DIR set to the profile's own ` +
