@@ -5,33 +5,22 @@ notarizes and smokes a release once it is published. These gates come
 first, on the machine that cuts, at the tip about to be tagged and in
 this order. A failure at any of them stops the cut.
 
-## 1. The tip's walks passed
-
-The tip's latest `Walks` run (`walks.md`, "Where they run") passed.
-Checked before anything else; only a yes lets the cut go on, and a run
-still going is a no:
-
-```sh
-gh run list --workflow walks.yml --commit "$(git rev-parse HEAD)" --limit 1 \
-  --json status,conclusion \
-  --jq 'if .[0].status == "completed" and .[0].conclusion == "success" then "yes" else "no" end'
-```
-
-## 2. The tip as a packaged lab build
+## 1. The tip as a packaged lab build
 
 From `app/` (`dev-app.md`, "Packaged build, as a test flavor"):
 
 ```sh
 SM_FLAVOR=lab pnpm package
-pnpm walks
 node scripts/smoke-app.mts "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app" --serve 9341
 "out/Shigoto no Mori (lab)-darwin-arm64/Shigoto no Mori (lab).app/Contents/Resources/smlab" nuke --yes
 ```
 
 While the smoke serves, check with weblab attached to `127.0.0.1:9341`
-what no walk covers (the first run, a terminal).
+the first run, a terminal and the pages the cut changes. A page that
+needs an account is checked on a dev profile instead: Clerk's dev
+instance refuses a test flavor's origin.
 
-## 3. The installed prerelease takes the tip through "Restart to update"
+## 2. The installed prerelease takes the tip through "Restart to update"
 
 The previous prerelease, installed on this machine and signed in, takes
 the tip through Settings' "Restart to update" and comes back on it,

@@ -1,6 +1,6 @@
 // The one owner of every test run's temp files. Each runner here (the
-// app's proof runner and vitest configs, the packages', the walks', the
-// smoke, the scene comparison, the Go tests and the hub's suite through
+// app's proof runner and vitest configs, the packages', the smoke, the
+// scene comparison, the Go tests and the hub's suite through
 // `node testTemp.mts`) takes a run folder,
 // `<temp>/sm-test/<family>/<id>/`, and points TMPDIR and
 // XDG_CONFIG_HOME at it before any test starts, so whatever a test, the

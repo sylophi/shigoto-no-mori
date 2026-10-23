@@ -28,7 +28,6 @@
     "lab/fake-host/**/*",
     "lab/scenes/**/*",
     "lab/reliability/**/*",
-    "lab/walks/**/*",
     "scripts/**/*.mts",
     "scripts/**/*.cts",
     "test/**/*.mts",

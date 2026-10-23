@@ -61,8 +61,8 @@ type ParentPort = {
 // shell's is: a host that runs for weeks writes a line every few
 // seconds while nothing happens. Written as each span ends, so a
 // rotation has nothing still on its way to the file it moves. A test
-// flavor's is kept whole: it is thrown away, and a failed walk needs
-// every minute of its run.
+// flavor's is kept whole: it is thrown away, and a failed lab run needs
+// every minute of it.
 function traceFile(logsPath: string, rotates: boolean): (line: string) => void {
   const path = join(logsPath, "host-trace.log");
   const open = (flags: "a" | "w") => {

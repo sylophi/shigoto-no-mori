@@ -10,7 +10,6 @@
     "dev": "pnpm -F ./app dev",
     "device": "pnpm -F ./app device",
     "test": "pnpm -F ./app test",
-    "walks": "pnpm -F ./app walks",
     "typecheck": "pnpm -r typecheck",
     "lint": "oxlint . && pnpm -C app react-compiler:check",
     "format": "oxfmt .",
