@@ -31,10 +31,11 @@ const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
 // wraps them: its remote endpoint client's requests and responses
 // ("beta polling error: unable to receive poll response: … EOF"), and
 // the file copy's own encoding over the stream, for a cut mid-copy.
-// This side's own failures carry none of them. A peer whose serve ends
-// mid-copy (it quit or died) reads as a cut too: Mutagen carries no
-// cause across it. Its disk full doesn't end it: the file is skipped
-// and comes back as a transition problem.
+// This side's own failures carry none of them, but for its message
+// codec's below. A peer whose serve ends (it quit or died, or turned
+// away a request past its size cap, a huge tree's) reads as a cut too:
+// Mutagen carries no cause across it. Its disk full doesn't end it:
+// the file is skipped and comes back as a transition problem.
 const LINK_WORDS = [
   "unable to send ",
   "unable to receive ",
@@ -43,8 +44,8 @@ const LINK_WORDS = [
   "unable to flush encoded messages",
 ];
 // The message codec's own failures under those words, which aren't a
-// cut: a snapshot past its size cap (a huge tree), or a message that
-// can't be encoded or read.
+// cut: a message coming in past its size cap (a huge tree's snapshot),
+// or one that can't be marshaled or parsed.
 const CODEC_WORDS = [
   "message size too large",
   "unable to marshal message",
