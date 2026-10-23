@@ -53,7 +53,10 @@
 //   - a device leaving its account ends its sessions within the
 //     sweep's bound: a terminate the daemon never answers is given up
 //     at 5 s, and an answer that comes later notes nothing on the
-//     thread, since the sweep did not go on running.
+//     thread, since the sweep did not go on running,
+//   - a moved original's re-open at a start waits, its session paused,
+//     for the peer to take this device's calls, and a worktree made at
+//     the old folder meanwhile ends the mirror, its copy kept.
 //
 // Run: pnpm test mirror-engine.
 import assert from "node:assert/strict";
@@ -1170,4 +1173,147 @@ it("a worktree made where a moved one was ends its mirror when it goes, never re
     "the mirror of the worktree gone to end",
   );
   assert.deepEqual(requests(), ["terminate s1"]);
+});
+
+// A mirror into B of a worktree moved while the app was closed (the
+// store records the move), as the daemon's first snapshot finds it
+// with B not reached yet: the session's root gone and the session
+// trying to connect. The bookkeeping has looked and paused it. `reach`
+// brings B in. The session's id is the check's own: the bookkeeping's
+// marks (registry.ts) outlive a check.
+async function movedOriginalWithPeerAway(id: string) {
+  scrubProcessGitEnv();
+  const git = sandboxGit();
+  const admissions = Effect.runSync(PubSub.unbounded<string>());
+  const asked: string[] = [];
+  let reached = false;
+  standInPeers({
+    transportFor: () => ({
+      invoke: () => Promise.reject(new Error("not in this check")),
+      subscribe: () => () => {},
+    }),
+    channelsFor: () => () => Promise.reject(new Error("not in this check")),
+    admissions: Stream.fromPubSub(admissions),
+    admits: (deviceId: string) => {
+      asked.push(deviceId);
+      return reached && deviceId === "B";
+    },
+  });
+  // The engine opens a session only against both sides, so a create
+  // fails while the peer is out of reach.
+  const mirror = await harness((request) =>
+    request.op !== "create"
+      ? { ok: true }
+      : reached
+        ? { ok: true, session: "reopened" }
+        : {
+            ok: false,
+            error: "unable to connect to beta: no direct connection to B",
+          },
+  );
+  const base = tempDir("sm-mirror-late-peer-", trackTest);
+  const repo = join(base, "repo");
+  git(base, "init", "-q", "-b", "main", repo);
+  writeFileSync(join(repo, "a.txt"), "a\n");
+  git(repo, "add", ".");
+  git(repo, "commit", "-q", "-m", "a");
+  // The original, moved while the app was closed: the store records it.
+  const { project, original, moved } = await Effect.runPromiseWith(
+    await hostContext(),
+  )(
+    Effect.gen(function* () {
+      const registered = yield* (yield* Registry.Registry).register({
+        name: "repo",
+        path: repo,
+      });
+      const worktrees = yield* Worktrees.Worktrees;
+      const created = yield* worktrees.create(
+        registered,
+        { name: "otter", branch: "otter", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      );
+      const row = (yield* worktrees.identities(registered)).find(
+        (worktree) => worktree.id === created.worktree.id,
+      );
+      assert.ok(row !== undefined);
+      const done = yield* worktrees.move(
+        { project: registered, worktree: row },
+        join(base, "elsewhere", "lynx"),
+      );
+      return { project: registered, original: row, moved: done.worktree };
+    }),
+  );
+  const raw = (paused: boolean) =>
+    rawMirrorSession({
+      session: id,
+      localRoot: original.path,
+      localWorktreeId: original.id,
+      deviceId: "B",
+      status: "connecting-remote",
+      paused,
+      labels: { [MIRROR_LABEL_MODE]: "mirror" },
+    });
+  await mirror.state([raw(false)]);
+  await waitFor(
+    () => asked.includes("B") && mirror.requests().includes(`pause ${id}`),
+    "the re-open to wait on the peer, its session paused",
+  );
+  // The daemon's next snapshot, which says so.
+  await mirror.state([raw(true)]);
+  return {
+    ...mirror,
+    project,
+    original,
+    moved,
+    reach: () => {
+      reached = true;
+      PubSub.publishUnsafe(admissions, "B");
+    },
+  };
+}
+
+it("a moved original keeps its mirror across a start with the peer reached late: the re-open waits, its session paused, for the peer to take this device's calls", async () => {
+  const { requests, reach, history, moved } =
+    await movedOriginalWithPeerAway("late");
+  assert.deepEqual(requests(), ["pause late"]);
+  reach();
+  await waitFor(
+    () => requests().includes("terminate late"),
+    "the mirror to re-open on the moved original",
+  );
+  // Never resumed on the old folder: the re-open pauses it again, and
+  // ends it once the new session is up.
+  assert.deepEqual(requests(), [
+    "pause late",
+    "pause late",
+    "create",
+    "terminate late",
+  ]);
+  const kinds = history(moved.id).map((event) => event.kind);
+  assert.ok(kinds.includes("resumed"), `the thread says ${kinds.join(", ")}`);
+  assert.ok(!kinds.includes("stopped"), `the thread says ${kinds.join(", ")}`);
+});
+
+it("a moved original's mirror waiting on its peer ends, its copy kept, when a worktree is made at the old folder, never mirroring that one", async () => {
+  const { requests, history, project, original, moved } =
+    await movedOriginalWithPeerAway("taken");
+  const made = await Effect.runPromiseWith(await hostContext())(
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.create(
+        project,
+        { name: "otter", branch: "fox", skipSetup: true },
+        { report: () => Effect.void, color: false },
+      ),
+    ),
+  );
+  // The old folder's id, as ids are path derived.
+  assert.equal(made.worktree.id, original.id);
+  await waitFor(
+    () => requests().includes("terminate taken"),
+    "the waiting mirror to end",
+  );
+  assert.deepEqual(requests(), ["pause taken", "terminate taken"]);
+  const stopped = history(moved.id).find((event) => event.kind === "stopped");
+  assert.match(stopped?.detail ?? "", /took its old folder/);
+  assert.ok(!history(original.id).some((event) => event.kind === "stopped"));
 });

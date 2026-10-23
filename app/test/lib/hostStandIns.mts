@@ -65,6 +65,7 @@ const standIns = Layer.mergeAll(
         peers.onPush(contract, key, id, handler),
       channels: (id) => peers.channels(id),
       admissions: Stream.suspend(() => peers.admissions),
+      admits: (id) => peers.admits(id),
     }),
   ),
   Layer.succeed(

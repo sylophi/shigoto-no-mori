@@ -103,7 +103,8 @@ const make = (options: {
     // kept under the old id: those made while the app was closed as it
     // comes up, and each one after as the store records it. The sessions
     // follow at the daemon's next snapshot, which finds their root gone
-    // and the move recorded (settleMirrorBookkeeping).
+    // and the move recorded, once their peer takes this device's calls
+    // (settleMirrorBookkeeping).
     const folder = yield* WtFolder.WtFolder;
     const carried = new Map<string, string>();
     const carryRekeys = Effect.gen(function* () {
@@ -317,14 +318,17 @@ const make = (options: {
     });
 
     // A peer coming to take this device's calls (its link up, both of
-    // its switches on): git looks again, and the sessions into it that
-    // wait on the link, that nobody paused and that no re-open holds
-    // reconnect at once, not at the engine's next retry. Side by side,
-    // each admission on its own: a resume waits on its reconnect, and
-    // one asked off a snapshot older than a pause would undo the pause.
+    // its switches on): git looks again, the bookkeeping re-opens what
+    // waited on the peer (a moved original's sessions, registry.ts
+    // settleMirrorBookkeeping), and the sessions into it that wait on the
+    // link, that nobody paused and that no re-open holds reconnect at
+    // once, not at the engine's next retry. Side by side, each admission
+    // on its own: a resume waits on its reconnect, and one asked off a
+    // snapshot older than a pause would undo the pause.
     const admit = (deviceId: string) =>
       Effect.gen(function* () {
         follower.onPeerAdmitted(deviceId);
+        runFork(Effect.ignore(withEngine(settleMirrorBookkeeping)));
         const waiting = (yield* daemon.sessions).filter(
           (raw) =>
             raw.deviceId === deviceId &&
@@ -373,6 +377,20 @@ const make = (options: {
               `[mirror] a daemon change went unread: ${errorWordsOf(defect)}`,
             ),
           ),
+        ),
+      ),
+      Effect.forkScoped,
+    );
+
+    // Every move the store records or forgets: a session waiting on its
+    // peer to re-open on a moved original is paused, so no snapshot
+    // comes for it, and a worktree made at its old folder meanwhile ends
+    // it (registry.ts settleMirrorBookkeeping).
+    yield* (yield* (yield* StoreChanges.StoreChanges).subscribe).pipe(
+      Stream.filter((tables) => tables.has("wt_moves")),
+      Stream.runForEach(() =>
+        Effect.sync(() =>
+          runFork(Effect.ignore(withEngine(settleMirrorBookkeeping))),
         ),
       ),
       Effect.forkScoped,
