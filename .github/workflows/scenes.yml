@@ -9,7 +9,7 @@ on:
       base:
         description: The ref to compare against
         required: true
-        default: origin/release/v3
+        default: origin/main
 
 permissions:
   contents: read

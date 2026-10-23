@@ -42,10 +42,8 @@ checks, [`hub/README.md`](hub/README.md) the device hub,
 [`marketing/README.md`](marketing/README.md) the site,
 [`lint/README.md`](lint/README.md) the repo's lint rules, and each
 package under `packages/` has a README of its own.
-
-While the `release/v3` branch lives, [`V3.md`](V3.md) is its charter and
-checklist and [`EFFECT.md`](EFFECT.md) the conventions every Effect
-change follows.
+[`EFFECT.md`](EFFECT.md) holds the conventions every Effect change
+follows.
 
 ## Agent skills
 

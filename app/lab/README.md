@@ -22,6 +22,7 @@ Commands and paths are relative to `app/`. The repo root's
 | [`dev-app.md`](dev-app.md) | Look up how the dev app is built, where it keeps its state, and how dev profiles work |
 | [`relaunch.mts`](relaunch.mts) | Prove a packaged build's relaunch (a data-folder move, a nuke) leaves a live window: `node lab/relaunch.mts "<path to the .app>"` on a build from `SM_FLAVOR=lab pnpm package`, which shares nothing with the installed app, then that build's `smlab nuke --yes --keep-app` (`dev-app.md`, "Packaged build, as a test flavor"). It reads the window through macOS accessibility, which the terminal running it must be allowed |
 | [`release.md`](release.md) | Cut a prerelease: the gates the tip passes before its tag (a packaged lab build, the installed prerelease taking it through "Restart to update") |
+| [`cutover.md`](cutover.md) | Release 3.0 to production (the hub, the web client and every app move together), and go back to 2.x from a backup |
 | [`weblab.md`](weblab.md) | Know what weblab can do (read, click, ask, capture, film) and how it starts and stops things here |
 
 ## Sharing the machine
