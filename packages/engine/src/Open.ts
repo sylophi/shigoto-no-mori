@@ -7,6 +7,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -174,6 +175,20 @@ const matching = (
   );
 };
 
+// The worktree's terminal in the app, where a terminal tool's command
+// line runs when the `terminal` setting is "app". The app's host
+// provides it around its own opens. Without it (the CLI), Terminal
+// opens instead.
+export class AppTerminal extends Context.Service<
+  AppTerminal,
+  {
+    readonly run: (
+      located: Worktrees.Located,
+      command: string,
+    ) => Effect.Effect<void, Error>;
+  }
+>()("sm/engine/AppTerminal") {}
+
 export class Open extends Context.Service<
   Open,
   {
@@ -182,9 +197,10 @@ export class Open extends Context.Service<
       located: Worktrees.Located,
       tool: string,
     ) => Effect.Effect<Launchers.Launchable, UnknownLauncher | LaunchFailed>;
-    // Runs a command line in the user's chosen terminal, in a folder.
+    // Runs a command line in the user's chosen terminal, in a folder or
+    // a worktree (which the app's own terminal can take).
     readonly inTerminal: (
-      folder: string,
+      where: string | Worktrees.Located,
       command: string,
     ) => Effect.Effect<void, LaunchFailed>;
     // Opens a worktree's file, absolute or relative to its root, in the
@@ -233,18 +249,36 @@ const make = Effect.gen(function* () {
           ),
     );
 
-  // A terminal tool's command line, run in the user's chosen terminal
-  // (Terminal when that one isn't installed or has no script).
-  // `entries` are the launchers already read, which say whether the
-  // chosen terminal is installed. Without them it is looked up.
+  // A terminal tool's command line, run in a folder or a worktree in
+  // the user's chosen terminal: a worktree's in the app when that is
+  // chosen and the app is the one opening, else the chosen terminal app
+  // (Terminal when that one isn't installed, or the app's own can't
+  // take it). `entries` are the launchers already read, which say
+  // whether the chosen terminal is installed. Without them it is
+  // looked up.
   const inTerminal = (
     label: string,
     command: string,
-    folder: string,
+    where: string | Worktrees.Located,
     entries?: ReadonlyArray<Launchers.Launchable>,
   ) =>
     Effect.gen(function* () {
       const chosen = yield* config.device("terminal");
+      const appTerminal = yield* Effect.serviceOption(AppTerminal);
+      if (
+        chosen === "app" &&
+        typeof where !== "string" &&
+        Option.isSome(appTerminal)
+      ) {
+        return yield* appTerminal.value
+          .run(where, command)
+          .pipe(
+            Effect.mapError(
+              (error) => new LaunchFailed({ label, said: error.message }),
+            ),
+          );
+      }
+      const folder = typeof where === "string" ? where : where.worktree.path;
       const installed =
         TERMINAL_SCRIPTS[chosen] === undefined
           ? undefined
@@ -327,7 +361,7 @@ const make = Effect.gen(function* () {
             return yield* inTerminal(
               entry.label,
               app.inTerminal,
-              where,
+              located,
               entries,
             );
           }
@@ -388,10 +422,10 @@ const make = Effect.gen(function* () {
   });
 
   const inTerminalAt = Effect.fn("Open.inTerminal")(function* (
-    folder: string,
+    where: string | Worktrees.Located,
     command: string,
   ) {
-    yield* inTerminal("the terminal", command, folder);
+    yield* inTerminal("the terminal", command, where);
   });
 
   // An executable's default app runs it, and a file no app claims (a
@@ -440,7 +474,7 @@ const make = Effect.gen(function* () {
     const { app } = entry;
     if (app.inTerminal !== undefined) {
       const program = app.inTerminal.trim().split(/\s+/)[0] ?? "";
-      yield* inTerminal(label, `${program} ${shellQuote(absolute)}`, where);
+      yield* inTerminal(label, `${program} ${shellQuote(absolute)}`, located);
       return absolute;
     }
     // The worktree goes along, so the file opens in the window that has

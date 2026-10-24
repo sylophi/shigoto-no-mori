@@ -819,14 +819,16 @@
       "projectId": "😀",
       "worktreeId": "\ud800",
       "launcherId": "-1"
-    }
+    },
+    "success": {}
   },
   "launchers:openFile": {
     "payload": {
       "projectId": "zH",
       "worktreeId": " ",
       "path": "x"
-    }
+    },
+    "success": {}
   },
   "link:end": {
     "payload": {
@@ -4019,6 +4021,9 @@
       "worktreeId": "53",
       "harness": "zG",
       "session": "V~"
+    },
+    "success": {
+      "terminalId": " "
     }
   },
   "worktrees:revertCommit": {

@@ -134,6 +134,13 @@ import {
 } from "@shigomori/ui/fixtures/settingsFixtures.ts";
 import { villagerHandlersFor } from "./villagerData";
 
+// The launch row's tools that run in a terminal.
+const FAKE_TERMINAL_TOOLS: ReadonlySet<string> = new Set([
+  "app:claude-code",
+  "app:neovim",
+  "app:lazygit",
+]);
+
 // A worktree id the contracts accept (12 hex), the same for the same
 // seed: FNV-1a over it, twice with different offsets for 48 bits.
 function worktreeIdOf(seed: string): string {
@@ -430,6 +437,15 @@ function hostHandlersFor(
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const changes = createFakeChanges(findWorktree);
+  // One more posed terminal in the worktree.
+  const openFakeTerminal = (projectId: string, worktreeId: string) => {
+    const terminalId = `t-${Date.now().toString(36)}`;
+    fakeOpenTerminals[forest.deviceId] = [
+      ...(fakeOpenTerminals[forest.deviceId] ?? []),
+      { terminalId, projectId, worktreeId, openedAt: Date.now() },
+    ];
+    return terminalId;
+  };
   const syncAfter = async (
     worktreeId: string,
     move: (worktree: FakeWorktree) => void,
@@ -631,7 +647,9 @@ function hostHandlersFor(
         worktree.agentSessions?.some((s) => s.state === "working") ?? false;
       return worktree;
     },
-    "worktrees:resumeAgent": () => undefined,
+    "worktrees:resumeAgent": ({ projectId, worktreeId }) => ({
+      terminalId: openFakeTerminal(projectId, worktreeId),
+    }),
     // An open PR takes the edit instead, as `sm describe` gives it.
     "worktrees:describe": ({ worktreeId, title, description }) => {
       const worktree = findWorktree(worktreeId);
@@ -867,7 +885,13 @@ function hostHandlersFor(
       }, 2_500);
     },
     "launchers:detect": () => [...FAKE_DETECTED],
-    "launchers:openFile": () => undefined,
+    // A terminal tool runs in a posed terminal, as the terminal
+    // setting's default has it.
+    "launchers:launch": ({ projectId, worktreeId, launcherId }) =>
+      FAKE_TERMINAL_TOOLS.has(launcherId)
+        ? { terminalId: openFakeTerminal(projectId, worktreeId) }
+        : {},
+    "launchers:openFile": () => ({}),
     "launchers:forProject": () => ({
       entries: [...FAKE_LAUNCHERS],
       hiddenCount: 0,
@@ -1073,14 +1097,9 @@ function hostHandlersFor(
       seq: 0,
       reset: true,
     }),
-    "terminals:open": ({ projectId, worktreeId }) => {
-      const terminalId = `t-${Date.now().toString(36)}`;
-      fakeOpenTerminals[forest.deviceId] = [
-        ...(fakeOpenTerminals[forest.deviceId] ?? []),
-        { terminalId, projectId, worktreeId, openedAt: Date.now() },
-      ];
-      return { terminalId };
-    },
+    "terminals:open": ({ projectId, worktreeId }) => ({
+      terminalId: openFakeTerminal(projectId, worktreeId),
+    }),
     "terminals:close": ({ terminalId }) => {
       fakeOpenTerminals[forest.deviceId] = (
         fakeOpenTerminals[forest.deviceId] ?? []

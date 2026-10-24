@@ -56,6 +56,13 @@ const mintHex = (words: number) =>
 // The worktree a terminal belongs to.
 type Owner = Pick<Terminal, "projectId" | "worktreeId">;
 
+// A terminal to open: its worktree, the grid the opener has room for,
+// and a command line typed into its shell (a launched terminal tool).
+type OpenInput = Owner & {
+  readonly size?: Size | undefined;
+  readonly command?: string;
+};
+
 // Where a terminal's shell starts (its worktree's folder) and what it is
 // given.
 export type Start = {
@@ -212,7 +219,7 @@ export class Terminals extends Context.Service<
     // close.
     readonly list: Stream.Stream<ReadonlyArray<Terminal>>;
     readonly open: (
-      input: Owner & { readonly size?: Size | undefined },
+      input: OpenInput,
     ) => Effect.Effect<
       Terminal,
       PtySpawnError | UnknownProjectError | UnknownWorktreeError
@@ -541,9 +548,7 @@ const make = <R, E>(options: {
 
     const mintId = mintHex(2);
 
-    const open = Effect.fn("Terminals.open")(function* (
-      input: Owner & { readonly size?: Size | undefined },
-    ) {
+    const open = Effect.fn("Terminals.open")(function* (input: OpenInput) {
       const start = yield* startOf(input);
       const terminal: Terminal = {
         terminalId: yield* mintId,
@@ -553,6 +558,9 @@ const make = <R, E>(options: {
       };
       yield* Effect.annotateCurrentSpan({ terminalId: terminal.terminalId });
       const session = yield* begin(terminal, start, input.size ?? DEFAULT_SIZE);
+      // Typed before the shell is up, as a terminal app's launch is: the
+      // shell reads it as its first line, and stays after it exits.
+      if (input.command !== undefined) session.pty.write(`${input.command}\r`);
       return session.terminal;
     });
 

@@ -4,7 +4,7 @@ import {
   DEVICE_SETTINGS_DEFAULTS as DEFAULTS,
   type GlobalConfig,
   type LauncherCommand,
-  type TerminalId,
+  type TerminalChoice,
   type Theme,
   type ThemeRotation,
 } from "@shigomori/contracts/schemas";
@@ -47,7 +47,7 @@ interface DeviceFormState {
   launchers: readonly LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
-  terminal: TerminalId;
+  terminal: TerminalChoice;
   // Null opens a file with its default app.
   editor: string | null;
   deleteBranchOnRemove: boolean;

@@ -1,9 +1,11 @@
 import { useMutation, useQuery, skipToken } from "@tanstack/react-query";
 import type {
   DetectedLauncher,
+  Launched,
   LauncherEntry,
 } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 
 export function useDetectedLaunchers() {
   const { api, keys } = useHostScope();
@@ -53,11 +55,29 @@ interface LaunchInput {
   launcherId: string;
 }
 
+// Shows the terminal in the app an open ran its tool in, if it did.
+export function useShowAppTerminal() {
+  const { deviceId } = useHostScope();
+  const { toTerminalOn } = useWorktreeNav();
+  return (
+    { projectId, worktreeId }: { projectId: string; worktreeId: string },
+    { terminalId }: Launched,
+  ) => {
+    if (terminalId !== undefined) {
+      toTerminalOn(deviceId, projectId, worktreeId, terminalId);
+    }
+  };
+}
+
 export function useLaunch() {
   const { api } = useHostScope();
+  const show = useShowAppTerminal();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: useLauncherForProject holds its order for minutes so the visible list doesn't reshuffle mid-interaction when bumpUseCount fires
   return useMutation<void, Error, LaunchInput>({
-    mutationFn: (input) => api.run(api.launchers.launch(input)),
+    mutationFn: (input) =>
+      api
+        .run(api.launchers.launch(input))
+        .then((launched) => show(input, launched)),
     meta: { errorTitle: "Couldn't launch" },
   });
 }
@@ -70,15 +90,13 @@ export function useOpenInEditor(worktree: {
   id: string;
 }): ((path: string) => void) | undefined {
   const { api, remote } = useHostScope();
+  const show = useShowAppTerminal();
+  const owner = { projectId: worktree.projectId, worktreeId: worktree.id };
   const { mutate } = useMutation<void, Error, string>({
     mutationFn: (path) =>
-      api.run(
-        api.launchers.openFile({
-          projectId: worktree.projectId,
-          worktreeId: worktree.id,
-          path,
-        }),
-      ),
+      api
+        .run(api.launchers.openFile({ ...owner, path }))
+        .then((launched) => show(owner, launched)),
     meta: { errorTitle: "Couldn't open the file" },
   });
   return remote ? undefined : mutate;

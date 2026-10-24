@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import type * as Engine from "@host/lib/Engine";
 import * as Ops from "@host/lib/engineOps";
 import { findProject } from "@host/lib/projects";
+import { inAppTerminal } from "@host/lib/terminals/inAppTerminal";
+import type { Terminals } from "@host/lib/terminals/Terminals";
 
 // The launcher row is the engine's: the tool catalog, what is installed,
 // the GitHub entry, custom commands, the hidden filter and the
@@ -26,14 +28,22 @@ export const launchersHandlers = {
   // id, so an in-flight deep link or a stale menu accelerator keeps
   // working.
   launch: ({ projectId, worktreeId, launcherId }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.openLauncher(project, worktreeId, launcherId),
+    inAppTerminal(
+      Effect.flatMap(findProject(projectId), (project) =>
+        Ops.openLauncher(project, worktreeId, launcherId),
+      ),
     ),
 
   // `sm worktrees edit`'s Open.edit: the editor setting, or the file's
   // default app.
   openFile: ({ projectId, worktreeId, path }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.openFile(project, worktreeId, path),
+    inAppTerminal(
+      Effect.flatMap(findProject(projectId), (project) =>
+        Ops.openFile(project, worktreeId, path),
+      ),
     ),
-} satisfies EffectHandlers<typeof launchersContract, unknown, Engine.Services>;
+} satisfies EffectHandlers<
+  typeof launchersContract,
+  unknown,
+  Engine.Services | Terminals
+>;

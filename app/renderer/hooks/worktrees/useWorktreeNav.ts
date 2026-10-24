@@ -23,7 +23,9 @@ import {
   openScriptTab,
   openTerminalTab,
 } from "@/store/terminalDrawer";
+import { terminalsAtom } from "@/hooks/terminals/useTerminals";
 import { useApi } from "@/lib/runtime/pageApi";
+import { useRegistry, whenViewShows } from "@/lib/runtime/viewHooks";
 
 // The worktree pages' params, read non-strictly because the pages
 // share them across five routes (the router can only type params
@@ -54,6 +56,7 @@ export function useWorktreeNav() {
   const matchRoute = useMatchRoute();
   const { deviceId } = useHostScope();
   const localDeviceId = useApi().deviceId;
+  const registry = useRegistry();
 
   // `on` names the device whose page to open. The router can only
   // check params against ONE literal `to`, and this one is a union of
@@ -202,16 +205,22 @@ export function useWorktreeNav() {
       });
     },
 
-    // A terminal, on a NAMED device (the Live page): its worktree's
-    // page, with the drawer open on its tab.
+    // A terminal, on a NAMED device (the Live page, a launch): its
+    // worktree's page, with the drawer open on its tab. Once the
+    // device's list has it, as a drawer opening on a worktree with none
+    // opens a shell of its own.
     toTerminalOn(
       on: string,
       projectId: string,
       worktreeId: string,
       terminalId: string,
     ) {
-      openTerminalTab(drawerKey(on, projectId, worktreeId), terminalId);
-      goOn(on, "detail", { projectId, worktreeId });
+      void whenViewShows(registry, terminalsAtom(on), ({ terminals }) =>
+        terminals.some((terminal) => terminal.terminalId === terminalId),
+      ).then(() => {
+        openTerminalTab(drawerKey(on, projectId, worktreeId), terminalId);
+        goOn(on, "detail", { projectId, worktreeId });
+      });
     },
 
     // Explicitly a NAMED device's page, whatever the surrounding scope:

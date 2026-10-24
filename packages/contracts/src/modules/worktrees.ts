@@ -29,6 +29,7 @@ import {
   FileHunksPayloadSchema,
   FileHunksSchema,
   GitOperationStateSchema,
+  LaunchedSchema,
   ListCommitsPayloadSchema,
   MergeBranchPayloadSchema,
   MergeBranchResultSchema,
@@ -175,7 +176,7 @@ export const worktreesContract = defineContract(
   worktreeMutation("idleAgents"),
   worktreeMutationOf("unbindAgent", AgentSessionPayloadSchema),
   // In a terminal on this machine, so like a launch not served to peers.
-  invoke("resumeAgent", AgentSessionPayloadSchema, VoidSchema, {
+  invoke("resumeAgent", AgentSessionPayloadSchema, LaunchedSchema, {
     tracksProjectUsage: true,
     remote: false,
   }),
