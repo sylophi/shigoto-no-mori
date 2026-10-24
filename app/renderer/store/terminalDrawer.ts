@@ -1,13 +1,15 @@
-// The worktree page's terminal drawer, this window's: for each worktree
-// whether it is open (so a page comes back as it was left, and visiting
-// one opens no shell there), the script consoles opened in it as tabs,
-// and the tab picked; and the one height every drawer shares, null
-// until one is dragged. A tab is
-// named by a terminal's id, or `script:` and its slot's param.
+// The worktree page's terminal drawer, this window's. For each worktree
+// it keeps whether it is open (so a page comes back as it was left, and
+// visiting one opens no shell there), the script consoles opened in it
+// as tabs, and the tab picked. Every drawer shares its height at the
+// bottom and width at the side, each null until it is dragged, and the
+// edge it is docked to (a store of its own, which the page reads). A
+// tab is named by a terminal's id, or `script:` and its slot's param.
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
+import { readStored, writeStored } from "@/lib/localStorage";
 import { slotToParam, type ScriptSlot } from "./scriptSlot";
 
 type Drawer = {
@@ -20,6 +22,7 @@ type Drawer = {
 type DrawerState = {
   readonly drawers: ReadonlyMap<string, Drawer>;
   readonly height: number | null;
+  readonly width: number | null;
 };
 
 const CLOSED: Drawer = { open: false, scripts: [], picked: null };
@@ -27,9 +30,16 @@ const CLOSED: Drawer = { open: false, scripts: [], picked: null };
 const store = createExternalStore<DrawerState>({
   drawers: new Map(),
   height: null,
+  width: null,
 });
 
 export const useTerminalDrawer = () => useExternalStore(store);
+
+// Docked at the side rather than the bottom, kept across launches.
+const SIDE_KEY = "terminalDrawer.side";
+const sideStore = createExternalStore(readStored(SIDE_KEY) === "true");
+
+export const useDrawerSide = () => useExternalStore(sideStore);
 
 export const drawerOf = (state: DrawerState, key: string): Drawer =>
   state.drawers.get(key) ?? CLOSED;
@@ -98,8 +108,17 @@ export function closeScriptTab(key: string, slot: ScriptSlot): void {
   }));
 }
 
-export function setDrawerHeight(height: number): void {
-  store.publish({ ...store.get(), height });
+export function setDrawerSide(side: boolean): void {
+  writeStored(SIDE_KEY, String(side));
+  sideStore.publish(side);
+}
+
+// The height at the bottom, or the width at the side.
+export function setDrawerSize(size: number): void {
+  const state = store.get();
+  store.publish(
+    sideStore.get() ? { ...state, width: size } : { ...state, height: size },
+  );
 }
 
 export function forgetDrawer(key: string): void {

@@ -40,7 +40,7 @@ export function TerminalPartsScene() {
   return (
     <div className="grid h-full grid-rows-2">
       <div className="relative flex flex-col justify-end">
-        <TerminalDrawerView height={300} onHeight={() => {}}>
+        <TerminalDrawerView size={300} onSize={() => {}}>
           <TerminalTabsView
             tabs={tabs}
             selectedId="script:dev"
@@ -72,7 +72,7 @@ export function TerminalPartsScene() {
         </TerminalDrawerView>
       </div>
       <div className="relative flex flex-col justify-end">
-        <TerminalDrawerView height={300} onHeight={() => {}}>
+        <TerminalDrawerView size={300} onSize={() => {}}>
           <TerminalTabsView
             tabs={tabs}
             selectedId="b"
@@ -95,7 +95,7 @@ export function PeerTerminalsHiddenScene() {
   const macbook = deviceById(MACBOOK_ID);
   return (
     <div className="relative flex h-full flex-col justify-end bg-background">
-      <TerminalDrawerView height={240} onHeight={() => {}}>
+      <TerminalDrawerView size={240} onSize={() => {}}>
         <TerminalTabsView
           tabs={[]}
           selectedId={null}

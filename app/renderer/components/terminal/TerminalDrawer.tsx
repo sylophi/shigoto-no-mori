@@ -6,8 +6,10 @@ import {
   drawerKey,
   drawerOf,
   pickDrawerTab,
-  setDrawerHeight,
   setDrawerOpen,
+  setDrawerSide,
+  setDrawerSize,
+  useDrawerSide,
   useTerminalDrawer,
 } from "@/store/terminalDrawer";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -20,16 +22,13 @@ const TerminalTabs = lazy(() =>
   })),
 );
 
-// The drawer's shortest, and the share of the window it may take.
-const MIN_HEIGHT = 120;
-const MAX_SHARE = 0.8;
-
 // A worktree's terminals and the script consoles opened in it, in the
-// bottom drawer of its page, while it is open. Closing the last tab
-// closes the drawer.
+// drawer of its page, while it is open. Closing the last tab closes the
+// drawer.
 export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const { deviceId } = useHostScope();
   const state = useTerminalDrawer();
+  const side = useDrawerSide();
   const key = drawerKey(deviceId, worktree.projectId, worktree.id);
   const drawer = drawerOf(state, key);
   // Slides in when it opens on the page it was closed on (its toggle,
@@ -47,18 +46,10 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
     .filter((slot): slot is ScriptSlot => slot !== null);
   return (
     <TerminalDrawerView
-      height={state.height}
+      side={side}
+      size={side ? state.width : state.height}
       slideIn={slideIn}
-      onHeight={(asked) =>
-        setDrawerHeight(
-          Math.round(
-            Math.min(
-              Math.max(asked, MIN_HEIGHT),
-              window.innerHeight * MAX_SHARE,
-            ),
-          ),
-        )
-      }
+      onSize={setDrawerSize}
     >
       <Suspense>
         <TerminalTabs
@@ -68,6 +59,8 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
           picked={drawer.picked}
           onPick={(tab) => pickDrawerTab(key, tab)}
           onEmpty={close}
+          side={side}
+          onDock={() => setDrawerSide(!side)}
           onHide={close}
         />
       </Suspense>

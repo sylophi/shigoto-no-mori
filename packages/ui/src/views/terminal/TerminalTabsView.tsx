@@ -1,18 +1,26 @@
 // A row of terminal tabs over the picked one's body: each tab its
 // label and a close, a new terminal at the row's end, and the drawer's
-// hide after that. Left and right arrows move the pick, as tabs do. The
-// row and the body are one surface, the card. The picked tab's body may
-// put controls of its own at the row's end (TerminalTabToolbar), which
-// wrap to a line of their own where they don't fit beside the tabs.
+// dock switch and hide after that. Left and right arrows move the pick,
+// as tabs do. The row and the body are one surface, the card. The
+// picked tab's body may put controls of its own at the row's end
+// (TerminalTabToolbar), which wrap to a line of their own where they
+// don't fit beside the tabs.
 import { createContext, use, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Tabs } from "@base-ui/react/tabs";
-import { ChevronDown, Plus, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  PanelBottom,
+  PanelRight,
+  Plus,
+  X,
+} from "lucide-react";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { useRevealPicked } from "../../hooks/useRevealPicked.ts";
-import { cn } from "../../lib/utils.ts";
+import { cn, dragRegion } from "../../lib/utils.ts";
 
 const ToolbarSlot = createContext<HTMLElement | null>(null);
 
@@ -37,6 +45,8 @@ export function TerminalTabsView({
   onSelect,
   onClose,
   onNew,
+  side = false,
+  onDock,
   onHide,
   note = null,
   children,
@@ -47,6 +57,10 @@ export function TerminalTabsView({
   onClose: (id: string) => void;
   // Absent where no terminal can be opened.
   onNew?: () => void;
+  // Docked at the side rather than the bottom, and the switch to the
+  // other.
+  side?: boolean;
+  onDock?: () => void;
   onHide: () => void;
   // What shows in place of the tabs' bodies while none can be shown (a
   // peer that takes no commands from here).
@@ -65,8 +79,18 @@ export function TerminalTabsView({
       onValueChange={(id: string) => onSelect(id)}
       className="flex h-full min-h-0 flex-col bg-card"
     >
-      <div className="relative flex shrink-0 flex-wrap items-center gap-x-2 pr-9 pl-3">
-        <div className="flex h-8 min-w-0 items-center gap-1">
+      {/* Its controls are clear of the window's title-bar drag strip,
+          which the row sits under when docked at the side. */}
+      <div
+        className={cn(
+          "relative flex shrink-0 flex-wrap items-center gap-x-2 pl-3",
+          onDock ? "pr-16 phone:pr-9" : "pr-9",
+        )}
+      >
+        <div
+          className="flex h-8 min-w-0 items-center gap-1"
+          style={dragRegion("no-drag")}
+        >
           <Tabs.List
             ref={listRef}
             activateOnFocus
@@ -126,16 +150,37 @@ export function TerminalTabsView({
         <div
           ref={setToolbar}
           className="flex h-8 min-w-0 flex-auto items-center justify-end gap-2 empty:hidden"
+          style={dragRegion("no-drag")}
         />
         {/* Out of the flow, so it stays on the first line when the
             controls wrap. */}
-        <div className="absolute top-0 right-2 flex h-8 items-center">
+        <div
+          className="absolute top-0 right-2 flex h-8 items-center gap-1"
+          style={dragRegion("no-drag")}
+        >
+          {onDock && (
+            <IconButton
+              aria-label={side ? "Dock to the bottom" : "Dock to the side"}
+              onClick={onDock}
+              className="rounded-full phone:hidden"
+            >
+              {side ? (
+                <PanelBottom className="size-3.5" />
+              ) : (
+                <PanelRight className="size-3.5" />
+              )}
+            </IconButton>
+          )}
           <IconButton
             aria-label="Hide terminals"
             onClick={onHide}
             className="rounded-full"
           >
-            <ChevronDown className="size-3.5" />
+            {side ? (
+              <ChevronRight className="size-3.5" />
+            ) : (
+              <ChevronDown className="size-3.5" />
+            )}
           </IconButton>
         </div>
       </div>
