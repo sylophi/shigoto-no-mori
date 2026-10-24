@@ -20,6 +20,7 @@ import type * as Effect from "effect/Effect";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { type QueryKeyRegistry, worktreeQueriesOn } from "@/lib/queryKeys";
 import { useRegistry } from "@/lib/runtime/viewHooks";
+import { useShowAppTerminal } from "@/hooks/launchers/useLaunchers";
 import {
   changeWorktreeRow,
   forgetWorktreeRows,
@@ -573,9 +574,13 @@ export function useUnbindAgent() {
 
 export function useResumeAgent() {
   const { api } = useHostScope();
+  const show = useShowAppTerminal();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: resuming opens a terminal and leaves the session's binding as it was
   return useMutation<void, Error, AgentSessionVars>({
-    mutationFn: (input) => api.run(api.worktrees.resumeAgent(input)),
+    mutationFn: (input) =>
+      api
+        .run(api.worktrees.resumeAgent(input))
+        .then((launched) => show(input, launched)),
     meta: { errorTitle: "Couldn't resume the agent session" },
   });
 }

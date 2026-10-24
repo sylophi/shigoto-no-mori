@@ -28,6 +28,7 @@ import * as HostWorktrees from "@host/lib/Worktrees";
 import * as PullRequestMaps from "@host/lib/githubCli/PullRequestMaps";
 import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { readGitBlob, readWorktreeFile } from "@host/lib/worktrees/files";
+import { inAppTerminal } from "@host/lib/terminals/inAppTerminal";
 import type { Terminals } from "@host/lib/terminals/Terminals";
 import { scriptEventNotifier, worktreeNotifiers } from "../scriptRun";
 import * as Ops from "@host/lib/engineOps";
@@ -276,8 +277,10 @@ export const worktreesHandlers = {
     ),
 
   resumeAgent: ({ projectId, worktreeId, harness, session }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      Ops.resumeAgent(project, worktreeId, harness, session),
+    inAppTerminal(
+      Effect.flatMap(findProject(projectId), (project) =>
+        Ops.resumeAgent(project, worktreeId, harness, session),
+      ),
     ),
 
   // An edit made to the open PR's title moves the project's PR map.

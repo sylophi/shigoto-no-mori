@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import { isSafeRelPath } from "../predicates/relPath.ts";
-import { TERMINAL_IDS } from "./launchers.ts";
+import { TERMINAL_CHOICES } from "./launchers.ts";
 import { loose } from "./loose.ts";
 import { ProjectScopedPayloadSchema } from "./payloads.ts";
 import {
@@ -261,7 +261,7 @@ const GlobalConfigSchema = Schema.Struct({
   // resolves never matches and is harmless to keep.
   hiddenLaunchers: Schema.optional(Schema.Array(Schema.String)),
   launchScripts: Schema.optional(Schema.Boolean),
-  terminal: Schema.optional(Schema.Literals(TERMINAL_IDS)),
+  terminal: Schema.optional(Schema.Literals(TERMINAL_CHOICES)),
   // Absent (or null in a patch) opens a file with its default app.
   editor: Schema.optional(Schema.NullOr(Schema.NonEmptyString)),
   deleteBranchOnRemove: Schema.optional(Schema.Boolean),
@@ -318,7 +318,7 @@ export const DeviceSettingsPatchSchema = strict(
     }),
     terminal: GlobalConfigSchema.fields.terminal.annotateKey({
       description:
-        "Terminal that terminal tools (Claude Code, Neovim, …) open in",
+        "Terminal that terminal tools (Claude Code, Neovim, …) open in. `app` is the worktree's terminal in the app, and Terminal from the CLI",
     }),
     editor: GlobalConfigSchema.fields.editor.annotateKey({
       description:
@@ -380,7 +380,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   launchers: [],
   hiddenLaunchers: [],
   launchScripts: true,
-  terminal: "terminal",
+  terminal: "app",
   editor: null,
   deleteBranchOnRemove: true,
   autoPopulateInstall: false,

@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Plus } from "lucide-react";
+import { Plus, SquareTerminal } from "lucide-react";
 import {
   launcherIdFor,
   parseLauncherId,
@@ -45,13 +45,24 @@ export function LaunchToolsPanelView({
 }) {
   const availableTools = detected.filter((d) => d.available);
   const missingTools = detected.filter((d) => !d.available);
-  // The installed terminals, in TERMINAL_IDS order, with the catalog's
-  // labels and icons.
-  const terminals = TERMINAL_IDS.flatMap((id) => {
-    const d = availableTools.find((t) => t.id === launcherIdFor("app", id));
-    if (d === undefined) return [];
-    return [{ value: id, label: <ToolLabel entry={d} /> }];
-  });
+  // The app's own terminal, then the installed terminal apps, in
+  // TERMINAL_IDS order, with the catalog's labels and icons.
+  const terminals = [
+    {
+      value: "app" as const,
+      label: (
+        <>
+          <SquareTerminal className="size-3.5" />
+          In app
+        </>
+      ),
+    },
+    ...TERMINAL_IDS.flatMap((id) => {
+      const d = availableTools.find((t) => t.id === launcherIdFor("app", id));
+      if (d === undefined) return [];
+      return [{ value: id, label: <ToolLabel entry={d} /> }];
+    }),
+  ];
 
   // The installed editors, after the default app that opens a file
   // while none is picked.
@@ -85,20 +96,18 @@ export function LaunchToolsPanelView({
         onToggle={toggleToolHidden}
       />
 
-      {terminals.length > 1 && (
-        <section className="space-y-3">
-          <SectionIntro title="Terminal">
-            Where terminal tools like Claude Code and Neovim open.
-          </SectionIntro>
-          <SegmentedControl
-            aria-label="Terminal"
-            value={form.terminal}
-            onChange={(terminal) => setForm((prev) => ({ ...prev, terminal }))}
-            options={terminals}
-            optionClassName="px-3 py-1.5 text-xs"
-          />
-        </section>
-      )}
+      <section className="space-y-3">
+        <SectionIntro title="Terminal">
+          Where terminal tools like Claude Code and Neovim open.
+        </SectionIntro>
+        <SegmentedControl
+          aria-label="Terminal"
+          value={form.terminal}
+          onChange={(terminal) => setForm((prev) => ({ ...prev, terminal }))}
+          options={terminals}
+          optionClassName="px-3 py-1.5 text-xs"
+        />
+      </section>
 
       {editors.length > 1 && (
         <section className="space-y-3">

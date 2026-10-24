@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "../contract.ts";
 import {
   DetectedLauncherSchema,
+  LaunchedSchema,
   LauncherEntrySchema,
   LaunchPayloadSchema,
   OpenFilePayloadSchema,
@@ -32,13 +33,13 @@ export const launchersContract = defineContract(
   ),
   // launch is remote false: it spawns an arbitrary shell command from
   // config, the one clear remote code execution vector. Detection is safe to serve, launching is not.
-  invoke("launch", LaunchPayloadSchema, VoidSchema, {
+  invoke("launch", LaunchPayloadSchema, LaunchedSchema, {
     tracksProjectUsage: true,
     remote: false,
   }),
   // A worktree's file in this machine's editor, like launch: what
   // opens is this machine's.
-  invoke("openFile", OpenFilePayloadSchema, VoidSchema, {
+  invoke("openFile", OpenFilePayloadSchema, LaunchedSchema, {
     remote: false,
   }),
 );

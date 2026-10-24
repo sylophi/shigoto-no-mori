@@ -565,7 +565,7 @@ const make = (binary: string) =>
         return yield* new CantResume({ harness: ref.harness });
       }
       yield* open.inTerminal(
-        located.worktree.path,
+        located,
         `${harness.resume} ${shellQuote(ref.session)}`,
       );
     });

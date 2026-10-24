@@ -44,10 +44,14 @@ export function parseLauncherId(
   return { kind, id: launcherId.slice(separator + 1) };
 }
 
-// The terminals terminal tools open in (the device setting `terminal`), as
-// launcher catalog ids, in the order Settings lists them.
+// The terminal apps terminal tools can open in, as launcher catalog ids,
+// in the order Settings lists them.
 export const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
-export type TerminalId = (typeof TERMINAL_IDS)[number];
+
+// The device setting `terminal`: the worktree's terminal drawer in the
+// app, or one of the terminal apps.
+export const TERMINAL_CHOICES = ["app", ...TERMINAL_IDS] as const;
+export type TerminalChoice = (typeof TERMINAL_CHOICES)[number];
 
 const WebLauncherSchema = Schema.Struct({
   kind: Schema.Literal("web"),
@@ -66,6 +70,13 @@ export const LaunchPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   launcherId: Schema.NonEmptyString,
 });
+
+// The app terminal a launch or an opened file runs in, when the
+// `terminal` setting picks the app's.
+export const LaunchedSchema = Schema.Struct({
+  terminalId: Schema.optional(Schema.String),
+});
+export type Launched = typeof LaunchedSchema.Type;
 
 // A file to open in the editor, relative to the worktree's root.
 export const OpenFilePayloadSchema = Schema.Struct({
