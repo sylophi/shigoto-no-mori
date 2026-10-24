@@ -1,10 +1,14 @@
 import { lazy, Suspense, useState } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useHasLocalHost } from "@/lib/localHost";
+import { openTerminalsInNewWindow } from "@/lib/newWindow";
+import { useApi } from "@/lib/runtime/pageApi";
 import { paramToSlot, type ScriptSlot } from "@/store/scriptSlot";
 import {
   closeScriptTab,
   drawerKey,
   drawerOf,
+  forgetDrawer,
   pickDrawerTab,
   setDrawerOpen,
   setDrawerSide,
@@ -26,6 +30,8 @@ const TerminalTabs = lazy(() =>
 // drawer of its page, while it is open. Closing the last tab closes the
 // drawer.
 export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
   const { deviceId } = useHostScope();
   const state = useTerminalDrawer();
   const side = useDrawerSide();
@@ -61,6 +67,26 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
           onEmpty={close}
           side={side}
           onDock={() => setDrawerSide(!side)}
+          onPopOut={
+            hasLocalHost
+              ? () => {
+                  openTerminalsInNewWindow(
+                    api,
+                    {
+                      deviceId,
+                      projectId: worktree.projectId,
+                      worktreeId: worktree.id,
+                    },
+                    {
+                      scripts: drawer.scripts,
+                      ...(drawer.picked !== null && { tab: drawer.picked }),
+                    },
+                  );
+                  // Its tabs move to the window.
+                  forgetDrawer(key);
+                }
+              : undefined
+          }
           onHide={close}
         />
       </Suspense>

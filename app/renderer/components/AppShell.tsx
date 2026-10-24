@@ -47,6 +47,7 @@ import {
   SIDEBAR_MAX,
   SIDEBAR_MIN,
 } from "@shigomori/ui/views/AppShellView.tsx";
+import { isTerminalsWindow } from "@shigomori/contracts/worktreePage";
 import { MIGRATION_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
 import { useMigration } from "@/hooks/useMigration";
@@ -109,7 +110,7 @@ export function AppShell() {
   useDeepLinks();
 
   // A page in place of the app, with none of its ways elsewhere.
-  if (pathname === MIGRATION_PATH) {
+  if (pathname === MIGRATION_PATH || isTerminalsWindow(pathname)) {
     return (
       <AppShellView phone={phone} hasLocalHost={hasLocalHost} sidebar={null}>
         <Outlet />

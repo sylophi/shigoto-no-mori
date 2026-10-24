@@ -1,7 +1,7 @@
 // A row of terminal tabs over the picked one's body: each tab its
 // label and a close, a new terminal at the row's end, and the drawer's
-// dock switch and hide after that. Left and right arrows move the pick,
-// as tabs do. The row and the body are one surface, the card. The
+// pop-out, dock switch and hide after that. Left and right arrows move
+// the pick, as tabs do. The row and the body are one surface, the card. The
 // picked tab's body may put controls of its own at the row's end
 // (TerminalTabToolbar), which wrap to a line of their own where they
 // don't fit beside the tabs. At the side they always take a line of
@@ -16,6 +16,7 @@ import {
   PanelBottom,
   PanelRight,
   Plus,
+  SquareArrowOutUpRight,
   X,
 } from "lucide-react";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
@@ -49,7 +50,9 @@ export function TerminalTabsView({
   onNew,
   side = false,
   onDock,
+  onPopOut,
   onHide,
+  titleBar = false,
   note = null,
   children,
 }: {
@@ -63,7 +66,11 @@ export function TerminalTabsView({
   // other.
   side?: boolean;
   onDock?: () => void;
-  onHide: () => void;
+  // Moves the tabs to a window of their own. Desktop only.
+  onPopOut?: () => void;
+  onHide?: () => void;
+  // The row is a window's title bar, on the traffic lights' line.
+  titleBar?: boolean;
   // What shows in place of the tabs' bodies while none can be shown (a
   // peer that takes no commands from here).
   note?: string | null;
@@ -71,14 +78,16 @@ export function TerminalTabsView({
   children: ReactNode;
 }) {
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const buttons = [onPopOut, onDock, onHide].filter(Boolean).length;
+  // Its controls carve their clicks out of a title bar, and the room
+  // between them still drags the window.
   const toolbarSlot = (
     <div
       ref={setToolbar}
       className={cn(
-        "flex h-8 min-w-0 items-center gap-2 empty:hidden",
+        "flex h-8 min-w-0 items-center gap-2 *:[app-region:no-drag] empty:hidden",
         side ? "px-3 *:first:mr-auto" : "flex-auto justify-end",
       )}
-      style={dragRegion("no-drag")}
     />
   );
   const listRef = useRevealPicked(
@@ -92,12 +101,17 @@ export function TerminalTabsView({
       className="flex h-full min-h-0 flex-col bg-card"
     >
       {/* Its controls are clear of the window's title-bar drag strip,
-          which the row sits under when docked at the side. */}
+          which the row sits under when docked at the side. As a title
+          bar it clears the traffic lights and centers on them (y=23,
+          main/electron/windows.ts), and drags the window. */}
       <div
         className={cn(
-          "relative flex shrink-0 flex-wrap items-center gap-x-2 pl-3",
-          onDock ? "pr-16 phone:pr-9" : "pr-9",
+          "relative flex shrink-0 flex-wrap items-center gap-x-2",
+          titleBar ? "pt-[7px] pl-[92px]" : "pl-3",
+          ["pr-3", "pr-9", "pr-16", "pr-23"][buttons],
+          onHide ? "phone:pr-9" : "phone:pr-3",
         )}
+        style={titleBar ? dragRegion("drag") : undefined}
       >
         <div
           className="flex h-8 min-w-0 items-center gap-1"
@@ -163,9 +177,21 @@ export function TerminalTabsView({
         {/* Out of the flow, so it stays on the first line when the
             controls wrap. */}
         <div
-          className="absolute top-0 right-2 flex h-8 items-center gap-1"
+          className={cn(
+            "absolute right-2 flex h-8 items-center gap-1",
+            titleBar ? "top-[7px]" : "top-0",
+          )}
           style={dragRegion("no-drag")}
         >
+          {onPopOut && (
+            <IconButton
+              aria-label="Open in new window"
+              onClick={onPopOut}
+              className="rounded-full phone:hidden"
+            >
+              <SquareArrowOutUpRight className="size-3.5" />
+            </IconButton>
+          )}
           {onDock && (
             <IconButton
               aria-label={side ? "Dock to the bottom" : "Dock to the side"}
@@ -179,17 +205,19 @@ export function TerminalTabsView({
               )}
             </IconButton>
           )}
-          <IconButton
-            aria-label="Hide terminals"
-            onClick={onHide}
-            className="rounded-full"
-          >
-            {side ? (
-              <ChevronRight className="size-3.5" />
-            ) : (
-              <ChevronDown className="size-3.5" />
-            )}
-          </IconButton>
+          {onHide && (
+            <IconButton
+              aria-label="Hide terminals"
+              onClick={onHide}
+              className="rounded-full"
+            >
+              {side ? (
+                <ChevronRight className="size-3.5" />
+              ) : (
+                <ChevronDown className="size-3.5" />
+              )}
+            </IconButton>
+          )}
         </div>
       </div>
       {side && toolbarSlot}

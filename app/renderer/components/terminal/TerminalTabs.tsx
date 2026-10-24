@@ -33,6 +33,7 @@ export function TerminalTabs(props: TerminalTabsProps) {
       side={props.side}
       onDock={props.onDock}
       onHide={props.onHide}
+      titleBar={props.titleBar}
       note={peerTerminalsHiddenNote(deviceLabel)}
     >
       {null}
@@ -52,9 +53,7 @@ function AttachedTerminalTabs({
   picked,
   onPick: pick,
   onEmpty,
-  side,
-  onDock,
-  onHide,
+  ...placement
 }: {
   worktree: Worktree;
   // The consoles open as tabs, and how one closes.
@@ -63,9 +62,12 @@ function AttachedTerminalTabs({
   picked: string | null;
   onPick: (tab: string) => void;
   onEmpty: () => void;
-  side: boolean;
-  onDock: () => void;
-  onHide: () => void;
+  // Where the tabs sit and the ways out of it (TerminalTabsView).
+  side?: boolean;
+  onDock?: () => void;
+  onPopOut?: () => void;
+  onHide?: () => void;
+  titleBar?: boolean;
 }) {
   const { api } = useHostScope();
   const owner = { projectId: worktree.projectId, worktreeId: worktree.id };
@@ -131,9 +133,7 @@ function AttachedTerminalTabs({
           );
       }}
       onNew={open}
-      side={side}
-      onDock={onDock}
-      onHide={onHide}
+      {...placement}
     >
       {pickedSlot !== undefined ? (
         <ScriptConsole worktree={worktree} slot={pickedSlot} />
