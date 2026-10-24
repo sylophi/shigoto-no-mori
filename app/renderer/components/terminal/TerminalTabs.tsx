@@ -30,6 +30,8 @@ export function TerminalTabs(props: TerminalTabsProps) {
       selectedId={null}
       onSelect={() => {}}
       onClose={() => {}}
+      side={props.side}
+      onDock={props.onDock}
       onHide={props.onHide}
       note={peerTerminalsHiddenNote(deviceLabel)}
     >
@@ -50,6 +52,8 @@ function AttachedTerminalTabs({
   picked,
   onPick: pick,
   onEmpty,
+  side,
+  onDock,
   onHide,
 }: {
   worktree: Worktree;
@@ -59,6 +63,8 @@ function AttachedTerminalTabs({
   picked: string | null;
   onPick: (tab: string) => void;
   onEmpty: () => void;
+  side: boolean;
+  onDock: () => void;
   onHide: () => void;
 }) {
   const { api } = useHostScope();
@@ -125,6 +131,8 @@ function AttachedTerminalTabs({
           );
       }}
       onNew={open}
+      side={side}
+      onDock={onDock}
       onHide={onHide}
     >
       {pickedSlot !== undefined ? (
