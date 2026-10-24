@@ -4,7 +4,9 @@
 // as tabs do. The row and the body are one surface, the card. The
 // picked tab's body may put controls of its own at the row's end
 // (TerminalTabToolbar), which wrap to a line of their own where they
-// don't fit beside the tabs.
+// don't fit beside the tabs. At the side they always take a line of
+// their own under the tabs, the command first and Run or Stop at its
+// end.
 import { createContext, use, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Tabs } from "@base-ui/react/tabs";
@@ -69,6 +71,16 @@ export function TerminalTabsView({
   children: ReactNode;
 }) {
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const toolbarSlot = (
+    <div
+      ref={setToolbar}
+      className={cn(
+        "flex h-8 min-w-0 items-center gap-2 empty:hidden",
+        side ? "px-3 *:first:mr-auto" : "flex-auto justify-end",
+      )}
+      style={dragRegion("no-drag")}
+    />
+  );
   const listRef = useRevealPicked(
     selectedId,
     tabs.map((tab) => tab.id),
@@ -147,11 +159,7 @@ export function TerminalTabsView({
             </IconButton>
           )}
         </div>
-        <div
-          ref={setToolbar}
-          className="flex h-8 min-w-0 flex-auto items-center justify-end gap-2 empty:hidden"
-          style={dragRegion("no-drag")}
-        />
+        {!side && toolbarSlot}
         {/* Out of the flow, so it stays on the first line when the
             controls wrap. */}
         <div
@@ -184,6 +192,7 @@ export function TerminalTabsView({
           </IconButton>
         </div>
       </div>
+      {side && toolbarSlot}
       <div className="min-h-0 flex-1">
         {note !== null ? (
           <CenteredMessage className="px-3 text-center">{note}</CenteredMessage>
