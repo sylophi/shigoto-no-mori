@@ -30,6 +30,12 @@ const fontWeightOf = (host: HTMLElement): number =>
   Number(host.ownerDocument.defaultView?.getComputedStyle(host).fontWeight) ||
   400;
 
+// The host's size on the type scale, larger on a phone, in pixels.
+const fontSizeOf = (host: HTMLElement): number =>
+  Number.parseFloat(
+    host.ownerDocument.defaultView?.getComputedStyle(host).fontSize ?? "",
+  ) || 11;
+
 // DECTCEM: terminal cursor visibility.
 const SHOW_CURSOR = "\x1b[?25h";
 const HIDE_CURSOR = "\x1b[?25l";
@@ -71,7 +77,7 @@ export function TerminalView({
     const doc = host.ownerDocument;
     const family = doc.defaultView?.getComputedStyle(host).fontFamily ?? "";
     void doc.fonts
-      .load(`12px ${family}`, "a\ue0b0")
+      .load(`${fontSizeOf(host)}px ${family}`, "a\ue0b0")
       .catch(() => {})
       .then(() => {
         if (!cancelled) setFontsIn(true);
@@ -86,14 +92,15 @@ export function TerminalView({
     if (!host || !feed || !fontsIn) return;
     let theme = readTerminalTheme(host);
     const term = new Terminal({
-      // Matches the host's `font-terminal text-xs` and the theme's mono
-      // weight. xterm sizes its cell grid from these, so they can't
-      // come from CSS.
+      // The host's `font-terminal text-2xs` and the theme's mono weight,
+      // handed to xterm, which sizes its cell grid from them rather than
+      // from CSS. No extra line height: the face's own line box has the
+      // leading.
       fontFamily:
         host.ownerDocument.defaultView?.getComputedStyle(host).fontFamily,
       fontWeight: fontWeightOf(host),
-      fontSize: 12,
-      lineHeight: 1.25,
+      fontSize: fontSizeOf(host),
+      lineHeight: 1,
       cursorBlink: true,
       scrollback: 5_000,
       theme,
@@ -232,7 +239,7 @@ export function TerminalView({
       data-slot="terminal"
       data-keyboard-surface="raw"
       {...usersAlone("terminal")}
-      className="isolate h-full w-full overflow-hidden bg-card px-6 py-2 font-terminal text-xs phone:px-4"
+      className="isolate h-full w-full overflow-hidden bg-card px-3 py-1 font-terminal text-2xs"
     >
       <div
         ref={hostRef}

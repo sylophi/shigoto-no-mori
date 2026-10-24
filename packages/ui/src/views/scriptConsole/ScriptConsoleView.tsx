@@ -1,5 +1,6 @@
-// A script's console as a tab of the terminal drawer: the command and
-// how its run stands over the run's terminal, with Run or Stop.
+// A script's console as a tab of the terminal drawer: the run's
+// terminal, with the command, how its run stands, and Run or Stop at the
+// end of the tab row.
 import type { ReactNode } from "react";
 import { Play, Square, Trash2 } from "lucide-react";
 import { ScriptStatusBadgeView } from "../shared/ScriptStatusBadgeView.tsx";
@@ -8,6 +9,7 @@ import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import type { ScriptRunState } from "../../lib/scriptRun.ts";
+import { TerminalTabToolbar } from "../terminal/TerminalTabsView.tsx";
 
 export function ScriptConsoleView({
   command,
@@ -36,9 +38,9 @@ export function ScriptConsoleView({
   // no PTY of the host's sits behind them.
   const outputOnly = busy && !state.interactive;
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex min-h-9 shrink-0 items-center gap-3 px-6 py-1 phone:px-4">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+    <>
+      <TerminalTabToolbar>
+        <div className="flex min-w-0 items-center gap-3">
           {command && (
             <SimpleTooltip whenTruncated tip={command}>
               <span className="truncate font-mono text-xs text-muted-foreground select-text">
@@ -48,7 +50,7 @@ export function ScriptConsoleView({
           )}
           <ScriptStatusBadgeView state={state} />
           {outputOnly && (
-            <span className="shrink-0 text-xs text-muted-foreground">
+            <span className="truncate text-xs text-muted-foreground">
               Output only: the CLI started this run.
             </span>
           )}
@@ -75,25 +77,25 @@ export function ScriptConsoleView({
               {state.status === "idle" ? "Run" : "Run again"}
             </Button>
           ))}
-      </div>
+      </TerminalTabToolbar>
       {readOnlyNote !== null ? (
-        <CenteredMessage className="h-auto flex-1 px-6 text-center">
+        <CenteredMessage className="px-3 text-center">
           {readOnlyNote}
         </CenteredMessage>
       ) : state.status === "idle" ? (
-        <div className="flex flex-1 items-center justify-center px-6 text-sm text-muted-foreground">
+        <CenteredMessage className="px-3">
           No runs yet. Press Run to start.
-        </div>
+        </CenteredMessage>
       ) : (
-        <div className="relative min-h-0 flex-1">
+        <div className="relative h-full">
           {terminal}
           {state.status === "starting" && !state.hasOutput && (
-            <div className="pointer-events-none absolute top-2 left-6 font-mono text-xs text-muted-foreground phone:left-4">
+            <div className="pointer-events-none absolute top-1 left-3 font-mono text-2xs text-muted-foreground">
               Starting…
             </div>
           )}
         </div>
       )}
-    </div>
+    </>
   );
 }
