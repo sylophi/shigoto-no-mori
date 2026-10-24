@@ -4,7 +4,7 @@
 // of the footer. On a phone it is a sheet over the whole page
 // instead (the page is `relative` for it), where a console has the room
 // a script's output needs; its tabs' hide button closes it.
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { cn } from "../../lib/utils.ts";
 
 export function TerminalDrawerView({
@@ -13,18 +13,21 @@ export function TerminalDrawerView({
   slideIn = false,
   children,
 }: {
-  height: number;
+  // Null until the handle is dragged: half the window.
+  height: number | null;
   // Opened just now on this page, not shown open by a page change.
   slideIn?: boolean;
   // A drag of the handle: the height it asks for.
   onHeight: (height: number) => void;
   children: ReactNode;
 }) {
+  const sectionRef = useRef<HTMLElement>(null);
   return (
     <section
+      ref={sectionRef}
       aria-label="Terminals"
       data-slot="terminal-drawer"
-      style={{ height }}
+      style={{ height: height ?? "50dvh" }}
       className="relative flex shrink-0 flex-col border-t border-border bg-card phone:absolute phone:inset-0 phone:z-30 phone:h-auto! phone:border-t-0"
     >
       <div
@@ -34,9 +37,10 @@ export function TerminalDrawerView({
         className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none phone:hidden"
         onPointerDown={(event) => {
           const startY = event.clientY;
+          const startHeight = sectionRef.current?.offsetHeight ?? 0;
           event.currentTarget.setPointerCapture(event.pointerId);
           const move = (moved: PointerEvent) =>
-            onHeight(height + startY - moved.clientY);
+            onHeight(startHeight + startY - moved.clientY);
           const target = event.currentTarget;
           target.addEventListener("pointermove", move);
           target.addEventListener(

@@ -1,7 +1,8 @@
 // The worktree page's terminal drawer, this window's: for each worktree
 // whether it is open (so a page comes back as it was left, and visiting
 // one opens no shell there), the script consoles opened in it as tabs,
-// and the tab picked; and the one height every drawer shares. A tab is
+// and the tab picked; and the one height every drawer shares, null
+// until one is dragged. A tab is
 // named by a terminal's id, or `script:` and its slot's param.
 import {
   createExternalStore,
@@ -18,14 +19,14 @@ type Drawer = {
 
 type DrawerState = {
   readonly drawers: ReadonlyMap<string, Drawer>;
-  readonly height: number;
+  readonly height: number | null;
 };
 
 const CLOSED: Drawer = { open: false, scripts: [], picked: null };
 
 const store = createExternalStore<DrawerState>({
   drawers: new Map(),
-  height: 280,
+  height: null,
 });
 
 export const useTerminalDrawer = () => useExternalStore(store);
