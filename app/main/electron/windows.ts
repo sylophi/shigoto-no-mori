@@ -23,6 +23,7 @@ import * as Schema from "effect/Schema";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import { navContract } from "@shigomori/contracts/modules/nav";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { isTerminalsWindow } from "@shigomori/contracts/worktreePage";
 import { log } from "@shared/log";
 import {
   atomicWriteJsonSync,
@@ -158,6 +159,20 @@ const hasPage = (entry: Held): boolean =>
 // The window focused last that still has a page, if any.
 function frontmost(): Held | undefined {
   return held.findLast(hasPage);
+}
+
+// The one of those that can show any page: a terminals window shows
+// only its own.
+function pageTaker(): Held | undefined {
+  return held.findLast(
+    (entry) => hasPage(entry) && !isTerminalsWindow(entry.route),
+  );
+}
+
+function raise(entry: Held): void {
+  if (entry.window.isMinimized()) entry.window.restore();
+  entry.window.show();
+  entry.window.focus();
 }
 
 function create(
@@ -427,9 +442,7 @@ export function surfaceWindow(): void {
   if (entry === undefined) {
     if (started) replaceDead(held.at(-1)?.route ?? HOME_ROUTE);
   } else {
-    if (entry.window.isMinimized()) entry.window.restore();
-    entry.window.show();
-    entry.window.focus();
+    raise(entry);
   }
   // macOS won't raise a background app just because one of its windows
   // asked for focus, and the launch the user just made is already gone.
@@ -437,26 +450,35 @@ export function surfaceWindow(): void {
 }
 
 // A deep link (main/electron/deepLink.ts) or a notification's click:
-// the window focused last takes it, raised, or a new window opens on
-// it. One that comes before the windows waits for them.
+// the window that can show it and was focused last takes it, raised,
+// or a new window opens on it. One that comes before the windows waits
+// for them.
 export function openDeepLink(route: string): void {
   if (!started) {
     launchLink = route;
     return;
   }
-  const entry = frontmost();
+  const entry = pageTaker();
   if (entry === undefined) {
-    replaceDead(route);
+    if (frontmost() === undefined) replaceDead(route);
+    else openWindow(route);
   } else {
     // A later link replaces an untaken one: the user wants the page
     // they asked for last.
     entry.deepLink = route;
     broadcast(navContract, "deepLink", undefined, entry.window.webContents);
-    if (entry.window.isMinimized()) entry.window.restore();
-    entry.window.show();
-    entry.window.focus();
+    raise(entry);
   }
   app.focus({ steal: true });
+}
+
+// The window an app-wide menu item (Settings, Add Project) acts in,
+// raised.
+export function raisePageWindow(): WebContents | undefined {
+  const entry = pageTaker();
+  if (entry === undefined) return undefined;
+  raise(entry);
+  return entry.window.webContents;
 }
 
 export function takeDeepLink(windowId: number | undefined): string | null {

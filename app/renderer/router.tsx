@@ -24,6 +24,7 @@ import { NotFoundPage } from "@/components/NotFoundPage";
 import { Settings } from "@/components/settings/Settings";
 import { SettingsPages } from "@/components/settings/SettingsSidebarNav";
 import { DevicesPage } from "@/components/remote/DevicesPage";
+import type { TerminalsSearch } from "@/lib/newWindow";
 import { withDeviceScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
@@ -267,6 +268,29 @@ const worktreeFilesRoute = createRoute({
   remountDeps: ({ params }) => params,
 });
 
+function validateTerminalsSearch(
+  search: Record<string, unknown>,
+): TerminalsSearch {
+  const { scripts, tab } = search;
+  return {
+    ...(Array.isArray(scripts) &&
+      scripts.every((param) => typeof param === "string") && { scripts }),
+    ...(typeof tab === "string" && { tab }),
+  };
+}
+
+const terminalsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.terminals,
+  component: withDeviceScope(
+    lazyRouteComponent(
+      () => import("@/components/terminal/TerminalsWindow"),
+      "TerminalsWindow",
+    ),
+  ),
+  validateSearch: validateTerminalsSearch,
+});
+
 // The project pages, each lazy. A peer's project header offers the
 // same actions this machine's does, and they all land here.
 function projectRoute(
@@ -358,6 +382,7 @@ function buildRouteTree(hasLocalHost: boolean) {
     stashDiffRoute,
     commitDiffRoute,
     worktreeFilesRoute,
+    terminalsRoute,
     ...projectRoutes,
   ]);
 }

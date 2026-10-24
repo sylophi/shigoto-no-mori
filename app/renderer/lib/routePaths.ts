@@ -1,4 +1,7 @@
-import { WORKTREE_PAGE_PATH } from "@shigomori/contracts/worktreePage";
+import {
+  TERMINALS_WINDOW_PATH,
+  WORKTREE_PAGE_PATH,
+} from "@shigomori/contracts/worktreePage";
 
 // The device pages' route paths, spelled once. Every worktree and
 // project page lives under /devices/$deviceId, this machine's included
@@ -26,6 +29,8 @@ export const WORKTREE_ROUTE_PATHS = {
   commit:
     "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
   files: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/files",
+  // The terminals' own window (TerminalsWindow), with no app around it.
+  terminals: TERMINALS_WINDOW_PATH,
 } as const;
 
 export const PROJECT_ROUTE_PATHS = {

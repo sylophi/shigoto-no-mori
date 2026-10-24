@@ -21,7 +21,7 @@ import {
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 import { broadcast } from "../ipc/register";
-import { openWindow } from "./windows";
+import { openWindow, raisePageWindow } from "./windows";
 
 // The keymap's launch tools are nine; anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
@@ -171,6 +171,19 @@ function clickBroadcast<M extends ContractModule, K extends PushKeys<M>>(
   };
 }
 
+// An app-wide item: to the window that can show any page, which a
+// focused terminals window can't.
+function pageBroadcast<M extends ContractModule, K extends PushKeys<M>>(
+  module: M,
+  key: K,
+  payload: PushProducerPayload<M, K>,
+): MenuItemConstructorOptions["click"] {
+  return () => {
+    const wc = raisePageWindow();
+    if (wc) broadcast(module, key, payload, wc);
+  };
+}
+
 function launchToolMenuItems(): MenuItemConstructorOptions[] {
   const { enabled, entries } = shownLaunchTools();
   const chords = shownChords();
@@ -213,7 +226,7 @@ export function buildAppMenu(): void {
         {
           label: "Settings…",
           accelerator: chords.settings,
-          click: clickBroadcast(navContract, "openSettings", undefined),
+          click: pageBroadcast(navContract, "openSettings", undefined),
         },
         { type: "separator" },
         { role: "services" },
@@ -237,7 +250,7 @@ export function buildAppMenu(): void {
         {
           label: "Add Project…",
           accelerator: chords.addProject,
-          click: clickBroadcast(navContract, "addProject", undefined),
+          click: pageBroadcast(navContract, "addProject", undefined),
         },
         ...launchToolMenuItems(),
       ],
