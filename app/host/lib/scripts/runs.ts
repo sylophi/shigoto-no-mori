@@ -18,6 +18,7 @@ import { scriptEnvOf, UNATTENDED_ENV } from "@shigomori/contracts/scriptEnv";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Option from "effect/Option";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { Marks } from "./marks";
@@ -169,9 +170,9 @@ interface RunRecord extends Killable {
 
 // A lifecycle script an engine run started (a create's setup, an rm's
 // teardown), which streams through the same events but has no PTY here.
-// Booked from its "started" document and dropped on its "exit". Not
-// persisted: each ends with the engine run that started it, a quit's
-// included.
+// Booked from its "started" document and dropped on its "exit", and
+// recorded for the sweep like a PTY run: a quit ends it with the engine
+// run that started it, but a host killed outright leaves it running.
 interface LifecycleRun extends Killable {
   settle: () => void;
   projectId: string;
@@ -208,6 +209,8 @@ export const makeRuns = ({
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const ptyRuns = new Map<string, RunRecord>();
     const lifecycle = new Map<string, LifecycleRun>();
+    // For the records forward, a synchronous callback, makes.
+    const runFork = yield* FiberSet.makeRuntime<never>();
 
     const killRecord = Effect.fnUntraced(function* (
       record: Killable,
@@ -271,6 +274,7 @@ export const makeRuns = ({
         forward: (event) => {
           if (event.kind === "started" && event.pid !== undefined) {
             const pid = event.pid;
+            const startedAt = clock.currentTimeMillisUnsafe();
             let settle!: () => void;
             const done = new Promise<void>((resolve) => {
               settle = resolve;
@@ -288,9 +292,25 @@ export const makeRuns = ({
               projectId: event.projectId,
               worktreeId: event.worktreeId,
               slot: event.slot,
-              startedAt: clock.currentTimeMillisUnsafe(),
+              startedAt,
             });
             own.add(event.runId);
+            if (event.command !== undefined) {
+              runFork(
+                sweep.record(
+                  {
+                    runId: event.runId,
+                    pid,
+                    groupLeader: false,
+                    projectId: event.projectId,
+                    worktreeId: event.worktreeId,
+                    startedAt,
+                    command: event.command,
+                  },
+                  Effect.promise(() => done),
+                ),
+              );
+            }
             announce();
             notify(event);
             return;
@@ -451,6 +471,7 @@ export const makeRuns = ({
         {
           runId,
           pid: pty.pid,
+          groupLeader: true,
           projectId: record.projectId,
           worktreeId: record.worktreeId,
           startedAt: record.startedAt,

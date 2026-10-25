@@ -10,8 +10,10 @@ import * as SqlClient from "effect/sql/SqlClient";
 export type RunningScript = {
   readonly runId: string;
   readonly ownerPid: number;
-  // The leader of the script's process group.
   readonly pid: number;
+  // Whether `pid` leads the script's process group: a PTY run's does,
+  // while a lifecycle script runs in the app's group.
+  readonly groupLeader: boolean;
   readonly projectId: string;
   readonly worktreeId: string;
   // Epoch ms, stamped just after the spawn.
@@ -39,6 +41,7 @@ const make = Effect.gen(function* () {
     worktree_id: string;
     started_at: number;
     command: string;
+    group_leader: number;
   }>`SELECT * FROM running_scripts ORDER BY started_at, run_id`.pipe(
     Effect.map((rows) =>
       rows.map((row) => ({
@@ -49,6 +52,7 @@ const make = Effect.gen(function* () {
         worktreeId: row.worktree_id,
         startedAt: row.started_at,
         command: row.command,
+        groupLeader: row.group_leader === 1,
       })),
     ),
     Effect.orDie,
@@ -66,6 +70,7 @@ const make = Effect.gen(function* () {
       worktree_id: script.worktreeId,
       started_at: script.startedAt,
       command: script.command,
+      group_leader: script.groupLeader ? 1 : 0,
     };
     yield* sql`INSERT OR REPLACE INTO running_scripts ${sql.insert(row)}`;
   }, Effect.orDie);
