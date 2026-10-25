@@ -10,6 +10,7 @@ import * as Result from "effect/Result";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Config from "../Config.ts";
 import * as Git from "../Git.ts";
+import type { UpstreamSync } from "../Git.ts";
 import {
   shortRefName,
   splitRemoteRef,
@@ -50,6 +51,8 @@ import {
   sessionsOf,
 } from "./documents.ts";
 
+const NO_RELATION = { behindPrimary: 0, mergedIntoPrimary: false };
+
 const identityRowOf = (
   worktree: WorktreeIdentity,
   marked: {
@@ -75,6 +78,78 @@ const identityRowOf = (
     },
     refs,
   );
+
+// What a row's counts are read from, as one key: HEAD's commit, its
+// upstream's, the primary's, and `graph`, every remote's with the
+// shallow boundary and the grafts. No setting changes a count, so the
+// same key reads the same counts. Undefined when a commit isn't among
+// the tips (an unborn branch, an upstream outside the branches and
+// remotes), or a replacement ref is, which core.useReplaceRefs can turn
+// off.
+const countsKeyOf = (
+  entry: WorktreeEntry,
+  worktree: Pick<WorktreeIdentity, "isPrimary">,
+  context: { readonly primaryFullRef: string },
+  tips: Effect.Success<ReturnType<Git.Git["Service"]["refTips"]>>,
+  graph: string,
+) => {
+  const branch = entry.detached ? undefined : tips.get(entry.branch);
+  const head = entry.detached ? entry.head : branch?.tip;
+  const upstream = branch?.upstream ?? "";
+  const primary =
+    context.primaryFullRef === "" ? "" : tips.get(context.primaryFullRef)?.tip;
+  if (
+    !head ||
+    primary === undefined ||
+    [...tips.keys()].some((ref) => ref.startsWith("refs/replace/")) ||
+    (upstream !== "" &&
+      !upstream.startsWith("refs/heads/") &&
+      !upstream.startsWith("refs/remotes/"))
+  )
+    return undefined;
+  const upstreamTip = tips.get(upstream)?.tip ?? "";
+  return {
+    key: JSON.stringify([
+      head,
+      entry.detached,
+      worktree.isPrimary,
+      upstream,
+      upstreamTip,
+      context.primaryFullRef,
+      primary,
+      graph,
+    ]),
+    head,
+    hasUpstream: upstreamTip !== "",
+  };
+};
+
+// Whether counts were read in full at their key's commits. The probes
+// answer a failed read with what looks like an answer, which kept
+// would outlive the failure: a log beside them that isn't HEAD's, an
+// upstream other than the one the key saw, a relation or count that
+// wasn't read. A diverged branch's are never kept: its merge check
+// reads the merge settings and attributes.
+const readAt = (
+  counts: {
+    readonly sync: UpstreamSync;
+    readonly relation: Option.Option<unknown>;
+    readonly unpushed: Option.Option<number>;
+  },
+  commits: ReadonlyArray<{ readonly hash: string }>,
+  read: { readonly head: string; readonly hasUpstream: boolean },
+) => {
+  const [newest] = commits;
+  const { ahead, behind, hasUpstream } = counts.sync;
+  return (
+    newest !== undefined &&
+    read.head.startsWith(newest.hash) &&
+    hasUpstream === read.hasUpstream &&
+    !(ahead > 0 && behind > 0) &&
+    Option.isSome(counts.relation) &&
+    Option.isSome(counts.unpushed)
+  );
+};
 
 export const makeListing = Effect.gen(function* () {
   const git = yield* Git.Git;
@@ -158,6 +233,28 @@ export const makeListing = Effect.gen(function* () {
       Effect.orElseSucceed(() => Option.none<string>()),
     );
 
+  // The shallow boundary and the grafts of a project's repository, read
+  // off its common dir. None when they can't be read this way.
+  const graftsOf = (projectPath: string) =>
+    Effect.gen(function* () {
+      const common = yield* Git.commonDirOf(projectPath);
+      if (common === null) return Option.none<string>();
+      const read = (file: string) =>
+        fs
+          .readFileString(path.join(common, file))
+          .pipe(Effect.catchIf(isAbsent, () => Effect.succeed("")));
+      return Option.some(
+        JSON.stringify(
+          yield* Effect.all([read("shallow"), read("info/grafts")], {
+            concurrency: 2,
+          }),
+        ),
+      );
+    }).pipe(
+      Effect.provide(platform),
+      Effect.orElseSucceed(() => Option.none<string>()),
+    );
+
   // git's last `worktree list` of each project and the files it was read
   // from, answered again while they say the same. Kept only when they
   // read the same before git ran and after: a change git saw as it ran,
@@ -188,14 +285,16 @@ export const makeListing = Effect.gen(function* () {
     return entries;
   });
 
-  const identities = Effect.fn("Worktrees.identities")(function* (
-    project: RegisteredProject,
-  ) {
+  // Each checkout with the entry git listed it as.
+  const checkoutsOf = Effect.fn(function* (project: RegisteredProject) {
     const entries = yield* listWorktrees(project.path);
     const bases = yield* layout.managedBases(project);
     const codexNames = yield* Effect.cached(deviceFlag("codexWorktreeNames"));
     const primaryPath = primaryCheckoutPath(entries, project.path);
-    const found: WorktreeIdentity[] = [];
+    const found: Array<{
+      readonly worktree: WorktreeIdentity;
+      readonly entry: WorktreeEntry;
+    }> = [];
     for (const entry of entries) {
       if (entry.bare) continue;
       const isPrimary = entry.path === primaryPath;
@@ -206,18 +305,27 @@ export const makeListing = Effect.gen(function* () {
           ? externalWorktreeName(path, entry.path, project.path)
           : path.basename(entry.path);
       found.push({
-        id: worktreeIdFromPath(entry.path),
-        projectId: project.id,
-        name,
-        branch: deriveBranch(entry),
-        path: entry.path,
-        isPrimary,
-        isExternal,
-        detached: entry.detached,
-        locked: entry.locked,
+        worktree: {
+          id: worktreeIdFromPath(entry.path),
+          projectId: project.id,
+          name,
+          branch: deriveBranch(entry),
+          path: entry.path,
+          isPrimary,
+          isExternal,
+          detached: entry.detached,
+          locked: entry.locked,
+        },
+        entry,
       });
     }
     return found;
+  });
+
+  const identities = Effect.fn("Worktrees.identities")(function* (
+    project: RegisteredProject,
+  ) {
+    return (yield* checkoutsOf(project)).map(({ worktree }) => worktree);
   });
 
   // The project's primary ref, the default-branch setting honored, and
@@ -239,7 +347,13 @@ export const makeListing = Effect.gen(function* () {
       ? (splitRemoteRef(primaryRef, remotes)?.branch ??
         primaryRef.slice(primaryRef.indexOf("/") + 1))
       : primaryRef;
-    return { remotes, primaryRef, primaryBranch, settings };
+    return {
+      remotes,
+      primaryFullRef: fullRef,
+      primaryRef,
+      primaryBranch,
+      settings,
+    };
   });
 
   // The marks, with any worktree shelved the shelf's snapshots, and with
@@ -289,7 +403,7 @@ export const makeListing = Effect.gen(function* () {
   ) {
     const primary = yield* primaryRefOf(project);
     const chain = yield* Effect.cached(
-      git.firstParentChain(project.path, primary.primaryRef),
+      git.firstParentChain(project.path, primary.primaryFullRef),
     );
     return { project, ...primary, ...marked, chain };
   });
@@ -333,18 +447,34 @@ export const makeListing = Effect.gen(function* () {
       ? data.description(worktree.projectId, worktree.id)
       : Effect.succeed(WorktreeData.NO_DESCRIPTION);
 
+  // What of a row only its refs decide: how it sits against its
+  // upstream, the primary and every remote.
+  const countsOf = (worktree: WorktreeIdentity, context: RowContext) =>
+    Effect.all(
+      {
+        sync: git.upstreamSync(worktree.path),
+        relation:
+          context.primaryRef === "" || worktree.isPrimary || worktree.detached
+            ? Effect.succeed(Option.some(NO_RELATION))
+            : git.primaryRelation({
+                worktree: worktree.path,
+                primaryRef: context.primaryFullRef,
+                chain: context.chain,
+              }),
+        unpushed: git.unpushedCount(worktree.path),
+      },
+      { concurrency: "unbounded" },
+    );
+  type Counts = Effect.Success<ReturnType<typeof countsOf>>;
+
   // A row, and when its probes started, which the shelf compares at.
-  const probe = (worktree: WorktreeIdentity, context: RowContext) =>
+  const probe = (
+    worktree: WorktreeIdentity,
+    context: RowContext,
+    counts: Effect.Effect<Counts> = countsOf(worktree, context),
+  ) =>
     Effect.gen(function* () {
       const at = yield* Clock.currentTimeMillis;
-      const relation =
-        context.primaryRef === "" || worktree.isPrimary || worktree.detached
-          ? Effect.succeed({ behindPrimary: 0, mergedIntoPrimary: false })
-          : git.primaryRelation({
-              worktree: worktree.path,
-              primaryRef: context.primaryRef,
-              chain: context.chain,
-            });
       const probes = yield* Effect.all(
         {
           changes: Effect.result(git.workingTreeChanges(worktree.path)),
@@ -352,9 +482,7 @@ export const makeListing = Effect.gen(function* () {
             skip: 0,
             count: RECENT_COMMITS,
           }),
-          sync: git.upstreamSync(worktree.path),
-          relation,
-          unpushed: git.unpushedCount(worktree.path),
+          counts,
           createdAt: createdAtOf(worktree.path),
           rebasing: rebasingOf(worktree),
           described: descriptionOf(worktree),
@@ -365,6 +493,12 @@ export const makeListing = Effect.gen(function* () {
         count: null,
         lastChangeAt: 0,
       }));
+      const { commits } = probes;
+      const { sync } = probes.counts;
+      const relation = Option.getOrElse(
+        probes.counts.relation,
+        () => NO_RELATION,
+      );
       const { title, description } = probes.described;
       const row: WorktreeRow = {
         id: worktree.id,
@@ -372,20 +506,20 @@ export const makeListing = Effect.gen(function* () {
         name: worktree.name,
         branch: worktree.branch,
         path: worktree.path,
-        ahead: probes.sync.ahead,
-        behind: probes.sync.behind,
-        hasUpstream: probes.sync.hasUpstream,
+        ahead: sync.ahead,
+        behind: sync.behind,
+        hasUpstream: sync.hasUpstream,
         hasRemote: context.remotes.length > 0,
-        divergedClean: probes.sync.divergedClean,
-        behindPrimary: probes.relation.behindPrimary,
-        unpushedCount: probes.unpushed,
+        divergedClean: sync.divergedClean,
+        behindPrimary: relation.behindPrimary,
+        unpushedCount: Option.getOrElse(probes.counts.unpushed, () => 0),
         ...nonEmpty("primaryRef", context.primaryRef),
         ...nonEmpty("primaryBranch", context.primaryBranch),
-        mergedIntoPrimary: probes.relation.mergedIntoPrimary,
+        mergedIntoPrimary: relation.mergedIntoPrimary,
         changedCount: changes.count,
         ...nonEmpty("lastChangeAt", changes.lastChangeAt),
         ...nonEmpty("createdAt", probes.createdAt),
-        recentCommits: probes.commits,
+        recentCommits: commits,
         isPrimary: worktree.isPrimary,
         isExternal: worktree.isExternal,
         detached: worktree.detached,
@@ -399,7 +533,7 @@ export const makeListing = Effect.gen(function* () {
         ...nonEmpty("description", description),
         projectName: context.project.name,
       };
-      return { row, at };
+      return { row, at, counts: probes.counts };
     });
   type Probed = Effect.Success<ReturnType<typeof probe>>;
 
@@ -523,19 +657,78 @@ export const makeListing = Effect.gen(function* () {
     );
   };
 
+  // Each project's last listing's counts by worktree path, under the key
+  // read before their probes: a ref that moved while they ran reads a
+  // new key next time. A row the listing no longer has drops out.
+  const keptCounts = new Map<
+    string,
+    ReadonlyMap<string, { readonly key: string; readonly counts: Counts }>
+  >();
+
   const rowsOf = Effect.fn("Worktrees.rowsOf")(function* (
     project: RegisteredProject,
     marked: Effect.Success<typeof marks>,
   ) {
-    const [found, context] = yield* Effect.all(
-      [identities(project), contextOf(project, marked)],
-      { concurrency: 2 },
+    const [found, context, tips, grafts, worktreeConfig] = yield* Effect.all(
+      [
+        checkoutsOf(project),
+        contextOf(project, marked),
+        Effect.option(git.refTips(project.path)),
+        graftsOf(project.path),
+        Effect.option(git.worktreeConfigOn(project.path)),
+      ],
+      { concurrency: 5 },
     );
+    const entries = new Map(
+      found.map(({ worktree, entry }) => [worktree.path, entry]),
+    );
+    // A worktree's own config can give its branch another upstream than
+    // the tips read, so with it on (or unread) nothing is kept.
+    const graph = Option.flatMap(
+      Option.filter(tips, () => Option.exists(worktreeConfig, (on) => !on)),
+      (all) =>
+        Option.map(grafts, (files) =>
+          [...all]
+            .filter(([ref]) => !ref.startsWith("refs/heads/"))
+            .map(([ref, { tip }]) => `${ref} ${tip}`)
+            .concat(files)
+            .join("\n"),
+        ),
+    );
+    const kept = keptCounts.get(project.path);
+    const keeping = new Map<
+      string,
+      { readonly key: string; readonly counts: Counts }
+    >();
     const probed = yield* Effect.forEach(
-      primaryFirst(found),
-      (worktree) => probe(worktree, context),
+      primaryFirst(found.map(({ worktree }) => worktree)),
+      (worktree) =>
+        Effect.gen(function* () {
+          const entry = entries.get(worktree.path);
+          const read =
+            entry === undefined || Option.isNone(tips) || Option.isNone(graph)
+              ? undefined
+              : countsKeyOf(entry, worktree, context, tips.value, graph.value);
+          const last = kept?.get(worktree.path);
+          if (read !== undefined && last?.key === read.key) {
+            keeping.set(worktree.path, last);
+            return yield* probe(worktree, context, Effect.succeed(last.counts));
+          }
+          const fresh = yield* probe(worktree, context);
+          if (
+            read !== undefined &&
+            readAt(fresh.counts, fresh.row.recentCommits, read)
+          ) {
+            keeping.set(worktree.path, {
+              key: read.key,
+              counts: fresh.counts,
+            });
+          }
+          return fresh;
+        }),
       { concurrency: ROW_SLOTS },
     );
+    keptCounts.set(project.path, keeping);
     return yield* settle(probed, context);
   });
 

@@ -76,7 +76,7 @@ export const makeHistory = ({
         "--remotes",
       ]).pipe(
         Effect.map((stdout) => Number.parseInt(stdout.trim(), 10) || 0),
-        Effect.orElseSucceed(() => 0),
+        Effect.option,
       );
     });
 
@@ -247,22 +247,23 @@ export const makeHistory = ({
       readonly chain: Effect.Effect<Option.Option<ReadonlySet<string>>>;
     }) {
       const counts = yield* aheadBehind(input.worktree, input.primaryRef);
-      if (Option.isNone(counts))
-        return { behindPrimary: 0, mergedIntoPrimary: false };
+      if (Option.isNone(counts)) return Option.none();
       const { ahead, behind } = counts.value;
       if (ahead > 0 || behind === 0 || behind > FIRST_PARENT_LIMIT) {
-        return { behindPrimary: behind, mergedIntoPrimary: false };
+        return Option.some({ behindPrimary: behind, mergedIntoPrimary: false });
       }
       const head = yield* run(input.worktree, ["rev-parse", "HEAD"]).pipe(
         Effect.map((stdout) => stdout.trim()),
-        Effect.orElseSucceed(() => ""),
+        Effect.option,
       );
-      // An unread chain must read as "not landed": an empty one would put
-      // every HEAD off it, i.e. merged.
+      // An unread chain must not read as one HEAD is off, i.e. merged.
       const chain = yield* input.chain;
-      const merged =
-        head !== "" && Option.isSome(chain) && !chain.value.has(head);
-      return { behindPrimary: behind, mergedIntoPrimary: merged };
+      if (Option.isNone(head) || head.value === "" || Option.isNone(chain))
+        return Option.none();
+      return Option.some({
+        behindPrimary: behind,
+        mergedIntoPrimary: !chain.value.has(head.value),
+      });
     });
 
     const readCommitMessage = Effect.fn("Git.readCommitMessage")(function* (
