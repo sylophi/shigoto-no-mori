@@ -37,6 +37,7 @@ import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Random from "effect/Random";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
@@ -616,14 +617,15 @@ const make = <R, E>(options: {
     const attached = (
       session: Session,
       after: { readonly incarnation: string; readonly seq: number } | undefined,
-    ): Stream.Stream<TerminalEvent> =>
-      Stream.unwrap(
+    ): Stream.Stream<TerminalEvent> => {
+      let from = after;
+      let stalled = false;
+      const round = Stream.unwrap(
         Effect.gen(function* () {
+          stalled = false;
           const headOf = () => {
             const past = session.history.since(
-              after?.incarnation === session.incarnation
-                ? after.seq
-                : undefined,
+              from?.incarnation === session.incarnation ? from.seq : undefined,
             );
             return {
               past,
@@ -652,11 +654,10 @@ const make = <R, E>(options: {
           // A chunk sent between the subscription and this read is in
           // both, and the seq tells which.
           const { past, head } = headOf();
+          from = { incarnation: session.incarnation, seq: past.seq };
           const taken = yield* Queue.bounded<TerminalEvent, Cause.Done>(
             CLIENT_BACKLOG,
           );
-          let stalled = false;
-          let seq = past.seq;
           yield* Stream.fromSubscription(live).pipe(
             Stream.runForEach((event) =>
               Queue.offer(taken, event).pipe(Effect.timeout(CLIENT_STALL)),
@@ -681,22 +682,25 @@ const make = <R, E>(options: {
                 ),
                 Stream.tap((event) =>
                   Effect.sync(() => {
-                    if (event.kind === "output") seq = event.seq;
+                    if (event.kind === "output") {
+                      from = {
+                        incarnation: session.incarnation,
+                        seq: event.seq,
+                      };
+                    }
                   }),
                 ),
                 Stream.takeUntil((event) => event.kind === "exit"),
               ),
             ),
-            Stream.concat(
-              Stream.suspend(() =>
-                stalled
-                  ? attached(session, { incarnation: session.incarnation, seq })
-                  : Stream.empty,
-              ),
-            ),
           );
         }),
       );
+      // Each round's scope closes before the next starts.
+      return round.pipe(
+        Stream.repeat(Schedule.forever.pipe(Schedule.while(() => stalled))),
+      );
+    };
 
     return Terminals.of({
       list: SubscriptionRef.changes(listed),
