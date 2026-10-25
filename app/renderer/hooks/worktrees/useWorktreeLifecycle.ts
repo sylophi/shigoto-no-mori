@@ -188,7 +188,7 @@ function tellCarryOver(
 // peer announces the copy's removal, and a push is not replayed. It
 // starts over on each new session to the device's host, since the wire
 // may drop, or the host die, between a removal's or a setup's start
-// and its close, and the close is not replayed; for a peer, the
+// and its close, and the close is not replayed. For a peer, the
 // session-landed sweep refetches the device's listing, which then says
 // whether the worktree is still there.
 export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
