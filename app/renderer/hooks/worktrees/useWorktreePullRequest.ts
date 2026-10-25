@@ -32,7 +32,7 @@ const SETTLE_WINDOW_MS = 30_000;
 // One project's per-branch PR queries on a device, for its
 // refsRefreshed broadcast (lib/hostWatch.ts): refs landing (a merge or
 // a push) are what most often move a PR. The predicate skips the
-// project map, which has its own sweep-driven refresh.
+// project map, which the host reads again as the refs move.
 export function invalidateWorktreePullRequests(
   qc: QueryClient,
   keys: QueryKeyRegistry,
@@ -50,7 +50,7 @@ export function invalidateWorktreePullRequests(
 // github.com while the app was backgrounded), when the device's refs
 // move (invalidateWorktreePullRequests), and when the project's map (the
 // host's view of its sweep) disagrees with it, so a PR flipped on
-// github.com reaches an open page within a sweep. The host writes what
+// github.com reaches an open page by the map's next read. The host writes what
 // this read learns into that map. Silent on error to match the sweep's
 // swallow behavior. A transient gh failure shouldn't toast.
 export function useWorktreePullRequest(

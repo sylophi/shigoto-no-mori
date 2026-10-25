@@ -38,8 +38,8 @@ export class PullRequestMaps extends Context.Service<
     // The last map read while it is fresh, else one read now. Empty
     // while gh can't be asked about the project.
     readonly get: (project: ProjectRef) => Effect.Effect<PullRequestMap>;
-    // A map read now, the sweep's. A failed read answers the last map
-    // and leaves it to be read again.
+    // A map read now, for a project whose remote refs moved. A failed
+    // read answers the last map and leaves it to be read again.
     readonly refresh: (project: ProjectRef) => Effect.Effect<PullRequestMap>;
     // A page's read of its branch's PR, which moves the map where it is
     // newer. Null when the branch has none or gh can't be asked.
