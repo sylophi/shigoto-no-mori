@@ -5,6 +5,7 @@
 // feed sets. A grid bigger than the box is cut off at its edges.
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
+import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
@@ -110,7 +111,14 @@ export function TerminalView({
       cursorBlink: true,
       scrollback: 5_000,
       theme,
+      // The graphemes addon needs the proposed `term.unicode` API.
+      allowProposedApi: true,
     });
+    // Unicode 15 widths with graphemes clustered, as Ghostty and Ink TUIs
+    // count them: a ZWJ sequence, flag or VS16 emoji takes two cells.
+    // Shells measuring with libc's wcwidth (zsh, readline) count those
+    // per code point, so they can misplace the cursor after one.
+    term.loadAddon(new UnicodeGraphemesAddon());
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon((_event, uri) => link(uri)));
