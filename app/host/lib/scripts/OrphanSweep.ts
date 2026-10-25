@@ -113,20 +113,21 @@ const readProcessTable = Effect.fnUntraced(function* (pids: number[]) {
 });
 
 // The recorded command is what we handed the login shell, but a shell
-// running a single simple command execs into it, so the live command
-// line is often the program with its own argv: `pnpm dev` shows up as
-// `node .../pnpm.cjs dev`, and a shell-quoted absolute path loses its
-// quotes. Accept the whole recorded command, its leading word, or that
-// word's basename, and treat anything else as inconclusive.
+// execs into the last command of what it runs, so the live command
+// line is often one program with its own argv: `pnpm i && pnpm dev`
+// shows up as `node .../pnpm.cjs dev`, and a shell-quoted absolute
+// path loses its quotes. Accept the whole recorded command, or the
+// leading word of any command in it, or that word's basename, and
+// treat anything else as inconclusive.
 function commandMatches(recorded: string, live: string): boolean {
   const trimmed = recorded.trim();
   if (trimmed === "") return false;
   if (live.includes(trimmed)) return true;
-  const head = (trimmed.split(/\s+/)[0] ?? "").replace(/['"]/g, "");
-  if (head === "") return false;
-  return (
-    live.includes(head) || live.includes(head.slice(head.lastIndexOf("/") + 1))
-  );
+  return trimmed.split(/[;&|\n]+/).some((command) => {
+    const head = (command.trim().split(/\s+/)[0] ?? "").replace(/['"]/g, "");
+    const base = head.slice(head.lastIndexOf("/") + 1);
+    return base !== "" && (live.includes(head) || live.includes(base));
+  });
 }
 
 // The identity proof. A live pid says nothing on its own, so three
