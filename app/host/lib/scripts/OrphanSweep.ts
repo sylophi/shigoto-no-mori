@@ -26,7 +26,7 @@ import * as Schedule from "effect/Schedule";
 import type { OrphanScriptReport } from "@shigomori/contracts/schemas";
 import * as RunningScripts from "@shigomori/engine/RunningScripts";
 import * as Processes from "@shigomori/engine/processes";
-import { signalTree } from "./process";
+import { signalPidTree, signalTree } from "./process";
 
 // `ps` reports a start time to the second and we stamp startedAt just
 // after spawn returns, so the two differ by that rounding plus spawn
@@ -131,15 +131,16 @@ function commandMatches(recorded: string, live: string): boolean {
 
 // The identity proof. A live pid says nothing on its own, so three
 // independent facts have to agree before the sweep signals anything:
-// the process leads its own group (a script's PTY child leads a session of its own, and
-// setsid survives an exec), it started when we recorded that it
+// the process leads its own group when it did (a script's PTY child
+// leads a session of its own, and setsid survives an exec; a lifecycle
+// script ran in the app's group), it started when we recorded that it
 // started, and its command line still looks like the one we launched.
 function isSameProcess(
   record: RecordedScript,
   live: LiveProcess | undefined,
 ): boolean {
   if (!live) return false;
-  if (live.pgid !== live.pid) return false;
+  if (record.groupLeader !== (live.pgid === live.pid)) return false;
   if (Math.abs(live.startedAt - record.startedAt) > START_TOLERANCE_MS) {
     return false;
   }
@@ -159,10 +160,13 @@ const waitForExit = (pid: number, ms: number) =>
     Effect.map(Option.isSome),
   );
 
+// A lifecycle script's group is the dead app's, which its other
+// leftovers share, so only its own tree is signaled.
 const killOrphan = Effect.fnUntraced(function* (record: RecordedScript) {
-  yield* signalTree(record.pid, "SIGTERM");
+  const signal = record.groupLeader ? signalTree : signalPidTree;
+  yield* signal(record.pid, "SIGTERM");
   if (yield* waitForExit(record.pid, ORPHAN_GRACE_MS)) return true;
-  yield* signalTree(record.pid, "SIGKILL");
+  yield* signal(record.pid, "SIGKILL");
   const died = yield* waitForExit(record.pid, ORPHAN_GRACE_MS);
   if (!died) {
     yield* Effect.logWarning(

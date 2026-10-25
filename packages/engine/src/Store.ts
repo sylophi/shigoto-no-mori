@@ -23,6 +23,7 @@ import { dropMirrorInvites } from "./migrations/dropMirrorInvites.ts";
 import { mirrorAgreements } from "./migrations/mirrorAgreements.ts";
 import { mirrorHistory } from "./migrations/mirrorHistory.ts";
 import { moving } from "./migrations/moving.ts";
+import { runningScriptGroups } from "./migrations/runningScriptGroups.ts";
 import { runningScripts } from "./migrations/runningScripts.ts";
 import { tables } from "./migrations/tables.ts";
 import { terminals } from "./migrations/terminals.ts";
@@ -114,6 +115,7 @@ const history = (platform: Platform, lenient: boolean) => ({
   "14_wt_moves_watched": wtMovesWatched,
   "15_worktree_terminals": worktreeTerminals,
   "16_drop_mirror_invites": dropMirrorInvites,
+  "17_running_script_groups": runningScriptGroups,
 });
 
 // Whether the store holds what a 2.x data dir's files said: the files

@@ -38,6 +38,7 @@ it("opens a store holding a saved device terminal, keeping its worktrees' and dr
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`DROP TABLE saved_terminals`;
+      yield* sql`ALTER TABLE running_scripts DROP COLUMN group_leader`;
       yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id >= 15`;
       yield* terminals;
       yield* sql`INSERT INTO saved_terminals ${sql.insert([

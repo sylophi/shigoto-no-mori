@@ -153,13 +153,15 @@ export const ScriptEventSchema = Schema.Union([
     data: Schema.String,
   }),
   // Lets the renderer bind runId to slot before data arrives. `pid`, once
-  // there is one, is what the host signals to stop the run.
+  // there is one, is what the host signals to stop the run, and
+  // `command`, what it records for the next boot's sweep to know it by.
   Schema.Struct({
     runId: Schema.String,
     kind: Schema.Literal("started"),
     projectId: Schema.String,
     worktreeId: Schema.String,
     pid: Schema.optional(PositiveInt),
+    command: Schema.optional(Schema.String),
     slot: LifecycleSlotSchema,
   }),
 ]);

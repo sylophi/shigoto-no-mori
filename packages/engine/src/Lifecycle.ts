@@ -147,7 +147,7 @@ const make = Effect.gen(function* () {
         projectId: context.project.id,
         worktreeId: context.worktree.id,
         slot,
-        ...(pid === undefined ? {} : { pid }),
+        ...(pid === undefined ? {} : { pid, command: input.command }),
       });
     const exit = (code: number | null) =>
       script({ runId, kind: "exit", code }).pipe(Effect.as({ code, runId }));
