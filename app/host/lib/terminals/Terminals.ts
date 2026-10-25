@@ -96,6 +96,9 @@ const BATCH = Duration.millis(16);
 // for it, and how long it waits for a client that takes none.
 const CLIENT_BACKLOG = 64;
 const CLIENT_STALL = Duration.seconds(2);
+// The longest the list and lookups wait for the restore, which one
+// project on a hung volume could hold up for every terminal.
+const RESTORE_WAIT = Duration.seconds(5);
 // The most one chunk holds, in UTF-16 code units: at most 768 KiB as
 // UTF-8, so a chunk fits a message of the stream it goes out on
 // (host/socket/boundedMessages.ts). A batch past it goes as several.
@@ -312,14 +315,25 @@ const make = <R, E>(options: {
       ),
     );
 
+    // Opens once the last run's terminals are back (restore), or
+    // RESTORE_WAIT on. Until then neither the list nor a lookup
+    // answers: a window attached across a restart would read its
+    // terminal as closed.
+    const back = yield* Latch.make(false);
+
     // A listed terminal, a dead one on its way out included (`live`
     // leaves it out).
-    const listedSession = (terminalId: string, live = false) => {
-      const session = sessions.get(terminalId);
-      return session === undefined || (live && Option.isSome(session.exited))
-        ? Effect.fail(new UnknownTerminalError({ terminalId }))
-        : Effect.succeed(session);
-    };
+    const listedSession = (terminalId: string, live = false) =>
+      Latch.whenOpen(
+        back,
+        Effect.suspend(() => {
+          const session = sessions.get(terminalId);
+          return session === undefined ||
+            (live && Option.isSome(session.exited))
+            ? Effect.fail(new UnknownTerminalError({ terminalId }))
+            : Effect.succeed(session);
+        }),
+      );
     const find = (terminalId: string) => listedSession(terminalId, true);
     const living = () =>
       [...sessions.values()].filter((session) => Option.isNone(session.exited));
@@ -607,6 +621,11 @@ const make = <R, E>(options: {
     });
     yield* restore.pipe(
       Effect.withSpan("Terminals.restore"),
+      Effect.ensuring(Latch.open(back)),
+      Effect.forkIn(layerScope),
+    );
+    yield* Latch.open(back).pipe(
+      Effect.delay(RESTORE_WAIT),
       Effect.forkIn(layerScope),
     );
 
@@ -703,7 +722,9 @@ const make = <R, E>(options: {
     };
 
     return Terminals.of({
-      list: SubscriptionRef.changes(listed),
+      list: Stream.unwrap(
+        Latch.whenOpen(back, Effect.succeed(SubscriptionRef.changes(listed))),
+      ),
       open,
       close: Effect.fn("Terminals.close")(function* (terminalId: string) {
         const session = yield* listedSession(terminalId);
