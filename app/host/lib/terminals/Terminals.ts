@@ -8,9 +8,10 @@
 // next start opens a fresh shell there under that history.
 //
 // Its output goes out in chunks, numbered by `seq`, to every client
-// attached, through a bounded PubSub: a client that stops taking holds
+// attached, through a bounded PubSub: a client that falls behind holds
 // the shell's output back rather than pile it up here, and the PTY is
-// paused while the backlog is large. History is a ring of the latest
+// paused while the backlog is large. One that stops taking is cut loose
+// after a moment, and catches up from the history. History is a ring of the latest
 // chunks (./history.ts), which an attach replays first.
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import {
@@ -21,6 +22,7 @@ import {
 import type { Terminal, TerminalEvent } from "@shigomori/contracts/schemas";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
 import { elapsedMillis } from "@shigomori/engine/elapsed";
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
@@ -89,8 +91,9 @@ function pieces(data: string): string[] {
 // Reads within a frame go out as one chunk (as a script's output does).
 const BATCH = Duration.millis(16);
 // Chunks a client may fall behind by before the shell's output waits
-// for it.
+// for it, and how long it waits for a client that takes none.
 const CLIENT_BACKLOG = 64;
+const CLIENT_STALL = Duration.seconds(2);
 // The most one chunk holds, in UTF-16 code units: at most 768 KiB as
 // UTF-8, so a chunk fits a message of the stream it goes out on
 // (host/socket/boundedMessages.ts). A batch past it goes as several.
@@ -605,6 +608,95 @@ const make = <R, E>(options: {
       Effect.forkIn(layerScope),
     );
 
+    // A client's events from `after`: the history after it, the size,
+    // then the events as they come. A client that takes nothing for a
+    // while is unsubscribed, so it holds no one else's output back, and
+    // starts again after the last chunk it took once it takes again.
+    const attached = (
+      session: Session,
+      after: { readonly incarnation: string; readonly seq: number } | undefined,
+    ): Stream.Stream<TerminalEvent> =>
+      Stream.unwrap(
+        Effect.gen(function* () {
+          const headOf = () => {
+            const past = session.history.since(
+              after?.incarnation === session.incarnation
+                ? after.seq
+                : undefined,
+            );
+            return {
+              past,
+              head: [
+                {
+                  kind: "history",
+                  incarnation: session.incarnation,
+                  ...past,
+                },
+                { kind: "size", ...session.size },
+              ] satisfies TerminalEvent[],
+            };
+          };
+          // A dead one, on its way out, gets its exit from here, not
+          // from its events.
+          if (Option.isSome(session.exited)) {
+            return Stream.fromIterable([
+              ...headOf().head,
+              { kind: "exit", code: session.exited.value },
+            ] satisfies TerminalEvent[]);
+          }
+          const subscribed = yield* Scope.fork(yield* Effect.scope);
+          const live = yield* PubSub.subscribe(session.events).pipe(
+            Scope.provide(subscribed),
+          );
+          // A chunk sent between the subscription and this read is in
+          // both, and the seq tells which.
+          const { past, head } = headOf();
+          const taken = yield* Queue.bounded<TerminalEvent, Cause.Done>(
+            CLIENT_BACKLOG,
+          );
+          let stalled = false;
+          let seq = past.seq;
+          yield* Stream.fromSubscription(live).pipe(
+            Stream.runForEach((event) =>
+              Queue.offer(taken, event).pipe(Effect.timeout(CLIENT_STALL)),
+            ),
+            Effect.catch(() =>
+              Effect.sync(() => {
+                stalled = true;
+              }),
+            ),
+            Effect.ensuring(
+              Scope.close(subscribed, Exit.void).pipe(
+                Effect.andThen(Queue.end(taken)),
+              ),
+            ),
+            Effect.forkScoped,
+          );
+          return Stream.fromIterable(head).pipe(
+            Stream.concat(
+              Stream.fromQueue(taken).pipe(
+                Stream.filter(
+                  (event) => event.kind !== "output" || event.seq > past.seq,
+                ),
+                Stream.tap((event) =>
+                  Effect.sync(() => {
+                    if (event.kind === "output") seq = event.seq;
+                  }),
+                ),
+                Stream.takeUntil((event) => event.kind === "exit"),
+              ),
+            ),
+            Stream.concat(
+              Stream.suspend(() =>
+                stalled
+                  ? attached(session, { incarnation: session.incarnation, seq })
+                  : Stream.empty,
+              ),
+            ),
+          );
+        }),
+      );
+
     return Terminals.of({
       list: SubscriptionRef.changes(listed),
       open,
@@ -615,49 +707,9 @@ const make = <R, E>(options: {
       }),
       attach: (terminalId, after) =>
         Stream.unwrap(
-          Effect.gen(function* () {
-            const session = yield* listedSession(terminalId);
-            const headOf = () => {
-              const past = session.history.since(
-                after?.incarnation === session.incarnation
-                  ? after.seq
-                  : undefined,
-              );
-              return {
-                past,
-                head: [
-                  {
-                    kind: "history",
-                    incarnation: session.incarnation,
-                    ...past,
-                  },
-                  { kind: "size", ...session.size },
-                ] satisfies TerminalEvent[],
-              };
-            };
-            // A dead one, on its way out, gets its exit from here, not
-            // from its events.
-            if (Option.isSome(session.exited)) {
-              return Stream.fromIterable([
-                ...headOf().head,
-                { kind: "exit", code: session.exited.value },
-              ] satisfies TerminalEvent[]);
-            }
-            const live = yield* PubSub.subscribe(session.events);
-            // A chunk sent between the subscription and this read is in
-            // both, and the seq tells which.
-            const { past, head } = headOf();
-            return Stream.fromIterable(head).pipe(
-              Stream.concat(
-                Stream.fromSubscription(live).pipe(
-                  Stream.filter(
-                    (event) => event.kind !== "output" || event.seq > past.seq,
-                  ),
-                  Stream.takeUntil((event) => event.kind === "exit"),
-                ),
-              ),
-            );
-          }),
+          Effect.map(listedSession(terminalId), (session) =>
+            attached(session, after),
+          ),
         ),
       write: Effect.fn("Terminals.write")(function* (
         terminalId: string,
