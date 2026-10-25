@@ -56,11 +56,11 @@ const treeViewAtom = Atom.family((key: string) => {
     deviceId,
     view: callOf(worktreesContract, view),
     input,
-    // A file's diff and hunks stream half a minute after the page moves
-    // to another file: a second look is instant, and a long review
-    // leaves no reads behind.
+    // A file's diff and hunks stream a few seconds after the page moves
+    // to another file: flicking back to the file just left is instant,
+    // and the files a review passes through soon stop rereading.
     ...(view === "watchFileDiff" || view === "watchFileHunks"
-      ? { idle: "30 seconds" }
+      ? { idle: "5 seconds" }
       : {}),
   });
 });
