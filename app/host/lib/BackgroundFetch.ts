@@ -1,13 +1,13 @@
 // Background `git fetch` for every registered project so refs/remotes/*
-// doesn't drift between explicit pulls, plus the project-wide PR cache
-// refresh (sidebar dots). One timer, ticking only while someone is
-// looking: a window here is focused, or a peer said so through
-// git:sweep within its lease. An unattended sweep is a git and a gh
-// spawn per project every minute that nobody reads, and whoever
-// returns (this window on focus, a peer on its focus or its session
-// landing) asks for a pass at that moment. Broadcasts refsRefreshed
-// when a pass moved a ref; the PR map announces its own changes
-// (PullRequestMaps).
+// doesn't drift between explicit pulls, plus the project-wide PR maps
+// (sidebar dots), read again as they age out or a project's remote refs
+// move. One timer, ticking only while someone is looking: a window here
+// is focused, or a peer said so through git:sweep within its lease. An
+// unattended sweep is a git spawn per project every minute and a gh one
+// every few that nobody reads, and whoever returns (this window on
+// focus, a peer on its focus or its session landing) asks for a pass at
+// that moment. Broadcasts refsRefreshed when a pass moved a ref; the PR
+// map announces its own changes (PullRequestMaps).
 import type { Project } from "@shigomori/contracts/schemas";
 import { messageOf } from "@shigomori/engine/errorDocument";
 import { gitContract } from "@shigomori/contracts/modules/git";
@@ -40,8 +40,9 @@ const FRESHNESS_MS = 3_000;
 // The timer's cadence while attended, and the staleness a peer's
 // request tolerates: a peer asking is the peer catching up on what the
 // timer would have kept within this age anyway, so a request landing
-// on a host that is already ticking is nearly free. The PR refresh
-// uses it on every path, since gh is a rate-limited API call and the
+// on a host that is already ticking is nearly free. The PR maps are
+// looked at on it from every path but read from gh only past their own
+// age (PullRequestMaps), since gh is a rate-limited API call and the
 // open worktree page refreshes its own PR on focus.
 const SWEEP_INTERVAL_MS = 60_000;
 
@@ -105,6 +106,8 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
     const lastFetchedAt = new Map<string, Stamp>();
     const fetchInFlight = new Map<string, Deferred.Deferred<boolean>>();
     const lastPullRequestSweepAt = new Map<string, Stamp>();
+    // Per project, the remote refs after its last fetch.
+    const remoteRefs = new Map<string, string>();
     // Projects whose last fetch attempt failed, so a run of failures warns once.
     const failingProjects = new Set<string>();
     // Per project, the worktrees whose auto-pull failed on the last sweep,
@@ -172,6 +175,18 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
             if (before !== after) {
               broadcastAll(gitContract, "refsRefreshed", { projectId });
             }
+            // A push or a merge is what most often moves a PR, so moved
+            // refs read the map now rather than at its age. Against the
+            // last fetch rather than `before`, so a push from here between
+            // passes counts too.
+            const seen = remoteRefs.get(projectId) ?? before;
+            remoteRefs.set(projectId, after);
+            if (seen !== after) {
+              yield* FiberSet.run(
+                runs,
+                pullRequests.refresh({ id: projectId, path: projectPath }),
+              );
+            }
             // After every successful fetch, not only one that moved a
             // ref: a marked worktree that was dirty or busy at the last
             // pass and is clean now has the same upstream and still wants
@@ -230,7 +245,7 @@ const make = ({ broadcast: broadcastAll, announceProjectChanged }: Options) =>
         if (sweptAt !== undefined && ageOf(sweptAt) < SWEEP_INTERVAL_MS)
           return Effect.void;
         lastPullRequestSweepAt.set(project.id, stamp());
-        return Effect.asVoid(pullRequests.refresh(project));
+        return Effect.asVoid(pullRequests.get(project));
       });
 
     // One pass over every project. The timer and the window-focus handler
