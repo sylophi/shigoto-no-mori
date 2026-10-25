@@ -66,11 +66,14 @@ export const clientAtoms = Atom.runtime((get) => {
     : Layer.succeed(ClientLinks, links);
 });
 
-// How many sessions to each peer have landed, which the boot counts
-// (onSessionLanded). A peer's views start again on each new session,
-// since one riding a session this side closed (a probe that found it
-// dead) is never told it ended.
-export const peerSessionAtom = Atom.family((_deviceId: string) =>
+// How many sessions to each device's host have landed, which the boot
+// counts: a peer's (onSessionLanded), and this machine's link landing
+// on its host again after a drop (startLocalHost). A peer's views start
+// again on each new session, since one riding a session this side
+// closed (a probe that found it dead) is never told it ended. What an
+// atom folds from pushes starts again on either, since the pushes that
+// would have ended it went with the session or the host that died.
+export const hostSessionAtom = Atom.family((_deviceId: string) =>
   Atom.keepAlive(Atom.make(0)),
 );
 
@@ -254,8 +257,8 @@ export const shellState = <R extends ContractCall, P extends ContractCall>(
   );
 };
 
-// The same for one device's host module: a peer's starts again on each
-// new session to it, which covers a restart into a new build.
+// The same for one device's host module: it starts again on each new
+// session to the host, which covers a restart into a new build.
 export const hostStateAtom = <R extends ContractCall, P extends ContractCall>(
   deviceId: string,
   options: Parameters<typeof pushedState<R, P>>[1],
@@ -264,7 +267,7 @@ export const hostStateAtom = <R extends ContractCall, P extends ContractCall>(
   return clientAtoms.atom((get) => {
     const localDeviceId = get(localDeviceIdAtom);
     const peer = deviceId !== localDeviceId;
-    if (peer) get(peerSessionAtom(deviceId));
+    get(hostSessionAtom(deviceId));
     return redialing(
       Stream.unwrap(
         Effect.map(hostLinkOf(deviceId, localDeviceId), (link) =>
@@ -411,7 +414,7 @@ export function hostViewAtom<R extends ContractCall>(options: {
     .atom((get) => {
       const localDeviceId = get(localDeviceIdAtom);
       if (options.deviceId !== localDeviceId) {
-        get(peerSessionAtom(options.deviceId));
+        get(hostSessionAtom(options.deviceId));
       }
       return valuesOn(localDeviceId);
     })

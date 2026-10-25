@@ -34,7 +34,7 @@ import {
   heard,
   hostPushes,
   localDeviceIdAtom,
-  peerSessionAtom,
+  hostSessionAtom,
   queryClientAtom,
 } from "@/lib/runtime/atoms";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -185,20 +185,19 @@ function tellCarryOver(
 // The boot mounts this machine's where it has a host, and a peer's from
 // the moment its session lands until the account goes: a row a mirror
 // folds away is never drawn, so nothing else would listen before the
-// peer announces the copy's removal, and a push is not replayed. A
-// peer's starts over on each new session, since the wire may drop
-// between a removal's start and its close and the close is not
-// replayed; the session-landed sweep refetches the device's listing,
-// which then says whether the worktree is still there.
+// peer announces the copy's removal, and a push is not replayed. It
+// starts over on each new session to the device's host, since the wire
+// may drop, or the host die, between a removal's or a setup's start
+// and its close, and the close is not replayed; for a peer, the
+// session-landed sweep refetches the device's listing, which then says
+// whether the worktree is still there.
 export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
   clientAtoms.atom(
     (get) => {
       const localDeviceId = get(localDeviceIdAtom);
       const local = deviceId === localDeviceId;
-      if (!local) {
-        get(peerSessionAtom(deviceId));
-        get(accountsLeftAtom);
-      }
+      get(hostSessionAtom(deviceId));
+      if (!local) get(accountsLeftAtom);
       const queryClient = get(queryClientAtom);
       const registry = get.registry;
       const pushes = <K extends "removal" | "lifecyclePhase">(key: K) =>

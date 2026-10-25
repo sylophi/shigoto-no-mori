@@ -29,7 +29,7 @@ import {
 } from "@/hooks/worktrees/useWorktrees";
 import { useAtomValue } from "@effect/atom-react";
 import * as Atom from "effect/reactivity/Atom";
-import { peerSessionAtom } from "@/lib/runtime/atoms";
+import { hostSessionAtom } from "@/lib/runtime/atoms";
 import { useViews, viewsOf } from "@/lib/runtime/viewHooks";
 import { useRemoteDevices } from "./useRemoteDevices";
 
@@ -47,7 +47,7 @@ const hadSessionAtom = Atom.family((joined: string) =>
       ? []
       : joined
           .split(SEPARATOR)
-          .filter((deviceId) => get(peerSessionAtom(deviceId)) > 0),
+          .filter((deviceId) => get(hostSessionAtom(deviceId)) > 0),
   ),
 );
 const SEPARATOR = "\u0001";

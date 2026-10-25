@@ -57,24 +57,30 @@ export function askAgainOnHostReturn(
   queryClient: QueryClient,
   signal: AbortSignal,
 ): void {
+  onHostReturn(() => {
+    const cut = queryClient.getQueryCache().findAll({
+      predicate: (query) =>
+        isOwnAppDrop(query.state.error) ||
+        isOwnAppDrop(query.state.fetchFailureReason),
+    });
+    // A read waiting out its retry's delay is cancelled first: React
+    // Query lets a fetch still out run on rather than start another.
+    for (const { queryKey } of cut) {
+      const exact = { queryKey, exact: true };
+      void queryClient
+        .cancelQueries(exact)
+        .then(() => queryClient.refetchQueries(exact));
+    }
+  }, signal);
+}
+
+// Each time this machine's host answers again after it stopped: a
+// restart, or this window's link dialing it again.
+export function onHostReturn(listener: () => void, signal: AbortSignal): void {
   let answering = hostAnswering.get();
   const stop = hostAnswering.subscribe(() => {
     const now = hostAnswering.get();
-    if (now && !answering) {
-      const cut = queryClient.getQueryCache().findAll({
-        predicate: (query) =>
-          isOwnAppDrop(query.state.error) ||
-          isOwnAppDrop(query.state.fetchFailureReason),
-      });
-      // A read waiting out its retry's delay is cancelled first: React
-      // Query lets a fetch still out run on rather than start another.
-      for (const { queryKey } of cut) {
-        const exact = { queryKey, exact: true };
-        void queryClient
-          .cancelQueries(exact)
-          .then(() => queryClient.refetchQueries(exact));
-      }
-    }
+    if (now && !answering) listener();
     answering = now;
   });
   signal.addEventListener("abort", stop, { once: true });
