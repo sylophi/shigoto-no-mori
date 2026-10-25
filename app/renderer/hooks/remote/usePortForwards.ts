@@ -30,6 +30,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { useHasLocalHost } from "@/lib/localHost";
+import { onHostReturn } from "@/lib/runtime/hostAnswering";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
 // Forwarding binds a real local TCP listener, which only the app can do
@@ -51,14 +52,18 @@ export function useCanForwardPorts(): boolean {
 // key. Those do not collapse, since invalidateQueries cancels and
 // restarts an in-flight refetch by default. The engine already
 // coalesces conn bursts to one signal per 150ms, which a per-consumer
-// listener would multiply straight back up.
+// listener would multiply straight back up. The forwards live in the
+// host's memory, so a host that restarted holds none and says nothing:
+// the list is read again as it answers.
 export function watchPortForwards(
   api: RendererApi,
   queryClient: QueryClient,
+  signal: AbortSignal,
 ): void {
-  api.listen(api.pushes(portForwardContract, "changed"), () => {
+  const refresh = () =>
     refreshQueries(queryClient, { queryKey: queryKeys.portForwards() });
-  });
+  api.listen(api.pushes(portForwardContract, "changed"), refresh);
+  onHostReturn(refresh, signal);
 }
 
 type PortForwardList = { readonly forwards: readonly PortForwardSummary[] };

@@ -26,7 +26,7 @@ import {
   accountsLeftAtom,
   clientLinksAtom,
   localDeviceIdAtom,
-  peerSessionAtom,
+  hostSessionAtom,
   queryClientAtom,
 } from "./lib/runtime/atoms";
 import { ApiProvider, type RendererApi } from "./lib/runtime/pageApi";
@@ -43,7 +43,10 @@ import {
 import { watchPortForwards } from "./hooks/remote/usePortForwards";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { watchHost } from "./lib/hostWatch";
-import { askAgainOnHostReturn } from "./lib/runtime/hostAnswering";
+import {
+  askAgainOnHostReturn,
+  onHostReturn,
+} from "./lib/runtime/hostAnswering";
 import { followDeviceSettings } from "./hooks/config/useGlobalConfig";
 import {
   onAccountLeft,
@@ -122,7 +125,7 @@ export function startApp({
   // with the account.
   const peerLifecycles = new Map<string, () => void>();
   onSessionLanded((deviceId) => {
-    registry.update(peerSessionAtom(deviceId), (count) => count + 1);
+    registry.update(hostSessionAtom(deviceId), (count) => count + 1);
     if (!peerLifecycles.has(deviceId)) {
       const lifecycle = registry.mount(worktreeLifecycleAtom(deviceId));
       const fetching = registry.mount(gitFetchingAtom(deviceId));
@@ -296,10 +299,13 @@ function startLocalHost(
   watchHost(queryClient, api.deviceId, api);
   followDeviceSettings(registry, queryClient, api.deviceId);
   askAgainOnHostReturn(queryClient, signal);
+  onHostReturn(() => {
+    registry.update(hostSessionAtom(api.deviceId), (count) => count + 1);
+  }, signal);
   registry.mount(scriptRunsAtom(api.deviceId));
   registry.mount(worktreeLifecycleAtom(api.deviceId));
   registry.mount(gitFetchingAtom(api.deviceId));
-  watchPortForwards(api, queryClient);
+  watchPortForwards(api, queryClient, signal);
 
   // Scripts that survived a crash or a force quit are stopped by the
   // host at boot. Their consoles died with the session that started
