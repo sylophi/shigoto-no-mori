@@ -172,7 +172,13 @@ export function TerminalView({
 
     const stop = feed({
       replay: (data, reset) => {
-        if (reset) term.reset();
+        if (reset) {
+          term.reset();
+          // A shell the host started again (its restart) starts at the
+          // host's default size, and this view, holding focus through
+          // it, takes no focus event to claim its own.
+          if (host.contains(host.ownerDocument.activeElement)) propose(true);
+        }
         if (data.length === 0) return;
         replayed = false;
         term.write(data, () => {
