@@ -54,7 +54,11 @@ export function useScriptRunner(
   const deviceLabel = useScopedDeviceLabel();
   const key = scriptKey(worktree.projectId, worktree.id, slot);
   const held = useScriptRunState(key);
-  const listed = useDeviceRunningScripts(deviceId, api)?.find(
+  const runs = useDeviceRunningScripts(deviceId, api);
+  useEffect(() => {
+    if (runs) store.settle(runs);
+  }, [runs, store]);
+  const listed = runs?.find(
     (run) => scriptKey(run.projectId, run.worktreeId, run.slot) === key,
   );
   // A run this window holds wins: the list lags a start or a restart
