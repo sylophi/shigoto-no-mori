@@ -27,8 +27,8 @@ const TerminalTabs = lazy(() =>
 );
 
 // A worktree's terminals and the script consoles opened in it, in the
-// drawer of its page, while it is open. Closing the last tab closes the
-// drawer.
+// drawer of its page, while it is open and the device drawer isn't.
+// Closing the last tab closes the drawer.
 export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const api = useApi();
   const hasLocalHost = useHasLocalHost();
@@ -45,7 +45,7 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
     setSeen({ key, open: drawer.open });
     setSlideIn(seen.key === key && drawer.open);
   }
-  if (!drawer.open) return null;
+  if (!drawer.open || state.device.open) return null;
   const close = () => setDrawerOpen(key, false);
   const slots = drawer.scripts
     .map(paramToSlot)
@@ -92,4 +92,21 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
       </Suspense>
     </TerminalDrawerView>
   );
+}
+
+// The keymap's terminal on a drawer. Closed, it opens, and its terminal
+// takes focus as it attaches. Open, it takes focus, or closes when it
+// has it.
+export function toggleTerminalDrawer(
+  open: boolean,
+  setOpen: (open: boolean) => void,
+): void {
+  const drawer = document.querySelector('[data-slot="terminal-drawer"]');
+  if (!open || !drawer) {
+    setOpen(true);
+  } else if (drawer.contains(document.activeElement)) {
+    setOpen(false);
+  } else {
+    drawer.querySelector<HTMLElement>(".xterm-helper-textarea")?.focus();
+  }
 }

@@ -113,3 +113,25 @@ export function TerminalDrawerView({
     </section>
   );
 }
+
+// A page with the drawer docked under it or beside it. One shape for
+// both docks and for no drawer, so a switch keeps the page mounted.
+export function WithTerminalDrawerView({
+  drawer,
+  side = false,
+  children,
+}: {
+  drawer: ReactNode;
+  side?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative flex min-h-0 flex-1">
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-h-0 flex-1 flex-col">{children}</div>
+        {!side && drawer}
+      </div>
+      {side && drawer}
+    </div>
+  );
+}

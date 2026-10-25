@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useOpenWhenEmpty } from "@/hooks/terminals/useOpenWhenEmpty";
 import { useTerminals } from "@/hooks/terminals/useTerminals";
 import { notifyError } from "@/lib/toast";
 import { scriptTabId, terminalTabLabel } from "@/store/terminalDrawer";
@@ -73,8 +73,8 @@ function AttachedTerminalTabs({
   const owner = { projectId: worktree.projectId, worktreeId: worktree.id };
   const terminals = useTerminals()?.filter(
     (terminal) =>
-      terminal.projectId === owner.projectId &&
-      terminal.worktreeId === owner.worktreeId,
+      terminal.worktree?.projectId === owner.projectId &&
+      terminal.worktree.worktreeId === owner.worktreeId,
   );
   const tabs = [
     ...(terminals ?? []).map((terminal, i) => ({
@@ -90,30 +90,17 @@ function AttachedTerminalTabs({
 
   const open = () =>
     void api
-      .run(api.terminals.open(owner))
+      .run(api.terminals.open({ worktree: owner }))
       .then(({ terminalId }) => pick(terminalId))
       .catch((error: unknown) =>
         notifyError("Couldn't open a terminal", error),
       );
 
-  // Once per mount: the first answer with no tab at all opens a
-  // terminal, and no tab left after some were there is the last one
-  // closing.
-  const seen = useRef<"waiting" | "opened" | "had">("waiting");
-  const count = terminals === undefined ? undefined : tabs.length;
-  useEffect(() => {
-    if (count === undefined) return;
-    if (count > 0) {
-      seen.current = "had";
-      return;
-    }
-    if (seen.current === "waiting") {
-      seen.current = "opened";
-      open();
-    } else if (seen.current === "had") {
-      onEmpty();
-    }
-  });
+  useOpenWhenEmpty(
+    terminals === undefined ? undefined : tabs.length,
+    open,
+    onEmpty,
+  );
 
   return (
     <TerminalTabsView

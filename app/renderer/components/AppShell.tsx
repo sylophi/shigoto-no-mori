@@ -22,6 +22,13 @@ import {
   isTabRoute,
 } from "@shigomori/ui/views/PhoneTabBarView.tsx";
 import { Sidebar } from "@/components/sidebar/Sidebar";
+import {
+  DeviceTerminalDrawer,
+  useDeviceDrawerKey,
+  usePageHostsDeviceDrawer,
+} from "@/components/terminal/DeviceTerminalDrawer";
+import { useDrawerSide } from "@/store/terminalDrawer";
+import { WithTerminalDrawerView } from "@shigomori/ui/views/terminal/TerminalDrawerView.tsx";
 import { InstallFailedToast } from "@/components/InstallFailedToast";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
 import {
@@ -108,9 +115,13 @@ export function AppShell() {
   }, [migrating, pathname, navigate]);
 
   useDeepLinks();
+  const pageHostsDrawer = usePageHostsDeviceDrawer();
+  const drawerSide = useDrawerSide();
+  const pageless = pathname === MIGRATION_PATH || isTerminalsWindow(pathname);
+  useDeviceDrawerKey(!pageHostsDrawer && !pageless);
 
   // A page in place of the app, with none of its ways elsewhere.
-  if (pathname === MIGRATION_PATH || isTerminalsWindow(pathname)) {
+  if (pageless) {
     return (
       <AppShellView phone={phone} hasLocalHost={hasLocalHost} sidebar={null}>
         <Outlet />
@@ -165,7 +176,12 @@ export function AppShell() {
         </>
       }
     >
-      <Outlet />
+      <WithTerminalDrawerView
+        drawer={!pageHostsDrawer && <DeviceTerminalDrawer />}
+        side={drawerSide}
+      >
+        <Outlet />
+      </WithTerminalDrawerView>
     </AppShellView>
   );
 }

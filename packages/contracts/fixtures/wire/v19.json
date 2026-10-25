@@ -2414,17 +2414,25 @@
       "terminals": [
         {
           "terminalId": "0",
-          "projectId": "Wv",
-          "worktreeId": "D",
+          "worktree": {
+            "projectId": "Wv",
+            "worktreeId": "D"
+          },
           "openedAt": -5.2161211745009093e-73
+        },
+        {
+          "terminalId": "1",
+          "openedAt": 1760000000000
         }
       ]
     }
   },
   "terminals:open": {
     "payload": {
-      "projectId": "-1",
-      "worktreeId": "\n"
+      "worktree": {
+        "projectId": "-1",
+        "worktreeId": "\n"
+      }
     },
     "success": {
       "terminalId": "p:"

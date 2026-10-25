@@ -4,6 +4,7 @@
 // needs to set the SHIGOMORI_* env (a package.json script's comes
 // from the engine with its command). A worktree's terminal starts with
 // the same env.
+import { homedir } from "node:os";
 import * as Effect from "effect/Effect";
 import {
   isEntityGoneError,
@@ -82,22 +83,29 @@ export function worktreeNotifiers(ctx: HandlerContext) {
   };
 }
 
-// Where a terminal starts (host/lib/terminals): in its worktree's
-// folder with its scripts' SHIGOMORI_* env. TERM and COLORTERM say what
-// xterm in the renderer draws.
-export const terminalStart = (owner: {
-  readonly projectId: string;
-  readonly worktreeId: string;
-}) =>
-  Effect.gen(function* () {
+// Where a terminal starts (host/lib/terminals): a worktree's in its
+// folder with its scripts' SHIGOMORI_* env, a device's at home with the
+// app's own. TERM and COLORTERM say what xterm in the renderer draws.
+export const terminalStart = (
+  owner:
+    | { readonly projectId: string; readonly worktreeId: string }
+    | undefined,
+) => {
+  const env = {
+    ...process.env,
+    TERM: "xterm-256color",
+    COLORTERM: "truecolor",
+  };
+  if (owner === undefined) {
+    return Effect.succeed<Start>({ cwd: homedir(), env });
+  }
+  return Effect.gen(function* () {
     const project = yield* findProject(owner.projectId);
     const ctx = yield* prepareScriptRun(project, owner.worktreeId);
     return {
       cwd: ctx.worktree.path,
       env: {
-        ...process.env,
-        TERM: "xterm-256color",
-        COLORTERM: "truecolor",
+        ...env,
         ...scriptEnvOf({ worktree: ctx.worktree, project, ...ctx.scriptEnv }),
       },
     } satisfies Start;
@@ -108,6 +116,7 @@ export const terminalStart = (owner: {
       (cause) => Effect.die(cause),
     ),
   );
+};
 
 // The worktrees a project's terminals may stay in.
 export const terminalWorktrees = (projectId: string) =>

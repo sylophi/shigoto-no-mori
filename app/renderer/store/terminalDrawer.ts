@@ -5,6 +5,9 @@
 // bottom and width at the side, each null until it is dragged, and the
 // edge it is docked to (a store of its own, which the page reads). A
 // tab is named by a terminal's id, or `script:` and its slot's param.
+// The device drawer is the window's one drawer of device terminals, on
+// every page, which takes a worktree drawer's place while it is open.
+// Its tabs are named by the device's id and the terminal's.
 import {
   createExternalStore,
   useExternalStore,
@@ -21,6 +24,7 @@ type Drawer = {
 
 type DrawerState = {
   readonly drawers: ReadonlyMap<string, Drawer>;
+  readonly device: { readonly open: boolean; readonly picked: string | null };
   readonly height: number | null;
   readonly width: number | null;
 };
@@ -29,6 +33,7 @@ const CLOSED: Drawer = { open: false, scripts: [], picked: null };
 
 const store = createExternalStore<DrawerState>({
   drawers: new Map(),
+  device: { open: false, picked: null },
   height: null,
   width: null,
 });
@@ -60,15 +65,44 @@ export const drawerKey = (
   worktreeId: string,
 ): string => `${deviceId}/${projectId}/${worktreeId}`;
 
-function update(key: string, change: (drawer: Drawer) => Drawer): void {
+function update(
+  key: string,
+  change: (drawer: Drawer) => Drawer,
+  show = false,
+): void {
   const state = store.get();
   const drawers = new Map(state.drawers);
   drawers.set(key, change(drawerOf(state, key)));
-  store.publish({ ...state, drawers });
+  // A worktree's drawer shown takes the device drawer's place.
+  const device = show ? { ...state.device, open: false } : state.device;
+  store.publish({ ...state, drawers, device });
 }
 
+const show = (key: string, change: (drawer: Drawer) => Drawer) =>
+  update(key, change, true);
+
 export function setDrawerOpen(key: string, open: boolean): void {
-  update(key, (drawer) => ({ ...drawer, open }));
+  update(key, (drawer) => ({ ...drawer, open }), open);
+}
+
+export const deviceTabId = (deviceId: string, terminalId: string): string =>
+  `${deviceId}/${terminalId}`;
+
+export const isDeviceDrawerOpen = (): boolean => store.get().device.open;
+
+export function setDeviceDrawerOpen(open: boolean): void {
+  const state = store.get();
+  if (state.device.open === open) return;
+  store.publish({ ...state, device: { ...state.device, open } });
+}
+
+export function pickDeviceTab(tab: string): void {
+  const state = store.get();
+  store.publish({ ...state, device: { ...state.device, picked: tab } });
+}
+
+export function openDeviceTab(tab: string): void {
+  store.publish({ ...store.get(), device: { open: true, picked: tab } });
 }
 
 // A worktree's last terminal closed away from its drawer (on Live): with
@@ -85,13 +119,13 @@ export function pickDrawerTab(key: string, tab: string): void {
 
 // Opens the drawer on a terminal's tab.
 export function openTerminalTab(key: string, terminalId: string): void {
-  update(key, (drawer) => ({ ...drawer, open: true, picked: terminalId }));
+  show(key, (drawer) => ({ ...drawer, open: true, picked: terminalId }));
 }
 
 // Opens the drawer on a script's console, its tab added if it has none.
 export function openScriptTab(key: string, slot: ScriptSlot): void {
   const param = slotToParam(slot);
-  update(key, (drawer) => ({
+  show(key, (drawer) => ({
     open: true,
     scripts: drawer.scripts.includes(param)
       ? drawer.scripts

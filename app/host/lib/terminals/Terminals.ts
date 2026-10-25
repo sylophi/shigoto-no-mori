@@ -2,7 +2,8 @@
 // PTY (../scripts/ScriptRuns.ts), a resource in a scope of its own under the
 // layer's: closing it is closing that scope, whose release is the kill
 // chain. A terminal belongs to a worktree, which it starts in with the
-// environment the worktree's scripts get and closes with. Its
+// environment the worktree's scripts get and closes with, or to the
+// device, starting in the home folder with the app's environment. Its
 // history and folder are saved (SavedTerminals) a moment after its
 // output changes and again as it closes, so after a quit or a crash the
 // next start opens a fresh shell there under that history.
@@ -53,18 +54,20 @@ const mintHex = (words: number) =>
     (parts) => parts.map((part) => part.toString(16).padStart(8, "0")).join(""),
   );
 
-// The worktree a terminal belongs to.
-type Owner = Pick<Terminal, "projectId" | "worktreeId">;
+// The worktree a terminal belongs to, none for the device's.
+type Owner = Terminal["worktree"];
 
-// A terminal to open: its worktree, the grid the opener has room for,
-// and a command line typed into its shell (a launched terminal tool).
-type OpenInput = Owner & {
+// A terminal to open: its worktree (none for the device's), the grid
+// the opener has room for, and a command line typed into its shell (a
+// launched terminal tool).
+type OpenInput = {
+  readonly worktree?: Owner;
   readonly size?: Size | undefined;
   readonly command?: string;
 };
 
-// Where a terminal's shell starts (its worktree's folder) and what it is
-// given.
+// Where a terminal's shell starts (its worktree's folder, or home) and
+// what it is given.
 export type Start = {
   readonly cwd: string;
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -258,7 +261,7 @@ export class Terminals extends Context.Service<
 
 const make = <R, E>(options: {
   // The folder and environment a terminal starts with: its worktree's
-  // scripts'.
+  // scripts', or the app's own in the home folder for the device's.
   readonly start: (
     owner: Owner,
   ) => Effect.Effect<Start, UnknownProjectError | UnknownWorktreeError, R>;
@@ -549,11 +552,10 @@ const make = <R, E>(options: {
     const mintId = mintHex(2);
 
     const open = Effect.fn("Terminals.open")(function* (input: OpenInput) {
-      const start = yield* startOf(input);
+      const start = yield* startOf(input.worktree);
       const terminal: Terminal = {
         terminalId: yield* mintId,
-        projectId: input.projectId,
-        worktreeId: input.worktreeId,
+        ...(input.worktree && { worktree: input.worktree }),
         openedAt: yield* Clock.currentTimeMillis,
       };
       yield* Effect.annotateCurrentSpan({ terminalId: terminal.terminalId });
@@ -579,7 +581,7 @@ const make = <R, E>(options: {
     // is dropped.
     const restore = Effect.gen(function* () {
       for (const { cwd, seq, history, ...terminal } of yield* saved.list) {
-        const start = yield* Effect.option(startOf(terminal));
+        const start = yield* Effect.option(startOf(terminal.worktree));
         if (Option.isNone(start)) {
           yield* saved.forget(terminal.terminalId);
           continue;
@@ -708,13 +710,15 @@ const make = <R, E>(options: {
           .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid).length;
       }).pipe(Effect.withSpan("Terminals.busy")),
       openIn: (worktreeId) =>
-        living().filter(({ terminal }) => terminal.worktreeId === worktreeId)
-          .length,
+        living().filter(
+          ({ terminal }) => terminal.worktree?.worktreeId === worktreeId,
+        ).length,
       closeMissing: Effect.gen(function* () {
-        const owned = [...sessions.values()];
-        const projects = new Set(
-          owned.map((session) => session.terminal.projectId),
-        );
+        const owned = [...sessions.values()].flatMap((session) => {
+          const owner = session.terminal.worktree;
+          return owner === undefined ? [] : [{ session, owner }];
+        });
+        const projects = new Set(owned.map(({ owner }) => owner.projectId));
         const present = new Map(
           yield* Effect.forEach(
             projects,
@@ -727,10 +731,10 @@ const make = <R, E>(options: {
           ),
         );
         const missing = new Set<string>();
-        for (const session of owned) {
-          const folders = present.get(session.terminal.projectId);
+        for (const { session, owner } of owned) {
+          const folders = present.get(owner.projectId);
           if (folders === null || folders === undefined) continue;
-          const path = folders.get(session.terminal.worktreeId);
+          const path = folders.get(owner.worktreeId);
           if (path === undefined || !(yield* exists(path))) {
             missing.add(session.terminal.terminalId);
           }

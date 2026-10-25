@@ -13,8 +13,7 @@ export const inAppTerminal = <E, R>(open: Effect.Effect<unknown, E, R>) =>
         run: ({ project, worktree }, command) =>
           Effect.map(
             terminals.open({
-              projectId: project.id,
-              worktreeId: worktree.id,
+              worktree: { projectId: project.id, worktreeId: worktree.id },
               command,
             }),
             (terminal) => {

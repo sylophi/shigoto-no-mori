@@ -49,6 +49,7 @@ import type {
 import { WorktreeDetailView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
 import { TerminalButton } from "./TerminalButton";
 import { NewWindowOption } from "./NewWindowOption";
+import { PageDeviceTerminalDrawer } from "@/components/terminal/DeviceTerminalDrawer";
 import { TerminalDrawer } from "@/components/terminal/TerminalDrawer";
 import { WorktreeHeader } from "./WorktreeHeader";
 import { WorktreeLocation } from "./WorktreeLocation";
@@ -307,7 +308,12 @@ export function WorktreeDetailInner({
           }
         />
       }
-      drawer={<TerminalDrawer worktree={worktree} />}
+      drawer={
+        <>
+          <PageDeviceTerminalDrawer />
+          <TerminalDrawer worktree={worktree} />
+        </>
+      }
       drawerSide={drawerSide}
     />
   );

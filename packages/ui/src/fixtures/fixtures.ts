@@ -729,28 +729,24 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
   [LOCAL_DEVICE_ID]: [
     {
       terminalId: "t-sm-badger-1",
-      projectId: "p_sm",
-      worktreeId: "a10000000003",
+      worktree: { projectId: "p_sm", worktreeId: "a10000000003" },
       openedAt: minutesAgo(240),
     },
     {
       terminalId: "t-sm-hum-1",
-      projectId: "p_sm",
-      worktreeId: "a10000000002",
+      worktree: { projectId: "p_sm", worktreeId: "a10000000002" },
       openedAt: minutesAgo(35),
     },
     {
       terminalId: "t-sm-badger-2",
-      projectId: "p_sm",
-      worktreeId: "a10000000003",
+      worktree: { projectId: "p_sm", worktreeId: "a10000000003" },
       openedAt: minutesAgo(12),
     },
   ],
   [MACBOOK_ID]: [
     {
       terminalId: "t-mb-gecko-1",
-      projectId: "mb_sm",
-      worktreeId: "a1b2c3d4e5f6",
+      worktree: { projectId: "mb_sm", worktreeId: "a1b2c3d4e5f6" },
       openedAt: minutesAgo(95),
     },
   ],

@@ -24,17 +24,10 @@
 
 // Where an action acts. The window is every page; a page or a dialog
 // is only itself, so two of them can share a chord.
-type KeymapScope =
-  | "window"
-  | "worktree"
-  | "changes"
-  | "palette"
-  | "folders"
-  | "editing";
+type KeymapScope = "window" | "changes" | "palette" | "folders" | "editing";
 
 const SCOPE_LABELS: Readonly<Record<KeymapScope, string>> = {
   window: "Anywhere",
-  worktree: "A worktree's page",
   changes: "Changes",
   palette: "The palette",
   folders: "Adding a project, picking a folder",
@@ -103,7 +96,7 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     id: "terminal",
     label: "Show or hide the terminal",
     chord: "Ctrl+`",
-    scope: "worktree",
+    scope: "window",
     terminal: true,
   },
   {

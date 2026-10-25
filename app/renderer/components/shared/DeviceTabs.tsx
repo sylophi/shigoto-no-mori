@@ -113,6 +113,14 @@ export function useDeviceTabs(): DeviceTab[] {
   return tabs;
 }
 
+// The devices that run commands from here, each with its api.
+export function useCommandableDevices(): (DeviceTab & { api: HostApi })[] {
+  return useDeviceTabs().filter(
+    (device): device is DeviceTab & { api: HostApi } =>
+      device.block === undefined && device.api !== undefined,
+  );
+}
+
 // The tab `pickedId` names, falling back to `initialId`, then to the
 // first tab, when the picked device leaves the list. Undefined only
 // while there are no tabs.

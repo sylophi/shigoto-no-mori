@@ -3,6 +3,8 @@
 // also focus it. A peer's terminals ride its command grant, so a
 // read-only peer's footer leaves it out.
 import { SquareTerminal } from "lucide-react";
+import { toggleDeviceDrawer } from "@/components/terminal/DeviceTerminalDrawer";
+import { toggleTerminalDrawer } from "@/components/terminal/TerminalDrawer";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
@@ -22,23 +24,14 @@ export function TerminalButton({ worktree }: { worktree: Worktree }) {
   const state = useTerminalDrawer();
   const keys = useBinding("terminal");
   const key = drawerKey(deviceId, worktree.projectId, worktree.id);
-  const open = drawerOf(state, key).open;
+  // Hidden while the device drawer has its place.
+  const open = drawerOf(state, key).open && !state.device.open;
   const shown = canCommand && hasHost;
-  // Closed, it opens, and its terminal takes focus as it attaches. Open,
-  // it takes focus, or closes when it has it.
-  useKeymapAction(
-    "terminal",
-    () => {
-      const drawer = document.querySelector('[data-slot="terminal-drawer"]');
-      if (!open || !drawer) {
-        setDrawerOpen(key, true);
-      } else if (drawer.contains(document.activeElement)) {
-        setDrawerOpen(key, false);
-      } else {
-        drawer.querySelector<HTMLElement>(".xterm-helper-textarea")?.focus();
-      }
-    },
-    { enabled: shown },
+  // Without the button, the keys are the device drawer's.
+  useKeymapAction("terminal", () =>
+    shown
+      ? toggleTerminalDrawer(open, (next) => setDrawerOpen(key, next))
+      : toggleDeviceDrawer(),
   );
   if (!shown) return null;
   return (

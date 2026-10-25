@@ -2,7 +2,8 @@
 // waiting on you is drawn as it is (AgentItemView). A script: its
 // output (the console takes up the run's output whichever window or
 // device started it, hooks/scripts/useScriptRunner.ts), a restart and a
-// stop. A terminal: its worktree's page with the drawer on its tab, and
+// stop. A terminal: its worktree's page with the drawer on its tab (a
+// device terminal: the device drawer on its tab, over this page), and
 // its close. A mirror: how it is doing, and its manage dialog (status,
 // history, pause, the ignore rule, stop) under the device running it,
 // as the worktree's Mirror button opens it. A forward: the local
@@ -32,8 +33,10 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { slotLabel } from "@/store/scriptSlot";
 import {
+  deviceTabId,
   drawerKey,
   hideEmptyDrawer,
+  openDeviceTab,
   terminalTabLabel,
 } from "@/store/terminalDrawer";
 import {
@@ -113,13 +116,14 @@ export function TerminalItem({
 }) {
   const { toTerminalOn } = useWorktreeNav();
   const { api } = useHostScope();
+  const { worktree } = terminal;
   const close = useMutation({
     mutationFn: () =>
       api.run(api.terminals.close({ terminalId: terminal.terminalId })),
     onSuccess: () => {
-      if (last)
+      if (last && worktree !== undefined)
         hideEmptyDrawer(
-          drawerKey(deviceId, terminal.projectId, terminal.worktreeId),
+          drawerKey(deviceId, worktree.projectId, worktree.worktreeId),
         );
     },
     meta: { errorTitle: "Couldn't close the terminal" },
@@ -129,12 +133,14 @@ export function TerminalItem({
       label={terminalTabLabel(index)}
       since={terminal.openedAt}
       onOpen={() =>
-        toTerminalOn(
-          deviceId,
-          terminal.projectId,
-          terminal.worktreeId,
-          terminal.terminalId,
-        )
+        worktree === undefined
+          ? openDeviceTab(deviceTabId(deviceId, terminal.terminalId))
+          : toTerminalOn(
+              deviceId,
+              worktree.projectId,
+              worktree.worktreeId,
+              terminal.terminalId,
+            )
       }
       closing={close.isPending}
       onClose={() => close.mutate()}

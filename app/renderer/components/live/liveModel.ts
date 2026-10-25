@@ -5,7 +5,8 @@
 // leads it. Cards file under the device holding the worktree, this
 // machine first, the ones with an agent waiting on you first. A forward
 // switched on from the account page names no worktree, and gets its
-// device's card of loose ports.
+// device's card of loose ports. A device terminal gets its device's
+// card of device terminals.
 import type { PortForwardSummary } from "@shigomori/contracts/modules/portForward";
 import type {
   AgentSession,
@@ -24,8 +25,8 @@ import { agentsNeedYou } from "@shigomori/ui/lib/agentNeeds.ts";
 type LiveItem =
   | { kind: "agent"; session: AgentSession }
   | { kind: "script"; run: RunningScript }
-  // `index` is its place among its worktree's terminals, as the
-  // drawer's tabs count them.
+  // `index` is its place among its worktree's terminals (or its
+  // device's), as the drawer's tabs count them.
   | { kind: "terminal"; terminal: Terminal; index: number }
   | { kind: "mirror"; mirror: LiveMirror }
   | { kind: "forward"; forward: PortForwardSummary };
@@ -33,7 +34,8 @@ type LiveItem =
 export type LiveCard = {
   key: string;
   deviceId: string;
-  // Null for the card of a device's loose forwards.
+  // Null for the card of a device's loose forwards, or of its device
+  // terminals.
   worktree: { projectId: string; worktreeId: string } | null;
   items: LiveItem[];
 };
@@ -71,7 +73,7 @@ export function buildLive({
     }
     const key = worktree
       ? `${deviceId}:${worktree.projectId}:${worktree.worktreeId}`
-      : `${deviceId}:ports`;
+      : `${deviceId}:${item.kind === "terminal" ? "terminals" : "ports"}`;
     let card = cards.get(key);
     if (card === undefined) {
       card = { key, deviceId, worktree, items: [] };
@@ -98,14 +100,13 @@ export function buildLive({
   for (const { deviceId, terminals: open } of terminals) {
     const counted = new Map<string, number>();
     for (const terminal of open) {
-      const key = `${terminal.projectId}:${terminal.worktreeId}`;
+      const { worktree = null } = terminal;
+      const key = worktree
+        ? `${worktree.projectId}:${worktree.worktreeId}`
+        : "";
       const index = counted.get(key) ?? 0;
       counted.set(key, index + 1);
-      add(
-        deviceId,
-        { projectId: terminal.projectId, worktreeId: terminal.worktreeId },
-        { kind: "terminal", terminal, index },
-      );
+      add(deviceId, worktree, { kind: "terminal", terminal, index });
     }
   }
   for (const mirror of mirrors) {

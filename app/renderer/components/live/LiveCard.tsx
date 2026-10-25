@@ -44,6 +44,7 @@ import { AgentItemView } from "@shigomori/ui/views/live/LiveItemsView.tsx";
 import {
   DeviceHeadingView,
   LiveCardView,
+  LiveDeviceTerminalsHeaderView,
   LivePortsHeaderView,
   LiveWorktreeHeaderView,
   LocalhostPortView,
@@ -132,6 +133,8 @@ function CardBody({
             {...card.worktree}
             state={cardWorktree}
           />
+        ) : terminals > 0 ? (
+          <LiveDeviceTerminalsHeaderView />
         ) : (
           <LivePortsHeaderView />
         )

@@ -1,5 +1,6 @@
 // A device as a menu item names it (a project's Remove and Add to
-// device submenus): its glyph and name, and a note at the item's end.
+// device submenus, the new terminal menu): its glyph and name, and a
+// note at the item's end.
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceGlyphView } from "../shared/DeviceGlyphView.tsx";
 

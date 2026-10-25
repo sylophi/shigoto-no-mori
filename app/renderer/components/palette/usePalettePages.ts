@@ -4,7 +4,10 @@ import {
   MonitorSmartphone,
   Radio,
   Settings as SettingsIcon,
+  SquareTerminal,
 } from "lucide-react";
+import { useCommandableDevices } from "@/components/shared/DeviceTabs";
+import { openDeviceTerminal } from "@/components/terminal/DeviceTerminalDrawer";
 import { selectSettingsTab } from "@/components/settings/settingsNav";
 import {
   ACCOUNT_SECTION,
@@ -18,13 +21,16 @@ import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts"
 
 // The pages the palette can open: the sidebar footer's (Live, the
 // project grid, a hostless client's Devices), and Settings' list (the
-// account, its sections, Tidy), as this window offers them.
+// account, its sections, Tidy), as this window offers them. And a new
+// terminal on each device that takes commands from here, in the device
+// drawer over the page.
 export function usePalettePages(): PalettePage[] {
   const hasLocalHost = useHasLocalHost();
   const navigate = useNavigate();
   const settingsKeys = useKeymap().get("settings");
   const villageLife = useVillageLife();
   const { client, host } = settingsSections(false, villageLife, hasLocalHost);
+  const devices = useCommandableDevices();
   const pages: PalettePage[] = [
     {
       key: "page:live",
@@ -57,6 +63,16 @@ export function usePalettePages(): PalettePage[] {
         open: () => void navigate({ to: "/tidy" }),
       },
     );
+  }
+  for (const device of devices) {
+    const { deviceId, label, isThisDevice } = device;
+    pages.push({
+      key: `page:terminal:${deviceId}`,
+      label: isThisDevice ? "Terminal" : `Terminal on ${label}`,
+      icon: SquareTerminal,
+      aliases: ["Shell"],
+      open: () => openDeviceTerminal(device),
+    });
   }
   // Settings itself, on the section it was left on.
   pages.push({

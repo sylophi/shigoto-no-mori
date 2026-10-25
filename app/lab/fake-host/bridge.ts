@@ -29,6 +29,7 @@ import {
   type RunningScript,
   type SharedSettingsDoc,
   type ShigomoriWorktreeData,
+  type Terminal,
   type Worktree,
   patchedPorts,
 } from "@shigomori/contracts/schemas";
@@ -437,12 +438,16 @@ function hostHandlersFor(
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const changes = createFakeChanges(findWorktree);
-  // One more posed terminal in the worktree.
-  const openFakeTerminal = (projectId: string, worktreeId: string) => {
+  // One more posed terminal in the worktree, or the device's with none.
+  const openFakeTerminal = (worktree?: Terminal["worktree"]) => {
     const terminalId = `t-${Date.now().toString(36)}`;
     fakeOpenTerminals[forest.deviceId] = [
       ...(fakeOpenTerminals[forest.deviceId] ?? []),
-      { terminalId, projectId, worktreeId, openedAt: Date.now() },
+      {
+        terminalId,
+        ...(worktree && { worktree }),
+        openedAt: Date.now(),
+      },
     ];
     return terminalId;
   };
@@ -648,7 +653,7 @@ function hostHandlersFor(
       return worktree;
     },
     "worktrees:resumeAgent": ({ projectId, worktreeId }) => ({
-      terminalId: openFakeTerminal(projectId, worktreeId),
+      terminalId: openFakeTerminal({ projectId, worktreeId }),
     }),
     // An open PR takes the edit instead, as `sm describe` gives it.
     "worktrees:describe": ({ worktreeId, title, description }) => {
@@ -889,7 +894,7 @@ function hostHandlersFor(
     // setting's default has it.
     "launchers:launch": ({ projectId, worktreeId, launcherId }) =>
       FAKE_TERMINAL_TOOLS.has(launcherId)
-        ? { terminalId: openFakeTerminal(projectId, worktreeId) }
+        ? { terminalId: openFakeTerminal({ projectId, worktreeId }) }
         : {},
     "launchers:openFile": () => ({}),
     "launchers:forProject": () => ({
@@ -1097,8 +1102,8 @@ function hostHandlersFor(
       seq: 0,
       reset: true,
     }),
-    "terminals:open": ({ projectId, worktreeId }) => ({
-      terminalId: openFakeTerminal(projectId, worktreeId),
+    "terminals:open": ({ worktree }) => ({
+      terminalId: openFakeTerminal(worktree),
     }),
     "terminals:close": ({ terminalId }) => {
       fakeOpenTerminals[forest.deviceId] = (

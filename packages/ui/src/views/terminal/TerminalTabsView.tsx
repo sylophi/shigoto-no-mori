@@ -1,6 +1,7 @@
 // A row of terminal tabs over the picked one's body: each tab its
-// label and a close, a new terminal at the row's end, and the drawer's
-// pop-out, dock switch and hide after that. Left and right arrows move
+// label and a close, a new terminal at the row's end (or a menu of where
+// to open it), and the drawer's pop-out, dock switch and hide after
+// that. Left and right arrows move
 // the pick, as tabs do. The row and the body are one surface, the card. The
 // picked tab's body may put controls of its own at the row's end
 // (TerminalTabToolbar), which wrap to a line of their own where they
@@ -20,6 +21,14 @@ import {
   X,
 } from "lucide-react";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "../../primitives/dropdown-menu.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { useRevealPicked } from "../../hooks/useRevealPicked.ts";
@@ -38,6 +47,8 @@ export function TerminalTabToolbar({ children }: { children: ReactNode }) {
 export type TerminalTab = {
   readonly id: string;
   readonly label: string;
+  // Before the label: a device terminal's device glyph.
+  readonly lead?: ReactNode;
   // A shell that has exited, or a run that has ended.
   readonly ended?: boolean;
 };
@@ -48,6 +59,7 @@ export function TerminalTabsView({
   onSelect,
   onClose,
   onNew,
+  newMenu,
   side = false,
   onDock,
   onPopOut,
@@ -62,6 +74,15 @@ export function TerminalTabsView({
   onClose: (id: string) => void;
   // Absent where no terminal can be opened.
   onNew?: () => void;
+  // In place of onNew, the places a new terminal may open in, picked
+  // from a menu.
+  newMenu?: {
+    readonly choices: readonly {
+      readonly id: string;
+      readonly content: ReactNode;
+    }[];
+    readonly onPick: (id: string) => void;
+  };
   // Docked at the side rather than the bottom, and the switch to the
   // other.
   side?: boolean;
@@ -143,10 +164,11 @@ export function TerminalTabsView({
                     data-slot="terminal-tab-pick"
                     aria-label={tab.label}
                     className={cn(
-                      "flex h-full items-center pl-2.5",
+                      "flex h-full items-center gap-1 pl-2.5",
                       tab.ended && "opacity-60",
                     )}
                   >
+                    {tab.lead}
                     <SimpleTooltip whenTruncated tip={tab.label}>
                       <span className="max-w-40 truncate">{tab.label}</span>
                     </SimpleTooltip>
@@ -163,14 +185,42 @@ export function TerminalTabsView({
               );
             })}
           </Tabs.List>
-          {onNew && (
-            <IconButton
-              aria-label="New terminal"
-              onClick={onNew}
-              className="shrink-0 rounded-full"
-            >
-              <Plus className="size-3.5" />
-            </IconButton>
+          {newMenu ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <IconButton
+                    aria-label="New terminal"
+                    className="shrink-0 rounded-full"
+                  />
+                }
+              >
+                <Plus className="size-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>New terminal on</DropdownMenuLabel>
+                  {newMenu.choices.map((choice) => (
+                    <DropdownMenuItem
+                      key={choice.id}
+                      onClick={() => newMenu.onPick(choice.id)}
+                    >
+                      {choice.content}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            onNew && (
+              <IconButton
+                aria-label="New terminal"
+                onClick={onNew}
+                className="shrink-0 rounded-full"
+              >
+                <Plus className="size-3.5" />
+              </IconButton>
+            )
           )}
         </div>
         {!side && toolbarSlot}

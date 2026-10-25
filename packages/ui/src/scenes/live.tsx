@@ -95,7 +95,7 @@ function script(worktreeId: string, readOnlyNote: string | null = null) {
 // The worktree's open terminals, named as the drawer's tabs are.
 function terminals(worktreeId: string) {
   return fakeOpenTerminals[LOCAL_DEVICE_ID]
-    ?.filter((terminal) => terminal.worktreeId === worktreeId)
+    ?.filter((terminal) => terminal.worktree?.worktreeId === worktreeId)
     .map((terminal, index) => (
       <TerminalItemView
         key={terminal.terminalId}

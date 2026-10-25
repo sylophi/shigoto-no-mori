@@ -5,7 +5,9 @@ import {
   ExternalLink as ExternalLinkIcon,
   FolderGit2,
   Loader2,
+  type LucideIcon,
   Plus,
+  SquareTerminal,
 } from "lucide-react";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import { DeviceMarkView } from "../shared/DeviceGlyphView.tsx";
@@ -197,13 +199,27 @@ export function LiveWorktreeHeaderView({
 // A device's loose forwards, the ones switched on from the account
 // page rather than a worktree.
 export function LivePortsHeaderView() {
+  return <LooseHeader icon={Cable} title="Forwarded ports" />;
+}
+
+export function LiveDeviceTerminalsHeaderView() {
+  return <LooseHeader icon={SquareTerminal} title="Device terminals" />;
+}
+
+function LooseHeader({
+  icon: Icon,
+  title,
+}: {
+  icon: LucideIcon;
+  title: string;
+}) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-        <Cable aria-hidden className="size-4" />
+        <Icon aria-hidden className="size-4" />
       </span>
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-sm font-medium">Forwarded ports</span>
+        <span className="truncate text-sm font-medium">{title}</span>
         <span className="truncate text-2xs text-muted-foreground">
           Not tied to a worktree
         </span>

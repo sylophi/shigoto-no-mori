@@ -11,10 +11,11 @@ const GridSizeSchema = Schema.Struct({
   rows: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
 });
 
-// A terminal belongs to the worktree it starts in, and closes with it.
+// A terminal belongs to the worktree it starts in, and closes with it,
+// or with none to its device, starting in the home folder.
 const TerminalSchema = Schema.Struct({
   terminalId: Schema.NonEmptyString,
-  ...WorktreeScopedPayloadSchema.fields,
+  worktree: Schema.optional(WorktreeScopedPayloadSchema),
   // Epoch ms.
   openedAt: Schema.Finite,
 });
@@ -24,8 +25,9 @@ export const TerminalsSchema = Schema.Struct({
   terminals: Schema.Array(TerminalSchema),
 });
 
+// A worktree's terminal, or with none the device's.
 export const OpenTerminalPayloadSchema = Schema.Struct({
-  ...WorktreeScopedPayloadSchema.fields,
+  worktree: Schema.optional(WorktreeScopedPayloadSchema),
   // The grid the opening client has room for.
   size: Schema.optional(GridSizeSchema),
 });

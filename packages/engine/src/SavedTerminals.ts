@@ -4,12 +4,15 @@ import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/sql/SqlClient";
 
 // A terminal as the host last saved it, while it ran or as it closed:
-// its worktree, the folder its shell was in, and the tail of what it
-// showed, which the next start replays above a fresh shell there.
+// its worktree (none for the device's), the folder its shell was in,
+// and the tail of what it showed, which the next start replays above a
+// fresh shell there.
 export type SavedTerminal = {
   readonly terminalId: string;
-  readonly projectId: string;
-  readonly worktreeId: string;
+  readonly worktree?: {
+    readonly projectId: string;
+    readonly worktreeId: string;
+  };
   readonly cwd: string;
   readonly openedAt: number;
   readonly seq: number;
@@ -31,8 +34,8 @@ const make = Effect.gen(function* () {
 
   const list = sql<{
     terminal_id: string;
-    project_id: string;
-    worktree_id: string;
+    project_id: string | null;
+    worktree_id: string | null;
     cwd: string;
     opened_at: number;
     seq: number;
@@ -41,8 +44,13 @@ const make = Effect.gen(function* () {
     Effect.map((rows) =>
       rows.map((row) => ({
         terminalId: row.terminal_id,
-        projectId: row.project_id,
-        worktreeId: row.worktree_id,
+        ...(row.project_id !== null &&
+          row.worktree_id !== null && {
+            worktree: {
+              projectId: row.project_id,
+              worktreeId: row.worktree_id,
+            },
+          }),
         cwd: row.cwd,
         openedAt: row.opened_at,
         seq: row.seq,
@@ -58,8 +66,8 @@ const make = Effect.gen(function* () {
   ) {
     const row = {
       terminal_id: terminal.terminalId,
-      project_id: terminal.projectId,
-      worktree_id: terminal.worktreeId,
+      project_id: terminal.worktree?.projectId ?? null,
+      worktree_id: terminal.worktree?.worktreeId ?? null,
       cwd: terminal.cwd,
       opened_at: terminal.openedAt,
       seq: terminal.seq,

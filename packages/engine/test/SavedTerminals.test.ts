@@ -22,8 +22,7 @@ const run = <A>(
 
 const worktreeTerminal: SavedTerminals.SavedTerminal = {
   terminalId: "b",
-  projectId: "P",
-  worktreeId: "W",
+  worktree: { projectId: "P", worktreeId: "W" },
   cwd: "/code/app",
   openedAt: 2,
   seq: 7,
@@ -76,4 +75,50 @@ it("opens a store holding a saved device terminal, keeping its worktrees' and dr
     listed: [worktreeTerminal],
     tables: ["saved_terminals"],
   });
+});
+
+it("opens a store whose saved terminals all name a worktree, keeping them, and saves a device's beside them", async () => {
+  // The store as a build before migration 17 left it: migration 15's
+  // table, whose worktree columns can't be null, holding a worktree's
+  // terminal.
+  await run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`DROP TABLE saved_terminals`;
+      yield* sql`DELETE FROM effect_sql_migrations WHERE migration_id >= 17`;
+      yield* sql`CREATE TABLE saved_terminals (
+        terminal_id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        worktree_id TEXT NOT NULL,
+        cwd TEXT NOT NULL,
+        opened_at INTEGER NOT NULL,
+        seq INTEGER NOT NULL,
+        history TEXT NOT NULL
+      ) STRICT`;
+      yield* sql`INSERT INTO saved_terminals ${sql.insert({
+        terminal_id: "b",
+        project_id: "P",
+        worktree_id: "W",
+        cwd: "/code/app",
+        opened_at: 2,
+        seq: 7,
+        history: "$ vim\r\n",
+      })}`;
+    }).pipe(Effect.orDie),
+  );
+  const deviceTerminal: SavedTerminals.SavedTerminal = {
+    terminalId: "c",
+    cwd: "/Users/sam",
+    openedAt: 3,
+    seq: 1,
+    history: "$ ls\r\n",
+  };
+  const listed = await run(
+    Effect.gen(function* () {
+      const saved = yield* SavedTerminals.SavedTerminals;
+      yield* saved.save(deviceTerminal);
+      return yield* saved.list;
+    }),
+  );
+  assert.deepEqual(listed, [worktreeTerminal, deviceTerminal]);
 });
