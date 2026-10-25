@@ -715,10 +715,7 @@ const make = <R, E>(options: {
 
     return Terminals.of({
       list: Stream.unwrap(
-        Latch.whenOpen(
-          back,
-          Effect.sync(() => SubscriptionRef.changes(listed)),
-        ),
+        Latch.whenOpen(back, Effect.succeed(SubscriptionRef.changes(listed))),
       ),
       open,
       close: Effect.fn("Terminals.close")(function* (terminalId: string) {
