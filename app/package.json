@@ -64,6 +64,7 @@
     "@tanstack/react-router": "1.170.17",
     "@tanstack/react-virtual": "^3.14.5",
     "@xterm/addon-fit": "catalog:",
+    "@xterm/addon-unicode-graphemes": "catalog:",
     "@xterm/addon-web-links": "catalog:",
     "@xterm/addon-webgl": "catalog:",
     "@xterm/xterm": "catalog:",

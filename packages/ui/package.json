@@ -20,6 +20,7 @@
     "@pierre/diffs": "catalog:",
     "@shigomori/contracts": "workspace:*",
     "@xterm/addon-fit": "catalog:",
+    "@xterm/addon-unicode-graphemes": "catalog:",
     "@xterm/addon-web-links": "catalog:",
     "@xterm/addon-webgl": "catalog:",
     "@xterm/xterm": "catalog:",
