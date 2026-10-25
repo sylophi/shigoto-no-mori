@@ -117,14 +117,19 @@ const readProcessTable = Effect.fnUntraced(function* (pids: number[]) {
 // line is often one program with its own argv: `pnpm i && pnpm dev`
 // shows up as `node .../pnpm.cjs dev`, and a shell-quoted absolute
 // path loses its quotes. Accept the whole recorded command, or the
-// leading word of any command in it, or that word's basename, and
-// treat anything else as inconclusive.
+// program of any command in it (past its `NAME=value` words and an
+// `exec`, which aren't in the live line), or that program's basename,
+// and treat anything else as inconclusive.
 function commandMatches(recorded: string, live: string): boolean {
   const trimmed = recorded.trim();
   if (trimmed === "") return false;
   if (live.includes(trimmed)) return true;
   return trimmed.split(/[;&|\n]+/).some((command) => {
-    const head = (command.trim().split(/\s+/)[0] ?? "").replace(/['"]/g, "");
+    const program = command
+      .trim()
+      .split(/\s+/)
+      .find((word) => word !== "exec" && !/^\w+=/.test(word));
+    const head = (program ?? "").replace(/['"]/g, "");
     const base = head.slice(head.lastIndexOf("/") + 1);
     return base !== "" && (live.includes(head) || live.includes(base));
   });
