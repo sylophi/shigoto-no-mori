@@ -18,8 +18,8 @@ import { scriptEnvOf, UNATTENDED_ENV } from "@shigomori/contracts/scriptEnv";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Option from "effect/Option";
-import * as Queue from "effect/Queue";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { Marks } from "./marks";
 import { OrphanSweep } from "./OrphanSweep";
@@ -170,10 +170,9 @@ interface RunRecord extends Killable {
 
 // A lifecycle script an engine run started (a create's setup, an rm's
 // teardown), which streams through the same events but has no PTY here.
-// Booked from its "started" document and dropped on its "exit". Not
-// persisted, though recorded for the sweep like a PTY run: a quit ends
-// it with the engine run that started it, but a host killed outright
-// leaves it running in a group with no host left.
+// Booked from its "started" document and dropped on its "exit", and
+// recorded for the sweep like a PTY run: a quit ends it with the engine
+// run that started it, but a host killed outright leaves it running.
 interface LifecycleRun extends Killable {
   settle: () => void;
   projectId: string;
@@ -210,22 +209,8 @@ export const makeRuns = ({
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const ptyRuns = new Map<string, RunRecord>();
     const lifecycle = new Map<string, LifecycleRun>();
-    // A lifecycle run is booked in a synchronous callback (forward), so
-    // its record waits here for the store.
-    const unrecorded = yield* Queue.unbounded<{
-      readonly script: Parameters<typeof sweep.record>[0];
-      readonly done: Promise<void>;
-    }>();
-    yield* Queue.take(unrecorded).pipe(
-      Effect.flatMap(({ script, done }) =>
-        sweep.record(
-          script,
-          Effect.promise(() => done),
-        ),
-      ),
-      Effect.forever,
-      Effect.forkScoped,
-    );
+    // For the records forward, a synchronous callback, makes.
+    const runFork = yield* FiberSet.makeRuntime<never>();
 
     const killRecord = Effect.fnUntraced(function* (
       record: Killable,
@@ -311,18 +296,20 @@ export const makeRuns = ({
             });
             own.add(event.runId);
             if (event.command !== undefined) {
-              Queue.offerUnsafe(unrecorded, {
-                script: {
-                  runId: event.runId,
-                  pid,
-                  groupLeader: false,
-                  projectId: event.projectId,
-                  worktreeId: event.worktreeId,
-                  startedAt,
-                  command: event.command,
-                },
-                done,
-              });
+              runFork(
+                sweep.record(
+                  {
+                    runId: event.runId,
+                    pid,
+                    groupLeader: false,
+                    projectId: event.projectId,
+                    worktreeId: event.worktreeId,
+                    startedAt,
+                    command: event.command,
+                  },
+                  Effect.promise(() => done),
+                ),
+              );
             }
             announce();
             notify(event);
