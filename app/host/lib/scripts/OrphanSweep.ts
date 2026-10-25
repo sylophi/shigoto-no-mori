@@ -138,9 +138,10 @@ function commandMatches(recorded: string, live: string): boolean {
 // The identity proof. A live pid says nothing on its own, so three
 // independent facts have to agree before the sweep signals anything:
 // the process leads its own group when it did (a script's PTY child
-// leads a session of its own, and setsid survives an exec; a lifecycle
-// script ran in the app's group), it started when we recorded that it
-// started, and its command line still looks like the one we launched.
+// leads a session of its own, and setsid survives an exec, while a
+// lifecycle script ran in the app's group), it started when we recorded
+// that it started, and its command line still looks like the one we
+// launched.
 function isSameProcess(
   record: RecordedScript,
   live: LiveProcess | undefined,
