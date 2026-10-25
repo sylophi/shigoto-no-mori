@@ -10,9 +10,10 @@
 // Its output goes out in chunks, numbered by `seq`, to every client
 // attached, through a bounded PubSub: a client that falls behind holds
 // the shell's output back rather than pile it up here, and the PTY is
-// paused while the backlog is large. One that stops taking is cut loose
-// after a moment, and catches up from the history. History is a ring of the latest
-// chunks (./history.ts), which an attach replays first.
+// paused while the backlog is large. One that stops taking is cut
+// loose after a moment, and catches up from the history. History is a
+// ring of the latest chunks (./history.ts), which an attach replays
+// first.
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import {
   UnknownProjectError,
