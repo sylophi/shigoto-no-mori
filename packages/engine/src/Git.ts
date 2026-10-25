@@ -249,8 +249,10 @@ export class Git extends Context.Service<
     ) => Effect.Effect<Option.Option<{ ahead: number; behind: number }>>;
     readonly upstreamSync: (worktree: string) => Effect.Effect<UpstreamSync>;
     // HEAD's newest commits no remote has, capped at UNPUSHED_LIMIT:
-    // what amend and undo may touch.
-    readonly unpushedCount: (worktree: string) => Effect.Effect<number>;
+    // what amend and undo may touch. None when it can't be read.
+    readonly unpushedCount: (
+      worktree: string,
+    ) => Effect.Effect<Option.Option<number>>;
     // A page of `git log HEAD`, newest first. Empty on any failure (an
     // unborn branch, a rebase in progress).
     // `query` searches the messages (literal, case blind) and `from`
@@ -277,14 +279,14 @@ export class Git extends Context.Service<
       repo: string,
       ref: string,
     ) => Effect.Effect<Option.Option<ReadonlySet<string>>>;
-    // How a branch sits against the project's primary ref. `chain` is
-    // the primary's firstParentChain, read once per project by the
-    // caller and asked only when needed.
+    // How a branch sits against the project's primary ref, none when it
+    // can't be read in full. `chain` is the primary's firstParentChain,
+    // read once per project by the caller and asked only when needed.
     readonly primaryRelation: (input: {
       readonly worktree: string;
       readonly primaryRef: string;
       readonly chain: Effect.Effect<Option.Option<ReadonlySet<string>>>;
-    }) => Effect.Effect<PrimaryRelation>;
+    }) => Effect.Effect<Option.Option<PrimaryRelation>>;
     readonly readCommitMessage: (
       worktree: string,
       hash: string,
@@ -371,6 +373,20 @@ export class Git extends Context.Service<
     readonly snapshotRemoteRefs: (
       repo: string,
     ) => Effect.Effect<string, GitError>;
+    // Every local branch's, remote-tracking ref's and replacement ref's
+    // commit by its full name, with a branch's upstream ref ("" without
+    // one), in one read.
+    readonly refTips: (
+      repo: string,
+    ) => Effect.Effect<
+      ReadonlyMap<string, { readonly tip: string; readonly upstream: string }>,
+      GitError
+    >;
+    // Whether extensions.worktreeConfig is on, which lets a worktree's
+    // own config.worktree set what the repository's config says.
+    readonly worktreeConfigOn: (
+      repo: string,
+    ) => Effect.Effect<boolean, GitError>;
 
     // --- branches and remotes ---
     readonly listRemotes: (repo: string) => Effect.Effect<string[]>;
@@ -1057,6 +1073,30 @@ const make = Effect.gen(function* () {
         "--format=%(objectname) %(refname)",
         "refs/remotes/",
       ]);
+    }),
+    refTips: Effect.fn("Git.refTips")(function* (repo) {
+      const out = yield* run(repo, [
+        "for-each-ref",
+        "--format=%(refname)%00%(objectname)%00%(upstream)",
+        "refs/heads/",
+        "refs/remotes/",
+        "refs/replace/",
+      ]);
+      return new Map(
+        splitLines(out).map((line) => {
+          const [ref = "", tip = "", upstream = ""] = line.split("\0");
+          return [ref, { tip, upstream }] as const;
+        }),
+      );
+    }),
+    worktreeConfigOn: Effect.fn("Git.worktreeConfigOn")(function* (repo) {
+      const out = yield* run(
+        repo,
+        ["config", "--type=bool", "--get", "extensions.worktreeConfig"],
+        // Unset.
+        { okExitCodes: [1] },
+      );
+      return out.trim() === "true";
     }),
     listRemotes,
     listRemoteEntries: Effect.fn("Git.listRemoteEntries")(function* (repo) {
