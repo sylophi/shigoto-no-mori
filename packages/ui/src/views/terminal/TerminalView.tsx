@@ -1,7 +1,7 @@
 // A terminal on screen: xterm drawing on the GPU, fed by its container.
 // The size is the host's (every client attached draws at it), so the
-// view only says what grid it has room for (onFit), on every change of
-// its box and whenever it takes focus, and draws at whatever size the
+// view only says what grid it has room for (onFit), once a change of its
+// box settles and whenever it takes focus, and draws at whatever size the
 // feed sets. A grid bigger than the box is cut off at its edges.
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
@@ -35,6 +35,12 @@ const fontSizeOf = (host: HTMLElement): number =>
   Number.parseFloat(
     host.ownerDocument.defaultView?.getComputedStyle(host).fontSize ?? "",
   ) || 11;
+
+// How long the box stays put before its new size goes to the shell. A
+// shell redraws its prompt at each size it is told, and a narrower grid
+// reflows the prompt it redraws over, which leaves a copy above (zsh's
+// multi-line themes), so a drag tells it only the size it ends at.
+const SETTLE_MS = 150;
 
 // DECTCEM: terminal cursor visibility.
 const SHOW_CURSOR = "\x1b[?25h";
@@ -144,8 +150,14 @@ export function TerminalView({
       fitTo(cols, rows);
     };
     proposeRef.current = propose;
-    // Observing delivers the current size straight away.
-    const observer = new ResizeObserver(() => propose(false));
+    // Observing delivers the current size straight away, which goes at
+    // once: the shell starts at the host's default size.
+    let settling: ReturnType<typeof setTimeout> | undefined;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(settling);
+      if (proposed === "") propose(false);
+      else settling = setTimeout(() => propose(false), SETTLE_MS);
+    });
     observer.observe(host);
     // Taking focus takes the size: the last terminal typed in decides it.
     const onFocus = () => propose(true);
@@ -196,6 +208,7 @@ export function TerminalView({
       stop();
       themeObserver.disconnect();
       observer.disconnect();
+      clearTimeout(settling);
       term.textarea?.removeEventListener("focus", onFocus);
       dataSub.dispose();
       term.dispose();
