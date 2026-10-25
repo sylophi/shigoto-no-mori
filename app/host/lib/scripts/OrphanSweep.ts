@@ -127,8 +127,8 @@ function commandMatches(recorded: string, live: string): boolean {
   return trimmed.split(/[;&|\n]+/).some((command) => {
     const program = command
       .trim()
-      .split(/\s+/)
-      .find((word) => word !== "exec" && !/^\w+=/.test(word));
+      .replace(/^(?:(?:\w+=(?:"[^"]*"|'[^']*'|\S*)|exec)\s+)*/, "")
+      .split(/\s+/)[0];
     const head = (program ?? "").replace(/['"]/g, "");
     const base = head.slice(head.lastIndexOf("/") + 1);
     return base !== "" && (live.includes(head) || live.includes(base));
