@@ -4,6 +4,7 @@
 // detail-page code shows and drives runs on whichever device the
 // surrounding subtree names.
 import { useAtomValue } from "@effect/atom-react";
+import { useEffect } from "react";
 import type {
   ScriptActivityKind,
   ScriptRunState,
@@ -69,6 +70,9 @@ export function useWorktreeScriptActivity(
     deviceId,
     local ? (hasLocalHost ? api : undefined) : peerApi,
   );
+  useEffect(() => {
+    if (listed) runs.settle(listed);
+  }, [listed, runs]);
   if (held !== null && held !== "failed") return held;
   return listedActivity(listed ?? [], worktreeId) ?? held;
 }

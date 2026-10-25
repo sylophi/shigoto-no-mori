@@ -60,6 +60,11 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 // script keeps producing output.
 const MAX_PENDING_CHUNKS = 500;
 
+// How long a run the host no longer has keeps waiting for its exit. The
+// list and the events are separate streams, so a healthy exit, with
+// its last output and its code, can trail the list that dropped it.
+const LOST_GRACE_MS = 5_000;
+
 // "started" is handled separately by handleEvent (which binds the runId
 // before delegating to applyEvent). Narrowing the post-start union lets
 // applyEvent's switch stay exhaustive with assertNever as the safety net.
@@ -173,6 +178,8 @@ export class ScriptRuns {
   // Runs attached to and then let go (attach), whose events the host
   // still sends until they exit.
   private ignored = new Set<string>();
+  // The runs the device's list named last (settle).
+  private listed = new Set<string>();
   private registry: AtomRegistry.AtomRegistry;
   private api: ScriptCalls;
   // Whether a removed-worktree notice is worth a toast even for a
@@ -307,23 +314,46 @@ export class ScriptRuns {
     this.setStateWithActivity(key, (s) =>
       s.cancelling ? s : { ...s, cancelling: true },
     );
-    // A run the host no longer has (already exited, or one it never
-    // could reach) reports `cancelled: false` instead of throwing, and
-    // the exit that follows a real stop is what clears the flag, so a
-    // refused stop must clear it here or the button reads "Stopping…"
-    // for good.
-    let cancelled = false;
+    let cancelled: boolean;
     try {
       ({ cancelled } = await this.api.cancel({ runId: state.runId }));
-    } catch {}
-    if (!cancelled) {
+    } catch {
+      // The exit that follows a real stop is what clears the flag, so a
+      // stop that could not be asked must clear it here or the button
+      // reads "Stopping…" for good.
       this.setStateWithActivity(key, (s) =>
         s.status === "running" || s.status === "starting"
           ? { ...s, cancelling: false }
           : s,
       );
+      return false;
     }
+    // A run the host no longer has: it ended where its exit could not
+    // reach here.
+    if (!cancelled) this.lost(state.runId);
     return cancelled;
+  }
+
+  // Ends the runs that left the device's list with no exit heard here
+  // (its host restarted, or the session dropped as the run ended), so
+  // their consoles stop reading running. Only runs the list named
+  // before: it lags a start here by the view's next value.
+  settle(runs: readonly RunningScript[]): void {
+    const now = new Set(runs.map((run) => run.runId));
+    for (const runId of this.listed) {
+      if (!now.has(runId)) this.lost(runId);
+    }
+    this.listed = now;
+  }
+
+  private lost(runId: string): void {
+    setTimeout(() => {
+      const key = this.runIdToKey.get(runId);
+      if (!key || this.current.states.get(key)?.status !== "running") return;
+      // Its exit, should it still come, would wait for a binding forever.
+      this.ignored.add(runId);
+      this.applyEvent(key, { runId, kind: "exit", code: null });
+    }, LOST_GRACE_MS);
   }
 
   // Console keystrokes and viewport size for a live run. Both are
