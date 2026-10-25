@@ -1,12 +1,18 @@
 // Git's runner: a git process in a worktree, its spawn slots, and one index write at a time per worktree.
 import * as Arr from "effect/Array";
+import * as Cache from "effect/Cache";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import { findExecutable } from "../executables.ts";
 import { subcommandOf } from "../gitParse.ts";
 import {
   DEFAULT_MAX_OUTPUT,
@@ -22,6 +28,7 @@ import {
   stderrOf,
 } from "./documents.ts";
 import {
+  capture,
   captureToFiles,
   readAll,
   readAllBytes,
@@ -119,10 +126,84 @@ export const waitingForIndex = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     while: indexHeld,
   });
 
+// PATH and DEVELOPER_DIR as a spawn with `env` sees them: a call's
+// own, else the environment now, not the engine's copy of it, since a
+// test's wrapper on PATH changes it under a running engine.
+const lookupVariables = (env: Readonly<Record<string, string>>) =>
+  Effect.suspend(() => {
+    const now = ConfigProvider.fromEnv({ preserveEmptyStrings: true });
+    const variable = (name: string) =>
+      name in env
+        ? Effect.succeed<string | undefined>(env[name])
+        : Config.String(name).pipe(
+            Effect.orElseSucceed(() => undefined),
+            Effect.provideService(ConfigProvider.ConfigProvider, now),
+          );
+    return Effect.all([variable("PATH"), variable("DEVELOPER_DIR")]);
+  });
+
 export const makeRunning = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   const slots = yield* Semaphore.make(SPAWN_SLOTS);
+
+  // Apple's /usr/bin/git is a launcher that looks up the selected
+  // developer dir's git on every run, some 6-9 ms a spawn, so reads run
+  // that git directly, by the absolute path xcrun names (it finds its
+  // exec-path from its own location). That git leaves out the
+  // launcher's SDKROOT, CPATH, LIBRARY_PATH and MANPATH, so what a read
+  // starts (a filter, a textconv, a credential helper, fsmonitor) runs
+  // without them, while hooked commands still go through the launcher
+  // for a hook building native code. Looked up again each minute, for
+  // an `xcode-select -s` or a moved Xcode.
+  const gits = yield* Cache.make({
+    capacity: 4,
+    timeToLive: "1 minute",
+    lookup: (key: string) =>
+      Effect.gen(function* () {
+        const [searched, developerDir] = JSON.parse(key) as [
+          string,
+          string | null,
+        ];
+        const first = yield* findExecutable("git").pipe(
+          Effect.provideService(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromEnv({ env: { PATH: searched } }),
+          ),
+        );
+        if (Option.getOrUndefined(first) !== "/usr/bin/git") return "git";
+        const { output, code } = yield* capture(
+          spawner,
+          "/usr/bin/xcrun",
+          ["--find", "git"],
+          { env: { DEVELOPER_DIR: developerDir ?? undefined } },
+        );
+        const found = output.trim();
+        return code === 0 && found.startsWith("/") ? found : "git";
+      }).pipe(
+        Effect.orElseSucceed(() => "git"),
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
+      ),
+  });
+  const readGit = Effect.fnUntraced(function* (
+    env: Readonly<Record<string, string>>,
+  ) {
+    if (process.platform !== "darwin") return "git";
+    const [searched, developerDir] = yield* lookupVariables(env);
+    // Only the entries ahead of the first relative or empty one, which
+    // the spawn searches from its cwd and the lookup can't: a git not
+    // found ahead of it is left to the spawn.
+    const ahead = Arr.takeWhile((searched ?? "").split(":"), (dir) =>
+      dir.startsWith("/"),
+    );
+    if (ahead.length === 0) return "git";
+    return yield* Cache.get(
+      gits,
+      JSON.stringify([ahead.join(":"), developerDir]),
+    );
+  });
 
   // A git in `cwd`, its stdout taken whole by `read`.
   const runner = <A>(
@@ -188,7 +269,7 @@ export const makeRunning = Effect.gen(function* () {
               )
             : Effect.gen(function* () {
                 const handle = yield* spawner.spawn(
-                  ChildProcess.make("git", gitArgs, {
+                  ChildProcess.make(yield* readGit(env), gitArgs, {
                     cwd,
                     env,
                     extendEnv: true,
