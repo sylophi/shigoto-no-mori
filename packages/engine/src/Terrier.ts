@@ -16,8 +16,9 @@ import { terrierProjectId } from "./terrierId.ts";
 // Terrier (github.com/dittofleet/terrier) is an external registry of
 // repo paths, listed as projects beside the registry's own while the
 // device's `terrier` setting is on. `terrier ls --json` is all this
-// reads, so terrier's version doesn't matter, only whether that output
-// still has the shape read here.
+// reads, and `terrier add` and `terrier rm` by path all it writes, so
+// terrier's version doesn't matter, only whether that output still has
+// the shape read here.
 
 // Why the setting is on and no terrier projects are listed: the words
 // a warning and doctor use.
@@ -33,8 +34,8 @@ export type TerrierListing = {
   readonly trouble: Option.Option<TerrierTrouble>;
 };
 
-// The project a terrier repo lists as: read-only, under an id minted
-// from its path, so every process agrees on it without storing it.
+// The project a terrier repo lists as, under an id minted from its
+// path, so every process agrees on it without storing it.
 export type TerrierProject = {
   readonly id: string;
   readonly name: string;
@@ -42,13 +43,17 @@ export type TerrierProject = {
   readonly source: "terrier";
 };
 
-// terrier refused an add, in its words.
-export class TerrierAddError extends Schema.TaggedError<TerrierAddError>()(
-  "TerrierAddError",
-  { reason: Schema.String, cause: Schema.Defect() },
+// terrier refused an add or a rm, in its words.
+export class TerrierRefused extends Schema.TaggedError<TerrierRefused>()(
+  "TerrierRefused",
+  {
+    verb: Schema.Literals(["add", "rm"]),
+    reason: Schema.String,
+    cause: Schema.Defect(),
+  },
 ) {
   override get message(): string {
-    return `terrier add failed: ${this.reason}`;
+    return `terrier ${this.verb} failed: ${this.reason}`;
   }
 }
 
@@ -60,7 +65,9 @@ export class Terrier extends Context.Service<
     // answers in the shape read here: the Settings toggle's readiness.
     readonly readiness: Effect.Effect<TerrierReadiness>;
     // Registers a repo in terrier. Already registered is a success there.
-    readonly add: (path: string) => Effect.Effect<void, TerrierAddError>;
+    readonly add: (path: string) => Effect.Effect<void, TerrierRefused>;
+    // Unregisters the repo terrier lists at `path`.
+    readonly remove: (path: string) => Effect.Effect<void, TerrierRefused>;
     // The next ask reads terrier again, for a toggle just flipped.
     readonly invalidate: Effect.Effect<void>;
   }
@@ -252,6 +259,24 @@ const make = Effect.gen(function* () {
   });
   const answered = Cache.get(cache, undefined);
   const invalidate = Cache.invalidateAll(cache);
+
+  // A write is read back by the next ask, so a project added or removed
+  // right after lists as terrier now does.
+  const write = (verb: "add" | "rm", path: string) =>
+    exec("terrier", [verb, "--", path], { timeout: "10 seconds" }).pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.catchTags({
+        CommandError: (cause) =>
+          Effect.fail(
+            new TerrierRefused({
+              verb,
+              reason: stderrOf(cause).replace(/^Error: /, "") || cause.message,
+              cause,
+            }),
+          ),
+      }),
+      Effect.ensuring(invalidate),
+    );
   return Terrier.of({
     listing: Effect.gen(function* () {
       if (!(yield* config.device("terrier"))) {
@@ -264,21 +289,10 @@ const make = Effect.gen(function* () {
       readable: listed.kind === "listed",
     })).pipe(Effect.orDie, Effect.withSpan("Terrier.readiness")),
     add: Effect.fn("Terrier.add")(function* (path: string) {
-      yield* exec("terrier", ["add", "--", path], {
-        timeout: "10 seconds",
-      }).pipe(
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        Effect.catchTags({
-          CommandError: (cause) =>
-            Effect.fail(
-              new TerrierAddError({
-                reason:
-                  stderrOf(cause).replace(/^Error: /, "") || cause.message,
-                cause,
-              }),
-            ),
-        }),
-      );
+      yield* write("add", path);
+    }),
+    remove: Effect.fn("Terrier.remove")(function* (path: string) {
+      yield* write("rm", path);
     }),
     invalidate,
   });

@@ -96,11 +96,7 @@ export function ProjectRow({
   const pickable = !arrangeMode && !expanded && !missing;
   // This machine first, then every peer holding the same repo.
   const { group, icon } = useProjectGroup({ project, local, members });
-  const { relocating, onLocate, picker } = useLocateProject(
-    group,
-    project,
-    missing,
-  );
+  const { relocating, onLocate, picker } = useLocateProject(group, missing);
   // The header stands for the repo on every device, and terrier lists
   // it per device, so any checkout of it being terrier's marks it.
   // Only the open (or unfolded) project wears the paw, so only it

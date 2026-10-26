@@ -18,6 +18,7 @@ import type { PortInfo, PortPoolConfig } from "./ports.ts";
 import * as Registry from "./Registry.ts";
 import type { RegisteredProject } from "./Registry.ts";
 import type * as GitHub from "./GitHub.ts";
+import type { TerrierRefused } from "./Terrier.ts";
 import { makeListing } from "./worktrees/listing.ts";
 import { makeStatusCard } from "./worktrees/statusCard.ts";
 import { makeResolving } from "./worktrees/resolving.ts";
@@ -410,8 +411,7 @@ export class Worktrees extends Context.Service<
     ) => Effect.Effect<string, CaptureNotCarried>;
     // Points a project whose repo was moved or renamed by hand at where
     // it is now (an absolute path, any folder inside it will do), keeping
-    // its id. The
-    // linked worktrees that moved along are re-linked, and the managed
+    // its id, and terrier's entry with it. The linked worktrees that moved along are re-linked, and the managed
     // ones a rename would leave external move to where new ones go.
     // Answers the project's row.
     readonly relocateProject: (
@@ -419,7 +419,10 @@ export class Worktrees extends Context.Service<
       destination: string,
     ) => Effect.Effect<
       ProjectRow,
-      RelocateRefused | Registry.UnknownProject | Registry.ProjectPathTaken
+      | RelocateRefused
+      | Registry.UnknownProject
+      | Registry.ProjectPathTaken
+      | TerrierRefused
     >;
   }
 >()("sm/engine/Worktrees") {}

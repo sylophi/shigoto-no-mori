@@ -22,6 +22,7 @@ import * as Scripts from "@host/lib/Scripts";
 import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
+import * as Terrier from "@shigomori/engine/Terrier";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as Shell from "@host/lib/Shell";
 import * as CliShell from "@host/lib/cli/shell";
@@ -90,15 +91,19 @@ function onExternalStateChange() {
       .filter((projectId) => projectId !== undefined),
   );
   for (const projectId of mirrored) announceProjectChanged(projectId);
-  // The terminal may have added or removed a project: re-read the list
-  // (a project gone takes its scripts, and a worktree or project gone its
-  // terminals), then follow it with the git-directory watches.
+  // The terminal may have added or removed a project: re-read the list,
+  // terrier's included, which it may have written to (a project gone
+  // takes its scripts, and a worktree or project gone its terminals),
+  // then follow it with the git-directory watches.
   // A watcher that failed to start has nothing to follow.
   void Graph.run(
-    Effect.flatMap(
-      Scripts.Scripts,
-      (scripts) => scripts.reapRemovedProjects,
-    ).pipe(
+    Effect.flatMap(Terrier.Terrier, (terrier) => terrier.invalidate).pipe(
+      Effect.andThen(
+        Effect.flatMap(
+          Scripts.Scripts,
+          (scripts) => scripts.reapRemovedProjects,
+        ),
+      ),
       Effect.andThen(Effect.serviceOption(GitWatcher.GitWatcher)),
       Effect.flatMap(
         Option.match({

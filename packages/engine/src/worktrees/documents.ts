@@ -385,13 +385,7 @@ export class PullRequestUnchecked extends Schema.TaggedError<PullRequestUnchecke
 export class RelocateRefused extends Schema.TaggedError<RelocateRefused>()(
   "RelocateRefused",
   {
-    reason: Schema.Literals([
-      "not-a-repo",
-      "via-terrier",
-      "still-there",
-      "terrier-lists-old",
-      "terrier-lists-new",
-    ]),
+    reason: Schema.Literals(["not-a-repo", "still-there", "terrier-lists-new"]),
     path: Schema.String,
     name: Schema.String,
     binary: Schema.String,
@@ -401,12 +395,8 @@ export class RelocateRefused extends Schema.TaggedError<RelocateRefused>()(
     switch (this.reason) {
       case "not-a-repo":
         return `${this.path} is not a git repository`;
-      case "via-terrier":
-        return `${this.name} is registered via terrier, not ${this.binary}. Register its new path with terrier instead.`;
       case "still-there":
         return `${this.path} is still there. Relocate is for a repo that was moved or renamed by hand.`;
-      case "terrier-lists-old":
-        return `terrier still lists ${this.path}. Run \`terrier prune\` first, then relocate.`;
       case "terrier-lists-new":
         return `${this.path} is already a project, via terrier. Remove ${this.name} instead (\`${this.binary} projects remove ${this.name}\`).`;
     }

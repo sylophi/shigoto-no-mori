@@ -1,5 +1,6 @@
 // sm projects <list|icon|add|remove|relocate|config>: the registered
-// projects, terrier's included, and each one's settings.
+// projects, terrier's included (and written through to it), and each
+// one's settings.
 import { basename } from "node:path";
 import {
   keyDescriptions,
@@ -218,7 +219,7 @@ const confirmAll = (root: string, found: Projects.Found) =>
   });
 
 // Every repo under `root` that isn't a project yet.
-const addAll = (root: string, yes: boolean) =>
+const addAll = (root: string, yes: boolean, terrier: boolean | undefined) =>
   Effect.gen(function* () {
     const projects = yield* Projects.Projects;
     const { json } = yield* Effect.service(Output);
@@ -233,7 +234,9 @@ const addAll = (root: string, yes: boolean) =>
     if (!yes) yield* confirmAll(root, found);
     const added: Registry.RegisteredProject[] = [];
     for (const repo of found.repos) {
-      const project = yield* projects.register(repo).pipe(Effect.result);
+      const project = yield* projects
+        .register(repo, { terrier })
+        .pipe(Effect.result);
       if (Result.isFailure(project)) {
         yield* note(`warning: skipping ${repo}: ${messageOf(project.failure)}`);
         continue;
@@ -250,14 +253,16 @@ const add = Command.make(
     path: Argument.String("path").pipe(Argument.withDefault(".")),
     rest,
     all: Flag.Boolean("all").pipe(Flag.withAlias("a"), Flag.withDefault(false)),
+    terrier: Flag.Boolean("terrier").pipe(Flag.optional),
     yes: yesFlag,
   },
   (input) =>
     Effect.gen(function* () {
       yield* warnTerrier;
       const at = yield* absolute(input.path);
-      if (input.all) return yield* addAll(at, input.yes);
-      const project = yield* (yield* Projects.Projects).add(at);
+      const terrier = Option.getOrUndefined(input.terrier);
+      if (input.all) return yield* addAll(at, input.yes, terrier);
+      const project = yield* (yield* Projects.Projects).add(at, { terrier });
       const { json } = yield* Effect.service(Output);
       yield* json ? emit(project) : announce(project);
     }),
@@ -298,7 +303,7 @@ const remove = Command.make(
           (left.worktrees > 0
             ? `Its ${left.worktrees} worktrees stay on disk.`
             : "No files are deleted from disk.") +
-          (left.stillListed ? " It stays listed via terrier." : "");
+          (left.inTerrier ? " It's unregistered from terrier too." : "");
         const sure = yield* confirm(
           `Remove ${project.name} (${project.path}) from Shigoto no Mori? ${remains}`,
         );

@@ -2,10 +2,11 @@
 // positionals interleave, any number of leading dashes name a flag
 // (`-no-cd`), a valued flag takes the next argument whatever it is, the
 // last of a repeated flag wins (a list flag keeps each), a boolean
-// takes no value, and `--` makes the rest positional. The command line
-// comes out in the one form effect/cli reads the same way: the
-// command's names, each flag as `--name=value` (a boolean as `=true`,
-// so no positional after it reads as its value), then the positionals.
+// takes no value and `--no-<name>` turns it off, and `--` makes the
+// rest positional. The command line comes out in the one form
+// effect/cli reads the same way: the command's names, each flag as
+// `--name=value` (a boolean as `=true` or `=false`, so no positional
+// after it reads as its value), then the positionals.
 // Each command's flags are read from its own definition.
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -133,7 +134,7 @@ const refuse = (problem: string) => Effect.fail(new UsageError({ problem }));
 // The flags `tokens` give, by name, and the positionals between them.
 const parse = (tokens: ReadonlyArray<string>, flags: Flags) =>
   Effect.suspend(() => {
-    const values = new Map<string, string[] | true>();
+    const values = new Map<string, string[] | boolean>();
     const positionals: string[] = [];
     // Where the first positional is, -1 without one.
     let first = -1;
@@ -145,15 +146,16 @@ const parse = (tokens: ReadonlyArray<string>, flags: Flags) =>
         continue;
       }
       const { name, inline } = split(arg);
-      const flag = flags.get(name);
-      if (flag === undefined) {
+      const negated = !flags.has(name) && name.startsWith("no-");
+      const flag = flags.get(negated ? name.slice(3) : name);
+      if (flag === undefined || (negated && flag.valued)) {
         return refuse(`Unknown option ${JSON.stringify(arg)}.`);
       }
       if (!flag.valued) {
         if (inline !== undefined) {
           return refuse(`Option ${JSON.stringify(arg)} takes no value.`);
         }
-        values.set(flag.name, true);
+        values.set(flag.name, !negated);
         continue;
       }
       let value = inline;
@@ -215,8 +217,8 @@ export const commandLine = (
     const flagArgs = [...values]
       .filter(([name]) => own.has(name))
       .flatMap(([name, value]) =>
-        value === true
-          ? [`--${name}=true`]
+        typeof value === "boolean"
+          ? [`--${name}=${value}`]
           : value.map((each) => `--${name}=${each}`),
       );
     // Past `--`, effect/cli reads a positional as it is, as only a flag

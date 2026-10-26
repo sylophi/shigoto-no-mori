@@ -31,8 +31,7 @@ export const ProjectSchema = Schema.Struct({
   remote: Schema.optional(Schema.NullOr(Schema.String)),
   lastUsed: Schema.optional(Schema.Natural),
   recentCount: Schema.optional(Schema.Natural),
-  // Merged from the terrier registry at read time, never persisted; can't
-  // be removed here.
+  // Merged from the terrier registry at read time, never persisted.
   source: Schema.optional(Schema.Literal("terrier")),
 });
 export type Project = typeof ProjectSchema.Type;

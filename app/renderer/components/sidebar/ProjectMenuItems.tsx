@@ -96,9 +96,8 @@ export function ProjectPageMenuItems({ project }: { project: Project }) {
 
 // The remove that closes the list, under the scope of the device it
 // removes from. Plain, it reads "Remove". Given a `device` it is that
-// device's row in a header's Remove submenu: named for the device,
-// keyed by it in the shared arm, and red even when inert, as everything
-// in that submenu is.
+// device's row in a header's Remove submenu: named for the device and
+// keyed by it in the shared arm.
 export function ProjectRemoveMenuItem({
   project,
   removeArm,
@@ -114,22 +113,6 @@ export function ProjectRemoveMenuItem({
   );
   const removeProject = useRemoveProject();
   const armed = removeArm.armedKey === armKey;
-  // A terrier-sourced project has nothing here to remove: its presence
-  // is terrier's call (`terrier rm`), so say that instead of offering
-  // a remove that the host would refuse anyway.
-  if (project.source === "terrier") {
-    return device === undefined ? (
-      <DropdownMenuItem disabled>Registered via terrier</DropdownMenuItem>
-    ) : (
-      <DropdownMenuItem variant="destructive" disabled>
-        <DeviceMenuRowView
-          icon={device.icon}
-          label={device.label}
-          note="via terrier"
-        />
-      </DropdownMenuItem>
-    );
-  }
   return (
     <DropdownMenuItem
       variant="destructive"

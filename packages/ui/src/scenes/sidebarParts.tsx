@@ -86,11 +86,7 @@ export function SidebarPartsScene() {
             </CheckItemView>
             <WorktreeSortSubmenuView sort="name" onPick={noop} />
             <DropdownMenuItem variant="destructive">
-              <DeviceMenuRowView
-                icon={macbook.icon}
-                label={macbook.label}
-                note="via terrier"
-              />
+              <DeviceMenuRowView icon={macbook.icon} label={macbook.label} />
             </DropdownMenuItem>
           </StaticMenu>
           <WorktreeSortMenuView sort="recent" onPick={noop} />

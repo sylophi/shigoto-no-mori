@@ -69,9 +69,7 @@ export const makeProjectChecks = ({
     } = reads;
     const { launcherFindings } = dataDirChecks;
     const unregisterHint = (project: ListedProject) =>
-      project.source === "terrier"
-        ? `\`terrier rm ${project.name}\``
-        : `\`${binaryName} projects remove ${project.name}\``;
+      `\`${binaryName} projects remove ${project.name}\``;
 
     // Whether the project's path is a working repo, which every other
     // check needs: its common dir when it is, what is wrong when it isn't.
@@ -81,20 +79,11 @@ export const makeProjectChecks = ({
         const info = yield* fs.stat(project.path).pipe(Effect.result);
         if (Result.isFailure(info) && isNotFound(info.failure)) {
           const line = check("Projects", "project-path", project.name);
-          if (project.source !== undefined) {
-            // Not sm's entry to drop: terrier prune owns it.
-            return Result.fail(
-              line.warn(
-                `${tildify(project.path, home)} is gone, but ${project.source} still lists it`,
-                "Restore the directory, or run `terrier prune`.",
-              ),
-            );
-          }
           return Result.fail(
             repairable(
               line.fail(
                 `${tildify(project.path, home)} is gone, so every command for this project fails`,
-                `If it moved, point the project at it (\`${binaryName} projects relocate ${project.name} <new-path>\`). Otherwise restore the directory, or unregister it (\`${binaryName} projects remove ${project.name}\`).`,
+                `If it moved, point the project at it (\`${binaryName} projects relocate ${project.name} <new-path>\`). Otherwise restore the directory, or unregister it (${unregisterHint(project)}).`,
               ),
               {
                 prompt: `Unregister ${project.name} (${tildify(project.path, home)} is gone)? Its config under projects/ goes too.`,
@@ -103,9 +92,8 @@ export const makeProjectChecks = ({
                 writesStore: true,
                 // The app may have dropped it already.
                 apply: registry
-                  .unregister(project.id)
+                  .unregister(project)
                   .pipe(
-                    Effect.asVoid,
                     Effect.catchTags({ UnknownProject: () => Effect.void }),
                   ),
               },
@@ -145,10 +133,7 @@ export const makeProjectChecks = ({
         const detail = (yield* sameDirectory(project.path, primaryPath))
           ? `registered through a symlinked path; git calls the same directory ${tildify(primaryPath, home)}, so nothing run from inside the repo matches it`
           : `registered at ${tildify(project.path, home)}, which is a worktree of ${tildify(primaryPath, home)}, not the repo's primary checkout`;
-        const readd =
-          project.source === "terrier"
-            ? `\`terrier add ${tildify(primaryPath, home)}\``
-            : `\`${binaryName} projects add ${tildify(primaryPath, home)}\``;
+        const readd = `\`${binaryName} projects add ${tildify(primaryPath, home)}\``;
         return Result.fail(
           check("Projects", "project-primary", project.name).fail(
             detail,

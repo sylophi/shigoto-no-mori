@@ -65,11 +65,15 @@ export const firstList = Effect.map(Ops.listedProjects, (listed) => {
   snapshot = listed.map(toProject);
 });
 
-// Registers a repo with the engine (`sm projects add`), then re-reads
-// the list so the sync readers (the git watcher's reconcile right after
-// the IPC call settles) see the new project.
-export const addProject = Effect.fnUntraced(function* (path: string) {
-  const project = yield* Ops.addProject(path);
+// Registers a repo with the engine (`sm projects add`, `--terrier` for
+// `terrier`), then re-reads the list so the sync readers (the git
+// watcher's reconcile right after the IPC call settles) see the new
+// project.
+export const addProject = Effect.fnUntraced(function* (
+  path: string,
+  terrier?: boolean,
+) {
+  const project = yield* Ops.addProject(path, terrier);
   yield* refresh;
   return project;
 });

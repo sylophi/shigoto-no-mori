@@ -129,6 +129,7 @@ type RepairError =
   | MovedWorktreePending
   | UpdateInProgress
   | StagingLockUnavailable
+  | Terrier.TerrierRefused
   // A prune that couldn't read the managed folders, so couldn't rule out
   // a moved worktree it would sever.
   | Darwin.DarwinHelperError;

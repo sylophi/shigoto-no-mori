@@ -209,21 +209,15 @@ export function ProjectGroupActions({
 }: ProjectGroupActionsProps) {
   const creator = useGroupCreator(members, identity);
   const setPinned = useSetProjectPinned(groupKey);
-  const live = members.filter(
-    (member): member is LiveMember => member.api !== undefined,
-  );
   // Whose copy the pages open for (and, on a group of one, the remove
   // acts on): this machine's, or the `+`'s device on a header with no local checkout.
   const primary =
-    members.find((member) => member.isThisDevice) ?? creator ?? live[0];
+    members.find((member) => member.isThisDevice) ??
+    creator ??
+    members.find((member): member is LiveMember => member.api !== undefined);
   // One arm for the whole menu, keyed by device in the Remove submenu.
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   const spansDevices = members.length > 1;
-  // Remove lists the devices only with a copy among them to remove.
-  // When every reachable one is terrier's, the plain item says so, as
-  // it does for a group of one, rather than open onto all-inert rows.
-  const listsRemoves =
-    spansDevices && live.some((member) => member.project.source !== "terrier");
   if (primary === undefined) return null;
 
   return (
@@ -272,14 +266,14 @@ export function ProjectGroupActions({
           />
           <MaybeHostScope deviceId={primary.deviceId} api={primary.api}>
             <ProjectPageMenuItems project={primary.project} />
-            {!listsRemoves && (
+            {!spansDevices && (
               <ProjectRemoveMenuItem
                 project={primary.project}
                 removeArm={removeArm}
               />
             )}
           </MaybeHostScope>
-          {listsRemoves && (
+          {spansDevices && (
             <RemoveSubmenu
               members={members}
               removeArm={removeArm}

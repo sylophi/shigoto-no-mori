@@ -198,9 +198,6 @@ export const makeRelocating = ({
     ) {
       const refuse = (reason: RelocateRefused["reason"], at: string) =>
         new RelocateRefused({ reason, path: at, name: project.name, binary });
-      if (project.source === "terrier") {
-        return yield* refuse("via-terrier", project.path);
-      }
       // Folded to the primary checkout, so a folder inside the repo or one
       // of its worktrees still lands on the repo.
       const repo = yield* git.locate(target);
@@ -214,19 +211,33 @@ export const makeRelocating = ({
           Effect.orElseSucceed(() => false),
         );
         if (stillThere) return yield* refuse("still-there", project.path);
-        // terrier's rows merge in by path, so either side being one would
-        // list one repo twice.
+        // terrier's rows merge in by path, so a repo it lists at the new
+        // path would list twice.
         const { paths: listed } = yield* terrier.listing;
-        if (listed.includes(project.path)) {
-          return yield* refuse("terrier-lists-old", project.path);
-        }
         if (listed.includes(to)) return yield* refuse("terrier-lists-new", to);
+        // Asked before terrier's writes too, which the registry's own
+        // refusal would come after.
+        const taken = (yield* registry.projects).find(
+          (other) => other.path === to && other.id !== project.id,
+        );
+        if (taken) {
+          return yield* new Registry.ProjectPathTaken({
+            path: to,
+            name: taken.name,
+          });
+        }
         const moved = yield* movedAlong(to, project.path);
         moved.set(project.path, to);
         const { rekeys } = yield* rekeysOf(
           { id: project.id, name: path.basename(to), path: to },
           moved,
         );
+        // terrier's entry moves first, the new one added before the old
+        // one goes: a refusal of the add leaves the project where it was.
+        if (listed.includes(project.path)) {
+          yield* terrier.add(to);
+          yield* terrier.remove(project.path);
+        }
         // The new path and what is kept under the moved ids commit
         // together, so a crash leaves the project where it was, or where it
         // went with all it kept.
@@ -234,7 +245,7 @@ export const makeRelocating = ({
           .withTransaction(
             Effect.gen(function* () {
               const entry = yield* registry.relocate(
-                project.id,
+                project,
                 to,
                 path.basename(to),
               );

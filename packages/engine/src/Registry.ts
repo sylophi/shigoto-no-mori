@@ -63,7 +63,7 @@ export class ProjectPathTaken extends Schema.TaggedError<ProjectPathTaken>()(
   }
 }
 
-// A listed project: the registry's, or terrier's (read-only).
+// A listed project: the registry's, or terrier's.
 export type ListedProject = RegisteredProject & {
   readonly source?: "terrier";
 };
@@ -90,15 +90,18 @@ export class Registry extends Context.Service<
       readonly name: string;
       readonly path: string;
     }) => Effect.Effect<RegisteredProject, ProjectAlreadyAdded>;
-    // Drops the entry and the project's settings and worktree data.
+    // Drops the project: terrier's entry while the integration lists it,
+    // then its own (a terrier project has none), its settings and its
+    // worktree data.
     readonly unregister: (
-      projectId: string,
-    ) => Effect.Effect<RegisteredProject, UnknownProject>;
-    // Points the entry at where its repo is now, under the new folder's
-    // name, keeping its id: its place in the manual order moves with it,
-    // and the icon remembered for the old path goes.
+      project: ListedProject,
+    ) => Effect.Effect<void, UnknownProject | Terrier.TerrierRefused>;
+    // Points the project at where its repo is now, under the new folder's
+    // name, keeping its id: a terrier project, which has no entry, gets
+    // one under its id. Its place in the manual order moves with it, and
+    // the icon remembered for the old path goes.
     readonly relocate: (
-      projectId: string,
+      project: ListedProject,
       path: string,
       name: string,
     ) => Effect.Effect<RegisteredProject, UnknownProject | ProjectPathTaken>;
@@ -240,37 +243,50 @@ const make = Effect.gen(function* () {
     return project;
   });
 
+  const forgetKept = (project: RegisteredProject) =>
+    Effect.gen(function* () {
+      yield* config.forgetProject(project.id);
+      yield* worktreeData.forgetProject(project.id);
+      // What is kept by the project's path, which would greet a re-add:
+      // its place in the order, its primary's marks, its icon.
+      yield* sql`DELETE FROM project_order WHERE path = ${project.path}`;
+      const primary = worktreeIdFromPath(project.path);
+      yield* forgetWorktree(primary);
+      yield* cloneCheckout.forget(primary);
+      yield* icons.forget(project.path);
+    });
+
+  // The project's place in the order, and only its own: `to` may already
+  // hold one (kept for a terrier row, say).
+  const movePlace = (from: string, to: string) =>
+    Effect.gen(function* () {
+      const [placed] = yield* sql`
+        SELECT 1 FROM project_order WHERE path = ${from}`;
+      if (placed) {
+        yield* sql`DELETE FROM project_order WHERE path = ${to}`;
+        yield* sql`UPDATE project_order SET path = ${to} WHERE path = ${from}`;
+      }
+    });
+
   const unregister = Effect.fn("Registry.unregister")(function* (
-    projectId: string,
+    project: ListedProject,
   ) {
-    const stillListed = (yield* terrier.listing).paths;
-    return yield* sql
+    // terrier's first: one left behind would keep listing the project.
+    if ((yield* terrier.listing).paths.includes(project.path)) {
+      yield* terrier.remove(project.path);
+    }
+    yield* sql
       .withTransaction(
         Effect.gen(function* () {
-          const [project] = yield* sql<RegisteredProject>`
-          SELECT id, name, path FROM projects WHERE id = ${projectId}`;
-          if (!project) return yield* new UnknownProject({ projectId });
-          yield* sql`DELETE FROM projects WHERE id = ${projectId}`;
-          // A project terrier still lists stays, under its terrier id,
-          // and keeps its settings and worktree data there.
-          if (stillListed.includes(project.path)) {
-            const kept = terrierProjectId(project.path);
-            if (kept !== projectId) {
-              yield* config.rekeyProject(projectId, kept);
-              yield* worktreeData.rekeyProject(projectId, kept);
+          if (project.source !== "terrier") {
+            const [entry] =
+              yield* sql`SELECT 1 FROM projects WHERE id = ${project.id}`;
+            if (!entry) {
+              return yield* new UnknownProject({ projectId: project.id });
             }
-            return { id: project.id, name: project.name, path: project.path };
+            yield* sql`DELETE FROM projects WHERE id = ${project.id}`;
           }
-          yield* config.forgetProject(projectId);
-          yield* worktreeData.forgetProject(projectId);
-          // What is kept by the project's path, which would greet a
-          // re-add: its place in the order, its primary's marks, its icon.
-          yield* sql`DELETE FROM project_order WHERE path = ${project.path}`;
-          const primary = worktreeIdFromPath(project.path);
-          yield* forgetWorktree(primary);
-          yield* cloneCheckout.forget(primary);
-          yield* icons.forget(project.path);
-          return { id: project.id, name: project.name, path: project.path };
+          yield* forgetKept(project);
         }),
       )
       .pipe(Effect.catchTags({ SqlError: Effect.die }));
@@ -565,32 +581,31 @@ const make = Effect.gen(function* () {
     .pipe(Effect.orDie, Effect.withSpan("Registry.deviceId"));
 
   const relocate = Effect.fn("Registry.relocate")(function* (
-    projectId: string,
+    project: ListedProject,
     path: string,
     name: string,
   ) {
+    const projectId = project.id;
     return yield* sql
       .withTransaction(
         Effect.gen(function* () {
-          const [project] = yield* sql<RegisteredProject>`
-            SELECT id, name, path FROM projects WHERE id = ${projectId}`;
-          if (!project) return yield* new UnknownProject({ projectId });
           const [other] = yield* sql<{ name: string }>`
             SELECT name FROM projects WHERE path = ${path} AND id != ${projectId}`;
           if (other) {
             return yield* new ProjectPathTaken({ path, name: other.name });
           }
-          yield* sql`UPDATE projects SET name = ${name}, path = ${path}
-            WHERE id = ${projectId}`;
-          // In the project's own place, and only there: the new path may
-          // already hold one (kept for a terrier row, say).
-          const [placed] = yield* sql`
-            SELECT 1 FROM project_order WHERE path = ${project.path}`;
-          if (placed) {
-            yield* sql`DELETE FROM project_order WHERE path = ${path}`;
-            yield* sql`UPDATE project_order SET path = ${path}
-              WHERE path = ${project.path}`;
+          if (project.source === "terrier") {
+            yield* sql`INSERT INTO projects (id, name, path, position)
+              SELECT ${projectId}, ${name}, ${path},
+                coalesce(max(position) + 1, 0) FROM projects`;
+          } else {
+            const [entry] =
+              yield* sql`SELECT 1 FROM projects WHERE id = ${projectId}`;
+            if (!entry) return yield* new UnknownProject({ projectId });
+            yield* sql`UPDATE projects SET name = ${name}, path = ${path}
+              WHERE id = ${projectId}`;
           }
+          yield* movePlace(project.path, path);
           yield* icons.forget(project.path);
           return { id: projectId, name, path };
         }),

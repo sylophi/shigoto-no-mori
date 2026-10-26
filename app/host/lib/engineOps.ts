@@ -347,9 +347,14 @@ export const setShelved = Effect.fnUntraced(function* (
   );
 });
 
-export const addProject = Effect.fnUntraced(function* (path: string) {
+export const addProject = Effect.fnUntraced(function* (
+  path: string,
+  terrier?: boolean,
+) {
   const project = yield* asChange(
-    Effect.flatMap(Projects.Projects, (projects) => projects.add(path)),
+    Effect.flatMap(Projects.Projects, (projects) =>
+      projects.add(path, { terrier }),
+    ),
   );
   return yield* Schema.decodeEffect(ProjectSchema)(project);
 });

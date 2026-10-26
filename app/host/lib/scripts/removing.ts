@@ -174,9 +174,8 @@ export const makeRemoving = ({
     // A project gone takes its scripts and terminals, whoever removed it:
     // the app (projects.remove), the doctor's repair, or a terminal's `sm
     // projects remove`, which the store's change tells
-    // (host/process/layer.ts). Gone is what a fresh list no longer names,
-    // so one a removal kept (terrier still registers it) keeps them. A
-    // list that can't be read takes nothing, and neither does a terrier
+    // (host/process/layer.ts). Gone is what a fresh list no longer names.
+    // A list that can't be read takes nothing, and neither does a terrier
     // project missing from a list terrier couldn't answer for (it lists
     // none then). The runs are the ones there before the list was read,
     // so a project added again meanwhile keeps a run started since. It
