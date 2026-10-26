@@ -155,7 +155,7 @@ export function NewWorktreeBranchScene() {
       sourcePicker={branchPicker}
       prSource={null}
       branchName="sheldon"
-      useBranchAsFolder
+      useBranchAsFolder={false}
       prFolderFrom="branch"
       folderName="sheldon"
       folderSourceRaw="sheldon"

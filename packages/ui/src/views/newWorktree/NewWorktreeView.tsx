@@ -105,7 +105,7 @@ export function NewWorktreeFormView({
   onBranchName: (name: string) => void;
   branchTaken: boolean;
   useBranchAsFolder: boolean;
-  prFolderFrom: "pr" | "branch";
+  prFolderFrom: PrFolderSource;
   onPrFolder: (source: PrFolderSource) => void;
   onUseSourceName: (use: boolean) => void;
   worktreeName: string;
@@ -230,20 +230,17 @@ export function NewWorktreeFormView({
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-baseline justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <label htmlFor="worktree-name" className="block text-sm font-medium">
             Worktree folder
           </label>
           {prMode ? (
             <SegmentedControl
               aria-label="Worktree folder name source"
-              value={useBranchAsFolder ? prFolderFrom : "custom"}
+              value={prFolderFrom}
               onChange={onPrFolder}
               options={PR_FOLDER_OPTIONS}
               disabled={busy}
-              // The row is baseline-aligned for the label and the old
-              // checkbox, but a bordered track wants its own centering.
-              className="self-center"
               optionClassName="px-2 py-0.5 text-2xs"
             />
           ) : (
