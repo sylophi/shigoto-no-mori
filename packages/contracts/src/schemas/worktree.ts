@@ -414,6 +414,12 @@ export const CheckoutBranchPayloadSchema = Schema.Struct({
   branch: GitRefNameSchema,
 });
 
+// `base` in place of the primary ref: any ref the repository holds.
+export const BranchDiffPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  base: Schema.optional(GitRefNameSchema),
+});
+
 export const CommitDiffPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   hash: CommitHashSchema,

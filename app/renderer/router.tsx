@@ -192,6 +192,15 @@ function validateDiffSearch(search: Record<string, unknown>): { amend?: true } {
   return search["amend"] === true ? { amend: true } : {};
 }
 
+// `base` is the ref the branch's changes are read against, in place of
+// the primary branch.
+function validateBranchDiffSearch(search: Record<string, unknown>): {
+  base?: string;
+} {
+  const base = search["base"];
+  return typeof base === "string" && base.length > 0 ? { base } : {};
+}
+
 // `dialog` opens the worktree page with one of its dialogs up
 // (useTakeWorktreeDialog).
 function validateDetailSearch(search: Record<string, unknown>): {
@@ -238,6 +247,7 @@ const branchDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.branchDiff,
   component: withDeviceScope(BranchDiff),
+  validateSearch: validateBranchDiffSearch,
 });
 
 const stashesRoute = createRoute({

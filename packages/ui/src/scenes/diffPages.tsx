@@ -5,6 +5,7 @@ import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 import type { ReactNode } from "react";
 import { ArrowUp } from "lucide-react";
 import { BranchBarView } from "../views/diff/BranchBarView.tsx";
+import { BranchComboboxView } from "../views/shared/BranchComboboxView.tsx";
 import type { DiffChangesControls } from "../views/diff/changesControls.ts";
 import { defaultBinding } from "../lib/keymap.ts";
 import { CommitComposerView } from "../views/diff/CommitComposerView.tsx";
@@ -24,6 +25,7 @@ import {
   FILE_GAP,
 } from "../views/diff/DiffPageView.tsx";
 import {
+  BRANCH_DIFF_BASE_PICKER,
   BranchDiffSubtitleView,
   CommitBylineView,
   PullRequestDiffSubtitleView,
@@ -195,12 +197,14 @@ function pageHeader(
   subtitle: ReactNode,
   extra?: {
     details?: ReactNode;
+    subtitleEnd?: ReactNode;
   },
 ) {
   return (
     <DiffHeaderView
       title={title}
       subtitle={subtitle}
+      subtitleEnd={extra?.subtitleEnd}
       back={null}
       files={null}
       wrapLines={false}
@@ -385,11 +389,18 @@ export function DiffPartsScene() {
           )}
           {pageHeader(
             "All branch changes",
-            <BranchDiffSubtitleView
-              commits={4}
-              more={false}
-              base="origin/main"
-            />,
+            <BranchDiffSubtitleView commits={4} more={false} />,
+            {
+              subtitleEnd: (
+                <BranchComboboxView
+                  branches={undefined}
+                  fetching={false}
+                  value="origin/main"
+                  onChange={noop}
+                  className={BRANCH_DIFF_BASE_PICKER}
+                />
+              ),
+            },
           )}
           {pageHeader(
             "Commit",

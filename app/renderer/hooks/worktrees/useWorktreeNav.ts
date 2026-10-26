@@ -163,9 +163,19 @@ export function useWorktreeNav() {
       go("prDiff", { projectId, worktreeId });
     },
 
-    // Everything the branch changes against the primary branch.
-    toBranchDiff(projectId: string, worktreeId: string, replace = false) {
-      go("branchDiff", { projectId, worktreeId }, replace);
+    // Everything the branch changes against the primary branch, or
+    // against `base`.
+    toBranchDiff(
+      projectId: string,
+      worktreeId: string,
+      opts: { base?: string; replace?: boolean } = {},
+    ) {
+      go(
+        "branchDiff",
+        { projectId, worktreeId },
+        opts.replace ?? false,
+        opts.base === undefined ? {} : { base: opts.base },
+      );
     },
 
     // The files page, opened on `path` when given (a file to show). A
