@@ -65,6 +65,9 @@ export function MergeDialogView({
   onSubmit: () => void;
   onCancel: () => void;
 }) {
+  // The squash's message is the one field, so the one place Enter merges.
+  const messaged =
+    method === "squash" && preview !== undefined && preview.incoming > 0;
   return (
     <form
       className="flex flex-col gap-4 p-5"
@@ -99,7 +102,7 @@ export function MergeDialogView({
         preview={preview}
         error={previewError}
       />
-      {method === "squash" && preview !== undefined && preview.incoming > 0 && (
+      {messaged && (
         <Input
           aria-label="Commit message"
           placeholder="Commit message"
@@ -126,7 +129,12 @@ export function MergeDialogView({
         >
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={!ready}>
+        <Button
+          type="submit"
+          keys={messaged ? "↩" : undefined}
+          size="sm"
+          disabled={!ready}
+        >
           {METHODS.find((m) => m.value === method)?.label}
         </Button>
       </div>

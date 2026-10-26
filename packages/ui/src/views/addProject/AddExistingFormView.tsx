@@ -16,7 +16,6 @@ import {
   keepFocusInInput,
   MODAL_COMMAND_CLASS,
 } from "../../primitives/cmdk-classes.ts";
-import { KeyedButtonView } from "./DialogPartsView.tsx";
 import { FooterRow } from "../../primitives/footer-row.tsx";
 
 // The add-existing tab's browse stage: the path as typed, the folders
@@ -112,21 +111,21 @@ export function AddExistingFormView({
           placeholder="Folder path"
           className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
         />
-        <KeyedButtonView
-          icon={
-            targetIsGitRepo ? (
-              <FolderGit2 className="size-3.5" />
-            ) : (
-              <FolderSearch className="size-3.5" />
-            )
-          }
-          label={pending && targetIsGitRepo ? "Adding…" : submitLabel}
+        <Button
+          variant="outline"
+          size="xs"
           keys={submitKbd}
           onMouseDown={keepFocusInInput}
           onClick={onPrimary}
           disabled={!canPrimary || pending}
-          aria-label={`${submitLabel} (${submitKbd})`}
-        />
+        >
+          {targetIsGitRepo ? (
+            <FolderGit2 className="size-3.5" />
+          ) : (
+            <FolderSearch className="size-3.5" />
+          )}
+          {pending && targetIsGitRepo ? "Adding…" : submitLabel}
+        </Button>
       </div>
 
       <Command.List

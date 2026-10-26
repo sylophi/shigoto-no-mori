@@ -149,7 +149,7 @@ export function FolderNameDialogView({
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={name.trim() === ""}>
+        <Button type="submit" keys="↩" size="sm" disabled={name.trim() === ""}>
           {verb}
         </Button>
       </div>

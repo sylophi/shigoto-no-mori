@@ -81,16 +81,20 @@ export function InlineNameEditorView({
           aria-label={`${label} name`}
           className={cn("h-7 w-48 min-w-0 px-2 py-1 text-sm", className)}
         />
-        <Button variant="outline" size="xs" disabled={!canSave} onClick={save}>
+        <Button
+          variant="outline"
+          size="xs"
+          disabled={!canSave}
+          onClick={save}
+          keys="↩"
+        >
           {pending ? "Saving…" : "Save"}
         </Button>
         <Button variant="ghost" size="xs" onClick={cancel}>
           Cancel
         </Button>
       </span>
-      <span className="text-3xs text-muted-foreground">
-        Enter to save, Esc to cancel
-      </span>
+      <span className="text-3xs text-muted-foreground">Esc to cancel</span>
     </span>
   );
 }

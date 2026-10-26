@@ -149,7 +149,8 @@ export function CreateMenuListView({
         </Command.Empty>
       </Command.List>
       <FooterRow className="px-3 py-2 text-2xs phone:hidden">
-        {/* ↩ creating goes without saying. ⇧ is for a click too. */}
+        {/* ⇧ is for a click too. */}
+        <KbdHint keys={["↩"]} label="Create" />
         <KbdHint keys={["⇧"]} label="Pick a base" />
       </FooterRow>
     </Command>
