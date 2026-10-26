@@ -44,6 +44,8 @@ export const PullRequestSchema = Schema.Struct({
   isDraft: Schema.Boolean,
   // On the slim shape because stacks are read off the project's map.
   baseRefName: Schema.String,
+  // The number of GitHub's stack holding it, none outside one.
+  stack: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
   isCrossRepository: Schema.optional(Schema.Boolean),
   // A fork's PR a branch here was checked out from, which makes it the
   // branch's own.

@@ -149,16 +149,22 @@ const make = Effect.gen(function* () {
       function* (project: ProjectRef, branch: string) {
         if (!(yield* ready(project))) return null;
         const started = generation(project);
-        const pr = yield* readBranchPullRequest(
+        const answer = yield* readBranchPullRequest(
           project.path,
           branch,
           signer,
         ).pipe(Effect.provide(gh));
         const last = maps.get(project.id);
+        const entry = last?.value.get(branch);
+        // The branch's read doesn't ask for its stack: the map's stands.
+        const pr =
+          answer && entry?.number === answer.number && entry.stack !== undefined
+            ? { ...answer, stack: entry.stack }
+            : answer;
         if (
           last &&
           generation(project) === started &&
-          !matchesMapEntry(pr, last.value.get(branch))
+          !matchesMapEntry(pr, entry)
         ) {
           const value = new Map(last.value);
           if (pr === null) value.delete(branch);

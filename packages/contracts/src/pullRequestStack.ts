@@ -1,7 +1,7 @@
-// A PR is stacked on another when its base is that PR's head, so the
-// branch -> PR map alone says which PRs form a stack (`gh stack`'s too).
-// A stack is linear: where a PR has two PRs based on it, walking up stops
-// at the fork.
+// A stack is GitHub's: a PR based on another PR's head is only stacked
+// on it when GitHub holds both in the same stack. Within it, the bases
+// give the order. A stack is linear: where a PR has two PRs based on it,
+// walking up stops at the fork.
 import { only } from "./util/only.ts";
 import type { PullRequest } from "./schemas/pullRequest.ts";
 import type { Worktree } from "./schemas/worktree.ts";
@@ -23,23 +23,26 @@ export interface PullRequestStack {
 // MAX_STACK_DEPTH: change both.
 const MAX_DEPTH = 64;
 
-// `trunk` is never a member: a long-lived "main -> production" PR would
-// otherwise make every PR based on main look stacked on it. Merged and
-// closed PRs stay in the chain.
+// `trunk` is never a member. Merged and closed PRs stay in the chain.
 export function pullRequestStackFor(
   prs: Record<string, PullRequest>,
   branch: string,
   trunk?: string,
 ): PullRequestStack | null {
   const own = prs[branch];
-  if (!own || branch === trunk) return null;
+  if (own?.stack === undefined || branch === trunk) return null;
   const visited = new Set<string>([branch]);
   const below: PullRequestStackEntry[] = [];
   let cursor = own;
   while (below.length < MAX_DEPTH) {
     const parentBranch = cursor.baseRefName;
     const parent = prs[parentBranch];
-    if (!parent || parentBranch === trunk || visited.has(parentBranch)) break;
+    if (
+      parent?.stack !== own.stack ||
+      parentBranch === trunk ||
+      visited.has(parentBranch)
+    )
+      break;
     visited.add(parentBranch);
     below.push({ branch: parentBranch, pr: parent });
     cursor = parent;
@@ -48,7 +51,9 @@ export function pullRequestStackFor(
   let top = branch;
   while (above.length < MAX_DEPTH) {
     const child = only(
-      childrenOf(prs, top).filter((c) => !visited.has(c.branch)),
+      childrenOf(prs, top).filter(
+        (c) => c.pr.stack === own.stack && !visited.has(c.branch),
+      ),
     );
     if (child === undefined) break;
     visited.add(child.branch);

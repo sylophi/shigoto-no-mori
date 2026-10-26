@@ -252,6 +252,14 @@ export class GitHub extends Context.Service<
       Option.Option<GitHubStack>,
       GitHubCliError | GitHubOutputError
     >;
+    // Every PR in one of the repo's GitHub stacks, to that stack's
+    // number. Empty when the host has no stacks API.
+    readonly stacks: (
+      repo: string,
+    ) => Effect.Effect<
+      ReadonlyMap<number, number>,
+      GitHubCliError | GitHubOutputError
+    >;
     // GitHub's own stack merge: every PR of the stack up to `number`
     // lands, or none does. Waits for the outcome.
     readonly mergeStackAsync: (
@@ -446,16 +454,22 @@ const MergeStateAnswer = Schema.fromJsonString(
   Schema.Struct({ mergeStateStatus: GoJson.text }),
 );
 
-// The stacks API's answer: each stack's pull requests.
-const StacksAnswer = Schema.fromJsonString(
-  Schema.Array(
-    Schema.Struct({
-      pull_requests: GoJson.list(
-        Schema.Struct({ number: GoJson.count, state: GoJson.text }),
-      ),
-    }),
+// A stack as the stacks API answers it, with its pull requests.
+const StackAnswer = Schema.Struct({
+  number: GoJson.count,
+  pull_requests: GoJson.list(
+    Schema.Struct({ number: GoJson.count, state: GoJson.text }),
   ),
+});
+const StacksAnswer = Schema.fromJsonString(Schema.Array(StackAnswer));
+// `--paginate --slurp`'s pages of stacks.
+const StackPagesAnswer = Schema.fromJsonString(
+  Schema.Array(Schema.Array(StackAnswer)),
 );
+
+// A host without the stacks API (GHES, the feature off) answers 404.
+const hasNoStacksApi = (error: GitHubCliError) =>
+  stderrOf(error).includes("HTTP 404");
 
 // An async merge's answer: its status, and the ticket's details.
 const AsyncTicket = Schema.fromJsonString(
@@ -878,10 +892,7 @@ const make = Effect.gen(function* () {
       `repos/{owner}/{repo}/stacks?pull_request=${number}`,
     ]).pipe(Effect.result);
     if (Result.isFailure(answered)) {
-      // A host without the stacks API (GHES, the feature off) answers
-      // 404: not an error, just not a GitHub stack.
-      if (stderrOf(answered.failure).includes("HTTP 404"))
-        return Option.none<GitHubStack>();
+      if (hasNoStacksApi(answered.failure)) return Option.none<GitHubStack>();
       return yield* answered.failure;
     }
     const stacks = Schema.decodeUnknownOption(StacksAnswer)(answered.success);
@@ -894,6 +905,31 @@ const make = Effect.gen(function* () {
       }
     }
     return Option.none<GitHubStack>();
+  });
+
+  const stacks = Effect.fn("GitHub.stacks")(function* (repo: string) {
+    const stackOf = new Map<number, number>();
+    const answered = yield* run(repo, [
+      "api",
+      "--paginate",
+      "--slurp",
+      "repos/{owner}/{repo}/stacks?per_page=100",
+    ]).pipe(Effect.result);
+    if (Result.isFailure(answered)) {
+      if (hasNoStacksApi(answered.failure)) return stackOf;
+      return yield* answered.failure;
+    }
+    const pages = Schema.decodeUnknownOption(StackPagesAnswer)(
+      answered.success,
+    );
+    if (Option.isNone(pages)) {
+      return yield* new GitHubOutputError({ command: "api stacks" });
+    }
+    for (const stack of pages.value.flat()) {
+      for (const pr of stack.pull_requests)
+        stackOf.set(pr.number, stack.number);
+    }
+    return stackOf;
   });
 
   const asyncTicket = (stdout: string) =>
@@ -978,6 +1014,7 @@ const make = Effect.gen(function* () {
     mergeProgress,
     mergeStateStatus,
     stackFor,
+    stacks,
     mergeStackAsync,
   });
 });

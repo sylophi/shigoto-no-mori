@@ -30,6 +30,7 @@ const fakePullRequest = (
   title: string,
   baseRefName: string,
   state: "OPEN" | "MERGED" | "CLOSED" = "OPEN",
+  stack?: number,
 ) => ({
   number,
   url: `https://github.com/sylophi/shigoto-no-mori/pull/${number}`,
@@ -37,6 +38,7 @@ const fakePullRequest = (
   state,
   isDraft: false,
   baseRefName,
+  ...(stack === undefined ? {} : { stack }),
 });
 
 // The repo's PRs by head branch. Three of them are a stack across two
@@ -54,16 +56,21 @@ const FAKE_PRS = {
     "Refuse a lock file older than the daemon",
     "main",
     "MERGED",
+    150,
   ),
   "exp/terrier-sync": fakePullRequest(
     151,
     "Watch the terrier registry for edits",
     "fix-stale-locks",
+    "OPEN",
+    150,
   ),
   "port-pool-retry": fakePullRequest(
     152,
     "Retry the pool lease before giving up",
     "exp/terrier-sync",
+    "OPEN",
+    150,
   ),
 };
 
