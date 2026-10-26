@@ -22,6 +22,8 @@ import { FolderIconView } from "../shared/ProjectIconView.tsx";
 import { CheckItemView } from "./SidebarToolbarView.tsx";
 
 export function ProjectFolderHeaderView({
+  dropRef,
+  dropping = false,
   name,
   count,
   expanded,
@@ -29,6 +31,10 @@ export function ProjectFolderHeaderView({
   onRename,
   onUngroup,
 }: {
+  // A drop target for a project dragged on the list, and whether one
+  // over it would land.
+  dropRef?: (node: HTMLElement | null) => void;
+  dropping?: boolean;
   name: string;
   count: number;
   expanded: boolean;
@@ -43,10 +49,14 @@ export function ProjectFolderHeaderView({
         {/* A row of the list like a project's, its projects set in
             under it, so it reads as one more thing in its owner. */}
         <button
+          ref={dropRef}
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+          className={cn(
+            "flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground",
+            dropping && "bg-primary/15 text-foreground hover:bg-primary/15",
+          )}
         >
           <FolderIconView name={name} />
           <SimpleTooltip whenTruncated tip={name}>

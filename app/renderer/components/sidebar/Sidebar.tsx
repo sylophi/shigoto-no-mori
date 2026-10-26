@@ -4,9 +4,6 @@ import type { SidebarView } from "@shigomori/contracts/schemas";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -44,6 +41,7 @@ import { useShareInboxOrder } from "./inbox/inboxOrder";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { useLeaveInboxForPage } from "./inbox/useLeaveInboxForPage";
 import { setOpenProject, useOpenProject } from "./openProject";
+import { useFolderDragging } from "./ProjectFolder";
 import { ProjectDragPreviewView } from "@shigomori/ui/views/sidebar/ProjectDragPreviewView.tsx";
 import type {
   GroupShelf,
@@ -167,6 +165,8 @@ function Forest({
   const markAgentsWaiting = useMarkAgentsWaiting();
   const viewSettled = useSidebarViewSettled() || pinnedView !== undefined;
   const reorderProjects = useReorderProjects();
+  // Off arranging, the drag files projects into folders.
+  const filing = useFolderDragging();
   // The open project and the shelf reveals are kept by group key
   // (projectGroupKey), one per repo: narrowed to a peer, a repo this
   // machine also holds is drawn as that peer's group, and it still
@@ -351,12 +351,6 @@ function Forest({
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
-  // distance: 5 lets a quick click still toggle expand; drag activates
-  // only after the pointer moves 5px while held.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
-
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
   };
@@ -492,17 +486,22 @@ function Forest({
             }
           />
         )}
-        {/* Dragging reorders projects, which the inbox doesn't show, so
-            it doesn't mount the DnD context at all. The context holds the
-            pinned header too, since every project row is a sortable. */}
+        {/* Dragging reorders projects, or files them into folders,
+            which the inbox doesn't show, so it doesn't mount the DnD
+            context at all. The context holds the pinned header too,
+            since every project row is a sortable. */}
         {inbox ? (
           scroller
         ) : (
           <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveId(null)}
+            sensors={filing.sensors}
+            {...(arrangeMode
+              ? {
+                  onDragStart: handleDragStart,
+                  onDragEnd: handleDragEnd,
+                  onDragCancel: () => setActiveId(null),
+                }
+              : filing.handlers)}
           >
             <SortableContext
               items={orderedProjects.map((p) => p.id)}
@@ -511,11 +510,15 @@ function Forest({
               {pinnedRow}
               {scroller}
             </SortableContext>
-            <DragOverlay>
-              {activeProject ? (
-                <ProjectDragPreviewView project={activeProject} />
-              ) : null}
-            </DragOverlay>
+            {arrangeMode ? (
+              <DragOverlay>
+                {activeProject ? (
+                  <ProjectDragPreviewView project={activeProject} />
+                ) : null}
+              </DragOverlay>
+            ) : (
+              filing.overlay
+            )}
           </DndContext>
         )}
       </ViewPaneView>
