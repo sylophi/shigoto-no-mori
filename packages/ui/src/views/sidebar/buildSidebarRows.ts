@@ -82,6 +82,9 @@ export interface BuildSidebarRowsArgs {
   // lists the projects as one run, and so does a list with a single
   // owner, which a header would only repeat.
   byOwner: { shut: ReadonlySet<string> } | null;
+  // The folders (ProjectGroupOrder.folders) drawn as their header
+  // alone, by fold key (the "project-folder" row's).
+  shutFolders: ReadonlySet<string>;
   // Peer devices' forests, merged into the tree: a remote project
   // sharing a local project's repo identity contributes its worktrees
   // to that group (marked per row), the rest gather under project
@@ -203,6 +206,7 @@ export function buildSidebarRows({
   byPrefix,
   arrangeMode,
   byOwner,
+  shutFolders,
   remote,
   mirrors,
   localSides = new Map(),
@@ -274,8 +278,11 @@ export function buildSidebarRows({
       project,
       local: true,
       expanded: false,
-      // Arranging draws the stored order, which the pins don't lead.
+      // Arranging draws the stored order, which the pins don't lead,
+      // and no folders.
       pinned: false,
+      folder: null,
+      folders: [],
       devices: [],
       members: [],
     }));
@@ -341,6 +348,9 @@ export function buildSidebarRows({
   const rankOf = (group: ProjectGroup) =>
     order.groups.get(group.groupId) ?? order.groups.size;
   const sorted = groups.toSorted((a, b) => rankOf(a) - rankOf(b));
+  const folderNames = new Map(
+    [...order.filed].map(([section, byName]) => [section, [...byName.keys()]]),
+  );
   // The tree draws one level: the open project on its own, or the list
   // of projects, a header each, and inline each one's rows under it.
   // (A repo registered twice here is two groups under one key, and
@@ -426,6 +436,8 @@ export function buildSidebarRows({
       expanded: inProject,
       folded: isFolded,
       pinned: order.pinned.has(group.groupKey),
+      folder: order.folders.get(group.groupKey) ?? null,
+      folders: folderNames.get(sectionOf(project, byOwner)) ?? [],
       // The worktrees beside the primary checkouts. Those are left out
       // because every project has one, and a number on every line
       // would say nothing about where the work is. None while this
@@ -594,9 +606,11 @@ export function buildSidebarRows({
   // them.
   const drawn = inProject
     ? chunks.flat()
-    : pinnedFirst(chunks, byOwner, order.owners, (key, foldKey) =>
-        shutFoldRows.set(key, foldKey),
-      );
+    : pinnedFirst(chunks, byOwner, order.owners, {
+        filed: order.filed,
+        shut: shutFolders,
+        hide: (key, foldKey) => shutFoldRows.set(key, foldKey),
+      });
 
   return {
     rows: drawn,
@@ -681,19 +695,19 @@ const isPinned = ([header]: SidebarRow[]) =>
 // The list of projects' rows, a run per project, with the pinned ones
 // first, the last of them marked for the gap under it when more follow
 // and it is a header alone, then the rest, split by owner when
-// `byOwner` says to.
+// `byOwner` says to, and by folder.
 function pinnedFirst(
   chunks: SidebarRow[][],
   byOwner: BuildSidebarRowsArgs["byOwner"],
   owners: ProjectGroupOrder["owners"],
-  hide: HideRow,
+  folders: Folders,
 ): SidebarRow[] {
   const lead = chunks.filter(isPinned).flat();
   const rest = chunks.filter((chunk) => !isPinned(chunk));
   const after =
     byOwner === null
-      ? rest.flat()
-      : ownerSections(rest, owners, byOwner.shut, hide);
+      ? folderRuns(rest, ALL_KEY, folders)
+      : ownerSections(rest, owners, byOwner.shut, folders);
   const end = lead.at(-1);
   if (end?.kind === "project" && after.length > 0)
     lead[lead.length - 1] = { ...end, pinnedEnd: true };
@@ -710,18 +724,19 @@ function ownerSections(
   chunks: SidebarRow[][],
   order: ProjectGroupOrder["owners"],
   shut: ReadonlySet<string>,
-  hide: HideRow,
+  folders: Folders,
 ): SidebarRow[] {
   const sections = new Map<string, SidebarRow[][]>();
   for (const chunk of chunks) {
     const [header] = chunk;
-    const owner = header?.kind === "project" ? ownerOf(header.project) : null;
-    const key = owner?.key ?? NO_OWNER_KEY;
+    const key =
+      header?.kind === "project" ? ownerKeyOf(header.project) : NO_OWNER_KEY;
     const section = sections.get(key);
     if (section) section.push(chunk);
     else sections.set(key, [chunk]);
   }
-  if (sections.size < 2) return chunks.flat();
+  const [only] = sections.keys();
+  if (sections.size < 2) return folderRuns(chunks, only ?? ALL_KEY, folders);
   const rankOf = (key: string) => order.get(key)?.rank ?? order.size;
   const drawn: SidebarRow[] = [];
   for (const [ownerKey, section] of [...sections].toSorted(
@@ -737,18 +752,84 @@ function ownerSections(
       count: section.length,
       expanded,
     });
-    if (expanded) drawn.push(...section.flat());
-    else for (const row of section.flat()) hide(row.key, headerKey);
+    if (expanded) drawn.push(...folderRuns(section, ownerKey, folders));
+    else for (const row of section.flat()) folders.hide(row.key, headerKey);
   }
   return drawn;
+}
+
+// The folders as the list draws them: each section's (filedFolders),
+// the shut ones' fold keys, and where their rows are left out.
+interface Folders {
+  filed: Filed;
+  shut: ReadonlySet<string>;
+  hide: HideRow;
+}
+
+// A section's folders by name, in name order, each with the group keys
+// filed in it. A section is an owner's (ownerOf), and the whole list is
+// one too (ALL_KEY), for when it isn't split by owner.
+type Filed = ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
+
+const ownerKeyOf = (project: Project) => ownerOf(project)?.key ?? NO_OWNER_KEY;
+
+const sectionOf = (
+  project: Project,
+  byOwner: BuildSidebarRowsArgs["byOwner"],
+) => (byOwner === null ? ALL_KEY : ownerKeyOf(project));
+
+// A section's projects' rows: each folder's under a header of its own,
+// set in under it, then the ones in no folder. A shut folder's rows are
+// handed to `hide`, its header standing in for them.
+function folderRuns(
+  chunks: SidebarRow[][],
+  section: string,
+  { filed, shut, hide }: Folders,
+): SidebarRow[] {
+  const loose: SidebarRow[][] = [];
+  const runs = new Map<string, SidebarRow[][]>();
+  for (const chunk of chunks) {
+    const [header] = chunk;
+    const folder = header?.kind === "project" ? header.folder : null;
+    if (folder === null) {
+      loose.push(chunk);
+      continue;
+    }
+    const run = runs.get(folder);
+    if (run) run.push(chunk);
+    else runs.set(folder, [chunk]);
+  }
+  const drawn: SidebarRow[] = [];
+  for (const [name, groupKeys] of filed.get(section) ?? []) {
+    const run = runs.get(name);
+    if (run === undefined) continue;
+    const foldKey = `${section}\n${name}`;
+    const headerKey = `f:${foldKey}`;
+    const expanded = !shut.has(foldKey);
+    drawn.push({
+      kind: "project-folder",
+      key: headerKey,
+      foldKey,
+      name,
+      groupKeys,
+      count: run.length,
+      expanded,
+    });
+    for (const row of run.flat())
+      if (expanded) drawn.push({ ...row, nested: true });
+      else hide(row.key, headerKey);
+  }
+  return [...drawn, ...loose.flat()];
 }
 
 // Files a row left out behind the row standing in for it (revealKey).
 type HideRow = (key: string, foldKey: string) => void;
 
-// The section of the projects with no owner. Not a valid owner key
-// (those always hold a slash), so no owner can take it.
+// The section of the projects with no owner, and the one section of a
+// list not split by owner. Not valid owner keys (those always hold a
+// slash), so no owner can take them.
 const NO_OWNER_KEY = "none";
+const ALL_KEY = "all";
 
 // Whether a local project takes the peers' checkouts of its repo.
 // Claimed by identity even while still loading, so the project's
@@ -816,11 +897,15 @@ function claimRemote(
 // holds it too, the peer's group keeps the local project's place. And
 // owner rank and header label by owner key (ownerOf), for the list
 // split by owner. And the pinned groups' keys (projectGroupKey), which
-// lead the list wherever their rank puts them.
+// lead the list wherever their rank puts them. And the folder each
+// group is filed in, by group key, which gathers the groups of one
+// owner filed in the same one under a header, and those headers.
 export interface ProjectGroupOrder {
   groups: ReadonlyMap<string, number>;
   owners: ReadonlyMap<string, { rank: number; label: string }>;
   pinned: ReadonlySet<string>;
+  folders: ReadonlyMap<string, string>;
+  filed: Filed;
 }
 
 // Where each group sits in the tree, decided over every device's
@@ -840,6 +925,7 @@ export function projectGroupOrder({
   remote,
   sortMode,
   pinned,
+  folders,
 }: {
   // This machine's projects as buildSidebarRows is handed them, so a
   // repo registered twice here has its peers claimed by the same
@@ -848,9 +934,11 @@ export function projectGroupOrder({
   remote: readonly RemoteForestItem[];
   sortMode: ProjectSortMode;
   pinned: ReadonlySet<string>;
+  folders: ReadonlyMap<string, string>;
 }): ProjectGroupOrder {
   const { claimed, peerOnly } = claimRemote(projects, remote);
   const entries = projects.map((project, i) => ({
+    groupKey: projectGroupKey(project, undefined),
     groupIds: claimsPeers(project)
       ? [project.id, remoteGroupId(project.identity)]
       : [project.id],
@@ -859,6 +947,7 @@ export function projectGroupOrder({
   for (const [groupKey, [first, ...rest]] of peerOnly) {
     if (!first) continue;
     entries.push({
+      groupKey,
       groupIds: [remoteGroupId(groupKey)],
       project: withMergedUsage(first.project, rest),
     });
@@ -897,7 +986,34 @@ export function projectGroupOrder({
     groups,
     owners: new Map(ranked.map(([key, label], rank) => [key, { rank, label }])),
     pinned,
+    folders,
+    filed: filedFolders(entries, folders),
   };
+}
+
+// Over every device's projects too, so a folder's rename reaches the
+// projects the device filter leaves out.
+function filedFolders(
+  entries: readonly { groupKey: string; project: Project }[],
+  folders: ReadonlyMap<string, string>,
+): Filed {
+  const filed = new Map<string, Map<string, string[]>>();
+  const named = entries.flatMap((entry) => {
+    const name = folders.get(entry.groupKey);
+    return name === undefined ? [] : [{ ...entry, name }];
+  });
+  for (const { groupKey, project, name } of named.toSorted((a, b) =>
+    a.name.localeCompare(b.name),
+  ))
+    for (const section of [ALL_KEY, ownerKeyOf(project)]) {
+      const byName = filed.get(section) ?? new Map<string, string[]>();
+      filed.set(section, byName);
+      const keys = byName.get(name) ?? [];
+      byName.set(name, keys);
+      // A repo registered twice here is two entries under one key.
+      if (!keys.includes(groupKey)) keys.push(groupKey);
+    }
+  return filed;
 }
 
 // One project's usage with every other checkout of it folded in: the

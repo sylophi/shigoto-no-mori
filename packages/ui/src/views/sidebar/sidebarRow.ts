@@ -43,7 +43,7 @@ export interface RemoteProjectMember {
   project: Project;
 }
 
-export type SidebarRow =
+type SidebarRowKinds =
   // A project header, for one repo wherever it is checked out: on this
   // machine with any peers' checkouts merged in, or on peers alone.
   // `project` is this machine's checkout when `local`, else the first
@@ -81,6 +81,10 @@ export type SidebarRow =
       // The last of the pinned projects leading the list, with more
       // after it: a gap under it parts them from the rest.
       pinnedEnd?: boolean;
+      // The folder it is filed in (ProjectGroupOrder.folders), and the
+      // folders of the section it is listed in, the ones it can move to.
+      folder: string | null;
+      folders: readonly string[];
     }
   // A local worktree. `mirror` names the peer device it is kept in
   // step with (a live mirror either way round), in which case the
@@ -162,6 +166,19 @@ export type SidebarRow =
       count: number;
       expanded: boolean;
     }
+  // The head of a folder's run inside an owner's (or inside the list,
+  // when it isn't split by owner). `foldKey` is the section's key and
+  // the folder's name, what the shell keeps it shut by, and `groupKeys`
+  // every project filed in it there, the pinned ones too, for a rename.
+  | {
+      kind: "project-folder";
+      key: string;
+      foldKey: string;
+      name: string;
+      groupKeys: readonly string[];
+      count: number;
+      expanded: boolean;
+    }
   // The head of the open project's worktrees gathered by a prefix
   // (BuildSidebarRowsArgs.byPrefix). Shut, the rows are left out and
   // `count` stands for them.
@@ -199,6 +216,12 @@ export type SidebarRow =
       count: number;
       expanded: boolean;
     };
+
+export type SidebarRow = SidebarRowKinds & {
+  // Drawn inside a folder of projects (folderRuns), set in under its
+  // header.
+  nested?: boolean;
+};
 
 // What a view hands the sidebar shell. Both row builders produce this,
 // so the shell renders one of them without knowing which.
@@ -238,6 +261,7 @@ export interface SidebarViewModel {
 const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   project: 28,
   "owner-header": 32,
+  "project-folder": 28,
   worktree: 49,
   "worktree-skeleton": 36,
   "worktree-error": 24,
@@ -284,6 +308,7 @@ const WORKTREE_ROW_GAP = "px-2 pb-(--row-gap) [--row-gap:--spacing(1)]";
 export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   project: "px-2",
   "owner-header": "px-2",
+  "project-folder": "px-2",
   worktree: WORKTREE_ROW_GAP,
   "worktree-skeleton": "px-2",
   "worktree-error": "px-2",
@@ -300,9 +325,11 @@ export type ProjectListRow = Extract<SidebarRow, { kind: "project" }>;
 
 export interface ProjectSection {
   key: string;
-  // The owner's name, null for the pinned projects and for a list that
-  // isn't split.
+  // The owner's name or the folder's, null for the pinned projects and
+  // for a list that isn't split.
   label: string | null;
+  // The folder's name, for a folder's section.
+  folder?: string;
   rows: ProjectListRow[];
 }
 

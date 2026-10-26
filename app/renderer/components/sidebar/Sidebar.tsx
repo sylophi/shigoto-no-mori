@@ -203,6 +203,11 @@ function Forest({
   const [shutOwners, setShutOwners] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  // The folders shut on the list of projects, by fold key. Transient
+  // too: every folder starts open.
+  const [shutFolders, setShutFolders] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   // The prefix groups shut inside a project, by group key and prefix.
   // Transient too: every group starts open.
   const [shutWorktreeGroups, setShutWorktreeGroups] = useState<
@@ -252,6 +257,10 @@ function Forest({
     }
     if (row.kind === "owner-header" && !row.expanded) {
       setShutOwners((prev) => withMember(prev, row.ownerKey, false));
+      return true;
+    }
+    if (row.kind === "project-folder" && !row.expanded) {
+      setShutFolders((prev) => withMember(prev, row.foldKey, false));
       return true;
     }
     if (row.kind === "inbox-shelf" && !row.expanded) {
@@ -313,6 +322,7 @@ function Forest({
         },
         arrangeMode,
         byOwner: groupByOwner ? { shut: shutOwners } : null,
+        shutFolders,
         remote: shownRemote,
         mirrors,
         localSides,
@@ -407,6 +417,7 @@ function Forest({
     onToggleShelved: toggleShelved,
     onToggleShelf: toggleShelf,
     onToggleOwner: (ownerKey) => setShutOwners(withToggled(ownerKey)),
+    onToggleFolder: (foldKey) => setShutFolders(withToggled(foldKey)),
     onToggleWorktreeGroup: (groupId, prefix) =>
       setShutWorktreeGroups(withToggled(worktreeGroupKey(groupId, prefix))),
     onToggleInboxGroup: (prefix) => setShutInboxGroups(withToggled(prefix)),

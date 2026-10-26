@@ -16,6 +16,8 @@ export interface RowHandlers {
   onToggleShelf: (shelf: InboxShelf) => void;
   // An owner's header opened or shut, by owner key (ownerOf).
   onToggleOwner: (ownerKey: string) => void;
+  // A folder's header opened or shut, by its fold key.
+  onToggleFolder: (foldKey: string) => void;
   // A prefix's group in the open project opened or shut.
   onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
   // A prefix's group in the inbox opened or shut.
@@ -77,7 +79,8 @@ function projectIdForRow(row: SidebarRow): string | null {
     row.kind === "inbox-worktree" ||
     row.kind === "inbox-shelf" ||
     row.kind === "inbox-group" ||
-    row.kind === "owner-header"
+    row.kind === "owner-header" ||
+    row.kind === "project-folder"
   )
     return null;
   // Remote rows report the group they were merged into, so hovering a

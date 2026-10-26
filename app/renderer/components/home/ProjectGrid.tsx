@@ -196,6 +196,8 @@ function ProjectTile({
           identity={project.identity}
           groupKey={row.groupKey}
           pinned={pinned}
+          folder={row.folder}
+          folders={row.folders}
           members={group}
           isHovered={hovered}
           triggerRef={triggerRef}

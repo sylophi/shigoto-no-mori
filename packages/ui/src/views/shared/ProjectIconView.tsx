@@ -67,6 +67,35 @@ export function ProjectIconView({
   );
 }
 
+// A folder of projects' tile, kin to a project's: a folder in a hue
+// drawn from its name, with the name's initial, on the same slot so it
+// takes each theme's fill (and doubutsu's lip) the way a project's does.
+export function FolderIconView({
+  name,
+  className,
+}: {
+  name: string;
+  className?: string;
+}) {
+  return (
+    <svg
+      aria-hidden
+      data-slot="project-tile"
+      viewBox="0 0 16 16"
+      style={{ "--project-hue": nameHue(name) } as CSSProperties}
+      className={cn("size-3.5 shrink-0 select-none", className)}
+    >
+      <path d={FOLDER} fill="currentColor" />
+      <TileInitial x={8} y={9.2} size={8.2} initial={initialOf(name)} />
+    </svg>
+  );
+}
+
+// The tab up at the left, the body under it with the corners as round
+// as the project tile's.
+const FOLDER =
+  "M0.5 4.2C0.5 2.7 1.4 1.8 2.9 1.8H5.6C6.3 1.8 6.8 2.1 7.2 2.6L7.9 3.5H13.1C14.6 3.5 15.5 4.4 15.5 5.9V12.4C15.5 13.9 14.6 14.8 13.1 14.8H2.9C1.4 14.8 0.5 13.9 0.5 12.4Z";
+
 function TileInitial({
   x,
   y,

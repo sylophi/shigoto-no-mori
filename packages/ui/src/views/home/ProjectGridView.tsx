@@ -35,6 +35,7 @@ import {
 import { StatusPillView } from "../sidebar/StatusPillView.tsx";
 import type { ProjectListRow, ProjectSection } from "../sidebar/sidebarRow.ts";
 import type { PaletteEntry } from "../palette/paletteEntries.ts";
+import { FolderIconView } from "../shared/ProjectIconView.tsx";
 
 // What a tile says about its project's work, off the palette's entries.
 export interface GroupWork {
@@ -121,6 +122,12 @@ export function ProjectGridLayoutView({
             // tiles stay level with the tiles beside them.
             <SimpleTooltip whenTruncated tip={section.label}>
               <SectionHeading className="col-span-full truncate">
+                {section.folder !== undefined && (
+                  <FolderIconView
+                    name={section.folder}
+                    className="mr-1.5 inline align-[-0.2em]"
+                  />
+                )}
                 {section.label}
               </SectionHeading>
             </SimpleTooltip>

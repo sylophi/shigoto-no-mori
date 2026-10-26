@@ -43,6 +43,7 @@ import {
   useProjectMenuRemoveArm,
   type ProjectMenuRemoveArm,
 } from "./ProjectMenuItems";
+import { ProjectFolderSubmenu } from "./ProjectFolder";
 import { QuickCreateButton } from "./QuickCreateButton";
 import { ProjectActionsView } from "@shigomori/ui/views/sidebar/ProjectActionsView.tsx";
 import type { RemoteProjectMember } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
@@ -175,9 +176,13 @@ interface ProjectGroupActionsProps {
   name: string;
   // The group's repo identity, which the designation is keyed by.
   identity: string | null | undefined;
-  // The group's key (projectGroupKey), which its pin is kept by.
+  // The group's key (projectGroupKey), which its pin and folder are
+  // kept by.
   groupKey: string;
   pinned: boolean;
+  // Its folder, and the ones it can move to.
+  folder: string | null;
+  folders: readonly string[];
   members: readonly GroupMember[];
   isHovered: boolean;
   // The `…` trigger, so the header's right-click can pop the same menu.
@@ -194,6 +199,8 @@ export function ProjectGroupActions({
   identity,
   groupKey,
   pinned,
+  folder,
+  folders,
   members,
   isHovered,
   triggerRef,
@@ -252,6 +259,11 @@ export function ProjectGroupActions({
           <DropdownMenuItem onClick={() => setPinned(!pinned)}>
             {pinned ? "Unpin" : "Pin"}
           </DropdownMenuItem>
+          <ProjectFolderSubmenu
+            groupKey={groupKey}
+            folder={folder}
+            folders={folders}
+          />
           {sortsWorktrees && <WorktreeSortSubmenu groupKey={groupKey} />}
           <AddToDeviceSubmenu
             name={name}

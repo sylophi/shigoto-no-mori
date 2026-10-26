@@ -64,6 +64,8 @@ export function VirtualRowView({
         row.kind === "project" && row.pinnedEnd && "pb-3",
         // Inline, a gap over each project parts it from the one before.
         row.kind === "project" && row.folded !== undefined && "pt-1",
+        // Under its folder's header, the icons in line with its name.
+        row.nested && "pl-7",
       )}
       style={
         start === undefined
