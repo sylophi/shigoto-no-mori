@@ -47,7 +47,8 @@ const decodeGhPrList = Schema.decodeUnknownOption(
 );
 
 // Open PRs read apart from closed ones (gh's "closed" is merged too), so
-// a busy repo's newer closed PRs don't crowd out its older open ones.
+// a busy repo's newer closed PRs don't crowd out its older open ones. Past
+// the open limit, the oldest open PRs still fall out (no title, no stack).
 const OPEN_PR_LIMIT = 1000;
 const CLOSED_PR_LIMIT = 200;
 
