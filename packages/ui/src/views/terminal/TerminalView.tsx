@@ -2,15 +2,20 @@
 // The size is the host's (every client attached draws at it), so the
 // view only says what grid it has room for (onFit), once a change of its
 // box settles and whenever it takes focus, and draws at whatever size the
-// feed sets. A grid bigger than the box is cut off at its edges.
+// feed sets. A grid bigger than the box is cut off at its edges. Under a
+// tab row, it puts a button in the row that copies its output.
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
+import { Check, Copy } from "lucide-react";
+import { useCopied } from "../../primitives/copy-button.tsx";
+import { IconButton } from "../../primitives/icon-button.tsx";
 import { isMac } from "../../lib/platform.ts";
 import { usersAlone } from "../../lib/usersAlone.ts";
+import { TerminalTabToolbar } from "./TerminalTabsView.tsx";
 import { readTerminalTheme, sameTheme } from "./terminalTheme.ts";
 
 // What the feed writes into once the screen is up.
@@ -59,6 +64,23 @@ const MAC_EDIT_KEYS: Readonly<Record<string, string>> = {
   "Alt+ArrowRight": "\x1bf",
 };
 
+// Everything it shows, scrollback and all, as plain text: a line the
+// grid wrapped joins the one before it, and the blank rows under the
+// last output go. The top row can be a wrapped line's tail, once the
+// scrollback is full and its head has gone.
+const textOf = (term: Terminal): string => {
+  const buffer = term.buffer.active;
+  const lines: string[] = [];
+  for (let y = 0; y < buffer.length; y++) {
+    const line = buffer.getLine(y);
+    if (!line) continue;
+    const text = line.translateToString(!buffer.getLine(y + 1)?.isWrapped);
+    if (line.isWrapped && lines.length > 0) lines[lines.length - 1] += text;
+    else lines.push(text);
+  }
+  return lines.join("\n").trimEnd();
+};
+
 const macEditKey = (e: KeyboardEvent): string | undefined =>
   e.ctrlKey || e.shiftKey || e.metaKey === e.altKey
     ? undefined
@@ -89,6 +111,9 @@ export function TerminalView({
   const input = useEffectEvent(onInput);
   const fitTo = useEffectEvent(onFit);
   const link = useEffectEvent(onLink);
+  const [copied, copy] = useCopied(() =>
+    termRef.current ? textOf(termRef.current) : "",
+  );
 
   // xterm keeps every glyph it has drawn, so it opens once both faces
   // are in: one drawn in the fallback face would stay that way. A Nerd
@@ -309,6 +334,20 @@ export function TerminalView({
       {...usersAlone("terminal")}
       className="isolate h-full w-full overflow-hidden bg-card px-3 py-1 font-terminal text-2xs"
     >
+      {/* First, ahead of a script console's Run or Stop. */}
+      <TerminalTabToolbar>
+        <IconButton
+          onClick={copy}
+          aria-label="Copy output"
+          className="order-first rounded-full"
+        >
+          {copied ? (
+            <Check className="size-3.5 text-foreground" />
+          ) : (
+            <Copy className="size-3.5" />
+          )}
+        </IconButton>
+      </TerminalTabToolbar>
       <div
         ref={hostRef}
         className="h-full w-full overflow-hidden [&_.xterm-viewport]:bg-transparent"
