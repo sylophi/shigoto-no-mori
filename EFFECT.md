@@ -394,8 +394,10 @@ export const layer = Layer.effect(Registry, make);
   of the thing under test: the engine sandbox's `box.engine(effect)`,
   the proofs' `runHost(effect)`. Effect's guidance uses `it.effect`
   from `@effect/vitest`; the proofs already run on the host's and the
-  engine's own runtimes, and keep one way to. A proof that spawns real git or the
-  real `sm` keeps the forks pool and no file parallelism.
+  engine's own runtimes, and keep one way to. A test that spawns real
+  git or the real `sm` keeps the forks pool, each file in a process of
+  its own. Files run one at a time only when they share something
+  fixed, like a port.
 
 ## 10. Views and containers
 

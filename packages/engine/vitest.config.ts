@@ -1,7 +1,6 @@
 // The tests spawn real processes, so each file runs in a process of
-// its own, one at a time (EFFECT.md section 9), and a test that builds
-// repos and runs git against them gets longer than vitest's
-// default to finish.
+// its own (EFFECT.md section 9), and a test that builds repos and runs
+// git against them gets longer than vitest's default to finish.
 import { defineConfig } from "vitest/config";
 import { isolateGit } from "../../test/gitIsolation";
 import { ownTestTemp } from "../../test/testTemp.mts";
@@ -16,7 +15,6 @@ export default defineConfig({
   test: {
     setupFiles: ["../../test/testProcesses.setup.mts"],
     pool: "forks",
-    fileParallelism: false,
     testTimeout: 30_000,
   },
 });
