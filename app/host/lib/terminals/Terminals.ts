@@ -123,12 +123,13 @@ const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
 const RESTORED_TAIL =
   "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
 // A private mode set or reset (CSI in seven or eight bits), its modes as
-// they come (`1049;25`), or a full reset, which leaves the alternate
+// they come (`1049;25`), a kitty keyboard set, push or pop (`=`, `>`,
+// `<`) with its numbers, or a full reset, which leaves the alternate
 // screen too.
 // A control character inside one is carried out and skipped, as a
 // terminal does, but CAN and SUB end it.
 const SCREEN_MODES = new RegExp(
-  String.raw`(?:\x1b\[|\x9b)\?([\d;\x00-\x17\x19\x1c-\x1f]+)([hl])|\x1bc`,
+  String.raw`(?:\x1b\[|\x9b)\?([\d;\x00-\x17\x19\x1c-\x1f]+)([hl])|(?:\x1b\[|\x9b)([=><])([\d;]*)u|\x1bc`,
   "g",
 );
 // The start of a sequence the output so far hasn't finished.
@@ -137,19 +138,77 @@ const UNFINISHED = new RegExp(
 );
 const ALTERNATE = new Set([1049, 1047, 47]);
 
+// The kitty keyboard flags a program asked for, kept as xterm keeps
+// them: the shown screen's flags and stack, and the other screen's put
+// by until it is shown again.
+type Kitty = {
+  readonly flags: number;
+  readonly stack: readonly number[];
+  readonly other: number;
+  readonly otherStack: readonly number[];
+};
+const KITTY_OFF: Kitty = { flags: 0, stack: [], other: 0, otherStack: [] };
+// xterm keeps the 16 latest pushes.
+const KITTY_STACK_MAX = 16;
+
+const otherScreen = (kitty: Kitty): Kitty => ({
+  flags: kitty.other,
+  stack: kitty.otherStack,
+  other: kitty.flags,
+  otherStack: kitty.stack,
+});
+
+const kittyAfter = (kitty: Kitty, op: string, numbers: string): Kitty => {
+  const [first = 0, mode = 1] = numbers.split(";").map(Number);
+  if (op === "=") {
+    const flags =
+      mode === 2
+        ? kitty.flags | first
+        : mode === 3
+          ? kitty.flags & ~first
+          : first;
+    return { ...kitty, flags };
+  }
+  if (op === ">") {
+    const stack = [...kitty.stack, kitty.flags].slice(-KITTY_STACK_MAX);
+    return { ...kitty, flags: first, stack };
+  }
+  const left = kitty.stack.length - Math.max(1, first);
+  return left <= 0
+    ? { ...kitty, flags: 0, stack: [] }
+    : {
+        ...kitty,
+        flags: kitty.stack[left] ?? 0,
+        stack: kitty.stack.slice(0, left),
+      };
+};
+
 // Whether `text` leaves the terminal on the alternate screen, from
-// `before` at its start, and where it last went there if it did.
-const alternateScreen = (
+// `before` at its start, where it last went there if it did, and the
+// kitty keyboard flags it leaves.
+const screenAfter = (
   text: string,
-  before = false,
-): { readonly on: boolean; readonly enteredAt: number | undefined } => {
-  let on = before;
+  before: { readonly on: boolean; readonly kitty: Kitty } = {
+    on: false,
+    kitty: KITTY_OFF,
+  },
+): {
+  readonly on: boolean;
+  readonly enteredAt: number | undefined;
+  readonly kitty: Kitty;
+} => {
+  let { on, kitty } = before;
   let enteredAt: number | undefined;
   for (const match of text.matchAll(SCREEN_MODES)) {
-    const [sequence, modes, set] = match;
+    const [sequence, modes, set, op, numbers] = match;
+    if (op !== undefined) {
+      kitty = kittyAfter(kitty, op, numbers ?? "");
+      continue;
+    }
     if (sequence === "\x1bc") {
       on = false;
       enteredAt = undefined;
+      kitty = KITTY_OFF;
       continue;
     }
     const listed = modes?.replace(/[^\d;]/g, "").split(";") ?? [];
@@ -157,25 +216,41 @@ const alternateScreen = (
       continue;
     }
     if (set === "l") {
+      if (on) kitty = otherScreen(kitty);
       on = false;
       enteredAt = undefined;
     } else if (!on) {
       on = true;
       enteredAt = match.index;
+      kitty = otherScreen(kitty);
     }
   }
-  return { on, enteredAt };
+  return { on, enteredAt, kitty };
 };
 
-// The alternate screen after a read, from where the last one left it,
-// with what of this one the next has to finish.
-const followAlternate = (
-  before: { readonly on: boolean; readonly carry: string },
+// The alternate screen and the kitty keyboard flags after a read, from
+// where the last one left them, with what of this one the next has to
+// finish.
+const followScreen = (
+  before: {
+    readonly alternate: boolean;
+    readonly kitty: Kitty;
+    readonly carry: string;
+  },
   data: string,
-): { readonly on: boolean; readonly carry: string } => {
+): {
+  readonly alternate: boolean;
+  readonly kitty: Kitty;
+  readonly carry: string;
+} => {
   const seen = before.carry + data;
+  const after = screenAfter(seen, {
+    on: before.alternate,
+    kitty: before.kitty,
+  });
   return {
-    on: alternateScreen(seen, before.on).on,
+    alternate: after.on,
+    kitty: after.kitty,
     carry: (UNFINISHED.exec(seen)?.[0] ?? "").slice(-256),
   };
 };
@@ -189,7 +264,7 @@ const followAlternate = (
 // end of the screen would wipe the lines above.
 const replayable = (history: string, alternate: boolean): string => {
   if (!alternate) return history;
-  return history.slice(0, alternateScreen(history).enteredAt ?? 0);
+  return history.slice(0, screenAfter(history).enteredAt ?? 0);
 };
 
 interface Session {
@@ -210,9 +285,11 @@ interface Session {
   seq: number;
   size: Size;
   exited: Option.Option<number | null>;
-  // On the alternate screen, followed as output comes in, so it holds
-  // once the ring has dropped where the program went there.
+  // On the alternate screen, and the kitty keyboard flags, followed as
+  // output comes in, so they hold once the ring has dropped where the
+  // program went there or asked for them.
   alternate: boolean;
+  kitty: Kitty;
   // A sequence the last read left unfinished, which the next finishes.
   carry: string;
   // Closed by its user or with its worktree, or its shell ended, so not
@@ -387,10 +464,11 @@ const make = <R, E>(options: {
             backlog.paused = false;
             session.pty.resume();
           }
-          ({ on: session.alternate, carry: session.carry } = followAlternate(
-            { on: session.alternate, carry: session.carry },
-            data,
-          ));
+          ({
+            alternate: session.alternate,
+            kitty: session.kitty,
+            carry: session.carry,
+          } = followScreen(session, data));
           for (const piece of pieces(data)) {
             session.seq += 1;
             session.history.append(session.seq, piece);
@@ -523,6 +601,7 @@ const make = <R, E>(options: {
           size,
           exited: Option.none(),
           alternate: false,
+          kitty: KITTY_OFF,
           carry: "",
           forget: false,
         };
@@ -629,7 +708,8 @@ const make = <R, E>(options: {
       Effect.forkIn(layerScope),
     );
 
-    // A client's events from `after`: the history after it, the size,
+    // A client's events from `after`: the size, the history after it
+    // (which xterm parses at the size it has when the history arrives),
     // then the events as they come. A client that takes nothing for a
     // while is unsubscribed, so it holds no one else's output back, and
     // starts again after the last chunk it took once it takes again.
@@ -643,18 +723,29 @@ const make = <R, E>(options: {
         Effect.gen(function* () {
           stalled = false;
           const headOf = () => {
-            const past = session.history.since(
+            const since = session.history.since(
               from?.incarnation === session.incarnation ? from.seq : undefined,
             );
+            // The history ends with the kitty keyboard flags as they are
+            // now, since the ring may have dropped where a program asked
+            // for them. Not after one that stops inside a sequence, which
+            // the next output finishes.
+            const past =
+              session.carry === ""
+                ? {
+                    ...since,
+                    data: `${since.data}\x1b[=${session.kitty.flags}u`,
+                  }
+                : since;
             return {
               past,
               head: [
+                { kind: "size", ...session.size },
                 {
                   kind: "history",
                   incarnation: session.incarnation,
                   ...past,
                 },
-                { kind: "size", ...session.size },
               ] satisfies TerminalEvent[],
             };
           };

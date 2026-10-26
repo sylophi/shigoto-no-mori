@@ -45,9 +45,9 @@ export const AttachTerminalPayloadSchema = Schema.Struct({
   after: Schema.optional(TerminalMarkSchema),
 });
 
-// What an attach streams, in order: the history (after `after` when the
-// ring still holds it in the same incarnation, else all of it with
-// `reset`, and the client starts over), the size, then output and size
+// What an attach streams, in order: the size, the history (after
+// `after` when the ring still holds it in the same incarnation, else all
+// of it with `reset`, and the client starts over), then output and size
 // changes as they come, then the exit. A chunk's `seq` counts the
 // incarnation's output chunks, so a reconnect asks for what came after
 // the last one it holds.

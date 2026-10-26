@@ -9,6 +9,7 @@ import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
+import { isMac } from "../../lib/platform.ts";
 import { usersAlone } from "../../lib/usersAlone.ts";
 import { readTerminalTheme, sameTheme } from "./terminalTheme.ts";
 
@@ -46,6 +47,22 @@ const SETTLE_MS = 150;
 // DECTCEM: terminal cursor visibility.
 const SHOW_CURSOR = "\x1b[?25h";
 const HIDE_CURSOR = "\x1b[?25l";
+
+// A Mac's ⌘ and ⌥ edits as the line editing keys every shell and TUI
+// reads: to the line's start and end, deleting to its start, and a word
+// back and forward.
+const MAC_EDIT_KEYS: Readonly<Record<string, string>> = {
+  "Meta+ArrowLeft": "\x01",
+  "Meta+ArrowRight": "\x05",
+  "Meta+Backspace": "\x15",
+  "Alt+ArrowLeft": "\x1bb",
+  "Alt+ArrowRight": "\x1bf",
+};
+
+const macEditKey = (e: KeyboardEvent): string | undefined =>
+  e.ctrlKey || e.shiftKey || e.metaKey === e.altKey
+    ? undefined
+    : MAC_EDIT_KEYS[`${e.metaKey ? "Meta" : "Alt"}+${e.key}`];
 
 export function TerminalView({
   feed,
@@ -113,7 +130,28 @@ export function TerminalView({
       theme,
       // The graphemes addon needs the proposed `term.unicode` API.
       allowProposedApi: true,
+      // Answers the kitty keyboard query (`CSI ? u`), so a program that
+      // asks (Claude Code, Codex, Neovim) can tell Shift+Enter from Enter.
+      vtExtensions: { kittyKeyboard: true },
     });
+    // Other ⌘ chords are the window's (copy, paste, the menu's), which
+    // kitty mode would send to the program instead. xterm keeps ⌘A, its
+    // select all.
+    if (isMac) {
+      term.attachCustomKeyEventHandler((e) => {
+        const key = macEditKey(e);
+        if (key === undefined && !e.metaKey) return true;
+        if (e.type === "keydown") {
+          if (key !== undefined) {
+            e.preventDefault();
+            term.input(key);
+          } else if (e.key === "a" && !e.altKey && !e.ctrlKey) {
+            term.selectAll();
+          }
+        }
+        return false;
+      });
+    }
     // Unicode 15 widths with graphemes clustered, as Ghostty and Ink TUIs
     // count them: a ZWJ sequence, flag or VS16 emoji takes two cells.
     // Shells measuring with libc's wcwidth (zsh, readline) count those
@@ -190,6 +228,9 @@ export function TerminalView({
         attributeFilter: ["class", "data-palette"],
       });
 
+    // xterm parses a write at the size it has when the write comes in,
+    // so the grid takes its box before the feed replays into it.
+    fit.fit();
     const stop = feed({
       replay: (data, reset) => {
         if (reset) {
