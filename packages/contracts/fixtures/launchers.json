@@ -272,5 +272,9 @@
         "terminalId": 7
       }
     ]
+  },
+  "TerminalIdSchema": {
+    "accepts": ["terminal", "iterm", "ghostty", "cmux"],
+    "rejects": ["app", "warp"]
   }
 }

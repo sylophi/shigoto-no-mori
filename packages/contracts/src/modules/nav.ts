@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
-import { GuideHarnessSchema } from "./guide.ts";
+import { GuideStartSchema } from "./guide.ts";
 
 export const navContract = defineContract(
   "nav",
@@ -9,8 +9,8 @@ export const navContract = defineContract(
   push("openSettings", VoidSchema),
   push("addProject", VoidSchema),
   push("launchById", Schema.String),
-  // A Help menu item: the guide, with this harness.
-  push("showAround", GuideHarnessSchema),
+  // A Help menu item: the guide to open.
+  push("showAround", GuideStartSchema),
   // A deep link arrived. Only a nudge: main holds the link until the
   // renderer takes it below, so a link that lands before the renderer
   // listens (one that launched the app) is not lost.

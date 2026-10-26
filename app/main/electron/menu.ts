@@ -16,7 +16,8 @@ import type { ContractModule } from "@shigomori/contracts/contract";
 import { navContract } from "@shigomori/contracts/modules/nav";
 import {
   askAboutTheApp,
-  type GuideHarness,
+  type GuideChoices,
+  guideChoicesKey,
 } from "@shigomori/contracts/modules/guide";
 import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
@@ -61,15 +62,16 @@ function shownChords(): Chords {
   );
 }
 
-// The Help menu's guides: the harnesses each window's device has, the
+// The Help menu's guides: what each window's device offers, the
 // focused window's shown.
-const guideHarnessesByWindow = new Map<number, readonly GuideHarness[]>();
+const guideChoicesByWindow = new Map<number, GuideChoices>();
+const NO_GUIDES: GuideChoices = { harnesses: [], terminals: [] };
 
-function shownGuideHarnesses(): readonly GuideHarness[] {
+function shownGuideChoices(): GuideChoices {
   return (
     (focusedWindowId === null
       ? undefined
-      : guideHarnessesByWindow.get(focusedWindowId)) ?? []
+      : guideChoicesByWindow.get(focusedWindowId)) ?? NO_GUIDES
   );
 }
 
@@ -99,12 +101,12 @@ function sameLaunchTools(a: LaunchTools, b: LaunchTools): boolean {
 function showing(change: () => void): void {
   const tools = shownLaunchTools();
   const chords = shownChords();
-  const guides = shownGuideHarnesses();
+  const guides = shownGuideChoices();
   change();
   if (
     !sameLaunchTools(tools, shownLaunchTools()) ||
     !sameChords(chords, shownChords()) ||
-    guides.join() !== shownGuideHarnesses().join()
+    guideChoicesKey(guides) !== guideChoicesKey(shownGuideChoices())
   ) {
     buildAppMenu();
   }
@@ -133,11 +135,8 @@ export function setChords(windowId: number, chords: Chords): void {
   showing(() => chordsByWindow.set(windowId, chords));
 }
 
-export function setGuideHarnesses(
-  windowId: number,
-  harnesses: readonly GuideHarness[],
-): void {
-  showing(() => guideHarnessesByWindow.set(windowId, harnesses));
+export function setGuideChoices(windowId: number, choices: GuideChoices): void {
+  showing(() => guideChoicesByWindow.set(windowId, choices));
 }
 
 // The menu follows the focused window's tools.
@@ -151,9 +150,29 @@ export function forgetWindowMenu(windowId: number): void {
   showing(() => {
     launchToolsByWindow.delete(windowId);
     chordsByWindow.delete(windowId);
-    guideHarnessesByWindow.delete(windowId);
+    guideChoicesByWindow.delete(windowId);
     if (focusedWindowId === windowId) focusedWindowId = null;
   });
+}
+
+function guideItems({
+  harnesses,
+  terminals,
+}: GuideChoices): MenuItemConstructorOptions[] {
+  return harnesses.map((harness) => ({
+    label: askAboutTheApp(harness),
+    ...(terminals.length === 0
+      ? { click: clickBroadcast(navContract, "showAround", { harness }) }
+      : {
+          submenu: terminals.map(({ id, label }) => ({
+            label,
+            click: clickBroadcast(navContract, "showAround", {
+              harness,
+              terminal: id,
+            }),
+          })),
+        }),
+  }));
 }
 
 // Click handler that broadcasts to the focused window. Electron types
@@ -279,13 +298,9 @@ export function buildAppMenu(): void {
     },
     {
       role: "help",
-      // The guide, one item for each harness installed here.
-      submenu: shownGuideHarnesses().map(
-        (harness): MenuItemConstructorOptions => ({
-          label: askAboutTheApp(harness),
-          click: clickBroadcast(navContract, "showAround", harness),
-        }),
-      ),
+      // The guide, one item for each harness installed here, which asks
+      // for a terminal when there are any to ask between.
+      submenu: guideItems(shownGuideChoices()),
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));

@@ -2,7 +2,7 @@
 // app-level actions. A hostless client has no local tree to arrange,
 // so its bar carries the toggle and the page-nav cluster.
 import { useBinding } from "@/hooks/ui/useKeymap";
-import { startGuide, useGuideHarnesses } from "@/hooks/useGuide";
+import { startGuide, useGuideChoices } from "@/hooks/useGuide";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useMarkAgentsWaiting } from "@/hooks/config/useSidebarMarks";
 import { useLiveCount } from "@/hooks/live/useLiveActivity";
@@ -41,7 +41,7 @@ export function SidebarFooter({
   const running = useLiveCount();
   const waiting = useWaitingAgents().length;
   const needsYou = useMarkAgentsWaiting() && waiting > 0;
-  const harnesses = useGuideHarnesses() ?? [];
+  const guides = useGuideChoices();
   const api = useApi();
   return (
     <SidebarFooterView
@@ -57,10 +57,10 @@ export function SidebarFooter({
       }
       actions={
         <>
-          {harnesses.length > 0 && (
+          {guides !== undefined && guides.harnesses.length > 0 && (
             <SidebarGuideMenuView
-              harnesses={harnesses}
-              onPick={(harness) => startGuide(api, harness)}
+              choices={guides}
+              onPick={(start) => startGuide(api, start)}
             />
           )}
           <SidebarNavActionsView

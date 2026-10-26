@@ -2,13 +2,14 @@ import * as Schema from "effect/Schema";
 import { push, defineContract, invoke, Remote } from "../contract.ts";
 import { harnessLabel, KNOWN_HARNESS_IDS } from "../harnesses.ts";
 import { VoidSchema } from "../schemas/index.ts";
+import { TerminalIdSchema } from "../schemas/launchers.ts";
 import { strict } from "../schemas/strict.ts";
 
 // A user's own agent, opened from the Help menu, drives the window it was
 // opened from: `sm guide mcp` calls the host, which passes the call to its
 // shell, which drives the window.
 
-export const GuideHarnessSchema = Schema.Literals(KNOWN_HARNESS_IDS);
+const GuideHarnessSchema = Schema.Literals(KNOWN_HARNESS_IDS);
 export type GuideHarness = typeof GuideHarnessSchema.Type;
 export const isGuideHarness = Schema.is(GuideHarnessSchema);
 
@@ -17,6 +18,35 @@ export const isGuideHarness = Schema.is(GuideHarnessSchema);
 export const GUIDE_QUESTION = "Ask a question about the app";
 export const askAboutTheApp = (harness: GuideHarness): string =>
   `Ask ${harnessLabel(harness)} about the app`;
+
+// A terminal app the guide can open in. While the `terminal` setting is
+// the app's own, the guide's menus ask which: the app's drawer belongs to
+// a worktree, and the agent would be working on the app it runs in.
+const GuideTerminalSchema = Schema.Struct({
+  id: TerminalIdSchema,
+  label: Schema.String,
+});
+
+// What the guide's menus offer: the harnesses installed here, and the
+// terminals to ask between, none when the setting names one.
+export const GuideChoicesSchema = Schema.Struct({
+  harnesses: Schema.Array(GuideHarnessSchema),
+  terminals: Schema.Array(GuideTerminalSchema),
+});
+export type GuideChoices = typeof GuideChoicesSchema.Type;
+
+// What the menus draw from the choices, to tell a change by.
+export const guideChoicesKey = ({ harnesses, terminals }: GuideChoices) =>
+  `${harnesses.join()};${terminals.map(({ id }) => id).join()}`;
+
+// A guide to open, in the terminal picked from the menu, else the
+// setting's.
+const GuideStartFields = {
+  harness: GuideHarnessSchema,
+  terminal: Schema.optional(TerminalIdSchema),
+};
+export const GuideStartSchema = strict(Schema.Struct(GuideStartFields));
+export type GuideStart = typeof GuideStartSchema.Type;
 
 const GuideRefSchema = Schema.Int.check(Schema.isGreaterThan(0));
 
@@ -106,11 +136,7 @@ export const guideContract = defineContract(
   "guide",
   "client",
   // A window already guided is guided by the new session alone.
-  invoke(
-    "start",
-    strict(Schema.Struct({ harness: GuideHarnessSchema })),
-    VoidSchema,
-  ),
+  invoke("start", GuideStartSchema, VoidSchema),
   invoke("read", VoidSchema, Schema.NullOr(GuideStateSchema)),
   // Its session's token is refused from then.
   invoke("stop", VoidSchema, VoidSchema),
@@ -128,6 +154,6 @@ export const guideDriveContract = defineContract(
 export const GuideLaunchSchema = strict(
   Schema.Struct({
     session: GuideSessionSchema,
-    harness: GuideHarnessSchema,
+    ...GuideStartFields,
   }),
 );

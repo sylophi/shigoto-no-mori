@@ -546,7 +546,7 @@ export function SceneSidebar({
               <>
                 {hasLocalHost && (
                   <SidebarGuideMenuView
-                    harnesses={["claude", "codex"]}
+                    choices={{ harnesses: ["claude", "codex"], terminals: [] }}
                     onPick={noop}
                   />
                 )}
