@@ -283,6 +283,7 @@ export function buildSidebarRows({
       pinned: false,
       folder: null,
       folders: [],
+      section: ALL_KEY,
       devices: [],
       members: [],
     }));
@@ -426,6 +427,7 @@ export function buildSidebarRows({
       }
     }
     const missing = project.pathExists === false;
+    const section = sectionOf(project, byOwner);
     const header: SidebarRow = {
       kind: "project",
       key: `p:${groupId}`,
@@ -437,7 +439,8 @@ export function buildSidebarRows({
       folded: isFolded,
       pinned: order.pinned.has(group.groupKey),
       folder: order.folders.get(group.groupKey) ?? null,
-      folders: folderNames.get(sectionOf(project, byOwner)) ?? [],
+      folders: folderNames.get(section) ?? [],
+      section,
       // The worktrees beside the primary checkouts. Those are left out
       // because every project has one, and a number on every line
       // would say nothing about where the work is. None while this
@@ -809,6 +812,7 @@ function folderRuns(
     drawn.push({
       kind: "project-folder",
       key: headerKey,
+      section,
       foldKey,
       name,
       groupKeys,

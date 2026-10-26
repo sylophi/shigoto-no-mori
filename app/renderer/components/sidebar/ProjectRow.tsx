@@ -33,6 +33,8 @@ interface ProjectRowProps {
   // Its folder, and the ones it can move to (the row's).
   folder: string | null;
   folders: readonly string[];
+  // The section it is listed in (SidebarRow's).
+  section: string;
   // The open project, alone in the tree: the row is its title. Else
   // the row is one of the list, to be picked.
   expanded: boolean;
@@ -65,6 +67,7 @@ export function ProjectRow({
   pinned,
   folder,
   folders,
+  section,
   expanded,
   folded,
   current,
@@ -104,9 +107,7 @@ export function ProjectRow({
   const filing = useFolderDrag({
     id: groupId,
     project,
-    folders,
-    groupKey,
-    folder,
+    item: { section, groupKey, folder },
     disabled: arrangeMode || pinned || expanded,
   });
   const nodeRef = useCombinedRefs(setNodeRef, filing.setNodeRef);

@@ -107,9 +107,17 @@ function Grid({
     }
   };
   const folderTargets = new Map<string, ReactNode>();
-  for (const { key, folder } of sections)
-    if (folder !== undefined)
-      folderTargets.set(key, <FolderSectionTarget id={key} folder={folder} />);
+  // A folder's projects are all in its owner's section.
+  for (const { key, folder, rows } of sections)
+    if (folder !== undefined && rows[0])
+      folderTargets.set(
+        key,
+        <FolderSectionTarget
+          id={key}
+          section={rows[0].section}
+          folder={folder}
+        />,
+      );
   return (
     <ProjectGridLayoutView
       sections={sections}
@@ -138,9 +146,18 @@ function Grid({
   );
 }
 
-function FolderSectionTarget({ id, folder }: { id: string; folder: string }) {
+function FolderSectionTarget({
+  id,
+  section,
+  folder,
+}: {
+  id: string;
+  section: string;
+  folder: string;
+}) {
   const { setNodeRef, dropping } = useFolderDropTarget(id, {
     kind: "folder",
+    section,
     name: folder,
   });
   return <FolderSectionTargetView dropRef={setNodeRef} dropping={dropping} />;
@@ -202,9 +219,7 @@ function ProjectTile({
   const drag = useFolderDrag({
     id: row.groupId,
     project,
-    folders: row.folders,
-    groupKey: row.groupKey,
-    folder: row.folder,
+    item: { section: row.section, groupKey: row.groupKey, folder: row.folder },
     disabled: pinned,
     droppable: row.folder === null,
   });

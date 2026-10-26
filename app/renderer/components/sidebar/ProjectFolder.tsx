@@ -38,34 +38,34 @@ const namingAtom = Atom.keepAlive(
   Atom.make<{ groupKeys: readonly string[]; name: string | null } | null>(null),
 );
 
-// A project dragged on the list, and what it can be dropped on.
+// A project dragged on the list, and what it can be dropped on. Each
+// is in a section (an owner's, or the whole list's), which a folder
+// is kept within.
 interface FolderDragItem {
+  section: string;
   groupKey: string;
   folder: string | null;
-  // The folders of its section, the ones it can move to.
-  folders: readonly string[];
 }
 
 type FolderDropTarget =
-  | { kind: "folder"; name: string }
-  | { kind: "project"; groupKey: string; folder: string | null };
+  | { kind: "folder"; section: string; name: string }
+  | (FolderDragItem & { kind: "project" });
 
 type FolderDrop = { folder: string | null } | { newFolderWith: string };
 
 // Onto a folder, or a project in one, files it there. Onto a project in
 // none takes it out of its folder, or, out of one already, starts a new
-// folder with both. Null where the drop changes nothing.
+// folder with both. Null where the drop changes nothing, and across
+// sections.
 function folderDrop(
   item: FolderDragItem,
   target: FolderDropTarget,
 ): FolderDrop | null {
-  const fileInto = (name: string) =>
-    name !== item.folder && item.folders.includes(name)
-      ? { folder: name }
-      : null;
-  if (target.kind === "folder") return fileInto(target.name);
-  if (target.folder !== null) return fileInto(target.folder);
-  if (target.groupKey === item.groupKey) return null;
+  if (target.section !== item.section) return null;
+  const into = target.kind === "folder" ? target.name : target.folder;
+  if (into !== null) return into === item.folder ? null : { folder: into };
+  if (target.kind === "folder" || target.groupKey === item.groupKey)
+    return null;
   return item.folder === null
     ? { newFolderWith: target.groupKey }
     : { folder: null };
@@ -102,7 +102,8 @@ export function useFolderDragging() {
     onDragCancel: () => setDragged(null),
   };
   const overlay = (
-    <DragOverlay modifiers={[trailPointer]}>
+    // No flight back on drop: the project lands where it was dropped.
+    <DragOverlay modifiers={[trailPointer]} dropAnimation={null}>
       {dragged && <ProjectDragPreviewView project={dragged} chip />}
     </DragOverlay>
   );
@@ -143,32 +144,27 @@ const trailPointer: Modifier = ({
 export function useFolderDrag({
   id,
   project,
-  groupKey,
-  folder,
-  folders,
+  item,
   disabled,
   droppable = true,
 }: {
   // The row's group id.
   id: string;
   project: Project;
-  groupKey: string;
-  folder: string | null;
-  folders: readonly string[];
+  item: FolderDragItem;
   disabled: boolean;
   droppable?: boolean;
 }) {
   const phone = usePhoneLayout();
   const enabled = !disabled && project.pathExists !== false && !phone;
-  const folderItem: FolderDragItem = { groupKey, folder, folders };
   const drag = useDraggable({
     id: `file:${id}`,
-    data: { project, folderItem },
+    data: { project, folderItem: item },
     disabled: !enabled,
   });
   const drop = useFolderDropTarget(
     `file:${id}`,
-    { kind: "project", groupKey, folder },
+    { kind: "project", ...item },
     !enabled || !droppable,
   );
   return {
@@ -207,6 +203,7 @@ export function ProjectFolderHeader({
   const setNaming = useAtomSet(namingAtom);
   const drop = useFolderDropTarget(`folder:${row.foldKey}`, {
     kind: "folder",
+    section: row.section,
     name: row.name,
   });
   return (

@@ -161,7 +161,9 @@ export function FolderSectionTargetView({
       ref={dropRef}
       aria-hidden
       className={cn(
-        "pointer-events-none absolute -inset-2 rounded-xl transition-colors",
+        // Half the gap between sections out, so two side by side meet
+        // without overlapping.
+        "pointer-events-none absolute -inset-1.5 rounded-xl transition-colors",
         dropping && "bg-primary/15",
       )}
     />
