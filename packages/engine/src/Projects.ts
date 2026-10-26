@@ -10,7 +10,6 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Config from "./Config.ts";
 import * as Git from "./Git.ts";
-import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
 import * as Terrier from "./Terrier.ts";
@@ -35,16 +34,6 @@ export class NotADirectory extends Schema.TaggedError<NotADirectory>()(
   }
 }
 
-// terrier's projects are terrier's to remove.
-export class ListedByTerrier extends Schema.TaggedError<ListedByTerrier>()(
-  "ListedByTerrier",
-  { name: Schema.String, binary: Schema.String },
-) {
-  override get message(): string {
-    return `${this.name} is registered via terrier, not ${this.binary}. Unregister it with \`terrier rm ${this.name}\`, or turn the terrier integration off.`;
-  }
-}
-
 // The repos under a folder that aren't projects yet, each at its primary
 // checkout, and how many there already are.
 export type Found = {
@@ -52,12 +41,16 @@ export type Found = {
   readonly known: number;
 };
 
-// What removing a project leaves: its worktrees on disk, and whether
-// terrier still lists it.
+// What removing a project leaves and takes: its worktrees stay on disk,
+// and terrier's entry for it goes.
 export type Leftovers = {
   readonly worktrees: number;
-  readonly stillListed: boolean;
+  readonly inTerrier: boolean;
 };
+
+// Whether an added project goes into terrier too. By default it does
+// while the device lists terrier's repos and terrier answers.
+type AddOptions = { readonly terrier?: boolean | undefined };
 
 export class Projects extends Context.Service<
   Projects,
@@ -66,16 +59,20 @@ export class Projects extends Context.Service<
     // folder inside it or one of its worktrees names the repo.
     readonly add: (
       path: string,
+      options?: AddOptions,
     ) => Effect.Effect<
       Registry.RegisteredProject,
-      NotARepository | Registry.ProjectAlreadyAdded
+      NotARepository | Registry.ProjectAlreadyAdded | Terrier.TerrierRefused
     >;
     // Adds a repository at its primary checkout, as `scan` found it.
+    // Into terrier first: a refusal there adds nothing, and the project
+    // is minted under the id terrier's listing of it carries.
     readonly register: (
       primaryPath: string,
+      options?: AddOptions,
     ) => Effect.Effect<
       Registry.RegisteredProject,
-      Registry.ProjectAlreadyAdded
+      Registry.ProjectAlreadyAdded | Terrier.TerrierRefused
     >;
     // The outermost repositories six levels under `root`, the way the
     // app's folder scan finds them, less the registered ones.
@@ -84,11 +81,12 @@ export class Projects extends Context.Service<
     // before it.
     readonly leftovers: (
       project: Registry.ListedProject,
-    ) => Effect.Effect<Leftovers, ListedByTerrier>;
-    // Drops the entry. Its checkouts stay on disk.
+    ) => Effect.Effect<Leftovers>;
+    // Drops the entry, and terrier's while the integration is on. Its
+    // checkouts stay on disk.
     readonly remove: (
       project: Registry.ListedProject,
-    ) => Effect.Effect<void, ListedByTerrier | Registry.UnknownProject>;
+    ) => Effect.Effect<void, Terrier.TerrierRefused | Registry.UnknownProject>;
   }
 >()("sm/engine/Projects") {}
 
@@ -123,7 +121,6 @@ const make = Effect.gen(function* () {
   const scripts = yield* Scripts.Scripts;
   const terrier = yield* Terrier.Terrier;
   const worktrees = yield* Worktrees.Worktrees;
-  const { binaryName } = yield* Paths.Paths;
 
   // What a project starts with: auto-pull on its primary per the
   // autoPullNew setting, its default branch, and a `<pm> install` setup
@@ -184,7 +181,17 @@ const make = Effect.gen(function* () {
   // neither.
   const register = Effect.fn("Projects.register")(function* (
     primaryPath: string,
+    options: AddOptions = {},
   ) {
+    // Before terrier's add, which a project already added mustn't get.
+    if ((yield* registry.projects).some((it) => it.path === primaryPath)) {
+      return yield* new Registry.ProjectAlreadyAdded({ path: primaryPath });
+    }
+    const intoTerrier =
+      options.terrier ??
+      ((yield* config.device("terrier")) &&
+        Option.isNone((yield* terrier.listing).trouble));
+    if (intoTerrier) yield* terrier.add(primaryPath);
     const facts = yield* seedOf(primaryPath);
     return yield* sql
       .withTransaction(
@@ -200,10 +207,13 @@ const make = Effect.gen(function* () {
       .pipe(Effect.catchTags({ SqlError: (error) => Effect.die(error) }));
   });
 
-  const add = Effect.fn("Projects.add")(function* (at: string) {
+  const add = Effect.fn("Projects.add")(function* (
+    at: string,
+    options: AddOptions = {},
+  ) {
     const repo = yield* git.locate(at);
     if (Option.isNone(repo)) return yield* new NotARepository({ path: at });
-    return yield* register(repo.value.primaryPath);
+    return yield* register(repo.value.primaryPath, options);
   });
 
   // A folder, not a link to one: readLink answers only for a link.
@@ -277,17 +287,9 @@ const make = Effect.gen(function* () {
     return { repos, known: primaries.length - repos.length };
   });
 
-  const refuseTerrier = (project: Registry.ListedProject) =>
-    project.source === "terrier"
-      ? Effect.fail(
-          new ListedByTerrier({ name: project.name, binary: binaryName }),
-        )
-      : Effect.void;
-
   const leftovers = Effect.fn("Projects.leftovers")(function* (
     project: Registry.ListedProject,
   ) {
-    yield* refuseTerrier(project);
     const [checkouts, { paths }] = yield* Effect.all(
       [
         worktrees.identities(project).pipe(Effect.orElseSucceed(() => [])),
@@ -297,15 +299,14 @@ const make = Effect.gen(function* () {
     );
     return {
       worktrees: checkouts.filter((checkout) => !checkout.isPrimary).length,
-      stillListed: paths.includes(project.path),
+      inTerrier: paths.includes(project.path),
     };
   });
 
   const remove = Effect.fn("Projects.remove")(function* (
     project: Registry.ListedProject,
   ) {
-    yield* refuseTerrier(project);
-    yield* registry.unregister(project.id);
+    yield* registry.unregister(project);
   });
 
   return Projects.of({ add, register, scan, leftovers, remove });

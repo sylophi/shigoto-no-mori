@@ -35,8 +35,8 @@ interface ProjectHeaderProps {
   missing?: boolean;
   // A relocation of the missing project is under way.
   relocating?: boolean;
-  // Picking a missing project locates it, when it can be (not terrier's,
-  // and its device takes commands from here).
+  // Picking a missing project locates it, when its device takes commands
+  // from here.
   onLocate?: () => void;
   listeners?: DraggableSyntheticListeners;
   onContextMenu?: (event: React.MouseEvent) => void;

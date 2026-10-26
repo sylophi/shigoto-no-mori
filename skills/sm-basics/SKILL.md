@@ -1,6 +1,6 @@
 ---
 name: sm-basics
-description: "Shigoto no Mori (sm) basics: register a project, and create, rename, land or tear down worktrees."
+description: "Shigoto no Mori (sm) basics: register, relocate or remove a project, and create, rename, land or tear down worktrees."
 ---
 
 ## Register a project
@@ -18,6 +18,21 @@ dependency install). Fill in what's missing:
 
 ```sh
 sm projects config --setup '<cmd>' --default-branch <ref>
+```
+
+## Relocate or remove a project
+
+After a repo was moved or renamed by hand:
+
+```sh
+sm projects relocate <name> <new-path>
+```
+
+It keeps the project's settings and reconnects its worktrees. To drop
+a project (its checkouts stay on disk):
+
+```sh
+sm projects remove <name> --yes
 ```
 
 ## Create a worktree

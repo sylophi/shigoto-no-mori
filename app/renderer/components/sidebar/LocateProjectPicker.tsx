@@ -16,12 +16,11 @@ import type { GroupMember } from "./ProjectGroupActions";
 
 // Locate for a project group's header, the sidebar's row and the home
 // page's tile alike. A missing checkout can be pointed at where its
-// repo went, over the session of the device holding it. Terrier's are
-// terrier's to move. `onLocate` is set while it can be located, and
-// `picker` is the open picker to render.
+// repo went, over the session of the device holding it. `onLocate` is
+// set while it can be located, and `picker` is the open picker to
+// render.
 export function useLocateProject(
   group: readonly GroupMember[],
-  project: Project,
   missing: boolean,
 ): {
   relocating: boolean;
@@ -34,10 +33,7 @@ export function useLocateProject(
     holder?.deviceId ?? "",
     holder?.project.id ?? "",
   );
-  const locateApi =
-    missing && project.source !== "terrier" && !relocating
-      ? holder?.api
-      : undefined;
+  const locateApi = missing && !relocating ? holder?.api : undefined;
   // Open, from where the picker starts once that is found.
   const [locating, setLocating] = useState<{ from: string | undefined }>();
   const onLocate =

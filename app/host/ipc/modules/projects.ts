@@ -72,8 +72,6 @@ export const projectsHandlers = {
 
   remove: ({ id }) => removeProject(id),
 
-  // Terrier-sourced projects are refused by the engine, which says to
-  // update terrier instead.
   relocate: ({ id, path }) => relocateProject(id, expandHome(path)),
 
   reorder: (input) => reorderProject(input),

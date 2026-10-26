@@ -166,11 +166,7 @@ function ProjectTile({
     !missing,
   );
   // A missing project's tile locates it, as its sidebar row does.
-  const { relocating, onLocate, picker } = useLocateProject(
-    group,
-    project,
-    missing,
-  );
+  const { relocating, onLocate, picker } = useLocateProject(group, missing);
   const lead = work?.lead;
   return (
     <ProjectTileView

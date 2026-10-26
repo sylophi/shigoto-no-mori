@@ -6,7 +6,6 @@ import { expandHome } from "@shared/paths";
 import { reorderProjects } from "@shared/reorder";
 import { cloneUrlOf } from "@shigomori/contracts/predicates/remoteUrl";
 import * as Git from "@shigomori/engine/Git";
-import * as Terrier from "@shigomori/engine/Terrier";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -27,15 +26,6 @@ class NotGitRepositoryError extends Schema.TaggedError<NotGitRepositoryError>()(
 ) {
   override get message(): string {
     return `${this.path} is not a git repository`;
-  }
-}
-
-class TerrierProjectError extends Schema.TaggedError<TerrierProjectError>()(
-  "TerrierProjectError",
-  { name: Schema.String },
-) {
-  override get message(): string {
-    return `${this.name} is registered via terrier. Unregister it with \`terrier rm\`, or turn the terrier integration off in Settings.`;
   }
 }
 
@@ -66,16 +56,16 @@ class CheckoutUnregisteredError extends Schema.TaggedError<CheckoutUnregisteredE
 
 // Registers a checkout the app just made (a clone, a new repository).
 // The checkout stays if registering fails, so the error says where it
-// is: a retry would only find the folder taken. Terrier first, for
-// add's reason. Uninterruptible: once the checkout exists, a Cancel or a
-// caller gone would leave it unregistered, so it is registered whatever
-// the caller did and shows up through the projects watch.
+// is: a retry would only find the folder taken. Uninterruptible: once
+// the checkout exists, a Cancel or a caller gone would leave it
+// unregistered, so it is registered whatever the caller did and shows
+// up through the projects watch.
 const registerNewCheckout = (
   path: string,
   terrier: boolean | undefined,
   made: string,
 ) =>
-  register(path, terrier).pipe(
+  addProject(path, terrier).pipe(
     Effect.uninterruptible,
     Effect.mapError(
       (cause) =>
@@ -87,19 +77,6 @@ const registerNewCheckout = (
         }),
     ),
   );
-
-// Into terrier first, so registering mints the id terrier's listing of
-// the repo carries (Projects.add in the engine): removing the project
-// here later leaves it under the same id, its per-project state intact.
-// Then the same engine as `sm projects add`: registration and the
-// config seed.
-const register = Effect.fn("projects.register")(function* (
-  path: string,
-  terrier: boolean | undefined,
-) {
-  if (terrier) yield* Effect.flatMap(Terrier.Terrier, (it) => it.add(path));
-  return yield* addProject(path);
-});
 
 // Over https to a GitHub host, with the device's gh signed in, gh is
 // git's credential helper for a clone, so a private repository clones
@@ -127,7 +104,7 @@ export const addCheckout = Effect.fn("projects.add")(function* (
   if (!(yield* (yield* Git.Git).isRepo(path))) {
     return yield* new NotGitRepositoryError({ path });
   }
-  return yield* register(path, terrier);
+  return yield* addProject(path, terrier);
 });
 
 export const cloneProject = Effect.fn("projects.clone")(function* (input: {
@@ -167,11 +144,6 @@ export const removeProject = Effect.fn("projects.remove")(function* (
 ) {
   const removed = (yield* freshProjects).find((p) => p.id === id);
   if (!removed) return;
-  if (removed.source === "terrier") {
-    // The UI disables removal for terrier-sourced projects, so this
-    // only backstops a stale renderer list.
-    return yield* new TerrierProjectError({ name: removed.name });
-  }
   // The mark blocks a renderer script run from spawning into the
   // project for the whole removal, so the reap below snapshots a set
   // nothing can add to. Registry drop and per-project state deletion

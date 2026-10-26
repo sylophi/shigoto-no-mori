@@ -212,22 +212,25 @@ const catalog = (names: Names) => {
         "--json prints {mime, base64}, or null when the project has no icon.",
       ],
       [
-        "projects add [<path>] [--all]",
+        "projects add [<path>] [--all] [--[no-]terrier]",
         "Register a repo",
-        "The repo at <path> (default .). --all registers every repo beneath it after confirmation (--yes skips).",
+        "The repo at <path> (default .). --all registers every repo beneath it after confirmation (--yes skips). " +
+          "While the terrier integration is on, it registers the repo in terrier too (--no-terrier skips). " +
+          "--terrier registers it there whatever the setting.",
       ],
       [
         "projects remove [<name-or-path>]",
         "Unregister a project",
-        "Worktrees stay on disk. Prompts for confirmation (--yes skips). " +
+        "Worktrees stay on disk. While the terrier integration is on, a repo terrier lists is unregistered there too. " +
+          "Prompts for confirmation (--yes skips). " +
           "When two projects share a name, remove by path (which also " +
           "reaches an entry whose repo has since moved away).",
       ],
       [
         "projects relocate [<name-or-path>] <new-path>",
         "Point a project at its moved repo",
-        "For a repo moved or renamed by hand: refused while the old path is still there. The project keeps its config and state, " +
-          "and its worktrees are reconnected to the repo (`git worktree repair`), including any that moved with it. " +
+        "For a repo moved or renamed by hand: refused while the old path is still there. The project keeps its config and state " +
+          "(terrier's entry for it moves too), and its worktrees are reconnected to the repo (`git worktree repair`), including any that moved with it. " +
           "After a rename, managed worktrees move to the folder named after the new one. " +
           "--json prints {ok, project}, project being a `projects list` row.",
       ],

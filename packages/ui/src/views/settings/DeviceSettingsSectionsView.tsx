@@ -285,8 +285,8 @@ function terrierDescription(
   }
   return (
     <>
-      Shows every repo registered in terrier as a project. Removing one requires{" "}
-      <span className="font-mono">terrier rm</span>.{" "}
+      Shows every repo registered in terrier as a project, and keeps terrier in
+      step as projects are added, moved or removed here.{" "}
       <ExternalLink {...TERRIER}>Learn more</ExternalLink>
     </>
   );
