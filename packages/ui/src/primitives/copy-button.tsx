@@ -8,11 +8,14 @@ interface CopyButtonProps {
 }
 
 // Copies a value and says so for a moment: the check a copy control
-// swaps its icon for.
-export function useCopied(value: string): [copied: boolean, copy: () => void] {
+// swaps its icon for. A function is read at the click.
+export function useCopied(
+  value: string | (() => string),
+): [copied: boolean, copy: () => void] {
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    void navigator.clipboard.writeText(value).then(() => {
+    const text = typeof value === "string" ? value : value();
+    void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     });
