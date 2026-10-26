@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { CODE_THEME } from "@shigomori/ui/views/diff/codeTheme.ts";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { useWorktreeFile } from "@/hooks/worktrees/useWorktreeFile";
+import {
+  useWorktreeFile,
+  useWorktreeImage,
+} from "@/hooks/worktrees/useWorktreeFile";
 import { formatBytes } from "@shigomori/ui/lib/formatBytes.ts";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
@@ -41,6 +44,7 @@ export function FileViewer({
     path,
   );
   const remoteImage = useRemoteImage(projectId);
+  const localImage = useWorktreeImage(projectId, worktreeId, path);
   const name = path.slice(path.lastIndexOf("/") + 1);
   // Kept from file to file, like an editor's preview pane.
   const [shown, setShown] = useState<FileShown>("preview");
@@ -78,7 +82,11 @@ export function FileViewer({
     >
       {text !== null && preview !== null && shown === "preview" ? (
         preview === "markdown" ? (
-          <MarkdownFileView source={text} remoteImage={remoteImage} />
+          <MarkdownFileView
+            source={text}
+            remoteImage={remoteImage}
+            localImage={localImage}
+          />
         ) : (
           // As an image, which runs none of the scripts an SVG can hold.
           <MediaFileView

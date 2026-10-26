@@ -134,15 +134,19 @@ export function CodeFileView({
 export function MarkdownFileView({
   source,
   remoteImage,
+  localImage,
 }: {
   source: string;
-  // An image on the project's remotes' hosts (Markdown).
+  // An image on the project's remotes' hosts, and one in the worktree
+  // (Markdown).
   remoteImage?: (url: string) => Promise<string>;
+  localImage?: (src: string) => Promise<string>;
 }) {
   return (
     <Markdown
       source={source}
       remoteImage={remoteImage}
+      localImage={localImage}
       breaks={false}
       className="mx-auto max-w-3xl px-6 py-4"
     />

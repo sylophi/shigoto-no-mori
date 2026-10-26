@@ -25,23 +25,22 @@ const urlsOf = (attribute: string, value: string) =>
     : [value];
 
 // A URL with no scheme and no host of its own (`./shot.png`): it can
-// only reach the page's own origin, and the caller may show an image of
-// its own there (`images`).
+// only reach the page's own origin, which isn't where it means.
 const isLocal = (url: string) =>
   !/^[a-z][a-z0-9+.-]*:/i.test(url) && !url.startsWith("//");
 
 // Whether an attribute's URLs (every candidate of a srcset) all load
-// from `hosts`, or stay on the page's own origin.
+// from `hosts`.
 const loadsFrom = (
   attribute: string,
   value: string,
   hosts: readonly string[],
-) =>
-  urlsOf(attribute, value).every(
-    (url) => isLocal(url) || isAllowedImage(url, hosts),
-  );
+) => urlsOf(attribute, value).every((url) => isAllowedImage(url, hosts));
 
 const REMOTE_SRC = "data-remote-src";
+// A local image's src, for the caller to show from its own place
+// (`images`, `localImage`).
+const LOCAL_SRC = "data-local-src";
 
 // Remote images load lazily and without a referrer: a long changelog
 // shouldn't pull every screenshot at once, and GitHub needn't learn
@@ -68,7 +67,8 @@ if (purify.isSupported) {
     node.removeAttribute("style");
     node.removeAttribute("background");
     // An image on another https host is not loaded from it: its src
-    // waits under REMOTE_SRC for the caller's `remoteImage`.
+    // waits under REMOTE_SRC for the caller's `remoteImage`, and a local
+    // one's under LOCAL_SRC.
     const src = node.getAttribute("src");
     if (
       node.tagName === "IMG" &&
@@ -77,6 +77,11 @@ if (purify.isSupported) {
       URL.parse(src)?.protocol === "https:"
     ) {
       node.setAttribute(REMOTE_SRC, src);
+      node.removeAttribute("src");
+      node.removeAttribute("srcset");
+    }
+    if (node.tagName === "IMG" && src !== null && isLocal(src)) {
+      node.setAttribute(LOCAL_SRC, src);
       node.removeAttribute("src");
       node.removeAttribute("srcset");
     }
@@ -155,6 +160,7 @@ export function Markdown({
   remoteImage,
   className,
   images,
+  localImage,
   breaks = true,
 }: {
   source: string;
@@ -170,14 +176,19 @@ export function Markdown({
   // where each is shown from, set on the rendered <img> rather than
   // written into the source, which would cache the bytes with it.
   images?: Readonly<Record<string, string>>;
+  // Any other local image, as a data: URL read from where the source
+  // lives (a file's worktree). Without one, such an image stays blank.
+  localImage?: (src: string) => Promise<string>;
 }) {
   const { openUrl } = useOutside();
   const html = purify.isSupported ? htmlOf(source, breaks) : "";
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!images) return;
-    for (const img of ref.current?.querySelectorAll("img") ?? []) {
-      const resolved = images[img.getAttribute("src") ?? ""];
+    for (const img of ref.current?.querySelectorAll<HTMLImageElement>(
+      `img[${LOCAL_SRC}]`,
+    ) ?? []) {
+      const resolved = images[img.getAttribute(LOCAL_SRC) ?? ""];
       if (resolved !== undefined) img.src = resolved;
     }
   }, [html, images]);
@@ -186,16 +197,21 @@ export function Markdown({
   // signed one at once, as a direct image loads: one under a fold would
   // wait past its signature.
   useEffect(() => {
-    if (!remoteImage) return;
     let current = true;
-    const load = (img: Element) =>
-      remoteImage(img.getAttribute(REMOTE_SRC) ?? "").then(
+    const load = (img: Element) => {
+      const remote = img.getAttribute(REMOTE_SRC);
+      return (
+        remote !== null
+          ? remoteImage?.(remote)
+          : localImage?.(img.getAttribute(LOCAL_SRC) ?? "")
+      )?.then(
         (src) => {
           if (current && img instanceof HTMLImageElement) img.src = src;
         },
         // Refused or unreadable: the image stays blank.
         () => {},
       );
+    };
     const nearing = new IntersectionObserver(
       (entries) => {
         for (const { target, isIntersecting } of entries) {
@@ -206,16 +222,24 @@ export function Markdown({
       },
       { rootMargin: "400px" },
     );
-    for (const img of ref.current?.querySelectorAll(`img[${REMOTE_SRC}]`) ??
-      []) {
-      if (img.getAttribute(REMOTE_SRC)?.includes("?")) void load(img);
-      else nearing.observe(img);
+    if (remoteImage) {
+      for (const img of ref.current?.querySelectorAll(`img[${REMOTE_SRC}]`) ??
+        []) {
+        if (img.getAttribute(REMOTE_SRC)?.includes("?")) void load(img);
+        else nearing.observe(img);
+      }
+    }
+    if (localImage) {
+      for (const img of ref.current?.querySelectorAll(`img[${LOCAL_SRC}]`) ??
+        []) {
+        nearing.observe(img);
+      }
     }
     return () => {
       current = false;
       nearing.disconnect();
     };
-  }, [html, remoteImage]);
+  }, [html, remoteImage, localImage]);
   if (!purify.isSupported) {
     return (
       <div
