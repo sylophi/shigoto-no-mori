@@ -26,25 +26,25 @@ export function WorktreeDiffSubtitleView({
   );
 }
 
-// The branch's changes: its commits since where it left the base.
+// The base's picker (a BranchComboboxView), sized to end the
+// subtitle's line.
+export const BRANCH_DIFF_BASE_PICKER =
+  "w-auto max-w-56 shrink-0 gap-1 px-1.5 py-0.5 text-xs";
+
+// The branch's changes: its commits since where it left the base,
+// counted against the primary branch only.
 export function BranchDiffSubtitleView({
   commits,
   more,
-  base,
 }: {
-  // Unknown until the history is read.
+  // Unknown until the history is read, and for another base.
   commits: number | undefined;
   // More commits than the history read returned.
   more: boolean;
-  base: string | undefined;
 }) {
-  return (
-    <>
-      {commits !== undefined &&
-        `${more ? `${commits}+ commits` : pluralize(commits, "commit")} since `}
-      <span className="font-mono">{base}</span>
-    </>
-  );
+  return commits === undefined
+    ? "Since"
+    : `${more ? `${commits}+ commits` : pluralize(commits, "commit")} since`;
 }
 
 // A commit: who made it and when, or only its hash when it isn't known

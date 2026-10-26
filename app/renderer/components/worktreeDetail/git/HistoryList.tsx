@@ -379,7 +379,11 @@ function BranchChangesRow({
   return (
     <BranchChangesRowView
       {...props}
-      onOpen={() => nav.toBranchDiff(worktree.projectId, worktree.id, true)}
+      onOpen={() =>
+        nav.toBranchDiff(worktree.projectId, worktree.id, {
+          replace: true,
+        })
+      }
     />
   );
 }

@@ -163,9 +163,9 @@ function buildQueryKeys(deviceId: string) {
       ),
     stashDiff: (projectId: string, worktreeId: string, hash: string) =>
       host("stashDiff", projectId, worktreeId, hash),
-    // What a branch changes against the primary branch.
-    branchDiff: (projectId: string, worktreeId: string) =>
-      host("branchDiff", projectId, worktreeId),
+    // What a branch changes against the primary branch, or `base`.
+    branchDiff: (projectId: string, worktreeId: string, base = "") =>
+      host("branchDiff", projectId, worktreeId, base),
     // How a branch and another to bring in stand, while HEAD is here.
     mergePreview: (
       projectId: string,

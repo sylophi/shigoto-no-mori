@@ -66,8 +66,8 @@ const byName = (files: FileDiffMetadata[]) =>
 // highlights again.
 function usePatchFiles(
   patch: string | undefined,
-  // Which page the patch is for (one commit, the branch, one picked
-  // file), so one page never shows another's files.
+  // Which page the patch is for (one commit, the branch against a base,
+  // one picked file), so one page never shows another's files.
   page: string,
 ): FileDiffMetadata[] | undefined {
   // The patch, when it is a worker's to parse.
@@ -108,6 +108,7 @@ export function DiffPage({
   worktree,
   title,
   subtitle,
+  subtitleEnd,
   emptyMessage,
   changes,
   footer,
@@ -127,6 +128,7 @@ export function DiffPage({
   worktree: Worktree;
   title: ReactNode;
   subtitle: ReactNode;
+  subtitleEnd?: ReactNode;
   emptyMessage: ReactNode;
   // Present on the uncommitted-changes page only. Turns the file list into a
   // tick list with the commit composer under it, and keeps the list up
@@ -202,10 +204,10 @@ export function DiffPage({
   const singleFile = changes !== undefined;
   const filesLabel = singleFile ? "Changed files" : "Files in this patch";
 
-  const { pathname } = useLocation();
+  const { pathname, searchStr } = useLocation();
   const parsedFiles = usePatchFiles(
     patch,
-    `${pathname}\n${changes?.selectedKey ?? ""}`,
+    `${pathname}${searchStr}\n${changes?.selectedKey ?? ""}`,
   );
   const allFiles = parsedFiles ?? NO_FILES;
   const filesKey = allFiles.map(fileKey).join("\n");
@@ -338,6 +340,7 @@ export function DiffPage({
           <DiffHeaderView
             title={title}
             subtitle={subtitle}
+            subtitleEnd={subtitleEnd}
             back={phone ? { label: backLabel, onClick: onBack } : null}
             files={
               phone &&

@@ -407,9 +407,9 @@ export const worktreesHandlers = {
       const identity = yield* findWorktreeIdentity(
         input.projectId,
         input.worktreeId,
-        { primaryRef: true },
+        { primaryRef: input.base === undefined },
       );
-      const base = branchBaseOf(identity);
+      const base = input.base ?? branchBaseOf(identity);
       if (base === undefined) {
         return yield* new Git.GitRefusedError({
           reason: "This branch has no primary branch to compare with.",

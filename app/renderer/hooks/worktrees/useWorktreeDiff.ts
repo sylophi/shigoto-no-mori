@@ -41,18 +41,20 @@ export function useCommitDiff(
   });
 }
 
-// What the branch changes against the primary branch, the way a pull
-// request would show it. Read afresh on each visit: the branch moves.
+// What the branch changes against the primary branch, or `base`, the
+// way a pull request would show it. Read afresh on each visit: the
+// branch moves.
 export function useBranchDiff(
   projectId: string,
   worktreeId: string | undefined,
+  base: string | undefined,
 ) {
   const { api, keys } = useHostScope();
   return useQuery<string>({
-    queryKey: keys.branchDiff(projectId, worktreeId ?? ""),
+    queryKey: keys.branchDiff(projectId, worktreeId ?? "", base),
     queryFn: worktreeId
       ? ({ signal }) =>
-          api.run(api.worktrees.branchDiff({ projectId, worktreeId }), {
+          api.run(api.worktrees.branchDiff({ projectId, worktreeId, base }), {
             signal,
           })
       : skipToken,

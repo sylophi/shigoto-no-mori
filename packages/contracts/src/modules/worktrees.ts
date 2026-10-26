@@ -5,6 +5,7 @@ import { push, defineContract, invoke, view } from "../contract.ts";
 import {
   AgentSessionPayloadSchema,
   ApplyStashPayloadSchema,
+  BranchDiffPayloadSchema,
   BranchHistorySchema,
   ChangedFileSchema,
   CheckoutBranchPayloadSchema,
@@ -291,8 +292,8 @@ export const worktreesContract = defineContract(
     remote: true,
     gated: false,
   }),
-  // As a pull request would show it.
-  invoke("branchDiff", WorktreeScopedPayloadSchema, Schema.String, {
+  // As a pull request would show it, against the primary ref or `base`.
+  invoke("branchDiff", BranchDiffPayloadSchema, Schema.String, {
     remote: true,
     gated: false,
   }),

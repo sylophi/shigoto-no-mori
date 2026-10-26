@@ -156,6 +156,26 @@
       }
     ]
   },
+  "BranchDiffPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a"
+      },
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "base": "origin/develop"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "base": "--output=/tmp/x"
+      }
+    ]
+  },
   "CommitDiffPayloadSchema": {
     "accepts": [
       {

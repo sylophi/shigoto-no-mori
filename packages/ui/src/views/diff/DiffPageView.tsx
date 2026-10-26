@@ -135,6 +135,7 @@ export function DiffPageView({
 export function DiffHeaderView({
   title,
   subtitle,
+  subtitleEnd,
   back,
   files,
   wrapLines,
@@ -145,6 +146,9 @@ export function DiffHeaderView({
 }: {
   title: ReactNode;
   subtitle: ReactNode;
+  // What ends the subtitle's line past its text, which stays the part
+  // that truncates: the branch page's base picker.
+  subtitleEnd?: ReactNode;
   // A phone's way back. A wide viewport's is the sidebar's first row.
   back: { label: string; onClick: () => void } | null;
   // The phone's chip that opens the file list's sheet.
@@ -174,11 +178,14 @@ export function DiffHeaderView({
               {title}
             </h1>
           </SimpleTooltip>
-          <SimpleTooltip whenTruncated tip={subtitle}>
-            <p className="truncate text-xs text-muted-foreground select-text">
-              {subtitle}
-            </p>
-          </SimpleTooltip>
+          <div className="flex items-center gap-1">
+            <SimpleTooltip whenTruncated tip={subtitle}>
+              <p className="min-w-0 truncate text-xs text-muted-foreground select-text">
+                {subtitle}
+              </p>
+            </SimpleTooltip>
+            {subtitleEnd}
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 self-center">
           {files && (
