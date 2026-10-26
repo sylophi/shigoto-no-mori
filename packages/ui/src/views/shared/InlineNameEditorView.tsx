@@ -1,6 +1,6 @@
 // A name edited in place: the line that showed the name turns into an
-// input, Enter saves and Esc reverts, and the two-key contract is
-// spelled out beside it because an inline editor has no obvious edges.
+// input, Enter saves and Esc reverts: Save wears ↩ and Esc is spelled
+// out beside it, because an inline editor has no obvious edges.
 // A device's name (DeviceNameFieldView) and a worktree's folder
 // (WorktreeLocationView) are renamed with it.
 import { useState } from "react";

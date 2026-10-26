@@ -150,7 +150,13 @@ export function DescriptionEditorView({
         >
           Cancel
         </Button>
-        <Button size="sm" onClick={onSave} disabled={saving}>
+        <Button
+          size="sm"
+          onClick={onSave}
+          disabled={saving}
+          keys={saveKeys.label}
+          aria-keyshortcuts={saveKeys.aria}
+        >
           Save
         </Button>
       </div>

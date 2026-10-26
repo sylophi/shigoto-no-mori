@@ -255,6 +255,7 @@ export function CommitComposerView({
             disabled={!canCommit}
             onClick={submit}
             keys={canCommit ? commitKeys.label : undefined}
+            aria-keyshortcuts={commitKeys.aria}
             className="min-w-0 flex-1"
           >
             {pending ? (
