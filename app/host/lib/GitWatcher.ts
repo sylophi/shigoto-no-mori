@@ -26,6 +26,10 @@
 // worktree's changed files), and nothing else moves. Which working
 // trees a project has is read off its git directory (the main checkout,
 // and each `worktrees/<name>/gitdir`), again whenever that changes.
+// An edit git ignores (a build's output, dependencies, a running app's
+// logs and databases) moves nothing a row shows and is no signal: a
+// tree that never stops writing one would otherwise have its project's
+// rows read again, on every device viewing it, once a second for good.
 //
 // A checkout's `index` written (the main checkout's or a worktree's)
 // is a third, host only (indexWritten), for the views of what it holds:
@@ -65,11 +69,13 @@ import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import type { Project } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
+import { splitZ } from "@shigomori/engine/gitParse";
 import { loadProjects } from "@host/lib/projects";
 import { watchPath } from "@host/lib/watchPath";
 
 const DEBOUNCE_MS = 300;
 const EDIT_WINDOW = "1 second";
+const VERDICTS_KEPT = 10_000;
 const BACKSTOP = Duration.seconds(10);
 // A project's reconcile that takes longer is a volume that stalls.
 const STEP_TIMEOUT = Duration.seconds(5);
@@ -102,6 +108,9 @@ function isWorkingTreeChange(file: string): boolean {
   return !GIT_SEGMENT.test(normalized);
 }
 
+const isGitignore = (file: string) =>
+  file === ".gitignore" || file.endsWith("/.gitignore");
+
 // The allowlist: the loop-safety of this watcher rests on it.
 function isRelevantGitPath(file: string): boolean {
   // Every ref write goes through a `.lock` sibling that is renamed
@@ -121,8 +130,7 @@ function isIndexPath(file: string): boolean {
 // The working trees of a project: its own folder when it is a checkout,
 // and every linked worktree its git directory lists, by the `.git` path
 // each `worktrees/<name>/gitdir` names. Read off the files, with no git.
-// By real path, and a tree inside another (a worktree kept under the
-// main checkout) left to the outer one's watch, so no edit counts twice.
+// By real path.
 const workingTreesOf = (projectPath: string, gitDir: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -159,14 +167,7 @@ const workingTreesOf = (projectPath: string, gitDir: string) =>
         ),
       );
     }
-    const trees = new Set<string>();
-    for (const tree of found) {
-      const outer = [...found].some(
-        (other) => other !== tree && tree.startsWith(other + path.sep),
-      );
-      if (!outer) trees.add(tree);
-    }
-    return trees;
+    return found;
   });
 
 // What a project's git directory says about the state its rows show,
@@ -329,6 +330,8 @@ type Moved = "git" | "index" | undefined;
 const make = (deps: GitWatcherDeps) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const paths = yield* Path.Path;
+    const git = yield* Git.Git;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     // Each watched project's git directory and the fiber watching it.
     const watches = yield* FiberMap.make<string>();
@@ -420,6 +423,117 @@ const make = (deps: GitWatcherDeps) =>
       });
     };
 
+    // Each project's checkouts, every one, inside another or not.
+    const checkoutsOf = new Map<string, ReadonlySet<string>>();
+    // Each project's verdicts on what git ignores, by checkout and path
+    // (a folder's with a trailing `/`, so one already deleted still
+    // matches a `node_modules/` rule). Its git or an index moving drops
+    // them, as a `git add -f` changes what counts.
+    const verdictsOf = new Map<string, Map<string, boolean>>();
+
+    // The paths of `asked` git ignores in `checkout`, one spawn for them
+    // all.
+    const ignoredOf = (checkout: string, asked: ReadonlySet<string>) =>
+      asked.size === 0
+        ? Effect.succeed(new Set<string>())
+        : git
+            .run(checkout, ["check-ignore", "--stdin", "-z"], {
+              stdin: [...asked].join("\0"),
+              okExitCodes: [1],
+            })
+            .pipe(
+              Effect.timeout(STEP_TIMEOUT),
+              Effect.map((out) => new Set(splitZ(out))),
+            );
+
+    // Whether one of a checkout's `files` (checkout-relative,
+    // `/`-separated) is one git doesn't ignore. Asked a folder level at a
+    // time, so a burst under one ignored folder (an install) is one short
+    // question.
+    const unignoredAmong = (
+      checkout: string,
+      verdicts: Map<string, boolean>,
+      files: ReadonlyArray<string>,
+    ) =>
+      Effect.gen(function* () {
+        let left = files;
+        for (let depth = 1; left.length > 0; depth += 1) {
+          const steps = left.map((file) => {
+            const parts = file.split("/");
+            const asked =
+              parts.length > depth
+                ? `${parts.slice(0, depth).join("/")}/`
+                : file;
+            return { file, asked, key: `${checkout}\0${asked}` };
+          });
+          const ignored = yield* ignoredOf(
+            checkout,
+            new Set(
+              steps
+                .filter((step) => !verdicts.has(step.key))
+                .map((step) => step.asked),
+            ),
+          );
+          const deeper: string[] = [];
+          for (const step of steps) {
+            const isIgnored = verdicts.get(step.key) ?? ignored.has(step.asked);
+            verdicts.set(step.key, isIgnored);
+            if (isIgnored) continue;
+            if (step.asked === step.file) return true;
+            deeper.push(step.file);
+          }
+          left = deeper;
+        }
+        return false;
+      });
+
+    // Whether a window's edits in `tree` hold one git doesn't ignore,
+    // each asked of the innermost checkout it is in, by that checkout's
+    // rules. A .gitignore git reads changes the rules, and a failed
+    // question counts as an edit. The verdicts start over past a cap,
+    // since an editor's saves name a fresh temp file each time.
+    const anyUnignored = (
+      projectId: string,
+      tree: string,
+      edits: ReadonlyArray<string>,
+    ) =>
+      Effect.gen(function* () {
+        const checkouts = checkoutsOf.get(projectId) ?? new Set([tree]);
+        let verdicts = verdictsOf.get(projectId);
+        if (verdicts === undefined || verdicts.size > VERDICTS_KEPT) {
+          verdicts = new Map();
+          verdictsOf.set(projectId, verdicts);
+        }
+        const byCheckout = new Map<string, string[]>();
+        for (const edit of edits) {
+          const file = paths.join(tree, edit);
+          let checkout = tree;
+          for (const other of checkouts) {
+            if (
+              other.length > checkout.length &&
+              file.startsWith(other + paths.sep)
+            ) {
+              checkout = other;
+            }
+          }
+          const relative = paths.relative(checkout, file).split(paths.sep);
+          const files = byCheckout.get(checkout) ?? [];
+          files.push(relative.join("/"));
+          byCheckout.set(checkout, files);
+        }
+        for (const [checkout, files] of byCheckout) {
+          const rules = files.filter(isGitignore);
+          if (yield* unignoredAmong(checkout, verdicts, rules)) {
+            verdictsOf.delete(projectId);
+            return true;
+          }
+        }
+        for (const [checkout, files] of byCheckout) {
+          if (yield* unignoredAmong(checkout, verdicts, files)) return true;
+        }
+        return false;
+      }).pipe(Effect.orElseSucceed(() => true));
+
     // One working tree's edits: a burst's first change opens a window,
     // and the window's end is one signal, so a tree that never goes
     // quiet (a build writing its output) still reports, at most once a
@@ -432,15 +546,34 @@ const make = (deps: GitWatcherDeps) =>
         ),
         Stream.filter((event) => isWorkingTreeChange(event.path)),
         Stream.groupedWithin(Number.POSITIVE_INFINITY, EDIT_WINDOW),
-        Stream.runForEach(() =>
-          Effect.sync(() => deps.onFilesChanged(projectId)),
+        Stream.runForEach((events) =>
+          anyUnignored(
+            projectId,
+            tree,
+            events.map((event) => event.path),
+          ).pipe(
+            Effect.map((unignored) => {
+              if (unignored) deps.onFilesChanged(projectId);
+            }),
+          ),
         ),
         Effect.ignore,
       );
 
-    // The project's working trees watched, and only `wanted`.
-    const followTrees = (projectId: string, wanted: ReadonlySet<string>) =>
+    // The project's checkouts followed: each watched, but one inside
+    // another (a worktree kept under the main checkout) left to the outer
+    // one's watch, so no edit counts twice.
+    const followTrees = (projectId: string, checkouts: ReadonlySet<string>) =>
       Effect.gen(function* () {
+        checkoutsOf.set(projectId, checkouts);
+        const wanted = new Set(
+          [...checkouts].filter(
+            (tree) =>
+              ![...checkouts].some((other) =>
+                tree.startsWith(other + paths.sep),
+              ),
+          ),
+        );
         const held = trees.get(projectId) ?? new Set<string>();
         for (const tree of held) {
           if (!wanted.has(tree)) {
@@ -470,11 +603,14 @@ const make = (deps: GitWatcherDeps) =>
           failing.delete(treeKey(projectId, tree));
         }
         trees.delete(projectId);
+        checkoutsOf.delete(projectId);
+        verdictsOf.delete(projectId);
       });
 
     // What moved, said: the git state on every wire, an index to the
     // views that read it.
     const signal = (projectId: string, moved: Moved) => {
+      if (moved !== undefined) verdictsOf.delete(projectId);
       if (moved === "git") return Effect.sync(() => deps.onChange(projectId));
       if (moved === "index") return PubSub.publish(indexWrites, projectId);
       return Effect.void;
