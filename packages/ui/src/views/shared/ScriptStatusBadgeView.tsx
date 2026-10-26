@@ -52,7 +52,11 @@ export function ScriptStatusBadgeView({
   if (state.status === "exited") {
     const when = state.endedAt;
     const timeTip = when ? new Date(when).toLocaleString() : undefined;
-    const suffix = when !== null ? ` · ${formatRelativeTime(when, now)}` : "";
+    const time = when !== null && (
+      <span className="ml-2 text-muted-foreground">
+        {formatRelativeTime(when, now)}
+      </span>
+    );
     // exitCode === null happens when the process was killed by signal
     // (the user clicked Stop, the app quit, or the worktree was
     // removed). That's intentional cancellation, not a failure, so
@@ -62,16 +66,16 @@ export function ScriptStatusBadgeView({
         <SimpleTooltip tip={timeTip}>
           <span className="tabular shrink-0 text-xs text-muted-foreground select-text">
             {state.exitCode === null ? "stopped" : "done"}
-            {suffix}
+            {time}
           </span>
         </SimpleTooltip>
       );
     }
     return (
       <SimpleTooltip tip={timeTip}>
-        <span className="tabular shrink-0 font-mono text-xs text-destructive select-text">
-          failed · exit {state.exitCode}
-          <span className="font-sans text-muted-foreground">{suffix}</span>
+        <span className="tabular shrink-0 text-xs text-destructive select-text">
+          failed with exit {state.exitCode}
+          {time}
         </span>
       </SimpleTooltip>
     );
