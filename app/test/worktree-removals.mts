@@ -144,6 +144,7 @@ case "$*" in
   "pr list --state all --limit 200 --json number,url"*) cat "$d/host-list";;
   "pr list --state all --limit 200 "*) cat "$d/list";;
   "pr view "*" --json headRefOid") cat "$d/view-$3";;
+  "api --paginate --slurp repos/{owner}/{repo}/stacks"*) echo '[[{"number":4,"pull_requests":[{"number":4},{"number":5}]}]]';;
   *) echo "unexpected gh $*" >&2; exit 1;;
 esac
 `,

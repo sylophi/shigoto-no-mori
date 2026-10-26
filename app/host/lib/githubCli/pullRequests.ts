@@ -21,6 +21,7 @@ import {
   pullRequestsEqual,
   summarizeChecks,
 } from "@shigomori/contracts/schemas";
+import * as GitHub from "@shigomori/engine/GitHub";
 import { ageOf, type Stamp } from "../util/kept";
 import { gh } from "./exec";
 import {
@@ -65,7 +66,7 @@ const runGhPrList = (cwd: string) =>
     Effect.orElseSucceed((): readonly GhPrListItem[] | null => null),
   );
 
-function toPullRequest(item: GhPrListItem): PullRequest {
+function toPullRequest(item: GhPrListItem, stack?: number): PullRequest {
   return {
     number: item.number,
     url: item.url,
@@ -74,6 +75,7 @@ function toPullRequest(item: GhPrListItem): PullRequest {
     isDraft: item.isDraft,
     baseRefName: item.baseRefName,
     isCrossRepository: item.isCrossRepository,
+    ...(stack === undefined ? {} : { stack }),
     ...checkedOutMark(item),
   };
 }
@@ -92,16 +94,22 @@ function checkedOutMark(pr: {
 export const readProjectPullRequests = Effect.fnUntraced(function* (
   cwd: string,
 ) {
-  const [rows, checkedOut] = yield* Effect.all(
-    [runGhPrList(cwd), checkedOutPullRequests(cwd)],
-    { concurrency: 2 },
+  const [rows, stackOf, checkedOut] = yield* Effect.all(
+    [
+      runGhPrList(cwd),
+      Effect.flatMap(GitHub.GitHub, (github) => github.stacks(cwd)).pipe(
+        Effect.orElseSucceed(() => null),
+      ),
+      checkedOutPullRequests(cwd),
+    ],
+    { concurrency: 3 },
   );
-  if (rows === null) return null;
+  if (rows === null || stackOf === null) return null;
   const map = new Map<string, PullRequest>();
   for (const item of rows) {
     if (map.has(item.headRefName)) continue;
     if (!isBranchsOwn(item, checkedOut.get(item.headRefName))) continue;
-    map.set(item.headRefName, toPullRequest(item));
+    map.set(item.headRefName, toPullRequest(item, stackOf.get(item.number)));
   }
   return map;
 });

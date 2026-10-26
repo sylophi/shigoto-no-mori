@@ -20,6 +20,7 @@
         "state": "MERGED",
         "isDraft": true,
         "baseRefName": "fix-stale-locks",
+        "stack": 150,
         "isCrossRepository": false
       }
     ],
