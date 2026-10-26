@@ -89,7 +89,9 @@ export function useWorktreeImage(
       // One that won't read stays blank, which says so.
       meta: { silentError: true },
     });
-    if (file.kind === "media") return `data:${file.mime};base64,${file.base64}`;
+    if (file.kind === "media" && file.mime.startsWith("image/")) {
+      return `data:${file.mime};base64,${file.base64}`;
+    }
     if (file.kind === "text" && /\.svg$/i.test(path)) {
       return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(file.contents)}`;
     }

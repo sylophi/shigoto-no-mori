@@ -208,8 +208,11 @@ export function Markdown({
         (src) => {
           if (current && img instanceof HTMLImageElement) img.src = src;
         },
-        // Refused or unreadable: the image stays blank.
-        () => {},
+        // Refused or unreadable: the image stays blank, not the one
+        // the same markup showed for another file.
+        () => {
+          if (current) img.removeAttribute("src");
+        },
       );
     };
     const nearing = new IntersectionObserver(
