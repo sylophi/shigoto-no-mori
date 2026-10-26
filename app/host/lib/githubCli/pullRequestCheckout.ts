@@ -38,8 +38,8 @@ const git = (cwd: string, args: string[]) =>
   Effect.flatMap(Git.Git, (service) => service.run(cwd, args));
 
 // Enough to fill a picker without paging. Deliberately below the
-// sidebar sweep's 200: that one indexes every branch in the project,
-// this one is a list a human scrolls.
+// sidebar sweep's: that one indexes every branch in the project, this
+// one is a list a human scrolls.
 const PR_CANDIDATE_LIMIT = 50;
 
 // A gh user or owner, of which only the login is read.

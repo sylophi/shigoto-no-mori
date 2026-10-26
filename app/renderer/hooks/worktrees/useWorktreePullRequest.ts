@@ -99,7 +99,7 @@ export function useWorktreePullRequest(
     retry: false,
     meta: { silentError: true },
   });
-  // The map holds only the newest 200 PRs (host PR_LIST_LIMIT), so one
+  // The map holds the open PRs and only the newest closed ones, so one
   // missing from it says nothing about this page's PR. A pending merge
   // or draft toggle has written its optimistic result here, which the
   // map can't match yet: the mutation refreshes the page as it settles.

@@ -46,17 +46,20 @@ const decodeGhPrList = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Array(GhPrListItemSchema)),
 );
 
-const PR_LIST_LIMIT = 200;
+// Every open PR, and the newest of all states for the merged and closed
+// ones: a busy repo's open PRs fall out of its newest 200.
+const OPEN_PR_LIMIT = 1000;
+const RECENT_PR_LIMIT = 200;
 
-const runGhPrList = (cwd: string) =>
+const runGhPrList = (cwd: string, state: "open" | "all", limit: number) =>
   gh(
     [
       "pr",
       "list",
       "--state",
-      "all",
+      state,
       "--limit",
-      String(PR_LIST_LIMIT),
+      String(limit),
       "--json",
       "number,url,title,state,isDraft,headRefName,baseRefName,isCrossRepository",
     ],
@@ -89,22 +92,27 @@ function checkedOutMark(pr: {
 }
 
 // The project's PRs by head branch, or null when gh failed (the
-// network, its output). gh lists newest first, so a reused branch
-// keeps its newest own PR.
+// network, its output). Newest first, so a reused branch keeps its
+// newest own PR.
 export const readProjectPullRequests = Effect.fnUntraced(function* (
   cwd: string,
 ) {
-  const [rows, stackOf, checkedOut] = yield* Effect.all(
+  const [open, recent, stackOf, checkedOut] = yield* Effect.all(
     [
-      runGhPrList(cwd),
+      runGhPrList(cwd, "open", OPEN_PR_LIMIT),
+      runGhPrList(cwd, "all", RECENT_PR_LIMIT),
       Effect.flatMap(GitHub.GitHub, (github) => github.stacks(cwd)).pipe(
         Effect.orElseSucceed(() => null),
       ),
       checkedOutPullRequests(cwd),
     ],
-    { concurrency: 3 },
+    { concurrency: 4 },
   );
-  if (rows === null || stackOf === null) return null;
+  if (open === null || recent === null || stackOf === null) return null;
+  const byNumber = new Map(
+    [...open, ...recent].map((item) => [item.number, item]),
+  );
+  const rows = [...byNumber.values()].toSorted((a, b) => b.number - a.number);
   const map = new Map<string, PullRequest>();
   for (const item of rows) {
     if (map.has(item.headRefName)) continue;
