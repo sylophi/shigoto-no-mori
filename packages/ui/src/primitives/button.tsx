@@ -3,6 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { destructiveMark } from "../lib/usersAlone.ts";
 import { cn } from "../lib/utils.ts";
+import { Kbd } from "./kbd.tsx";
 import type { WithoutTitle } from "./tooltip.tsx";
 
 const buttonVariants = cva(
@@ -58,8 +59,14 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  keys,
+  children,
   ...props
-}: WithoutTitle<ButtonPrimitive.Props> & VariantProps<typeof buttonVariants>) {
+}: WithoutTitle<ButtonPrimitive.Props> &
+  VariantProps<typeof buttonVariants> & {
+    // The key that presses it, drawn at its end: ↩ on a form's submit.
+    keys?: string;
+  }) {
   return (
     <ButtonPrimitive
       data-slot="button"
@@ -71,7 +78,20 @@ function Button({
       {...destructiveMark(variant)}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {children}
+      {keys !== undefined && (
+        <Kbd
+          aria-hidden
+          className={cn(
+            "bg-current/15 text-current phone:hidden",
+            size === "xs" && "h-4 min-w-4",
+          )}
+        >
+          {keys}
+        </Kbd>
+      )}
+    </ButtonPrimitive>
   );
 }
 

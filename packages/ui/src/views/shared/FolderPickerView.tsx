@@ -5,7 +5,6 @@ import { Folder } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
 import { FileManagerIcon } from "../../primitives/file-manager.tsx";
-import { Kbd, KbdGroup } from "../../primitives/kbd.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import {
@@ -163,12 +162,9 @@ export function FolderPickerView({
           onMouseDown={(e) => e.preventDefault()}
           onClick={confirm}
           disabled={!canConfirm}
-          aria-label={`${confirmLabel} (${confirmKbd})`}
+          keys={confirmKbd}
         >
-          <span>{confirmLabel}</span>
-          <KbdGroup className="pointer-events-none">
-            <Kbd>{confirmKbd}</Kbd>
-          </KbdGroup>
+          {confirmLabel}
         </Button>
       </div>
       {hint && (

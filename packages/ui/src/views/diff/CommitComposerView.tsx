@@ -9,7 +9,6 @@ import {
 import { Button } from "../../primitives/button.tsx";
 import { ErrorBanner } from "../../primitives/error-banner.tsx";
 import { Input } from "../../primitives/input.tsx";
-import { Kbd } from "../../primitives/kbd.tsx";
 import type { Binding } from "../../lib/keymap.ts";
 import { Textarea } from "../../primitives/textarea.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
@@ -255,6 +254,8 @@ export function CommitComposerView({
             size="sm"
             disabled={!canCommit}
             onClick={submit}
+            keys={canCommit ? commitKeys.label : undefined}
+            aria-keyshortcuts={commitKeys.aria}
             className="min-w-0 flex-1"
           >
             {pending ? (
@@ -263,11 +264,6 @@ export function CommitComposerView({
               <GitCommitHorizontal aria-hidden />
             )}
             <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-            {canCommit && (
-              <Kbd className="bg-primary-foreground/20 text-primary-foreground">
-                {commitKeys.label}
-              </Kbd>
-            )}
           </Button>
         </SimpleTooltip>
       </div>

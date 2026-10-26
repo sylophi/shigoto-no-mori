@@ -55,6 +55,7 @@ export function StashListView({
           />
           <Button
             type="submit"
+            keys="↩"
             size="sm"
             disabled={changedCount === 0 || pending}
           >

@@ -74,7 +74,13 @@ export function RewordFormView({
         <Button variant="outline" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button size="sm" onClick={onSave} disabled={!canSave}>
+        <Button
+          size="sm"
+          onClick={onSave}
+          disabled={!canSave}
+          keys={saveKeys.label}
+          aria-keyshortcuts={saveKeys.aria}
+        >
           Reword
         </Button>
       </div>

@@ -17,7 +17,7 @@ export function Kbd({
   );
 }
 
-export function KbdGroup({
+function KbdGroup({
   className,
   ...props
 }: WithoutTitle<ComponentProps<"kbd">>) {

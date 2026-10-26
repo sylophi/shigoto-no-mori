@@ -117,6 +117,7 @@ export function PortFormView({
           </Button>
           <Button
             type="submit"
+            keys="↩"
             variant="secondary"
             size="xs"
             disabled={saving || port.length === 0}

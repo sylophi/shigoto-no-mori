@@ -323,7 +323,7 @@ export function NewWorktreeFormView({
         >
           Cancel
         </Button>
-        <Button type="submit" disabled={!canSubmit || busy} size="sm">
+        <Button type="submit" keys="↩" disabled={!canSubmit || busy} size="sm">
           {busy
             ? "Creating…"
             : deviceLabel

@@ -51,7 +51,12 @@ export function NewBranchFormView({
         {basePicker}
       </div>
       <div className="flex items-center gap-2">
-        <Button type="submit" size="xs" disabled={!canSubmit || pending}>
+        <Button
+          type="submit"
+          keys="↩"
+          size="xs"
+          disabled={!canSubmit || pending}
+        >
           {pending ? "Creating…" : "Create"}
         </Button>
         <Button

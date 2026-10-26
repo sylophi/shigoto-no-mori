@@ -162,6 +162,7 @@ export function PortForwardSectionView({
             />
             <Button
               type="submit"
+              keys="↩"
               size="xs"
               variant="secondary"
               disabled={startPending || parsedPort === undefined}

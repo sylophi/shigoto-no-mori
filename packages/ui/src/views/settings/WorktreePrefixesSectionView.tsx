@@ -94,6 +94,7 @@ export function WorktreePrefixesSectionView({
         />
         <Button
           type="submit"
+          keys="↩"
           size="sm"
           disabled={!settled || input.trim() === ""}
         >

@@ -1,15 +1,10 @@
-import type {
-  ComponentProps,
-  KeyboardEvent,
-  ReactNode,
-  RefObject,
-} from "react";
+import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { Command } from "cmdk";
 import { FolderInput, Loader2 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
-import { Kbd, KbdGroup, KbdHint } from "../../primitives/kbd.tsx";
+import { KbdHint } from "../../primitives/kbd.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
-import { SimpleTooltip, type WithoutTitle } from "../../primitives/tooltip.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { FooterRow } from "../../primitives/footer-row.tsx";
 
 // The clone's and the new repository's top row: what to make, and the
@@ -73,41 +68,17 @@ export function ActionInputRowView({
           onChange={(e) => onChange(e.target.value)}
         />
       )}
-      <KeyedButtonView
-        icon={icon}
-        label={label}
+      <Button
+        variant="outline"
+        size="xs"
         keys="↩"
         onClick={onSubmit}
         disabled={!canSubmit}
-        aria-label={`${label} (↩)`}
-      />
+      >
+        {icon}
+        {label}
+      </Button>
     </div>
-  );
-}
-
-// The dialog's primary action, with the key that also runs it.
-export function KeyedButtonView({
-  icon,
-  label,
-  keys,
-  ...props
-}: {
-  icon?: ReactNode;
-  label: string;
-  keys: string;
-} & WithoutTitle<ComponentProps<"button">>) {
-  return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-      {...props}
-    >
-      {icon}
-      <span>{label}</span>
-      <KbdGroup className="pointer-events-none">
-        <Kbd>{keys}</Kbd>
-      </KbdGroup>
-    </button>
   );
 }
 

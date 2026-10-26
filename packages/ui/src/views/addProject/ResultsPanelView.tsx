@@ -2,7 +2,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { Command } from "cmdk";
 import { ArrowLeft, FolderSearch } from "lucide-react";
 import { PathSpan } from "../../primitives/path-span.tsx";
-import { KeyedButtonView } from "./DialogPartsView.tsx";
+import { Button } from "../../primitives/button.tsx";
 import { ResultRowView } from "./ResultRowView.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { MODAL_COMMAND_CLASS } from "../../primitives/cmdk-classes.ts";
@@ -104,16 +104,17 @@ export function ResultsPanelView(props: ResultsPanelProps) {
 
         <FooterRow className="justify-end">
           {props.terrierOptIn}
-          <KeyedButtonView
-            label={
-              props.bulkAdding
-                ? "Adding…"
-                : `Add ${pluralize(props.selected.size, "project")}`
-            }
+          <Button
+            variant="outline"
+            size="xs"
             keys={props.confirmKeys}
             onClick={() => void props.onAdd()}
             disabled={props.selected.size === 0 || props.bulkAdding}
-          />
+          >
+            {props.bulkAdding
+              ? "Adding…"
+              : `Add ${pluralize(props.selected.size, "project")}`}
+          </Button>
         </FooterRow>
       </Command>
     </div>
