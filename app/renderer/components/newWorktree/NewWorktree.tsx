@@ -207,7 +207,10 @@ function NewWorktreeForm({
         ? selectedPr.headRefName
         : pullRequestFolderName(selectedPr),
   }[mode];
-  const folderSourceRaw = useBranchAsFolder ? folderSource : worktreeName;
+  // A blank custom folder takes the picked name its placeholder shows.
+  const folderSourceRaw = useBranchAsFolder
+    ? folderSource
+    : worktreeName || pickedName || "";
   const folderName = sanitizeBranchForPath(folderSourceRaw);
   // Case-insensitive: NTFS and default APFS treat "Feature" and
   // "feature" as the same directory (matches the host-side check).
