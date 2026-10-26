@@ -3026,13 +3026,13 @@
   },
   {
     "name": "cloudflared",
-    "version": "2026.8.3",
+    "version": "2026.10.4",
     "licenses": "Apache-2.0",
     "repository": "https://github.com/cloudflare/cloudflared",
     "publisher": "Cloudflare, Inc.",
     "url": "",
     "licenseFile": "",
-    "licenseText": "Apache License 2.0. Full text: https://github.com/cloudflare/cloudflared/blob/2026.8.3/LICENSE",
+    "licenseText": "Apache License 2.0. Full text: https://github.com/cloudflare/cloudflared/blob/2026.10.4/LICENSE",
     "copyright": ""
   },
   {

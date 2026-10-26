@@ -14,7 +14,7 @@
 //
 // .mts with no imports, loadable by plain `node scripts/*.mts` and by
 // the host through the @shared alias. Never import this from the renderer.
-export const CLOUDFLARED_VERSION = "2026.8.3";
+export const CLOUDFLARED_VERSION = "2026.10.4";
 
 // Repo-relative directory the fetched binary lands in (gitignored).
 export const CLOUDFLARED_DIST_DIR = "dist-cloudflared";
@@ -31,11 +31,11 @@ type CloudflaredAsset = { name: string; sha256: string };
 const ASSETS: Record<string, CloudflaredAsset> = {
   "darwin-arm64": {
     name: "cloudflared-darwin-arm64.tgz",
-    sha256: "40c9144d86df8937c5b43293a1f7d2d2107029aa74725023dd46b1b27154352f",
+    sha256: "68b6bc4080ac1330234db2a9002d07f98b000537a1bd531a687b660d4160fa7f",
   },
   "darwin-x64": {
     name: "cloudflared-darwin-amd64.tgz",
-    sha256: "61e1316266a00fd70ce40da011d612badc805367fb65293dd1925f938f704c99",
+    sha256: "f11fbef4207d715892331917dafd437f032cf4b7137ed64dea3008338c1c613d",
   },
 };
 

@@ -12570,12 +12570,12 @@ WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
 ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 --------------------------------------------------------------------------------
-cloudflared@2026.8.3
+cloudflared@2026.10.4
 License: Apache-2.0
 Repository: https://github.com/cloudflare/cloudflared
 Publisher: Cloudflare, Inc.
 
-Apache License 2.0. Full text: https://github.com/cloudflare/cloudflared/blob/2026.8.3/LICENSE
+Apache License 2.0. Full text: https://github.com/cloudflare/cloudflared/blob/2026.10.4/LICENSE
 
 --------------------------------------------------------------------------------
 clsx@1.2.1
