@@ -18,6 +18,7 @@ import {
   type RefObject,
 } from "react";
 import { AlertTriangle, GitPullRequest } from "lucide-react";
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { PageHeaderView } from "../shared/PageHeaderView.tsx";
 import { PAGE_BODY } from "../shared/PageShellView.tsx";
 import { PinnedMarkView } from "../shared/PinnedMarkView.tsx";
@@ -80,6 +81,7 @@ export function ProjectGridLayoutView({
   columns,
   gridRef,
   tiles,
+  folderTargets,
 }: {
   sections: readonly ProjectSection[];
   // As many as fit across the pane (measured by the container).
@@ -87,6 +89,9 @@ export function ProjectGridLayoutView({
   gridRef?: Ref<HTMLDivElement>;
   // Each row's tile (ProjectTile), by row key.
   tiles: ReadonlyMap<string, ReactNode>;
+  // Each folder's section as the drop target of a project dragged into
+  // it (FolderSectionTargetView), by section key.
+  folderTargets?: ReadonlyMap<string, ReactNode>;
 }) {
   return (
     // Arrows move between the tiles, across the sections, as on a
@@ -115,8 +120,9 @@ export function ProjectGridLayoutView({
                 ? "1 / -1"
                 : `span ${Math.min(section.rows.length, columns)}`,
           }}
-          className="grid grid-cols-subgrid content-start gap-y-2"
+          className="relative grid grid-cols-subgrid content-start gap-y-2"
         >
+          {folderTargets?.get(section.key)}
           {section.label !== null && (
             // On one line however few columns the owner spans, so its
             // tiles stay level with the tiles beside them.
@@ -141,6 +147,29 @@ export function ProjectGridLayoutView({
   );
 }
 
+// Over a folder's section, filling it, to drop a project into it.
+// Under the tiles and blind to the pointer: the drag only measures it.
+export function FolderSectionTargetView({
+  dropRef,
+  dropping,
+}: {
+  dropRef: (node: HTMLElement | null) => void;
+  dropping: boolean;
+}) {
+  return (
+    <div
+      ref={dropRef}
+      aria-hidden
+      className={cn(
+        // Half the gap between sections out, so two side by side meet
+        // without overlapping.
+        "pointer-events-none absolute -inset-1.5 rounded-xl transition-colors",
+        dropping && "bg-primary/15",
+      )}
+    />
+  );
+}
+
 export function ProjectTileView({
   row,
   work,
@@ -156,6 +185,7 @@ export function ProjectTileView({
   icon,
   actions,
   picker,
+  drag,
 }: {
   row: ProjectListRow;
   work: GroupWork | undefined;
@@ -180,6 +210,13 @@ export function ProjectTileView({
   actions: ReactNode;
   // The locate picker, while it is open.
   picker: ReactNode;
+  // The tile dragged into a folder, and dropped on (useFolderDrag).
+  drag?: {
+    setNodeRef: (node: HTMLElement | null) => void;
+    listeners: DraggableSyntheticListeners;
+    isDragging: boolean;
+    dropping: boolean;
+  };
 }) {
   const { project, devices, branches, pinned } = row;
   const descriptionId = useId();
@@ -191,6 +228,7 @@ export function ProjectTileView({
   const active = work !== undefined && work.lastActivity > 0;
   return (
     <div
+      ref={drag?.setNodeRef}
       onPointerEnter={() => onHover(true)}
       onPointerLeave={() => onHover(false)}
       // Right-click pops the actions' menu, as on the sidebar's row.
@@ -203,10 +241,13 @@ export function ProjectTileView({
         "relative rounded-lg border border-border bg-card transition-colors",
         (!missing || onLocate !== undefined) &&
           "hover:bg-accent/60 has-[[aria-expanded=true]]:bg-accent/60",
+        drag?.dropping && "bg-primary/15 hover:bg-primary/15",
+        drag?.isDragging && "opacity-50",
       )}
     >
       <button
         type="button"
+        {...drag?.listeners}
         data-project-tile
         disabled={missing ? onLocate === undefined : unlisted}
         onClick={missing ? onLocate : onOpen}

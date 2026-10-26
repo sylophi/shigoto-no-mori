@@ -9,8 +9,14 @@
 // work: it opens the worktree visited last (the ⌘K palette's recency),
 // and the sidebar follows the page into the project. Its line under the
 // name is the repo's GitHub About, and the one below says how much is
-// going on there.
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+// going on there. A tile is dragged into folders as the list's row is.
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useRepoDescription } from "@/hooks/projects/useRepoDescription";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
@@ -23,11 +29,17 @@ import {
   useProjectGroup,
 } from "@/components/sidebar/ProjectGroupActions";
 import { useLocateProject } from "@/components/sidebar/LocateProjectPicker";
+import {
+  FolderDragContext,
+  useFolderDrag,
+  useFolderDropTarget,
+} from "@/components/sidebar/ProjectFolder";
 import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import type { ProjectListRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { buildGrid } from "@shigomori/ui/views/home/gridModel.ts";
 import type { GroupWork } from "@shigomori/ui/views/home/ProjectGridView.tsx";
 import {
+  FolderSectionTargetView,
   ProjectGridLayoutView,
   ProjectGridView,
   ProjectTileView,
@@ -54,7 +66,11 @@ export function ProjectGrid() {
   return (
     <ProjectGridView
       grid={
-        sections.length > 0 ? <Grid sections={sections} work={work} /> : null
+        sections.length > 0 ? (
+          <FolderDragContext>
+            <Grid sections={sections} work={work} />
+          </FolderDragContext>
+        ) : null
       }
       empty={
         sources.loading
@@ -90,11 +106,24 @@ function Grid({
       openCreateForm(project.id, device?.deviceId);
     }
   };
+  const folderTargets = new Map<string, ReactNode>();
+  // A folder's projects are all in its owner's section.
+  for (const { key, folder, rows } of sections)
+    if (folder !== undefined && rows[0])
+      folderTargets.set(
+        key,
+        <FolderSectionTarget
+          id={key}
+          section={rows[0].section}
+          folder={folder}
+        />,
+      );
   return (
     <ProjectGridLayoutView
       sections={sections}
       columns={columns}
       gridRef={gridRef}
+      folderTargets={folderTargets}
       tiles={
         new Map(
           sections.flatMap((section) =>
@@ -115,6 +144,23 @@ function Grid({
       }
     />
   );
+}
+
+function FolderSectionTarget({
+  id,
+  section,
+  folder,
+}: {
+  id: string;
+  section: string;
+  folder: string;
+}) {
+  const { setNodeRef, dropping } = useFolderDropTarget(id, {
+    kind: "folder",
+    section,
+    name: folder,
+  });
+  return <FolderSectionTargetView dropRef={setNodeRef} dropping={dropping} />;
 }
 
 // The narrowest a tile gets, in spacing steps (w-60), so it grows with
@@ -168,8 +214,18 @@ function ProjectTile({
   // A missing project's tile locates it, as its sidebar row does.
   const { relocating, onLocate, picker } = useLocateProject(group, missing);
   const lead = work?.lead;
+  // A pinned one leads the grid outside the folders. A filed one is
+  // dropped on through its folder's section.
+  const drag = useFolderDrag({
+    id: row.groupId,
+    project,
+    item: { section: row.section, groupKey: row.groupKey, folder: row.folder },
+    disabled: pinned,
+    droppable: row.folder === null,
+  });
   return (
     <ProjectTileView
+      drag={drag}
       row={row}
       work={work}
       showBadges={showBadges}

@@ -146,6 +146,8 @@ export function ProjectHeaderView({
     // fill (ProjectRow) is what says it can be picked.
     <button
       type="button"
+      // Dragged into a folder (ProjectFolder's folderDrop).
+      {...listeners}
       onClick={onToggle}
       onContextMenu={onContextMenu}
       // doubutsu stripes the row as one pill and has this sit it out.

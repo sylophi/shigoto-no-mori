@@ -85,6 +85,8 @@ type SidebarRowKinds =
       // folders of the section it is listed in, the ones it can move to.
       folder: string | null;
       folders: readonly string[];
+      // That section: an owner's, or the whole list's when it isn't split.
+      section: string;
     }
   // A local worktree. `mirror` names the peer device it is kept in
   // step with (a live mirror either way round), in which case the
@@ -173,6 +175,8 @@ type SidebarRowKinds =
   | {
       kind: "project-folder";
       key: string;
+      // The owner's section it is in (a project row's `section`).
+      section: string;
       foldKey: string;
       name: string;
       groupKeys: readonly string[];

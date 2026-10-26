@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { CSS, useCombinedRefs } from "@dnd-kit/utilities";
 import type { Project } from "@shigomori/contracts/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useSidebarMarks } from "@/hooks/config/useSidebarMarks";
@@ -9,6 +9,7 @@ import {
   type SidebarDeviceBadge,
 } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import { useLocateProject } from "./LocateProjectPicker";
+import { useFolderDrag } from "./ProjectFolder";
 import { ProjectGroupActions, useProjectGroup } from "./ProjectGroupActions";
 import { ProjectHeaderView } from "@shigomori/ui/views/sidebar/ProjectHeaderView.tsx";
 import { ProjectRowView } from "@shigomori/ui/views/sidebar/ProjectRowView.tsx";
@@ -32,6 +33,8 @@ interface ProjectRowProps {
   // Its folder, and the ones it can move to (the row's).
   folder: string | null;
   folders: readonly string[];
+  // The section it is listed in (SidebarRow's).
+  section: string;
   // The open project, alone in the tree: the row is its title. Else
   // the row is one of the list, to be picked.
   expanded: boolean;
@@ -64,6 +67,7 @@ export function ProjectRow({
   pinned,
   folder,
   folders,
+  section,
   expanded,
   folded,
   current,
@@ -85,15 +89,31 @@ export function ProjectRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: groupId, disabled: !reorderable });
+  } = useSortable({
+    id: groupId,
+    // A drop target too only while arranging, or it would take the
+    // filing drag's drops.
+    disabled: { draggable: !reorderable, droppable: !arrangeMode },
+  });
   const sortableStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
   const marks = useSidebarMarks();
   const missing = project.pathExists === false;
-  // One of the list, to go into.
-  const pickable = !arrangeMode && !expanded && !missing;
+  // Off arranging, a project on the list is dragged into folders. Not
+  // a pinned one, which leads the list outside them, nor the open
+  // project's title.
+  const filing = useFolderDrag({
+    id: groupId,
+    project,
+    item: { section, groupKey, folder },
+    disabled: arrangeMode || pinned || expanded,
+  });
+  const nodeRef = useCombinedRefs(setNodeRef, filing.setNodeRef);
+  // One of the list, to go into. Not while it is being dragged, which
+  // would read as pressing it.
+  const pickable = !arrangeMode && !expanded && !missing && !filing.isDragging;
   // This machine first, then every peer holding the same repo.
   const { group, icon } = useProjectGroup({ project, local, members });
   const { relocating, onLocate, picker } = useLocateProject(group, missing);
@@ -120,9 +140,15 @@ export function ProjectRow({
 
   return (
     <ProjectRowView
-      sortable={{ setNodeRef, style: sortableStyle, attributes, isDragging }}
+      sortable={{
+        setNodeRef: nodeRef,
+        style: sortableStyle,
+        attributes,
+        isDragging,
+      }}
       arrangeMode={arrangeMode}
       pickable={pickable}
+      dropping={filing.dropping}
       current={current}
       folded={folded}
       branches={branches}
@@ -143,7 +169,7 @@ export function ProjectRow({
           folded={folded}
           current={current}
           onToggle={onToggle}
-          listeners={listeners}
+          listeners={arrangeMode ? listeners : filing.listeners}
           onContextMenu={onHeaderContextMenu}
           arrangeMode={arrangeMode}
           reorderable={reorderable}

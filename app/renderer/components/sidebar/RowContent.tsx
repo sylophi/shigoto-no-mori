@@ -53,6 +53,7 @@ export function RowContent({
           pinned={row.pinned}
           folder={row.folder}
           folders={row.folders}
+          section={row.section}
           expanded={row.expanded}
           folded={row.folded}
           current={row.groupKey === currentGroupKey}

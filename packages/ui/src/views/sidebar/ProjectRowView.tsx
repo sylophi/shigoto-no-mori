@@ -11,6 +11,7 @@ export function ProjectRowView({
   sortable: { setNodeRef, style, attributes, isDragging },
   arrangeMode,
   pickable,
+  dropping = false,
   current,
   folded,
   branches,
@@ -19,7 +20,8 @@ export function ProjectRowView({
   actions,
   picker,
 }: {
-  // The row's place in the arranging drag (useSortable).
+  // The row's place in the arranging drag (useSortable), and in the
+  // list's drag into folders.
   sortable: {
     setNodeRef?: (node: HTMLElement | null) => void;
     style?: React.CSSProperties;
@@ -29,6 +31,8 @@ export function ProjectRowView({
   arrangeMode: boolean;
   // One of the list, to go into.
   pickable: boolean;
+  // A project dragged over it would land (ProjectFolder's folderDrop).
+  dropping?: boolean;
   // The page on screen belongs to this project.
   current: boolean;
   // On the inline list, whether the project is folded to the row.
@@ -67,6 +71,7 @@ export function ProjectRowView({
           // page's own row shows that.
           pickable &&
             (current && folded !== false ? "bg-accent" : "hover:bg-accent/60"),
+          dropping && "bg-primary/15 hover:bg-primary/15",
         )}
       >
         {header}
