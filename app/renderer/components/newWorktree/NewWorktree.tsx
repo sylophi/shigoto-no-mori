@@ -34,6 +34,7 @@ import {
   NewWorktreeBodyView,
   NewWorktreeFormView,
   type NewWorktreeMode,
+  type PrFolderSource,
 } from "@shigomori/ui/views/newWorktree/NewWorktreeView.tsx";
 
 // The source the form opens on. Gives way to "branch-from" when the
@@ -147,11 +148,12 @@ function NewWorktreeForm({
   // field and the folder name should show.
   const checkoutBranch = localBranchOf(base, remoteRefs);
   const [worktreeName, setWorktreeName] = useState("");
-  const [useBranchAsFolder, setUseBranchAsFolder] = useState(true);
+  const [useSourceName, setUseSourceName] = useState(false);
   const [selectedPr, setSelectedPr] = useState<PullRequestCandidate | null>(
     null,
   );
-  const [prFolderFrom, setPrFolderFrom] = useState<"pr" | "branch">("branch");
+  const [prFolderFrom, setPrFolderFrom] = useState<PrFolderSource>("branch");
+  const useBranchAsFolder = prMode ? prFolderFrom !== "custom" : useSourceName;
   const [cloneFiles, setCloneFiles] = useState(true);
   const candidates = usePullRequestCandidates(project.id, prMode);
   const verdict = candidates.data;
@@ -305,23 +307,16 @@ function NewWorktreeForm({
       useBranchAsFolder={useBranchAsFolder}
       prFolderFrom={prFolderFrom}
       onPrFolder={(next) => {
-        if (next === "custom") {
-          // Seed the editable field with whatever was just shown,
-          // so switching doesn't blow away the user's context.
-          setWorktreeName(folderName);
-          setUseBranchAsFolder(false);
-          return;
-        }
+        // Seed the editable field with whatever was just shown,
+        // so switching doesn't blow away the user's context.
+        if (next === "custom") setWorktreeName(folderName);
         setPrFolderFrom(next);
-        setUseBranchAsFolder(true);
       }}
       onUseSourceName={(next) => {
-        if (!next) {
-          // Seed the editable field with whatever was just shown,
-          // so toggling off doesn't blow away the user's context.
-          setWorktreeName(folderName);
-        }
-        setUseBranchAsFolder(next);
+        // Seed the editable field with whatever was just shown,
+        // so toggling off doesn't blow away the user's context.
+        if (!next) setWorktreeName(folderName);
+        setUseSourceName(next);
       }}
       worktreeName={worktreeName}
       onWorktreeName={setWorktreeName}
