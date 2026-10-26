@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, Loader2 } from "lucide-react";
 import { Kbd } from "../../primitives/kbd.tsx";
 
 // The foot of the changes page's file list (WorktreeDiff.tsx fills it):
@@ -44,8 +44,9 @@ export function CleanTreeMessageView({
   shortcut,
 }: {
   owed: string | null;
-  // What the commit keys run here, when they run anything, and the keys.
-  shortcut: { keys: string; does: string } | null;
+  // What the commit keys run here, when they run anything, and the keys,
+  // or while that runs, its words ("Pushing…").
+  shortcut: { keys: string; does: string; running?: string } | null;
 }) {
   return (
     <span className="flex flex-col items-center gap-2">
@@ -53,9 +54,18 @@ export function CleanTreeMessageView({
       <span className="text-foreground">No uncommitted changes</span>
       {owed && <span className="text-xs">{owed}</span>}
       {shortcut && (
-        <span className="flex items-center gap-1.5 text-xs">
-          <Kbd>{shortcut.keys}</Kbd>
-          {shortcut.does}
+        <span className="flex h-5 items-center gap-1.5 text-xs">
+          {shortcut.running ? (
+            <>
+              <Loader2 aria-hidden className="size-3.5 animate-spin" />
+              {shortcut.running}
+            </>
+          ) : (
+            <>
+              <Kbd>{shortcut.keys}</Kbd>
+              {shortcut.does}
+            </>
+          )}
         </span>
       )}
     </span>

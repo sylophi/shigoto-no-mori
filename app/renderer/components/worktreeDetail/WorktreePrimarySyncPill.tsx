@@ -2,6 +2,7 @@ import { ArrowDown } from "lucide-react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useMergePrimaryWorktree,
+  useRunningSyncs,
   useSyncWithPrimaryWorktree,
 } from "@/hooks/worktrees/useWorktreeSync";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -33,6 +34,7 @@ export function WorktreePrimarySyncPill({
 }) {
   const sync = useSyncWithPrimaryWorktree();
   const merge = useMergePrimaryWorktree();
+  const running = useRunningSyncs(worktree);
   const nav = useWorktreeNav();
   const { canCommand } = useCommandAccess();
   if (!canCommand) return null;
@@ -50,8 +52,11 @@ export function WorktreePrimarySyncPill({
         disabledReason ??
         `git fetch && git rebase ${branchName}, or a merge once commits here are pushed or a rebase conflicts`
       }
-      disabled={disabledReason !== undefined}
-      pending={sync.isPending || merge.isPending}
+      // Waits for any other sync, so two git commands can't run at once.
+      disabled={disabledReason !== undefined || running.length > 0}
+      pending={
+        running.includes("syncWithPrimary") || running.includes("mergePrimary")
+      }
       onClick={() =>
         sync.mutate(scope, {
           onError: (err) => {
