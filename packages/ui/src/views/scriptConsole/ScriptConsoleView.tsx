@@ -1,6 +1,6 @@
-// A script's console as a tab of the terminal drawer: the run's
-// terminal, with the command, how its run stands, and Run or Stop at the
-// end of the tab row.
+// A script's console as a tab of the terminal drawer: Run or Stop at the
+// end of the tab row, and under it the command and how its run stands
+// over the run's terminal.
 import type { ReactNode } from "react";
 import { Play, Square, Trash2 } from "lucide-react";
 import { ScriptStatusBadgeView } from "../shared/ScriptStatusBadgeView.tsx";
@@ -38,30 +38,10 @@ export function ScriptConsoleView({
   // no PTY of the host's sits behind them.
   const outputOnly = busy && !state.interactive;
   return (
-    <>
-      <TerminalTabToolbar>
-        <div className="flex min-w-0 items-center gap-3">
-          {command && (
-            <SimpleTooltip whenTruncated tip={command}>
-              <span className="truncate font-mono text-xs text-muted-foreground select-text">
-                {command}
-              </span>
-            </SimpleTooltip>
-          )}
-          <ScriptStatusBadgeView state={state} />
-          {outputOnly && (
-            <span className="truncate text-xs text-muted-foreground">
-              Output only: the CLI started this run.
-            </span>
-          )}
-        </div>
-        {onClear && (
-          <IconButton onClick={onClear} aria-label="Clear log">
-            <Trash2 className="size-3.5" />
-          </IconButton>
-        )}
-        {readOnlyNote === null &&
-          (busy ? (
+    <div className="flex h-full flex-col">
+      {readOnlyNote === null && (
+        <TerminalTabToolbar>
+          {busy ? (
             <Button
               variant="outline-destructive"
               size="xs"
@@ -76,26 +56,48 @@ export function ScriptConsoleView({
               <Play />
               {state.status === "idle" ? "Run" : "Run again"}
             </Button>
-          ))}
-      </TerminalTabToolbar>
-      {readOnlyNote !== null ? (
-        <CenteredMessage className="px-3 text-center">
-          {readOnlyNote}
-        </CenteredMessage>
-      ) : state.status === "idle" ? (
-        <CenteredMessage className="px-3">
-          No runs yet. Press Run to start.
-        </CenteredMessage>
-      ) : (
-        <div className="relative h-full">
-          {terminal}
-          {state.status === "starting" && !state.hasOutput && (
-            <div className="pointer-events-none absolute top-1 left-3 font-mono text-2xs text-muted-foreground">
-              Starting…
-            </div>
           )}
-        </div>
+        </TerminalTabToolbar>
       )}
-    </>
+      <div className="flex h-7 shrink-0 items-center gap-3 bg-muted/50 px-3">
+        <SimpleTooltip whenTruncated tip={command}>
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground select-text">
+            <span className="opacity-50 select-none">$ </span>
+            {command}
+          </span>
+        </SimpleTooltip>
+        {outputOnly && (
+          <span className="truncate text-xs text-muted-foreground">
+            Output only: the CLI started this run.
+          </span>
+        )}
+        <ScriptStatusBadgeView state={state} />
+        {onClear && (
+          <IconButton onClick={onClear} aria-label="Clear log">
+            <Trash2 className="size-3.5" />
+          </IconButton>
+        )}
+      </div>
+      <div className="relative min-h-0 flex-1">
+        {readOnlyNote !== null ? (
+          <CenteredMessage className="px-3 text-center">
+            {readOnlyNote}
+          </CenteredMessage>
+        ) : state.status === "idle" ? (
+          <CenteredMessage className="px-3">
+            No runs yet. Press Run to start.
+          </CenteredMessage>
+        ) : (
+          <>
+            {terminal}
+            {state.status === "starting" && !state.hasOutput && (
+              <div className="pointer-events-none absolute top-1 left-3 font-mono text-2xs text-muted-foreground">
+                Starting…
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   );
 }
