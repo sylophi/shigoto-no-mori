@@ -7,9 +7,9 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import { onGuide } from "../../electron/guide";
 
 export const guideHandlers: Handlers<typeof guideContract, HandlerContext> = {
-  start: ({ harness }, { windowId }) => {
+  start: (start, { windowId }) => {
     if (windowId === undefined) throw new Error("Only a window has a guide.");
-    return onGuide((guide) => guide.start(windowId, harness));
+    return onGuide((guide) => guide.start(windowId, start));
   },
   read: (_, { windowId }) =>
     windowId === undefined ? null : onGuide((guide) => guide.read(windowId)),

@@ -3,7 +3,7 @@ import type { Handlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
   setChords,
-  setGuideHarnesses,
+  setGuideChoices,
   setLaunchToolsEnabled,
 } from "../../electron/menu";
 
@@ -18,8 +18,8 @@ export const menuHandlers: Handlers<typeof menuContract, HandlerContext> = {
   setChords: ({ chords }, { windowId }) => {
     if (windowId !== undefined) setChords(windowId, chords);
   },
-  // The guide's harnesses installed on the calling window's device.
-  setGuideHarnesses: (harnesses, { windowId }) => {
-    if (windowId !== undefined) setGuideHarnesses(windowId, harnesses);
+  // The guide's choices on the calling window's device.
+  setGuideChoices: (choices, { windowId }) => {
+    if (windowId !== undefined) setGuideChoices(windowId, choices);
   },
 };

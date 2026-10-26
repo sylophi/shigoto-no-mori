@@ -708,7 +708,8 @@
   },
   "guide:start": {
     "payload": {
-      "harness": "codex"
+      "harness": "codex",
+      "terminal": "ghostty"
     }
   },
   "guide:stop": {},
@@ -877,8 +878,11 @@
       }
     }
   },
-  "menu:setGuideHarnesses": {
-    "payload": ["claude", "codex"]
+  "menu:setGuideChoices": {
+    "payload": {
+      "harnesses": ["claude", "codex"],
+      "terminals": [{ "id": "ghostty", "label": "Ghostty" }]
+    }
   },
   "menu:setLaunchToolsEnabled": {
     "payload": {
@@ -1485,7 +1489,10 @@
   },
   "nav:openSettings": {},
   "nav:showAround": {
-    "payload": "claude"
+    "payload": {
+      "harness": "claude",
+      "terminal": "iterm"
+    }
   },
   "nav:takeDeepLink": {
     "success": " "
@@ -1943,7 +1950,8 @@
   "session:guideLaunch": {
     "payload": {
       "session": "n80D$PJ9Ebstno7q",
-      "harness": "claude"
+      "harness": "claude",
+      "terminal": "terminal"
     }
   },
   "session:migrationRetry": {},

@@ -86,7 +86,22 @@ export function LauncherIconView({
     return <Sparkles className={className} />;
   }
 
-  const id = parseLauncherId(entry.id)?.id ?? entry.id;
+  return (
+    <AppIconView
+      id={parseLauncherId(entry.id)?.id ?? entry.id}
+      className={className}
+    />
+  );
+}
+
+// An app's icon by its catalog id (a harness's id names its app too).
+export function AppIconView({
+  id,
+  className = "size-4",
+}: {
+  id: string;
+  className?: string;
+}) {
   const appId = ICON_ALIAS.get(id) ?? id;
   const url = APP_ICON_URL.get(appId);
   if (url !== undefined) return <img src={url} alt="" className={className} />;

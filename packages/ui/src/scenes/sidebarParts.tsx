@@ -94,7 +94,7 @@ export function SidebarPartsScene() {
         <Part label="Guide menu">
           <StaticMenu>
             <SidebarGuideMenuItemsView
-              harnesses={["claude", "codex"]}
+              choices={{ harnesses: ["claude", "codex"], terminals: [] }}
               onPick={noop}
             />
           </StaticMenu>

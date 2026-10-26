@@ -16,7 +16,8 @@ import type { SidebarView } from "@shigomori/contracts/schemas";
 import { harnessLabel } from "@shigomori/contracts/harnesses";
 import {
   GUIDE_QUESTION,
-  type GuideHarness,
+  type GuideChoices,
+  type GuideStart,
 } from "@shigomori/contracts/modules/guide";
 import {
   DropdownMenu,
@@ -24,8 +25,12 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../primitives/dropdown-menu.tsx";
+import { AppIconView } from "../shared/LauncherIconView.tsx";
 import {
   SegmentedControl,
   type SegmentedOption,
@@ -174,11 +179,11 @@ export function SidebarNavActionsView({
 // The guide's menu, opening up from the footer: what the guide is for,
 // and an item for each agent installed here.
 export function SidebarGuideMenuView({
-  harnesses,
+  choices,
   onPick,
 }: {
-  harnesses: readonly GuideHarness[];
-  onPick: (harness: GuideHarness) => void;
+  choices: GuideChoices;
+  onPick: (start: GuideStart) => void;
 }) {
   return (
     <DropdownMenu>
@@ -191,27 +196,51 @@ export function SidebarGuideMenuView({
         </DropdownMenuTrigger>
       </SimpleTooltip>
       <DropdownMenuContent side="top" sideOffset={6}>
-        <SidebarGuideMenuItemsView harnesses={harnesses} onPick={onPick} />
+        <SidebarGuideMenuItemsView choices={choices} onPick={onPick} />
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
+// Each harness asks for a terminal when there are any to ask between.
 export function SidebarGuideMenuItemsView({
-  harnesses,
+  choices: { harnesses, terminals },
   onPick,
 }: {
-  harnesses: readonly GuideHarness[];
-  onPick: (harness: GuideHarness) => void;
+  choices: GuideChoices;
+  onPick: (start: GuideStart) => void;
 }) {
   return (
     <DropdownMenuGroup>
       <DropdownMenuLabel>{GUIDE_QUESTION}</DropdownMenuLabel>
-      {harnesses.map((harness) => (
-        <DropdownMenuItem key={harness} onClick={() => onPick(harness)}>
-          {harnessLabel(harness)}
-        </DropdownMenuItem>
-      ))}
+      {harnesses.map((harness) => {
+        const row = (
+          <>
+            <AppIconView id={harness} className="size-3.5" />
+            {harnessLabel(harness)}
+          </>
+        );
+        return terminals.length === 0 ? (
+          <DropdownMenuItem key={harness} onClick={() => onPick({ harness })}>
+            {row}
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuSub key={harness}>
+            <DropdownMenuSubTrigger>{row}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {terminals.map(({ id, label }) => (
+                <DropdownMenuItem
+                  key={id}
+                  onClick={() => onPick({ harness, terminal: id })}
+                >
+                  <AppIconView id={id} className="size-3.5" />
+                  {label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        );
+      })}
     </DropdownMenuGroup>
   );
 }

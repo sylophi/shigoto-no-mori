@@ -36,7 +36,7 @@ import {
   removeOurs,
   snakeCase,
 } from "./agentHooks.ts";
-import type { GuideHarness } from "@shigomori/contracts/modules/guide";
+import type { GuideStart } from "@shigomori/contracts/modules/guide";
 import type { AgentHarnessStatus } from "@shigomori/contracts/schemas/agents";
 import {
   cloneSourceCommand,
@@ -147,10 +147,9 @@ export class GuideHarnessMissing extends Schema.TaggedError<GuideHarnessMissing>
 // cloned from GitHub, or a dev build's own checkout.
 type GuideSource = { readonly tag: string } | { readonly checkout: string };
 
-// A guide to open: the harness, the session it drives the window on,
-// and the source it reads.
-export type GuideLaunch = {
-  readonly harness: GuideHarness;
+// A guide to open: the harness and terminal, the session it drives the
+// window on, and the source it reads.
+export type GuideLaunch = GuideStart & {
   readonly session: string;
   readonly source: GuideSource;
 };
@@ -630,6 +629,7 @@ const make = (binary: string) =>
       yield* open.inTerminal(
         folder,
         `${before}${guideCommand({ ...input, sm, dataDir })}`,
+        input.terminal,
       );
     });
 

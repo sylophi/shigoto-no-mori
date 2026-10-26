@@ -3,6 +3,7 @@
 // a custom command line. Each open counts toward the row's order. And
 // opening one of its files in the editor the device settings name.
 import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";
+import type { TerminalId } from "@shigomori/contracts/schemas/launchers";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -197,11 +198,13 @@ export class Open extends Context.Service<
       located: Worktrees.Located,
       tool: string,
     ) => Effect.Effect<Launchers.Launchable, UnknownLauncher | LaunchFailed>;
-    // Runs a command line in the user's chosen terminal, in a folder or
-    // a worktree (which the app's own terminal can take).
+    // Runs a command line in the user's chosen terminal, or `terminal`
+    // when given, in a folder or a worktree (which the app's own
+    // terminal can take).
     readonly inTerminal: (
       where: string | Worktrees.Located,
       command: string,
+      terminal?: TerminalId,
     ) => Effect.Effect<void, LaunchFailed>;
     // Opens a worktree's file, absolute or relative to its root, in the
     // editor the device settings name, or with its default app while
@@ -250,10 +253,10 @@ const make = Effect.gen(function* () {
     );
 
   // A terminal tool's command line, run in a folder or a worktree in
-  // the user's chosen terminal: a worktree's in the app when that is
-  // chosen and the app is the one opening, else the chosen terminal app
-  // (Terminal when that one isn't installed, or the app's own can't
-  // take it). `entries` are the launchers already read, which say
+  // `picked`, else the user's chosen terminal: a worktree's in the app
+  // when that is chosen and the app is the one opening, else the chosen
+  // terminal app (Terminal when that one isn't installed, or the app's
+  // own can't take it). `entries` are the launchers already read, which say
   // whether the chosen terminal is installed. Without them it is
   // looked up.
   const inTerminal = (
@@ -261,9 +264,10 @@ const make = Effect.gen(function* () {
     command: string,
     where: string | Worktrees.Located,
     entries?: ReadonlyArray<Launchers.Launchable>,
+    picked?: TerminalId,
   ) =>
     Effect.gen(function* () {
-      const chosen = yield* config.device("terminal");
+      const chosen = picked ?? (yield* config.device("terminal"));
       const appTerminal = yield* Effect.serviceOption(AppTerminal);
       if (
         chosen === "app" &&
@@ -424,8 +428,9 @@ const make = Effect.gen(function* () {
   const inTerminalAt = Effect.fn("Open.inTerminal")(function* (
     where: string | Worktrees.Located,
     command: string,
+    terminal?: TerminalId,
   ) {
-    yield* inTerminal("the terminal", command, where);
+    yield* inTerminal("the terminal", command, where, undefined, terminal);
   });
 
   // An executable's default app runs it, and a file no app claims (a

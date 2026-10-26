@@ -31,6 +31,7 @@ import type {
   GuideHarness,
   GuideKey,
   GuideReply,
+  GuideStart,
   GuideState,
 } from "@shigomori/contracts/modules/guide";
 import { USERS_ALONE } from "@shigomori/ui/lib/usersAlone.ts";
@@ -131,10 +132,9 @@ export class GuideWindows extends Context.Service<
       state: GuideState | null,
     ) => Effect.Effect<void>;
     // Opens the user's agent on a session (the host's session:guideLaunch).
-    readonly launch: (input: {
-      readonly session: string;
-      readonly harness: GuideHarness;
-    }) => Effect.Effect<void, CallFailure>;
+    readonly launch: (
+      input: GuideStart & { readonly session: string },
+    ) => Effect.Effect<void, CallFailure>;
     // Each window as it closes.
     readonly closed: Stream.Stream<number>;
   }
@@ -156,7 +156,7 @@ export class Guide extends Context.Service<
     // one it had. A launch that fails leaves none.
     readonly start: (
       windowId: number,
-      harness: GuideHarness,
+      start: GuideStart,
     ) => Effect.Effect<void, CallFailure>;
     // Ends the window's session, if it has one.
     readonly end: (windowId: number) => Effect.Effect<void>;
@@ -414,7 +414,7 @@ const make = Effect.gen(function* () {
 
   const start = Effect.fn("Guide.start")(function* (
     windowId: number,
-    harness: GuideHarness,
+    { harness, terminal }: GuideStart,
   ) {
     const previous = yield* byWindow(windowId);
     const session: Session = {
@@ -439,7 +439,7 @@ const make = Effect.gen(function* () {
     if (!(yield* Ref.get(sessions)).has(session.token)) return;
     yield* tell(session);
     yield* windows
-      .launch({ session: session.token, harness })
+      .launch({ session: session.token, harness, terminal })
       .pipe(Effect.onError(() => endSession(session)));
   }, starts.withPermits(1));
 

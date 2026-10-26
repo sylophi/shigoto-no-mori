@@ -1,9 +1,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Plus, SquareTerminal } from "lucide-react";
 import {
-  launcherIdFor,
+  installedTerminals,
   parseLauncherId,
-  TERMINAL_IDS,
   type DetectedLauncher,
 } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
@@ -57,11 +56,10 @@ export function LaunchToolsPanelView({
         </>
       ),
     },
-    ...TERMINAL_IDS.flatMap((id) => {
-      const d = availableTools.find((t) => t.id === launcherIdFor("app", id));
-      if (d === undefined) return [];
-      return [{ value: id, label: <ToolLabel entry={d} /> }];
-    }),
+    ...installedTerminals(detected).map(({ id, entry }) => ({
+      value: id,
+      label: <ToolLabel entry={entry} />,
+    })),
   ];
 
   // The installed editors, after the default app that opens a file

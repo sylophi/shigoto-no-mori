@@ -30,7 +30,7 @@ export const WEB_GITHUB_ID = "web:github";
 // slices at each call site.
 export type LauncherKind = "app" | "custom" | "web";
 
-export function launcherIdFor(kind: LauncherKind, id: string): string {
+function launcherIdFor(kind: LauncherKind, id: string): string {
   return `${kind}:${id}`;
 }
 
@@ -46,12 +46,26 @@ export function parseLauncherId(
 
 // The terminal apps terminal tools can open in, as launcher catalog ids,
 // in the order Settings lists them.
-export const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
+const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
 
 // The device setting `terminal`: the worktree's terminal drawer in the
 // app, or one of the terminal apps.
 export const TERMINAL_CHOICES = ["app", ...TERMINAL_IDS] as const;
 export type TerminalChoice = (typeof TERMINAL_CHOICES)[number];
+export const TerminalIdSchema = Schema.Literals(TERMINAL_IDS);
+export type TerminalId = typeof TerminalIdSchema.Type;
+
+// The terminal apps installed here, in TERMINAL_IDS order, with their
+// detected entries.
+export const installedTerminals = (
+  detected: readonly DetectedLauncher[],
+): { id: TerminalId; entry: DetectedLauncher }[] =>
+  TERMINAL_IDS.flatMap((id) => {
+    const entry = detected.find(
+      (d) => d.available && d.id === launcherIdFor("app", id),
+    );
+    return entry === undefined ? [] : [{ id, entry }];
+  });
 
 const WebLauncherSchema = Schema.Struct({
   kind: Schema.Literal("web"),
