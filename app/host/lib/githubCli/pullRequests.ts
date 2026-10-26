@@ -109,10 +109,7 @@ export const readProjectPullRequests = Effect.fnUntraced(function* (
     { concurrency: 4 },
   );
   if (open === null || recent === null || stackOf === null) return null;
-  const byNumber = new Map(
-    [...open, ...recent].map((item) => [item.number, item]),
-  );
-  const rows = [...byNumber.values()].toSorted((a, b) => b.number - a.number);
+  const rows = [...open, ...recent].toSorted((a, b) => b.number - a.number);
   const map = new Map<string, PullRequest>();
   for (const item of rows) {
     if (map.has(item.headRefName)) continue;
