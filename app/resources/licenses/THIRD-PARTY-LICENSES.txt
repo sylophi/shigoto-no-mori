@@ -9705,7 +9705,7 @@ Apache License
    limitations under the License.
 
 --------------------------------------------------------------------------------
-@xterm/addon-fit@0.11.0
+@xterm/addon-fit@0.12.0-beta.311
 License: MIT
 Repository: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-fit
 License file: @xterm/addon-fit/LICENSE
@@ -9732,7 +9732,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-@xterm/addon-unicode-graphemes@0.4.0
+@xterm/addon-unicode-graphemes@0.5.0-beta.310
 License: MIT
 Repository: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-unicode-graphemes
 License file: @xterm/addon-unicode-graphemes/LICENSE
@@ -9759,7 +9759,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-@xterm/addon-web-links@0.12.0
+@xterm/addon-web-links@0.13.0-beta.310
 License: MIT
 Repository: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-web-links
 License file: @xterm/addon-web-links/LICENSE
@@ -9786,7 +9786,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-@xterm/addon-webgl@0.19.0
+@xterm/addon-webgl@0.20.0-beta.309
 License: MIT
 Repository: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-webgl
 License file: @xterm/addon-webgl/LICENSE
@@ -9813,7 +9813,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-@xterm/xterm@6.0.0
+@xterm/xterm@6.1.0-beta.315
 License: MIT
 Repository: https://github.com/xtermjs/xterm.js
 License file: @xterm/xterm/LICENSE

@@ -14,7 +14,8 @@ import {
 } from "@shigomori/ui/lib/keymap.ts";
 import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { KeyboardSectionView } from "@shigomori/ui/views/settings/KeyboardSectionView.tsx";
-import { isMac, keymapOf, useKeymapRecording } from "@/hooks/ui/useKeymap";
+import { isMac } from "@shigomori/ui/lib/platform.ts";
+import { keymapOf, useKeymapRecording } from "@/hooks/ui/useKeymap";
 import { useHasLocalHost } from "@/lib/localHost";
 
 export function KeyboardSection({

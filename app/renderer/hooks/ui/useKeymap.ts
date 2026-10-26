@@ -15,14 +15,11 @@ import {
   KEYMAP_ACTIONS,
   resolveKeymap,
 } from "@shigomori/ui/lib/keymap.ts";
+import { isMac } from "@shigomori/ui/lib/platform.ts";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { isEditableTarget, isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
-
-// ⌘ or Ctrl: which key `Mod` is here. A phone or tablet browser counts
-// as a Mac, whose glyphs its keyboards print.
-export const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 
 // `stored` (the client config's keybindings, or a form's) over the
 // defaults, for this window.
@@ -115,8 +112,8 @@ const CTRL_TWIN_ACTIONS = new Set(
 // every key but a `Mod` chord and its Ctrl twin, which the action may
 // still leave to the field (Enter's, arrows' and the editing keys'
 // meanings are the field's), and a focused terminal every key a shell
-// can be sent: it gives up ⌘, which never reaches one, and the
-// terminal's own toggle. Those two are claimed in the capture phase,
+// can be sent: it gives up a ⌘ chord bound here and the terminal's own
+// toggle. Those two are claimed in the capture phase,
 // before the terminal sees them; the rest wait for the bubble, so a
 // control that spent the key (an editor's Escape) keeps it.
 export function useKeymapListener(): void {
