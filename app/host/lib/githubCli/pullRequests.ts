@@ -46,12 +46,12 @@ const decodeGhPrList = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Array(GhPrListItemSchema)),
 );
 
-// Every open PR, and the newest of all states for the merged and closed
-// ones: a busy repo's open PRs fall out of its newest 200.
+// Open PRs read apart from closed ones (gh's "closed" is merged too), so
+// a busy repo's newer closed PRs don't crowd out its older open ones.
 const OPEN_PR_LIMIT = 1000;
-const RECENT_PR_LIMIT = 200;
+const CLOSED_PR_LIMIT = 200;
 
-const runGhPrList = (cwd: string, state: "open" | "all", limit: number) =>
+const runGhPrList = (cwd: string, state: "open" | "closed", limit: number) =>
   gh(
     [
       "pr",
@@ -93,14 +93,15 @@ function checkedOutMark(pr: {
 
 // The project's PRs by head branch, or null when gh failed (the
 // network, its output). Newest first, so a reused branch keeps its
-// newest own PR.
+// newest own PR. A PR in both lists closed between the two reads: its
+// closed copy goes first.
 export const readProjectPullRequests = Effect.fnUntraced(function* (
   cwd: string,
 ) {
-  const [open, recent, stackOf, checkedOut] = yield* Effect.all(
+  const [open, closed, stackOf, checkedOut] = yield* Effect.all(
     [
       runGhPrList(cwd, "open", OPEN_PR_LIMIT),
-      runGhPrList(cwd, "all", RECENT_PR_LIMIT),
+      runGhPrList(cwd, "closed", CLOSED_PR_LIMIT),
       Effect.flatMap(GitHub.GitHub, (github) => github.stacks(cwd)).pipe(
         Effect.orElseSucceed(() => null),
       ),
@@ -108,8 +109,8 @@ export const readProjectPullRequests = Effect.fnUntraced(function* (
     ],
     { concurrency: 4 },
   );
-  if (open === null || recent === null || stackOf === null) return null;
-  const rows = [...open, ...recent].toSorted((a, b) => b.number - a.number);
+  if (open === null || closed === null || stackOf === null) return null;
+  const rows = [...closed, ...open].toSorted((a, b) => b.number - a.number);
   const map = new Map<string, PullRequest>();
   for (const item of rows) {
     if (map.has(item.headRefName)) continue;
