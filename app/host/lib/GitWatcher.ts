@@ -26,6 +26,10 @@
 // worktree's changed files), and nothing else moves. Which working
 // trees a project has is read off its git directory (the main checkout,
 // and each `worktrees/<name>/gitdir`), again whenever that changes.
+// An edit git ignores (a build's output, dependencies, a running app's
+// logs and databases) moves nothing a row shows and is no signal: a
+// tree that never stops writing one would otherwise have its project's
+// rows read again, on every device viewing it, once a second for good.
 //
 // A checkout's `index` written (the main checkout's or a worktree's)
 // is a third, host only (indexWritten), for the views of what it holds:
@@ -65,11 +69,13 @@ import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import type { Project } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
+import { splitZ } from "@shigomori/engine/gitParse";
 import { loadProjects } from "@host/lib/projects";
 import { watchPath } from "@host/lib/watchPath";
 
 const DEBOUNCE_MS = 300;
 const EDIT_WINDOW = "1 second";
+const VERDICTS_KEPT = 10_000;
 const BACKSTOP = Duration.seconds(10);
 // A project's reconcile that takes longer is a volume that stalls.
 const STEP_TIMEOUT = Duration.seconds(5);
@@ -98,9 +104,11 @@ const INDEX = /^(worktrees\/[^/]+\/)?index$/;
 const GIT_SEGMENT = /(^|\/)\.git(\/|$)/;
 
 function isWorkingTreeChange(file: string): boolean {
-  const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
-  return !GIT_SEGMENT.test(normalized);
+  return !GIT_SEGMENT.test(file);
 }
+
+const isGitignore = (file: string) =>
+  file === ".gitignore" || file.endsWith("/.gitignore");
 
 // The allowlist: the loop-safety of this watcher rests on it.
 function isRelevantGitPath(file: string): boolean {
@@ -329,6 +337,7 @@ type Moved = "git" | "index" | undefined;
 const make = (deps: GitWatcherDeps) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const git = yield* Git.Git;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     // Each watched project's git directory and the fiber watching it.
     const watches = yield* FiberMap.make<string>();
@@ -420,23 +429,79 @@ const make = (deps: GitWatcherDeps) =>
       });
     };
 
+    // The paths of `asked` git ignores in `tree`, one spawn for them all.
+    const ignoredOf = (tree: string, asked: ReadonlySet<string>) =>
+      asked.size === 0
+        ? Effect.succeed(new Set<string>())
+        : git
+            .run(tree, ["check-ignore", "--stdin", "-z"], {
+              stdin: [...asked].join("\0"),
+              okExitCodes: [1],
+            })
+            .pipe(Effect.map((out) => new Set(splitZ(out))));
+
+    // Whether a window's edits (tree-relative, `/`-separated) hold one
+    // git doesn't ignore. Asked a folder level at a time, so a burst
+    // under one ignored folder (an install) is one short question, and
+    // the verdicts kept until a .gitignore changes: past a cap too,
+    // since an editor's saves name a fresh temp file each time. A failed
+    // question counts as an edit.
+    const anyUnignored = (
+      tree: string,
+      verdicts: Map<string, boolean>,
+      edits: ReadonlyArray<string>,
+    ) =>
+      Effect.gen(function* () {
+        const ignoreChanged = edits.some(isGitignore);
+        if (ignoreChanged || verdicts.size > VERDICTS_KEPT) verdicts.clear();
+        if (ignoreChanged) return true;
+        let left = edits;
+        for (let depth = 1; left.length > 0; depth += 1) {
+          const prefixes = left.map((file) =>
+            file.split("/").slice(0, depth).join("/"),
+          );
+          const ignored = yield* ignoredOf(
+            tree,
+            new Set(prefixes.filter((prefix) => !verdicts.has(prefix))),
+          );
+          const deeper: string[] = [];
+          for (const [i, file] of left.entries()) {
+            const prefix = prefixes[i] ?? file;
+            const isIgnored = verdicts.get(prefix) ?? ignored.has(prefix);
+            verdicts.set(prefix, isIgnored);
+            if (isIgnored) continue;
+            if (prefix === file) return true;
+            deeper.push(file);
+          }
+          left = deeper;
+        }
+        return false;
+      }).pipe(Effect.orElseSucceed(() => true));
+
     // One working tree's edits: a burst's first change opens a window,
     // and the window's end is one signal, so a tree that never goes
     // quiet (a build writing its output) still reports, at most once a
     // window. A tree that goes away drops its watch, which the next read
     // of the project's trees starts again if the tree is back.
-    const watchTree = (projectId: string, tree: string) =>
-      watchOf(tree).pipe(
+    const watchTree = (projectId: string, tree: string) => {
+      const verdicts = new Map<string, boolean>();
+      return watchOf(tree).pipe(
         Stream.tap(() =>
           Effect.sync(() => failing.delete(treeKey(projectId, tree))),
         ),
-        Stream.filter((event) => isWorkingTreeChange(event.path)),
+        Stream.map((event) => event.path.replaceAll("\\", "/")),
+        Stream.filter(isWorkingTreeChange),
         Stream.groupedWithin(Number.POSITIVE_INFINITY, EDIT_WINDOW),
-        Stream.runForEach(() =>
-          Effect.sync(() => deps.onFilesChanged(projectId)),
+        Stream.runForEach((edits) =>
+          anyUnignored(tree, verdicts, edits).pipe(
+            Effect.map((unignored) => {
+              if (unignored) deps.onFilesChanged(projectId);
+            }),
+          ),
         ),
         Effect.ignore,
       );
+    };
 
     // The project's working trees watched, and only `wanted`.
     const followTrees = (projectId: string, wanted: ReadonlySet<string>) =>
