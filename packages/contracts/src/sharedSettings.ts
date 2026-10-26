@@ -20,6 +20,7 @@ export const EMPTY_SHARED_SETTINGS: SharedSettingsDoc = { entries: {} };
 
 const PINNED_PROJECT_PREFIX = "pinnedProject/";
 const WORKTREE_SORT_PREFIX = "worktreeSort/";
+const PROJECT_FOLDER_PREFIX = "projectFolder/";
 
 // The keys this build reads. Copies hold and forward any key, so a
 // name here is a promise to every build that ever synced it: reuse one
@@ -35,6 +36,8 @@ export const sharedSettingKeys = {
   worktreeSort: (groupKey: string) => `${WORKTREE_SORT_PREFIX}${groupKey}`,
   // true, or null once unpinned.
   pinnedProject: (groupKey: string) => `${PINNED_PROJECT_PREFIX}${groupKey}`,
+  // The name of the folder the project is in, or null once taken out.
+  projectFolder: (groupKey: string) => `${PROJECT_FOLDER_PREFIX}${groupKey}`,
   // Prefixes, one per line.
   hiddenWorktreePrefixes: "hiddenWorktreePrefixes",
   // Prefixes, one per line.
@@ -261,10 +264,20 @@ export function pinnedProjectKeys(doc: SharedSettingsDoc): string[] {
     .toSorted();
 }
 
-export function worktreeSortValues(doc: SharedSettingsDoc): [string, string][] {
-  return entriesUnder(doc, WORKTREE_SORT_PREFIX).filter(
+const stringEntriesUnder = (doc: SharedSettingsDoc, prefix: string) =>
+  entriesUnder(doc, prefix).filter(
     (entry): entry is [string, string] => typeof entry[1] === "string",
   );
+
+// The folder each project is in, by group key.
+export function projectFolders(doc: SharedSettingsDoc): [string, string][] {
+  return stringEntriesUnder(doc, PROJECT_FOLDER_PREFIX).toSorted(([a], [b]) =>
+    a.localeCompare(b),
+  );
+}
+
+export function worktreeSortValues(doc: SharedSettingsDoc): [string, string][] {
+  return stringEntriesUnder(doc, WORKTREE_SORT_PREFIX);
 }
 
 // `transact` stores `next`'s answer atomically unless it is undefined.

@@ -27,6 +27,7 @@ import { SimpleTooltip } from "../../../primitives/tooltip.tsx";
 import { cn } from "../../../lib/utils.ts";
 import type { ProjectListRow, ProjectSection } from "../sidebarRow.ts";
 import { FooterRow } from "../../../primitives/footer-row.tsx";
+import { FolderIconView } from "../../shared/ProjectIconView.tsx";
 
 // The button itself: creating outright, or the list's trigger.
 export function NewWorktreeButtonView({
@@ -129,6 +130,12 @@ export function CreateMenuListView({
             heading={
               section.label === null ? undefined : (
                 <div className={cn(HEADING_CLASS, "truncate")}>
+                  {section.folder !== undefined && (
+                    <FolderIconView
+                      name={section.folder}
+                      className="mr-1.5 inline align-[-0.2em]"
+                    />
+                  )}
                   {section.label}
                 </div>
               )

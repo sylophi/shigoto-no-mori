@@ -14,6 +14,7 @@ import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllowAgentWorking } from "@/hooks/config/useSidebarMarks";
 import { usePinnedProjects } from "@/hooks/sharedSettings/usePinnedProjects";
+import { useProjectFolders } from "@/hooks/sharedSettings/useProjectFolders";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { type LocalSide, localSidesWith } from "@shigomori/ui/lib/forest.ts";
@@ -38,6 +39,7 @@ export function useForestSources({
   const sortMode = useProjectSort();
   const groupByOwner = useGroupProjectsByOwner();
   const pinned = usePinnedProjects();
+  const folders = useProjectFolders();
   // The inbox's and the queries' order (the tree re-sorts its groups
   // with projectGroupOrder). Drag-reorder still operates on the stored
   // order (`projects`), which is safe because dragging is gated to
@@ -123,6 +125,7 @@ export function useForestSources({
       remote: remoteItems,
       sortMode,
       pinned,
+      folders,
     }),
     local,
     localSides,

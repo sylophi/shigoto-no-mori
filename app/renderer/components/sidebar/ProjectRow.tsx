@@ -25,9 +25,13 @@ interface ProjectRowProps {
   // (ids derive from the checkout path), so this is what stays unique
   // across the list.
   groupId: string;
-  // What the group goes by (projectGroupKey), which its pin is kept by.
+  // What the group goes by (projectGroupKey), which its pin and folder
+  // are kept by.
   groupKey: string;
   pinned: boolean;
+  // Its folder, and the ones it can move to (the row's).
+  folder: string | null;
+  folders: readonly string[];
   // The open project, alone in the tree: the row is its title. Else
   // the row is one of the list, to be picked.
   expanded: boolean;
@@ -58,6 +62,8 @@ export function ProjectRow({
   groupId,
   groupKey,
   pinned,
+  folder,
+  folders,
   expanded,
   folded,
   current,
@@ -153,6 +159,8 @@ export function ProjectRow({
           identity={project.identity}
           groupKey={groupKey}
           pinned={pinned}
+          folder={folder}
+          folders={folders}
           members={group}
           // The open project's row is the tree's title, and wears
           // its actions at rest.

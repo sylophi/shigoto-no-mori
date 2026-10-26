@@ -20,6 +20,7 @@ import {
   DeviceFilterBarView,
 } from "../views/sidebar/DeviceFilterBarView.tsx";
 import { FoldHeaderView } from "../views/sidebar/FoldHeaderView.tsx";
+import { ProjectFolderHeaderView } from "../views/sidebar/ProjectFolderView.tsx";
 import { buildInboxRows } from "../views/sidebar/inbox/buildInboxRows.ts";
 import { InboxRowView } from "../views/sidebar/inbox/InboxRowView.tsx";
 import { NewWorktreeButtonView } from "../views/sidebar/inbox/NewWorktreeButtonView.tsx";
@@ -220,6 +221,7 @@ function treeModel(shell: SceneShell, openKey: string | null) {
       remote,
       sortMode: "manual",
       pinned: new Set(),
+      folders: new Map(),
     }),
     openShelves: {
       agentWorking: new Set(),
@@ -231,6 +233,7 @@ function treeModel(shell: SceneShell, openKey: string | null) {
     byPrefix: null,
     arrangeMode: false,
     byOwner: null,
+    shutFolders: new Set(),
     remote,
     mirrors: [],
     deviceBadges: deviceBadges(shell),
@@ -257,6 +260,7 @@ export function sceneGrid() {
       remote,
       sortMode: "manual",
       pinned: new Set(),
+      folders: new Map(),
     }),
     hiddenPrefixes: [],
     allowAgentWorking: MARKS.allowAgentWorking,
@@ -353,6 +357,17 @@ function SceneRow({
           count={row.count}
           expanded={row.expanded}
           onToggle={noop}
+        />
+      );
+    case "project-folder":
+      return (
+        <ProjectFolderHeaderView
+          name={row.name}
+          count={row.count}
+          expanded={row.expanded}
+          onToggle={noop}
+          onRename={noop}
+          onUngroup={noop}
         />
       );
     case "worktree-group":

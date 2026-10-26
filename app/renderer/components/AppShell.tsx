@@ -11,6 +11,7 @@
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
+import { FolderNameDialog } from "@/components/sidebar/ProjectFolder";
 import { GuideBand } from "@/components/guide/GuideBand";
 import { HostBand } from "@/components/HostBand";
 import { GuideMenu } from "@/components/guide/GuideMenu";
@@ -160,6 +161,7 @@ export function AppShell() {
           {phone && <ForestKeepalive />}
           <WorktreePalette />
           <AddProjectModal />
+          <FolderNameDialog />
           {hasLocalHost && <GuideCallout />}
           {hasLocalHost && <GuideMenu />}
         </>

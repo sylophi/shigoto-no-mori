@@ -1,6 +1,7 @@
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import { InboxRow } from "./inbox/InboxRow";
 import { FoldHeaderView } from "@shigomori/ui/views/sidebar/FoldHeaderView.tsx";
+import { ProjectFolderHeader } from "./ProjectFolder";
 import { ProjectRow } from "./ProjectRow";
 import { ShelfRowView } from "@shigomori/ui/views/sidebar/ShelfRowView.tsx";
 import { WorktreeRow } from "./WorktreeRow";
@@ -20,6 +21,7 @@ interface RowContentProps {
   onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   onToggleOwner: (ownerKey: string) => void;
+  onToggleFolder: (foldKey: string) => void;
   onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
   onToggleInboxGroup: (prefix: string) => void;
   currentGroupKey: string | undefined;
@@ -33,6 +35,7 @@ export function RowContent({
   onToggleShelved,
   onToggleShelf,
   onToggleOwner,
+  onToggleFolder,
   onToggleWorktreeGroup,
   onToggleInboxGroup,
   currentGroupKey,
@@ -48,6 +51,8 @@ export function RowContent({
           groupId={row.groupId}
           groupKey={row.groupKey}
           pinned={row.pinned}
+          folder={row.folder}
+          folders={row.folders}
           expanded={row.expanded}
           folded={row.folded}
           current={row.groupKey === currentGroupKey}
@@ -66,6 +71,13 @@ export function RowContent({
           count={row.count}
           expanded={row.expanded}
           onToggle={() => onToggleOwner(row.ownerKey)}
+        />
+      );
+    case "project-folder":
+      return (
+        <ProjectFolderHeader
+          row={row}
+          onToggle={() => onToggleFolder(row.foldKey)}
         />
       );
     case "worktree-group":
