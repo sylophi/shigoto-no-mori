@@ -5,7 +5,9 @@ import {
   useMergeUpstreamWorktree,
   useOverwriteWorktree,
   usePushForceWorktree,
+  useRunningSyncs,
   useSyncMoveMutations,
+  type RunningSync,
 } from "@/hooks/worktrees/useWorktreeSync";
 import { worktreeSyncView } from "@shigomori/ui/lib/syncState.ts";
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -34,12 +36,11 @@ export function WorktreeSyncPill({
   const { state, move, held, waiting } = worktreeSyncView(worktree);
   const input = { projectId: worktree.projectId, worktreeId: worktree.id };
   const mutations = useSyncMoveMutations();
-  // Held here, not in PickSide: a dirty tree swaps PickSide for the
-  // held hint, and an overwrite still running must keep both buttons
-  // disabled when it comes back.
-  const pushForce = usePushForceWorktree();
-  const overwrite = useOverwriteWorktree();
+  // Held here, not in MergeUpstream: a merge that stops on conflicts
+  // dirties the tree, which swaps it for the held hint before its answer
+  // lands, and the way to the diff has to outlive that.
   const mergeUpstream = useMergeUpstreamWorktree();
+  const running = useRunningSyncs(worktree);
   const { canCommand } = useCommandAccess();
 
   if (!canCommand) return null;
@@ -51,11 +52,7 @@ export function WorktreeSyncPill({
 
   // Every move in this pill waits for the others, so a click here can't
   // start one git command beside another.
-  const busy =
-    pushForce.isPending ||
-    overwrite.isPending ||
-    mergeUpstream.isPending ||
-    Object.values(mutations).some((m) => m.isPending);
+  const busy = running.length > 0;
 
   switch (state.kind) {
     case "detached":
@@ -66,7 +63,6 @@ export function WorktreeSyncPill({
     case "behind":
     case "pullAndPush": {
       if (!move) return null;
-      const mutation = mutations[move.key];
       const button = (
         <SyncActionButtonView
           tone={move.tone}
@@ -74,8 +70,8 @@ export function WorktreeSyncPill({
           label={compact ? move.compactLabel : move.label}
           tip={move.disabledReason ?? move.tip}
           disabled={move.disabledReason !== undefined || busy}
-          pending={mutation.isPending}
-          onClick={() => mutation.mutate(input)}
+          pending={running.includes(move.key)}
+          onClick={() => mutations[move.key].mutate(input)}
         />
       );
       // A split that merges cleanly can still pick a side instead.
@@ -88,8 +84,7 @@ export function WorktreeSyncPill({
           worktree={worktree}
           lead={button}
           busy={busy}
-          pushForce={pushForce}
-          overwrite={overwrite}
+          running={running}
           ahead={state.ahead}
           behind={state.behind}
           compact={compact}
@@ -109,11 +104,11 @@ export function WorktreeSyncPill({
               mergeUpstream={mergeUpstream}
               behind={state.behind}
               busy={busy}
+              pending={running.includes("mergeUpstream")}
             />
           }
           busy={busy}
-          pushForce={pushForce}
-          overwrite={overwrite}
+          running={running}
           ahead={state.ahead}
           behind={state.behind}
           compact={compact}
@@ -130,18 +125,20 @@ function MergeUpstream({
   mergeUpstream,
   behind,
   busy,
+  pending,
 }: {
   input: { projectId: string; worktreeId: string };
   mergeUpstream: ReturnType<typeof useMergeUpstreamWorktree>;
   behind: number;
   busy: boolean;
+  pending: boolean;
 }) {
   const nav = useWorktreeNav();
   return (
     <MergeUpstreamView
       behind={behind}
       busy={busy}
-      pending={mergeUpstream.isPending}
+      pending={pending}
       onClick={() =>
         mergeUpstream.mutate(input, {
           onSuccess: ({ stopped }) => {
@@ -157,8 +154,7 @@ function PickSide({
   worktree,
   lead,
   busy,
-  pushForce,
-  overwrite,
+  running,
   ahead,
   behind,
   compact,
@@ -166,13 +162,14 @@ function PickSide({
   worktree: Worktree;
   lead: ReactNode;
   busy: boolean;
-  pushForce: ReturnType<typeof usePushForceWorktree>;
-  overwrite: ReturnType<typeof useOverwriteWorktree>;
+  running: RunningSync[];
   ahead: number;
   behind: number;
   compact: boolean;
 }) {
   const input = { projectId: worktree.projectId, worktreeId: worktree.id };
+  const pushForce = usePushForceWorktree();
+  const overwrite = useOverwriteWorktree();
   // Both actions throw away one side's commits, which is more
   // destructive than "Delete worktree" (that one keeps the branch). Same
   // two-step confirm, and arming one disarms the other so a stray second
@@ -188,7 +185,7 @@ function PickSide({
       lead={lead}
       pushForce={{
         armed: confirmPushForce.armed,
-        pending: pushForce.isPending,
+        pending: running.includes("pushForce"),
         onClick: () => {
           confirmOverwrite.reset();
           confirmPushForce.trigger(() => pushForce.mutate(input));
@@ -196,7 +193,7 @@ function PickSide({
       }}
       overwrite={{
         armed: confirmOverwrite.armed,
-        pending: overwrite.isPending,
+        pending: running.includes("overwrite"),
         onClick: () => {
           confirmPushForce.reset();
           confirmOverwrite.trigger(() => overwrite.mutate(input));

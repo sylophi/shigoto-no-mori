@@ -31,7 +31,10 @@ import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { worktreeSyncView } from "@shigomori/ui/lib/syncState.ts";
-import { useSyncMoveMutations } from "@/hooks/worktrees/useWorktreeSync";
+import {
+  useRunningSyncs,
+  useSyncMoveMutations,
+} from "@/hooks/worktrees/useWorktreeSync";
 import {
   changeKey,
   isUntracked,
@@ -386,20 +389,23 @@ function WorktreeChanges({
 // The commit keys (⌘↩) on a page with nothing to commit: run the
 // branch's send, a push or a publish, the move the commit box's keys
 // lead to anyway. Only those two: they send commits and touch nothing
-// here. Answers with the keys and what they run ("to push"), or null
-// while they run nothing.
+// here. Answers with the keys and what they run ("to push"), and its
+// words while it runs, or null while they run nothing.
 function usePushShortcut(
   worktree: Worktree,
   enabled: boolean,
-): { keys: string; does: string } | null {
+): { keys: string; does: string; running?: string } | null {
   const mutations = useSyncMoveMutations();
+  const running = useRunningSyncs(worktree);
   const keys = useBinding("commit");
   const move = worktreeSyncView(worktree).move;
+  // Another sync on the worktree holds the send until it's done.
   const send =
     enabled &&
     move &&
     (move.key === "push" || move.key === "publish") &&
-    move.disabledReason === undefined
+    move.disabledReason === undefined &&
+    running.every((other) => other === move.key)
       ? move
       : null;
   const mutation = send ? mutations[send.key] : null;
@@ -407,14 +413,20 @@ function usePushShortcut(
   useKeymapAction(
     "commit",
     () => {
-      if (!mutation || mutation.isPending) return false;
+      if (!mutation || running.length > 0) return false;
       mutation.mutate(scope);
     },
     { enabled: mutation !== null },
   );
   if (!send) return null;
+  const push = send.key === "push";
   return {
     keys: keys.label,
-    does: send.key === "push" ? "to push" : "to publish",
+    does: push ? "to push" : "to publish",
+    running: running.includes(send.key)
+      ? push
+        ? "Pushing…"
+        : "Publishing…"
+      : undefined,
   };
 }
