@@ -37,16 +37,14 @@ import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useDeepLinks } from "@/hooks/ui/useDeepLinks";
 import { useEscapeGoesBack } from "@/hooks/ui/useEscapeGoesBack";
 import { useKeymapListener } from "@/hooks/ui/useKeymap";
-import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
+import { startSidebarResize } from "@/lib/sidebarResize";
+import { useSidebarWidth } from "@/store/layout";
 import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { useHasLocalHost } from "@/lib/localHost";
 import {
   AppShellView,
   PhoneBackBarView,
-  SIDEBAR_DEFAULT,
-  SIDEBAR_MAX,
-  SIDEBAR_MIN,
 } from "@shigomori/ui/views/AppShellView.tsx";
 import { isTerminalsWindow } from "@shigomori/contracts/worktreePage";
 import { MIGRATION_PATH } from "@/lib/routePaths";
@@ -75,12 +73,7 @@ export function AppShell() {
   useEscapeGoesBack();
   // The forest tab a stacked page returns to on a phone.
   const forestTab = forestTabFor(useSidebarView());
-  const sidebar = useResizableWidth({
-    storageKey: "sidebar.width",
-    min: SIDEBAR_MIN,
-    max: SIDEBAR_MAX,
-    fallback: SIDEBAR_DEFAULT,
-  });
+  const sidebarWidth = useSidebarWidth();
 
   usePageCanvas(phone);
 
@@ -124,8 +117,8 @@ export function AppShell() {
       phone={phone}
       hasLocalHost={hasLocalHost}
       sidebar={<Sidebar />}
-      sidebarWidth={sidebar.width}
-      onResizeStart={sidebar.onMouseDown}
+      sidebarWidth={sidebarWidth}
+      onResizeStart={startSidebarResize}
       // Updates found on this machine or a peer, announced once each,
       // and this machine's last install when it failed.
       toasts={

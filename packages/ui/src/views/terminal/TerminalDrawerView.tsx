@@ -42,13 +42,13 @@ export function TerminalDrawerView({
       style={
         side
           ? { width: size ?? "40%", maxWidth: `calc(100% - ${PAGE_ROOM}px)` }
-          : { height: size ?? "50dvh" }
+          : { height: size ?? "50dvh", maxHeight: `${MAX_SHARE * 100}dvh` }
       }
       className={cn(
         "relative flex shrink-0 flex-col border-border bg-card phone:absolute phone:inset-0 phone:z-30",
         side
           ? "border-l phone:w-auto! phone:max-w-none! phone:border-l-0"
-          : "border-t phone:h-auto! phone:border-t-0",
+          : "border-t phone:h-auto! phone:max-h-none! phone:border-t-0",
       )}
     >
       <div

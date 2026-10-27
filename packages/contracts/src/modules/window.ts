@@ -48,6 +48,8 @@ export const windowContract = defineContract(
   invoke("notify", NotifyPayloadSchema, VoidSchema),
   invoke("hostAddress", VoidSchema, HostAddressSchema),
   invoke("open", RoutePayloadSchema, VoidSchema),
+  // Forgets the sizes the shell keeps: the terminals window's.
+  invoke("resetLayout", VoidSchema, VoidSchema),
   // Reopened on at the next start.
   invoke("showing", RoutePayloadSchema, VoidSchema),
   // The shell wakes its host, as on a resume from sleep.

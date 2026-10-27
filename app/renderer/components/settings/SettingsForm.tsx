@@ -16,6 +16,8 @@ import {
   type DeviceRosterEntry,
 } from "@/components/shared/DeviceTabs";
 import { DeviceTabBarView } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
+import { LayoutSectionView } from "@shigomori/ui/views/settings/LayoutSectionView.tsx";
+import { resetLayout } from "@/store/layout";
 import { UpdateMark } from "@shigomori/ui/primitives/status-dot.tsx";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import {
@@ -118,7 +120,8 @@ export function SettingsForm({
   initialConfig: GlobalConfig;
   initialClientConfig: ClientConfig;
 }) {
-  const localDeviceId = useApi().deviceId;
+  const api = useApi();
+  const localDeviceId = api.deviceId;
   const hasLocalHost = useHasLocalHost();
   const save = useSettingsSave();
   const { setOverride } = useTheme();
@@ -321,6 +324,12 @@ export function SettingsForm({
           )}
           <WorktreePrefixesSection list="hidden" />
           <WorktreePrefixesSection list="grouped" />
+          <LayoutSectionView
+            onReset={() => {
+              resetLayout();
+              if (hasLocalHost) void api.run(api.window.resetLayout());
+            }}
+          />
           {/* The desktop states its build in this device's General
                 section. A hostless client has no such section, and its
                 build is still worth a line, so it goes with the other
