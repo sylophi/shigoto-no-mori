@@ -101,12 +101,30 @@ export function isInstallingUpdate(): boolean {
 
 function setState(next: UpdaterState): void {
   state = next;
+  publish();
+}
+
+// The state as the windows, the peers and `sm update` see it: marked
+// `updating` while an install is under way or armed (updateNow), so
+// every button that would start one waits on it instead.
+function shownState(): UpdaterState {
+  const updating = installing || installWhenStaged !== null;
+  return updating &&
+    (state.kind === "checking" ||
+      state.kind === "downloading" ||
+      state.kind === "ready")
+    ? { ...state, updating }
+    : state;
+}
+
+function publish(): void {
+  const shown = shownState();
   // The host answers the windows' and the peers' reads, and pushes it.
-  noteUpdaterState(state);
+  noteUpdaterState(shown);
   // Mirror every state to disk so `sm update` can follow along
   // (updaterBridge.ts). Fire-and-forget: transitions are seconds apart,
   // and a lost write only stales the CLI's view until the next one.
-  fork?.(publishUpdaterState(state));
+  fork?.(publishUpdaterState(shown));
 }
 
 // What a failed finish-install left for this start, taken so the next
@@ -297,8 +315,11 @@ const check: Effect.Effect<void, never, UpdaterServices> = Effect.gen(
     armedMidCheck = false;
     if (unattended !== null && state.kind === "ready") {
       // Nobody waits on this call to hear a busy host's refusal, and the
-      // update stays staged behind the usual restart button.
-      installUpdate(unattended).catch(() => undefined);
+      // update stays staged behind the usual restart button. The state
+      // says `updating` until the install starts or is refused.
+      installUpdate(unattended)
+        .catch(() => undefined)
+        .finally(publish);
     }
   },
 ).pipe(
@@ -353,6 +374,7 @@ async function installUpdate(unattended: boolean): Promise<InstallOutcome> {
   // was up.
   if (held) throw new Error(heldWords);
   installing = true;
+  publish();
   try {
     // Resolves only once the installer actually spawned: quitting on a
     // child that failed to start would end the app without a relaunch.
@@ -403,8 +425,14 @@ async function updateNow(unattended: boolean): Promise<void> {
     if (refusal !== null) throw new Error(refusal);
   }
   installWhenStaged = unattended;
-  if (checkInFlight) armedMidCheck = true;
-  else checkForUpdates();
+  if (checkInFlight) {
+    armedMidCheck = true;
+    publish();
+  } else {
+    // Says `updating` before this answers, ahead of the check's own.
+    setState({ kind: "checking" });
+    checkForUpdates();
+  }
 }
 
 // What an install asked for during a hold answers.
@@ -433,8 +461,9 @@ async function hold(input: {
       : "The app is being reset. The update can install once it has restarted.";
   if (endCheck !== null) await Effect.runPromise(endCheck);
   if (state.kind === "checking" || state.kind === "downloading") {
-    setState({ kind: "idle" });
+    state = { kind: "idle" };
   }
+  publish();
   return null;
 }
 
@@ -446,7 +475,7 @@ function resume(): void {
 
 // The state as it stands, for a host that starts after it moved.
 export function currentUpdaterState(): UpdaterState {
-  return state;
+  return shownState();
 }
 
 // The updater's half of the host's calls to its shell

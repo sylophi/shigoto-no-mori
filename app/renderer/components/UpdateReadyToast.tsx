@@ -9,16 +9,20 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { toast } from "@/lib/toast";
 import { useApi } from "@/lib/runtime/pageApi";
 
-const TOAST_ID = "updater:ready";
-
 // The releases this window has seen news of: the toast closed by hand,
-// its update taken, or the release found while Settings (which shows
-// it) was open. Once each, per window.
+// or the release found while Settings (which shows it) was open. Once
+// each, per window.
 const seen = new Set<string>();
-// Whether the toast is meant to be up, so its onDismiss can tell a
-// close by hand from this component taking it down (sonner calls it
-// for both).
-let wanted = false;
+// The toast as it stands: which of its two forms is up, under which
+// id, so its onDismiss can tell a close by hand from this component
+// swapping it or taking it down (sonner calls it for both). Each
+// showing gets an id of its own, and the last one taken down is
+// dismissed again on every pass: sonner adds a toast a beat after it's
+// asked to and takes one down a frame after, so a showing and a
+// dismissal close together under one id could undo each other.
+let shown: { form: "offer" | "updating"; id: string } | null = null;
+let gone: string | null = null;
+let showings = 0;
 
 // Says so as soon as any device this window could update finds a new
 // release, even before it has downloaded it, with the update one click
@@ -28,14 +32,16 @@ let wanted = false;
 // button is Settings' Update all (useUpdateAll): a device with the
 // update staged restarts into it, and one without fetches it first and
 // restarts once it's staged. It asks for the second click Update all
-// does once it would restart another machine. It stays until closed or
-// used, steps aside while its preview is open, never shows on Settings,
-// and goes once no device is behind (every device updated, or the
-// release pulled).
+// does once it would restart another machine. Once taken, it says the
+// update is under way until every device behind has restarted, and a
+// refusal brings the offer back for a retry. It stays until closed,
+// steps aside while its preview is open, never shows on Settings, and
+// goes once no device is behind (every device updated, or the release
+// pulled).
 export function UpdateReadyToast() {
   const localDeviceId = useApi().deviceId;
   const { latest, oldest, outdated } = useOutdatedDevices();
-  const { mutate: updateAll, isPending: updating } = useUpdateAll(outdated);
+  const { update: updateAll, updating } = useUpdateAll(outdated);
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
   const [previewOpen, setPreviewOpen] = useState(false);
   const onSettings = useOnSettingsPages();
@@ -49,15 +55,14 @@ export function UpdateReadyToast() {
   // each has got with it, is the button's business.
   const title =
     latest === null ? "An update is available" : `v${latest} is available`;
+  const updatingTitle =
+    latest === null ? "Updating…" : `Updating to v${latest}…`;
   const label = deviceIds.length === 1 ? "Update" : "Update all";
   const buttonLabel = armed ? "Click again to confirm" : label;
 
-  // Seen once it's taken: a refusal brings the toast back for a retry.
-  // The toast is down meanwhile, taken down here rather than closed.
   const update = () => {
-    wanted = false;
     setPreviewOpen(false);
-    updateAll(undefined, { onSuccess: () => seen.add(release) });
+    updateAll();
   };
   // A remote restart asks for the second click Update all does.
   const press = () => (remote ? trigger(update) : update());
@@ -66,32 +71,51 @@ export function UpdateReadyToast() {
 
   useEffect(() => {
     if (behind && onSettings) seen.add(release);
-    wanted = behind && !previewOpen && !updating && !seen.has(release);
-    if (!wanted) {
-      toast.dismiss(TOAST_ID);
-      return;
+    const form =
+      !behind || previewOpen || seen.has(release)
+        ? null
+        : updating
+          ? "updating"
+          : "offer";
+    if (form !== (shown?.form ?? null)) {
+      if (shown !== null) gone = shown.id;
+      showings += 1;
+      shown = form === null ? null : { form, id: `updater:${showings}` };
     }
-    toast(title, {
-      id: TOAST_ID,
-      testId: TOAST_ID,
-      duration: Number.POSITIVE_INFINITY,
-      description:
-        latest === null ? undefined : (
-          <WhatsNewLinkView onOpen={() => setPreviewOpen(true)} />
-        ),
-      onDismiss: () => {
-        if (wanted) seen.add(release);
-      },
-      action: {
-        label: buttonLabel,
-        onClick: (event) => {
-          // The first click only arms, so the toast stays for the
-          // second.
-          if (remote && !armed) event.preventDefault();
-          pressFromToast();
+    if (gone !== null) toast.dismiss(gone);
+    if (shown === null) return;
+    const { id } = shown;
+    const onDismiss = () => {
+      if (shown?.id === id) seen.add(release);
+    };
+    if (form === "updating") {
+      toast.loading(updatingTitle, {
+        id,
+        testId: "updater:updating",
+        duration: Number.POSITIVE_INFINITY,
+        onDismiss,
+      });
+    } else {
+      toast(title, {
+        id,
+        testId: "updater:ready",
+        duration: Number.POSITIVE_INFINITY,
+        description:
+          latest === null ? undefined : (
+            <WhatsNewLinkView onOpen={() => setPreviewOpen(true)} />
+          ),
+        onDismiss,
+        action: {
+          label: buttonLabel,
+          onClick: (event) => {
+            // The toast stays: the first click only arms, and the
+            // second swaps it for the update under way.
+            event.preventDefault();
+            pressFromToast();
+          },
         },
-      },
-    });
+      });
+    }
   }, [
     behind,
     onSettings,
@@ -99,10 +123,9 @@ export function UpdateReadyToast() {
     updating,
     release,
     title,
+    updatingTitle,
     latest,
     buttonLabel,
-    remote,
-    armed,
   ]);
 
   return previewOpen && latest !== null ? (
@@ -112,6 +135,7 @@ export function UpdateReadyToast() {
       restartButton={
         <Button
           size="sm"
+          disabled={updating}
           aria-pressed={remote ? armed : undefined}
           onClick={press}
         >

@@ -185,6 +185,7 @@ function versionSection() {
           deviceLabel="MacBook"
           armed={false}
           pending={false}
+          restarting={false}
           onClick={noop}
         />
       }
@@ -209,7 +210,11 @@ export function SettingsGeneralScene() {
           selectedId={LOCAL_DEVICE_ID}
           onSelect={noop}
           trailing={
-            <UpdateAllButtonView armed={false} pending={false} onClick={noop} />
+            <UpdateAllButtonView
+              armed={false}
+              updating={false}
+              onClick={noop}
+            />
           }
         />,
         <>
@@ -500,6 +505,7 @@ export function SettingsDialogsScene() {
               deviceLabel="MacBook"
               armed={false}
               pending={false}
+              restarting={false}
               onClick={noop}
             />
           }

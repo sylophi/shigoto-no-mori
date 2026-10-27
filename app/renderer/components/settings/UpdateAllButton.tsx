@@ -5,13 +5,13 @@ import { UpdateAllButtonView } from "@shigomori/ui/views/settings/UpdateAllButto
 
 // Update all (UpdateAllButtonView) over the devices behind.
 export function UpdateAllButton({ outdated }: { outdated: Outdated }) {
-  const install = useUpdateAll(outdated);
+  const { update, updating } = useUpdateAll(outdated);
   const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
   return (
     <UpdateAllButtonView
       armed={confirm.armed}
-      pending={install.isPending}
-      onClick={() => confirm.trigger(() => install.mutate())}
+      updating={updating}
+      onClick={() => confirm.trigger(update)}
     />
   );
 }

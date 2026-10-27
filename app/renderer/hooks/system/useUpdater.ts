@@ -8,13 +8,13 @@ import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { useHasLocalHost } from "@/lib/localHost";
 import {
+  allUpdating,
   findOutdated,
   type KnownUpdates,
   type OutdatedDevice,
   restartIntoUpdate,
 } from "@/lib/updates";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
-import { toast } from "@/lib/toast";
 import { hostStateAtom } from "@/lib/runtime/atoms";
 import { useApi } from "@/lib/runtime/pageApi";
 import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
@@ -151,18 +151,20 @@ export function useOutdatedDevices(): KnownUpdates {
   );
 }
 
-// Update every device in `outdated` (useOutdatedDevices), from one
-// button: Settings' Update all and the update toast. A device with its
-// update staged restarts into it. One without is told to fetch it and
-// restart once it's staged (the host's updater:update), which answers
-// right away, so the button never waits on a download. The peers go
-// first and together: each answers before it quits or arms
-// (updater.ts), so a busy one's refusal comes back here. This machine
-// goes last, and only once every peer took its update, since
-// restarting this window would end the page that reports a refusal and
-// hold the retry. Its own install is attended, so a busy machine still
-// gets the usual dialog. Resolves with the devices left downloading,
-// by how they will finish (updateDevice).
+// Update every device in `outdated` (useOutdatedDevices) not already on
+// its way, from one button: Settings' Update all and the update toast.
+// A device with its update staged restarts into it. One without is
+// told to fetch it and restart once it's staged (the host's
+// updater:update), which answers right away, so the button never waits
+// on a download. The peers go first and together: each answers before
+// it quits or arms (updater.ts), so a busy one's refusal comes back
+// here. This machine goes last, and only once every peer took its
+// update, since restarting this window would end the page that reports
+// a refusal and hold the retry. Its own install is attended, so a busy
+// machine still gets the usual dialog. `updating` holds from the press
+// until no device behind is left to ask: each one's state says it is
+// on its way (`updating`) before its answer lands, and it drops out of
+// `outdated` as it restarts.
 export function useUpdateAll(
   outdated: Readonly<Record<string, OutdatedDevice>>,
 ) {
@@ -170,31 +172,31 @@ export function useUpdateAll(
   const targets = useUpdateTargets();
 
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state push is the single source of truth, and the updater state atom follows it
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: async () => {
       const chosen = targets.flatMap((target) => {
         const device = outdated[target.deviceId];
-        return device === undefined ? [] : [{ target, device }];
+        return device === undefined || device.updating
+          ? []
+          : [{ target, device }];
       });
       const local = chosen.find(
         ({ target }) => target.deviceId === localDeviceId,
       );
-      const outcomes = await Promise.all(
-        chosen
-          .filter((entry) => entry !== local)
-          .map(({ target, device }) =>
-            updateDevice(target, device).then(
-              (outcome) => ({ label: target.label, outcome }),
-              (error: unknown) => ({
-                label: target.label,
-                refusal: errorMessageOf(error).replace(/([^.!?])$/, "$1."),
-              }),
+      const refused = (
+        await Promise.all(
+          chosen
+            .filter((entry) => entry !== local)
+            .map(({ target, device }) =>
+              updateDevice(target.api, device).then(
+                () => [],
+                (error: unknown) => [
+                  `${target.label}: ${errorMessageOf(error).replace(/([^.!?])$/, "$1.")}`,
+                ],
+              ),
             ),
-          ),
-      );
-      const refused = outcomes.flatMap((entry) =>
-        "refusal" in entry ? [`${entry.label}: ${entry.refusal}`] : [],
-      );
+        )
+      ).flat();
       if (refused.length > 0) {
         const reasons = refused.join(" ");
         throw new Error(
@@ -203,53 +205,19 @@ export function useUpdateAll(
             : `${reasons} This device was not updated, so you can try again.`,
         );
       }
-      if (local !== undefined) {
-        outcomes.push({
-          label: local.target.label,
-          outcome: await updateDevice(local.target, local.device),
-        });
-      }
-      const labelsOf = (wanted: UpdateOutcome) =>
-        outcomes.flatMap((entry) =>
-          "outcome" in entry && entry.outcome === wanted ? [entry.label] : [],
-        );
-      return { armed: labelsOf("armed") };
-    },
-    onSuccess: ({ armed }) => {
-      if (armed.length > 0) {
-        toast.success(
-          `${sentenceStart(names.format(armed))} ${
-            armed.length === 1
-              ? "restarts once its update downloads"
-              : "restart once their updates download"
-          }`,
-        );
-      }
+      if (local !== undefined)
+        await updateDevice(local.target.api, local.device);
     },
     meta: { errorTitle: "Couldn't update every device" },
   });
+  return {
+    update: () => mutation.mutate(),
+    updating: mutation.isPending || allUpdating(outdated),
+  };
 }
 
-// How a device took its update: restarting into the staged one, or
-// armed to restart once it has fetched it.
-type UpdateOutcome = "installed" | "armed";
-
-async function updateDevice(
-  target: UpdateTarget,
-  device: OutdatedDevice,
-): Promise<UpdateOutcome> {
-  if (device.staged) {
-    await restartIntoUpdate(target.api);
-    return "installed";
-  }
-  // One whose update reached it meanwhile restarts into it now.
-  await restartIntoUpdate(target.api, "update");
-  return "armed";
+// Restarts a device into its staged update, or arms it to once it has
+// fetched it.
+function updateDevice(api: HostApi, device: OutdatedDevice): Promise<void> {
+  return restartIntoUpdate(api, device.staged ? "install" : "update");
 }
-
-// "this device and MacBook" as the start of a sentence.
-function sentenceStart(text: string): string {
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
-}
-
-const names = new Intl.ListFormat("en", { type: "conjunction" });

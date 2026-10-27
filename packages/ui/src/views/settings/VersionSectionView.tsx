@@ -158,6 +158,8 @@ export function ChangelogButtonView({
 // section or the preview of that update. A remote restart is the one
 // action here that ends a session someone else may be using, so it
 // asks for a second click where the local one has the busy dialog.
+// Once the device is restarting (the updater's `updating`), it says so
+// until the device goes.
 export function RestartToUpdateButtonView({
   version,
   remote,
@@ -165,6 +167,7 @@ export function RestartToUpdateButtonView({
   deviceLabel,
   armed,
   pending,
+  restarting,
   onClick,
 }: {
   version: string;
@@ -173,19 +176,29 @@ export function RestartToUpdateButtonView({
   deviceLabel: string;
   // A remote restart asked for once.
   armed: boolean;
+  // The ask in flight, or this machine's busy dialog up.
   pending: boolean;
+  restarting: boolean;
   onClick: () => void;
 }) {
   return (
     <SimpleTooltip tip={canCommand ? undefined : peerReadOnlyNote(deviceLabel)}>
       <Button
         size="sm"
-        disabled={pending || !canCommand}
+        disabled={pending || restarting || !canCommand}
         aria-pressed={remote ? armed : undefined}
         onClick={onClick}
       >
-        <RefreshCw />
-        {armed ? "Click again to confirm" : `Restart to update to v${version}`}
+        {pending || restarting ? (
+          <Loader2 className="animate-spin" />
+        ) : (
+          <RefreshCw />
+        )}
+        {restarting
+          ? "Restarting…"
+          : armed
+            ? "Click again to confirm"
+            : `Restart to update to v${version}`}
       </Button>
     </SimpleTooltip>
   );

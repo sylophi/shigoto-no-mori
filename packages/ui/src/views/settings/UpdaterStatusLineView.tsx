@@ -1,5 +1,5 @@
 import { InlineError } from "../../primitives/inline-error.tsx";
-import type { UpdaterState } from "@shigomori/contracts/schemas";
+import { isUpdating, type UpdaterState } from "@shigomori/contracts/schemas";
 
 // The muted line for every state but error, null where the button says
 // it all. A Record, so a new state kind has to be given a line here.
@@ -33,10 +33,16 @@ export function UpdaterStatusLineView({
       </span>
     );
   }
-  const text =
+  const base =
     state.kind === "downloading" && state.version !== undefined
       ? `Downloading v${state.version}…`
       : STATUS_TEXT[state.kind];
+  // On its way into the update: it restarts once it's staged. A ready
+  // one is restarting now, which its button says.
+  const text =
+    isUpdating(state) && state.kind !== "ready"
+      ? `${base ?? STATUS_TEXT.downloading} It restarts once it's ready.`
+      : base;
   if (text === null) return null;
   return <span className="text-xs text-muted-foreground">{text}</span>;
 }

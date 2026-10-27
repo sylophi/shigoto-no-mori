@@ -41,13 +41,17 @@ export type NukeReport = typeof NukeReportSchema.Type;
 
 // `downloading` also covers "found an update": the engine streams no
 // byte progress. `unsupported`: no update channel (dev builds).
+// `updating`: the device is on its way into the update, restarting into
+// it once it's staged, or now when it's `ready`.
+const updating = Schema.optional(Schema.Boolean);
 export const UpdaterStateSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("unsupported") }),
   Schema.Struct({ kind: Schema.Literal("idle") }),
-  Schema.Struct({ kind: Schema.Literal("checking") }),
+  Schema.Struct({ kind: Schema.Literal("checking"), updating }),
   Schema.Struct({
     kind: Schema.Literal("downloading"),
     version: Schema.optional(Schema.String),
+    updating,
   }),
   Schema.Struct({
     kind: Schema.Literal("ready"),
@@ -55,6 +59,7 @@ export const UpdaterStateSchema = Schema.Union([
     notes: Schema.optional(Schema.String),
     // null when the OS gave an unparseable date.
     releaseDate: Schema.NullOr(Schema.String),
+    updating,
   }),
   Schema.Struct({
     kind: Schema.Literal("error"),
@@ -65,6 +70,15 @@ export const UpdaterStateSchema = Schema.Union([
   }),
 ]);
 export type UpdaterState = typeof UpdaterStateSchema.Type;
+
+export function isUpdating(state: UpdaterState | null | undefined): boolean {
+  return (
+    (state?.kind === "checking" ||
+      state?.kind === "downloading" ||
+      state?.kind === "ready") &&
+    state.updating === true
+  );
+}
 
 // updater.json, published for `sm update`, which has no IPC into the
 // app: it tells whether a live instance must restart around the swap.

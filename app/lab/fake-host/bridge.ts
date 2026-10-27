@@ -46,7 +46,10 @@ import {
 import { decode } from "@shigomori/contracts/codec";
 import { WEB_PLATFORM } from "@shigomori/contracts/platform";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
-import type { AgentHarnessStatus } from "@shigomori/contracts/schemas";
+import type {
+  AgentHarnessStatus,
+  UpdaterState,
+} from "@shigomori/contracts/schemas";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import {
   MIRROR_HISTORY_LIMIT,
@@ -462,11 +465,42 @@ function hostHandlersFor(
       .filter((worktree) => !worktree.isPrimary && !worktree.detached)
       .map((worktree) => worktree.branch),
   ];
-  // Stands in for the restart into the staged build: the device
-  // reports up to date.
+  // Stands in for the restart into the staged build: the device says
+  // it is restarting, then a peer drops off and comes back a few seconds
+  // later running it. This window's own device stays restarting, where
+  // the real window would close.
+  const updaterState = (): UpdaterState => {
+    const updating = updatingDevices.has(forest.deviceId);
+    return stagedUpdates.has(forest.deviceId)
+      ? {
+          kind: "ready",
+          version: FAKE_UPDATE_VERSION,
+          releaseDate: null,
+          updating,
+        }
+      : downloadingUpdates.has(forest.deviceId)
+        ? { kind: "downloading", version: FAKE_UPDATE_VERSION, updating }
+        : { kind: "idle" };
+  };
   const restartIntoUpdate = () => {
-    stagedUpdates.delete(forest.deviceId);
-    emit("updater:state", { kind: "idle" });
+    const { deviceId } = forest;
+    stagedUpdates.add(deviceId);
+    updatingDevices.add(deviceId);
+    emit("updater:state", updaterState());
+    if (!WEB_SHELL && deviceId === LOCAL_DEVICE_ID) return;
+    const presence = directSessions.has(deviceId)
+      ? "connected"
+      : roster.has(deviceId)
+        ? "online"
+        : "offline";
+    setTimeout(() => window.fakeHost?.setPeer(deviceId, "offline"), 1_000);
+    setTimeout(() => {
+      stagedUpdates.delete(deviceId);
+      updatingDevices.delete(deviceId);
+      updatedDevices.add(deviceId);
+      window.fakeHost?.setPeer(deviceId, presence);
+      emit("updater:state", updaterState());
+    }, 5_000);
   };
   return {
     ...sharedSettingsHandlersFor(forest.deviceId, emit),
@@ -859,14 +893,9 @@ function hostHandlersFor(
     // update staged, so the restart-to-update buttons on their Settings
     // General sections have something to show, and the ones ?downloading poses
     // are fetching it. Installing stands in for the restart into the
-    // new build: the device reports up to date. Updating one with
-    // nothing staged shows the download first.
-    "updater:get": () =>
-      stagedUpdates.has(forest.deviceId)
-        ? { kind: "ready", version: FAKE_UPDATE_VERSION, releaseDate: null }
-        : downloadingUpdates.has(forest.deviceId)
-          ? { kind: "downloading", version: FAKE_UPDATE_VERSION }
-          : { kind: "idle" },
+    // new build (restartIntoUpdate). Updating one with nothing staged
+    // downloads it first, then restarts.
+    "updater:get": updaterState,
     "updater:check": () => undefined,
     "updater:install": () => restartIntoUpdate(),
     "updater:update": () => {
@@ -875,14 +904,12 @@ function hostHandlersFor(
         return;
       }
       downloadingUpdates.add(forest.deviceId);
-      emit("updater:state", {
-        kind: "downloading",
-        version: FAKE_UPDATE_VERSION,
-      });
+      updatingDevices.add(forest.deviceId);
+      emit("updater:state", updaterState());
       setTimeout(() => {
         downloadingUpdates.delete(forest.deviceId);
-        emit("updater:state", { kind: "idle" });
-      }, 2_500);
+        restartIntoUpdate();
+      }, 4_000);
     },
     "launchers:detect": () => [...FAKE_DETECTED],
     // A terminal tool runs in a posed terminal, as the terminal
@@ -1666,6 +1693,10 @@ const directSessions = new Set<string>();
 // ?downloading=sm,mb,mini the ones fetching it.
 const stagedUpdates = new Set<string>();
 const downloadingUpdates = new Set<string>();
+// The devices on their way into the update, and the ones that
+// restarted into it, which then run it.
+const updatingDevices = new Set<string>();
+const updatedDevices = new Set<string>();
 // ?migration=waiting|moving|stuck|done: the v3 migration in that state
 // (stepsFixtures.ts), for its page (?to=/migration). Without it there is
 // nothing to migrate.
@@ -1871,7 +1902,9 @@ function hubSnapshot(): HubStatus {
   const peerAcceptsCommands: Record<string, boolean> = {};
   const peerSharesData: Record<string, boolean> = {};
   for (const id of directSessions) {
-    peerAppVersions[id] = FAKE_APP_VERSION;
+    peerAppVersions[id] = updatedDevices.has(id)
+      ? FAKE_UPDATE_VERSION
+      : FAKE_APP_VERSION;
     peerAcceptsCommands[id] = forests[id]?.grantsCaller ?? false;
     peerSharesData[id] = !notSharing.has(id);
   }

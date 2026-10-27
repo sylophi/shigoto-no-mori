@@ -203,6 +203,21 @@
         "releaseDate": null
       },
       {
+        "kind": "checking",
+        "updating": true
+      },
+      {
+        "kind": "downloading",
+        "version": "3.2.0",
+        "updating": true
+      },
+      {
+        "kind": "ready",
+        "version": "3.2.0",
+        "releaseDate": null,
+        "updating": true
+      },
+      {
         "kind": "error",
         "message": "Couldn't reach the release feed"
       },
