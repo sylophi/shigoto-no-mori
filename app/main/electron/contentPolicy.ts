@@ -5,8 +5,7 @@
 // inline script, no eval, and nothing to connect to but the loopback
 // and Clerk. The web client's policy (vercel.json) is the model. A dev
 // build serves through vite, whose client and React's refresh preamble
-// are inline and whose updates arrive over a socket of its own, and
-// runs react-grab, which fetches its font and asks for its version.
+// are inline and whose updates arrive over a socket of its own.
 
 import { GITHUB_IMAGE_HOSTS } from "@shigomori/contracts/predicates/imageHosts";
 
@@ -34,11 +33,7 @@ export function rendererContentPolicy(options: {
   const directives: Record<string, readonly string[]> = {
     "default-src": ["'self'"],
     "script-src": ["'self'", ...clerk, challenges, ...dev("'unsafe-inline'")],
-    "style-src": [
-      "'self'",
-      "'unsafe-inline'",
-      ...dev("https://fonts.googleapis.com"),
-    ],
+    "style-src": ["'self'", "'unsafe-inline'"],
     // Clerk's avatars, and a description's images from GitHub. One on a
     // project's remote's host comes as a data: URL its device read
     // (projects:remoteImage), as in the web client, whose policy is
@@ -57,13 +52,13 @@ export function rendererContentPolicy(options: {
     ],
     // The files page's video and audio, read whole into data: URLs.
     "media-src": ["'self'", "data:"],
-    "font-src": ["'self'", "data:", ...dev("https://fonts.gstatic.com")],
+    "font-src": ["'self'", "data:"],
     "connect-src": [
       "'self'",
       "ws://127.0.0.1:*",
       ...clerk,
       challenges,
-      ...dev("ws://localhost:*", "https://www.react-grab.com"),
+      ...dev("ws://localhost:*"),
     ],
     "worker-src": ["'self'", "blob:"],
     "frame-src": [challenges],

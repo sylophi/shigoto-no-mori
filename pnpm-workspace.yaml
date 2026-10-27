@@ -151,3 +151,8 @@ catalog:
   typescript: ~7.0.2
   vite: ^8.1.4
   vitest: 5.0.3
+
+# React Grab reads sourcemaps over http(s) alone. The patch lets it
+# read them over the page's own scheme too, the desktop window's.
+patchedDependencies:
+  react-grab@0.2.0: patches/react-grab@0.2.0.patch

@@ -12,6 +12,7 @@ import react from "@vitejs/plugin-react";
 import { reactCompiler } from "./vite.reactCompiler";
 import { materialIcons } from "./vite.materialIcons";
 import { dedupe } from "./vite.dedupe";
+import { reactGrabBuild } from "./vite.reactGrab";
 import tailwindcss from "@tailwindcss/vite";
 import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
@@ -166,6 +167,7 @@ export default defineConfig(({ mode }) => {
       preloadBoot(),
     ],
     build: {
+      ...reactGrabBuild,
       outDir: resolve(__dirname, "dist-web"),
       emptyOutDir: true,
       // Never inline assets as data: URIs. The deploy's CSP is strict
