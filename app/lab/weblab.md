@@ -56,12 +56,12 @@ reference. What it gives you here:
   the window is focused and left for real: `open -b <its bundle id>`
   (`.electron-dev/dist/Electron.app`'s `CFBundleIdentifier`), then
   `open -a Finder`.
-- **A dev window's idle cost.** react-grab, which a dev build alone
-  loads, pauses every running animation while it freezes the page and
-  resumes them with `play()`, after which CSS no longer pauses them:
-  the wallpaper keeps drifting behind other windows at about 5% of a
-  core with the GPU's share. Reload before measuring what a window
+- **A grabbed window's idle cost.** React Grab (⌘⇧G) pauses every
+  running animation while it freezes the page and resumes them with
+  `play()`, after which CSS no longer pauses them: the wallpaper keeps
+  drifting behind other windows at about 5% of a core with the GPU's
+  share. Reload a window it ran in before measuring what the window
   costs at rest.
 - **Dev noise.** A dev window logs the same lines on every boot. This
   `ignore` keeps them out of the replies:
-  `["React Grab", "\\[vite\\]", "ws://localhost", "Electron Security Warning", "clerk-telemetry", "development keys", "React DevTools"]`.
+  `["\\[vite\\]", "ws://localhost", "Electron Security Warning", "clerk-telemetry", "development keys", "React DevTools"]`.

@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { reactCompiler } from "./vite.reactCompiler";
 import { materialIcons } from "./vite.materialIcons";
 import { dedupe } from "./vite.dedupe";
+import { reactGrabBuild } from "./vite.reactGrab";
 import tailwindcss from "@tailwindcss/vite";
 import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
 import { defineConfig } from "vite";
@@ -89,6 +90,7 @@ export default defineConfig(({ mode }) => {
     css: { postcss: { plugins: [insideTheRoot()] } },
     plugins: [tailwindcss(), react(), reactCompiler(), materialIcons()],
     build: {
+      ...reactGrabBuild,
       // Keep material-icon-theme SVGs as separate hashed files so each one
       // loads on-demand when its icon is actually displayed. Inlined as
       // base64 they'd bloat the JS bundle for icons that may never render.

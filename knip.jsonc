@@ -26,10 +26,6 @@
         // A lab check run by hand against a packaged build.
         "lab/relaunch.mts",
       ],
-      "ignoreDependencies": [
-        // Loaded from an inline script in index.html, in dev only.
-        "react-grab",
-      ],
     },
     "hub": {
       "ignoreDependencies": [

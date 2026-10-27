@@ -3,6 +3,7 @@
 // runtime, then the shared boot with the Electron flavor of Clerk and a
 // memory history (a window has no address bar) starting on the page the
 // shell opened the window on.
+import { listenForReactGrab } from "./lib/reactGrab";
 import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { mountWindow, startApp } from "./boot";
@@ -46,4 +47,5 @@ async function boot() {
   });
 }
 
+listenForReactGrab();
 void boot();
