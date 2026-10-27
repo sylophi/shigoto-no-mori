@@ -234,7 +234,7 @@ export function TerminalView({
     const onFocus = () => propose(true);
     term.textarea?.addEventListener("focus", onFocus);
 
-    // Theme classes and the palette attribute live on the window's theme
+    // Theme classes and the palette attribute live on the nearest theme
     // root and flip after this component's own effects run, so watch the
     // DOM rather than the theme hooks. Only a changed palette is handed to xterm:
     // it repaints everything for any new theme object.

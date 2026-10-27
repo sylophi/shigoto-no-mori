@@ -304,6 +304,8 @@ export function SettingsAppearanceScene() {
             onThemeRotationEveryChange={noop}
             pauseAnimationsOnBattery
             onPauseAnimationsOnBatteryChange={noop}
+            darkTerminals={false}
+            onDarkTerminalsChange={noop}
             battery
             lightPalette={
               <ThemePickerView

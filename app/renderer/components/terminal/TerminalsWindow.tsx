@@ -9,6 +9,7 @@ import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingV
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import type { TerminalsSearch } from "@/lib/newWindow";
 import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
+import { TerminalScope } from "./TerminalScope";
 import { TerminalTabs } from "./TerminalTabs";
 
 export function TerminalsWindow() {
@@ -32,22 +33,24 @@ function WindowTabs({ worktree }: { worktree: Worktree }) {
     .map(paramToSlot)
     .filter((slot): slot is ScriptSlot => slot !== null);
   return (
-    <div className="h-full bg-card">
-      <TerminalTabs
-        worktree={worktree}
-        slots={slots}
-        onCloseScript={(closed) =>
-          update({
-            scripts: search.scripts?.filter(
-              (param) => param !== slotToParam(closed),
-            ),
-          })
-        }
-        picked={search.tab ?? null}
-        onPick={(tab) => update({ tab })}
-        onEmpty={() => window.close()}
-        titleBar
-      />
-    </div>
+    <TerminalScope>
+      <div className="h-full bg-card">
+        <TerminalTabs
+          worktree={worktree}
+          slots={slots}
+          onCloseScript={(closed) =>
+            update({
+              scripts: search.scripts?.filter(
+                (param) => param !== slotToParam(closed),
+              ),
+            })
+          }
+          picked={search.tab ?? null}
+          onPick={(tab) => update({ tab })}
+          onEmpty={() => window.close()}
+          titleBar
+        />
+      </div>
+    </TerminalScope>
   );
 }

@@ -17,6 +17,7 @@ import {
   useTerminalDrawer,
 } from "@/store/terminalDrawer";
 import type { Worktree } from "@shigomori/contracts/schemas";
+import { TerminalScope } from "./TerminalScope";
 import { TerminalDrawerView } from "@shigomori/ui/views/terminal/TerminalDrawerView.tsx";
 
 // xterm comes with the first terminal opened, not with the page.
@@ -51,45 +52,47 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
     .map(paramToSlot)
     .filter((slot): slot is ScriptSlot => slot !== null);
   return (
-    <TerminalDrawerView
-      side={side}
-      size={side ? state.width : state.height}
-      slideIn={slideIn}
-      onSize={setDrawerSize}
-    >
-      <Suspense>
-        <TerminalTabs
-          worktree={worktree}
-          slots={slots}
-          onCloseScript={(slot) => closeScriptTab(key, slot)}
-          picked={drawer.picked}
-          onPick={(tab) => pickDrawerTab(key, tab)}
-          onEmpty={close}
-          side={side}
-          onDock={() => setDrawerSide(!side)}
-          onPopOut={
-            hasLocalHost
-              ? () => {
-                  openTerminalsInNewWindow(
-                    api,
-                    {
-                      deviceId,
-                      projectId: worktree.projectId,
-                      worktreeId: worktree.id,
-                    },
-                    {
-                      scripts: drawer.scripts,
-                      ...(drawer.picked !== null && { tab: drawer.picked }),
-                    },
-                  );
-                  // Its tabs move to the window.
-                  forgetDrawer(key);
-                }
-              : undefined
-          }
-          onHide={close}
-        />
-      </Suspense>
-    </TerminalDrawerView>
+    <TerminalScope>
+      <TerminalDrawerView
+        side={side}
+        size={side ? state.width : state.height}
+        slideIn={slideIn}
+        onSize={setDrawerSize}
+      >
+        <Suspense>
+          <TerminalTabs
+            worktree={worktree}
+            slots={slots}
+            onCloseScript={(slot) => closeScriptTab(key, slot)}
+            picked={drawer.picked}
+            onPick={(tab) => pickDrawerTab(key, tab)}
+            onEmpty={close}
+            side={side}
+            onDock={() => setDrawerSide(!side)}
+            onPopOut={
+              hasLocalHost
+                ? () => {
+                    openTerminalsInNewWindow(
+                      api,
+                      {
+                        deviceId,
+                        projectId: worktree.projectId,
+                        worktreeId: worktree.id,
+                      },
+                      {
+                        scripts: drawer.scripts,
+                        ...(drawer.picked !== null && { tab: drawer.picked }),
+                      },
+                    );
+                    // Its tabs move to the window.
+                    forgetDrawer(key);
+                  }
+                : undefined
+            }
+            onHide={close}
+          />
+        </Suspense>
+      </TerminalDrawerView>
+    </TerminalScope>
   );
 }

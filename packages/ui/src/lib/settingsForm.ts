@@ -27,6 +27,7 @@ interface ClientFormState {
   themeRotation: boolean;
   themeRotationEvery: ThemeRotation;
   pauseAnimationsOnBattery: boolean;
+  darkTerminals: boolean;
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
   villageLife: boolean;
@@ -86,6 +87,7 @@ function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
       clientConfig,
       "pauseAnimationsOnBattery",
     ),
+    darkTerminals: clientSetting(clientConfig, "darkTerminals"),
     villageLife: clientSetting(clientConfig, "villageLife"),
     villageNews: clientSetting(clientConfig, "villageNews"),
     markTerrierProjects: clientSetting(clientConfig, "markTerrierProjects"),

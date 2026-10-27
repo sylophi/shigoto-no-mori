@@ -420,6 +420,8 @@ export const ClientConfigSchema = Schema.Struct({
   notifyAgentDone: Schema.optional(Schema.Boolean),
   inlineWorktrees: Schema.optional(Schema.Boolean),
   pauseAnimationsOnBattery: Schema.optional(Schema.Boolean),
+  // Terminals wear the dark palette whatever the window's appearance.
+  darkTerminals: Schema.optional(Schema.Boolean),
   // The login item and the relaunch after a crash.
   keepReachable: Schema.optional(Schema.Boolean),
   // Local port by `${deviceId}:${remotePort}`, a forward's identity. Only
@@ -478,6 +480,7 @@ const CLIENT_CONFIG_DEFAULTS = {
   notifyAgentDone: false,
   inlineWorktrees: false,
   pauseAnimationsOnBattery: true,
+  darkTerminals: false,
   keepReachable: true,
   groupProjectsByOwner: true,
 } satisfies {
