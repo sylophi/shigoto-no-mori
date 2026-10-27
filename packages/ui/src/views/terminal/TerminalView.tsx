@@ -81,6 +81,65 @@ const textOf = (term: Terminal): string => {
   return lines.join("\n").trimEnd();
 };
 
+// A program that takes the wheel (mouse reporting, or the alternate
+// screen's arrow keys) gets one step per line the wheel moved. xterm
+// sends one per wheel event, however far it went, and a trackpad's at
+// a third of its distance, so a fullscreen TUI (Claude Code) would
+// scroll far less than the finger. Each line goes
+// back through xterm as a one-line wheel event, which it encodes, and
+// one event's steps go to `send` together. Returns whether xterm is
+// encoding them, as its data is then theirs.
+const scrollByLine = (
+  term: Terminal,
+  send: (data: string) => void,
+): (() => boolean) => {
+  let pixels = 0;
+  let steps: string | undefined;
+  term.onData((data) => {
+    if (steps !== undefined) steps += data;
+  });
+  term.attachCustomWheelEventHandler((e) => {
+    if (steps !== undefined) return true;
+    if (
+      term.modes.mouseTrackingMode === "none" &&
+      term.buffer.active.type === "normal"
+    ) {
+      return true;
+    }
+    const cell = term.dimensions?.css.cell.height;
+    if (!cell || e.deltaY === 0 || e.shiftKey) return false;
+    pixels +=
+      e.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? e.deltaY * cell
+        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? e.deltaY * cell * term.rows
+          : e.deltaY;
+    const lines = Math.trunc(pixels / cell);
+    pixels -= lines * cell;
+    steps = "";
+    for (let i = 0; i < Math.abs(lines); i++) {
+      e.target?.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaY: Math.sign(lines),
+          deltaMode: WheelEvent.DOM_DELTA_LINE,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          altKey: e.altKey,
+          ctrlKey: e.ctrlKey,
+          metaKey: e.metaKey,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    }
+    const encoded = steps;
+    steps = undefined;
+    if (encoded !== "") send(encoded);
+    return false;
+  });
+  return () => steps !== undefined;
+};
+
 const macEditKey = (e: KeyboardEvent): string | undefined =>
   e.ctrlKey || e.shiftKey || e.metaKey === e.altKey
     ? undefined
@@ -201,8 +260,17 @@ export function TerminalView({
     // client attached to the same shell answers nothing, so a query is
     // answered once. And only once the replay is parsed (TerminalScreen).
     let replayed = true;
+    // The wheel's steps go from any, as a scroll over a terminal
+    // without focus is meant for it.
+    const scrolling = scrollByLine(term, (data) => {
+      if (replayed) input(data);
+    });
     const dataSub = term.onData((data) => {
-      if (replayed && host.contains(host.ownerDocument.activeElement)) {
+      if (
+        replayed &&
+        !scrolling() &&
+        host.contains(host.ownerDocument.activeElement)
+      ) {
         input(data);
       }
     });
