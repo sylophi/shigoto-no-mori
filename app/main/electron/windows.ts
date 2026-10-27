@@ -7,7 +7,8 @@
 // window focused last, or a new one if none is open. At a quit each
 // window's route and bounds are remembered (windows.json in userData)
 // and the next start opens them again, one window on the home route
-// when there is nothing to bring back. Until the app opens
+// when there is nothing to bring back. A terminals window opens at the
+// size the last one was left (terminalsWindow.json), kept the same way. Until the app opens
 // past the v3 migration, a window opened meanwhile shows its page in
 // place of the app. The app quits with its last window (main/index.ts).
 import { join } from "node:path";
@@ -66,6 +67,10 @@ const BoundsSchema = Schema.Struct({
   height: Schema.Finite,
 });
 
+const SizeSchema = Schema.NullOr(
+  Schema.Struct({ width: Schema.Finite, height: Schema.Finite }),
+);
+
 const RememberedSchema = Schema.Array(
   Schema.Struct({
     route: Schema.String,
@@ -96,6 +101,9 @@ const held: Held[] = [];
 
 const closedListeners = new Set<(windowId: number) => void>();
 
+// The last terminals window's size, until Reset layout forgets it.
+let terminalsSize: typeof SizeSchema.Type = null;
+
 // The last window as it closed, which a quit that closing it started
 // remembers, and a cancelled one reopens.
 let lastClosed: Remembered | null = null;
@@ -112,6 +120,10 @@ let migrating = false;
 
 function rememberedPath(): string {
   return join(app.getPath("userData"), "windows.json");
+}
+
+function terminalsSizePath(): string {
+  return join(app.getPath("userData"), "terminalsWindow.json");
 }
 
 function find(windowId: number): Held | undefined {
@@ -282,6 +294,12 @@ function create(
   const place = () => {
     entry.bounds = window.getNormalBounds();
     entry.minimized = window.isMinimized();
+    if (isTerminalsWindow(entry.route)) {
+      terminalsSize = {
+        width: entry.bounds.width,
+        height: entry.bounds.height,
+      };
+    }
   };
   window.on("resize", place);
   window.on("move", place);
@@ -348,15 +366,28 @@ export function noteMigrating(on: boolean): void {
   migrating = on;
 }
 
-// A new window on `route`, cascaded off the window focused last.
+// A new window on `route`, cascaded off the window focused last, at
+// its size or a terminals window's.
 export function openWindow(route: string): void {
   const from = frontmost()?.window.getNormalBounds();
+  const size = isTerminalsWindow(route) ? terminalsSize : null;
   create(
     route,
     from === undefined
       ? {}
-      : { bounds: { ...from, x: from.x + CASCADE, y: from.y + CASCADE } },
+      : {
+          bounds: {
+            ...from,
+            ...size,
+            x: from.x + CASCADE,
+            y: from.y + CASCADE,
+          },
+        },
   );
+}
+
+export function forgetTerminalsSize(): void {
+  terminalsSize = null;
 }
 
 // The boot's windows: the ones the last quit remembered, in the order
@@ -372,6 +403,7 @@ export function openWindowsAtStart(options: {
   let remembered: readonly Remembered[] = [];
   try {
     remembered = readJsonOrNullSync(rememberedPath(), RememberedSchema) ?? [];
+    terminalsSize = readJsonOrNullSync(terminalsSizePath(), SizeSchema);
   } catch (error) {
     log.warn(`[windows] could not read the windows: ${errorMessageOf(error)}`);
   }
@@ -406,6 +438,7 @@ export function rememberWindows(): void {
         : [lastClosed];
   try {
     atomicWriteJsonSync(rememberedPath(), records);
+    atomicWriteJsonSync(terminalsSizePath(), terminalsSize);
   } catch (error) {
     log.warn(
       `[windows] could not remember the windows: ${errorMessageOf(error)}`,

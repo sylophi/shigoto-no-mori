@@ -2,14 +2,15 @@
 // it keeps whether it is open (so a page comes back as it was left, and
 // visiting one opens no shell there), the script consoles opened in it
 // as tabs, and the tab picked. Every drawer shares its height at the
-// bottom and width at the side, each null until it is dragged, and the
-// edge it is docked to (a store of its own, which the page reads). A
-// tab is named by a terminal's id, or `script:` and its slot's param.
+// bottom and width at the side, each null until it is dragged and kept
+// across launches, and the edge it is docked to (a store of its own,
+// which the page reads). A tab is named by a terminal's id, or
+// `script:` and its slot's param.
 import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
-import { readStored, writeStored } from "@/lib/localStorage";
+import { readStored, removeStored, writeStored } from "@/lib/localStorage";
 import { slotToParam, type ScriptSlot } from "./scriptSlot";
 
 type Drawer = {
@@ -27,10 +28,15 @@ type DrawerState = {
 
 const CLOSED: Drawer = { open: false, scripts: [], picked: null };
 
+const HEIGHT_KEY = "terminalDrawer.height";
+const WIDTH_KEY = "terminalDrawer.width";
+const readSize = (key: string): number | null =>
+  Number(readStored(key)) || null;
+
 const store = createExternalStore<DrawerState>({
   drawers: new Map(),
-  height: null,
-  width: null,
+  height: readSize(HEIGHT_KEY),
+  width: readSize(WIDTH_KEY),
 });
 
 export const useTerminalDrawer = () => useExternalStore(store);
@@ -116,9 +122,15 @@ export function setDrawerSide(side: boolean): void {
 // The height at the bottom, or the width at the side.
 export function setDrawerSize(size: number): void {
   const state = store.get();
-  store.publish(
-    sideStore.get() ? { ...state, width: size } : { ...state, height: size },
-  );
+  const side = sideStore.get();
+  writeStored(side ? WIDTH_KEY : HEIGHT_KEY, String(size));
+  store.publish(side ? { ...state, width: size } : { ...state, height: size });
+}
+
+export function resetDrawerSizes(): void {
+  removeStored(HEIGHT_KEY);
+  removeStored(WIDTH_KEY);
+  store.publish({ ...store.get(), height: null, width: null });
 }
 
 export function forgetDrawer(key: string): void {

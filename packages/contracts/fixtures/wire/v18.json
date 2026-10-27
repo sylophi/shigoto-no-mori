@@ -2552,6 +2552,7 @@
     }
   },
   "window:relaunch": {},
+  "window:resetLayout": {},
   "window:showing": {
     "payload": {
       "route": "/{"

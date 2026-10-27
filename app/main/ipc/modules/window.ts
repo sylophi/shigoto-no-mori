@@ -6,7 +6,11 @@ import { applyThemeSource } from "../../electron/clientConfig";
 import { showNotification } from "../../electron/notifications";
 import { nukeShell } from "../../electron/nuke";
 import { relaunchApp } from "../../electron/relaunch";
-import { noteShowing, openWindow } from "../../electron/windows";
+import {
+  forgetTerminalsSize,
+  noteShowing,
+  openWindow,
+} from "../../electron/windows";
 import { host, hostAddress } from "../../hostProcess";
 
 export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
@@ -32,6 +36,10 @@ export const windowHandlers: Handlers<typeof windowContract, HandlerContext> = {
 
   open: ({ route }) => {
     openWindow(route);
+  },
+
+  resetLayout: () => {
+    forgetTerminalsSize();
   },
 
   showing: ({ route }, { windowId }) => {

@@ -22,7 +22,7 @@ interface AppShellViewProps {
   // page in place of the app, which takes the whole window.
   sidebar?: ReactNode;
   sidebarWidth?: number;
-  // The resize handle's drag (useResizableWidth).
+  // The resize handle's drag (startSidebarResize).
   onResizeStart?: (event: MouseEvent<HTMLDivElement>) => void;
   // The phone's back bar over a page stacked on the forest
   // (PhoneBackBarView), and its tab bar (PhoneTabBarView).

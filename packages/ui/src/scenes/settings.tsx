@@ -9,6 +9,7 @@ import { SidebarTakeoverView } from "../views/sidebar/SidebarTakeoverView.tsx";
 import { ModalBox } from "../primitives/modal-shell.tsx";
 import { AgentsSectionView } from "../views/settings/AgentsSectionView.tsx";
 import { AppearanceSectionView } from "../views/settings/AppearanceSectionView.tsx";
+import { LayoutSectionView } from "../views/settings/LayoutSectionView.tsx";
 import { ChangelogDialogView } from "../views/settings/ChangelogDialogView.tsx";
 import {
   CliSectionView,
@@ -368,6 +369,7 @@ export function SettingsAppearanceScene() {
             settled
             commit={() => true}
           />
+          <LayoutSectionView onReset={noop} />
         </>,
       )}
     </SceneWindowFrame>
