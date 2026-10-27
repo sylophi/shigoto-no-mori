@@ -75,7 +75,7 @@ const RUNS_HOOKS = new Set([
 // cancel it.
 const NETWORK_DEADLINES = new Map<string, Duration.Input>([
   ["fetch", "5 minutes"],
-  ["push", "30 minutes"],
+  ["push", "10 minutes"],
 ]);
 const STALL_LIMIT = [
   "-c",
