@@ -9,20 +9,21 @@ import { Button } from "../../primitives/button.tsx";
 // it's staged. Only offered while two or more devices are behind
 // (offersUpdateAll), which is useOutdatedDevices' `outdated`. It
 // restarts other machines, so it asks for the second click a single
-// remote restart does.
+// remote restart does. It holds while the devices are on their way
+// into the update, until they have restarted.
 export function UpdateAllButtonView({
   armed,
-  pending,
+  updating,
   onClick,
 }: {
   armed: boolean;
-  pending: boolean;
+  updating: boolean;
   onClick: () => void;
 }) {
   return (
     <Button
       size="xs"
-      disabled={pending}
+      disabled={updating}
       aria-pressed={armed}
       onClick={onClick}
       // The loud fill of each device's own Restart to update, in the
@@ -30,12 +31,12 @@ export function UpdateAllButtonView({
       // slot stretches it), so it matches the tabs at either density.
       className="h-auto rounded-full px-2.5"
     >
-      {pending ? (
+      {updating ? (
         <Loader2 aria-hidden className="animate-spin" />
       ) : (
         <RefreshCw aria-hidden />
       )}
-      {armed ? "Click again to confirm" : "Update all"}
+      {updating ? "Updating…" : armed ? "Click again to confirm" : "Update all"}
     </Button>
   );
 }

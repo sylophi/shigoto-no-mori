@@ -3,6 +3,7 @@ import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useUpdater } from "@/hooks/system/useUpdater";
+import { isUpdating } from "@shigomori/contracts/schemas";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { ChangelogDialog } from "./ChangelogDialog";
 import {
@@ -65,7 +66,7 @@ function RestartToUpdateButton({ version }: { version: string }) {
   const { remote } = useHostScope();
   const { canCommand } = useCommandAccess();
   const deviceLabel = useScopedDeviceLabel();
-  const { install } = useUpdater();
+  const { state, install } = useUpdater();
   const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
   return (
     <RestartToUpdateButtonView
@@ -75,6 +76,7 @@ function RestartToUpdateButton({ version }: { version: string }) {
       deviceLabel={deviceLabel}
       armed={confirm.armed}
       pending={install.isPending}
+      restarting={isUpdating(state)}
       onClick={() =>
         remote ? confirm.trigger(() => install.mutate()) : install.mutate()
       }

@@ -3,7 +3,7 @@ import {
   isPrereleaseVersion,
   releaseVersionOf,
 } from "@shigomori/contracts/releaseVersions";
-import type { UpdaterState } from "@shigomori/contracts/schemas";
+import { isUpdating, type UpdaterState } from "@shigomori/contracts/schemas";
 import type { updaterContract } from "@shigomori/contracts/modules/updater";
 import type { EffectClient } from "@shigomori/contracts/types";
 import type * as Effect from "effect/Effect";
@@ -16,9 +16,11 @@ import { isOwnAppDrop } from "@shared/remote/rpcTransport";
 // A device behind the newest release this window knows of: `staged`
 // when its update is a restart away, else it restarts once it has
 // fetched it (downloading, or not found yet since its last check
-// predates the release).
+// predates the release). `updating` once it is on its way into it
+// (restarting, or armed to once it's staged).
 export interface OutdatedDevice {
   staged: boolean;
+  updating: boolean;
 }
 
 export interface KnownUpdates {
@@ -75,7 +77,10 @@ export function findOutdated(devices: readonly DeviceUpdater[]): KnownUpdates {
         (!isPrereleaseVersion(latest) || isPrereleaseVersion(running)) &&
         compareAppVersions(running, latest) === -1);
     if (!behind) continue;
-    outdated[deviceId] = { staged: state?.kind === "ready" };
+    outdated[deviceId] = {
+      staged: state?.kind === "ready",
+      updating: isUpdating(state),
+    };
     if (
       releaseVersionOf(running) !== "" &&
       (oldest === null || compareAppVersions(running, oldest) === -1)
@@ -84,6 +89,14 @@ export function findOutdated(devices: readonly DeviceUpdater[]): KnownUpdates {
     }
   }
   return { latest, oldest, outdated };
+}
+
+// Whether every device behind is on its way into its update, so there
+// is nothing left to ask for.
+export function allUpdating(
+  outdated: Readonly<Record<string, OutdatedDevice>>,
+): boolean {
+  return Object.values(outdated).every((device) => device.updating);
 }
 
 // Asks a device to install or update, through its api (a HostApi's
