@@ -90,7 +90,12 @@ function pieces(data: string): string[] {
   }
   return out;
 }
-// Reads within a frame go out as one chunk (as a script's output does).
+// The reads a write comes in go out as one chunk once they pause for
+// QUIET, a BATCH after the last chunk at the soonest, or a BATCH after
+// they began while they keep coming (a flood). A program's redraw
+// arrives as many small reads over a millisecond or two, and sent in
+// pieces it would show half drawn.
+const QUIET = Duration.millis(2);
 const BATCH = Duration.millis(16);
 // Chunks a client may fall behind by before the shell's output waits
 // for it, and how long it waits for a client that takes none.
@@ -117,11 +122,6 @@ const SAVE_AT_MOST = Duration.minutes(1);
 // A shell is stopped with SIGHUP, as when its window closes, and
 // SIGKILL a moment later if it is still there.
 const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
-// What a restored history ends with, so the fresh shell's prompt lands
-// on a clean screen: out of the mouse and the keypad modes, with the
-// cursor shown and the colors reset.
-const RESTORED_TAIL =
-  "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?2004l\x1b>\x1b[?25h\x1b[0m\r\n";
 // A private mode set or reset (CSI in seven or eight bits), its modes as
 // they come (`1049;25`), a kitty keyboard set, push or pop (`=`, `>`,
 // `<`) with its numbers, or a full reset, which leaves the alternate
@@ -137,6 +137,49 @@ const UNFINISHED = new RegExp(
   String.raw`(?:\x1b\[|\x9b)[\x00-\x17\x19\x1c-\x3f]*$|\x1b$`,
 );
 const ALTERNATE = new Set([1049, 1047, 47]);
+// The mouse reporting protocols, of which one at most is on, and the
+// other private modes a program sets for its input and cursor: the
+// cursor keys, the cursor shown, focus reports, SGR mouse coordinates
+// and bracketed paste. Followed like the kitty flags, so a full-screen
+// program still gets the wheel and its keys after an attach whose ring
+// dropped where it asked for them.
+const MOUSE = new Set([9, 1000, 1002, 1003]);
+const INPUT_MODES = new Set([1, 25, 1004, 1006, 2004]);
+// What a terminal starts with: the cursor shown.
+const MODES_AT_START: ReadonlySet<number> = new Set([25]);
+
+const modesAfter = (
+  modes: ReadonlySet<number>,
+  listed: readonly number[],
+  set: boolean,
+): ReadonlySet<number> => {
+  const next = new Set(modes);
+  for (const mode of listed) {
+    if (MOUSE.has(mode)) {
+      for (const protocol of MOUSE) next.delete(protocol);
+      if (set) next.add(mode);
+    } else if (INPUT_MODES.has(mode)) {
+      if (set) next.add(mode);
+      else next.delete(mode);
+    }
+  }
+  return next;
+};
+
+// What a restored history ends with, so the fresh shell's prompt lands
+// on a clean screen: out of the input and the keypad modes, with the
+// cursor shown and the colors reset.
+const RESTORED_TAIL = `${[...MOUSE, ...INPUT_MODES]
+  .filter((mode) => mode !== 25)
+  .map((mode) => `\x1b[?${mode}l`)
+  .join("")}\x1b>\x1b[?25h\x1b[0m\r\n`;
+
+// The sequences that put a reset terminal in `modes`.
+const modesText = (modes: ReadonlySet<number>): string =>
+  [...modes]
+    .filter((mode) => mode !== 25)
+    .map((mode) => `\x1b[?${mode}h`)
+    .join("") + (modes.has(25) ? "" : "\x1b[?25l");
 
 // The kitty keyboard flags a program asked for, kept as xterm keeps
 // them: the shown screen's flags and stack, and the other screen's put
@@ -185,22 +228,28 @@ const kittyAfter = (kitty: Kitty, op: string, numbers: string): Kitty => {
 
 // Whether `text` leaves the terminal on the alternate screen, from
 // `before` at its start, where it last went there if it did, and the
-// kitty keyboard flags it leaves.
+// kitty keyboard flags and input modes it leaves.
 const screenAfter = (
   text: string,
-  before: { readonly on: boolean; readonly kitty: Kitty } = {
+  before: {
+    readonly on: boolean;
+    readonly kitty: Kitty;
+    readonly modes: ReadonlySet<number>;
+  } = {
     on: false,
     kitty: KITTY_OFF,
+    modes: MODES_AT_START,
   },
 ): {
   readonly on: boolean;
   readonly enteredAt: number | undefined;
   readonly kitty: Kitty;
+  readonly modes: ReadonlySet<number>;
 } => {
-  let { on, kitty } = before;
+  let { on, kitty, modes } = before;
   let enteredAt: number | undefined;
   for (const match of text.matchAll(SCREEN_MODES)) {
-    const [sequence, modes, set, op, numbers] = match;
+    const [sequence, sequenceModes, set, op, numbers] = match;
     if (op !== undefined) {
       kitty = kittyAfter(kitty, op, numbers ?? "");
       continue;
@@ -209,10 +258,14 @@ const screenAfter = (
       on = false;
       enteredAt = undefined;
       kitty = KITTY_OFF;
+      modes = MODES_AT_START;
       continue;
     }
-    const listed = modes?.replace(/[^\d;]/g, "").split(";") ?? [];
-    if (!listed.some((mode) => ALTERNATE.has(Number(mode)))) {
+    const listed = (sequenceModes?.replace(/[^\d;]/g, "").split(";") ?? []).map(
+      Number,
+    );
+    modes = modesAfter(modes, listed, set === "h");
+    if (!listed.some((mode) => ALTERNATE.has(mode))) {
       continue;
     }
     if (set === "l") {
@@ -225,32 +278,36 @@ const screenAfter = (
       kitty = otherScreen(kitty);
     }
   }
-  return { on, enteredAt, kitty };
+  return { on, enteredAt, kitty, modes };
 };
 
-// The alternate screen and the kitty keyboard flags after a read, from
-// where the last one left them, with what of this one the next has to
-// finish.
+// The alternate screen, the kitty keyboard flags and the input modes
+// after a read, from where the last one left them, with what of this
+// one the next has to finish.
 const followScreen = (
   before: {
     readonly alternate: boolean;
     readonly kitty: Kitty;
+    readonly modes: ReadonlySet<number>;
     readonly carry: string;
   },
   data: string,
 ): {
   readonly alternate: boolean;
   readonly kitty: Kitty;
+  readonly modes: ReadonlySet<number>;
   readonly carry: string;
 } => {
   const seen = before.carry + data;
   const after = screenAfter(seen, {
     on: before.alternate,
     kitty: before.kitty,
+    modes: before.modes,
   });
   return {
     alternate: after.on,
     kitty: after.kitty,
+    modes: after.modes,
     carry: (UNFINISHED.exec(seen)?.[0] ?? "").slice(-256),
   };
 };
@@ -285,11 +342,12 @@ interface Session {
   seq: number;
   size: Size;
   exited: Option.Option<number | null>;
-  // On the alternate screen, and the kitty keyboard flags, followed as
-  // output comes in, so they hold once the ring has dropped where the
-  // program went there or asked for them.
+  // On the alternate screen, the kitty keyboard flags and the input
+  // modes, followed as output comes in, so they hold once the ring has
+  // dropped where the program went there or asked for them.
   alternate: boolean;
   kitty: Kitty;
+  modes: ReadonlySet<number>;
   // A sequence the last read left unfinished, which the next finishes.
   carry: string;
   // Closed by its user or with its worktree, or its shell ended, so not
@@ -449,9 +507,27 @@ const make = <R, E>(options: {
       backlog: { bytes: number; paused: boolean },
     ) =>
       Effect.gen(function* () {
+        const batch = Duration.toMillis(BATCH);
+        let sentAt = Number.NEGATIVE_INFINITY;
         while (true) {
           const first = yield* Queue.take(reads);
-          if (typeof first === "string") yield* Effect.sleep(BATCH);
+          if (typeof first === "string") {
+            const start = yield* elapsedMillis;
+            let seen = yield* Queue.size(reads);
+            while (true) {
+              yield* Effect.sleep(QUIET);
+              const size = yield* Queue.size(reads);
+              const now = yield* elapsedMillis;
+              if (
+                now - start >= batch ||
+                (size === seen && now - sentAt >= batch)
+              ) {
+                break;
+              }
+              seen = size;
+            }
+          }
+          sentAt = yield* elapsedMillis;
           const taken = [first, ...(yield* Queue.clear(reads))];
           let data = "";
           let ended: Option.Option<number> = Option.none();
@@ -467,6 +543,7 @@ const make = <R, E>(options: {
           ({
             alternate: session.alternate,
             kitty: session.kitty,
+            modes: session.modes,
             carry: session.carry,
           } = followScreen(session, data));
           for (const piece of pieces(data)) {
@@ -602,6 +679,7 @@ const make = <R, E>(options: {
           exited: Option.none(),
           alternate: false,
           kitty: KITTY_OFF,
+          modes: MODES_AT_START,
           carry: "",
           forget: false,
         };
@@ -726,17 +804,21 @@ const make = <R, E>(options: {
             const since = session.history.since(
               from?.incarnation === session.incarnation ? from.seq : undefined,
             );
-            // The history ends with the kitty keyboard flags as they are
-            // now, since the ring may have dropped where a program asked
-            // for them. Not after one that stops inside a sequence, which
-            // the next output finishes.
-            const past =
+            // The ring may have dropped where a program went to the
+            // alternate screen, so a history that starts over goes there
+            // first if it is still there, and ends with the kitty keyboard
+            // flags and the input modes as they are now. Not after one
+            // that stops inside a sequence, which the next output
+            // finishes.
+            const entered =
+              since.reset && session.alternate && !screenAfter(since.data).on
+                ? `\x1b[?1049h${since.data}`
+                : since.data;
+            const tail =
               session.carry === ""
-                ? {
-                    ...since,
-                    data: `${since.data}\x1b[=${session.kitty.flags}u`,
-                  }
-                : since;
+                ? `\x1b[=${session.kitty.flags}u${modesText(session.modes)}`
+                : "";
+            const past = { ...since, data: entered + tail };
             return {
               past,
               head: [
