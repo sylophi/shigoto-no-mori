@@ -451,7 +451,7 @@ importers:
         specifier: ^6.1.2
         version: 6.1.2(react@19.2.7)
       react-grab:
-        specifier: ^0.2.0
+        specifier: 0.2.0
         version: 0.2.0(patch_hash=5b181239b3224dc270abd8ee8a987199f3f9df83cb885cc2f3f05762970beb68)(react@19.2.7)
       sonner:
         specifier: ^2.0.7

@@ -83,7 +83,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-error-boundary": "^6.1.2",
-    "react-grab": "^0.2.0",
+    "react-grab": "0.2.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "catalog:",
     "ws": "^8.21.3"

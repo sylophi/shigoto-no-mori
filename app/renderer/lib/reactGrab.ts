@@ -40,6 +40,7 @@ export function listenForReactGrab(): void {
         return;
       }
       e.preventDefault();
+      e.stopPropagation();
       toggleGrab();
     },
     true,
