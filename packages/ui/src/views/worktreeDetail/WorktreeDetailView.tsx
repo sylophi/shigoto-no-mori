@@ -73,7 +73,9 @@ export function WorktreeDetailView({
   drawer?: ReactNode;
   drawerSide?: boolean;
 }) {
-  // One shape for both docks, so a switch keeps the page mounted.
+  // One shape for both docks, so a switch keeps the page mounted. The
+  // outer box is `relative`: the side drawer measures it as its offset
+  // parent.
   return (
     <div className="relative flex h-full">
       <div className="relative flex h-full min-w-0 flex-1 flex-col">

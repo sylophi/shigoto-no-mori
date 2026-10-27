@@ -99,8 +99,9 @@ export function TerminalTabsView({
         )}
         style={titleBar ? dragRegion("drag") : undefined}
       >
+        {/* The tabs scroll before the controls wrap under them. */}
         <div
-          className="flex h-8 min-w-0 items-center gap-1"
+          className="flex h-8 max-w-max min-w-0 grow basis-28 items-center gap-1"
           style={dragRegion("no-drag")}
         >
           <Tabs.List
@@ -163,7 +164,7 @@ export function TerminalTabsView({
             room between them still drags the window. */}
         <div
           ref={setToolbar}
-          className="flex h-8 flex-auto items-center justify-end gap-2 *:[app-region:no-drag] empty:hidden"
+          className="ml-auto flex h-8 items-center gap-2 *:[app-region:no-drag] empty:hidden"
         />
         {/* Out of the flow, so it stays on the first line when the
             controls wrap. */}
