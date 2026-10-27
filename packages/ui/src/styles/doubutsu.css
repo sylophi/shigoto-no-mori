@@ -927,7 +927,7 @@
    last frame is pixel-identical to its first. And none of them can go
    much slower: these all sit under 13% opacity, where below a few px/s
    the eye has nothing to lock onto and the pattern just looks static.
-   All six drift at the same ~4.7px/s along six different vectors:
+   All six drift at the same ~7px/s along six different vectors:
    related rooms, not copies. */
 @keyframes ac-wallpaper-drift {
   from {
@@ -950,7 +950,7 @@
   --doubutsu-wallpaper-opacity: 0.06;
   --doubutsu-drift-x: -80px;
   --doubutsu-drift-y: 80px;
-  --doubutsu-drift-time: 24s;
+  --doubutsu-drift-time: 16s;
 }
 
 /* Devices: apples, falling straight down. Built like the leaves: a
@@ -965,7 +965,7 @@
   --doubutsu-wallpaper-opacity: 0.065;
   --doubutsu-drift-x: 0px;
   --doubutsu-drift-y: 78px;
-  --doubutsu-drift-time: 16.5s;
+  --doubutsu-drift-time: 11s;
 }
 
 /* Settings: boxes, sliding left. The one square-cornered shape in an
@@ -979,7 +979,7 @@
   --doubutsu-wallpaper-opacity: 0.07;
   --doubutsu-drift-x: -140px;
   --doubutsu-drift-y: 0px;
-  --doubutsu-drift-time: 30s;
+  --doubutsu-drift-time: 20s;
 }
 
 /* Tidy the forest: five-petal blossoms drifting down-right, the mirror
@@ -991,19 +991,19 @@
   --doubutsu-wallpaper-opacity: 0.075;
   --doubutsu-drift-x: 120px;
   --doubutsu-drift-y: 120px;
-  --doubutsu-drift-time: 36s;
+  --doubutsu-drift-time: 24s;
 }
 
 /* Visitors: paw prints, built like the apples: one print at one size
    and one angle on a diagonal checker, solid pads with the toes apart,
-   walking up the page the way they point, at the same ~4.7px/s. */
+   walking up the page the way they point, at the same ~7px/s. */
 .doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="visitors"]) {
   --doubutsu-wallpaper: url("./wallpapers/paw.svg");
   --doubutsu-wallpaper-size: 84px 84px;
   --doubutsu-wallpaper-opacity: 0.065;
   --doubutsu-drift-x: 0px;
   --doubutsu-drift-y: -84px;
-  --doubutsu-drift-time: 18s;
+  --doubutsu-drift-time: 12s;
 }
 
 /* The forest as a page (the phone layout's home, ForestPage): the
