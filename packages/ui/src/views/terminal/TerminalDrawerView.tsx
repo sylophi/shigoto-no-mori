@@ -70,11 +70,10 @@ export function TerminalDrawerView({
           const section = sectionRef.current;
           const startSize =
             (side ? section?.offsetWidth : section?.offsetHeight) ?? 0;
+          // Its row with the page, `relative` for the phone sheet. Its
+          // parent element can be a box-less theme scope.
           const [min, max] = side
-            ? [
-                MIN_WIDTH,
-                (section?.parentElement?.clientWidth ?? 0) - PAGE_ROOM,
-              ]
+            ? [MIN_WIDTH, (section?.offsetParent?.clientWidth ?? 0) - PAGE_ROOM]
             : [MIN_HEIGHT, window.innerHeight * MAX_SHARE];
           event.currentTarget.setPointerCapture(event.pointerId);
           const move = (moved: PointerEvent) =>
