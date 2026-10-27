@@ -318,7 +318,8 @@ export const makeCreating = ({
           input.name === "" ? yield* pickName(project, used) : input.name;
         const place = path.join(yield* layout.worktreeBase(project), name);
         // The remote-tracking ref the worktree sits on, refreshed, so the
-        // base isn't whatever the last fetch left.
+        // base isn't whatever the last fetch left, unless the remote is
+        // too slow to wait for.
         let remotes: ReadonlyArray<string> | undefined;
         if (
           input.base !== "" &&
@@ -328,12 +329,11 @@ export const makeCreating = ({
           const split = splitRemoteRef(input.base, remotes);
           if (split) {
             yield* git
-              .run(project.path, [
-                "fetch",
-                "--quiet",
-                split.remote,
-                split.branch,
-              ])
+              .run(
+                project.path,
+                ["fetch", "--quiet", split.remote, split.branch],
+                { deadline: "30 seconds" },
+              )
               .pipe(Effect.ignore);
           }
         }

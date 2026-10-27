@@ -3,6 +3,7 @@ import * as Arr from "effect/Array";
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -28,6 +29,7 @@ import {
   stderrOf,
 } from "./documents.ts";
 import {
+  CommandTimedOut,
   capture,
   captureToFiles,
   readAll,
@@ -63,10 +65,18 @@ const RUNS_HOOKS = new Set([
   "switch",
   "worktree add",
 ]);
-// A fetch that hasn't finished in five minutes is stuck (a remote that
-// stopped answering mid-transfer over ssh, which the stall limit can't
-// see): it ends, with its git, rather than holding its caller for good.
-const FETCH_DEADLINE = "5 minutes";
+// A network git that hasn't finished by its deadline is stuck (a remote
+// that stopped answering mid-transfer over ssh, which the stall limit
+// can't see): it ends, with its git, rather than holding its caller for
+// good. A push's covers its pre-push hook too (an LFS upload, a test
+// run). A pull has none, since ending one can stop it partway through
+// the working tree, so the engine pulls as a fetch and a merge. A
+// clone has none: a large one takes what it takes, and its caller can
+// cancel it.
+const NETWORK_DEADLINES = new Map<string, Duration.Input>([
+  ["fetch", "5 minutes"],
+  ["push", "30 minutes"],
+]);
 const STALL_LIMIT = [
   "-c",
   "http.lowSpeedLimit=1000",
@@ -229,6 +239,7 @@ export const makeRunning = Effect.gen(function* () {
       const failed = (exitCode: number | null) => (cause: unknown) =>
         new GitCommandError({ subcommand, exitCode, cause });
       const limit = options.maxOutputBytes ?? DEFAULT_MAX_OUTPUT;
+      const deadline = options.deadline ?? NETWORK_DEADLINES.get(subcommand);
       const tooLarge = () =>
         new GitOutputTooLargeError({ subcommand, limitBytes: limit });
       const once = Effect.scoped(
@@ -319,17 +330,22 @@ export const makeRunning = Effect.gen(function* () {
           return stdout;
         }),
       ).pipe(
-        subcommand === "fetch" && options.local !== true
-          ? Effect.timeoutOrElse({
-              duration: FETCH_DEADLINE,
+        deadline === undefined
+          ? identity
+          : Effect.timeoutOrElse({
+              duration: deadline,
               orElse: () =>
                 Effect.fail(
                   failed(null)(
-                    new Error("git fetch didn't finish within 5 minutes"),
+                    new CommandTimedOut({
+                      command: `git ${subcommand}`,
+                      seconds: Duration.toSeconds(
+                        Duration.fromInputUnsafe(deadline),
+                      ),
+                    }),
                   ),
                 ),
-            })
-          : identity,
+            }),
         SLOTTED_SUBCOMMANDS.has(slotKey) ? slots.withPermit : identity,
       );
       return yield* WAITS_FOR_INDEX.has(subcommand) && options.once !== true

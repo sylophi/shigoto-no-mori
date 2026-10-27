@@ -1164,7 +1164,8 @@ const make = Effect.gen(function* () {
       },
     ),
     pullFastForward: Effect.fn("Git.pullFastForward")(function* (worktree) {
-      yield* run(worktree, ["pull", "--ff-only"]);
+      yield* run(worktree, ["fetch"]);
+      yield* run(worktree, ["merge", "--ff-only", "@{u}"]);
     }),
     fastForwardToUpstream: Effect.fn("Git.fastForwardToUpstream")(
       function* (worktree) {

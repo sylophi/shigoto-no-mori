@@ -1,5 +1,4 @@
 import { basename } from "node:path";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -152,9 +151,6 @@ const decodeGhPrCommits = Schema.decodeUnknownEffect(
   ),
 );
 
-// A stalled fetch gives way to gh, which has its own deadline.
-const PULL_REQUEST_FETCH_DEADLINE = Duration.minutes(1);
-
 // Whether both of the PR's commits are here, fetching the ones that
 // aren't (a base that moved since the last fetch, a head pushed from
 // another device or a fork) by hash from the remote that holds the PR,
@@ -175,22 +171,23 @@ const fetchPullRequestCommits = Effect.fnUntraced(function* (
   if (missing.length === 0) return true;
   const remote = yield* remoteNameForUrl(cwd, pr.url);
   if (!remote) return false;
+  // A stalled fetch gives way to gh, which has its own deadline.
   return yield* git
-    .run(cwd, [
-      "fetch",
-      "--quiet",
-      "--no-tags",
-      "--no-write-fetch-head",
-      remote,
-      ...missing,
-    ])
+    .run(
+      cwd,
+      [
+        "fetch",
+        "--quiet",
+        "--no-tags",
+        "--no-write-fetch-head",
+        remote,
+        ...missing,
+      ],
+      { deadline: "1 minute" },
+    )
     .pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
-      Effect.timeoutOrElse({
-        duration: PULL_REQUEST_FETCH_DEADLINE,
-        orElse: () => Effect.succeed(false),
-      }),
     );
 });
 
