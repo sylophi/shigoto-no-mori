@@ -56,7 +56,9 @@ export const makeCleanup = ({
         if (!(yield* git.hasCommit(repo, head)) && remote !== "") {
           // Its failure is the check below's.
           yield* git
-            .run(repo, ["fetch", "--quiet", "--no-tags", remote, head])
+            .run(repo, ["fetch", "--quiet", "--no-tags", remote, head], {
+              deadline: "1 minute",
+            })
             .pipe(Effect.ignore);
         }
         if (!(yield* git.hasCommit(repo, head))) {
@@ -117,7 +119,7 @@ export const makeCleanup = ({
 
     // Fast-forwards `branch`, checked out at `worktree`, from
     // `remote/branch`, refusing unless that checkout really is on it: a
-    // pull --ff-only advances whatever branch is out.
+    // fast-forward merge advances whatever branch is out.
     const ffPull = (worktree: string, remote: string, branch: string) =>
       Effect.gen(function* () {
         const head = (yield* git.run(worktree, [
@@ -133,7 +135,8 @@ export const makeCleanup = ({
             [worktree, head, branch],
           );
         }
-        yield* git.run(worktree, ["pull", "--ff-only", remote, branch]);
+        yield* git.run(worktree, ["fetch", remote, branch]);
+        yield* git.run(worktree, ["merge", "--ff-only", "FETCH_HEAD"]);
       });
 
     // Best-effort fast-forward of the checkout holding the PR's base branch

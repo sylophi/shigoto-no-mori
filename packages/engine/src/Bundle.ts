@@ -200,7 +200,9 @@ const make = Effect.gen(function* () {
       bundle,
       ...specs,
     ];
-    yield* git.run(repo, fetch, { local: true }).pipe(
+    // From a file on this machine, which no network can stall, so no
+    // deadline however long its index takes.
+    yield* git.run(repo, fetch, { deadline: "Infinity" }).pipe(
       Effect.mapError(
         (error) =>
           new BundleRefused({

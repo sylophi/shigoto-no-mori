@@ -1,5 +1,6 @@
 // Git's errors, documents and the pure helpers its areas share (EFFECT.md, section 2). `Git.ts` re-exports what consumers use.
 import type { CommitPicks } from "@shigomori/contracts/schemas";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -157,9 +158,9 @@ export type RunOptions = {
   // external diff driver, a textconv). Output past the cap and a git
   // that never ran still fail.
   readonly anyExit?: boolean | undefined;
-  // A fetch from a file on this machine (a bundle), which no network can
-  // stall, so it has no deadline however long its index takes.
-  readonly local?: boolean | undefined;
+  // The deadline over the subcommand's own (git/running.ts): a short one
+  // for a fetch its caller can go on without, "Infinity" for none.
+  readonly deadline?: Duration.Input | undefined;
   // The output cap, over DEFAULT_MAX_OUTPUT.
   readonly maxOutputBytes?: number | undefined;
   // A write asked once, not again on a held index.lock, for a caller
