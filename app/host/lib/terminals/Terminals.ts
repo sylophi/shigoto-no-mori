@@ -94,9 +94,12 @@ function pieces(data: string): string[] {
 // QUIET, a BATCH after the last chunk at the soonest, or a BATCH after
 // they began while they keep coming (a flood). A program's redraw
 // arrives as many small reads over a millisecond or two, and sent in
-// pieces it would show half drawn.
+// pieces it would show half drawn. One that marks its frames
+// (synchronized output) has each go out as soon as it ends, so a
+// fullscreen TUI's scroll reaches the screen at the rate it draws.
 const QUIET = Duration.millis(2);
 const BATCH = Duration.millis(16);
+const FRAME_END = "\x1b[?2026l";
 // Chunks a client may fall behind by before the shell's output waits
 // for it, and how long it waits for a client that takes none.
 const CLIENT_BACKLOG = 64;
@@ -510,25 +513,28 @@ const make = <R, E>(options: {
         const batch = Duration.toMillis(BATCH);
         let sentAt = Number.NEGATIVE_INFINITY;
         while (true) {
-          const first = yield* Queue.take(reads);
-          if (typeof first === "string") {
-            const start = yield* elapsedMillis;
-            let seen = yield* Queue.size(reads);
-            while (true) {
-              yield* Effect.sleep(QUIET);
-              const size = yield* Queue.size(reads);
-              const now = yield* elapsedMillis;
-              if (
-                now - start >= batch ||
-                (size === seen && now - sentAt >= batch)
-              ) {
-                break;
-              }
-              seen = size;
+          const taken: Array<string | number> = [
+            ...(yield* Queue.takeAll(reads)),
+          ];
+          const start = yield* elapsedMillis;
+          let latest: ReadonlyArray<string | number> = taken;
+          while (
+            latest.every(
+              (item) => typeof item === "string" && !item.includes(FRAME_END),
+            ) &&
+            (yield* elapsedMillis) - start < batch
+          ) {
+            const next = yield* Queue.takeAll(reads).pipe(
+              Effect.timeoutOption(QUIET),
+            );
+            if (Option.isSome(next)) {
+              latest = next.value;
+              taken.push(...latest);
+            } else if ((yield* elapsedMillis) - sentAt >= batch) {
+              break;
             }
           }
           sentAt = yield* elapsedMillis;
-          const taken = [first, ...(yield* Queue.clear(reads))];
           let data = "";
           let ended: Option.Option<number> = Option.none();
           for (const item of taken) {
