@@ -293,6 +293,9 @@ const config: ForgeConfig = {
         // The version rides the volume name rather than the artwork,
         // which is a committed png and would go stale every release.
         title: dmgVolumeName,
+        // lzma, about a fifth smaller than the default zlib. appdmg
+        // takes it, but electron-installer-dmg's type stops at ULFO.
+        format: "ULMO" as "ULFO",
         icon: "assets/icon.icns",
         background: dmgBackgroundFor(version),
         iconSize: DMG_ICON_SIZE,
