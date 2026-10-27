@@ -38,6 +38,8 @@ export function AppearanceSection({
   onThemeRotationEveryChange: (next: ThemeRotation) => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
+  darkTerminals: boolean;
+  onDarkTerminalsChange: (next: boolean) => void;
   villageLife: boolean;
   onVillageLifeChange: (next: boolean) => void;
   villageNews: boolean;

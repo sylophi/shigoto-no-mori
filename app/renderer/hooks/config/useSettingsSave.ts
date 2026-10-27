@@ -76,6 +76,7 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
       "pauseAnimationsOnBattery",
       state.pauseAnimationsOnBattery,
     ),
+    darkTerminals: storedClientSetting("darkTerminals", state.darkTerminals),
     villageLife: storedClientSetting("villageLife", state.villageLife),
     villageNews: storedClientSetting("villageNews", state.villageNews),
     markTerrierProjects: storedClientSetting(

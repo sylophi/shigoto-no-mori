@@ -30,6 +30,8 @@ export interface AppearanceSectionViewProps {
   onThemeRotationEveryChange: (next: ThemeRotation) => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
+  darkTerminals: boolean;
+  onDarkTerminalsChange: (next: boolean) => void;
   // A browser without the Battery Status API has nothing to pause on.
   battery: boolean;
   // The two palette picks (ThemePicker).
@@ -53,6 +55,8 @@ export function AppearanceSectionView({
   onThemeRotationEveryChange,
   pauseAnimationsOnBattery,
   onPauseAnimationsOnBatteryChange,
+  darkTerminals,
+  onDarkTerminalsChange,
   battery,
   lightPalette,
   darkPalette,
@@ -116,6 +120,11 @@ export function AppearanceSectionView({
           />
         </div>
       </div>
+      <ToggleRowView
+        checked={darkTerminals}
+        onCheckedChange={onDarkTerminalsChange}
+        label="Always dark terminals"
+      />
       {/* A browser without the Battery Status API has nothing to pause
           on, and neither does the plain look: the wallpaper is doubutsu's. */}
       {battery && (

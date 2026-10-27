@@ -308,6 +308,8 @@ export function SettingsForm({
             onPauseAnimationsOnBatteryChange={setField(
               "pauseAnimationsOnBattery",
             )}
+            darkTerminals={form.darkTerminals}
+            onDarkTerminalsChange={setField("darkTerminals")}
             villageLife={form.villageLife}
             onVillageLifeChange={setField("villageLife")}
             villageNews={form.villageNews}
