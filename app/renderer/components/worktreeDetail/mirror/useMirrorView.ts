@@ -1,5 +1,5 @@
-// A mirror link as its surfaces word it (the header pill, the footer
-// button, the dialog): both devices by name, the line describeMirror
+// A mirror link as its surfaces word it (the footer button, the
+// dialog): both devices by name, the line describeMirror
 // ranks off the session and what is known beside it (the runner out of
 // reach, its engine restarting, a switch off on the copy's device), and
 // the root this machine can reveal the session's paths under, when it
