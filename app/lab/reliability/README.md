@@ -20,7 +20,7 @@ pnpm reliability --soak 4h                  # random order and gaps, for 4 hours
 | `--soak <d>` | Loop the soak's scenarios for `<d>` (`90m`, `4h`), in random order, with a random gap between them. |
 | `--gap <min>-<max>` | The soak's gap, default `30s-3m`. |
 | `--seed <n>` | Replay a soak's order and gaps (the report names its seed). |
-| `--headed` | Show the browser, for watching or for signing it in. |
+| `--headed` | Show the browser, for watching. |
 | `--keep` | Leave every profile and its device enrolled, for a quicker next run. |
 | `--revoke-host` | Sign B out at the end and delete its profile, which is kept otherwise. `--keep` wins. |
 | `--deploy-local-hub` | Let a named `hub-redeploy` deploy this checkout's `hub/` when it differs from main. |
@@ -62,11 +62,9 @@ hub front and B's listener front, thrown together, plus the pages'
 offline emulation. Down, new connections are refused and open ones
 stall. Back up, the stalled flows resume or are cut.
 
-The browser profile keeps its sign-in between runs. The first run
-needs one: run with `--headed` and sign in with GitHub, or set
-`RELIABILITY_SIGN_IN` to a command that completes the sign-in's GitHub
-authorize URL (handed to it as `$AUTH_URL`) and prints the URL GitHub
-redirects to, which the tab then opens.
+The browser profile keeps its sign-in between runs. A profile with
+none signs in as B: the hub mints a sign-in token for B's session,
+which the tab redeems for its own.
 
 At the end it signs the browser, A and C out (revoking their devices)
 and deletes A's and C's profiles, unless `--keep`. The browser profile

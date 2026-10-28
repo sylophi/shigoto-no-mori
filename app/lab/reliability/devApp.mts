@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright-core";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
+import { devProfilePaths } from "../../scripts/lib/devProfile.mts";
 import { pageApi, withPageApi } from "./pageApi.mts";
 import { appDir, freePort, waitFor, type TraceLine } from "./util.mts";
 
@@ -44,21 +45,19 @@ export class DevApp {
   constructor(options: DevAppOptions) {
     this.options = options;
     this.profile = options.profile;
-    this.profileDir = join(homedir(), ".smd-profiles", this.profile);
-    this.userDataDir = join(
-      homedir(),
-      "Library",
-      "Application Support",
-      "Shigoto no Mori (dev)",
-      "profiles",
-      this.profile,
-    );
-    this.logDir = join(
-      homedir(),
-      "Library",
-      "Logs",
-      `Shigoto no Mori (Dev) [${this.profile}]`,
-    );
+    const paths = devProfilePaths(this.profile);
+    this.profileDir = paths.dir;
+    this.userDataDir = paths.userData;
+    // Electron's logs folder: macOS's own, elsewhere inside userData.
+    this.logDir =
+      process.platform === "darwin"
+        ? join(
+            homedir(),
+            "Library",
+            "Logs",
+            `Shigoto no Mori (Dev) [${this.profile}]`,
+          )
+        : join(paths.userData, "logs");
   }
 
   // Its one project: a clone of the host's seed, the same repo by its
@@ -82,20 +81,27 @@ export class DevApp {
   // dev app's sign-in and enrolls a device of its own.
   async launch(fresh: boolean): Promise<void> {
     this.debugPort = await freePort();
-    this.launched = spawn(
+    const device = [
       "pnpm",
-      ["device", this.profile, ...(fresh ? ["--clone-login"] : [])],
-      {
-        cwd: appDir,
-        detached: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: {
-          ...process.env,
-          ...this.options.env,
-          SHIGOMORI_DEBUG_PORT: String(this.debugPort),
-        },
+      "device",
+      this.profile,
+      ...(fresh ? ["--clone-login"] : []),
+    ];
+    // A machine with no display gives each app a virtual one.
+    const [command = "pnpm", ...args] =
+      process.platform === "linux" && process.env["DISPLAY"] === undefined
+        ? ["xvfb-run", "-a", ...device]
+        : device;
+    this.launched = spawn(command, args, {
+      cwd: appDir,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        ...this.options.env,
+        SHIGOMORI_DEBUG_PORT: String(this.debugPort),
       },
-    );
+    });
     this.launched.stdout?.pipe(this.options.logs, { end: false });
     this.launched.stderr?.pipe(this.options.logs, { end: false });
     await this.attach(fresh);
@@ -208,7 +214,7 @@ export class DevApp {
     try {
       out = execFileSync(
         "lsof",
-        ["-nP", "-a", "-p", String(pid), "-iTCP", "-sTCP:LISTEN"],
+        ["-nPw", "-a", "-p", String(pid), "-iTCP", "-sTCP:LISTEN"],
         { encoding: "utf8" },
       );
     } catch {
@@ -244,7 +250,7 @@ export class DevApp {
     const mains = rows
       .filter((row) => ours.has(row.pid))
       .map((row) => byPid.get(row.ppid))
-      .filter((parent) => parent?.command.includes("/Contents/MacOS/Electron"));
+      .filter((parent) => parent?.command.includes("/electron/dist/"));
     for (const main of mains) if (main !== undefined) ours.add(main.pid);
     for (let grew = true; grew;) {
       grew = false;
