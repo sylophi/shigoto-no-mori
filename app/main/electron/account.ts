@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
+import { byPlatform } from "@shigomori/engine/platform";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import {
   departed,
@@ -29,11 +30,11 @@ import {
   type AccountStore,
   type StoreCipher,
   type StoredAccount,
-} from "../core/account/credentialStore";
+} from "@shared/account/credentialFile";
 import {
   defaultDesktopDeviceName,
   type DefaultDeviceName,
-} from "../core/account/defaultDeviceName";
+} from "@shared/account/defaultDeviceName";
 import { detectDesktopDeviceShape } from "../core/account/defaultDeviceIcon";
 import { retryParkedRevoke, signOutDevice } from "@shared/account/enroll";
 import type { AccountShell } from "@shared/account/handlers";
@@ -68,10 +69,14 @@ let revokeWarned = false;
 // The safeStorage-backed cipher. `available` is the OS keychain's
 // verdict: when true the credential is encrypted at rest, when false the
 // store keeps plaintext (enc:false) so sign-in still works on a machine
-// without a keychain. The plaintext fallback is logged once.
+// without a keychain. The plaintext fallback is logged once. Linux
+// keeps plaintext by design, in the file only its owner can read, as
+// ssh keys and gh's tokens are on a server: with no keyring there,
+// safeStorage encrypts with a key Chromium hardcodes.
 function buildCipher(): StoreCipher {
-  const available = safeStorage.isEncryptionAvailable();
-  if (!available && !cipherWarned) {
+  const keychain = byPlatform({ darwin: true, linux: false });
+  const available = keychain && safeStorage.isEncryptionAvailable();
+  if (keychain && !available && !cipherWarned) {
     cipherWarned = true;
     log.warn(
       "[account] OS encryption unavailable, storing the hub credential " +

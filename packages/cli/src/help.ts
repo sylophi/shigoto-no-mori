@@ -35,12 +35,23 @@ const catalog = (names: Names) => {
       ],
       ...byPlatform<{ darwin: Item[]; linux: Item[] }>({
         darwin: [["app", "Open the Shigoto no Mori app", ""]],
-        linux: [],
+        linux: [
+          [
+            "login",
+            "Sign this machine in to your account",
+            "Prints a link and a code: open the link on another device, sign in there if you need to, and approve. This machine then joins your account as one of your devices, under its hostname. Needs the host running.",
+          ],
+          [
+            "logout",
+            "Sign this machine out of your account",
+            "Removes this machine from your devices and drops its credential. Offline, it signs out here anyway, and the hub is told the next time the host starts.",
+          ],
+        ],
       }),
       [
         "devices [-p <project>]",
         "List your other devices",
-        "The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror, and if not, why. Needs the app open.",
+        `The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror, and if not, why. ${byPlatform({ darwin: "Needs the app open.", linux: "Needs the host running, signed in (`login`)." })}`,
       ],
       [
         "update [--check]",

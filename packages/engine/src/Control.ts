@@ -38,6 +38,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/socket/Socket";
 import { type Flavor, flavorNames, isFlavor } from "./flavor.ts";
+import { byPlatform } from "./platform.ts";
 import { answerWithin } from "./liveness.ts";
 import * as Paths from "./Paths.ts";
 import { pidAlive } from "./processes.ts";
@@ -51,11 +52,19 @@ class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
   { flavor: Schema.String.check(Schema.makeFilter(isFlavor)) },
 ) {
   override get message(): string {
-    const hint =
-      this.flavor === "dev"
-        ? "Start it with `pnpm dev` in a checkout, sign in, and try again."
-        : `Open it (${flavorNames(this.flavor).binaryName} app), sign in, and try again.`;
-    return `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${hint}`;
+    const bin = flavorNames(this.flavor).binaryName;
+    return byPlatform({
+      darwin: `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${
+        this.flavor === "dev"
+          ? "Start it with `pnpm dev` in a checkout, sign in, and try again."
+          : `Open it (${bin} app), sign in, and try again.`
+      }`,
+      linux: `This machine's host isn't running, and it is what reaches your other devices. ${
+        this.flavor === "dev"
+          ? "Start it with `pnpm headless` in a checkout and try again."
+          : `Start it (${bin} service start) and try again.`
+      }`,
+    });
   }
 
   get documentCode(): string {

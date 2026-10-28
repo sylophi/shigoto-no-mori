@@ -25,6 +25,7 @@ import { dirty } from "./commands/dirty.ts";
 import { app, edit, open } from "./commands/open.ts";
 import { update } from "./commands/update.ts";
 import { nuke } from "./commands/nuke.ts";
+import { login, logout } from "./commands/login.ts";
 import { serviceCommand } from "./commands/service.ts";
 import {
   bring,
@@ -152,6 +153,8 @@ const sm = Command.make("sm").pipe(
     loaded(unmirror),
     loaded(mirrors),
     loaded(devices),
+    login.pipe(Command.provide(services)),
+    logout.pipe(Command.provide(services)),
     doctorCommand.pipe(changingWithFix, Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
     nuke.pipe(Command.provide(Paths.layer(flavor))),

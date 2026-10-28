@@ -1,7 +1,6 @@
-// The name a desktop device enrolls under before anyone renames it:
-// what the machine's owner already calls it, as far as the OS will
-// say. Pure node (os and a child process), electron-free like the rest
-// of main/core/account/.
+// The name a machine enrolls under before anyone renames it: what its
+// owner already calls it, as far as the OS will say. Pure node (os and
+// a child process), for the desktop shell and the headless host.
 import { hostname } from "node:os";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 import { execFile } from "node:child_process";

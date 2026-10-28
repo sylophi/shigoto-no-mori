@@ -20,6 +20,7 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
+import { byPlatform } from "@shigomori/engine/platform";
 import type { SyncCloneInto } from "@shigomori/contracts/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shigomori/contracts/projectPaths";
@@ -69,10 +70,14 @@ export const roster = Effect.gen(function* () {
   const hereId = yield* DeviceId.current;
   const here = devices.find((device) => device.deviceId === hereId);
   if (here === undefined) {
+    const hint = byPlatform({
+      darwin: "Sign in from the app first.",
+      linux: "Sign in first (`login`).",
+    });
     return yield* Effect.fail(
       new ControlError(
         "signed-out",
-        "This device isn't signed in to an account, so it has no other devices to reach. Sign in from the app first.",
+        `This device isn't signed in to an account, so it has no other devices to reach. ${hint}`,
       ),
     );
   }

@@ -18,6 +18,8 @@ curl -fsSL https://raw.githubusercontent.com/sylophi/shigoto-no-mori/main/instal
 
 The install keeps its versions in `~/.local/share/shigomori`, links `sm` into `~/.local/bin`, and runs the host as a systemd user service, from boot where lingering is on (`sm service status`). `sm update` moves it to the latest release, and `sm nuke --yes` takes everything of it off the machine.
 
+`sm login` makes the machine one of your devices: it shows a code to approve in a browser on any device, signed in to your account. `sm logout` takes it off the account.
+
 ## Repository
 
 | Folder | What it is |

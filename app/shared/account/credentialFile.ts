@@ -1,10 +1,10 @@
-// The node/desktop adapter for the credential store. It supplies the
-// fs-backed storage primitives (an atomic 0o600 write, a tolerant read, a
-// swallowed remove) and the OS-keychain cipher, then delegates every
-// document-shape and cipher decision to the shared, storage-agnostic core
-// in shared/account/credentialStore.ts. The web client reuses that same
-// core over a different backing, so the on-storage envelope stays
-// identical across platforms.
+// The node adapter for the credential store, the desktop shell's and
+// the headless host's. It supplies the fs-backed storage primitives (an
+// atomic 0o600 write, a tolerant read, a swallowed remove) around the
+// cipher its caller gives, then delegates every document-shape and
+// cipher decision to the storage-agnostic core in credentialStore.ts.
+// The web client reuses that same core over a different backing, so
+// the on-storage envelope stays identical across platforms.
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isENOENT } from "@shared/paths";
 import {
@@ -20,7 +20,7 @@ import {
   type AccountStore,
   type StoreCipher,
   type StoredAccount,
-} from "@shared/account/credentialStore";
+} from "./credentialStore";
 import { log } from "@shared/log";
 
 export type { AccountStore, StoreCipher, StoredAccount };

@@ -91,6 +91,9 @@
       // production above. Routes are not inherited, so it is repeated.
       "workers_dev": false,
       "routes": [{ "pattern": "hub-dev.shigomori.com", "custom_domain": true }],
+      // The device grant's OAuth application on the development Clerk
+      // instance (src/env.ts).
+      "vars": { "CLERK_OAUTH_CLIENT_ID": "O4Inmls3211dQbqW" },
       "durable_objects": {
         "bindings": [
           {

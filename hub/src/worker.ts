@@ -62,9 +62,9 @@ import {
 import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 
 export interface HubDeps {
-  // Resolves the enroll bearer (a Clerk session token) to the owning
-  // account, or null when it does not verify; throws when it could not
-  // be checked.
+  // Resolves the enroll bearer (a Clerk session or OAuth access token)
+  // to the owning account, or null when it does not verify; throws when
+  // it could not be checked.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
   // The fetch the Cloudflare tunnel API is called through. Defaults to
   // the global fetch.

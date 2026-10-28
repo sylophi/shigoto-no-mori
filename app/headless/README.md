@@ -21,6 +21,11 @@ device link, which are where its projects are seen and driven.
   this process. Nobody is at it to confirm a busy restart, so it
   refuses one as for another device. Its install puts the staged
   version in place and quits, and the unit starts the new one.
+- `account.ts`: the account with no window to sign in from. `sm login`
+  asks Clerk for a device code and enrolls with the access token
+  Clerk issues once the code is approved (the device grant,
+  `hub/README.md`). The credential is kept in an owner-only file,
+  since a server has no keyring to keep it in.
 - `nuke.ts`: `sm nuke` with no window. The command takes the unit out
   and starts the host with `--sm-nuke`, which runs the host's half of
   the nuke and leaves a marker. The next start deletes the files the

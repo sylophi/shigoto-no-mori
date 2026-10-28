@@ -890,6 +890,35 @@
       "data": "5fo="
     }
   },
+  "login:finish": {
+    "payload": {
+      "userCode": "\u0000",
+      "verificationUri": "Y,",
+      "deviceCode": "sq",
+      "interval": -1,
+      "expiresIn": 4
+    },
+    "success": {
+      "signedIn": false,
+      "deviceName": "nM"
+    }
+  },
+  "login:signOut": {},
+  "login:start": {
+    "success": {
+      "userCode": "Y,",
+      "verificationUri": "\ud800",
+      "deviceCode": "\udc00",
+      "interval": 1,
+      "expiresIn": 2
+    }
+  },
+  "login:status": {
+    "success": {
+      "signedIn": true,
+      "deviceName": "\u0000"
+    }
+  },
   "menu:setChords": {
     "payload": {
       "chords": {

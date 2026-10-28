@@ -9,12 +9,12 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { HARNESSES } from "@shigomori/engine/agentHooks";
 import { NUKE_EXIT } from "@shigomori/engine/footprint";
-import { applyAccount } from "@host/process/handlers";
 import { quit, runHost } from "@host/process/run";
 import { log } from "@shared/log";
 import { finishPendingNuke } from "@shared/nuke";
 import { applyUserShellEnv } from "@shared/shellEnv";
 import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
+import { headlessAccount } from "./account";
 import { headlessFacts } from "./facts";
 import { finishNuke, nuking, runNuke } from "./nuke";
 import * as HeadlessShell from "./shell";
@@ -56,14 +56,15 @@ async function main(): Promise<void> {
   for (const harness of HARNESSES) delete process.env[harness.sessionEnv];
   process.on("SIGTERM", () => quit(false));
   process.on("SIGINT", () => quit(false));
+  const account = headlessAccount(facts);
   await runHost({
     facts,
     shell: HeadlessShell.layer(facts),
     openSpans: new Map(),
     ready: async ({ port, deviceId }) => {
       log.info(`[host] up on 127.0.0.1:${port} as device ${deviceId}`);
-      await applyAccount(null);
-      if (nuking) await runNuke(facts);
+      await account.boot(deviceId);
+      if (nuking) await runNuke(facts, account.signOutForNuke);
     },
     failed: async () => {},
   });

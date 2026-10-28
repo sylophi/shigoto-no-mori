@@ -332,6 +332,17 @@ bearer. The Worker verifies it as a Clerk session JWT
 (`verifyToken` with the secret key) and keys the device registry on
 its `sub`. The Worker verifies, the app never does.
 
+A machine with no browser (`sm login` on a Linux server) signs in
+through Clerk's device grant instead: the user approves a code on
+Clerk's hosted page, and the host gets an OAuth access token that it
+brings as the enroll bearer once. The Worker verifies it against the
+JWKS as it does a session token, and accepts it only when it was
+issued to the OAuth application named by the `CLERK_OAUTH_CLIENT_ID`
+var (`wrangler.jsonc`, per environment); without the var, no OAuth
+token enrolls. The application is public, has the device
+authorization grant on, and issues its access tokens as JWTs. The
+Account Portal hosts the approval page, so it has to be on.
+
 One REQUIRED piece of Clerk instance configuration: the desktop
 renderer lives on a custom-scheme origin and authenticates Clerk's
 Frontend API with an `Authorization` header, which Clerk rejects from

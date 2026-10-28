@@ -19,7 +19,8 @@ import { net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import type { TokenStorage } from "@clerk/electron";
 import { clerkTokenStorage } from "./clerkTokenStorage";
-import { clerkFrontendHost, rendererContentPolicy } from "./contentPolicy";
+import { clerkFrontendHost } from "@shigomori/contracts/accountServiceConfig";
+import { rendererContentPolicy } from "./contentPolicy";
 import {
   RENDERER_SCHEME_HOST,
   rendererSchemeName,

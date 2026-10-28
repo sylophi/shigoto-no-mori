@@ -2,10 +2,11 @@
 // rest with safeStorage. The file and its values are in the format of
 // the Clerk SDK's electron-store adapter, as a 2.x install's are, so its
 // sign-in carries over: one JSON object, tab-indented, each value `enc:`
-// and the base64 ciphertext. The dev launchers clone a sign-in by
-// copying the file (scripts/lib/devProfile.mts). When the OS offers no
-// encryption a token is not persisted, and the user signs in again on
-// the next launch.
+// and the base64 ciphertext. On Linux a value is `raw:` and the token,
+// in a file only its owner can read, for the reason account.ts gives.
+// The dev launchers clone a sign-in by copying the file
+// (scripts/lib/devProfile.mts). When macOS offers no encryption a token
+// is not persisted, and the user signs in again on the next launch.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -18,9 +19,11 @@ import * as Schema from "effect/Schema";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import { safeStorage } from "electron";
 import { CLERK_TOKEN_STORE } from "@shared/packaging/appName.mts";
+import { byPlatform } from "@shigomori/engine/platform";
 
 const ENCRYPTED_PREFIX = "enc:";
 const RAW_PREFIX = "raw:";
+const keptRaw = byPlatform({ darwin: false, linux: true });
 
 type Cipher = {
   readonly encrypt: (value: string) => Promise<string>;
@@ -239,6 +242,7 @@ const make = Effect.fnUntraced(function* (file: string) {
     key: string,
     value: string,
   ) {
+    if (keptRaw) return yield* store.set(key, RAW_PREFIX + value);
     const cipher = yield* getCipher;
     if (cipher === null) return yield* warnUnencrypted;
     yield* keep(key, cipher, value);

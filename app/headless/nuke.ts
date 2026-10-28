@@ -4,6 +4,7 @@
 // which the next start deletes before anything opens them
 // (shared/nuke.ts), and an exit that tells the command which start
 // this was.
+import { errorMessageOf } from "@shigomori/contracts/errors";
 import { NUKE_EXIT, NUKE_SWITCH } from "@shigomori/engine/footprint";
 import { nukeHost } from "@host/ipc/modules/runtime";
 import * as Graph from "@host/process/graph";
@@ -24,11 +25,26 @@ export function finishNuke(
   process.exit(files.length > 0 ? NUKE_EXIT.marked : NUKE_EXIT.finished);
 }
 
-// The live half, once the host is up.
-export async function runNuke(facts: HostFacts): Promise<void> {
+// The live half, once the host is up: this device off the account
+// first, as the desktop's (main/electron/nuke.ts).
+export async function runNuke(
+  facts: HostFacts,
+  signOut: () => Promise<string | null>,
+): Promise<void> {
   try {
-    const { left } = await Graph.run(nukeHost);
+    const failure = await signOut().catch(errorMessageOf);
+    const host = await Graph.run(nukeHost);
     writeNukeMarker(facts.userDataPath, nukedPaths(facts.logsPath));
+    const left =
+      failure === null
+        ? host.left
+        : [
+            {
+              what: "This device on your account",
+              why: `${failure} Remove it from another device's account page.`,
+            },
+            ...host.left,
+          ];
     for (const { what, why } of left)
       console.log(`[nuke] left: ${what}: ${why}`);
     quit(false, left.length === 0 ? NUKE_EXIT.again : NUKE_EXIT.againWithLeft);
