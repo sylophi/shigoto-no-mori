@@ -183,6 +183,12 @@ if (currentPlatform() === "darwin") {
   }
 }
 
+// Vite marks a module it serves under ?v= (the contracts source among
+// them) cacheable for a year, keyed on a hash only its prebundle
+// changes, so a dev window restarted after a contracts change would
+// run the copy it cached first.
+if (!app.isPackaged) app.commandLine.appendSwitch("disable-http-cache");
+
 // The Clerk main-process bridge: renderer-scheme privileges (pre-ready
 // requirement), token storage, and the OAuth deep-link transport. After
 // the dev userData suffix (tokens live in userData). Its cleanup() is
