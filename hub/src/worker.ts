@@ -66,6 +66,8 @@ export interface HubDeps {
   // to the owning account, or null when it does not verify; throws when
   // it could not be checked.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
+  // A Clerk sign-in token for the account, redeemed once for a session.
+  mintSignInToken(accountId: string, env: Env): Promise<string>;
   // The fetch the Cloudflare tunnel API is called through. Defaults to
   // the global fetch.
   cfFetch?: typeof fetch;
@@ -83,6 +85,11 @@ class LoginVerifier extends Context.Service<
   LoginVerifier,
   (token: string) => Promise<{ accountId: string } | null>
 >()("sm/hub/LoginVerifier") {}
+
+class SignInTokenMinter extends Context.Service<
+  SignInTokenMinter,
+  (accountId: string) => Promise<string>
+>()("sm/hub/SignInTokenMinter") {}
 
 class CfFetch extends Context.Service<CfFetch, typeof fetch>()(
   "sm/hub/CfFetch",
@@ -204,6 +211,7 @@ const handlers = Effect.gen(function* () {
   const env = yield* WorkerEnv;
   const registry = yield* Registry.Registry;
   const cfFetch = yield* CfFetch;
+  const mintSignInToken = yield* SignInTokenMinter;
 
   // Who is online in the account, from its hub object. Presence is
   // advisory in a device list, so a hub object hiccup reads as every
@@ -231,58 +239,67 @@ const handlers = Effect.gen(function* () {
   });
 
   const enrollment = HttpApiBuilder.group(HubApi, "enrollment", (handle) =>
-    handle.handle("enroll", ({ payload }) =>
-      Effect.gen(function* () {
-        const { accountId } = yield* HubLogin;
-        const { deviceId, name, platform, icon, publicKey } = payload;
-        // Enrolling again rotates the credential and the key: exactly
-        // one credential per device is valid at any time, because only
-        // one hash is stored, and the roster hands peers the key the
-        // device enrolled with last. The account's object admits the device against the
-        // cap and writes it in one step (DeviceHub.enroll).
-        const credential = DEVICE_CREDENTIAL_PREFIX + randomBase64url(32);
-        const credentialHash = yield* Effect.promise(() =>
-          sha256Hex(credential),
-        );
-        const outcome = yield* Effect.tryPromise(
-          async (): Promise<EnrollOutcome> =>
-            await accountHub(env, accountId).enroll({
-              deviceId,
-              accountId,
-              name,
-              platform,
-              icon,
-              publicKey,
-              credentialHash,
-            }),
-        );
-        if (outcome.status === "enrolled-elsewhere") {
-          return yield* new HubDeviceEnrolledElsewhereError();
-        }
-        if (outcome.status === "account-full") {
-          return yield* new HubAccountFullError({
-            limit: MAX_ACCOUNT_DEVICES,
-          });
-        }
-        if (outcome.evicted !== null) {
-          yield* tearDownTunnel(accountId, outcome.evicted);
-        }
-        return {
-          credential,
-          device: toDeviceInfo(
-            {
-              device_id: deviceId,
-              name,
-              platform,
-              icon,
-              created_at: outcome.createdAt,
-              last_seen_at: outcome.lastSeenAt,
-            },
-            new Set(outcome.online),
-          ),
-        };
-      }).pipe(Effect.catchTags({ UnknownError: unavailable("enroll") })),
-    ),
+    handle
+      .handle("enroll", ({ payload }) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* HubLogin;
+          const { deviceId, name, platform, icon, publicKey } = payload;
+          // Enrolling again rotates the credential and the key: exactly
+          // one credential per device is valid at any time, because only
+          // one hash is stored, and the roster hands peers the key the
+          // device enrolled with last. The account's object admits the device against the
+          // cap and writes it in one step (DeviceHub.enroll).
+          const credential = DEVICE_CREDENTIAL_PREFIX + randomBase64url(32);
+          const credentialHash = yield* Effect.promise(() =>
+            sha256Hex(credential),
+          );
+          const outcome = yield* Effect.tryPromise(
+            async (): Promise<EnrollOutcome> =>
+              await accountHub(env, accountId).enroll({
+                deviceId,
+                accountId,
+                name,
+                platform,
+                icon,
+                publicKey,
+                credentialHash,
+              }),
+          );
+          if (outcome.status === "enrolled-elsewhere") {
+            return yield* new HubDeviceEnrolledElsewhereError();
+          }
+          if (outcome.status === "account-full") {
+            return yield* new HubAccountFullError({
+              limit: MAX_ACCOUNT_DEVICES,
+            });
+          }
+          if (outcome.evicted !== null) {
+            yield* tearDownTunnel(accountId, outcome.evicted);
+          }
+          return {
+            credential,
+            device: toDeviceInfo(
+              {
+                device_id: deviceId,
+                name,
+                platform,
+                icon,
+                created_at: outcome.createdAt,
+                last_seen_at: outcome.lastSeenAt,
+              },
+              new Set(outcome.online),
+            ),
+          };
+        }).pipe(Effect.catchTags({ UnknownError: unavailable("enroll") })),
+      )
+      .handle("signInToken", () =>
+        Effect.gen(function* () {
+          const { accountId } = yield* HubLogin;
+          return {
+            token: yield* Effect.tryPromise(() => mintSignInToken(accountId)),
+          };
+        }).pipe(Effect.catchTags({ UnknownError: unavailable("enroll") })),
+      ),
   );
 
   const devices = HttpApiBuilder.group(HubApi, "devices", (handle) =>
@@ -425,6 +442,7 @@ const RATE_LIMIT_PERIOD_SECONDS = 60;
 const OPEN_ROUTES: ReadonlySet<string> = new Set(
   [
     HubApi.groups.enrollment.endpoints.enroll,
+    HubApi.groups.enrollment.endpoints.signInToken,
     HubApi.groups.socket.endpoints.connect,
   ].map((endpoint) => `${endpoint.method} ${endpoint.path}`),
 );
@@ -530,6 +548,9 @@ export function createWorker(deps: HubDeps): HubWorker {
       Registry.layer,
       Layer.succeed(LoginVerifier, (token: string) =>
         deps.verifyLogin(token, env),
+      ),
+      Layer.succeed(SignInTokenMinter, (accountId: string) =>
+        deps.mintSignInToken(accountId, env),
       ),
       Layer.succeed(CfFetch, deps.cfFetch ?? fetch),
     ).pipe(Layer.provideMerge(Layer.succeed(WorkerEnv, env)));

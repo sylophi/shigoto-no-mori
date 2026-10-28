@@ -49,6 +49,7 @@ import {
   resolveServiceConfig,
   type AccountServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
+import { envSetting } from "@shared/config";
 import { log, warnOnFailure } from "@shared/log";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { current as currentPlatform } from "@shigomori/engine/platform";
@@ -368,6 +369,7 @@ export const desktopAccount: AccountShell = {
   // (scripts/lib/devProfile.mts cloneDevLogin).
   sharedSignIn: () =>
     existsSync(join(app.getPath("userData"), CLONED_LOGIN_MARKER)),
+  codeSignIn: envSetting("SHIGOMORI_CODE_SIGN_IN") === "1",
   changed: accountChanged,
   transitions,
   // The registry as the hub last listed it, which the host's mirrors and

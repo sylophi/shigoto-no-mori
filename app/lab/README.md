@@ -11,9 +11,9 @@ Commands and paths are relative to `app/`.
 On Linux, weblab's browser runs headless, and Google Chrome has to be
 installed. That is all the fake host, the scenes and `scenes:compare`
 need, so they work there as written. Device windows run there too,
-signed out (`devices.md`), so what needs the account, `reliability/`
-among it, needs a Mac, as do `relaunch.mts`, `guide-eval/` and
-`release.md`, which drive macOS itself.
+signed in with a code approved from another device (`devices.md`). `reliability/` reads the dev
+app's macOS folders, and `relaunch.mts`, `guide-eval/` and
+`release.md` drive macOS itself, so those need a Mac.
 
 | Page | Reach for it to |
 | --- | --- |

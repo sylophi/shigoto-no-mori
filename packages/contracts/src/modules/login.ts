@@ -11,7 +11,7 @@ import { strict } from "../schemas/strict.ts";
 // device with the hub under the token it gets. Loopback only, and kept
 // out of allContractModules, so no window's api carries it.
 
-const LoginCodeSchema = strict(
+export const LoginCodeSchema = strict(
   Schema.Struct({
     // What the person enters at verificationUri. The complete URI has
     // it in already.

@@ -343,6 +343,13 @@ token enrolls. The application is public, has the device
 authorization grant on, and issues its access tokens as JWTs. The
 Account Portal hosts the approval page, so it has to be on.
 
+A desktop window no one sits at (the lab's, on a server's virtual
+display) can sign in with the same code. Its shell brings the
+access token to `POST /sign-in-token`, and the Worker answers a Clerk
+sign-in token for the account (five minutes, one use), which the
+window redeems (Clerk's `ticket` strategy) for a session of its own
+and enrolls with as above.
+
 One REQUIRED piece of Clerk instance configuration: the desktop
 renderer lives on a custom-scheme origin and authenticates Clerk's
 Frontend API with an `Authorization` header, which Clerk rejects from

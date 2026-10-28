@@ -1,6 +1,6 @@
 // Deployment entry: the worker with the real Clerk verifier, plus the
 // Durable Object class wrangler binds as DEVICE_HUB.
-import { verifyToken } from "@clerk/backend";
+import { createClerkClient, verifyToken } from "@clerk/backend";
 import { decodeJwt } from "@clerk/backend/jwt";
 import { tokenRefused } from "./clerk.ts";
 import { createWorker } from "./worker.ts";
@@ -56,4 +56,17 @@ function isOAuthJwt(token: string): boolean {
   }
 }
 
-export default createWorker({ verifyLogin });
+// Redeemed within minutes, once, by the window that asked.
+const SIGN_IN_TOKEN_SECONDS = 300;
+
+async function mintSignInToken(accountId: string, env: Env): Promise<string> {
+  const { token } = await createClerkClient({
+    secretKey: env.CLERK_SECRET_KEY,
+  }).signInTokens.createSignInToken({
+    userId: accountId,
+    expiresInSeconds: SIGN_IN_TOKEN_SECONDS,
+  });
+  return token;
+}
+
+export default createWorker({ verifyLogin, mintSignInToken });

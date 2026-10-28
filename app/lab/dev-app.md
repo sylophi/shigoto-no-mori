@@ -147,6 +147,7 @@ screen, which an agent's session has no permission to capture.
 | `SHIGOMORI_DIAL_KINDS`             | Candidate kinds this device dials, e.g. `tunnel`. Dev builds only. See Rules. |
 | `SHIGOMORI_DIRECT_FRONT_PORT`      | Port this device advertises for its direct listener (LAN candidates, the tunnel's ingress), for a proxy in front of it. Dev builds only. |
 | `SHIGOMORI_DEVTOOLS`               | `1` streams the main process's spans to the Effect devtools (VS Code) on their default port. Dev builds only. |
+| `SHIGOMORI_CODE_SIGN_IN`           | `1` signs the window in with a code approved on another device, for a window no one sits at (`devices.md`). |
 | `RENDERER_PORT`                    | Renderer port, from `.env.ports`. A real env var overrides it.                |
 | `WEB_PORT`                         | Web client port (`pnpm web:dev`). Same source and override rule.              |
 | `FAKE_HOST_PORT`, `FAKE_HOST_WEB_PORT` | Fake host ports (`pnpm fake-host`, `pnpm fake-host:web`). Same source and override rule. |
@@ -215,7 +216,9 @@ still reads signed in while every clone boots signed out (see
 Without `--clone-login`, sign in from the profile's own window using a
 method that stays in the window. GitHub sign-in uses a deep link, and
 with two windows from the same bundle the OS picks which one receives
-it. The Clerk dev instance offers GitHub only, hence cloning.
+it. The Clerk dev instance offers GitHub only, hence cloning. A window
+started with `SHIGOMORI_CODE_SIGN_IN=1` signs in with a code approved
+on another device instead (`devices.md`).
 
 ## Rules
 

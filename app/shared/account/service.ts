@@ -10,12 +10,12 @@
 // HttpClientError when it answered something the API does not name (a
 // bare 5xx).
 //
-// Auth-tier discipline lives here. enroll is the only call that carries
-// the short-lived Clerk session token proving the sign-in. listDevices,
-// revoke and mintTicket carry the long-lived device credential the
-// enroll response returned. Mixing the two would either leak the login
-// token past its one use or try to enroll under a credential the
-// endpoint does not accept.
+// Auth-tier discipline lives here. enroll and signInToken are the only
+// calls that carry the short-lived Clerk token proving the sign-in.
+// listDevices, revoke and mintTicket carry the long-lived device
+// credential the enroll response returned. Mixing the two would either
+// leak the login token past its one use or try to enroll under a
+// credential the endpoint does not accept.
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -118,6 +118,9 @@ export type AccountService = {
     fields: EnrollFields,
     signal?: AbortSignal,
   ): Promise<EnrollResponse>;
+  // A Clerk sign-in token for the account the login token names, which
+  // a window redeems for a session (deviceGrant.ts).
+  signInToken(loginToken: string, signal?: AbortSignal): Promise<string>;
   listDevices(credential: string, signal?: AbortSignal): Promise<DeviceInfo[]>;
   revoke(
     credential: string,
@@ -159,9 +162,9 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
   const baseUrl = deps.baseUrl.replace(/\/+$/, "");
   const fetchImpl = deps.fetchImpl ?? fetch;
 
-  // One call under one bearer: the Clerk session token for enroll, the
-  // device credential for everything else. Every call names this build's
-  // protocol, which the hub holds to its floor.
+  // One call under one bearer: the Clerk token for enroll and
+  // signInToken, the device credential for everything else. Every call
+  // names this build's protocol, which the hub holds to its floor.
   const call = <A, E>(
     bearer: string,
     run: (client: HubClient) => Effect.Effect<A, E>,
@@ -205,6 +208,15 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
           signal,
         ),
       );
+    },
+
+    async signInToken(loginToken, signal) {
+      const { token } = await call(
+        loginToken,
+        (client) => client.signInToken(),
+        signal,
+      );
+      return token;
     },
 
     async listDevices(credential, signal) {

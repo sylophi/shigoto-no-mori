@@ -3,6 +3,7 @@ import { push, defineContract, invoke } from "../contract.ts";
 import { DeviceIdSchema, DeviceInfoSchema } from "../hubProtocol.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { DeviceIconSchema } from "../deviceIcon.ts";
+import { LoginCodeSchema } from "./login.ts";
 
 // Client-scoped on purpose: enrollment writes an OS-keychain credential
 // on the machine showing the window, so it must never reach a peer.
@@ -20,6 +21,9 @@ const AccountStatusSchema = Schema.Struct({
   // A dev profile's --clone-login copy: ending the Clerk session here
   // ends it there too.
   sharedSignIn: Schema.Boolean,
+  // Signs in with a code approved on another device
+  // (SHIGOMORI_CODE_SIGN_IN), for a window no one sits at.
+  codeSignIn: Schema.Boolean,
   // Enrolled before device keys: reads as signed out until it enrolls
   // again.
   needsDeviceKey: Schema.Boolean,
@@ -34,6 +38,13 @@ export const accountContract = defineContract(
   invoke("status", VoidSchema, AccountStatusSchema),
   // Takes a fresh Clerk session token.
   invoke("enroll", Schema.NonEmptyString, AccountStatusSchema),
+  // The sign-in with a code (status.codeSignIn): Clerk's device grant,
+  // approved from another device and traded with the hub for a Clerk
+  // sign-in token, which the window redeems for its session.
+  invoke("startCodeSignIn", VoidSchema, LoginCodeSchema),
+  // Answers once the person approved. Refused when they denied it or
+  // the code expired.
+  invoke("finishCodeSignIn", LoginCodeSchema, Schema.String),
   // The revoke is best-effort, so sign-out succeeds offline.
   invoke("signOut", VoidSchema, VoidSchema),
   // Not best-effort, unlike signOut: nothing local stands in for "still

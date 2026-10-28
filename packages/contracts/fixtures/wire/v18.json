@@ -20,8 +20,19 @@
       "deviceIcon": "pine",
       "detectedDeviceIcon": "bird",
       "sharedSignIn": false,
+      "codeSignIn": false,
       "needsDeviceKey": false
     }
+  },
+  "account:finishCodeSignIn": {
+    "payload": {
+      "userCode": "",
+      "verificationUri": "\u0000",
+      "deviceCode": "",
+      "interval": -4,
+      "expiresIn": -3
+    },
+    "success": "\n"
   },
   "account:lastListedDevices": {
     "success": [
@@ -58,6 +69,7 @@
       "deviceIcon": "tablet",
       "detectedDeviceIcon": "flower",
       "sharedSignIn": false,
+      "codeSignIn": false,
       "needsDeviceKey": false
     }
   },
@@ -74,10 +86,20 @@
       "deviceIcon": "gamepad",
       "detectedDeviceIcon": "pine",
       "sharedSignIn": false,
+      "codeSignIn": false,
       "needsDeviceKey": false
     }
   },
   "account:signOut": {},
+  "account:startCodeSignIn": {
+    "success": {
+      "userCode": "\t",
+      "verificationUri": "\ud800",
+      "deviceCode": "\n",
+      "interval": -2,
+      "expiresIn": 2
+    }
+  },
   "account:status": {
     "success": {
       "configured": true,
@@ -87,6 +109,7 @@
       "deviceIcon": "flower",
       "detectedDeviceIcon": "coffee",
       "sharedSignIn": false,
+      "codeSignIn": false,
       "needsDeviceKey": false
     }
   },

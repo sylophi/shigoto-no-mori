@@ -24,6 +24,7 @@ import {
   syncHubDevice,
   updateDevice,
 } from "./enroll";
+import { awaitDeviceGrant, startDeviceGrant } from "./deviceGrant";
 import type { AccountService } from "./service";
 
 export type AccountShell = {
@@ -43,6 +44,8 @@ export type AccountShell = {
   readonly platform: string;
   // Whether this device signed in by copying another's sign-in.
   readonly sharedSignIn: () => boolean;
+  // Whether a window signs in with a code (account:startCodeSignIn).
+  readonly codeSignIn: boolean;
   // The account changed, under the ids before and after it (a rename
   // keeps the id). Awaited before the call answers. A shell that hears
   // changes from elsewhere too (the web's other tabs) keeps its own.
@@ -102,6 +105,7 @@ export function makeAccountHandlers(
       deviceIcon: effectiveDeviceIcon(record, store, detectedIcon),
       detectedDeviceIcon: detectedIcon,
       sharedSignIn: shell.sharedSignIn(),
+      codeSignIn: shell.codeSignIn,
       needsDeviceKey: store.readWithoutKey() !== null,
     };
   };
@@ -198,6 +202,13 @@ export function makeAccountHandlers(
     enroll: (token) =>
       Effect.runPromise(Effect.provideService(enrollOnce, EnrollToken, token)),
     signOut: () => Effect.runPromise(signOutOnce),
+
+    startCodeSignIn: () => startDeviceGrant(shell.config()),
+    finishCodeSignIn: async (code) => {
+      const config = shell.config();
+      const token = await awaitDeviceGrant(config, code);
+      return shell.service(config).signInToken(token);
+    },
 
     revokeDevice: async (deviceId) => {
       const account = signedIn();
