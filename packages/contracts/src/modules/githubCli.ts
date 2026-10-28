@@ -4,6 +4,7 @@ import {
   CreatePullRequestPayloadSchema,
   CreatePullRequestResultSchema,
   DiscardAttachmentPayloadSchema,
+  ClosePullRequestPayloadSchema,
   DisablePullRequestAutoMergePayloadSchema,
   GithubCliPullRequestDiffPayloadSchema,
   GithubCliReadinessSchema,
@@ -184,6 +185,12 @@ export const githubCliContract = defineContract(
       grant: "changeCode",
     },
   ),
+  invoke("closePullRequest", ClosePullRequestPayloadSchema, VoidSchema, {
+    tracksProjectUsage: true,
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
   push("projectPullRequestsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,
   }),

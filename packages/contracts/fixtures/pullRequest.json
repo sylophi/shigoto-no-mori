@@ -1097,6 +1097,56 @@
       }
     ]
   },
+  "ClosePullRequestPayloadSchema": {
+    "accepts": [
+      {
+        "projectId": "p_sm",
+        "number": 148,
+        "comment": ""
+      },
+      {
+        "projectId": "p_sm",
+        "number": 148,
+        "comment": "Superseded by #151."
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "projectId": "p_sm",
+          "number": 148,
+          "comment": "",
+          "delete-branch": true
+        },
+        "output": {
+          "projectId": "p_sm",
+          "number": 148,
+          "comment": ""
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "p_sm",
+        "number": -148,
+        "comment": ""
+      },
+      {
+        "projectId": "",
+        "number": 148,
+        "comment": ""
+      },
+      {
+        "projectId": "p_sm",
+        "number": 148
+      },
+      {
+        "projectId": "p_sm",
+        "number": 148,
+        "comment": null
+      }
+    ]
+  },
   "GithubRepoListSchema": {
     "accepts": [["sylophi/shigoto-no-mori", "acme/tools"], []],
     "rejects": [[1], "sylophi/shigoto-no-mori"]

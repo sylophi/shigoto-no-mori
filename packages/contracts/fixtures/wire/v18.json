@@ -500,6 +500,13 @@
       "leaseMs": -5e-323
     }
   },
+  "githubCli:closePullRequest": {
+    "payload": {
+      "projectId": "}",
+      "number": 5,
+      "comment": ""
+    }
+  },
   "githubCli:createPullRequest": {
     "payload": {
       "projectId": ")",

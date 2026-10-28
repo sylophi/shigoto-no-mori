@@ -84,6 +84,7 @@ import {
   FAKE_PULL_REQUEST_OPTIONS,
   FAKE_REPO_MERGE_CONFIG,
   fakeCreatePullRequest,
+  fakeClosePullRequest,
   fakeDisableAutoMerge,
   fakeMergePullRequest,
   fakePullRequestCompare,
@@ -1030,6 +1031,7 @@ function hostHandlersFor(
     // merged after it, so the flow can be walked in the fake host.
     "githubCli:mergePullRequest": ({ method }) => fakeMergePullRequest(method),
     "githubCli:disablePullRequestAutoMerge": () => fakeDisableAutoMerge(),
+    "githubCli:closePullRequest": () => fakeClosePullRequest(),
     "githubCli:pullRequestDraft": ({ projectId, worktreeId }) => {
       const worktree = findWorktree(worktreeId);
       if (!worktree) throw new Error("Unknown worktree");

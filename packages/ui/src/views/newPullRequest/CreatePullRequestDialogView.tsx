@@ -171,9 +171,11 @@ export function CreatePullRequestDialogView({
           <DescriptionEditorView
             value={form.body}
             onChange={onBody}
-            attachments={form.attachments}
-            onAttach={onAttach}
-            onRemove={onRemoveAttachment}
+            attach={{
+              attachments: form.attachments,
+              onAttach,
+              onRemove: onRemoveAttachment,
+            }}
             disabled={descriptionDisabled}
           />
           <div className="grid grid-cols-3 gap-6 phone:grid-cols-1 phone:gap-4">

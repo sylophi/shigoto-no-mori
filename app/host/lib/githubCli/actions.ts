@@ -235,6 +235,22 @@ export const disablePullRequestAutoMerge = Effect.fn(
   });
 });
 
+// Closes a PR unmerged, with a comment when one was written. Its
+// branch stays, on the remote too.
+export const closePullRequest = Effect.fn("GithubActions.close")(function* (
+  project: PullRequestMaps.ProjectRef,
+  number: number,
+  comment: string,
+) {
+  const args = ["pr", "close", String(number)];
+  if (comment.trim() !== "") args.push(`--comment=${comment}`);
+  yield* runGh(args, {
+    cwd: project.path,
+    fallback: "gh pr close failed",
+  });
+  yield* (yield* PullRequestMaps.PullRequestMaps).moved(project);
+});
+
 // Who a new repository can be published under: the signed-in user,
 // then the organizations they belong to, in one round trip.
 export const listGithubOwners = Effect.fn("GithubActions.owners")(function* () {

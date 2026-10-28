@@ -23,29 +23,34 @@ const TABS = [
 ] as const;
 
 // The description as GitHub's own form has it: markdown written in one
-// tab and shown in the other, and images and videos pasted, dropped or
-// picked into it, each landing at the caret as a reference while it
-// uploads to the host beside the list of what's attached.
+// tab and shown in the other, and, where it goes with attachments,
+// images and videos pasted, dropped or picked into it, each landing at
+// the caret as a reference while it uploads to the host beside the list
+// of what's attached.
 export function DescriptionEditorView({
+  label = "Description",
   value,
   onChange,
-  attachments,
-  onAttach,
-  onRemove,
+  attach,
   disabled,
 }: {
+  // What it writes, said in its field and its tabs.
+  label?: string;
   value: string;
   onChange: (next: string) => void;
-  attachments: readonly Attachment[];
-  // Files, and images that came as links, to attach where the
-  // selection is.
-  onAttach: (
-    incoming: { files: File[]; links: { url: string; alt: string }[] },
-    selection: { start: number; end: number },
-  ) => void;
-  onRemove: (attachment: Attachment) => void;
+  attach?: {
+    attachments: readonly Attachment[];
+    // Files, and images that came as links, to attach where the
+    // selection is.
+    onAttach: (
+      incoming: { files: File[]; links: { url: string; alt: string }[] },
+      selection: { start: number; end: number },
+    ) => void;
+    onRemove: (attachment: Attachment) => void;
+  };
   disabled: boolean;
 }) {
+  const attachments = attach?.attachments ?? [];
   const [tab, setTab] = useState<Tab>("write");
   const [dragging, setDragging] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -57,18 +62,19 @@ export function DescriptionEditorView({
       ? { start: el.selectionStart, end: el.selectionEnd }
       : { start: value.length, end: value.length };
   };
-  const attach = (files: File[]) => {
-    if (files.length > 0) onAttach({ files, links: [] }, selection());
+  const attachFiles = (files: File[]) => {
+    if (files.length > 0) attach?.onAttach({ files, links: [] }, selection());
   };
   // Files first. Without any, the images a page handed over as links
   // (an image dragged off it, or copied with its HTML), as long as
   // that's all it handed over: pasted text with an image in it pastes
   // its text, as it would anywhere.
   const take = (data: DataTransfer, e: { preventDefault: () => void }) => {
+    if (!attach) return;
     const files = Array.from(data.files);
     if (files.length > 0) {
       e.preventDefault();
-      attach(files);
+      attachFiles(files);
       return;
     }
     const { links, alone } = linkedImages(
@@ -77,13 +83,13 @@ export function DescriptionEditorView({
     );
     if (links.length === 0 || !alone) return;
     e.preventDefault();
-    onAttach({ files: [], links }, selection());
+    attach.onAttach({ files: [], links }, selection());
   };
   const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) =>
     take(e.clipboardData, e);
   // Files land on the text or on its preview alike, the preview's at
   // the end of the text, where they then show.
-  const dropZone = {
+  const dropZone = attach && {
     onDragOver: (e: DragEvent<HTMLElement>) => {
       const { types } = e.dataTransfer;
       if (!types.includes("Files") && !types.includes("text/uri-list")) {
@@ -104,39 +110,43 @@ export function DescriptionEditorView({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <SegmentedControl
-          aria-label="Description view"
+          aria-label={`${label} view`}
           optionClassName="px-2.5 py-0.5 text-xs"
           value={tab}
           onChange={setTab}
           options={TABS}
         />
-        <SimpleTooltip tip="Images and videos. Paste or drop them too">
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="ml-auto text-muted-foreground"
-            disabled={disabled}
-            onClick={() => {
-              setTab("write");
-              pickRef.current?.click();
-            }}
-          >
-            <Paperclip aria-hidden />
-            Attach files
-          </Button>
-        </SimpleTooltip>
-        <input
-          ref={pickRef}
-          type="file"
-          accept={ATTACHMENT_ACCEPT}
-          multiple
-          hidden
-          onChange={(e) => {
-            attach(Array.from(e.target.files ?? []));
-            e.target.value = "";
-          }}
-        />
+        {attach && (
+          <>
+            <SimpleTooltip tip="Images and videos. Paste or drop them too">
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="ml-auto text-muted-foreground"
+                disabled={disabled}
+                onClick={() => {
+                  setTab("write");
+                  pickRef.current?.click();
+                }}
+              >
+                <Paperclip aria-hidden />
+                Attach files
+              </Button>
+            </SimpleTooltip>
+            <input
+              ref={pickRef}
+              type="file"
+              accept={ATTACHMENT_ACCEPT}
+              multiple
+              hidden
+              onChange={(e) => {
+                attachFiles(Array.from(e.target.files ?? []));
+                e.target.value = "";
+              }}
+            />
+          </>
+        )}
       </div>
       {/* What a drag over either says, laid over it without taking
           the drop. */}
@@ -144,8 +154,8 @@ export function DescriptionEditorView({
         {tab === "write" ? (
           <Textarea
             ref={textRef}
-            aria-label="Description"
-            placeholder="Description (markdown)"
+            aria-label={label}
+            placeholder={`${label} (markdown)`}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onPaste={onPaste}
@@ -185,7 +195,7 @@ export function DescriptionEditorView({
             <AttachmentChip
               key={attachment.id}
               attachment={attachment}
-              onRemove={() => onRemove(attachment)}
+              onRemove={() => attach?.onRemove(attachment)}
               disabled={disabled}
             />
           ))}

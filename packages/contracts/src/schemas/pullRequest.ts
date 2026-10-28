@@ -469,3 +469,10 @@ export const DisablePullRequestAutoMergePayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,
   number: PullRequestNumberSchema,
 });
+
+// comment: the closing comment's markdown, "" for none.
+export const ClosePullRequestPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  number: PullRequestNumberSchema,
+  comment: Schema.String.check(Schema.isMaxLength(65536)),
+});

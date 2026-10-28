@@ -5,6 +5,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../primitives/dropdown-menu.tsx";
 import { ErrorBanner } from "../../../primitives/error-banner.tsx";
@@ -47,6 +48,8 @@ export interface MergeControls {
   // The other merge methods, in the button's menu.
   others: readonly MergeMethod[];
   onPickMethod: (method: MergeMethod) => void;
+  // Below the methods in the same menu: opens the close dialog.
+  onClosePullRequest: () => void;
   // How far up the stack to merge, when the PR sits in one.
   reach?: { value: StackReach; onPick: (reach: StackReach) => void };
   draftPending: boolean;
@@ -135,7 +138,7 @@ export function MergeBoxView({
       variant={merge.armed ? "default" : "outline"}
       disabled={merge.disabled}
       onClick={merge.onMerge}
-      className={cn(merge.others.length > 0 && "rounded-r-none border-r-0")}
+      className={cn(merge.mode !== "armed" && "rounded-r-none border-r-0")}
     >
       {merge.pending ? (
         <>
@@ -196,7 +199,7 @@ export function MergeBoxView({
             ) : (
               <SimpleTooltip tip={merge.blocked}>{mergeButton}</SimpleTooltip>
             )}
-            {merge.others.length > 0 && (
+            {merge.mode !== "armed" && (
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -204,8 +207,8 @@ export function MergeBoxView({
                       type="button"
                       size="sm"
                       variant="outline"
-                      disabled={merge.disabled}
-                      aria-label="Choose merge method"
+                      disabled={merge.pending || merge.draftPending}
+                      aria-label="More ways to finish the pull request"
                       className="rounded-l-none px-1.5"
                     >
                       <ChevronDown aria-hidden className="size-3.5" />
@@ -216,11 +219,19 @@ export function MergeBoxView({
                   {merge.others.map((method) => (
                     <DropdownMenuItem
                       key={method}
+                      disabled={merge.disabled}
                       onClick={() => merge.onPickMethod(method)}
                     >
                       {MERGE_METHOD_LABEL[method]}
                     </DropdownMenuItem>
                   ))}
+                  {merge.others.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={merge.onClosePullRequest}
+                  >
+                    Close pull request…
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
