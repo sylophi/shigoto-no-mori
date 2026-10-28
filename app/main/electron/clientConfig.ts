@@ -32,7 +32,7 @@ import {
   type Theme,
 } from "@shigomori/contracts/schemas";
 import { log } from "@shared/log";
-import { readJson, writeJson } from "../core/files/jsonFile";
+import { readJson, writeJson } from "@shared/jsonFile";
 
 function clientConfigPath(): string {
   return join(app.getPath("userData"), "clientConfig.json");

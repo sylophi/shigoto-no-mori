@@ -130,6 +130,7 @@ export const makeFeeds = ({
       if (zip === "" || version === "") return yield* failed("incomplete");
       return {
         url: zip,
+        digest: "",
         version,
         notes: answer?.notes ?? "",
         releaseDate: parseReleaseDate(answer?.pub_date ?? ""),

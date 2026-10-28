@@ -56,6 +56,9 @@ file-sync/filesync
 # headless host bundle (scripts/build-headless.mts)
 dist-headless/
 
+# the node a Linux package ships, fetched by scripts/fetch-node.mts
+dist-node/
+
 # filesystem helper compiled binary (scripts/build-nativefs.mts)
 dist-nativefs/
 nativefs/nativefs

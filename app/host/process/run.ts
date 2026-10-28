@@ -13,7 +13,10 @@ import { childDefaults } from "@shigomori/engine/processes";
 import type { HostFailureSchema } from "@shigomori/contracts/modules/shellCalls";
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import * as Effect from "effect/Effect";
+import type * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import type * as Path from "effect/Path";
+import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import { errorWordsOf } from "@host/lib/errorWords";
 import type { HostFacts as Facts } from "@shared/hostFacts";
@@ -90,23 +93,28 @@ let hurried = false;
 let runtime: { readonly dispose: () => Promise<void> } | null = null;
 
 // The host is asked to stop: the answer leaves first, then the graph
-// closes, which is the quit sequence (layer.ts), and the process ends.
-// `hurried` is an update install or a relaunch, which signals scripts
-// instead of waiting them out.
-export function quit(asHurried: boolean): void {
+// closes, which is the quit sequence (layer.ts), and the process ends
+// with `code`. `hurried` is an update install or a relaunch, which
+// signals scripts instead of waiting them out.
+export function quit(asHurried: boolean, code = 0): void {
   hurried = asHurried;
   setImmediate(() => {
     void (runtime?.dispose() ?? Promise.resolve())
       .catch((error: unknown) => {
         log.error("[quit] a finalizer failed:", error);
       })
-      .finally(() => process.exit(0));
+      .finally(() => process.exit(code));
   });
 }
 
-export async function runHost(root: {
+export async function runHost<E>(root: {
   readonly facts: Facts;
-  readonly shell: Layer.Layer<Shell.Shell>;
+  // Over the platform's services, which the graph provides.
+  readonly shell: Layer.Layer<
+    Shell.Shell,
+    E,
+    FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner
+  >;
   // The spans open now, which the Electron shell's beat reads.
   readonly openSpans: Observability.OpenSpans;
   // The host is up, on the loopback at `address`.

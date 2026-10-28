@@ -14,7 +14,9 @@
 // Naming and path policy lives in @shared/packaging/cliDist.mts; this
 // module owns the link state machine and the "is that link ours?"
 // judgment.
-import type { Flavor } from "@shigomori/engine/flavor";
+import { type Flavor, flavorNames } from "@shigomori/engine/flavor";
+import { currentOf } from "@shigomori/engine/linuxInstall";
+import { byPlatform } from "@shigomori/engine/platform";
 import { lstat, readlink, rm } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import {
@@ -46,6 +48,25 @@ function linkPath(flavor: Flavor): string {
   return join(cliUserBinDir(), cliBinaryName(flavor));
 }
 
+// What the links point at: the binary this app runs, but for a Linux
+// install's, which they reach through `current` so they move on with
+// an update.
+function linkTarget(facts: Facts): string | null {
+  const binary = cliBinaryOf(facts);
+  if (binary === null || !facts.packaged) return binary;
+  return byPlatform({
+    darwin: binary,
+    linux: join(currentOf(facts.resourcesPath), cliBinaryName(facts.flavor)),
+  });
+}
+
+// The end of a link to this flavor's installed binary, wherever it is.
+const installedEnding = (flavor: Flavor) =>
+  byPlatform({
+    darwin: `/Contents/Resources/${cliBinaryName(flavor)}`,
+    linux: `/${flavorNames(flavor).configDir}/current/${cliBinaryName(flavor)}`,
+  });
+
 // What a link path points at, in decreasing closeness to "the binary
 // this app runs":
 //   missing      nothing at the path
@@ -76,12 +97,12 @@ async function linkOwnership(
   if (!stat.isSymbolicLink()) return "foreign";
   const target = await readlink(link).catch(() => null);
   if (target === null) return "foreign";
-  const binary = cliBinaryOf(facts);
+  const binary = linkTarget(facts);
   if (binary !== null && target === binary) {
     return "this-binary";
   }
   const name = cliBinaryName(facts.flavor);
-  const bundleTarget = target.endsWith(`/Contents/Resources/${name}`);
+  const bundleTarget = target.endsWith(installedEnding(facts.flavor));
   const distTarget = target.endsWith(`/${CLI_DIST_DIR}/${name}`);
   if (facts.packaged ? bundleTarget : distTarget) return "this-flavor";
   if (bundleTarget || distTarget) return "our-family";
@@ -194,7 +215,7 @@ async function installLinks(facts: Facts, force: boolean): Promise<CliStatus> {
         "install.",
     );
   }
-  const binary = cliBinaryOf(facts);
+  const binary = linkTarget(facts);
   if (binary === null) throw new Error("No CLI binary is available to link.");
   await pointLinksAt(facts, binary, force);
   return linkStatus(facts);
@@ -256,7 +277,7 @@ export async function repairCliLinks(facts: Facts): Promise<void> {
   if (isTranslocated(facts)) return;
   const status = await linkStatus(facts);
   if (status.state !== "stale") return;
-  const binary = cliBinaryOf(facts);
+  const binary = linkTarget(facts);
   if (binary === null) return;
   try {
     await pointLinksAt(facts, binary, false);

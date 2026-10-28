@@ -8,11 +8,15 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { HARNESSES } from "@shigomori/engine/agentHooks";
+import { NUKE_EXIT } from "@shigomori/engine/footprint";
 import { applyAccount } from "@host/process/handlers";
 import { quit, runHost } from "@host/process/run";
 import { log } from "@shared/log";
+import { finishPendingNuke } from "@shared/nuke";
 import { applyUserShellEnv } from "@shared/shellEnv";
+import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
 import { headlessFacts } from "./facts";
+import { finishNuke, nuking, runNuke } from "./nuke";
 import * as HeadlessShell from "./shell";
 
 // One host per flavor on this machine: a database in its userData,
@@ -35,8 +39,14 @@ async function main(): Promise<void> {
   const facts = await headlessFacts();
   if (!holdInstanceLock(facts.userDataPath)) {
     log.error("[host] another host of this build is running on this machine");
-    process.exit(1);
+    process.exit(nuking ? NUKE_EXIT.running : 1);
   }
+  // A nuke's files, before anything opens one: with the lock held, so
+  // no other host is using them.
+  const nuked = finishPendingNuke(facts.userDataPath);
+  if (nuked !== null) finishNuke(nuked.left);
+  // A test build's update stand-ins, before anything is spawned.
+  takeUpdateEndpointOverrides();
   // A unit starts with the service manager's environment, not the
   // owner's shell's: rebuilt from the login shell (shared/shellEnv.ts).
   // A dev run starts from the developer's terminal and keeps it, but for
@@ -48,11 +58,12 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => quit(false));
   await runHost({
     facts,
-    shell: HeadlessShell.layer,
+    shell: HeadlessShell.layer(facts),
     openSpans: new Map(),
     ready: async ({ port, deviceId }) => {
       log.info(`[host] up on 127.0.0.1:${port} as device ${deviceId}`);
       await applyAccount(null);
+      if (nuking) await runNuke(facts);
     },
     failed: async () => {},
   });

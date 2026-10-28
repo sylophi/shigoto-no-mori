@@ -3,6 +3,7 @@
 // command also takes -p <project>, said once in the prose instead of on
 // every usage line. Help is data; layout and color are computed.
 import type { flavorNames } from "@shigomori/engine/flavor";
+import { byPlatform } from "@shigomori/engine/platform";
 import { commandName, projectVerb } from "./aliases.ts";
 import { splitAtDashes } from "./argv.ts";
 import { styles, type Styles } from "./output.ts";
@@ -32,7 +33,10 @@ const catalog = (names: Names) => {
         "The tools `open` offers, in the app's order (recent use, then label), hidden ones left out. --json prints {ok, entries: [{kind, id, label, available?}], hiddenCount, usage: {<id>: {lastUsed, recentCount}}}, kind being detected, custom or web. " +
           '--catalog lists every tool the app knows instead, installed or not, with no project needed: --json prints {ok, apps: [{kind: "detected", id: "app:<id>", label, available}]}, sorted by label case-insensitively.',
       ],
-      ["app", "Open the Shigoto no Mori app", ""],
+      ...byPlatform<{ darwin: Item[]; linux: Item[] }>({
+        darwin: [["app", "Open the Shigoto no Mori app", ""]],
+        linux: [],
+      }),
       [
         "devices [-p <project>]",
         "List your other devices",
@@ -48,11 +52,18 @@ const catalog = (names: Names) => {
         "Check the installation and data dir",
         "Checks the environment, the data dir, each project, and the processes a crashed app left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts); anything else is reported. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.",
       ],
-      [
-        "nuke --yes [--keep-app]",
-        "Take everything of this build off the machine",
-        "What Settings' Danger zone does, with no window: the app in this command's bundle is quit, then started to remove its worktrees, this command's links, the shell and agent hooks, this device from your account and its login item, then its data folder, its own folder, logs, preferences and keychain item. Then the bundle itself (--keep-app keeps it). Runs only from a packaged build's command. Exits non-zero when something stayed, saying what.",
-      ],
+      byPlatform<{ darwin: Item; linux: Item }>({
+        darwin: [
+          "nuke --yes [--keep-app]",
+          "Take everything of this build off the machine",
+          "What Settings' Danger zone does, with no window: the app in this command's bundle is quit, then started to remove its worktrees, this command's links, the shell and agent hooks, this device from your account and its login item, then its data folder, its own folder, logs, preferences and keychain item. Then the bundle itself (--keep-app keeps it). Runs only from a packaged build's command. Exits non-zero when something stayed, saying what.",
+        ],
+        linux: [
+          "nuke --yes",
+          "Take everything of this build off the machine",
+          "What Settings' Danger zone does, with no window: the host's service is stopped and taken out, then the host is started to remove its worktrees, this command's links and the shell and agent hooks, then its data folder, logs and install. Runs only from an installed build's command. Exits non-zero when something stayed, saying what.",
+        ],
+      }),
       [
         "help [<command>] [--all]",
         "Show help",
@@ -358,6 +369,35 @@ const catalog = (names: Names) => {
       ],
     ],
 
+    service: [
+      [
+        "service install",
+        "Run this machine's host as a service",
+        "Writes the systemd user unit that runs the installed version's host, from boot and again whenever it exits but for a stop, and starts it. Turns on lingering where you may, so it runs with no one logged in. --json prints {ok, lingering}.",
+      ],
+      [
+        "service uninstall",
+        "Stop the host and remove its service",
+        "The install stays: `service install` runs it again.",
+      ],
+      ["service start", "Start the host", ""],
+      [
+        "service stop",
+        "Stop the host",
+        "Until the next start, or the next boot.",
+      ],
+      [
+        "service status",
+        "Show whether the host runs, and when it starts",
+        "--json prints {ok, unit, installed, enabled, running, pid, version, lingering}, version being the installed one (null with none) and pid 0 when it isn't running.",
+      ],
+      [
+        "service logs [-f, --follow]",
+        "Show what the host has logged",
+        "The last 200 lines of its journal, or every line as it comes with --follow.",
+      ],
+    ],
+
     flags: [
       ["--json", "Machine-readable output", "NDJSON progress for create."],
       ["--verbose", "Diagnostics on stderr", ""],
@@ -436,6 +476,21 @@ const namespacesOf = (bin: string, items: Catalog) => [
     items: items.shell,
     canon: (name: string) => name,
   },
+  // A Mac's app is its host, so only Linux has one to run as a service.
+  ...byPlatform({
+    darwin: [],
+    linux: [
+      {
+        name: "service",
+        desc: "The host, run by systemd",
+        shortAlias: "",
+        blurb:
+          "The host is what serves this machine to the terminal and to your other devices. On Linux it runs as a systemd user unit, from the version installed.",
+        items: items.service,
+        canon: (name: string) => name,
+      },
+    ],
+  }),
 ];
 
 const INDENT = 2;
@@ -557,6 +612,7 @@ export const helpPages = (look: HelpLook) => {
     ["Config", items.config],
     ["Agents", items.agents],
     ["Shell integration", items.shell],
+    ...byPlatform({ darwin: [], linux: [["Service", items.service] as const] }),
     ["Flags", items.flags],
     ["Environment", items.environment],
   ];

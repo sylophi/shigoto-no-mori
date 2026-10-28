@@ -46,8 +46,11 @@ import { migrationFailed, noteMigration } from "./electron/migration";
 import { showMoveFailed } from "./electron/moveFailed";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { onGuide } from "./electron/guide";
-import { currentUpdaterState, updaterCalls } from "./electron/updater";
-import { releaseUpdaterBridge } from "./electron/updaterBridge";
+import {
+  currentUpdaterState,
+  releaseUpdaterBridge,
+  updaterCalls,
+} from "./electron/updater";
 import { accountFactsForHost, retryParkedSignOut } from "./electron/account";
 import { makePortServer } from "./ipc/ShellLink";
 import { broadcastAll } from "./ipc/register";

@@ -9,6 +9,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { appFolders } from "@shigomori/engine/footprint";
 import * as Paths from "@shigomori/engine/Paths";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { HostFacts } from "@shared/hostFacts";
 
 export async function headlessFacts(): Promise<HostFacts> {
@@ -16,8 +17,9 @@ export async function headlessFacts(): Promise<HostFacts> {
   const flavor = packaged ? __SM_PACKAGED_FLAVOR__ : "dev";
   const paths = await Effect.runPromise(
     Effect.service(Paths.Paths).pipe(
-      Effect.provide(Paths.layer(flavor)),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(
+        Paths.layer(flavor).pipe(Layer.provide(NodeServices.layer)),
+      ),
     ),
   );
   const { userData, logs } = appFolders(flavor, paths);

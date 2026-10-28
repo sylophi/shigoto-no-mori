@@ -1,15 +1,20 @@
 // The doctor's environment checks: git, gh, the shell hook and its wrapper, the programs `sm` runs.
 import { tildify } from "@shigomori/contracts/projectPaths";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { belowGitFloor, fields, parseGitVersion } from "../doctorParse.ts";
 import { envVar } from "../environment.ts";
 import { findExecutable } from "../executables.ts";
 import { flavorNames } from "../flavor.ts";
 import * as Git from "../Git.ts";
+import { unitState } from "../hostUnit.ts";
+import { installedVersionOf, linuxInstall } from "../linuxInstall.ts";
 import { appFoldersOf } from "../Launchers.ts";
 import * as Paths from "../Paths.ts";
+import { byPlatform } from "../platform.ts";
 import {
   CD_FILE_ENV,
   hookPlace,
@@ -21,6 +26,22 @@ import { type RunInput, check } from "./documents.ts";
 import type { ReadsArea } from "./reads.ts";
 import { bundleVersionArgs, isAsideName } from "../updater/documents.ts";
 
+// How each OS gets the programs sm runs.
+const INSTALL_HINTS = byPlatform({
+  darwin: {
+    git: "`xcode-select --install`",
+    gitUpgrade: "`brew upgrade git`",
+    gh: "`brew install gh`",
+    path: "Link the CLI from the app's Settings, or add its directory to PATH.",
+  },
+  linux: {
+    git: "with your package manager",
+    gitUpgrade: "with your package manager",
+    gh: "https://cli.github.com",
+    path: "Add ~/.local/bin, where the install links it, to PATH.",
+  },
+});
+
 export const makeEnvironmentChecks = ({
   reads,
 }: {
@@ -30,6 +51,8 @@ export const makeEnvironmentChecks = ({
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
     const git = yield* Git.Git;
+    const fs = yield* FileSystem.FileSystem;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const { home, binaryName, flavor } = paths;
     const names = flavorNames(flavor);
     // ZDOTDIR read once, as Paths reads the environment.
@@ -44,7 +67,7 @@ export const makeEnvironmentChecks = ({
       if (Option.isNone(version)) {
         return line.fail(
           "not runnable (every command in sm shells out to it)",
-          "Install git (`xcode-select --install`) and make sure it's on PATH.",
+          `Install git (${INSTALL_HINTS.git}) and make sure it's on PATH.`,
         );
       }
       const trimmed = version.value.trim();
@@ -57,7 +80,7 @@ export const makeEnvironmentChecks = ({
       if (parsed !== undefined && belowGitFloor(parsed.major, parsed.minor)) {
         return line.warn(
           `${raw} is older than 2.40, which sm's worktree creation needs`,
-          "Upgrade git (`brew upgrade git`).",
+          `Upgrade git (${INSTALL_HINTS.gitUpgrade}).`,
         );
       }
       return line.ok(raw);
@@ -68,7 +91,7 @@ export const makeEnvironmentChecks = ({
       if (Option.isNone(yield* findExecutable("gh"))) {
         return line.warn(
           "not on PATH, so pr, merge, and land can't talk to GitHub without it",
-          "Install the GitHub CLI (`brew install gh`), then `gh auth login`.",
+          `Install the GitHub CLI (${INSTALL_HINTS.gh}), then \`gh auth login\`.`,
         );
       }
       // Only success matters: `gh auth status` prints account details that
@@ -146,7 +169,7 @@ export const makeEnvironmentChecks = ({
     // The binary's own identity, and whether the app bundle behind it
     // agrees: a version mismatch means the sm on PATH is a stray copy
     // that `sm update` won't carry along.
-    const checkApp = ({ version, executable }: RunInput) =>
+    const checkBundle = ({ version, executable }: RunInput) =>
       Effect.gen(function* () {
         const line = check("Environment", "app", "app");
         if (flavor === "dev") {
@@ -191,6 +214,60 @@ export const makeEnvironmentChecks = ({
         return line.ok(`${appVersion} at ${tildify(bundle.value, home)}`);
       });
 
+    // On Linux: the install this binary is from, the version `current`
+    // names, and the host's service running it.
+    const install = linuxInstall(flavor, paths);
+    const checkInstall = ({ version, executable }: RunInput) =>
+      Effect.gen(function* () {
+        const line = check("Environment", "app", "install");
+        if (flavor === "dev") {
+          return line.ok(
+            `dev build (${binaryName} ${version}): runs from a checkout, no install`,
+          );
+        }
+        const current = yield* realPath(install.current);
+        if (Option.isNone(current)) {
+          return line.warn(
+            "no install found, so update and the host's service have nothing behind them",
+            "Install Shigoto no Mori with its install script.",
+          );
+        }
+        const installed = path.basename(current.value);
+        const resolved = Option.getOrElse(
+          yield* realPath(executable),
+          () => executable,
+        );
+        if (installedVersionOf(install, resolved) !== installed) {
+          return line.warn(
+            `this binary isn't the installed ${installed}'s, so \`${binaryName} update\` can't reach it`,
+            `Run ${tildify(path.join(install.current, binaryName), home)}, which the install links onto PATH.`,
+          );
+        }
+        const unit = yield* unitState(install).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
+          ),
+          Effect.option,
+        );
+        if (Option.isNone(unit) || !unit.value.installed) {
+          return line.warn(
+            `${installed} is installed, but no service runs its host, so this machine serves no devices`,
+            `Run \`${binaryName} service install\`.`,
+          );
+        }
+        if (!unit.value.running) {
+          return line.warn(
+            `${installed} is installed, but its host is stopped`,
+            `Run \`${binaryName} service start\`.`,
+          );
+        }
+        return line.ok(`${installed}, its host running`);
+      });
+
+    const checkApp = byPlatform({ darwin: checkBundle, linux: checkInstall });
+
     // The binary in PATH order, deduped by the file each entry resolves
     // to, so a symlink and its target don't read as a conflict.
     const binariesOnPath = Effect.gen(function* () {
@@ -228,7 +305,7 @@ export const makeEnvironmentChecks = ({
       if (first === undefined) {
         return line.warn(
           `no \`${binaryName}\` on PATH, so this run came from an explicit path`,
-          "Link the CLI from the app's Settings, or add its directory to PATH.",
+          INSTALL_HINTS.path,
         );
       }
       if (found.length === 1) return line.ok(first);

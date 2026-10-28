@@ -8,6 +8,16 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 
 `Shigoto no Mori` plays on *Doubutsu no Mori* (Animal Crossing), "work forest", and the idea of a forest of worktrees: many pieces of work growing side by side without becoming chaos.
 
+## On Linux
+
+A Linux machine, such as a server you reach over SSH, runs the app with no window: its host, which the terminal `sm` and your other devices drive. It needs x86_64, glibc 2.35 or newer (Ubuntu 22.04, Debian 12) and systemd.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sylophi/shigoto-no-mori/main/install.sh | sh
+```
+
+The install keeps its versions in `~/.local/share/shigomori`, links `sm` into `~/.local/bin`, and runs the host as a systemd user service, from boot where lingering is on (`sm service status`). `sm update` moves it to the latest release, and `sm nuke --yes` takes everything of it off the machine.
+
 ## Repository
 
 | Folder | What it is |

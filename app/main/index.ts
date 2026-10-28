@@ -15,7 +15,7 @@ import { clerkPublishableKey } from "./electron/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { unmountedVolume } from "@shared/unmountedVolume";
-import { finishPendingNuke } from "./core/nuke/finish";
+import { finishPendingNuke } from "@shared/nuke";
 import { openPastStuckNuke } from "./electron/nuke";
 import {
   finishHeadlessNuke,
@@ -74,7 +74,7 @@ import {
 } from "./electron/liveness";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isInstallingUpdate } from "./electron/updater";
-import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
+import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 
 if (

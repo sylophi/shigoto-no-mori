@@ -1,4 +1,4 @@
-// The updater's files: the commands it runs, and the files it shares with the app and a v2 sm, read leniently and written whole.
+// The updater's files: the commands it runs, the files it shares with the app and a v2 sm, read leniently and written whole, and whether the app is running.
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -7,14 +7,17 @@ import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { type Flavor, flavorNames } from "../flavor.ts";
+import { unitState } from "../hostUnit.ts";
 import { parseJson } from "../json.ts";
+import { linuxInstall } from "../linuxInstall.ts";
 import * as Paths from "../Paths.ts";
+import { byPlatform } from "../platform.ts";
 import { captureWithin } from "../processes.ts";
 import { type AppStatus, appStatusOf } from "../updateFeed.ts";
 import {
-  NotInBundle,
   type Ran,
   RemoveFailed,
+  StagingFailed,
   updaterFiles,
 } from "./documents.ts";
 
@@ -103,21 +106,53 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
         .pipe(Effect.tapError(() => fs.remove(temporary).pipe(Effect.ignore)));
     });
 
+    const makeDirectory = (target: string) =>
+      fs
+        .makeDirectory(target, { recursive: true })
+        .pipe(
+          Effect.mapError(
+            (cause) =>
+              new StagingFailed({ reason: "directory", path: target, cause }),
+          ),
+        );
+
+    // The host of a Linux install, as its unit runs it: none when the
+    // service manager can't be asked.
+    const unit = unitState(linuxInstall(flavor, paths)).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.option,
+    );
+
     // A live pid isn't yet the app: pids recycle across reboots, and handing
     // the install to a recycled one would wait on a process that never
-    // restarts. The executable's name has to match too, and ps fails for a
-    // pid that is gone.
+    // restarts. On a Mac the executable's name has to match too, and ps
+    // fails for a pid that is gone. On Linux it has to be the pid the
+    // host's unit runs.
     const appAlive = (pid: number) =>
-      run("ps", ["-o", "comm=", "-p", String(pid)], "stdout").pipe(
-        Effect.map((ps) => ps.ok && ps.output.includes(appExecutable)),
-      );
+      byPlatform({
+        darwin: run("ps", ["-o", "comm=", "-p", String(pid)], "stdout").pipe(
+          Effect.map((ps) => ps.ok && ps.output.includes(appExecutable)),
+        ),
+        linux: Effect.map(
+          unit,
+          (state) => Option.isSome(state) && state.value.pid === pid,
+        ),
+      });
 
-    // Any process with the app's executable name, even one that hasn't
-    // published updater.json yet. -x matches exactly, so the "... Helper"
-    // processes don't count.
-    const appRunning = run("pgrep", ["-x", appExecutable]).pipe(
-      Effect.map((ran) => ran.ok),
-    );
+    // The app running, even one that hasn't published updater.json yet:
+    // on a Mac any process with its executable name (-x matches exactly,
+    // so the "... Helper" processes don't count), on Linux the host's
+    // unit.
+    const appRunning = byPlatform({
+      darwin: run("pgrep", ["-x", appExecutable]).pipe(
+        Effect.map((ran) => ran.ok),
+      ),
+      linux: Effect.map(
+        unit,
+        (state) => Option.isSome(state) && state.value.running,
+      ),
+    });
 
     // The app's updater.json, none when it is missing or malformed.
     const readStatus = readShared(statusPath, (value) =>
@@ -132,41 +167,18 @@ export const makeFiles = ({ flavor }: { readonly flavor: Flavor }) =>
       return status;
     });
 
-    // The installed bundle: two folders above the terminal's binary, which
-    // runs from <bundle>/Contents/Resources (the command on PATH links
-    // there). Anything else refuses, so a stray copy never swaps
-    // /Applications.
-    const installedBundle = Effect.fn("Updater.installedBundle")(function* (
-      executable: string,
-    ) {
-      const resolved = yield* fs
-        .realPath(executable)
-        .pipe(Effect.orElseSucceed(() => executable));
-      const resources = path.dirname(resolved);
-      const contents = path.dirname(resources);
-      const bundle = path.dirname(contents);
-      if (
-        path.basename(resources) !== "Resources" ||
-        path.basename(contents) !== "Contents" ||
-        !bundle.endsWith(".app")
-      ) {
-        return yield* new NotInBundle();
-      }
-      return bundle;
-    });
-
     return {
       at,
       removeAll,
       prune,
       run,
+      makeDirectory,
       readShared,
       writeShared,
       appAlive,
       appRunning,
       readStatus,
       runningApp,
-      installedBundle,
     };
   });
 

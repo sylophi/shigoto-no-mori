@@ -25,6 +25,7 @@ import { dirty } from "./commands/dirty.ts";
 import { app, edit, open } from "./commands/open.ts";
 import { update } from "./commands/update.ts";
 import { nuke } from "./commands/nuke.ts";
+import { serviceCommand } from "./commands/service.ts";
 import {
   bring,
   devices,
@@ -154,6 +155,7 @@ const sm = Command.make("sm").pipe(
     doctorCommand.pipe(changingWithFix, Command.provide(doctor(flavor))),
     update.pipe(Command.provide(services)),
     nuke.pipe(Command.provide(Paths.layer(flavor))),
+    serviceCommand.pipe(Command.provide(Paths.layer(flavor))),
     guideCommand.pipe(Command.provide(services)),
   ]),
 );

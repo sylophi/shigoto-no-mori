@@ -4,7 +4,7 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { lstat, readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
@@ -30,7 +30,13 @@ type LicenseEntry = Required<LicenseInfo>;
 
 const require = createRequire(import.meta.url);
 
-const OUT_DIR = join(appRoot, "resources", "licenses");
+// --out writes elsewhere: a Linux package's notices are its own, while
+// the committed copy is the Mac release's.
+const outAt = process.argv.indexOf("--out");
+const OUT_DIR =
+  outAt === -1
+    ? join(appRoot, "resources", "licenses")
+    : resolve(process.argv[outAt + 1] ?? "");
 const JSON_OUT = join(OUT_DIR, "third-party-licenses.json");
 const TEXT_OUT = join(OUT_DIR, "THIRD-PARTY-LICENSES.txt");
 const CHECK = process.argv.includes("--check");
@@ -623,7 +629,7 @@ async function main() {
 
   console.log(
     `[licenses] wrote ${entries.length} production dependency notices to ` +
-      "resources/licenses/",
+      `${relative(appRoot, OUT_DIR)}/`,
   );
 }
 

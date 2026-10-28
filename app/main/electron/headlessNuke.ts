@@ -2,7 +2,7 @@
 // the bundle with --sm-nuke): the host's half and the shell's, as the
 // Danger zone runs them, then an exit that tells the command to start
 // the app again, whose start deletes the files the marker names
-// (core/nuke/finish.ts) and what only a start with nothing open can:
+// (shared/nuke.ts) and what only a start with nothing open can:
 // the keychain item and the preferences.
 import { execFileSync } from "node:child_process";
 import { app } from "electron";

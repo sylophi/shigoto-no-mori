@@ -37,6 +37,29 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
   }
 }
 
+// The host's half of "Nuke everything", for a window and for the
+// headless host's own (headless/nuke.ts).
+export const nukeHost = Effect.gen(function* () {
+  const terminals = yield* Terminals.Terminals;
+  return yield* nukeEverything({
+    onProgress: (progress) =>
+      HostPushes.push(runtimeContract, "nukeProgress", progress),
+    killAllScripts: (yield* Scripts.Scripts).stopAll(),
+    closeTerminals: terminals.closeEvery,
+    holdUpdater: (yield* Shell.Shell).holdUpdater("reset"),
+    uninstall: Effect.map(
+      Effect.all([
+        leftIf(
+          "The terminal command and its shell hooks",
+          uninstallCliEverything,
+        ),
+        leftIf("The agent hooks", Ops.removeAllAgentHooks),
+      ]),
+      (lists) => lists.flat(),
+    ),
+  });
+});
+
 let moveInFlight = false;
 
 // What the moves have under way, the peers bringing from here by their
@@ -178,27 +201,7 @@ export const runtimeHandlers = {
       if (unattended) yield* shell.relaunch;
     }),
 
-  nuke: () =>
-    Effect.gen(function* () {
-      const terminals = yield* Terminals.Terminals;
-      return yield* nukeEverything({
-        onProgress: (progress) =>
-          HostPushes.push(runtimeContract, "nukeProgress", progress),
-        killAllScripts: (yield* Scripts.Scripts).stopAll(),
-        closeTerminals: terminals.closeEvery,
-        holdUpdater: (yield* Shell.Shell).holdUpdater("reset"),
-        uninstall: Effect.map(
-          Effect.all([
-            leftIf(
-              "The terminal command and its shell hooks",
-              uninstallCliEverything,
-            ),
-            leftIf("The agent hooks", Ops.removeAllAgentHooks),
-          ]),
-          (lists) => lists.flat(),
-        ),
-      });
-    }),
+  nuke: () => nukeHost,
 } satisfies EffectHandlers<
   typeof runtimeContract,
   HandlerContext,

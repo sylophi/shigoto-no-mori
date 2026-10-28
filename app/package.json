@@ -21,6 +21,7 @@
     "device": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-device.mts",
     "headless": "node scripts/dev-cli.mts && node scripts/fetch-cloudflared.mts --best-effort && node scripts/build-headless.mts --dev && node dist-headless/host.cjs",
     "headless:build": "node scripts/build-headless.mts",
+    "package:linux": "node scripts/package-linux.mts",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",

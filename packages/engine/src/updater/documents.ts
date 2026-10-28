@@ -18,6 +18,7 @@ import { errnoText } from "../platformErrors.ts";
 import { parse, SemVer } from "semver";
 import { StagingLockUnavailable, UpdateInProgress } from "../stagingLock.ts";
 import { APP_REPO } from "../flavor.ts";
+import { byPlatform } from "../platform.ts";
 import { formatKitchen, RELEASE_LIST_URL } from "../updateFeed.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -238,6 +239,21 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
 
 // A removal a later step needs (a clear folder to stage or swap into)
 // failed: `rm -rf` of `path`.
+// A Linux release's tarball that isn't the one the release names.
+export class DigestRejected extends Schema.TaggedError<DigestRejected>()(
+  "DigestRejected",
+  {
+    reason: Schema.Literals(["missing", "other"]),
+    version: Schema.String,
+  },
+) {
+  override get message(): string {
+    return this.reason === "missing"
+      ? `The release ${this.version} names no digest for its download, so it can't be checked. Refusing to install.`
+      : `The download of ${this.version} doesn't match the digest its release names. Refusing to install.`;
+  }
+}
+
 export class RemoveFailed extends Schema.TaggedError<RemoveFailed>()(
   "RemoveFailed",
   { path: Schema.String, cause: Schema.Defect() },
@@ -439,6 +455,7 @@ export type StageError =
   | LockError
   | DownloadFailed
   | SignatureRejected
+  | DigestRejected
   | RemoveFailed;
 
 export type InstallError =
@@ -570,11 +587,14 @@ export const discard = (
 export const ZERO_VERSION = new SemVer("0.0.0");
 
 // The two endpoints, either a stand-in's, or "" for one with none while
-// the other has one.
+// the other has one. The update server serves the Mac's zips alone.
 export const updateServerUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl
     ? (input.feedUrl ?? "")
-    : `https://update.electronjs.org/${APP_REPO}/darwin-${input.running.arch}/${input.running.version}`;
+    : byPlatform({
+        darwin: `https://update.electronjs.org/${APP_REPO}/darwin-${input.running.arch}/${input.running.version}`,
+        linux: "",
+      });
 
 export const releaseListUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl

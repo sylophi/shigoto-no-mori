@@ -5,6 +5,11 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { parse, type SemVer } from "semver";
 import { APP_REPO } from "./flavor.ts";
+import {
+  byPlatform,
+  current as currentPlatform,
+  type Platform,
+} from "./platform.ts";
 
 // GitHub's list of the app's releases, the API's one page maximum: the
 // updater's release list and the app's changelog alike.
@@ -13,6 +18,9 @@ export const RELEASE_LIST_URL = `https://api.github.com/repos/${APP_REPO}/releas
 // What a feed said about the release to move to.
 export type ReleaseInfo = {
   readonly url: string;
+  // The asset's digest as GitHub keeps it ("sha256:<hex>"), "" when the
+  // feed names none.
+  readonly digest: string;
   readonly version: string;
   readonly notes: string;
   // ISO 8601, or "" when the feed's date is absent or unreadable.
@@ -47,7 +55,11 @@ const GitHubRelease = Schema.NullOr(
       Schema.NullOr(
         Schema.Array(
           Schema.NullOr(
-            Schema.Struct({ name: Text, browser_download_url: Text }),
+            Schema.Struct({
+              name: Text,
+              browser_download_url: Text,
+              digest: Text,
+            }),
           ),
         ),
       ),
@@ -74,13 +86,20 @@ export const ReleaseListCache = Schema.Struct({
 
 // --- picking a release -------------------------------------------------------
 
-// The zip maker names its asset "<product>-darwin-<arch>-<version>.zip",
-// and GitHub turns the product name's spaces into dots on upload.
-const zipAssetUrl = (release: GitHubRelease, marker: string) =>
+// A platform's asset is "<name>-<platform>-<arch>-<version>" and its
+// archive's ending: a Mac's the zip maker's, the product name's spaces
+// turned into dots by GitHub on upload, and Linux's the tarball
+// app/scripts/package-linux.mts makes (linuxInstall.ts linuxPackageName).
+const ARCHIVE = { darwin: ".zip", linux: ".tar.gz" } as const;
+
+const assetOf = (release: GitHubRelease, platform: Platform, arch: string) =>
   (release?.assets ?? []).find((asset) => {
     const name = asset?.name ?? "";
-    return name.endsWith(".zip") && name.includes(marker);
-  })?.browser_download_url ?? "";
+    return (
+      name.endsWith(byPlatform(ARCHIVE, platform)) &&
+      name.includes(`-${platform}-${arch}-`)
+    );
+  });
 
 // The release a build moves to, or undefined when none is ahead. Only a
 // release above the build in semver's order is offered, which ranks
@@ -89,17 +108,22 @@ const zipAssetUrl = (release: GitHubRelease, marker: string) =>
 // prerelease, of any stage, or full release, and a full build full
 // releases alone. Either way a release flagged prerelease under a full
 // release's tag stays hidden, as the update server hides it, and one
-// without its zip for this arch yet (the workflow uploads assets minutes
-// after the tag) is skipped, as the update server skips it.
+// without its asset for this platform and arch yet (the workflow uploads
+// assets minutes after the tag) is skipped, as the update server skips
+// it.
 export const pickRelease = (
   current: SemVer,
   releases: ReadonlyArray<GitHubRelease>,
   arch: string,
+  platform: Platform = currentPlatform(),
 ): ReleaseInfo | undefined => {
   const onPrerelease = current.prerelease.length > 0;
-  const marker = `-darwin-${arch}-`;
-  let best: { release: GitHubRelease; version: SemVer; url: string } | null =
-    null;
+  let best: {
+    release: GitHubRelease;
+    version: SemVer;
+    url: string;
+    digest: string;
+  } | null = null;
   for (const release of releases) {
     const tag = release?.tag_name ?? "";
     const version = parse(tag);
@@ -110,13 +134,15 @@ export const pickRelease = (
     } else if (release?.prerelease === true) {
       continue;
     }
-    const url = zipAssetUrl(release, marker);
+    const asset = assetOf(release, platform, arch);
+    const url = asset?.browser_download_url ?? "";
     if (url === "") continue;
-    best = { release, version, url };
+    best = { release, version, url, digest: asset?.digest ?? "" };
   }
   if (best === null) return undefined;
   return {
     url: best.url,
+    digest: best.digest,
     version: trimV(best.release?.tag_name ?? ""),
     notes: best.release?.body ?? "",
     releaseDate: parseReleaseDate(best.release?.published_at ?? ""),

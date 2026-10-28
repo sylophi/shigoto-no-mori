@@ -15,9 +15,10 @@ import { DEV_RELAUNCH_FILE_ENV } from "@shared/packaging/appName.mts";
 import { openEnvArgs } from "@shigomori/engine/relaunchEnv";
 import { dataDir, dataDirSource } from "@shared/paths";
 import { debugPortOpened } from "./devCdp";
-import { updateEndpoints } from "./updateEndpoints";
+import { updateEndpoints } from "@shared/updater/endpoints";
 import { log } from "@shared/log";
 import { envSetting } from "@shared/config";
+import { QUIT_AFTER_ANSWER_MS } from "@shared/updater/machine";
 
 let requested = false;
 
@@ -91,14 +92,6 @@ export function relaunchApp(): void {
   scheduleRelaunch();
   app.quit();
 }
-
-// How long a quit asked for over a link waits after its handler
-// resolved. The invoke is answered when the handler resolves, and quit
-// tears the listener down (a peer's direct one, a window's loopback)
-// before a queued frame can leave, so the quit trails the reply and the
-// caller sees success instead of a dropped session. Shared with the
-// updater's install.
-export const QUIT_AFTER_ANSWER_MS = 500;
 
 // The relaunch is arranged at once and only the quit waits: a quit
 // from this machine's own user inside the gap then still comes back

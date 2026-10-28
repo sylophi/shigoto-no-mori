@@ -22,11 +22,15 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type * as Option from "effect/Option";
 import type { StagedManifest } from "@shigomori/contracts/schemas/runtime";
+import type { Installation } from "./updater/installation.ts";
 import { type Flavor } from "./flavor.ts";
 import { makeFiles } from "./updater/files.ts";
 import { makeFeeds } from "./updater/feeds.ts";
+import { makeBundle } from "./updater/bundle.ts";
 import { makeSignatures } from "./updater/signatures.ts";
 import { makeStaging } from "./updater/staging.ts";
+import { makeVersions } from "./updater/versions.ts";
+import { byPlatform } from "./platform.ts";
 import { makeSwap } from "./updater/swap.ts";
 import { makeRestart } from "./updater/restart.ts";
 import { makeMethods } from "./updater/methods.ts";
@@ -103,6 +107,17 @@ export class Updater extends Context.Service<
     // to restart. Waits for the app's pid to exit, swaps the staged
     // bundle in and relaunches the app. Headless, so every outcome goes
     // to updates/install.log as well.
+    // The staged update put in place now by the app it replaces, which
+    // restarts into it on its own (a Linux host, whose unit starts it
+    // again once it exits).
+    readonly install: (input: {
+      readonly running: Running;
+      readonly feedUrl?: string;
+      readonly releasesUrl?: string;
+    }) => Effect.Effect<
+      StagedManifest,
+      UpdatesUnavailable | NotInBundle | InstallError
+    >;
     readonly finishInstall: (input: {
       readonly running: Running;
       readonly appPid: number;
@@ -126,24 +141,30 @@ export class Updater extends Context.Service<
 const make = Effect.fn("Updater.make")(function* (flavor: Flavor) {
   const files = yield* makeFiles({ flavor });
   const feeds = yield* makeFeeds({ flavor, files });
-  const signatures = yield* makeSignatures({ files });
-  const staging = yield* makeStaging({ files, feeds, signatures });
-  const swap = yield* makeSwap({ files, signatures, staging });
+  const installation: Installation = yield* byPlatform({
+    darwin: Effect.flatMap(makeSignatures({ files }), (signatures) =>
+      makeBundle({ files, signatures }),
+    ),
+    linux: makeVersions({ flavor, files }),
+  });
+  const staging = yield* makeStaging({ files, feeds, installation });
+  const swap = yield* makeSwap({ files, staging, installation });
   const restart = yield* makeRestart({ files });
   const methods = yield* makeMethods({
     files,
     feeds,
-    signatures,
+    installation,
     staging,
     swap,
     restart,
   });
-  const { check, stage, update, finishInstall } = methods;
+  const { check, stage, update, install, finishInstall } = methods;
   return Updater.of({
     check,
     stage,
     update,
     staged: staging.installable,
+    install,
     finishInstall,
   });
 });

@@ -7,7 +7,7 @@
 // whole or not at all, written through a temp sibling and renamed in,
 // and read back schema-checked before the first window, an absent
 // file reading as null. Everything the shell writes while it runs is
-// on FileSystem instead (jsonFile.ts).
+// on FileSystem instead (shared/jsonFile.ts).
 import {
   mkdirSync,
   readFileSync,
