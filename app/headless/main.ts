@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   const account = headlessAccount(facts);
   await runHost({
     facts,
-    shell: HeadlessShell.layer(facts),
+    shell: HeadlessShell.layer(facts, account),
     openSpans: new Map(),
     ready: async ({ port, deviceId }) => {
       log.info(`[host] up on 127.0.0.1:${port} as device ${deviceId}`);

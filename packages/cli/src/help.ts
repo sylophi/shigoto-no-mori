@@ -54,6 +54,27 @@ const catalog = (names: Names) => {
         `The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror, and if not, why. ${byPlatform({ darwin: "Needs the app open.", linux: "Needs the host running, signed in (`login`)." })}`,
       ],
       [
+        "devices share [on|off]",
+        "Share this device with your other devices",
+        "Off, your other devices can't see or do anything here. Without on or off, prints the switch. --json prints {ok, share, control, keepReachable}, as the other switches do.",
+      ],
+      [
+        "devices control [on|off]",
+        "Let your other devices act on this one as you",
+        "Runs their commands here: scripts and terminals, worktrees and mirrors into this device, files, ports and settings. Needs sharing on and an account signed in. Off by default, and off again after a sign-out.",
+      ],
+      ...byPlatform<{ darwin: Item[]; linux: Item[] }>({
+        darwin: [
+          [
+            "devices reachable [on|off]",
+            "Keep this device reachable",
+            "Opens the app at login and again after a crash it can recover from.",
+          ],
+        ],
+        // The service does it (`service`).
+        linux: [],
+      }),
+      [
         "update [--check]",
         "Update the app to the latest release",
         "Checks GitHub releases, downloads, verifies and installs without opening the app (the linked CLI updates with it), restarting a running app into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",

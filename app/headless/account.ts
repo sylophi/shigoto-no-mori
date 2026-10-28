@@ -122,6 +122,8 @@ const sleep = (ms: number, signal: AbortSignal) =>
 const call = <A>(run: (signal: AbortSignal) => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: callFailureOf });
 
+export type HeadlessAccount = ReturnType<typeof headlessAccount>;
+
 // Made before the host starts, since the loopback takes its contracts
 // as it starts. The device id comes once the host is up (boot), and a
 // call before then waits for it.
@@ -304,10 +306,20 @@ export function headlessAccount(facts: HostFacts) {
     );
   };
 
+  // The command switch, kept on the account's record.
+  const setAcceptsCommands = (enabled: boolean) =>
+    inTurn(async () => {
+      const record = store.read();
+      if (record === null) throw new Error("This machine isn't signed in.");
+      store.write({ ...record, acceptsCommands: enabled });
+    });
+
   // The revoke is best effort: offline, it is parked for the next start
-  // (retryParkedRevoke), and this device signs out here anyway.
+  // (retryParkedRevoke), and this device signs out here anyway. Commands
+  // are refused from the first moment, ahead of the revoke's round trip.
   const signOut = async () => {
     const deviceId = await deviceIdOf;
+    if (store.read()?.acceptsCommands === true) await setAcceptsCommands(false);
     await inTurn(() =>
       signOutDevice({
         config,
@@ -335,6 +347,7 @@ export function headlessAccount(facts: HostFacts) {
   registerLoopbackContract(loginContract, login);
 
   return {
+    setAcceptsCommands,
     // The account as this start finds it, and a revoke a sign-out
     // couldn't deliver, delivered now.
     boot: async (deviceId: string) => {

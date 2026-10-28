@@ -1,14 +1,17 @@
 // The Shell service (host/lib/Shell.ts) of a host with no shell around
 // it: nobody is at it to show anything to, so what a shell would show
 // is logged. A restart is a quit, which the service manager that keeps
-// the host running (the systemd unit) starts again. The updater runs
-// here (updater.ts), and there is no window for a guide to drive.
+// the host running (the systemd unit) starts again, which keeps it
+// reachable too. The updater runs here (updater.ts), the account's
+// command switch is account.ts's, and there is no window for a guide
+// to drive.
 import { callFailureOf } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Shell from "@host/lib/Shell";
 import { quit } from "@host/process/run";
 import type { HostFacts } from "@shared/hostFacts";
+import type { HeadlessAccount } from "./account";
 import { makeHeadlessUpdater } from "./updater";
 
 const refused = (words: string) => Effect.fail(callFailureOf(new Error(words)));
@@ -17,7 +20,10 @@ const refused = (words: string) => Effect.fail(callFailureOf(new Error(words)));
 const call = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: callFailureOf });
 
-export const layer = (facts: HostFacts) => {
+export const layer = (
+  facts: HostFacts,
+  account: Pick<HeadlessAccount, "setAcceptsCommands">,
+) => {
   const updater = makeHeadlessUpdater(facts);
   const relaunch = Effect.sync(() => quit(true));
   return Layer.succeed(
@@ -43,6 +49,13 @@ export const layer = (facts: HostFacts) => {
       stopUpdaterBridge: Effect.promise(updater.releaseBridge),
       migration: () => Effect.void,
       guide: () => refused("This machine has no window to guide."),
+      setAcceptsCommands: (enabled) =>
+        call(() => account.setAcceptsCommands(enabled)),
+      keepReachable: Effect.succeed(null),
+      setKeepReachable: () =>
+        refused(
+          "On Linux the service keeps the host running (`sm service status`).",
+        ),
     }),
   ).pipe(Layer.merge(updater.layer));
 };

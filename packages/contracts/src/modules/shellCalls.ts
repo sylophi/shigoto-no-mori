@@ -63,4 +63,9 @@ export const shellCallsContract = defineContract(
   // Before the folder moves: the bridge `sm update` asks through stopped.
   invoke("stopUpdaterBridge", VoidSchema, VoidSchema),
   invoke("guide", GuideDrivePayloadSchema, GuideReplySchema),
+  // The account page's switches the shell keeps, which a terminal sets
+  // too (control:setAccess).
+  invoke("setAcceptsCommands", Schema.Boolean, VoidSchema),
+  invoke("keepReachable", VoidSchema, Schema.Boolean),
+  invoke("setKeepReachable", Schema.Boolean, VoidSchema),
 );

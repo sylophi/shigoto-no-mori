@@ -11,6 +11,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
+import { accessSwitches } from "./access.ts";
 import { given, here, projectFlags, rest, worktreeFlags } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 
@@ -307,7 +308,7 @@ export const devices = Command.make(
         ),
       );
     }),
-);
+).pipe(Command.withSubcommands(accessSwitches));
 
 // list --remote [--from <device>]: the project's worktrees on the other
 // devices, the names bring and mirror --from take.

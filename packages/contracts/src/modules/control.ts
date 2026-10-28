@@ -196,6 +196,19 @@ const ControlMirrorSchema = strict(
 );
 export type ControlMirror = typeof ControlMirrorSchema.Type;
 
+// This device's switches on the account page: sharing with the
+// account's other devices, taking their commands, and keeping the app
+// running, which is null where the shell has no such switch (a Linux
+// host's service keeps it running).
+const ControlAccessSchema = strict(
+  Schema.Struct({
+    share: Schema.Boolean,
+    control: Schema.Boolean,
+    keepReachable: Schema.NullOr(Schema.Boolean),
+  }),
+);
+export type ControlAccess = typeof ControlAccessSchema.Type;
+
 const ControlMirrorTargetSchema = Schema.Struct({
   projectId: Schema.NonEmptyString,
   worktreeId: WorktreeIdSchema,
@@ -273,6 +286,20 @@ export const controlContract = defineContract(
       }),
     ),
     { gated: true },
+  ),
+  invoke("access", VoidSchema, ControlAccessSchema),
+  // The switches given, set. Command access is kept on the account's
+  // record, so it is refused signed out.
+  invoke(
+    "setAccess",
+    strict(
+      Schema.Struct({
+        share: Schema.optional(Schema.Boolean),
+        control: Schema.optional(Schema.Boolean),
+        keepReachable: Schema.optional(Schema.Boolean),
+      }),
+    ),
+    ControlAccessSchema,
   ),
 ).annotateRpcs(Remote, false);
 

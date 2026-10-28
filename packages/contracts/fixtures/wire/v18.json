@@ -277,6 +277,13 @@
       "collapsedProjects": []
     }
   },
+  "control:access": {
+    "success": {
+      "share": true,
+      "control": true,
+      "keepReachable": true
+    }
+  },
   "control:bring": {
     "payload": {
       "projectId": "7`",
@@ -421,6 +428,14 @@
         },
         "copySide": "local"
       }
+    }
+  },
+  "control:setAccess": {
+    "payload": {},
+    "success": {
+      "share": false,
+      "control": true,
+      "keepReachable": false
     }
   },
   "dialog:pickFolder": {
@@ -2153,6 +2168,9 @@
     },
     "success": ""
   },
+  "shellCalls:keepReachable": {
+    "success": false
+  },
   "shellCalls:migration": {
     "payload": {
       "planned": true,
@@ -2183,6 +2201,12 @@
   },
   "shellCalls:relaunch": {},
   "shellCalls:resumeUpdater": {},
+  "shellCalls:setAcceptsCommands": {
+    "payload": true
+  },
+  "shellCalls:setKeepReachable": {
+    "payload": false
+  },
   "shellCalls:stopUpdaterBridge": {},
   "shellCalls:updaterCheck": {},
   "shellCalls:updaterInstall": {

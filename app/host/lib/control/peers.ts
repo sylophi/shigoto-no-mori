@@ -62,6 +62,17 @@ const probe = <A, E, R>(asked: Effect.Effect<A, E, R>, late: () => A) =>
     ),
   );
 
+export const signedOut = () =>
+  new ControlError(
+    "signed-out",
+    `This device isn't signed in to an account, so it has no other devices to reach. ${byPlatform(
+      {
+        darwin: "Sign in from the app first.",
+        linux: "Sign in first (`login`).",
+      },
+    )}`,
+  );
+
 export const roster = Effect.gen(function* () {
   const devices = yield* Effect.flatMap(
     AccountPeers.AccountPeers,
@@ -69,18 +80,7 @@ export const roster = Effect.gen(function* () {
   );
   const hereId = yield* DeviceId.current;
   const here = devices.find((device) => device.deviceId === hereId);
-  if (here === undefined) {
-    const hint = byPlatform({
-      darwin: "Sign in from the app first.",
-      linux: "Sign in first (`login`).",
-    });
-    return yield* Effect.fail(
-      new ControlError(
-        "signed-out",
-        `This device isn't signed in to an account, so it has no other devices to reach. ${hint}`,
-      ),
-    );
-  }
+  if (here === undefined) return yield* Effect.fail(signedOut());
   return {
     here: { deviceId: hereId, name: nameOf(here) } as Named,
     peers: peersOf(devices, hereId),
