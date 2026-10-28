@@ -259,7 +259,7 @@ export const askedPeers = Effect.fnUntraced(function* (
       return yield* Effect.fail(
         new ControlError(
           "ambiguous-device",
-          `"${query}" matches several devices: ${listed(namesOf(asked))}. Name one in full, or pass its id.`,
+          `"${query}" matches several devices: ${listed(namesOf(asked))}. Name one in full, or pass the start of its id.`,
         ),
       );
     }

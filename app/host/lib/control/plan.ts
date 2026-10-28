@@ -57,13 +57,23 @@ export function matchDevices(peers: DeviceInfo[], query: string): DeviceInfo[] {
     (device) => nameOf(device).toLowerCase() === wanted,
   );
   if (exact.length > 0) return exact;
-  return peers.filter((device) =>
-    nameOf(device).toLowerCase().startsWith(wanted),
+  return peers.filter(
+    (device) =>
+      nameOf(device).toLowerCase().startsWith(wanted) ||
+      device.deviceId.toLowerCase().startsWith(wanted),
   );
 }
 
-export const listed = (devices: { name: string }[]): string =>
-  devices.map((device) => `"${device.name}"`).join(", ");
+// Devices as a sentence lists them. A name two of them share carries
+// the start of each one's id, which --to and --from take.
+export const listed = (devices: Named[]): string =>
+  devices
+    .map(({ deviceId, name }) =>
+      devices.filter((other) => other.name === name).length > 1
+        ? `"${name}" (${deviceId.slice(0, 8)})`
+        : `"${name}"`,
+    )
+    .join(", ");
 
 const nameFor = (deviceId: string, devices: Named[]): string =>
   devices.find((device) => device.deviceId === deviceId)?.name ?? deviceId;

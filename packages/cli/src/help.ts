@@ -179,7 +179,7 @@ const catalog = (names: Names) => {
       [
         "worktrees send [<name>] [--to <device>]",
         "Move a worktree to another device",
-        "The app's \"Transplant to…\". --to takes a device's name, the start of it, or its id, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it; a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open, and finishes there even if interrupted. Exits 3 when the worktree landed but something after it didn't hold.",
+        "The app's \"Transplant to…\". --to takes a device's name or id, or the start of either, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it; a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open, and finishes there even if interrupted. Exits 3 when the worktree landed but something after it didn't hold.",
       ],
       [
         "worktrees bring <worktree> [--from <device>]",
@@ -266,7 +266,7 @@ const catalog = (names: Names) => {
         "Set up a project on a device that lacks it",
         "Clones another device's project here, or with --to, this device's project onto that device. " +
           "<project> is the other device's project: its name, its path there, or its id (an unknown name lists what is there). With --to it is one of this device's. " +
-          "--from and --to take a device's name, the start of it, or its id. --from can be left off when only one device has the project. " +
+          "--from and --to take a device's name or id, or the start of either. --from can be left off when only one device has the project. " +
           "The repo is cloned from the source's checkout over the device link, so it needs no credentials, and gets the same remote. " +
           "It goes in the folder --into <dir> names (a leading ~ is the receiving device's home), by default the checkout's own place with the two homes swapped. " +
           "A checkout of the repo already in that folder is registered as it is. " +
