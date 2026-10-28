@@ -62,10 +62,9 @@ Open one with weblab's `new`, the worktree's port as the address.
 `.env.ports` until the first `pnpm fake-host` (or any dev server) runs
 `scripts/ensure-ports.mts`, which asks port-pool for this checkout's
 ports; `port-pool release <checkout>` gives them back when a throwaway
-checkout goes. The first load after an install can answer 504
-("Outdated Optimize Dep") while Vite bundles its dependencies: give the
-first `goto` a longer timeout, or load again. Below, 4752 and 4753
-stand for them:
+checkout goes. A server's first load compiles the app through the
+React Compiler, which can outlast weblab's default timeout, so give
+the first `goto` a longer one. Below, 4752 and 4753 stand for them:
 
 ```json
 { "name": "ui", "address": 4752, "start": "pnpm fake-host", "path": "/?theme=dark&to=/account", "viewport": "920x720" }

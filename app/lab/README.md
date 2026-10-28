@@ -8,6 +8,13 @@ one part to keep as written is "Sharing the machine".
 
 Commands and paths are relative to `app/`.
 
+On Linux, weblab's browser runs headless, and Google Chrome has to be
+installed. That is all the fake host, the scenes and `scenes:compare`
+need, so they work there as written. Device windows run there too,
+signed out (`devices.md`), so what needs the account, `reliability/`
+among it, needs a Mac, as do `relaunch.mts`, `guide-eval/` and
+`release.md`, which drive macOS itself.
+
 | Page | Reach for it to |
 | --- | --- |
 | [`fake-host/README.md`](fake-host/README.md) | See a screen in any state (a peer offline, a failing PR, the phone layout) or watch a flow play out, in a browser, with no hub, account or second machine |

@@ -25,6 +25,12 @@ build, the renderer's vite server, deep links. A window started while
 that server answers is a peer on the primary's build, so open the
 primary first, and end the peers before it, or everything at once.
 
+On a Linux machine with no display, put `xvfb-run -a` (the `xvfb`
+package) in front of `pnpm device` in `start`, which gives each
+window a virtual display of its own. A window there can't sign in
+yet, since sign-in goes through a browser and a deep link back, so
+it runs signed out and `--clone-login` has nothing to copy.
+
 Each window's account page should list the other device as online,
 then connected. The device names end in `[<tag>-a]` and `[<tag>-b]`.
 Then drive them:
