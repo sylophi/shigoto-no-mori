@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  DeviceSettingsPatchSchema,
+  DeviceConfigKeysSchema,
   keyDescriptions,
 } from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
@@ -254,7 +254,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
 const device: Settings = {
   scope: { kind: "device" },
   listCommand: "config list",
-  descriptions: keyDescriptions(DeviceSettingsPatchSchema.struct),
+  descriptions: keyDescriptions(DeviceConfigKeysSchema),
 };
 
 export const configCommand = Command.make("config").pipe(

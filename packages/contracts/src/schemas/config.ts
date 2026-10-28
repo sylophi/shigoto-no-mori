@@ -395,6 +395,24 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   githubCli: true,
 };
 
+// The device's keys `sm config` lists and sets: the Settings form's,
+// and the ones only it writes, which no peer may, so never in the patch.
+export const DeviceConfigKeysSchema = Schema.Struct({
+  ...DeviceSettingsPatchSchema.struct.fields,
+  directConnections: GlobalConfigSchema.fields.directConnections.annotateKey({
+    description:
+      "Let other devices dial this one directly (its listener and tunnel)",
+  }),
+  cloudflaredPath: GlobalConfigSchema.fields.cloudflaredPath.annotateKey({
+    description: "The cloudflared the tunnel runs, instead of sm's own",
+  }),
+});
+
+export const DEVICE_CONFIG_DEFAULTS = {
+  ...DEVICE_SETTINGS_DEFAULTS,
+  directConnections: true,
+};
+
 // How this app instance looks, owned by the main process; the CLI never
 // reads it. Must not become strict: a newer build's key has to pass
 // through.

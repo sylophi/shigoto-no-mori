@@ -1,5 +1,7 @@
 import {
+  DEVICE_CONFIG_DEFAULTS,
   DEVICE_SETTINGS_DEFAULTS,
+  DeviceConfigKeysSchema,
   type DeviceSettingsPatch,
   DeviceSettingsPatchSchema,
   modeledKeyFields,
@@ -267,8 +269,8 @@ export class Config extends Context.Service<
 // The keys in the order the CLI lists them. A key the schema models and
 // this list misses is still listed, last.
 const deviceKeys = settingKeys(
-  modeledKeyFields(DeviceSettingsPatchSchema.struct),
-  DEVICE_SETTINGS_DEFAULTS,
+  modeledKeyFields(DeviceConfigKeysSchema),
+  DEVICE_CONFIG_DEFAULTS,
   [
     "launchScripts",
     "deleteBranchOnRemove",
@@ -286,6 +288,8 @@ const deviceKeys = settingKeys(
     "hiddenLaunchers",
     "terminal",
     "editor",
+    "directConnections",
+    "cloudflaredPath",
   ],
   {
     launchers: {
