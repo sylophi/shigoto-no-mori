@@ -5,7 +5,7 @@ This file is generated from production npm dependencies as pnpm resolves
 them (the app's and the bundled sm's), the Go modules linked into the bundled
 file-sync engine and darwin helper, and the other binaries the packaged app
 bundles.
-Packages: 671
+Packages: 673
 
 --------------------------------------------------------------------------------
 @adraffy/ens-normalize@1.11.1
@@ -9782,6 +9782,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 --------------------------------------------------------------------------------
+@xterm/addon-serialize@0.15.0-beta.310
+License: MIT
+Repository: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-serialize
+
+No license text found.
+
+--------------------------------------------------------------------------------
 @xterm/addon-unicode-graphemes@0.5.0-beta.310
 License: MIT
 Repository: https://github.com/xtermjs/xterm.js/tree/master/addons/addon-unicode-graphemes
@@ -9861,6 +9868,13 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+@xterm/headless@6.1.0-beta.313
+License: MIT
+Repository: https://github.com/xtermjs/xterm.js
+
+No license text found.
 
 --------------------------------------------------------------------------------
 @xterm/xterm@6.1.0-beta.315

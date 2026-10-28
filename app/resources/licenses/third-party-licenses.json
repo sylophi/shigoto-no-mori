@@ -2365,6 +2365,17 @@
     "copyright": "Copyright (c) 2019, The xterm.js authors (https://github.com/xtermjs/xterm.js)"
   },
   {
+    "name": "@xterm/addon-serialize",
+    "version": "0.15.0-beta.310",
+    "licenses": "MIT",
+    "repository": "https://github.com/xtermjs/xterm.js/tree/master/addons/addon-serialize",
+    "publisher": "",
+    "url": "",
+    "licenseFile": "",
+    "licenseText": "",
+    "copyright": ""
+  },
+  {
     "name": "@xterm/addon-unicode-graphemes",
     "version": "0.5.0-beta.310",
     "licenses": "MIT",
@@ -2396,6 +2407,17 @@
     "licenseFile": "@xterm/addon-webgl/LICENSE",
     "licenseText": "Copyright (c) 2018, The xterm.js authors (https://github.com/xtermjs/xterm.js)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
     "copyright": "Copyright (c) 2018, The xterm.js authors (https://github.com/xtermjs/xterm.js)"
+  },
+  {
+    "name": "@xterm/headless",
+    "version": "6.1.0-beta.313",
+    "licenses": "MIT",
+    "repository": "https://github.com/xtermjs/xterm.js",
+    "publisher": "",
+    "url": "",
+    "licenseFile": "",
+    "licenseText": "",
+    "copyright": ""
   },
   {
     "name": "@xterm/xterm",

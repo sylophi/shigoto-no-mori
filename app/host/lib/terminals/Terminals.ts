@@ -2,25 +2,29 @@
 // PTY (../scripts/ScriptRuns.ts), a resource in a scope of its own under the
 // layer's: closing it is closing that scope, whose release is the kill
 // chain. A terminal belongs to a worktree, which it starts in with the
-// environment the worktree's scripts get and closes with. Its
-// history and folder are saved (SavedTerminals) a moment after its
+// environment the worktree's scripts get and closes with. Its main
+// screen and folder are saved (SavedTerminals) a moment after its
 // output changes and again as it closes, so after a quit or a crash the
-// next start opens a fresh shell there under that history.
+// next start opens a fresh shell there under that screen.
 //
 // Its output goes out in chunks, numbered by `seq`, to every client
 // attached, through a bounded PubSub: a client that falls behind holds
 // the shell's output back rather than pile it up here, and the PTY is
 // paused while the backlog is large. One that stops taking is cut
-// loose after a moment, and catches up from the history. History is a
-// ring of the latest chunks (./history.ts), which an attach replays
-// first.
+// loose after a moment, and catches up from the history, a ring of the
+// latest chunks (./history.ts), while it still holds the client's last
+// one. Any other attach is sent the screen as it is (./screen.ts).
 import * as Lifecycle from "@shigomori/engine/Lifecycle";
 import {
   UnknownProjectError,
   UnknownTerminalError,
   UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
-import type { Terminal, TerminalEvent } from "@shigomori/contracts/schemas";
+import type {
+  GridSize,
+  Terminal,
+  TerminalEvent,
+} from "@shigomori/contracts/schemas";
 import * as SavedTerminals from "@shigomori/engine/SavedTerminals";
 import { elapsedMillis } from "@shigomori/engine/elapsed";
 import * as Cause from "effect/Cause";
@@ -45,8 +49,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
-
-type Size = { readonly cols: number; readonly rows: number };
+import { makeScreen, type Screen } from "./screen";
 
 // `words` random 32-bit words as hex.
 const mintHex = (words: number) =>
@@ -63,7 +66,7 @@ type Owner = Pick<Terminal, "projectId" | "worktreeId">;
 // A terminal to open: its worktree, the grid the opener has room for,
 // and a command line typed into its shell (a launched terminal tool).
 type OpenInput = Owner & {
-  readonly size?: Size | undefined;
+  readonly size?: GridSize | undefined;
   readonly command?: string;
 };
 
@@ -74,7 +77,7 @@ export type Start = {
   readonly env: Readonly<Record<string, string | undefined>>;
 };
 
-const DEFAULT_SIZE: Size = { cols: 120, rows: 40 };
+const DEFAULT_SIZE: GridSize = { cols: 120, rows: 40 };
 
 // `data` in chunks of at most CHUNK_MAX, never between the two halves
 // of a surrogate pair.
@@ -115,10 +118,13 @@ const CHUNK_MAX = 256 * 1024;
 // paused, and below which it reads again.
 const PAUSE_AT = 1024 * 1024;
 const RESUME_AT = 256 * 1024;
-// A terminal's changed history is saved once its output has been quiet
+// Output the screen may have yet to parse before the next read waits
+// for it. Frames don't wait, and a flood goes at the pace it is parsed.
+const SCREEN_BEHIND = 1024 * 1024;
+// A terminal's changed screen is saved once its output has been quiet
 // this long, and at least this often while it keeps changing (a flood,
 // an agent CLI's spinner): what a crash may lose, against one write of
-// the whole ring each time. Both count awake time, so a clock step moves
+// the whole screen each time. Both count awake time, so a clock step moves
 // no save and a sleep spends none of the minute.
 const SAVE_QUIET = Duration.seconds(2);
 const SAVE_AT_MOST = Duration.minutes(1);
@@ -135,54 +141,18 @@ const SCREEN_MODES = new RegExp(
   String.raw`(?:\x1b\[|\x9b)\?([\d;\x00-\x17\x19\x1c-\x1f]+)([hl])|(?:\x1b\[|\x9b)([=><])([\d;]*)u|\x1bc`,
   "g",
 );
-// The start of a sequence the output so far hasn't finished.
+// The start of a sequence the output so far hasn't finished: a CSI, or
+// a string (OSC, DCS, APC, PM, SOS) not yet ended by BEL or ST.
 const UNFINISHED = new RegExp(
-  String.raw`(?:\x1b\[|\x9b)[\x00-\x17\x19\x1c-\x3f]*$|\x1b$`,
+  String.raw`(?:\x1b\[|\x9b)[\x00-\x17\x19\x1c-\x3f]*$|(?:\x1b[\]P_^X]|[\x90\x98\x9d-\x9f])[^\x07\x1b\x9c]*\x1b?$|\x1b$`,
 );
 const ALTERNATE = new Set([1049, 1047, 47]);
-// The mouse reporting protocols, of which one at most is on, and the
-// other private modes a program sets for its input and cursor: the
-// cursor keys, the cursor shown, focus reports, SGR mouse coordinates
-// and bracketed paste. Followed like the kitty flags, so a full-screen
-// program still gets the wheel and its keys after an attach whose ring
-// dropped where it asked for them.
-const MOUSE = new Set([9, 1000, 1002, 1003]);
-const INPUT_MODES = new Set([1, 25, 1004, 1006, 2004]);
-// What a terminal starts with: the cursor shown.
-const MODES_AT_START: ReadonlySet<number> = new Set([25]);
-
-const modesAfter = (
-  modes: ReadonlySet<number>,
-  listed: readonly number[],
-  set: boolean,
-): ReadonlySet<number> => {
-  const next = new Set(modes);
-  for (const mode of listed) {
-    if (MOUSE.has(mode)) {
-      for (const protocol of MOUSE) next.delete(protocol);
-      if (set) next.add(mode);
-    } else if (INPUT_MODES.has(mode)) {
-      if (set) next.add(mode);
-      else next.delete(mode);
-    }
-  }
-  return next;
-};
+// SGR mouse coordinates, which a snapshot of the screen doesn't carry.
+const SGR_MOUSE = 1006;
 
 // What a restored history ends with, so the fresh shell's prompt lands
-// on a clean screen: out of the input and the keypad modes, with the
-// cursor shown and the colors reset.
-const RESTORED_TAIL = `${[...MOUSE, ...INPUT_MODES]
-  .filter((mode) => mode !== 25)
-  .map((mode) => `\x1b[?${mode}l`)
-  .join("")}\x1b>\x1b[?25h\x1b[0m\r\n`;
-
-// The sequences that put a reset terminal in `modes`.
-const modesText = (modes: ReadonlySet<number>): string =>
-  [...modes]
-    .filter((mode) => mode !== 25)
-    .map((mode) => `\x1b[?${mode}h`)
-    .join("") + (modes.has(25) ? "" : "\x1b[?25l");
+// on its own line in the default colors.
+const RESTORED_TAIL = "\x1b[0m\r\n";
 
 // The kitty keyboard flags a program asked for, kept as xterm keeps
 // them: the shown screen's flags and stack, and the other screen's put
@@ -229,103 +199,49 @@ const kittyAfter = (kitty: Kitty, op: string, numbers: string): Kitty => {
       };
 };
 
-// Whether `text` leaves the terminal on the alternate screen, from
-// `before` at its start, where it last went there if it did, and the
-// kitty keyboard flags and input modes it leaves.
-const screenAfter = (
-  text: string,
-  before: {
-    readonly on: boolean;
-    readonly kitty: Kitty;
-    readonly modes: ReadonlySet<number>;
-  } = {
-    on: false,
-    kitty: KITTY_OFF,
-    modes: MODES_AT_START,
-  },
-): {
-  readonly on: boolean;
-  readonly enteredAt: number | undefined;
+// Whether a read leaves the terminal on the alternate screen, and the
+// kitty keyboard flags and SGR mouse it leaves, from where the last one
+// left them, with what of this one the next has to finish.
+type Followed = {
+  readonly alternate: boolean;
   readonly kitty: Kitty;
-  readonly modes: ReadonlySet<number>;
-} => {
-  let { on, kitty, modes } = before;
-  let enteredAt: number | undefined;
-  for (const match of text.matchAll(SCREEN_MODES)) {
+  readonly sgrMouse: boolean;
+  readonly carry: string;
+};
+
+const followScreen = (before: Followed, data: string): Followed => {
+  const seen = before.carry + data;
+  let { alternate, kitty, sgrMouse } = before;
+  for (const match of seen.matchAll(SCREEN_MODES)) {
     const [sequence, sequenceModes, set, op, numbers] = match;
     if (op !== undefined) {
       kitty = kittyAfter(kitty, op, numbers ?? "");
       continue;
     }
     if (sequence === "\x1bc") {
-      on = false;
-      enteredAt = undefined;
+      alternate = false;
       kitty = KITTY_OFF;
-      modes = MODES_AT_START;
+      sgrMouse = false;
       continue;
     }
     const listed = (sequenceModes?.replace(/[^\d;]/g, "").split(";") ?? []).map(
       Number,
     );
-    modes = modesAfter(modes, listed, set === "h");
-    if (!listed.some((mode) => ALTERNATE.has(mode))) {
-      continue;
-    }
-    if (set === "l") {
-      if (on) kitty = otherScreen(kitty);
-      on = false;
-      enteredAt = undefined;
-    } else if (!on) {
-      on = true;
-      enteredAt = match.index;
-      kitty = otherScreen(kitty);
-    }
+    if (listed.includes(SGR_MOUSE)) sgrMouse = set === "h";
+    if (!listed.some((mode) => ALTERNATE.has(mode))) continue;
+    if (set === "h" ? !alternate : alternate) kitty = otherScreen(kitty);
+    alternate = set === "h";
   }
-  return { on, enteredAt, kitty, modes };
-};
-
-// The alternate screen, the kitty keyboard flags and the input modes
-// after a read, from where the last one left them, with what of this
-// one the next has to finish.
-const followScreen = (
-  before: {
-    readonly alternate: boolean;
-    readonly kitty: Kitty;
-    readonly modes: ReadonlySet<number>;
-    readonly carry: string;
-  },
-  data: string,
-): {
-  readonly alternate: boolean;
-  readonly kitty: Kitty;
-  readonly modes: ReadonlySet<number>;
-  readonly carry: string;
-} => {
-  const seen = before.carry + data;
-  const after = screenAfter(seen, {
-    on: before.alternate,
-    kitty: before.kitty,
-    modes: before.modes,
-  });
   return {
-    alternate: after.on,
-    kitty: after.kitty,
-    modes: after.modes,
+    alternate,
+    kitty,
+    sgrMouse,
     carry: (UNFINISHED.exec(seen)?.[0] ?? "").slice(-256),
   };
 };
 
-// What a terminal's next start replays: a history that ends on the
-// alternate screen (a full-screen program ran at the quit) up to where
-// it went there, the main screen as that program found it, cursor and
-// all, or none of it if the ring no longer holds that point. Leaving the
-// alternate screen instead puts the cursor where the program left it,
-// or for 1049 where it saved it, and the fresh prompt's clear to the
-// end of the screen would wipe the lines above.
-const replayable = (history: string, alternate: boolean): string => {
-  if (!alternate) return history;
-  return history.slice(0, screenAfter(history).enteredAt ?? 0);
-};
+// Where a terminal's output is up to, as the screen shows it.
+type Shown = Followed & { readonly seq: number };
 
 interface Session {
   readonly terminal: Terminal;
@@ -333,6 +249,7 @@ interface Session {
   readonly cwd: string;
   readonly pty: PtyHandle;
   readonly history: History;
+  readonly screen: Screen<Shown>;
   readonly events: PubSub.PubSub<TerminalEvent>;
   readonly scope: Scope.Closeable;
   // This shell's, minted as it starts: a client's seq means something
@@ -343,16 +260,11 @@ interface Session {
   readonly changed: Latch.Latch;
   changedAt: number;
   seq: number;
-  size: Size;
+  size: GridSize;
   exited: Option.Option<number | null>;
-  // On the alternate screen, the kitty keyboard flags and the input
-  // modes, followed as output comes in, so they hold once the ring has
-  // dropped where the program went there or asked for them.
-  alternate: boolean;
-  kitty: Kitty;
-  modes: ReadonlySet<number>;
-  // A sequence the last read left unfinished, which the next finishes.
-  carry: string;
+  // Followed as output comes in, for what a snapshot of the screen
+  // doesn't carry.
+  followed: Followed;
   // Closed by its user or with its worktree, or its shell ended, so not
   // saved for the next start.
   forget: boolean;
@@ -373,8 +285,8 @@ export class Terminals extends Context.Service<
     readonly close: (
       terminalId: string,
     ) => Effect.Effect<void, UnknownTerminalError>;
-    // The history after `after` (all of it when that is gone), the
-    // size, then the output and the size as they change, then the
+    // The size and the history after `after` (the screen when that is
+    // gone), then the output and the size as they change, then the
     // exit.
     readonly attach: (
       terminalId: string,
@@ -387,7 +299,7 @@ export class Terminals extends Context.Service<
     // The size every attached client draws at.
     readonly resize: (
       terminalId: string,
-      size: Size,
+      size: GridSize,
     ) => Effect.Effect<void, UnknownTerminalError>;
     // How many live terminals are the worktree's.
     readonly openIn: (worktreeId: string) => number;
@@ -546,13 +458,15 @@ const make = <R, E>(options: {
             backlog.paused = false;
             session.pty.resume();
           }
-          ({
-            alternate: session.alternate,
-            kitty: session.kitty,
-            modes: session.modes,
-            carry: session.carry,
-          } = followScreen(session, data));
-          for (const piece of pieces(data)) {
+          session.followed = followScreen(session.followed, data);
+          const chunks = pieces(data);
+          // Queued before any goes out, so an attach's snapshot has all
+          // the chunks it missed.
+          session.screen.write(data, {
+            ...session.followed,
+            seq: session.seq + chunks.length,
+          });
+          for (const piece of chunks) {
             session.seq += 1;
             session.history.append(session.seq, piece);
             session.changedAt = yield* elapsedMillis;
@@ -562,6 +476,9 @@ const make = <R, E>(options: {
               data: piece,
               seq: session.seq,
             });
+          }
+          if (session.screen.behind() > SCREEN_BEHIND) {
+            yield* session.screen.parsed;
           }
           if (Option.isSome(ended)) {
             session.exited = Option.some(ended.value);
@@ -607,7 +524,7 @@ const make = <R, E>(options: {
         ...session.terminal,
         cwd: Option.getOrElse(folder, () => session.cwd),
         seq: session.seq,
-        history: replayable(session.history.text(), session.alternate),
+        history: yield* session.screen.saved,
       });
     });
 
@@ -642,7 +559,7 @@ const make = <R, E>(options: {
     const begin = Effect.fnUntraced(function* (
       terminal: Terminal,
       { cwd, env }: Start,
-      size: Size,
+      size: GridSize,
       restored?: { readonly seq: number; readonly history: string },
     ) {
       const scope = yield* Scope.fork(layerScope);
@@ -667,14 +584,22 @@ const make = <R, E>(options: {
         // A restored history is a chunk of its own in a new incarnation,
         // so a client that saw the shell before the restart starts over.
         const first = restored === undefined ? 0 : restored.seq + 1;
+        const followed: Followed = {
+          alternate: false,
+          kitty: KITTY_OFF,
+          sgrMouse: false,
+          carry: "",
+        };
         const session: Session = {
           terminal,
           cwd,
           pty,
           incarnation: yield* mintHex(4),
-          history: makeHistory(
-            first,
+          history: makeHistory(first),
+          screen: makeScreen(
+            size,
             restored === undefined ? "" : restored.history + RESTORED_TAIL,
+            { ...followed, seq: first },
           ),
           events: yield* PubSub.bounded<TerminalEvent>(CLIENT_BACKLOG),
           scope,
@@ -683,10 +608,7 @@ const make = <R, E>(options: {
           seq: first,
           size,
           exited: Option.none(),
-          alternate: false,
-          kitty: KITTY_OFF,
-          modes: MODES_AT_START,
-          carry: "",
+          followed,
           forget: false,
         };
         yield* Scope.addFinalizer(scope, PubSub.shutdown(session.events));
@@ -806,42 +728,41 @@ const make = <R, E>(options: {
       const round = Stream.unwrap(
         Effect.gen(function* () {
           stalled = false;
-          const headOf = () => {
-            const since = session.history.since(
-              from?.incarnation === session.incarnation ? from.seq : undefined,
-            );
-            // The ring may have dropped where a program went to the
-            // alternate screen, so a history that starts over goes there
-            // first if it is still there, and ends with the kitty keyboard
-            // flags and the input modes as they are now. Not after one
-            // that stops inside a sequence, which the next output
-            // finishes.
-            const entered =
-              since.reset && session.alternate && !screenAfter(since.data).on
-                ? `\x1b[?1049h${since.data}`
-                : since.data;
-            const tail =
-              session.carry === ""
-                ? `\x1b[=${session.kitty.flags}u${modesText(session.modes)}`
-                : "";
-            const past = { ...since, data: entered + tail };
-            return {
-              past,
-              head: [
-                { kind: "size", ...session.size },
-                {
-                  kind: "history",
-                  incarnation: session.incarnation,
-                  ...past,
-                },
-              ] satisfies TerminalEvent[],
-            };
-          };
+          const opening = (
+            size: GridSize,
+            past: { data: string; seq: number; reset: boolean },
+          ) => ({
+            past,
+            head: [
+              { kind: "size", ...size },
+              { kind: "history", incarnation: session.incarnation, ...past },
+            ] satisfies TerminalEvent[],
+          });
+          const headOf = Effect.gen(function* () {
+            const since =
+              from?.incarnation === session.incarnation
+                ? session.history.since(from.seq)
+                : undefined;
+            if (since !== undefined) {
+              return opening(session.size, { ...since, reset: false });
+            }
+            // A client starting over gets the screen, then the kitty
+            // keyboard flags and the SGR mouse, which the screen doesn't
+            // carry, then the sequence its last output left unfinished
+            // for the next to finish.
+            const { data, size, at } = yield* session.screen.snapshot;
+            const mouse = at.sgrMouse ? `\x1b[?${SGR_MOUSE}h` : "";
+            return opening(size, {
+              data: `${data}\x1b[=${at.kitty.flags}u${mouse}${at.carry}`,
+              seq: at.seq,
+              reset: true,
+            });
+          });
           // A dead one, on its way out, gets its exit from here, not
           // from its events.
           if (Option.isSome(session.exited)) {
             return Stream.fromIterable([
-              ...headOf().head,
+              ...(yield* headOf).head,
               { kind: "exit", code: session.exited.value },
             ] satisfies TerminalEvent[]);
           }
@@ -851,7 +772,7 @@ const make = <R, E>(options: {
           );
           // A chunk sent between the subscription and this read is in
           // both, and the seq tells which.
-          const { past, head } = headOf();
+          const { past, head } = yield* headOf;
           from = { incarnation: session.incarnation, seq: past.seq };
           const taken = yield* Queue.bounded<TerminalEvent, Cause.Done>(
             CLIENT_BACKLOG,
@@ -927,7 +848,7 @@ const make = <R, E>(options: {
       }),
       resize: Effect.fn("Terminals.resize")(function* (
         terminalId: string,
-        size: Size,
+        size: GridSize,
       ) {
         const session = yield* find(terminalId);
         if (
@@ -937,6 +858,7 @@ const make = <R, E>(options: {
           return;
         }
         session.size = size;
+        session.screen.resize(size);
         yield* Effect.sync(() => session.pty.resize(size.cols, size.rows)).pipe(
           Effect.ignore,
         );

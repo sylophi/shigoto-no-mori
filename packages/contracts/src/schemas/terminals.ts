@@ -10,6 +10,11 @@ const GridSizeSchema = Schema.Struct({
   cols: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
   rows: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
 });
+export type GridSize = typeof GridSizeSchema.Type;
+
+// The lines a terminal keeps above its screen: a client's, and the
+// host's copy of the screen that a client starting over is sent.
+export const TERMINAL_SCROLLBACK = 5_000;
 
 // A terminal belongs to the worktree it starts in, and closes with it.
 const TerminalSchema = Schema.Struct({
@@ -46,9 +51,9 @@ export const AttachTerminalPayloadSchema = Schema.Struct({
 });
 
 // What an attach streams, in order: the size, the history (after
-// `after` when the ring still holds it in the same incarnation, else all
-// of it with `reset`, and the client starts over), then output and size
-// changes as they come, then the exit. A chunk's `seq` counts the
+// `after` when the ring still holds it in the same incarnation, else the
+// screen as it is with `reset`, and the client starts over), then
+// output and size changes as they come, then the exit. A chunk's `seq` counts the
 // incarnation's output chunks, so a reconnect asks for what came after
 // the last one it holds.
 export const TerminalEventSchema = Schema.Union([

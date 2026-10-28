@@ -10,6 +10,7 @@ import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
+import { TERMINAL_SCROLLBACK } from "@shigomori/contracts/schemas";
 import { Check, Copy } from "lucide-react";
 import { useCopied } from "../../primitives/copy-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
@@ -210,7 +211,7 @@ export function TerminalView({
       fontSize: fontSizeOf(host),
       lineHeight: 1,
       cursorBlink: true,
-      scrollback: 5_000,
+      scrollback: TERMINAL_SCROLLBACK,
       theme,
       // The graphemes addon needs the proposed `term.unicode` API.
       allowProposedApi: true,
