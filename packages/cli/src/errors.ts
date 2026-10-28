@@ -89,6 +89,8 @@ const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
   "projects config":
     "projects config <list|get|set|unset|edit|read|launcher|carryover> [args]",
   config: "config <list|read|get|set|unset|launcher|edit> [args]",
+  devices:
+    "devices [-p <project>], or devices <share|control|reachable> [on|off]",
   shell: "shell <install|uninstall|status|init>",
   agents:
     "agents <install|uninstall|status|bind|unbind|idle|resume|event> [args]",

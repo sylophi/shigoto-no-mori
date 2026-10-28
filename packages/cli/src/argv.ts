@@ -102,7 +102,7 @@ const namespaceFlags = (chain: ReadonlyArray<Command.Command.Any>): Flags => {
 // The namespaces that parse the flags first and take the verb from the
 // first positional. Every other takes it from the first argument, a
 // flag included.
-const FLAGS_FIRST = new Set(["config", "projects config"]);
+const FLAGS_FIRST = new Set(["config", "projects config", "devices"]);
 
 const subcommand = (command: Command.Command.Any, word: string) =>
   command.subcommands

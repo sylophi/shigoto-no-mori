@@ -266,49 +266,54 @@ const BLOCKS: Readonly<Record<NonNullable<ControlDevice["block"]>, string>> = {
   refused: "turned the ask away",
 };
 
-export const devices = Command.make(
-  "devices",
-  { ...projectFlags, rest },
-  (input) =>
-    Effect.gen(function* () {
-      const at = yield* here;
-      const ref = {
-        project: Option.getOrUndefined(given(input.project)),
-        projectId: Option.getOrUndefined(given(input.projectId)),
-      };
-      const listed = yield* (yield* Transfer.Transfer).devices(at, ref);
-      const { json, stdoutColor } = yield* Effect.service(Output);
-      if (json) return yield* emit(listed);
-      const { dim, green, yellow } = styles(stdoutColor);
-      yield* out(dim(`This device is "${listed.thisDevice.name}".`));
-      if (listed.devices.length === 0) {
-        return yield* out(dim("The account has no other device."));
-      }
-      const scoped =
-        ref.project !== undefined ||
-        ref.projectId !== undefined ||
-        at.current !== undefined;
-      yield* out(
-        renderTable(
-          ["DEVICE", "PLATFORM", "STATUS"],
-          listed.devices.map((device) => {
-            // A reason from a newer app than this build shows as it came.
-            const block: string = device.block ?? "";
-            return [
-              device.name,
-              device.platform,
-              block === ""
-                ? green(scoped ? "ready" : "connected")
-                : yellow(
-                    `${BLOCKS[block as keyof typeof BLOCKS] ?? block}${device.refusal === undefined ? "" : ` (${device.refusal})`}`,
-                  ),
-            ];
-          }),
-          stdoutColor,
-        ),
-      );
-    }),
-).pipe(Command.withSubcommands(accessSwitches));
+export const devices = Command.make("devices", {}, (input) =>
+  Effect.gen(function* () {
+    // The shared flags reach the parent's handler too, untyped there.
+    const flags = input as typeof input & {
+      readonly project: Option.Option<string>;
+      readonly projectId: Option.Option<string>;
+    };
+    const at = yield* here;
+    const ref = {
+      project: Option.getOrUndefined(given(flags.project)),
+      projectId: Option.getOrUndefined(given(flags.projectId)),
+    };
+    const listed = yield* (yield* Transfer.Transfer).devices(at, ref);
+    const { json, stdoutColor } = yield* Effect.service(Output);
+    if (json) return yield* emit(listed);
+    const { dim, green, yellow } = styles(stdoutColor);
+    yield* out(dim(`This device is "${listed.thisDevice.name}".`));
+    if (listed.devices.length === 0) {
+      return yield* out(dim("The account has no other device."));
+    }
+    const scoped =
+      ref.project !== undefined ||
+      ref.projectId !== undefined ||
+      at.current !== undefined;
+    yield* out(
+      renderTable(
+        ["DEVICE", "PLATFORM", "STATUS"],
+        listed.devices.map((device) => {
+          // A reason from a newer app than this build shows as it came.
+          const block: string = device.block ?? "";
+          return [
+            device.name,
+            device.platform,
+            block === ""
+              ? green(scoped ? "ready" : "connected")
+              : yellow(
+                  `${BLOCKS[block as keyof typeof BLOCKS] ?? block}${device.refusal === undefined ? "" : ` (${device.refusal})`}`,
+                ),
+          ];
+        }),
+        stdoutColor,
+      ),
+    );
+  }),
+).pipe(
+  Command.withSharedFlags(projectFlags),
+  Command.withSubcommands(accessSwitches),
+);
 
 // list --remote [--from <device>]: the project's worktrees on the other
 // devices, the names bring and mirror --from take.
