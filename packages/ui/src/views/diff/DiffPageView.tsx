@@ -26,6 +26,12 @@ import {
   CODE_THEME,
 } from "./codeTheme.ts";
 import {
+  type FindBar,
+  FindBarView,
+  FindButtonView,
+  type FindToggle,
+} from "../shared/FindBarView.tsx";
+import {
   HunkBarView,
   hunkAnnotations,
   type HunkControls,
@@ -107,16 +113,18 @@ export function estimateFileHeight(
 }
 
 // A diff page (DiffPage.tsx binds it to a patch): the file list taken
-// over into the sidebar, the header, the patch, and on a phone the file
-// list's sheet.
+// over into the sidebar, the header, the find bar while it's open, the
+// patch, and on a phone the file list's sheet.
 export function DiffPageView({
   takeover,
   header,
+  findBar,
   pane,
   sheet,
 }: {
   takeover: ReactNode;
   header: ReactNode;
+  findBar: FindBar | null;
   pane: ReactNode;
   sheet: ReactNode;
 }) {
@@ -124,6 +132,7 @@ export function DiffPageView({
     <div className="flex h-full flex-col">
       {takeover}
       {header}
+      {findBar && <FindBarView {...findBar} />}
       {pane}
       {sheet}
     </div>
@@ -138,6 +147,7 @@ export function DiffHeaderView({
   subtitleEnd,
   back,
   files,
+  find,
   wrapLines,
   onToggleWrap,
   diffStyle,
@@ -153,6 +163,7 @@ export function DiffHeaderView({
   back: { label: string; onClick: () => void } | null;
   // The phone's chip that opens the file list's sheet.
   files: { label: string; count: number; onOpen: () => void } | null;
+  find: FindToggle | null;
   wrapLines: boolean;
   onToggleWrap: () => void;
   diffStyle: DiffStyle;
@@ -198,6 +209,7 @@ export function DiffHeaderView({
               <span className="tabular">{files.count}</span>
             </ChipButton>
           )}
+          {find && <FindButtonView {...find} />}
           <SimpleTooltip tip="Wrap long lines">
             <IconButton
               onClick={onToggleWrap}

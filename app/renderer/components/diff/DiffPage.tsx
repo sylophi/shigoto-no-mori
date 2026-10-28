@@ -35,6 +35,7 @@ import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffPane } from "./DiffPane";
 import { HighlightWorkers } from "./HighlightWorkers";
 import { MediaDiff } from "./MediaDiff";
+import { useDiffFind } from "./useDiffFind";
 import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 import { readStored, writeStored } from "@/lib/localStorage";
 
@@ -290,6 +291,16 @@ export function DiffPage({
     selectFile(key);
   };
 
+  const find = useDiffFind({
+    scrollRef,
+    files: allFiles,
+    diffStyle,
+    toFile: (key) => {
+      setCollapsed(key, false);
+      setJump({ key });
+    },
+  });
+
   const rows = allFiles.map((fileDiff) => {
     const key = fileKey(fileDiff);
     return (
@@ -354,6 +365,7 @@ export function DiffPage({
                   }
                 : null
             }
+            find={find.toggle}
             wrapLines={wrapLines}
             onToggleWrap={toggleWrap}
             diffStyle={diffStyle}
@@ -361,6 +373,7 @@ export function DiffPage({
             details={details}
           />
         }
+        findBar={find.bar}
         pane={
           <DiffPane
             scrollRef={scrollRef}

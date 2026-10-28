@@ -347,6 +347,27 @@
 .dark {
   --project-tile-fill: 0.66 0.12;
 }
+/*
+ * The find's highlights (a diff's or a file's find bar), painted
+ * through the CSS Custom Highlight API: every match, and the one the
+ * bar is on. The code's shadow roots repeat these two rules
+ * (codeTheme.ts).
+ */
+[data-theme-scope] {
+  --find-match: color-mix(in oklab, var(--color-amber-300) 45%, transparent);
+  --find-current: color-mix(in oklab, var(--color-amber-500) 75%, transparent);
+}
+.dark {
+  --find-match: color-mix(in oklab, var(--color-amber-500) 40%, transparent);
+  --find-current: color-mix(in oklab, var(--color-amber-500) 65%, transparent);
+}
+::highlight(find) {
+  background-color: var(--find-match);
+}
+::highlight(find-current) {
+  background-color: var(--find-current);
+}
+
 [data-slot="project-tile"] {
   &,
   & * {

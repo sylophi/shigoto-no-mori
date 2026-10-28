@@ -13,7 +13,9 @@ export const CODE_THEME = {
   // they scroll only when they overflow and reserve no gutter: where
   // the platform draws classic bars, the library's always-on scroll and
   // stable gutter would give every block an empty bar.
-  unsafeCSS: `:host { --diffs-bg: var(--background); --diffs-overflow-override: auto; } [data-code] { scrollbar-gutter: auto; }`,
+  // The find's highlights (index.css) are painted in the shadow root
+  // by rules of its own: the page's rules don't reach in.
+  unsafeCSS: `:host { --diffs-bg: var(--background); --diffs-overflow-override: auto; } [data-code] { scrollbar-gutter: auto; } ::highlight(find) { background-color: var(--find-match); } ::highlight(find-current) { background-color: var(--find-current); }`,
 };
 
 // In pixels, and numbers rather than CSS because the diff pane's

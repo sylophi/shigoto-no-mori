@@ -13,6 +13,7 @@ import {
   MarkdownFileView,
   MediaFileView,
 } from "../views/files/FileViewerView.tsx";
+import { defaultBinding } from "../lib/keymap.ts";
 import {
   FilesHeaderView,
   FilesNoteView,
@@ -29,6 +30,12 @@ import { SceneSidebar } from "./sidebar.tsx";
 import { projectNamed, worktreeNamed } from "./world.ts";
 
 const noop = () => {};
+
+const find = {
+  open: false,
+  keys: defaultBinding("find").label,
+  onToggle: noop,
+};
 const HUM = worktreeNamed(
   projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori"),
   "happy-hummingbird",
@@ -127,6 +134,8 @@ export function FilesPageScene() {
       onReveal={noop}
       reading={false}
       message={null}
+      find={find}
+      findBar={null}
     >
       {file.kind === "text" && (
         <CodeFileView
@@ -173,6 +182,8 @@ export function FilesPartsScene() {
           onReveal={null}
           reading
           message={null}
+          find={null}
+          findBar={null}
         >
           {null}
         </FileViewerView>
@@ -185,6 +196,8 @@ export function FilesPartsScene() {
           onReveal={null}
           reading={false}
           message={null}
+          find={find}
+          findBar={null}
         >
           <MarkdownFileView source={readme} />
         </FileViewerView>
@@ -197,6 +210,8 @@ export function FilesPartsScene() {
           onReveal={null}
           reading={false}
           message={null}
+          find={null}
+          findBar={null}
         >
           <MediaFileView
             mime="image/svg+xml"
@@ -212,6 +227,8 @@ export function FilesPartsScene() {
           onReveal={null}
           reading={false}
           message="Binary file, not shown."
+          find={null}
+          findBar={null}
         >
           {null}
         </FileViewerView>

@@ -156,6 +156,7 @@ function diffPage({
       <DiffPageView
         takeover={null}
         header={header}
+        findBar={null}
         pane={
           <DiffPaneView
             state="files"
@@ -192,6 +193,12 @@ function SceneMediaDiff({ fileDiff }: { fileDiff: FileDiffMetadata }) {
   );
 }
 
+const find = {
+  open: false,
+  keys: defaultBinding("find").label,
+  onToggle: noop,
+};
+
 function pageHeader(
   title: ReactNode,
   subtitle: ReactNode,
@@ -207,6 +214,7 @@ function pageHeader(
       subtitleEnd={extra?.subtitleEnd}
       back={null}
       files={null}
+      find={find}
       wrapLines={false}
       onToggleWrap={noop}
       diffStyle="unified"

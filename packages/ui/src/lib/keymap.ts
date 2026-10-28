@@ -107,6 +107,12 @@ export const KEYMAP_ACTIONS: readonly KeymapAction[] = [
     terminal: true,
   },
   {
+    id: "find",
+    label: "Find in a diff or a file",
+    chord: "Mod+F",
+    scope: "worktree",
+  },
+  {
     id: "commit",
     label: "Commit, or push with nothing to commit",
     chord: "Mod+Enter",
