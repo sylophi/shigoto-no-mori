@@ -7,7 +7,7 @@
 // <dataDir>/updates/staged. Installing hands the staged release to the
 // shell's install, then quits: the app's spawns a detached
 // `sm update --finish-install --pid <ours>`, which waits for this
-// process to exit, swaps the bundle, and relaunches; a Linux host's
+// process to exit, swaps the bundle, and relaunches. A Linux host's
 // puts it in place itself, and its unit starts the new one. The
 // windows and the peers see a small state machine.
 //
@@ -60,7 +60,7 @@ export type UpdaterSeat = {
   // The state as it moved, for the host, which answers the windows' and
   // the peers' reads and pushes it.
   readonly noteState: (state: UpdaterState) => void;
-  // What the host is busy with; `quitAfter` as for a quit that follows.
+  // What the host is busy with (`quitAfter` as for a quit that follows).
   readonly busy: (quitAfter: boolean) => Promise<BusyOperations>;
   // Asks the person at this machine whether a busy restart goes ahead,
   // true to go on, and whether a quit they chose is under way. Null for

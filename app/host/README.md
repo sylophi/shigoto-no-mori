@@ -30,8 +30,8 @@ in-process (`lib/Engine.ts`, `lib/engineOps.ts`).
 
 The host runs apart from the shell so that its work never stalls a
 window and a crash of it is a reconnect. The shell forks it at launch
-(`main/hostProcess.ts`; on a machine with no screen it runs with no
-shell, `../headless`) and reaches it over RPC as every client does:
+(`main/hostProcess.ts`, or with no shell at all on a machine with no
+screen, `../headless`) and reaches it over RPC as every client does:
 a window, the shell and the terminal `sm` on the loopback, the web
 client and the other devices over the device link. The shell owns the
 account (Clerk, the keychain) and tells the host the account's facts,

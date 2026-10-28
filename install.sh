@@ -61,8 +61,8 @@ config_dir=${name%%-linux-x64-*}
 version=${name#*-linux-x64-}
 [ "$config_dir" != "$name" ] && [ -n "$version" ] ||
   fail "$(basename "$tarball") isn't a release's Linux build."
-# Prod's command is sm, a test flavor's sm<word>; the spelled-out one
-# beside it is named as the folders are.
+# Prod's command is sm, a test flavor's sm<word>, and the spelled-out
+# one beside it is named as the folders are.
 binary=sm${config_dir#shigomori}
 binary=$(printf '%s' "$binary" | tr -d -)
 

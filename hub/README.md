@@ -338,7 +338,7 @@ Clerk's hosted page, and the host gets an OAuth access token that it
 brings as the enroll bearer once. The Worker verifies it against the
 JWKS as it does a session token, and accepts it only when it was
 issued to the OAuth application named by the `CLERK_OAUTH_CLIENT_ID`
-var (`wrangler.jsonc`, per environment); without the var, no OAuth
+var (`wrangler.jsonc`, per environment). Without the var, no OAuth
 token enrolls. The application is public, has the device
 authorization grant on, and issues its access tokens as JWTs. The
 Account Portal hosts the approval page, so it has to be on.

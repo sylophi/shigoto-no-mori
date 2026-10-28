@@ -41,11 +41,11 @@ runs it as the dev flavor, which `smd` reaches.
 builds the release's Linux asset, `out/make/<configDir>-linux-x64-<version>.tar.gz`.
 The tarball holds one folder with:
 
-- the bundle, `host.cjs`;
-- the pinned `node` it runs on (`../shared/packaging/nodeDist.mts`);
-- node-pty, its addon compiled at install (`../scripts/prepare-node-pty.mts`);
-- `sm`, `nativefs`, `file-sync` and `cloudflared`;
-- the notices of what it ships, in `licenses/`.
+- the bundle, `host.cjs`
+- the pinned `node` it runs on (`../shared/packaging/nodeDist.mts`)
+- node-pty, its addon compiled at install (`../scripts/prepare-node-pty.mts`)
+- `sm`, `nativefs`, `file-sync` and `cloudflared`
+- the notices of what it ships, in `licenses/`
 
 `SM_FLAVOR` makes a test flavor's package, as for the app. The release
 workflow builds it on the oldest runner it has, since the addon and the

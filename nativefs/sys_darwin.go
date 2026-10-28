@@ -23,7 +23,7 @@ func exchange(a, b string) error {
 	return unix.RenamexNp(a, b, unix.RENAME_SWAP)
 }
 
-// Only APFS clones; HFS+ and network volumes can't.
+// Only APFS clones. HFS+ and network volumes can't.
 func cloneable(p string) (bool, error) {
 	var st unix.Statfs_t
 	if err := unix.Statfs(p, &st); err != nil {
