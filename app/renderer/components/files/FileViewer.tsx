@@ -1,6 +1,6 @@
 import { getFiletypeFromFileName, preloadHighlighter } from "@pierre/diffs";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CODE_THEME } from "@shigomori/ui/views/diff/codeTheme.ts";
 import { useTheme } from "@/hooks/ui/useTheme";
 import {
@@ -20,6 +20,7 @@ import {
 } from "@shigomori/ui/views/files/FileViewerView.tsx";
 import { useRemoteImage } from "@/hooks/projects/useRemoteImage";
 import { useApi } from "@/lib/runtime/pageApi";
+import { useFileFind } from "./useFileFind";
 
 // The files page's pane: one file, read whole and highlighted by the
 // same renderer the diffs use, a Markdown or SVG file rendered unless
@@ -51,6 +52,13 @@ export function FileViewer({
   const text =
     data?.kind === "text" && data.contents.length > 0 ? data.contents : null;
   const preview = text === null ? null : previewOf(name);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Not over an SVG drawn as an image, which has no text to find.
+  const find = useFileFind(
+    bodyRef,
+    path,
+    text !== null && !(preview === "svg" && shown === "preview"),
+  );
   return (
     <FileViewerView
       path={path}
@@ -70,6 +78,9 @@ export function FileViewer({
             }
       }
       reading={isPending}
+      find={find.toggle}
+      findBar={find.bar}
+      bodyRef={bodyRef}
       message={
         isPending
           ? null

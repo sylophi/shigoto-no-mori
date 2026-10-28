@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type Ref, useState } from "react";
 import { File } from "@pierre/diffs/react";
 import { FolderOpen, Loader2 } from "lucide-react";
 import { CODE_STYLE, CODE_THEME } from "../diff/codeTheme.ts";
@@ -8,6 +8,12 @@ import { IconButton } from "../../primitives/icon-button.tsx";
 import { Markdown } from "../../primitives/markdown.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
+import {
+  type FindBar,
+  FindBarView,
+  FindButtonView,
+  type FindToggle,
+} from "../shared/FindBarView.tsx";
 
 // Past this many lines a file shows as plain text: highlighting it
 // would hold the window for seconds, all at once on the main thread.
@@ -31,6 +37,9 @@ export function FileViewerView({
   onReveal,
   reading,
   message,
+  find,
+  findBar,
+  bodyRef,
   children,
 }: {
   path: string;
@@ -43,6 +52,11 @@ export function FileViewerView({
   reading: boolean;
   // What stands in for a file with nothing to draw.
   message: string | null;
+  // The find bar's switch, for a file with text, the bar while it's
+  // open, and the scrolling body it searches.
+  find: FindToggle | null;
+  findBar: FindBar | null;
+  bodyRef?: Ref<HTMLDivElement>;
   // The file: highlighted (CodeFileView), rendered (MarkdownFileView)
   // or drawn (MediaFileView).
   children: ReactNode;
@@ -74,6 +88,7 @@ export function FileViewerView({
             {formatBytes(size)}
           </span>
         )}
+        {find && <FindButtonView {...find} compact />}
         <CopyButton value={path} label="Copy path" />
         {onReveal && (
           <IconButton
@@ -85,7 +100,8 @@ export function FileViewerView({
           </IconButton>
         )}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      {findBar && <FindBarView {...findBar} />}
+      <div ref={bodyRef} className="min-h-0 flex-1 overflow-auto">
         {reading ? (
           <CenteredMessage>
             <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
