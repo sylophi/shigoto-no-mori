@@ -543,10 +543,10 @@ const make = (deps: GitWatcherDeps) =>
       return { file, checkout, inCheckout: inCheckout.join("/") };
     };
 
-    // Whether a window's edits in `tree` hold one git doesn't ignore,
-    // each asked of the innermost checkout it is in, by that checkout's
-    // rules. A .gitignore git reads changes the rules, and a failed
-    // question counts as an edit.
+    // What a window's edits in `tree` hold that git doesn't ignore, each
+    // asked of the innermost checkout it is in, by that checkout's rules:
+    // a .gitignore git reads, which changes the rules, else an edit, else
+    // nothing. A failed question counts as an edit.
     const anyUnignored = (
       projectId: string,
       tree: string,
@@ -565,14 +565,16 @@ const make = (deps: GitWatcherDeps) =>
           const rules = files.filter(isGitignore);
           if (yield* unignoredAmong(checkout, verdicts, rules)) {
             verdictsOf.delete(projectId);
-            return true;
+            return "rules" as const;
           }
         }
         for (const [checkout, files] of byCheckout) {
-          if (yield* unignoredAmong(checkout, verdicts, files)) return true;
+          if (yield* unignoredAmong(checkout, verdicts, files)) {
+            return "edit" as const;
+          }
         }
-        return false;
-      }).pipe(Effect.orElseSucceed(() => true));
+        return null;
+      }).pipe(Effect.orElseSucceed(() => "edit" as const));
 
     // The folders of `tree` its watch leaves out where a tree is watched
     // a folder at a time: any `.git`, and each one git ignores, asked of
@@ -628,7 +630,7 @@ const make = (deps: GitWatcherDeps) =>
     // quiet (a build writing its output) still reports, at most once a
     // window. A tree that goes away drops its watch, which the next read
     // of the project's trees starts again if the tree is back.
-    const watchTree = (projectId: string, tree: string) =>
+    const watchTree = (projectId: string, tree: string): Effect.Effect<void> =>
       watchOf(tree, ignoredFolders(projectId, tree)).pipe(
         Stream.tap(() =>
           Effect.sync(() => failing.delete(treeKey(projectId, tree))),
@@ -641,8 +643,20 @@ const make = (deps: GitWatcherDeps) =>
             tree,
             events.map((event) => event.path),
           ).pipe(
-            Effect.map((unignored) => {
-              if (unignored) deps.onFilesChanged(projectId);
+            Effect.flatMap((seen) => {
+              if (seen !== null) deps.onFilesChanged(projectId);
+              // A watch a folder at a time left out the folders the old
+              // rules ignored, so it starts over by the new ones, from a
+              // fiber of its own, since starting it stops this one.
+              return seen === "rules"
+                ? Effect.forkDetach(
+                    FiberMap.run(
+                      treeWatches,
+                      treeKey(projectId, tree),
+                      watchTree(projectId, tree),
+                    ),
+                  )
+                : Effect.void;
             }),
           ),
         ),
