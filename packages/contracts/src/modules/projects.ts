@@ -3,6 +3,8 @@ import { push, defineContract, invoke, view } from "../contract.ts";
 import {
   AddProjectPayloadSchema,
   BranchListSchema,
+  CloneFromDevicePayloadSchema,
+  ClonedFromDeviceSchema,
   CloneProjectPayloadSchema,
   CreateProjectPayloadSchema,
   ProjectIconSchema,
@@ -42,6 +44,19 @@ export const projectsContract = defineContract(
     gated: true,
     grant: "browseFiles",
   }),
+  // Another device's project, cloned here from its checkout (that
+  // device's grant) with its settings and the files its carry-over
+  // names. Runs for as long as the clone does.
+  invoke(
+    "cloneFromDevice",
+    CloneFromDevicePayloadSchema,
+    ClonedFromDeviceSchema,
+    {
+      remote: true,
+      gated: true,
+      grant: "browseFiles",
+    },
+  ),
   // A new repository with an empty first commit, so its default
   // branch exists for worktrees to branch off.
   invoke("create", CreateProjectPayloadSchema, ProjectSchema, {

@@ -25,7 +25,7 @@ import { useApi } from "@/lib/runtime/pageApi";
 // accelerator in main/electron/menu.ts that broadcasts over IPC.
 export function AddProjectModal() {
   const api = useApi();
-  const { addProjectOpen, addProjectRequest, openAddProject } = useOverlays();
+  const { addProjectOpen, openAddProject } = useOverlays();
 
   useEffect(
     () =>
@@ -34,7 +34,7 @@ export function AddProjectModal() {
   );
 
   if (!addProjectOpen) return null;
-  return <AddProjectDialog key={addProjectRequest} />;
+  return <AddProjectDialog />;
 }
 
 // The three ways to a project (an existing repo, a clone, a new one)
@@ -44,24 +44,14 @@ export function AddProjectModal() {
 // once there is a choice to make.
 function AddProjectDialog() {
   const localDeviceId = useApi().deviceId;
-  const { addProjectTarget, setAddProjectOpen } = useOverlays();
+  const { setAddProjectOpen } = useOverlays();
   const onClose = () => setAddProjectOpen(false);
-  // A target's query is a path to browse or a URL to clone.
-  const targetUrl =
-    addProjectTarget.query !== undefined &&
-    repoNameFromUrl(addProjectTarget.query) !== null
-      ? addProjectTarget.query
-      : null;
-  const [mode, setMode] = useState<AddProjectMode>(
-    targetUrl === null ? "existing" : "clone",
-  );
+  const [mode, setMode] = useState<AddProjectMode>("existing");
   // Held here, above the per-device views, so what was typed survives a
   // change of device: a pasted URL is as good on the next machine, and
   // `~/dev/` means the same folder on each.
-  const [query, setQuery] = useState(
-    targetUrl === null ? (addProjectTarget.query ?? "~/") : "~/",
-  );
-  const [url, setUrl] = useState(targetUrl ?? "");
+  const [query, setQuery] = useState("~/");
+  const [url, setUrl] = useState("");
   const [name, setName] = useState("");
   // A URL typed or pasted where a path goes is a clone, after the `~/`
   // the input starts with.
@@ -79,10 +69,7 @@ function AddProjectDialog() {
   const [addToTerrier, setAddToTerrier] = useState(true);
   const tabs = useDeviceTabs();
   const { data: status } = useAccountStatus();
-  const [picked, pick] = usePickedDevice(
-    tabs,
-    addProjectTarget.deviceId ?? localDeviceId,
-  );
+  const [picked, pick] = usePickedDevice(tabs, localDeviceId);
 
   // Escape is the shell's to hear (it hears it wherever focus sits),
   // and the view's to answer while it has a stage to back out of. The

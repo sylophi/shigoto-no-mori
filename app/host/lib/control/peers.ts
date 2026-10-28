@@ -102,6 +102,73 @@ export const standingsOf = (
     ),
   );
 
+// What a peer holds, read fresh, beside its standing: offline, not
+// sharing, or a refusal in its words stand for the device whatever the
+// repo (and leave its projects unread), then with `grant`, no command
+// access.
+const projectsOn = (
+  device: DeviceInfo,
+  // Undefined when no direct session is established.
+  peer: DirectPeer | undefined,
+  grant: boolean,
+): Effect.Effect<
+  { standing: ControlDevice; projects: Project[] | null },
+  never,
+  PeerReach
+> => {
+  const base = {
+    deviceId: device.deviceId,
+    name: nameOf(device),
+    platform: device.platform,
+  };
+  const offline = {
+    standing: { ...base, block: "offline" as const },
+    projects: null,
+  };
+  if (peer === undefined) return Effect.succeed(offline);
+  if (!peer.sharesData) {
+    return Effect.succeed({
+      standing: { ...base, block: "not-sharing" as const },
+      projects: null,
+    });
+  }
+  return probe(
+    peerEffects(projectsContract, device.deviceId).list(),
+    () => null,
+  ).pipe(
+    Effect.map((projects) =>
+      projects === null
+        ? offline
+        : {
+            standing:
+              grant && peer.acceptsCommands !== true
+                ? { ...base, block: "no-grant" as const }
+                : base,
+            projects: projects.filter(
+              (project) => project.pathExists !== false,
+            ),
+          },
+    ),
+    // The session dropped between the roster read and the ask (the
+    // bridge reads a drop as no direct connection), the peer stopped
+    // sharing meanwhile, or it answered with a refusal, in its words.
+    Effect.catch((error) =>
+      Effect.succeed({
+        standing: isNoDirectConnectionError(error)
+          ? offline.standing
+          : isNotSharingError(error)
+            ? { ...base, block: "not-sharing" as const }
+            : {
+                ...base,
+                block: "refused" as const,
+                refusal: errorWordsOf(error),
+              },
+        projects: null,
+      }),
+    ),
+  );
+};
+
 // Sharing comes first: a device that isn't sharing serves nothing.
 // Then command access: a send needs it whether or not the device holds
 // the repo (without it, it clones the repo first), and a bring needs
@@ -109,57 +176,34 @@ export const standingsOf = (
 const standingOf = (
   device: DeviceInfo,
   identity: string | null,
-  // Undefined when no direct session is established.
   peer: DirectPeer | undefined,
   grant: boolean,
-): Effect.Effect<ControlDevice, never, PeerReach> => {
-  const base = {
-    deviceId: device.deviceId,
-    name: nameOf(device),
-    platform: device.platform,
-  };
-  const offline = { ...base, block: "offline" as const };
-  if (peer === undefined) return Effect.succeed(offline);
-  if (!peer.sharesData) {
-    return Effect.succeed({ ...base, block: "not-sharing" as const });
-  }
-  return probe(
-    peerEffects(projectsContract, device.deviceId).list(),
-    () => null,
-  ).pipe(
-    Effect.map((projects): ControlDevice => {
-      if (projects === null) return offline;
-      // A null identity never matches: it means this device couldn't
-      // tell what repo this is, not "the same unknown repo".
-      const held =
-        identity === null
-          ? undefined
-          : projects.find(
-              (project) =>
-                project.identity === identity && project.pathExists !== false,
-            );
-      const holding = held === undefined ? {} : { projectId: held.id };
-      if (grant && !peer.acceptsCommands) {
-        return { ...base, ...holding, block: "no-grant" };
-      }
-      return held === undefined
-        ? { ...base, block: "no-project" }
-        : { ...base, ...holding };
-    }),
-    // The session dropped between the roster read and the ask (the
-    // bridge reads a drop as no direct connection), the peer stopped
-    // sharing meanwhile, or it answered with a refusal, in its words.
-    Effect.catch((error) =>
-      Effect.succeed<ControlDevice>(
-        isNoDirectConnectionError(error)
-          ? offline
-          : isNotSharingError(error)
-            ? { ...base, block: "not-sharing" }
-            : { ...base, block: "refused", refusal: errorWordsOf(error) },
-      ),
+): Effect.Effect<ControlDevice, never, PeerReach> =>
+  Effect.map(projectsOn(device, peer, grant), ({ standing, projects }) => {
+    if (projects === null) return standing;
+    // A null identity never matches: it means this device couldn't
+    // tell what repo this is, not "the same unknown repo".
+    const held =
+      identity === null
+        ? undefined
+        : projects.find((project) => project.identity === identity);
+    if (held !== undefined) return { ...standing, projectId: held.id };
+    return standing.block === undefined
+      ? { ...standing, block: "no-project" }
+      : standing;
+  });
+
+// Each peer's projects, for a clone from one: its standing says
+// whether it could serve one (a clone reads the peer's checkout over
+// its grant).
+export const projectsOnPeers = (devices: DeviceInfo[]) =>
+  Effect.flatMap(directPeers, (direct) =>
+    Effect.forEach(
+      devices,
+      (device) => projectsOn(device, direct[device.deviceId], true),
+      { concurrency: "unbounded" },
     ),
   );
-};
 
 // A checkout git can't read (its folder moved away) has no identity
 // to match on, the same as one with no shared identity.
@@ -173,6 +217,18 @@ export const candidates = Effect.fnUntraced(function* (
   project: Project,
   query: string | undefined,
   { grant }: { grant: boolean },
+) {
+  const asked = yield* askedPeers(query);
+  const identity = yield* repoIdentityOf(project);
+  return {
+    identity,
+    standings: yield* standingsOf(asked, identity, { grant }),
+  };
+});
+
+// The peers a verb asks: the one `query` names, or every one.
+export const askedPeers = Effect.fnUntraced(function* (
+  query: string | undefined,
 ) {
   const { peers } = yield* roster;
   if (peers.length === 0) {
@@ -203,11 +259,7 @@ export const candidates = Effect.fnUntraced(function* (
       );
     }
   }
-  const identity = yield* repoIdentityOf(project);
-  return {
-    identity,
-    standings: yield* standingsOf(asked, identity, { grant }),
-  };
+  return asked;
 });
 
 export const registryOrEmpty = probe(

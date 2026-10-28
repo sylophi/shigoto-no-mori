@@ -33,6 +33,7 @@ import {
   patchedPorts,
 } from "@shigomori/contracts/schemas";
 import { cloneFolderName } from "@shared/cloneUrl";
+import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
@@ -590,11 +591,41 @@ function hostHandlersFor(
     // Any image a description names on a remote's host, as a swatch.
     "projects:remoteImage": () =>
       `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120"><rect width="320" height="120" rx="12" fill="#7fb069"/></svg>')}`,
-    "projects:cloneUrl": ({ projectId }) => {
-      const identity = forest.projects.find(
+    // Takes a moment, as a clone does, and lands where the other device
+    // keeps it, the two homes swapped, as the host's default does.
+    "projects:cloneFromDevice": async ({ deviceId, projectId, parentDir }) => {
+      await sleep(2200);
+      const source = forests[deviceId]?.projects.find(
         (project) => project.id === projectId,
-      )?.identity;
-      return identity ? (fakeRemoteUrls[identity] ?? null) : null;
+      );
+      if (source === undefined) {
+        throw new Error("That project is no longer on the other device.");
+      }
+      const into = cloneIntoOf(
+        parentDir ??
+          moveCloneParent({
+            sourcePath: source.path,
+            sourceHome: fakeDisks[deviceId]?.home,
+            destinationHome: disk.home,
+            destinationProjects: forest.projects,
+          }),
+        source.path,
+      );
+      const parent = resolveOnDisk(disk, into.parentDir);
+      const entries = (disk.dirs[parent] ??= []);
+      if (entries.some((entry) => entry.name === into.name)) {
+        throw new Error(`${parent}/${into.name} already exists`);
+      }
+      entries.push({ name: into.name, isGitRepo: true });
+      return {
+        project: registerProject(
+          disk,
+          forest,
+          `${parent}/${into.name}`,
+          source.identity ?? null,
+        ),
+        settings: { copied: true },
+      };
     },
     "runtime:info": () => ({
       dataDir: `${disk.home}/.sm`,

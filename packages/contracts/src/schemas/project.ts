@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { isCloneSource } from "../predicates/remoteUrl.ts";
 import { PathPayloadSchema, ProjectScopedPayloadSchema } from "./payloads.ts";
+import { strict } from "./strict.ts";
 
 // What `deriveBranch` returns with no branch and no readable detached
 // HEAD; not a real branch.
@@ -103,6 +104,37 @@ export const CloneProjectPayloadSchema = Schema.Struct({
 });
 
 export type CloneProjectPayload = typeof CloneProjectPayloadSchema.Type;
+
+// Another device's project, set up on the device asked. No parentDir:
+// that device's own layout, the two homes swapped.
+export const CloneFromDevicePayloadSchema = Schema.Struct({
+  deviceId: Schema.NonEmptyString,
+  projectId: Schema.NonEmptyString,
+  parentDir: Schema.optional(Schema.NonEmptyString),
+});
+
+// Ignored files brought from another device's checkout. conflicts:
+// paths both sides held differently, which keep this side's version.
+export const FilesBroughtSchema = strict(
+  Schema.Struct({
+    crossed: Schema.Boolean,
+    conflicts: Schema.Natural,
+    error: Schema.optional(Schema.String),
+  }),
+);
+
+export const ClonedFromDeviceSchema = Schema.Struct({
+  project: ProjectSchema,
+  // The other device's settings, copied over the ones a new project
+  // starts with. The clone stands either way.
+  settings: Schema.Struct({
+    copied: Schema.Boolean,
+    error: Schema.optional(Schema.String),
+  }),
+  // The files its carry-over copies into new worktrees, brought from
+  // the other device's checkout. Absent when it names none.
+  files: Schema.optional(FilesBroughtSchema),
+});
 
 export const CreateProjectPayloadSchema = Schema.Struct({
   parentDir: Schema.NonEmptyString,

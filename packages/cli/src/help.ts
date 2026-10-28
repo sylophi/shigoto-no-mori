@@ -219,6 +219,20 @@ const catalog = (names: Names) => {
           "--terrier registers it there whatever the setting.",
       ],
       [
+        "projects clone <project> [--from <device> | --to <device>] [--into <dir>]",
+        "Set up a project on a device that lacks it",
+        "Clones another device's project here, or with --to, this device's project onto that device. " +
+          "<project> is the other device's project: its name, its path there, or its id (an unknown name lists what is there). With --to it is one of this device's. " +
+          "--from and --to take a device's name, the start of it, or its id. --from can be left off when only one device has the project. " +
+          "The repo is cloned from the source's checkout over the device link, so it needs no credentials, and gets the same remote. " +
+          "It goes in the folder --into <dir> names (a leading ~ is the receiving device's home), by default the checkout's own place with the two homes swapped. " +
+          "A checkout of the repo already in that folder is registered as it is. " +
+          "The project then takes the source's settings: scripts, launchers, carry-over and the rest, bar its port base and a custom worktree folder, " +
+          "and the files its carry-over names (an ignored .env, say) come from the source's checkout. " +
+          "Refused when the receiving device already has the repo. Needs the app open on both, each sharing, and the other device accepting commands from this one (with --to, each from the other). " +
+          "Prints the checkout's path when it lands here. Exits 3 when the clone stands but the settings or those files didn't come along. --json prints {ok, project, device, settings: {copied, error}, files: {crossed, conflicts, error}, caveats}.",
+      ],
+      [
         "projects remove [<name-or-path>]",
         "Unregister a project",
         "Worktrees stay on disk. While the terrier integration is on, a repo terrier lists is unregistered there too. " +

@@ -1,6 +1,6 @@
-// sm projects <list|icon|add|remove|relocate|config>: the registered
-// projects, terrier's included (and written through to it), and each
-// one's settings.
+// sm projects <list|icon|add|clone|remove|relocate|config>: the
+// registered projects, terrier's included (and written through to it),
+// and each one's settings. clone is a cross-device verb (transfer.ts).
 import { basename } from "node:path";
 import {
   keyDescriptions,
@@ -34,6 +34,7 @@ import { pickProject } from "../pickers.ts";
 import { confirm, interactive } from "../prompt.ts";
 import { configVerbs, type Settings } from "./config.ts";
 import { carryOverVerb } from "./configLists.ts";
+import { cloneProject } from "./transfer.ts";
 
 const refreshIconsFlag = Flag.Boolean("refresh-icons").pipe(
   Flag.withDefault(false),
@@ -352,5 +353,13 @@ const relocate = Command.make(
 ).pipe(changing);
 
 export const projectsCommand = Command.make("projects").pipe(
-  Command.withSubcommands([list, add, remove, relocate, icon, projectConfig]),
+  Command.withSubcommands([
+    list,
+    add,
+    cloneProject,
+    remove,
+    relocate,
+    icon,
+    projectConfig,
+  ]),
 );

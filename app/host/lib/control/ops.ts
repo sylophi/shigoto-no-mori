@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import { only } from "@shigomori/contracts/util/only";
 import {
+  type ControlCloneResult,
   type ControlDevice,
   ControlError,
   type ControlMirror,
@@ -40,19 +41,26 @@ import {
   setupDefaultFor,
 } from "@shigomori/contracts/leaveOutRule";
 import { type Project } from "@shigomori/contracts/schemas";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { tildify } from "@shigomori/contracts/projectPaths";
+import { homedir } from "node:os";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
   sharedStringSetting,
 } from "@shigomori/contracts/sharedSettings";
 import {
+  peerEffects,
   peerSyncFor,
   peerWorktree,
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import type { DirectPeer } from "./AccountPeers";
 import { findProject, findProjectAndWorktree } from "@host/lib/projects";
+import { clonePeerProject } from "@host/lib/sync/cloneFromPeer";
+import { progressTo } from "@host/lib/sync/move";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import {
   mirrorList,
@@ -74,16 +82,19 @@ import {
   nameOf,
   namesOf,
   peerMirrorView,
+  pickPeerProject,
   pickWorktree,
   type Running,
 } from "./plan";
 import {
+  askedPeers,
   candidates,
   cloneIntoOn,
   directPeers,
   mirrorOf,
   peerMirrorOf,
   peerMirrors,
+  projectsOnPeers,
   registryOrEmpty,
   registryUnlessRateLimited,
   repoIdentityOf,
@@ -597,6 +608,57 @@ export const bring = settled<"bring">((input, ctx) =>
     };
   }),
 );
+
+// A project set up on a device that lacks it (`sm projects clone`), by
+// the clone the app's "Add to device" runs too. A peer's here: the
+// device and the project the caller named, read fresh off the peers.
+// This device's on a peer: that peer clones it from here.
+export const clone = (
+  input: Parameters<ViewHandlers<typeof controlContract, never>["clone"]>[0],
+  ctx: HandlerContext,
+): Effect.Effect<ControlCloneResult, CallFailure, HostServices> =>
+  Effect.gen(function* () {
+    if ("projectId" in input) {
+      const project = yield* findProject(input.projectId);
+      const { target } = yield* pickDevice(project, input.device);
+      if (target.projectId !== undefined) {
+        return yield* Effect.fail(
+          new ControlError(
+            "device-blocked",
+            `"${target.name}" already has ${project.name}.`,
+          ),
+        );
+      }
+      const cloned = yield* peerEffects(
+        projectsContract,
+        target.deviceId,
+      ).cloneFromDevice({
+        deviceId: yield* DeviceId.current,
+        projectId: project.id,
+        ...(input.cloneInto === undefined
+          ? {}
+          : { parentDir: tildify(input.cloneInto, homedir()) }),
+      });
+      return {
+        ...cloned,
+        device: { deviceId: target.deviceId, name: target.name },
+      };
+    }
+    const held = yield* projectsOnPeers(yield* askedPeers(input.device));
+    const { device, project } = yield* planned(() =>
+      pickPeerProject(held, input.project),
+    );
+    const cloned = yield* clonePeerProject(
+      device.deviceId,
+      project,
+      input.cloneInto,
+      progressTo(ctx, worktreeIdFromPath(project.path)),
+    );
+    return {
+      ...cloned,
+      device: { deviceId: device.deviceId, name: device.name },
+    };
+  }).pipe(Effect.mapError(callFailureOf));
 
 // The mirrors this device is part of: the ones it runs, and the
 // ones peers run against its worktrees, each seen from this side.

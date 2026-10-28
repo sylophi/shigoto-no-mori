@@ -1,14 +1,13 @@
 // "Add to device": the project menu's way onto a machine that doesn't
 // hold the repo yet. It lists the devices that register projects and
-// aren't among the group's members, and a pick opens the add-project
-// dialog on that device with the repo's remote already in the input,
-// so getting a project onto a new machine is the pick, a glance at the
-// folder, and ↩. The clone itself is the dialog's (CloneForm).
+// aren't among the group's members, and a pick clones the project
+// there from a member's checkout, settings and carry-over files
+// included, into the member's own layout (projects:cloneFromDevice,
+// what `sm projects clone` runs too).
 //
-// The remote comes from a member that has the repo. projects:cloneUrl
-// is a read, so any member with a session can answer it, including a
-// peer that won't take commands from here: bringing its repo to THIS
-// machine needs nothing of it but the URL.
+// The clone runs on the picked device, which asks the member for the
+// repo itself: the member needs to take commands from that device, not
+// from this one.
 import { DeviceMenuRowView } from "@shigomori/ui/views/sidebar/DeviceMenuRowView.tsx";
 import {
   DropdownMenuItem,
@@ -17,7 +16,6 @@ import {
   DropdownMenuSubTrigger,
 } from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
-import { useOverlays } from "@/hooks/ui/useOverlays";
 import { notifyError, toast } from "@/lib/toast";
 import type { GroupMember } from "./ProjectGroupActions";
 
@@ -31,47 +29,59 @@ export function AddToDeviceSubmenu({
   onOpenChange: (open: boolean) => void;
 }) {
   const tabs = useDeviceTabs();
-  const { openAddProject } = useOverlays();
 
   const holders = new Set(members.map((member) => member.deviceId));
   const candidates = tabs.filter((tab) => !holders.has(tab.deviceId));
-  // The tab's api rather than the member's: a member's is withheld
-  // without the command grant, which a read doesn't need, and a tab's
-  // is simply the device's session (the page's api for this one). A peer
-  // in the roster has an api before it has a session to carry a call,
-  // so a member that can answer now goes ahead of one that may not.
-  const sources = members.flatMap((member) => {
-    const tab = tabs.find((t) => t.deviceId === member.deviceId);
-    return tab?.api === undefined
-      ? []
-      : [
-          {
-            project: member.project,
-            api: tab.api,
-            live: tab.block !== "offline",
-          },
-        ];
-  });
-  const source = sources.find((member) => member.live) ?? sources[0];
+  // A member this device reaches and commands goes ahead of one that may
+  // not serve the clone.
+  const source =
+    members.find((member) => {
+      const tab = tabs.find((each) => each.deviceId === member.deviceId);
+      return tab !== undefined && tab.block === undefined;
+    }) ?? members[0];
   if (candidates.length === 0 || source === undefined) return null;
-  const { api, project } = source;
 
-  const addTo = async (tab: DeviceTab) => {
-    const url = await api
-      .run(api.projects.cloneUrl({ projectId: project.id }))
-      .catch((err) => {
-        notifyError(`Couldn't read ${name}'s remote`, err);
-        return undefined;
-      });
-    if (url === undefined) return;
-    if (url === null) {
-      // Nothing to clone from. The dialog still opens there, to browse:
-      // the repo may already sit on that disk, just never registered.
-      toast(`${name} has no remote to clone from`, {
-        description: `If ${tab.label} already has a copy, add it by its folder.`,
-      });
-    }
-    openAddProject({ deviceId: tab.deviceId, query: url ?? undefined });
+  const addTo = (tab: DeviceTab) => {
+    const { api } = tab;
+    if (api === undefined) return;
+    const id = toast.loading(`Cloning ${name} onto ${tab.label}…`);
+    api
+      .run(
+        api.projects.cloneFromDevice({
+          deviceId: source.deviceId,
+          projectId: source.project.id,
+        }),
+      )
+      .then(
+        ({ project, settings, files }) => {
+          const missed = [
+            ...(settings.copied ? [] : [`its settings: ${settings.error}`]),
+            ...(files?.error === undefined
+              ? []
+              : [`its carry-over files: ${files.error}`]),
+            ...((files?.conflicts ?? 0) > 0
+              ? [
+                  `${files?.conflicts} carry-over ${files?.conflicts === 1 ? "path" : "paths"}, since the checkout there has its own`,
+                ]
+              : []),
+          ];
+          if (missed.length === 0) {
+            toast.success(`Added ${name} on ${tab.label}`, {
+              id,
+              description: project.path,
+            });
+          } else {
+            toast.warning(`Added ${name} on ${tab.label}, without all of it`, {
+              id,
+              description: missed.join(". "),
+            });
+          }
+        },
+        (err: unknown) => {
+          toast.dismiss(id);
+          notifyError(`Couldn't add ${name} on ${tab.label}`, err);
+        },
+      );
   };
 
   return (

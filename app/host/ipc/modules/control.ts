@@ -1,8 +1,6 @@
 // The terminal's cross-device verbs on the loopback (host/lib/control/ops.ts).
-import type {
-  ControlTransferEvent,
-  controlContract,
-} from "@shigomori/contracts/modules/control";
+import type { controlContract } from "@shigomori/contracts/modules/control";
+import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HostServices } from "@host/process/services";
@@ -12,6 +10,7 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import {
   bring,
+  clone,
   devices,
   mirrors,
   mirrorStop,
@@ -30,24 +29,22 @@ export const controlHandlers = {
   HostServices
 >;
 
-// A transfer as its caller follows it: each step of its progress as the
-// op notifies it, then its answer, on one stream. Interrupting the
-// stream (the caller gone) interrupts the op.
+// A transfer or a clone as its caller follows it: each step of its
+// progress as the op notifies it, then its answer, on one stream.
+// Interrupting the stream (the caller gone) interrupts the op.
+type Followed<A> =
+  | { readonly _tag: "progress"; readonly progress: SyncPullProgress }
+  | { readonly _tag: "result"; readonly result: A };
+
 const followTransfer =
-  <I>(
+  <I, A>(
     op: (
       input: I,
       ctx: HandlerContext,
-    ) => Effect.Effect<
-      Extract<ControlTransferEvent, { _tag: "result" }>["result"],
-      unknown,
-      HostServices
-    >,
+    ) => Effect.Effect<A, unknown, HostServices>,
   ) =>
-  (
-    input: unknown,
-  ): Stream.Stream<ControlTransferEvent, unknown, HostServices> =>
-    Stream.callback<ControlTransferEvent, unknown, HostServices>((queue) =>
+  (input: unknown): Stream.Stream<Followed<A>, unknown, HostServices> =>
+    Stream.callback<Followed<A>, unknown, HostServices>((queue) =>
       Effect.gen(function* () {
         const abort = new AbortController();
         yield* Effect.addFinalizer(() => Effect.sync(() => abort.abort()));
@@ -56,8 +53,8 @@ const followTransfer =
           notifier: () => (progress) =>
             Queue.offerUnsafe(queue, {
               _tag: "progress",
-              progress,
-            } as ControlTransferEvent),
+              progress: progress as SyncPullProgress,
+            }),
         };
         // Its failure as it is: the loopback sends a contract error as
         // itself, and any other with its message and code.
@@ -73,4 +70,5 @@ const followTransfer =
 export const controlTransfers = {
   send: followTransfer(send),
   bring: followTransfer(bring),
+  clone: followTransfer(clone),
 };
