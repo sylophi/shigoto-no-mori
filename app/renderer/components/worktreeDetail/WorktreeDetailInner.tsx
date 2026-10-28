@@ -30,7 +30,6 @@ import { BirthdayPartyView } from "@shigomori/ui/views/villagers/BirthdayPartyVi
 import { ResidentFaceView } from "@shigomori/ui/views/villagers/ResidentFaceView.tsx";
 import { useResident } from "@/hooks/villagers/useResident";
 import { LaunchSection } from "./LaunchSection";
-import { MirrorPill } from "./MirrorPill";
 import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorCopyTabs, useMirrorCopies } from "./mirror/MirrorCopyTabs";
 import type { TransferDialog } from "@shigomori/ui/views/worktreeDetail/TransferActionsView.tsx";
@@ -256,7 +255,6 @@ export function WorktreeDetailInner({
       header={
         <WorktreeHeader worktree={worktree} title={title} pr={pullRequest} />
       }
-      mirrorPill={<MirrorPill worktree={worktree} />}
       banner={bannerLabel}
       locked={locked}
       description={

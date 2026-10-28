@@ -215,7 +215,6 @@ export function WorktreePageScene() {
             />
           )
         }
-        mirrorPill={null}
         banner={null}
         locked={false}
         prLead={pullRequestLead()}
@@ -466,7 +465,6 @@ export function WorktreePagePartsScene() {
               marks={null}
               face={null}
               header={branchTitle(QUAIL, false)}
-              mirrorPill={null}
               banner="Copying files into the worktree..."
               locked
               launch={null}

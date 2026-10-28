@@ -81,8 +81,8 @@ function ConflictRow({
 // session's local side, the original) and the copy's.
 type ConflictNames = { runner: string; copy: string };
 
-// The conflict chip itself: the same shape as the read-only status
-// chips in MirrorPill, as a button, because there is a list behind it.
+// The conflict chip itself, a button because there is a list behind
+// it.
 export function MirrorConflictsChipView({
   session,
   tone,

@@ -24,7 +24,6 @@ export function WorktreeDetailView({
   marks,
   face,
   header,
-  mirrorPill,
   banner,
   locked,
   description,
@@ -53,7 +52,6 @@ export function WorktreeDetailView({
   // The resident's face (ResidentFaceView) beside the title (WorktreeHeader).
   face: ReactNode;
   header: ReactNode;
-  mirrorPill: ReactNode;
   // A create or a removal under way.
   banner: string | null;
   // The page is locked while files move in or the worktree goes.
@@ -120,7 +118,6 @@ export function WorktreeDetailView({
             {face}
             <div className="min-w-0 flex-1">{header}</div>
           </div>
-          {mirrorPill}
         </header>
 
         {banner && <LifecycleBannerView label={banner} />}

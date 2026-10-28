@@ -1,8 +1,10 @@
 // The footer's mirror button on a worktree that is part of a mirror,
 // on either side of it: the original a session runs on (on the device
 // holding it), and the copy at the far end, served to that device. One
-// button per mirror, its icon in the mirror's status tone, opening the
-// dialog with the running mirror's status, history and controls. The
+// button per mirror, its icon in the mirror's status tone and its label
+// the status itself once the mirror is anything but live or syncing,
+// opening the dialog with the running mirror's status, history and
+// controls. The
 // dialog mounts under the RUNNER's scope, so its reads and controls go
 // to the device running the session whichever page this is: the local
 // page, a peer's page viewed from here, or the far end's own page.
@@ -110,7 +112,11 @@ function MirrorLinkAction({
             )}
           />
         }
-        label="Mirroring"
+        label={
+          view.tone === "emerald" || view.tone === "sky"
+            ? "Mirroring"
+            : view.label
+        }
         tip={`${view.label} with ${names.other}${view.detail === "" ? "" : `: ${view.detail}`}`}
         disabledReason={runnerApi === undefined ? view.detail : undefined}
         onClick={() => setOpen(true)}

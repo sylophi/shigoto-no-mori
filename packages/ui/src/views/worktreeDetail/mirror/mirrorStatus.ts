@@ -1,5 +1,5 @@
-// One line of truth about a mirror session, shared by the header
-// pill, the dialogs and the sidebar row so every surface ranks the
+// One line of truth about a mirror session, shared by the footer
+// button, the dialogs and the sidebar row so every surface ranks the
 // same news the same way: a stop under way, a runner out of reach or
 // restarting (the session is then its last word), a person's pause, a
 // halt, the copy's device turning the mirror away, a lost link, a

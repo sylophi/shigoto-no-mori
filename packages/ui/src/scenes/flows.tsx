@@ -1,7 +1,6 @@
 // The transplant and mirror flows over the fixtures: MacBook's
 // gentle-gecko transplanted here, brave-badger mirrored to a peer, the
-// steps either flow goes through, a running mirror's dialog, and the
-// mirror's marks on a worktree's header.
+// steps either flow goes through, and a running mirror's dialog.
 import type { ReactNode } from "react";
 import { ArrowRight, type LucideIcon, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
@@ -9,12 +8,6 @@ import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
 import { ModalBox } from "../primitives/modal-shell.tsx";
 import { changeEntries } from "../lib/patchFiles.ts";
 import { worktreeTitle } from "../lib/worktreeTitle.ts";
-import { MirrorConflictsChipView } from "../views/worktreeDetail/MirrorConflictsView.tsx";
-import {
-  MirrorLineView,
-  MirrorPillView,
-  MirrorStatusChipView,
-} from "../views/worktreeDetail/MirrorPillView.tsx";
 import { PullFlowFrameView } from "../views/worktreeDetail/flow/PullFlowFrameView.tsx";
 import {
   LeaveOutPickerView,
@@ -707,59 +700,13 @@ export function MirrorManageScene() {
   );
 }
 
-// The mirror's marks and the leave-out picker's rows in their other
-// states.
+// The leave-out picker's rows and the flows' smaller parts in their
+// other states.
 export function FlowPartsScene() {
-  const copy = worktreeNamed(MB_SM, "gentle-gecko");
-  const session = {
-    ...mirrorSessionFixture(BADGER, MACBOOK_ID, copy),
-    conflicts: CONFLICTS,
-  };
-  const look = describeMirror(session);
   const trailing = { action: "Bring", done: "Brought" };
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-5">
-        <Part label="Mirror line">
-          <MirrorPillView
-            lines={
-              <>
-                <MirrorLineView
-                  chip={
-                    <MirrorStatusChipView tone="emerald" label="Mirrored" />
-                  }
-                  other={MACBOOK.label}
-                />
-                <MirrorLineView
-                  chip={
-                    <MirrorStatusChipView
-                      tone="sky"
-                      label="Syncing"
-                      tip="Staging 12 files"
-                      spinning
-                    />
-                  }
-                  other={MINI.label}
-                />
-              </>
-            }
-          />
-          <MirrorPillView
-            lines={
-              <MirrorLineView
-                chip={
-                  <MirrorConflictsChipView
-                    session={session}
-                    tone={look.tone}
-                    label={look.label}
-                    names={NAMES}
-                  />
-                }
-                other={MACBOOK.label}
-              />
-            }
-          />
-        </Part>
         <Part label="Picker rows">
           <div className="flex flex-wrap items-center gap-2">
             <LeaveOutTrailingView
