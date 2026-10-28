@@ -237,6 +237,9 @@ catalogs:
     '@xterm/addon-fit':
       specifier: 0.12.0-beta.311
       version: 0.12.0-beta.311
+    '@xterm/addon-serialize':
+      specifier: 0.15.0-beta.310
+      version: 0.15.0-beta.310
     '@xterm/addon-unicode-graphemes':
       specifier: 0.5.0-beta.310
       version: 0.5.0-beta.310
@@ -246,6 +249,9 @@ catalogs:
     '@xterm/addon-webgl':
       specifier: 0.20.0-beta.309
       version: 0.20.0-beta.309
+    '@xterm/headless':
+      specifier: 6.1.0-beta.313
+      version: 6.1.0-beta.313
     '@xterm/xterm':
       specifier: 6.1.0-beta.315
       version: 6.1.0-beta.315
@@ -393,6 +399,9 @@ importers:
       '@xterm/addon-fit':
         specifier: 'catalog:'
         version: 0.12.0-beta.311(@xterm/xterm@6.1.0-beta.315)
+      '@xterm/addon-serialize':
+        specifier: 'catalog:'
+        version: 0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315)
       '@xterm/addon-unicode-graphemes':
         specifier: 'catalog:'
         version: 0.5.0-beta.310(@xterm/xterm@6.1.0-beta.315)
@@ -402,6 +411,9 @@ importers:
       '@xterm/addon-webgl':
         specifier: 'catalog:'
         version: 0.20.0-beta.309(@xterm/xterm@6.1.0-beta.315)
+      '@xterm/headless':
+        specifier: 'catalog:'
+        version: 6.1.0-beta.313
       '@xterm/xterm':
         specifier: 'catalog:'
         version: 6.1.0-beta.315
@@ -4280,6 +4292,11 @@ packages:
     peerDependencies:
       '@xterm/xterm': ^6.1.0-beta.315
 
+  '@xterm/addon-serialize@0.15.0-beta.310':
+    resolution: {integrity: sha512-Kc2+SBXmlTXU8bava1mxFBipRkqUT7hWkwJpO8Bafq0oDq1HkMF4eb6JcYZ6kGHunylUSIUudO3ufGjnOZ2sLQ==}
+    peerDependencies:
+      '@xterm/xterm': ^6.1.0-beta.315
+
   '@xterm/addon-unicode-graphemes@0.5.0-beta.310':
     resolution: {integrity: sha512-oCvQV7rKNekf7KcNdVicPhOo47W160QS6tIhXG7VpQ9OKGKTrAnMAxD+fr/nTlbd3h86+zvMqJpfd7NKEm/fYA==}
     peerDependencies:
@@ -4294,6 +4311,9 @@ packages:
     resolution: {integrity: sha512-xr69GVLQPmYHLrPzGOl+oapEIDhaYbLCZALL+0qcEI71UW/EmmawweI6RloQsVxIKbMrujH9Xb5KOAqP7BTFSQ==}
     peerDependencies:
       '@xterm/xterm': ^6.1.0-beta.315
+
+  '@xterm/headless@6.1.0-beta.313':
+    resolution: {integrity: sha512-zPAUE6kQyv0Ln9T9mHJQBtED9eN85Xnkaqty6Mim9JKMqkQpWudxpvCRNxzBKduoLDfSKlasKCI7XVYaSqfBHw==}
 
   '@xterm/xterm@6.1.0-beta.315':
     resolution: {integrity: sha512-w7MeKxi6vbxE3IOFRiwgugkM6FZonE9gF9KyJ0OiE5HbYZOm38bz+CTGZg3+wqA6porJnHfjzX1KaihInP+iWg==}
@@ -11984,6 +12004,10 @@ snapshots:
     dependencies:
       '@xterm/xterm': 6.1.0-beta.315
 
+  '@xterm/addon-serialize@0.15.0-beta.310(@xterm/xterm@6.1.0-beta.315)':
+    dependencies:
+      '@xterm/xterm': 6.1.0-beta.315
+
   '@xterm/addon-unicode-graphemes@0.5.0-beta.310(@xterm/xterm@6.1.0-beta.315)':
     dependencies:
       '@xterm/xterm': 6.1.0-beta.315
@@ -11995,6 +12019,8 @@ snapshots:
   '@xterm/addon-webgl@0.20.0-beta.309(@xterm/xterm@6.1.0-beta.315)':
     dependencies:
       '@xterm/xterm': 6.1.0-beta.315
+
+  '@xterm/headless@6.1.0-beta.313': {}
 
   '@xterm/xterm@6.1.0-beta.315': {}
 

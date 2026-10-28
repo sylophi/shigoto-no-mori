@@ -1,6 +1,6 @@
 // A terminal's history: its last output chunks, each with its seq, up
-// to a cap on their length. What an attach replays, and what a quit
-// saves.
+// to a cap on their length, which a client coming back catches up
+// from.
 
 // A terminal query: the program asks the terminal something and reads
 // the answer as input. Replayed into a terminal again, the terminal
@@ -36,74 +36,44 @@ type Chunk = { readonly seq: number; readonly data: string };
 export type History = {
   // Keeps a chunk of output, without its queries.
   readonly append: (seq: number, data: string) => void;
-  // What came after `after`, joined, ending at the last chunk's seq.
-  // `reset` when the ring no longer holds all of it (or `after` is
-  // absent): `data` is then everything it holds.
-  readonly since: (after: number | undefined) => {
-    readonly data: string;
-    readonly seq: number;
-    readonly reset: boolean;
-  };
-  readonly text: () => string;
+  // What came after `after`, joined, ending at the last chunk's seq, or
+  // nothing once the ring no longer holds all of it.
+  readonly since: (
+    after: number,
+  ) => { readonly data: string; readonly seq: number } | undefined;
 };
 
-// A ring starting after `seq`, or holding `text` as chunk `seq` when
-// given (a restored terminal's saved history).
-export function makeHistory(
-  seq: number,
-  text = "",
-  limit = HISTORY_LIMIT,
-): History {
+// A ring starting after `seq`.
+export function makeHistory(seq: number): History {
   const chunks: Chunk[] = [];
   let length = 0;
-  // The seq of the last chunk dropped or cut off the front, or the
-  // start's: a client holding less than that starts over.
+  // The seq of the last chunk dropped, or the start's: a client holding
+  // less than that can't catch up.
   let dropped = seq;
   let last = seq;
-  const append = (at: number, data: string) => {
-    last = at;
-    const kept = withoutQueries(data);
-    if (kept.length === 0) return;
-    chunks.push({ seq: at, data: kept });
-    length += kept.length;
-    // Whole chunks go first, then the oldest left is cut to its tail,
-    // from a line's start where it has one, so a flood keeps the last
-    // of it.
-    while (length > limit) {
-      const first = chunks[0];
-      if (first === undefined) break;
-      const excess = length - limit;
-      dropped = first.seq;
-      if (first.data.length <= excess) {
-        chunks.shift();
-        length -= first.data.length;
-        continue;
-      }
-      const line = first.data.indexOf("\n", excess);
-      const cut = line === -1 ? excess : line + 1;
-      chunks[0] = { seq: first.seq, data: first.data.slice(cut) };
-      length -= cut;
-    }
-  };
-  if (text.length > 0) {
-    chunks.push({ seq, data: text });
-    length = text.length;
-    // A client from before holds another history: it starts over.
-    dropped = seq;
-  }
   return {
-    append,
+    append: (at, data) => {
+      last = at;
+      const kept = withoutQueries(data);
+      if (kept.length === 0) return;
+      chunks.push({ seq: at, data: kept });
+      length += kept.length;
+      while (length > HISTORY_LIMIT) {
+        const first = chunks.shift();
+        if (first === undefined) break;
+        dropped = first.seq;
+        length -= first.data.length;
+      }
+    },
     since: (after) => {
-      const reset = after === undefined || after < dropped || after > last;
+      if (after < dropped || after > last) return undefined;
       return {
         data: chunks
-          .filter((chunk) => reset || chunk.seq > after)
+          .filter((chunk) => chunk.seq > after)
           .map((chunk) => chunk.data)
           .join(""),
         seq: last,
-        reset,
       };
     },
-    text: () => chunks.map((chunk) => chunk.data).join(""),
   };
 }
