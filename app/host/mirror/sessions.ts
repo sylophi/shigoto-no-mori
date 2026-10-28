@@ -52,6 +52,7 @@ import {
   peerWorktree,
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
+import { byPlatform } from "@shigomori/engine/platform";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostAccount from "@host/lib/HostAccount";
 import * as Sharing from "@host/lib/Sharing";
@@ -310,12 +311,15 @@ export const startMirrorFrom = (
     (stopRelay) => Effect.sync(stopRelay),
   );
   return Effect.gen(function* () {
-    const blocker = mirrorHereBlocker({
-      acceptsCommands:
-        (yield* (yield* HostAccount.HostAccount).current).facts
-          ?.acceptsCommands === true,
-      sharing: yield* (yield* Sharing.Sharing).current,
-    });
+    const blocker = mirrorHereBlocker(
+      {
+        acceptsCommands:
+          (yield* (yield* HostAccount.HostAccount).current).facts
+            ?.acceptsCommands === true,
+        sharing: yield* (yield* Sharing.Sharing).current,
+      },
+      byPlatform({ darwin: false, linux: true }),
+    );
     if (blocker !== undefined) {
       return yield* new MirrorStartRefusedError({ reason: blocker });
     }

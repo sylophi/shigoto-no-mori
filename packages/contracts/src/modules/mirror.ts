@@ -344,16 +344,24 @@ export function mirrorEngineBlocker(
 }
 
 // "Mirror here" has the peer write into this device, which both of this
-// device's switches must let it do.
-export function mirrorHereBlocker(own: {
-  readonly acceptsCommands: boolean;
-  readonly sharing: boolean;
-}): string | undefined {
+// device's switches must let it do. A host with no window (Linux) has
+// them turned on from its terminal, not an account page.
+export function mirrorHereBlocker(
+  own: {
+    readonly acceptsCommands: boolean;
+    readonly sharing: boolean;
+  },
+  windowless = false,
+): string | undefined {
   if (!own.sharing) {
-    return "Turn on “Share with other devices” on this device's account page to mirror here.";
+    return windowless
+      ? "Turn on sharing here (`devices share on`) to mirror here."
+      : "Turn on “Share with other devices” on this device's account page to mirror here.";
   }
   if (!own.acceptsCommands) {
-    return "Turn on “Allow control from other devices” on this device's account page to mirror here.";
+    return windowless
+      ? "Turn on control here (`devices control on`) to mirror here."
+      : "Turn on “Allow control from other devices” on this device's account page to mirror here.";
   }
   return undefined;
 }

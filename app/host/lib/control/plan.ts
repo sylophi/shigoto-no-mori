@@ -32,22 +32,37 @@ export const BLOCK_REASON: Record<
   string
 > = {
   offline: "not connected",
-  "not-sharing":
-    "doesn't share with other devices (turn it on from its account page, in Settings)",
+  "not-sharing": "doesn't share with other devices",
   "no-project": "has no checkout of this repo",
-  "no-grant":
-    "doesn't accept commands (turn it on from its account page, in Settings)",
+  "no-grant": "doesn't accept commands",
   refused: "turned the ask away",
 };
 
+// How a device's switch is turned on: from its account page, or on
+// Linux, where the host runs with no window, from its terminal.
+const turnOn = (platform: string, verb: "share" | "control"): string =>
+  platform === "linux"
+    ? `turn it on there with \`devices ${verb} on\``
+    : "turn it on from its account page, in Settings";
+
 // A device's block as a sentence's end, with the peer's own words for
-// a refusal.
+// a refusal and the way to turn a switch on.
 export const blockWords = (
-  device: Pick<ControlDevice, "block" | "refusal">,
-): string =>
-  device.block === "refused" && device.refusal !== undefined
-    ? `${BLOCK_REASON.refused} (${device.refusal})`
-    : BLOCK_REASON[device.block ?? "offline"];
+  device: Pick<ControlDevice, "block" | "refusal" | "platform">,
+): string => {
+  switch (device.block) {
+    case "refused":
+      return device.refusal === undefined
+        ? BLOCK_REASON.refused
+        : `${BLOCK_REASON.refused} (${device.refusal})`;
+    case "not-sharing":
+      return `${BLOCK_REASON["not-sharing"]} (${turnOn(device.platform, "share")})`;
+    case "no-grant":
+      return `${BLOCK_REASON["no-grant"]} (${turnOn(device.platform, "control")})`;
+    default:
+      return BLOCK_REASON[device.block ?? "offline"];
+  }
+};
 
 export function matchDevices(peers: DeviceInfo[], query: string): DeviceInfo[] {
   const wanted = query.trim().toLowerCase();

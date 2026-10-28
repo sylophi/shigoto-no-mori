@@ -483,7 +483,7 @@ export const bring = settled<"bring">((input, ctx) =>
       return yield* Effect.fail(
         new ControlError(
           "device-blocked",
-          `"${standings[0].name}" ${BLOCK_REASON["not-sharing"]}.`,
+          `"${standings[0].name}" ${blockWords(standings[0])}.`,
         ),
       );
     }
