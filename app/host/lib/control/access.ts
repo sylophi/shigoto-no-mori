@@ -38,14 +38,14 @@ export const setAccess: Handler["setAccess"] = (patch, ctx) =>
   Effect.gen(function* () {
     const { share, control, keepReachable } = patch;
     const shell = yield* Shell.Shell;
-    if (share !== undefined) {
-      yield* Effect.flatMap(Sharing.Sharing, (it) => it.set(share));
-    }
     if (control !== undefined) {
       const { facts } = yield* Effect.flatMap(HostAccount, (it) => it.current);
       if (facts === null) return yield* Effect.fail(signedOut());
-      yield* shell.setAcceptsCommands(control);
     }
+    if (share !== undefined) {
+      yield* Effect.flatMap(Sharing.Sharing, (it) => it.set(share));
+    }
+    if (control !== undefined) yield* shell.setAcceptsCommands(control);
     if (keepReachable !== undefined) {
       yield* shell.setKeepReachable(keepReachable);
     }

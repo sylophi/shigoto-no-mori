@@ -8,7 +8,7 @@
 // asked a level of the tree at a time, and a folder that appears is
 // watched as it appears. A folder left out stays out until the watch
 // starts again.
-import { readdir } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FiberMap from "effect/FiberMap";
@@ -63,11 +63,16 @@ const watchFolders = (
             Queue.offerUnsafe(queue, { ...event, path });
             if (Predicate.isTagged(event, "Remove")) return drop(path);
             if (!Predicate.isTagged(event, "Create")) return Effect.void;
-            return fs.stat(full(path)).pipe(
-              Effect.flatMap((info) =>
-                info.type === "Directory" ? add([path]) : Effect.void,
+            // Not through a symlink, as the first walk doesn't go.
+            return Effect.promise(() =>
+              lstat(full(path)).then(
+                (info) => info.isDirectory(),
+                () => false,
               ),
-              Effect.ignore,
+            ).pipe(
+              Effect.flatMap((isFolder) =>
+                isFolder ? add([path]) : Effect.void,
+              ),
             );
           }),
         );

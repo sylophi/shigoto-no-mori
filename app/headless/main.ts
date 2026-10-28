@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { HARNESSES } from "@shigomori/engine/agentHooks";
 import { NUKE_EXIT } from "@shigomori/engine/footprint";
+import { CANT_START_EXIT } from "@shigomori/engine/linuxInstall";
 import { quit, runHost } from "@host/process/run";
 import { log } from "@shared/log";
 import { finishPendingNuke } from "@shared/nuke";
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
       await account.boot(deviceId);
       if (nuking) await runNuke(facts, account.signOutForNuke);
     },
-    failed: async () => {},
+    failed: async () => process.exit(CANT_START_EXIT),
   });
 }
 

@@ -54,11 +54,16 @@ export const HOST_BUNDLE = "host.cjs";
 export const linuxPackageName = (flavor: Flavor, version: string) =>
   `${flavorNames(flavor).configDir}-linux-x64-${version}`;
 
+// How a host that couldn't start exits (a store it can't open), which
+// starting it again won't fix.
+export const CANT_START_EXIT = 3;
+
 // The host the unit runs is `current`'s, at boot (with the user's
-// lingering on) and again whenever it exits but for a stop, which
-// signals it alone: its quit stops what it started, and what is left
-// once it is done goes after it. The stop waits as long as the app's
-// quit does, with its kill's grace (main/hostProcess.ts).
+// lingering on) and again whenever it exits but for a stop or
+// CANT_START_EXIT. A stop signals it alone: its quit stops what it
+// started, and what is left once it is done goes after it. The stop
+// waits as long as the app's quit does, with its kill's grace
+// (main/hostProcess.ts).
 export const unitText = (flavor: Flavor, install: LinuxInstall) => `[Unit]
 Description=${flavorNames(flavor).appName}
 
@@ -66,6 +71,7 @@ Description=${flavorNames(flavor).appName}
 ExecStart="${join(install.current, HOST_RUNTIME)}" "${join(install.current, HOST_BUNDLE)}"
 Restart=always
 RestartSec=2
+RestartPreventExitStatus=${CANT_START_EXIT}
 KillMode=mixed
 TimeoutStopSec=20
 

@@ -92,7 +92,17 @@ func cloneDir(src, dst string, st *unix.Stat_t) error {
 			mu.Unlock()
 		}
 	}
+	failed := func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return first != nil
+	}
+	// A filesystem that can't clone fails the first file, so the rest
+	// of the tree isn't tried.
 	for _, entry := range entries {
+		if failed() {
+			break
+		}
 		from, to := filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name())
 		select {
 		case cloneSlots <- struct{}{}:
