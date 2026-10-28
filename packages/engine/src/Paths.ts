@@ -68,6 +68,11 @@ export class Paths extends Context.Service<
     readonly store: string;
     // XDG_CONFIG_HOME, else ~/.config.
     readonly configHome: string;
+    // XDG_DATA_HOME, else ~/.local/share, and XDG_STATE_HOME, else
+    // ~/.local/state, where Linux keeps the app's own files
+    // (footprint.ts).
+    readonly dataHome: string;
+    readonly stateHome: string;
     // Where the pointer file goes, which redirects the data dir away from
     // the flavor's default: one line holding an absolute path, outside
     // the data dir (nothing inside it can say where it is). The pre-2.0
@@ -118,6 +123,12 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
 
   const configHome = Option.getOrElse(yield* env("XDG_CONFIG_HOME"), () =>
     path.join(home, ".config"),
+  );
+  const dataHome = Option.getOrElse(yield* env("XDG_DATA_HOME"), () =>
+    path.join(home, ".local", "share"),
+  );
+  const stateHome = Option.getOrElse(yield* env("XDG_STATE_HOME"), () =>
+    path.join(home, ".local", "state"),
   );
   const pointerFile = path.join(configHome, names.configDir, names.pointer);
   const legacyPointerFile =
@@ -239,6 +250,8 @@ const make = Effect.fn("Paths.make")(function* (flavor: Flavor) {
     binaryName: names.binaryName,
     store: path.join(resolved.dataDir, "store.db"),
     configHome,
+    dataHome,
+    stateHome,
     pointerFile,
     legacyPointerFile,
     defaultDataDir,

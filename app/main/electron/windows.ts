@@ -51,6 +51,7 @@ import {
   applyRestartVisibility,
   type RestartVisibility,
 } from "./restartVisibility";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 
 const HOME_ROUTE = "/";
 // The v3 migration's page (renderer/lib/routePaths.ts).
@@ -323,7 +324,7 @@ function create(
       // As it was: an app kept hidden, or a window minimized, stays so.
       const minimized = !window.isDestroyed() && window.isMinimized();
       // macOS's alone: Electron has no hidden app elsewhere.
-      const hidden = process.platform === "darwin" && app.isHidden();
+      const hidden = currentPlatform() === "darwin" && app.isHidden();
       create(entry.route, {
         bounds: entry.bounds,
         ...(hidden || minimized

@@ -57,7 +57,7 @@ import {
   isolateGit,
   repositoryRoot,
 } from "../../../../test/gitIsolation.ts";
-import { macfs } from "./macfs.ts";
+import { nativefs } from "./nativefs.ts";
 import { SYNC_SPAWN } from "../../../../test/testProcesses.mts";
 
 // The services a harness case calls.
@@ -96,9 +96,12 @@ export const HOOK_BINARY =
 // git's variables point a child at the repository a hook runs in, and
 // the user's git config would reach the sandbox's repos. The engine's
 // Git service runs git under this process's environment, so the
-// process's own goes the same way.
+// process's own goes the same way. With no config, a commit made under
+// the engine (a fake gh's or git's) has the fixture identity, since git
+// can't guess one from a hostname without a domain.
 isolateGit();
 Object.assign(process.env, {
+  ...GIT_IDENTITY,
   // No background gc or maintenance: a sandbox's repos are copied while
   // git runs, and a pack rewritten mid-copy loses files.
   GIT_CONFIG_COUNT: "2",
@@ -165,8 +168,8 @@ export type Sandbox = {
 export function sandbox(
   options: {
     readonly env?: Readonly<Record<string, string>>;
-    // The darwin helper in macfs/'s place, for a case where it fails.
-    readonly macfs?: string;
+    // The filesystem helper in nativefs/'s place, for a case where it fails.
+    readonly nativefs?: string;
     // The engine's file system made over the real one, for a case that
     // stops it at one call.
     readonly fileSystem?: (
@@ -174,7 +177,7 @@ export function sandbox(
     ) => FileSystem.FileSystem;
   } = {},
 ): Sandbox {
-  const helper = options.macfs ?? macfs();
+  const helper = options.nativefs ?? nativefs();
   const originalPath = process.env.PATH;
   const root = realpathSync(mkdtempSync(join(tmpdir(), "engine-sandbox-")));
   const seed = join(root, "seed");
@@ -221,7 +224,7 @@ export function sandbox(
       flavor: "dev",
       store: Store.layer(openNode),
       open: openNode,
-      macfs: helper,
+      nativefs: helper,
       sm: HOOK_BINARY,
     });
   let runtime: ManagedRuntime.ManagedRuntime<Engine, unknown> | undefined;
@@ -402,9 +405,11 @@ export function sandbox(
           doctor.run(input),
         ).pipe(
           Effect.provide(
-            doctorLayer({ flavor: "dev", open: openNode, macfs: helper }).pipe(
-              Layer.provide(platform()),
-            ),
+            doctorLayer({
+              flavor: "dev",
+              open: openNode,
+              nativefs: helper,
+            }).pipe(Layer.provide(platform())),
           ),
         ),
       ),

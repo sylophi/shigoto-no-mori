@@ -53,9 +53,12 @@ dist-file-sync/
 file-sync/file-sync
 file-sync/filesync
 
-# darwin helper compiled binary (scripts/build-macfs.mts)
-dist-macfs/
-macfs/macfs
+# headless host bundle (scripts/build-headless.mts)
+dist-headless/
+
+# filesystem helper compiled binary (scripts/build-nativefs.mts)
+dist-nativefs/
+nativefs/nativefs
 
 # The scene comparison's report (app/lab/scene-compare)
 app/lab/scene-compare/report/

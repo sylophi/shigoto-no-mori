@@ -1,6 +1,6 @@
-// The darwin helper as macfs/ is now, built once per state of its
+// The filesystem helper as nativefs/ is now, built once per state of its
 // sources into the temp dir, for the tests and proofs that run the
-// Darwin service. No side effects on import, so the app's proofs can
+// NativeFs service. No side effects on import, so the app's proofs can
 // take it without the sandbox's environment.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -15,10 +15,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { isolatedGitEnv } from "../../../../test/gitIsolation.ts";
 
-const dir = join(import.meta.dirname, "..", "..", "..", "..", "macfs");
+const dir = join(import.meta.dirname, "..", "..", "..", "..", "nativefs");
 let built: string | undefined;
 
-export function macfs(): string {
+export function nativefs(): string {
   if (built !== undefined) return built;
   const hash = createHash("sha256");
   for (const rel of readdirSync(dir)
@@ -34,8 +34,8 @@ export function macfs(): string {
   }
   const binary = join(
     tmpdir(),
-    `macfs-${hash.digest("hex").slice(0, 16)}`,
-    "macfs",
+    `nativefs-${hash.digest("hex").slice(0, 16)}`,
+    "nativefs",
   );
   if (!existsSync(binary)) {
     mkdirSync(dirname(binary), { recursive: true });

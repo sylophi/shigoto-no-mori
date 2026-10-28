@@ -19,7 +19,7 @@ import type { ConfigDoc } from "../configDoc.ts";
 import { formatSize, launcherProgram, shellWord } from "../doctorParse.ts";
 import { findExecutable } from "../executables.ts";
 import { flavorNames } from "../flavor.ts";
-import * as Darwin from "../Darwin.ts";
+import * as NativeFs from "../NativeFs.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
 import { heldV2Files, removeV2Files, v2Files } from "../v2Files.ts";
@@ -146,7 +146,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
-    const darwin = yield* Darwin.Darwin;
+    const nativeFs = yield* NativeFs.NativeFs;
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
     const { home, dataDir, binaryName, flavor } = paths;
@@ -544,11 +544,11 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     // A symlink counts as itself, never what it points at. Undefined when
     // any of it can't be read, so no size is shown rather than a short one.
     const treeSize = (root: string) =>
-      darwin.lstat({ root }).pipe(
+      nativeFs.lstat({ root }).pipe(
         Stream.runFold(
           (): number | undefined => 0,
           (size, entry) =>
-            size === undefined || Darwin.isFailed(entry)
+            size === undefined || NativeFs.isFailed(entry)
               ? undefined
               : isDirMode(entry.mode)
                 ? size

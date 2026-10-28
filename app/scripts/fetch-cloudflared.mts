@@ -98,18 +98,22 @@ const staging = `${distDir}.tmp`;
 try {
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
-  const archive = join(staging, asset.name);
-  writeFileSync(archive, bytes);
-  // The darwin assets are a tgz holding the one binary.
-  execFileSync("tar", [
-    "-xzf",
-    archive,
-    "-C",
-    staging,
-    CLOUDFLARED_BINARY_NAME,
-  ]);
-  rmSync(archive);
-  chmodSync(join(staging, CLOUDFLARED_BINARY_NAME), 0o755);
+  const binaryPath = join(staging, CLOUDFLARED_BINARY_NAME);
+  if (asset.name.endsWith(".tgz")) {
+    const archive = join(staging, asset.name);
+    writeFileSync(archive, bytes);
+    execFileSync("tar", [
+      "-xzf",
+      archive,
+      "-C",
+      staging,
+      CLOUDFLARED_BINARY_NAME,
+    ]);
+    rmSync(archive);
+  } else {
+    writeFileSync(binaryPath, bytes);
+  }
+  chmodSync(binaryPath, 0o755);
   writeFileSync(join(staging, "stamp"), stamp);
   rmSync(distDir, { recursive: true, force: true });
   renameSync(staging, distDir);

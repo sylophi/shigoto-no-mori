@@ -6,7 +6,6 @@
 // credential. The calls are the web's too (shared/account/handlers.ts),
 // served by ipc/modules/account.ts.
 import { existsSync, readFileSync } from "node:fs";
-import { platform } from "node:os";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
 import { app, safeStorage } from "electron";
@@ -51,6 +50,7 @@ import {
 } from "@shigomori/contracts/accountServiceConfig";
 import { log, warnOnFailure } from "@shared/log";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 
 // Built lazily on first handler use, never at import time. This module is
 // imported before app "ready" (registerShellHandlers runs before
@@ -358,7 +358,7 @@ export const desktopAccount: AccountShell = {
   deviceId: () => hostDeviceId(),
   defaultName: defaultDeviceName,
   detectedIcon: detectedDeviceIcon,
-  platform: platform(),
+  platform: currentPlatform(),
   // --clone-login leaves this beside the token store it copied
   // (scripts/lib/devProfile.mts cloneDevLogin).
   sharedSignIn: () =>

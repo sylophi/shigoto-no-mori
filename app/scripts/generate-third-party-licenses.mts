@@ -51,13 +51,13 @@ const NPM_ROOTS = [
 ];
 
 // The Go modules whose binaries ship inside the app (the file-sync
-// engine and the darwin helper), each walked for the modules
+// engine and the filesystem helper), each walked for the modules
 // ACTUALLY LINKED into its default build: `go list -deps` over the main
 // package, with the default build tags, so a dependency reachable only
 // through a build tag this project never sets (Mutagen's
 // source-available parts behind `mutagensspl`) is neither compiled in
 // nor listed.
-const GO_MODULES = ["file-sync", "macfs"];
+const GO_MODULES = ["file-sync", "nativefs"];
 
 // License file names Go modules use, in lookup order.
 const LICENSE_FILE_NAMES = [
@@ -526,7 +526,7 @@ function renderText(entries: LicenseEntry[]): string {
     "",
     "This file is generated from production npm dependencies as pnpm resolves",
     "them (the app's and the bundled sm's), the Go modules linked into the bundled",
-    "file-sync engine and darwin helper, and the other binaries the packaged app",
+    "file-sync engine and filesystem helper, and the other binaries the packaged app",
     "bundles.",
     `Packages: ${entries.length}`,
     "",

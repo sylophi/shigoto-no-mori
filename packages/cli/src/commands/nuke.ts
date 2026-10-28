@@ -140,6 +140,8 @@ export const nuke = Command.make(
       const place = footprint(paths.flavor, {
         home: paths.home,
         configHome: paths.configHome,
+        dataHome: paths.dataHome,
+        stateHome: paths.stateHome,
         binHome: "",
       });
       for (const { id, path } of place.paths) {

@@ -20,6 +20,8 @@ level up.
 - `renderer/README.md`: the UI both shells run, containers over the
   views.
 - `web/README.md`: the web client, a device with no host.
+- `headless/README.md`: the host with no shell, for a machine with no
+  screen.
 - `shared/README.md`: the code the host, the shell and the clients
   share.
 

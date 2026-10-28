@@ -26,6 +26,7 @@ import { NUKE_MARKER, writeNukeMarker } from "../core/nuke/finish";
 import { names } from "../flavor";
 import { signOutForNuke } from "./account";
 import { setsLoginItem } from "./liveness";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 
 // What goes at the next start besides userData: the data dir, the logs,
 // and the pointer that found the data dir. A data dir set by
@@ -59,7 +60,7 @@ export async function nukeShell(): Promise<NukeReport> {
       why: errorMessageOf(error),
     });
   }
-  if (process.platform === "darwin" && setsLoginItem()) {
+  if (currentPlatform() === "darwin" && setsLoginItem()) {
     app.setLoginItemSettings({ openAtLogin: false });
   }
   writeNukeMarker(app.getPath("userData"), pathsToDelete());

@@ -4,7 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Darwin from "../Darwin.ts";
+import * as NativeFs from "../NativeFs.ts";
 import { parsePortPoolDirs } from "../doctorParse.ts";
 import { findExecutable } from "../executables.ts";
 import { isNotFound } from "../platformErrors.ts";
@@ -13,7 +13,7 @@ import { captureWithin } from "../processes.ts";
 export const makeReads = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const darwin = yield* Darwin.Darwin;
+  const nativeFs = yield* NativeFs.NativeFs;
   // A program's stdout and exit code. Fails when it can't be spawned.
   const capture = (
     command: string,
@@ -31,7 +31,7 @@ export const makeReads = Effect.gen(function* () {
   // helper failing fails the read, so a check says it couldn't look
   // rather than that nothing was there.
   const lstatIn = (dir: string, entries: ReadonlyArray<string>) =>
-    Darwin.lstatByPath(darwin, dir, entries);
+    NativeFs.lstatByPath(nativeFs, dir, entries);
 
   const statOf = (target: string) => fs.stat(target).pipe(Effect.option);
 

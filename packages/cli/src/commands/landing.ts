@@ -20,6 +20,7 @@ import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { changing, refuseUnmigrated } from "../engine.ts";
 import { childEnv } from "@shigomori/engine/processes";
+import { screenOpener } from "@shigomori/engine/screen";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import {
@@ -210,17 +211,26 @@ export const pr = Command.make("pr", target, (input) =>
     const { json, stderrColor } = yield* Effect.service(Output);
     if (json) return yield* emit(doc);
     const url = doc.url ?? "";
-    yield* Effect.callback<void, OpenFailed>((resume) => {
-      execFile("open", [url], { env: childEnv(process.env) }, (error) => {
-        resume(
-          error === null
-            ? Effect.void
-            : Effect.fail(new OpenFailed({ url, problem: error.message })),
+    // Where there's no screen to open it on, the link is what it gets.
+    const opener = yield* screenOpener;
+    if (Option.isSome(opener)) {
+      yield* Effect.callback<void, OpenFailed>((resume) => {
+        execFile(
+          opener.value,
+          [url],
+          { env: childEnv(process.env) },
+          (error) => {
+            resume(
+              error === null
+                ? Effect.void
+                : Effect.fail(new OpenFailed({ url, problem: error.message })),
+            );
+          },
         );
       });
-    });
+    }
     yield* out(
-      `opened PR #${String(doc.number)} (${(doc.state ?? "").toLowerCase()}): ${doc.title ?? ""}`,
+      `${Option.isSome(opener) ? "opened " : ""}PR #${String(doc.number)} (${(doc.state ?? "").toLowerCase()}): ${doc.title ?? ""}`,
     );
     yield* note(styles(stderrColor).dim(url));
   }),

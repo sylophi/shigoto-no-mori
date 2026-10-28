@@ -26,9 +26,9 @@ import {
   FILE_SYNC_DIST_DIR,
 } from "./shared/packaging/fileSyncDist.mts";
 import {
-  MACFS_BINARY_NAME,
-  MACFS_DIST_DIR,
-} from "./shared/packaging/macfsDist.mts";
+  NATIVEFS_BINARY_NAME,
+  NATIVEFS_DIST_DIR,
+} from "./shared/packaging/nativefsDist.mts";
 import {
   APPLE_EVENTS_USAGE_DESCRIPTION,
   LOCAL_NETWORK_USAGE_DESCRIPTION,
@@ -165,9 +165,9 @@ const config: ForgeConfig = {
       // by the prePackage hook and spawned by the host
       // (host/fileSync/runner.ts).
       `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
-      // The darwin helper (the filesystem calls Node lacks), compiled by
+      // The filesystem helper (the filesystem calls Node lacks), compiled by
       // the prePackage hook the same way.
-      `${MACFS_DIST_DIR}/${MACFS_BINARY_NAME}`,
+      `${NATIVEFS_DIST_DIR}/${NATIVEFS_BINARY_NAME}`,
     ],
     // The Local Network (macOS 15+) and Automation prompts' sentences,
     // shared with the dev bundle. See shared/packaging/infoPlist.mts.
@@ -199,7 +199,7 @@ const config: ForgeConfig = {
       : {}),
   },
   // node-pty ships Node-API prebuilds that work in Electron as-is
-  // (scripts/fix-node-pty-helper.mts makes the helper executable, since
+  // (scripts/prepare-node-pty.mts makes the helper executable, since
   // install scripts are disabled). Skipping the rebuild keeps a compiler
   // toolchain out of the dev loop and makes dev and packaged builds run
   // the same binary.
@@ -210,11 +210,11 @@ const config: ForgeConfig = {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
-      // Compile the file-sync engine and the darwin helper (Go), then
+      // Compile the file-sync engine and the filesystem helper (Go), then
       // the terminal sm (Bun).
       for (const script of [
         "build-file-sync.mts",
-        "build-macfs.mts",
+        "build-nativefs.mts",
         "build-cli.mts",
       ]) {
         execFileSync("node", [`scripts/${script}`], {

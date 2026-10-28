@@ -76,8 +76,9 @@ allowBuilds:
   # node-pty (script console PTY) ships Node-API prebuilds that Electron
   # loads as-is, and forge.config.ts's rebuildConfig skips rebuilding it,
   # so its install-time node-gyp build is skipped too. Those scripts
-  # would have made the bundled spawn-helper executable, and that is
-  # app/scripts/fix-node-pty-helper.mts's job instead.
+  # would have made the bundled spawn-helper executable, or built the
+  # addon where no prebuild ships (Linux), and that is
+  # app/scripts/prepare-node-pty.mts's job instead.
   node-pty: false
 
 # Force tar >= 7.5.10 to patch CVE-2026-29786 (GHSA-qffp-2rhf-9h96):

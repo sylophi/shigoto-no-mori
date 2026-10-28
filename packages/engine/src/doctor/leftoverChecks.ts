@@ -1,10 +1,12 @@
 // The doctor's checks for what a crash left running: stale locks and orphaned processes.
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Path from "effect/Path";
 import { plural, pluralize } from "@shigomori/contracts/words";
 import { parseProcessTable } from "../doctorParse.ts";
-import { flavorNames } from "../flavor.ts";
+import { LOOPBACK_FILE, LoopbackFile } from "../Control.ts";
+import { appFolders } from "../footprint.ts";
 import * as Paths from "../Paths.ts";
 import { pidAlive, PS_BIRTH_ENV } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
@@ -16,19 +18,13 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
-    const { home, flavor } = paths;
-    const names = flavorNames(flavor);
+    const { flavor } = paths;
     const { capture, readText } = reads;
     // The app records its cloudflared child's pid and kills a leftover one
     // at its next launch. Until then a tunnel whose app crashed keeps this
-    // Mac reachable.
+    // machine reachable.
     const checkOrphanTunnel = Effect.gen(function* () {
-      const userData = path.join(
-        home,
-        "Library",
-        "Application Support",
-        names.userDataDir,
-      );
+      const { userData } = appFolders(flavor, paths);
       const raw = yield* readText(path.join(userData, "cloudflared.pid"));
       if (Option.isNone(raw)) return [];
       const pid = readTunnelPid(raw.value);
@@ -45,14 +41,23 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       const space = output.indexOf(" ");
       const ppid = space < 0 ? output : output.slice(0, space);
       const comm = space < 0 ? "" : output.slice(space + 1);
-      // Reparented to launchd is what outliving the app looks like. With
-      // the app alive it is the app's child, and the app's business.
-      if (!comm.toLowerCase().includes("cloudflared") || ppid.trim() !== "1") {
+      // With the app alive it is the host's child, and the app's
+      // business. Outliving the host is a parent that isn't the one the
+      // loopback names (launchd, init, a session's reaper).
+      const host = yield* readText(
+        path.join(paths.dataDir, LOOPBACK_FILE),
+      ).pipe(
+        Effect.map(Option.flatMap(Schema.decodeUnknownOption(LoopbackFile))),
+      );
+      if (
+        !comm.toLowerCase().includes("cloudflared") ||
+        Option.exists(host, (file) => String(file.pid) === ppid.trim())
+      ) {
         return [];
       }
       return [
         check("Processes", "tunnel", "tunnel").warn(
-          `a cloudflared tunnel (pid ${pid}) outlived the app that started it, so this Mac stays reachable through it`,
+          `a cloudflared tunnel (pid ${pid}) outlived the app that started it, so this machine stays reachable through it`,
           `Open the app, which stops it at launch, or run \`kill ${pid}\`.`,
         ),
       ];

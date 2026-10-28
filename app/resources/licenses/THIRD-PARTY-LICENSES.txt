@@ -3,7 +3,7 @@ Third-Party Licenses
 
 This file is generated from production npm dependencies as pnpm resolves
 them (the app's and the bundled sm's), the Go modules linked into the bundled
-file-sync engine and darwin helper, and the other binaries the packaged app
+file-sync engine and filesystem helper, and the other binaries the packaged app
 bundles.
 Packages: 673
 

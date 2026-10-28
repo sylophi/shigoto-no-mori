@@ -120,7 +120,7 @@ jobs:
           go-version-file: file-sync/go.mod
           cache-dependency-path: |
             file-sync/go.sum
-            macfs/go.sum
+            nativefs/go.sum
 
       - name: Install dependencies
         id: install
@@ -134,13 +134,13 @@ jobs:
       # The release build regenerates the notices, so stale committed
       # copies make every shipped build report a "-dirty" commit. They
       # list the darwin-arm64 packages, the only ones pnpm installs here,
-      # and the Go modules linked into file-sync and the darwin helper.
+      # and the Go modules linked into file-sync and the filesystem helper.
       - name: Third-party notices are up to date
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:licenses
 
-      # The engine's and the terminal's tests drive the darwin helper,
-      # built from macfs/.
+      # The engine's and the terminal's tests drive the filesystem helper,
+      # built from nativefs/.
       - name: Engine
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:engine
@@ -154,9 +154,52 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm run check:go
 
+  # The engine's, the terminal's and the Go tests again on Linux, where
+  # the filesystem helper and file-sync run on their Linux calls.
+  engine-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: file-sync/go.mod
+          cache-dependency-path: |
+            file-sync/go.sum
+            nativefs/go.sum
+
+      - name: Install dependencies
+        id: install
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.0"
+
+      - name: Engine
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:engine
+
+      - name: Terminal
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:cli
+
+      - name: Go tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm run check:go
+
   # Every proof in app/test, on macOS like the app they prove: they
   # drive the real sm and file-sync binaries (built with Bun from
-  # packages/cli, and from file-sync/ and macfs/ with Go) and real git.
+  # packages/cli, and from file-sync/ and nativefs/ with Go) and real git.
   proofs:
     runs-on: macos-latest
     timeout-minutes: 20
@@ -177,7 +220,7 @@ jobs:
           go-version-file: file-sync/go.mod
           cache-dependency-path: |
             file-sync/go.sum
-            macfs/go.sum
+            nativefs/go.sum
 
       # The terminal sm the proofs run is compiled with Bun.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

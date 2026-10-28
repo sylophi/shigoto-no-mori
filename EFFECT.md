@@ -309,8 +309,9 @@ export const layer = Layer.effect(Registry, make);
   from `@effect/platform-node` in the host and the shells, the Bun
   equivalent in the terminal binary. The engine is written against the
   service interfaces only and never against Bun globals.
-- The darwin syscalls Node lacks go through the Go helper, behind
-  one engine service with batched verbs. No native addon.
+- The filesystem calls Node lacks (clones, swaps, file flags) go
+  through the Go helper (`nativefs/`), behind one engine service with
+  batched verbs. No native addon.
 - `Logger` and `Tracer` replace `console.*`. Every service method is
   `Effect.fn("Service.method")` so it has a span. Log at the point of
   decision, not at every step.

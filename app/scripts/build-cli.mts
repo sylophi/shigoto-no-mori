@@ -5,9 +5,9 @@
 //   default          -> dist-cli/sm       targets ~/.sm (bundled with the app)
 //   SM_FLAVOR=<word> -> dist-cli/sm<word> targets ~/.sm<word> (a test flavor's)
 //   --dev            -> dist-cli/smd      targets ~/.smd (built by `pnpm dev`)
-// The binary finds the darwin helper beside itself, as the app's
+// The binary finds the filesystem helper beside itself, as the app's
 // Resources ship them, so the build gets a copy of the one in
-// dist-macfs/ (build it first, as dev-cli.mts and install-cli.mts do).
+// dist-nativefs/ (build it first, as dev-cli.mts and install-cli.mts do).
 //
 // Run: pnpm cli:build [--dev]
 import { execFileSync } from "node:child_process";
@@ -16,9 +16,9 @@ import { join } from "node:path";
 import { buildFlavor } from "../shared/packaging/buildFlavor.mts";
 import { CLI_DIST_DIR, cliBinaryName } from "../shared/packaging/cliDist.mts";
 import {
-  MACFS_BINARY_NAME,
-  MACFS_DIST_DIR,
-} from "../shared/packaging/macfsDist.mts";
+  NATIVEFS_BINARY_NAME,
+  NATIVEFS_DIST_DIR,
+} from "../shared/packaging/nativefsDist.mts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
 const flavor = process.argv.includes("--dev")
@@ -39,6 +39,7 @@ execFileSync(
   { cwd: join(repoRoot, "packages", "cli"), stdio: "inherit" },
 );
 
-const macfs = join(appRoot, MACFS_DIST_DIR, MACFS_BINARY_NAME);
-if (existsSync(macfs)) copyFileSync(macfs, join(outdir, MACFS_BINARY_NAME));
+const nativefs = join(appRoot, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME);
+if (existsSync(nativefs))
+  copyFileSync(nativefs, join(outdir, NATIVEFS_BINARY_NAME));
 console.log(`built ${outfile} (version ${version})`);

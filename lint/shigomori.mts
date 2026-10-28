@@ -7,6 +7,7 @@ import noDoubleCast from "./rules/no-double-cast.mts";
 import noEnvInService from "./rules/no-env-in-service.mts";
 import noNativeTooltip from "./rules/no-native-tooltip.mts";
 import noNodeBuiltinsInService from "./rules/no-node-builtins-in-service.mts";
+import noProcessPlatform from "./rules/no-process-platform.mts";
 import noRuntimeInService from "./rules/no-runtime-in-service.mts";
 import noWallClock from "./rules/no-wall-clock.mts";
 import type { Rule } from "./types.mts";
@@ -21,6 +22,7 @@ export default {
     "no-env-in-service": noEnvInService,
     "no-native-tooltip": noNativeTooltip,
     "no-node-builtins-in-service": noNodeBuiltinsInService,
+    "no-process-platform": noProcessPlatform,
     "no-runtime-in-service": noRuntimeInService,
     "no-wall-clock": noWallClock,
   },

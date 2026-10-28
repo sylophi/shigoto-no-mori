@@ -1,11 +1,7 @@
-//go:build darwin
-
 package main
 
 import (
 	"encoding/binary"
-	"errors"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -27,26 +23,31 @@ func exchange(a, b string) error {
 	return unix.RenamexNp(a, b, unix.RENAME_SWAP)
 }
 
-// The name of the filesystem holding p: "apfs", "hfs", "smbfs", ...
-func fsType(p string) (string, error) {
+// Only APFS clones; HFS+ and network volumes can't.
+func cloneable(p string) (bool, error) {
 	var st unix.Statfs_t
 	if err := unix.Statfs(p, &st); err != nil {
-		return "", err
+		return false, err
 	}
-	return unix.ByteSliceToString(st.Fstypename[:]), nil
+	return unix.ByteSliceToString(st.Fstypename[:]) == "apfs", nil
 }
 
-// p's own file flags (st_flags), a symlink's included.
+// The flags a checkout's own files can carry (compression, document
+// tracking), which no flag read reports.
+const keptFlags = unix.UF_COMPRESSED | unix.UF_TRACKED
+
+func statFlags(st *unix.Stat_t) uint32 {
+	return st.Flags &^ keptFlags
+}
+
+// p's own file flags (st_flags) but keptFlags, a symlink's included.
 func fileFlags(p string) (uint32, error) {
 	var st unix.Stat_t
 	if err := unix.Lstat(p, &st); err != nil {
 		return 0, err
 	}
-	return st.Flags, nil
+	return statFlags(&st), nil
 }
-
-// Flags clearing leaves: the ones a checkout's own files can carry.
-const keptFlags = unix.UF_COMPRESSED | unix.UF_TRACKED
 
 // The flags clearing removes: the owner's (immutable, hidden, ...) but
 // keptFlags. The system's (an iCloud placeholder, restricted) only root
@@ -54,12 +55,16 @@ const keptFlags = unix.UF_COMPRESSED | unix.UF_TRACKED
 // whole call.
 const clearedFlags = unix.UF_SETTABLE &^ keptFlags
 
-// Clears clearedFlags on p, given the flags it has now.
-func clearFlags(p string, flags uint32) error {
-	if flags&clearedFlags == 0 {
+// Clears clearedFlags on p.
+func clearFlags(p string) error {
+	var st unix.Stat_t
+	if err := unix.Lstat(p, &st); err != nil {
+		return err
+	}
+	if st.Flags&clearedFlags == 0 {
 		return nil
 	}
-	return chflagsNoFollow(p, flags&^clearedFlags)
+	return chflagsNoFollow(p, st.Flags&^clearedFlags)
 }
 
 // chflags on p itself, a symlink included (chflags(2) follows one),
@@ -75,51 +80,11 @@ func chflagsNoFollow(p string, flags uint32) error {
 	return unix.Setattrlist(p, &attrs, buf[:], unix.FSOPT_NOFOLLOW)
 }
 
-// p's own extended attribute names, a symlink's included.
-func listXattrs(p string) ([]string, error) {
-	var small [1024]byte
-	buf := small[:]
-	for {
-		n, err := unix.Llistxattr(p, buf)
-		// More than fits: ask how much, then read again (it may grow in
-		// between).
-		if errors.Is(err, unix.ERANGE) {
-			size, err := unix.Llistxattr(p, nil)
-			if err != nil {
-				return nil, err
-			}
-			buf = make([]byte, size+64)
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		names := []string{}
-		for name := range strings.SplitSeq(string(buf[:n]), "\x00") {
-			if name != "" {
-				names = append(names, name)
-			}
-		}
-		return names, nil
-	}
-}
-
 // The attribute macOS stamps on whatever this process writes, so
-// stripping leaves it.
-const provenanceXattr = "com.apple.provenance"
+// reads leave it out and stripping leaves it.
+const stampedXattr = "com.apple.provenance"
 
-// Removes every one of names from p but provenanceXattr.
-func stripXattrs(p string, names []string) error {
-	for _, name := range names {
-		if name == provenanceXattr {
-			continue
-		}
-		if err := unix.Lremovexattr(p, name); err != nil && !errors.Is(err, unix.ENOATTR) {
-			return err
-		}
-	}
-	return nil
-}
+const errNoXattr = unix.ENOATTR
 
 // ATTR_CMNEXT_PRIVATESIZE from <sys/attr.h> (macOS 10.15+), which x/sys
 // doesn't define: the bytes of a file no clone shares, i.e. what

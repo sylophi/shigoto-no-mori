@@ -28,7 +28,7 @@ export async function storeFailureReport(
   error: unknown,
   options: {
     readonly flavor: Flavor;
-    readonly macfs: string;
+    readonly nativefs: string;
     readonly version: string;
   },
 ): Promise<{ readonly report: string; readonly newer: boolean } | null> {
@@ -50,7 +50,7 @@ export async function storeFailureReport(
       Effect.provide(
         doctorLayer({
           flavor: options.flavor,
-          macfs: options.macfs,
+          nativefs: options.nativefs,
           open: (filename) => SqliteClient.make({ filename }),
         }).pipe(Layer.provide(NodeServices.layer)),
       ),

@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { orderSources, type Source } from "../CarryOver.ts";
-import * as Darwin from "../Darwin.ts";
+import * as NativeFs from "../NativeFs.ts";
 import { envVar } from "../environment.ts";
 import * as Git from "../Git.ts";
 import type { ReadsArea } from "./reads.ts";
@@ -17,7 +17,7 @@ export const makeSources = ({
 }) =>
   Effect.gen(function* () {
     const git = yield* Git.Git;
-    const darwin = yield* Darwin.Darwin;
+    const nativeFs = yield* NativeFs.NativeFs;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
 
@@ -53,7 +53,7 @@ export const makeSources = ({
     });
 
     // Whether a checkout can be cloned from into `destination`: on the
-    // same APFS volume, neither sparse nor split.
+    // same volume, one that can clone, neither sparse nor split.
     const sourceUsable = Effect.fnUntraced(function* (
       source: string,
       destination: string,
@@ -64,12 +64,16 @@ export const makeSources = ({
       ]);
       if (Option.isNone(from) || Option.isNone(parent)) return false;
       if (from.value.dev !== parent.value.dev) return false;
-      const types = yield* darwin.fsType({ root: source }).pipe(
+      const answers = yield* nativeFs.cloneable({ root: source }).pipe(
         Stream.runCollect,
         Effect.orElseSucceed(() => []),
       );
-      const type = types[0];
-      if (type === undefined || Darwin.isFailed(type) || type.type !== "apfs") {
+      const answer = answers[0];
+      if (
+        answer === undefined ||
+        NativeFs.isFailed(answer) ||
+        !answer.cloneable
+      ) {
         return false;
       }
       return !(yield* sparseOrSplit(source));

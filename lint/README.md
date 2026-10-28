@@ -13,6 +13,7 @@ rule per file in `rules/`.
 | `no-node-builtins-in-service` | A service module never imports `node:fs`, `node:child_process`, `node:os` or `node:path`. |
 | `no-env-in-service` | A service module reads the environment through `Config`, never `process.env`. |
 | `no-wall-clock` | The time comes through `Clock` or `DateTime`, never `Date.now()` or `new Date()`: in a service module anywhere, and in every module of `app/shared`, `app/host`, `app/main`, `packages/engine`, `packages/contracts` and `packages/cli` but their tests. |
+| `no-process-platform` | The OS is read only in `packages/engine/src/platform.ts` (`current`, `byPlatform`), never `process.platform` or `os.platform()`: in every module of `app/shared`, `app/host`, `app/main`, `app/headless` and the packages' `src` but their tests. |
 | `effect-fn-service-methods` | A method a service module's tag types as returning an `Effect.Effect` is `Effect.fn("Service.method")`, not a plain function. |
 
 `pnpm run lint` also runs `app/scripts/react-compiler-check.mts`,

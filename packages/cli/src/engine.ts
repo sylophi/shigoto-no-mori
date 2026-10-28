@@ -1,5 +1,5 @@
 // The engine under the terminal: the store over Bun's SQLite, and the
-// darwin helper beside the binary.
+// filesystem helper beside the binary.
 import { dirname, join } from "node:path";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import * as DataDirLock from "@shigomori/engine/DataDirLock";
@@ -16,7 +16,7 @@ import * as Layer from "effect/Layer";
 
 const open: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
-const macfs = join(dirname(process.execPath), "macfs");
+const nativefs = join(dirname(process.execPath), "nativefs");
 // What the agent hooks run: this binary (Agents names it by its real
 // path).
 const sm = process.execPath;
@@ -39,7 +39,7 @@ export const engine = (flavor: Flavor) =>
         flavor,
         store: owed ? Store.fromFiles(open, true) : Store.layer(open),
         open,
-        macfs,
+        nativefs,
         sm,
       }).pipe(
         Layer.provideMerge(Migration.layer),
@@ -81,4 +81,5 @@ export const changingWithFix = <
 
 // `sm doctor`'s, which opens the store inside each run, so a store that
 // won't open still gets its checklist.
-export const doctor = (flavor: Flavor) => doctorLayer({ flavor, open, macfs });
+export const doctor = (flavor: Flavor) =>
+  doctorLayer({ flavor, open, nativefs });

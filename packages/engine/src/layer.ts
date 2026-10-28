@@ -1,6 +1,6 @@
 // The engine's layer graph, which each process that runs the engine
 // builds once: its store over the process's SQLite driver, its flavor,
-// where the darwin helper (macfs) is, and the terminal `sm` the agent
+// where the filesystem helper (nativefs) is, and the terminal `sm` the agent
 // hooks run. The updater talks HTTP through
 // fetch, the one client Node and Bun both have.
 import * as DataDirLock from "./DataDirLock.ts";
@@ -11,7 +11,7 @@ import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
 import * as Control from "./Control.ts";
-import * as Darwin from "./Darwin.ts";
+import * as NativeFs from "./NativeFs.ts";
 import * as Dirty from "./Dirty.ts";
 import * as Doctor from "./Doctor.ts";
 import type { Flavor } from "./flavor.ts";
@@ -54,7 +54,7 @@ type EngineOptions = {
   readonly store: ReturnType<typeof Store.layer>;
   // The driver's open, which the data-folder lock's database takes too.
   readonly open: Store.OpenDatabase;
-  readonly macfs: string;
+  readonly nativefs: string;
   readonly sm: string;
 };
 
@@ -93,7 +93,7 @@ const services = (options: EngineOptions) =>
     // Below Registry, which forgets a removed project's clone records.
     Layer.provideMerge(CloneCheckout.layer),
     Layer.provideMerge(Terrier.layer),
-    Layer.provideMerge(Darwin.layer(options.macfs)),
+    Layer.provideMerge(NativeFs.layer(options.nativefs)),
     Layer.provideMerge(
       Layer.mergeAll(
         Config.layer,
@@ -168,7 +168,7 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
 export const doctorLayer = (options: {
   readonly flavor: Flavor;
   readonly open: Store.OpenDatabase;
-  readonly macfs: string;
+  readonly nativefs: string;
 }) =>
   Doctor.standalone(
     doctorStore(Store.layer(options.open)),
@@ -177,7 +177,11 @@ export const doctorLayer = (options: {
     Store.importOwed(options.open),
   ).pipe(
     Layer.provide(
-      Layer.mergeAll(Git.layer, Darwin.layer(options.macfs), Migration.layer),
+      Layer.mergeAll(
+        Git.layer,
+        NativeFs.layer(options.nativefs),
+        Migration.layer,
+      ),
     ),
     // `--fix` prunes and moves worktrees, which a data-folder move holds
     // still.

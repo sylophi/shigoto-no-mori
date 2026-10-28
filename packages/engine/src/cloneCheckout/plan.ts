@@ -1,6 +1,6 @@
 // The clone's pure phases: what it decides from what it has already read.
 import { dirname, join } from "node:path";
-import { type LstatEntry, S_IFDIR, S_IFMT } from "../Darwin.ts";
+import { type LstatEntry, S_IFDIR, S_IFMT } from "../NativeFs.ts";
 import {
   ancestors,
   checkedOutPerm,
@@ -15,12 +15,6 @@ import {
   type TreeEntry,
   verifiedRecord,
 } from "../gitIndex.ts";
-
-// The flags a clone may keep: what a checkout's own files can carry
-// (compression, document tracking).
-const UF_COMPRESSED = 0x20;
-const UF_TRACKED = 0x40;
-const KEPT_FLAGS = UF_COMPRESSED | UF_TRACKED;
 
 const nanos = (sec: number, nsec: number) =>
   BigInt(sec) * 1_000_000_000n + BigInt(nsec);
@@ -352,10 +346,9 @@ export const verdicts = ({
       !sameFile(after, entry.stat) ||
       !matchesMode(after, entry.mode) ||
       !checkedOutPerm(after, entry.mode, mask) ||
-      (raw.flags & ~KEPT_FLAGS) !== 0 ||
-      names.some((name) => name !== "com.apple.provenance") ||
-      // clonefile keeps the mtime and mode: anything else isn't our
-      // clone.
+      raw.flags !== 0 ||
+      names.length > 0 ||
+      // A clone keeps the mtime and mode: anything else isn't ours.
       cloneStat.mtimeSec !== after.mtimeSec ||
       cloneStat.mtimeNsec !== after.mtimeNsec ||
       cloneStat.size !== after.size ||

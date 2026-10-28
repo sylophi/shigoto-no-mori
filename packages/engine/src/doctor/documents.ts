@@ -14,7 +14,7 @@ import * as Schema from "effect/Schema";
 import * as CloneCheckout from "../CloneCheckout.ts";
 import * as Config from "../Config.ts";
 import type { ConfigDoc } from "../configDoc.ts";
-import * as Darwin from "../Darwin.ts";
+import * as NativeFs from "../NativeFs.ts";
 import * as Git from "../Git.ts";
 import type { CommandTimedOut } from "../processes.ts";
 import { decodedLaunchers } from "../Launchers.ts";
@@ -132,7 +132,7 @@ type RepairError =
   | Terrier.TerrierRefused
   // A prune that couldn't read the managed folders, so couldn't rule out
   // a moved worktree it would sever.
-  | Darwin.DarwinHelperError;
+  | NativeFs.NativeFsError;
 
 // --- helpers --------------------------------------------------------------
 
@@ -212,10 +212,10 @@ export const errorText = (error: { readonly message: string }) =>
     : error.message;
 
 export const isDirMode = (mode: number) =>
-  (mode & Darwin.S_IFMT) === Darwin.S_IFDIR;
+  (mode & NativeFs.S_IFMT) === NativeFs.S_IFDIR;
 
 // A stat's mtime, epoch ms.
-export const lstatMtime = (entry: Darwin.LstatEntry) =>
+export const lstatMtime = (entry: NativeFs.LstatEntry) =>
   entry.mtimeSec * 1000 + Math.floor(entry.mtimeNsec / 1e6);
 
 // Who holds the update stager's pidfile, read once a pass.

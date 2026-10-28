@@ -1,10 +1,11 @@
 // Clone checkout: a new worktree's tracked files cloned out of an
-// existing checkout (APFS clonefile) instead of written by git. A clone
-// shares the source's blocks, so a whole directory lands in one call
-// however many files it holds, and the new worktree's index is written
-// here with each clone's own stat, so git trusts the files without
-// reading them back. Letting git build that index would hash every
-// clone, slower than the plain checkout this replaces.
+// existing checkout (copy-on-write: APFS on macOS, XFS or btrfs on
+// Linux) instead of written by git. A clone shares the source's blocks,
+// so a whole directory lands in one helper call however many files it
+// holds, and the new worktree's index is written here with each clone's
+// own stat, so git trusts the files without reading them back. Letting
+// git build that index would hash every clone, slower than the plain
+// checkout this replaces.
 //
 // A file is only cloned when the source's index vouches for its bytes:
 // the same blob and mode as the new worktree's commit, an ordinary entry
