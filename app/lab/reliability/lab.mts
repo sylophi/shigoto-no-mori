@@ -103,7 +103,7 @@ const PAGE_HOOKS = `(() => {
 })();`;
 
 // What the harness reaches in a page besides its api: its own hooks
-// (PAGE_HOOKS), and the part of Clerk's global it uses.
+// (PAGE_HOOKS), and the part of Clerk's global it and sign-in.mts use.
 declare global {
   interface Window {
     harnessSetHidden(hidden: boolean): void;
@@ -119,6 +119,7 @@ declare global {
         };
       };
       setActive(options: { session: string | null }): Promise<void>;
+      signOut(): Promise<void>;
     };
   }
 }
