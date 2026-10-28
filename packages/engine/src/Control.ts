@@ -255,8 +255,14 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     return { client, call };
   });
 
-  // A call's failure as the verbs read it.
-  const refusal = (channel: string, error: unknown): ControlError => {
+  // A call's failure as the verbs read it. A refusal of commands is a
+  // peer's (the loopback's callers pass no gate), and names the device
+  // that refused: this one, when the peer had to reach back into it.
+  const refusal = (
+    channel: string,
+    error: unknown,
+    ownId: string,
+  ): ControlError => {
     if (
       error instanceof AppNotRunning ||
       error instanceof AppBusy ||
@@ -280,11 +286,15 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         said: error.text,
       });
     }
-    if (
-      error instanceof LinkRefusedError ||
-      error instanceof CommandRefusedError
-    ) {
-      return notRunning;
+    if (error instanceof LinkRefusedError) return notRunning;
+    if (error instanceof CommandRefusedError) {
+      return new ControlRefused({
+        channel,
+        said:
+          error.deviceId === ownId
+            ? `This device doesn't accept commands from your other devices, and the other one has to reach back into it for this. Turn it on (\`${paths.binaryName} devices control on\`) and try again.`
+            : "The other device doesn't accept commands from this one. Turn on “Allow control from other devices” there and try again.",
+      });
     }
     if (Predicate.isTagged(error, "RpcClientError"))
       return new ConnectionLost();
@@ -297,6 +307,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     onPush?: (pushed: string, payload: unknown) => Effect.Effect<void>,
   ) {
     const found = yield* published;
+    const ownId = yield* registry.deviceId;
     // A file left by a crash names a dead pid, or a port nothing (or
     // something else) listens on: both read as not running, the second
     // through the dial or the handshake.
@@ -354,7 +365,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
           Effect.fail(
             Cause.hasInterruptsOnly(cause)
               ? new ConnectionLost()
-              : refusal(channel, Cause.squash(cause)),
+              : refusal(channel, Cause.squash(cause), ownId),
           ),
         ),
       ),
