@@ -46,6 +46,34 @@ export function bringIgnores(
   ];
 }
 
+// The ignores that let only `paths` cross, with all inside them:
+// everything ignored, then each path let in, its folders first, since
+// the engine never walks into an ignored folder. Within the cap, a path
+// that doesn't fit stays behind.
+export function onlyIgnores(paths: readonly string[]): string[] {
+  const rules = ["*"];
+  const seen = new Set(rules);
+  for (const path of paths) {
+    const parts = path.replace(/\/+$/, "").split("/");
+    const anchored = anchorIgnoredPath(parts.join("/"));
+    const lines = [
+      ...parts
+        .slice(0, -1)
+        .map(
+          (_, at) => `!${anchorIgnoredPath(parts.slice(0, at + 1).join("/"))}`,
+        ),
+      `!${anchored}`,
+      `!${anchored}/**`,
+    ].filter((line) => !seen.has(line));
+    if (rules.length + lines.length > MIRROR_IGNORES_LIMIT) break;
+    for (const line of lines) {
+      seen.add(line);
+      rules.push(line);
+    }
+  }
+  return rules;
+}
+
 export function broughtPaths(ignores: readonly string[]): string[] {
   const marker = ignores.lastIndexOf(BRING_MARKER);
   if (marker === -1) return [];

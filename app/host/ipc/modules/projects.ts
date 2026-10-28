@@ -21,6 +21,7 @@ import {
   listProjectsWithStatus,
   relocateProject,
 } from "@host/lib/projects";
+import { cloneProjectFromDevice } from "@host/lib/sync/cloneFromPeer";
 import * as CarryOver from "@shigomori/engine/CarryOver";
 import type { HostServices } from "@host/process/services";
 import * as Worktrees from "@host/lib/Worktrees";
@@ -67,6 +68,8 @@ export const projectsHandlers = {
   add: ({ path, terrier }) => addCheckout(path, terrier),
 
   clone: (input) => cloneProject(input),
+
+  cloneFromDevice: cloneProjectFromDevice,
 
   create: (input) => createProject(input),
 

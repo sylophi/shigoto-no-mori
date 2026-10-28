@@ -1,6 +1,7 @@
 // The cross-device verbs over the engine's Transfer, which the running
 // app carries out: send and bring move a worktree, mirror keeps a copy
-// in step, unmirror stops one, mirrors and devices list. The remote
+// in step, unmirror stops one, projects clone sets a project up on a
+// device that lacks it, mirrors and devices list. The remote
 // listing (`list --remote`, `--from`) is here too.
 import type { ControlDevice } from "@shigomori/contracts/modules/control";
 import * as Transfer from "@shigomori/engine/Transfer";
@@ -56,38 +57,37 @@ const onProgress = Effect.map(
           : note(styles(stderrColor).dim(`  ${line}`)),
 );
 
-// A finished transfer: the story on stderr and the copy's path alone on
-// stdout, as create's, so `cd "$(sm bring <name>)"` works. A copy on the
-// other device has no path here, so it is part of the story. It exits 3
-// with a caveat, which a script mustn't read as a clean run.
-const report = ({ document, headline, result }: Transfer.Transferred) =>
+// A finished transfer or clone: the story on stderr and the copy's path
+// alone on stdout, as create's, so `cd "$(sm bring <name>)"` works. A
+// copy on another device (`elsewhere`) has no path here, so it is part
+// of the story. It exits 3 with a caveat, which a script mustn't read
+// as a clean run.
+const report = (finished: {
+  readonly document: { readonly caveats: readonly string[] };
+  readonly headline: string;
+  readonly along: readonly (string | false)[];
+  readonly path: string;
+  readonly elsewhere: string | undefined;
+}) =>
   Effect.gen(function* () {
+    const { document } = finished;
     const { json, stderrColor } = yield* Effect.service(Output);
     const { dim, green, yellow } = styles(stderrColor);
     const code = document.caveats.length > 0 ? 3 : 0;
     if (json) {
       yield* emit(document);
     } else {
-      yield* note(green(headline));
-      if (result.captured && result.dirtyApplied) {
-        yield* note(dim("  uncommitted changes went along"));
-      }
-      if (result.files?.crossed === true) {
-        yield* note(dim("  ignored files went along"));
-      }
-      const source = result.source;
-      if (source !== undefined && source.done && source.fate !== "keep") {
-        yield* note(dim(`  source ${Transfer.sourceFateDone(source.fate)}`));
+      yield* note(green(finished.headline));
+      for (const line of finished.along) {
+        if (line !== false) yield* note(dim(`  ${line}`));
       }
       for (const caveat of document.caveats) {
         yield* note(yellow(`! ${caveat}`));
       }
-      if (result.copySide === "local") {
-        yield* out(result.worktree.path);
+      if (finished.elsewhere === undefined) {
+        yield* out(finished.path);
       } else {
-        yield* note(
-          dim(`  at ${result.worktree.path} on "${result.device.name}"`),
-        );
+        yield* note(dim(`  at ${finished.path} on "${finished.elsewhere}"`));
       }
     }
     if (code !== 0) return yield* new ExitCode({ code });
@@ -107,19 +107,70 @@ const transferVerb = (name: "send" | "bring" | "mirror") =>
         setup: input.setup,
         noSetup: input.noSetup,
       };
-      const done = yield* transfer[name](
+      const { document, headline, result } = yield* transfer[name](
         at,
         target(input),
         flags,
         yield* onProgress,
       );
-      yield* report(done);
+      const { source } = result;
+      yield* report({
+        document,
+        headline,
+        along: [
+          result.captured &&
+            result.dirtyApplied &&
+            "uncommitted changes went along",
+          result.files?.crossed === true && "ignored files went along",
+          source !== undefined &&
+            source.done &&
+            source.fate !== "keep" &&
+            `source ${Transfer.sourceFateDone(source.fate)}`,
+        ],
+        path: result.worktree.path,
+        elsewhere: result.copySide === "local" ? undefined : result.device.name,
+      });
     }),
   );
 
 export const send = transferVerb("send");
 export const bring = transferVerb("bring");
 export const mirror = transferVerb("mirror");
+
+export const cloneProject = Command.make(
+  "clone",
+  {
+    project: Argument.String("project"),
+    rest,
+    from: Flag.String("from").pipe(Flag.optional),
+    to: Flag.String("to").pipe(Flag.optional),
+    into: Flag.String("into").pipe(Flag.optional),
+  },
+  (input) =>
+    Effect.gen(function* () {
+      const { document, headline, result } =
+        yield* (yield* Transfer.Transfer).cloneProject(
+          yield* here,
+          {
+            project: input.project,
+            from: raw(input.from),
+            to: raw(input.to),
+            into: raw(input.into),
+          },
+          yield* onProgress,
+        );
+      yield* report({
+        document,
+        headline,
+        along: [
+          result.settings.copied && "its settings came along",
+          result.files?.crossed === true && "its carry-over files came along",
+        ],
+        path: result.project.path,
+        elsewhere: raw(input.to) === undefined ? undefined : result.device.name,
+      });
+    }),
+);
 
 export const unmirror = Command.make(
   "unmirror",

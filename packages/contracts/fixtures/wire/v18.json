@@ -290,6 +290,19 @@
       }
     }
   },
+  "control:clone": {
+    "payload": {
+      "_tag": "from",
+      "project": "?"
+    },
+    "success": {
+      "_tag": "progress",
+      "progress": {
+        "sourceWorktreeId": "77f763e93ec4",
+        "step": "transfer"
+      }
+    }
+  },
   "control:devices": {
     "payload": {},
     "success": {
@@ -1705,6 +1718,22 @@
       "id": " ",
       "name": "X",
       "path": "RH"
+    }
+  },
+  "projects:cloneFromDevice": {
+    "payload": {
+      "deviceId": "%S",
+      "projectId": "k"
+    },
+    "success": {
+      "project": {
+        "id": "wt",
+        "name": "",
+        "path": " "
+      },
+      "settings": {
+        "copied": false
+      }
     }
   },
   "projects:cloneUrl": {

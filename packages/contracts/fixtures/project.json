@@ -282,6 +282,110 @@
       }
     ]
   },
+  "CloneFromDevicePayloadSchema": {
+    "accepts": [
+      {
+        "deviceId": "dev-b",
+        "projectId": "proj-1"
+      },
+      {
+        "deviceId": "dev-b",
+        "projectId": "proj-1",
+        "parentDir": "~/Software/"
+      }
+    ],
+    "rejects": [
+      {
+        "deviceId": "",
+        "projectId": "proj-1"
+      },
+      {
+        "deviceId": "dev-b",
+        "projectId": "proj-1",
+        "parentDir": ""
+      },
+      {
+        "projectId": "proj-1"
+      }
+    ]
+  },
+  "FilesBroughtSchema": {
+    "accepts": [
+      {
+        "crossed": true,
+        "conflicts": 0
+      },
+      {
+        "crossed": false,
+        "conflicts": 2,
+        "error": "not running"
+      }
+    ],
+    "rejects": [
+      {
+        "crossed": true,
+        "conflicts": -1
+      },
+      {
+        "crossed": true,
+        "conflicts": 0,
+        "extra": 1
+      }
+    ]
+  },
+  "ClonedFromDeviceSchema": {
+    "accepts": [
+      {
+        "project": {
+          "id": "proj-2",
+          "name": "port-pool",
+          "path": "/Users/alex/Software/port-pool"
+        },
+        "settings": {
+          "copied": true
+        }
+      },
+      {
+        "project": {
+          "id": "proj-2",
+          "name": "port-pool",
+          "path": "/Users/alex/Software/port-pool"
+        },
+        "settings": {
+          "copied": false,
+          "error": "Unknown project: proj-1"
+        },
+        "files": {
+          "crossed": false,
+          "conflicts": 0,
+          "error": "not running"
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "project": {
+          "id": "proj-2",
+          "name": "port-pool",
+          "path": "/x"
+        }
+      },
+      {
+        "project": {
+          "id": "proj-2",
+          "name": "port-pool",
+          "path": "/x"
+        },
+        "settings": {
+          "copied": true
+        },
+        "files": {
+          "crossed": true,
+          "conflicts": -1
+        }
+      }
+    ]
+  },
   "CloneProjectPayloadSchema": {
     "accepts": [
       {

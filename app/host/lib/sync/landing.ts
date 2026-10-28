@@ -17,7 +17,6 @@ import {
   syncContract,
 } from "@shigomori/contracts/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
-import { errorWordsOf } from "@host/lib/errorWords";
 import {
   branchInTheWay,
   pullBranchCollision,
@@ -32,11 +31,13 @@ import { incomingRef as incomingRefFor } from "@shigomori/engine/Bundle";
 import { dirtyRef } from "@shigomori/engine/Dirty";
 import * as Git from "@shigomori/engine/Git";
 import {
-  addProject,
   findProjectByIdentity,
   findProjectByIdentityOrFail,
 } from "@host/lib/projects";
-import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
+import {
+  cloneCheckoutFromPeer,
+  registerClone,
+} from "@host/lib/sync/cloneFromPeer";
 import { MoveCancelledError } from "@host/lib/sync/Moves";
 import {
   attachLinkFarEnd,
@@ -55,17 +56,6 @@ class SourceBranchGoneError extends Schema.TaggedError<SourceBranchGoneError>()(
 ) {
   override get message(): string {
     return `${this.branch} no longer exists on the source device.`;
-  }
-}
-
-// The checkout is there, cloned or found, but could not be added as a
-// project.
-class CloneUnregisteredError extends Schema.TaggedError<CloneUnregisteredError>()(
-  "CloneUnregisteredError",
-  { path: Schema.String, reason: Schema.String },
-) {
-  override get message(): string {
-    return `${this.path} is there, but couldn't be added as a project: ${this.reason}`;
   }
 }
 
@@ -211,20 +201,7 @@ export const landWorktree = (
           cloneInto,
           landBranch,
           landing.identity,
-          // A clone that got as far as its register stays: it is a
-          // checkout of the repo at the place the user named, and a
-          // retry lands in it. So a failed register says where it is: a
-          // retry would only find the folder taken.
-          (dest) =>
-            addProject(dest).pipe(
-              Effect.mapError(
-                (error) =>
-                  new CloneUnregisteredError({
-                    path: dest,
-                    reason: errorWordsOf(error),
-                  }),
-              ),
-            ),
+          registerClone,
           (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
         ).pipe(Effect.withSpan("Landing.clone")));
     }

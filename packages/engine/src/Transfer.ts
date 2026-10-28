@@ -6,7 +6,8 @@
 //   mirror <worktree> --from <device>   keep a copy of theirs in step here,
 //                                       the mirror running on their device
 //
-// plus unmirror, mirrors, devices and a peer's worktrees. They run in the
+// plus a project cloned between devices (`sm projects clone`), unmirror,
+// mirrors, devices and a peer's worktrees. They run in the
 // app (Control says why), through the same orchestrators its own dialogs
 // use. The app resolves the names a person says (a device by its name, a
 // peer's worktree by its folder name or branch, the one device that
@@ -15,6 +16,7 @@
 // prints, with the headline a person reads.
 import type { CallsOf, OutputOf } from "@shigomori/contracts/contract";
 import {
+  type ControlCloneResult,
   type controlContract,
   ControlLeaveOutSchema,
   type ControlPeerWorktree,
@@ -25,6 +27,7 @@ import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Control from "./Control.ts";
 import type * as Git from "./Git.ts";
@@ -66,6 +69,7 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()(
       "send-direction",
       "bring-direction",
       "mirror-both",
+      "clone-both",
       "no-worktree",
       "leave-out",
       "setup-both",
@@ -73,6 +77,7 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()(
       "source",
       "clone-into-bring",
       "clone-into-blank",
+      "into-blank",
     ]),
     // The flag a blank device was given to.
     flag: Schema.String,
@@ -94,6 +99,8 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()(
         return `bring comes --from a device. To move one there: ${bin} worktrees send [<name>] --to <device>.`;
       case "mirror-both":
         return "A mirror goes one way: --to a device, or --from one.";
+      case "clone-both":
+        return "A clone goes one way: --to a device, or --from one.";
       case "no-worktree":
         return `Which worktree? \`${bin} worktrees list --remote\` shows what your other devices hold.`;
       case "leave-out":
@@ -108,6 +115,8 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()(
         return "--clone-into is for send and mirror --to. A bring lands in this device's own checkout.";
       case "clone-into-blank":
         return "--clone-into needs a folder on the other device, the one its checkout of the repo goes in.";
+      case "into-blank":
+        return "--into needs a folder, the one the checkout goes in.";
     }
   }
 }
@@ -164,6 +173,14 @@ export type Transferred = {
   readonly result: ControlTransferResult;
 };
 
+// A peer's project cloned here: the document `sm --json` prints (the
+// terminal exits 3 when it has caveats), and the headline.
+export type Cloned = {
+  readonly document: WithCaveats<ControlCloneResult>;
+  readonly headline: string;
+  readonly result: ControlCloneResult;
+};
+
 // A project's worktrees on the other devices: the document (list's
 // shape, each saying whose it is), and the devices that weren't asked.
 export type PeerWorktrees = {
@@ -193,6 +210,13 @@ type TransferError = TransferRefused | ResolveError | ReadError;
 
 type ProjectRef = Pick<Worktrees.Target, "project" | "projectId">;
 
+type CloneInput = {
+  readonly project: string;
+  readonly from?: string | undefined;
+  readonly to?: string | undefined;
+  readonly into?: string | undefined;
+};
+
 export class Transfer extends Context.Service<
   Transfer,
   {
@@ -218,6 +242,14 @@ export class Transfer extends Context.Service<
       flags: TransferFlags,
       onProgress: OnProgress,
     ) => Effect.Effect<Transferred, TransferError>;
+    // `sm projects clone`: the project another device names `project`,
+    // cloned from there and registered here with its settings, or with
+    // `to`, this device's project set up on that device the same way.
+    readonly cloneProject: (
+      here: Worktrees.Here,
+      input: CloneInput,
+      onProgress: OnProgress,
+    ) => Effect.Effect<Cloned, TransferError>;
     // `sm worktrees unmirror`: the mirror stopped and its copy removed.
     readonly unmirror: (
       here: Worktrees.Here,
@@ -374,7 +406,9 @@ const appDocument = <T extends object>(answer: T): Ok<T> => ({
 const make = Effect.gen(function* () {
   const control = yield* Control.Control;
   const worktrees = yield* Worktrees.Worktrees;
-  const { binaryName: binary } = yield* Paths.Paths;
+  const paths = yield* Paths.Paths;
+  const { binaryName: binary } = paths;
+  const path = yield* Path.Path;
 
   // A call's answer as the contracts type it: the loopback's RpcClient
   // decoded it against LoopbackGroup before Control handed it on.
@@ -527,6 +561,73 @@ const make = Effect.gen(function* () {
       : yield* runBring(here, target, flags, true, onProgress);
   });
 
+  const cloneProject = Effect.fn("Transfer.cloneProject")(function* (
+    here: Worktrees.Here,
+    input: CloneInput,
+    onProgress: OnProgress,
+  ) {
+    yield* checkDeviceFlags(input);
+    const from = input.from ?? "";
+    const to = input.to ?? "";
+    if (from !== "" && to !== "") return yield* refused(binary, "clone-both");
+    if (input.into !== undefined && input.into.trim() === "") {
+      return yield* refused(binary, "into-blank");
+    }
+    // A folder here is typed against the shell's cwd. One on the other
+    // device goes as typed, `~` its home.
+    const cloneInto =
+      input.into === undefined
+        ? {}
+        : {
+            cloneInto:
+              to === ""
+                ? path.resolve(here.cwd, paths.expandHome(input.into))
+                : input.into,
+          };
+    const result = yield* invoke<ControlCloneResult>(
+      "control:clone",
+      to === ""
+        ? {
+            _tag: "from",
+            project: input.project,
+            ...(from === "" ? {} : { device: from }),
+            ...cloneInto,
+          }
+        : {
+            _tag: "to",
+            projectId: (yield* worktrees.resolveProject(here, input.project))
+              .id,
+            device: to,
+            ...cloneInto,
+          },
+      progressOf(onProgress),
+    );
+    const { settings, files } = result;
+    return {
+      document: {
+        ...appDocument(result),
+        caveats: [
+          ...(settings.copied
+            ? []
+            : [`its settings did not come along: ${settings.error ?? ""}`]),
+          ...((files?.error ?? "") !== ""
+            ? [`the carry-over files did not all cross: ${files?.error}`]
+            : []),
+          ...((files?.conflicts ?? 0) > 0
+            ? [
+                `${files?.conflicts} carry-over ${files?.conflicts === 1 ? "path" : "paths"} kept the checkout's own version`,
+              ]
+            : []),
+        ],
+      },
+      headline:
+        to === ""
+          ? `cloned ${result.project.name} from "${result.device.name}"`
+          : `cloned ${result.project.name} onto "${result.device.name}"`,
+      result,
+    };
+  });
+
   // Stops the mirror the worktree is part of and removes the copy,
   // whichever side that is. The original stays.
   const unmirror = Effect.fn("Transfer.unmirror")(function* (
@@ -606,6 +707,7 @@ const make = Effect.gen(function* () {
     send,
     bring,
     mirror,
+    cloneProject,
     unmirror,
     mirrors,
     devices,

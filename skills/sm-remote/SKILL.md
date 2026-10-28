@@ -1,6 +1,6 @@
 ---
 name: sm-remote
-description: "Move or mirror a Shigoto no Mori (sm) worktree between the user's machines."
+description: "Move or mirror a Shigoto no Mori (sm) worktree between the user's machines, or set up a project from one machine on another."
 ---
 
 The app must be open and signed in on both machines. If a command says
@@ -29,6 +29,24 @@ sm worktrees mirror <name> --from <device>
 
 `cd` to the path it prints. If either machine refuses, pass on what it
 says: it names the switch to turn on, and on which machine.
+
+## Set up a project on another machine
+
+For "set up <project> here" on a new machine:
+
+```sh
+sm projects clone <project> --from <device>
+```
+
+For "set up <project> on <device>" from the machine that has it:
+
+```sh
+sm projects clone <project> --to <device>
+```
+
+It clones the repo from the machine that has it, with its settings and
+the files its carry-over names. With --from, a name it doesn't know lists the
+projects there. Tell them the path it prints.
 
 ## Stop mirroring
 

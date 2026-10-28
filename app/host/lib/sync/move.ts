@@ -68,7 +68,7 @@ const decodeReceiveWorktreeResult = Schema.decodeUnknownSync(
 // only id the caller holds until the create lands). Frames are
 // droppable presence, never state: the result is the single source of
 // truth.
-function progressTo(
+export function progressTo(
   ctx: HandlerContext,
   sourceWorktreeId: string,
 ): (frame: ProgressFrame) => void {

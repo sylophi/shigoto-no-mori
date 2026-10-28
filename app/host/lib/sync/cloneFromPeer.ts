@@ -1,7 +1,8 @@
 // A checkout of a repo made on this device from another device's copy,
 // over the device link: a landing's project when this device has none
 // (a pull's `cloneInto`, or a send's, where the landing runs here on
-// the source's behalf). The source's default branch crosses as a
+// the source's behalf), or a project of the other device's set up here
+// (`sm projects clone`). The source's default branch crosses as a
 // bundle on the same source link the branch itself then does
 // (sourceLink.ts), so a repo with no remote gets here too, and the
 // link's grant is the one gate. The bundle unpacks into a fresh
@@ -40,10 +41,92 @@ import { errnoWords } from "@shigomori/engine/platformErrors";
 import { pidAlive } from "@shigomori/engine/processes";
 import { expandHome } from "@shared/paths";
 import { repoIdentity } from "@host/lib/engineOps";
-import { landingRefOf, type WorktreeSource } from "./sourceLink";
+import * as Ops from "@host/lib/engineOps";
+import { errorWordsOf } from "@host/lib/errorWords";
+import {
+  addProject,
+  findProjectByIdentity,
+  loadProjects,
+} from "@host/lib/projects";
+import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
+import { projectsContract } from "@shigomori/contracts/modules/projects";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
+import { homedir } from "node:os";
+import { peerEffects } from "@host/ipc/PeerReach";
+import { transferFilesOnce } from "@host/mirror/oneShot";
+import { onlyIgnores } from "@shigomori/contracts/mirrorIgnores";
+import { shigomoriContract } from "@shigomori/contracts/modules/shigomori";
+import type {
+  Project,
+  ProjectSettingsPatch,
+  ShigomoriConfig,
+} from "@shigomori/contracts/schemas";
+import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
+import {
+  landingRefOf,
+  peerSource,
+  type ProgressFrame,
+  type WorktreeSource,
+} from "./sourceLink";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
 const decodeBundleRef = Schema.decodeSync(SyncBundleRefSchema);
+
+// The checkout is there, cloned or found, but could not be added as a
+// project.
+class CloneUnregisteredError extends Schema.TaggedError<CloneUnregisteredError>()(
+  "CloneUnregisteredError",
+  { path: Schema.String, reason: Schema.String },
+) {
+  override get message(): string {
+    return `${this.path} is there, but couldn't be added as a project: ${this.reason}`;
+  }
+}
+
+// The project asked for isn't on the other device (any more).
+class PeerProjectGoneError extends Schema.TaggedError<PeerProjectGoneError>()(
+  "PeerProjectGoneError",
+  { projectId: Schema.String },
+) {
+  override get message(): string {
+    return "That project is no longer on the other device.";
+  }
+}
+
+// A repo with no identity (no commits yet) matches nothing, here or
+// on any later move.
+class NoRepoIdentityError extends Schema.TaggedError<NoRepoIdentityError>()(
+  "NoRepoIdentityError",
+  { name: Schema.String },
+) {
+  override get message(): string {
+    return `${this.name} can't be told apart from any other repo (it has no commits yet), so it can't be cloned.`;
+  }
+}
+
+class ProjectAlreadyHereError extends Schema.TaggedError<ProjectAlreadyHereError>()(
+  "ProjectAlreadyHereError",
+  { name: Schema.String, path: Schema.String },
+) {
+  override get message(): string {
+    return `${this.name} is already on this device, at ${this.path}.`;
+  }
+}
+
+// A clone's register. A clone that got as far as it stays: it is a
+// checkout of the repo at the place the user named, and a retry lands
+// in it. So a failed register says where it is: a retry would only
+// find the folder taken.
+export const registerClone = (dest: string) =>
+  addProject(dest).pipe(
+    Effect.mapError(
+      (error) =>
+        new CloneUnregisteredError({
+          path: dest,
+          reason: errorWordsOf(error),
+        }),
+    ),
+  );
 
 // Inside a clone's .git, from just before its rename until its register:
 // the folder and the repo (its identity) it is a clone of, which a retry
@@ -119,9 +202,10 @@ export const cloneDestination = (
 export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   source: WorktreeSource,
   { parentDir, name }: SyncCloneInto,
-  // The branch the landing puts its copy on afterwards: the clone's own
-  // branch cannot be it, and that is known before a byte moves.
-  landing: string,
+  // The branch a landing puts its copy on afterwards: the clone's own
+  // branch cannot be it, and that is known before a byte moves. None
+  // for a project's clone, which is all there is.
+  landing: string | undefined,
   // The repo's identity, which a clone a crash left must match to be
   // taken for this one.
   identity: string,
@@ -163,9 +247,10 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
     { concurrency: 2 },
   );
   if (
-    landing === branch ||
-    landing.startsWith(`${branch}/`) ||
-    branch.startsWith(`${landing}/`)
+    landing !== undefined &&
+    (landing === branch ||
+      landing.startsWith(`${branch}/`) ||
+      branch.startsWith(`${landing}/`))
   ) {
     return yield* new Git.GitRefusedError({
       reason: `The copy would land on ${landing}, which the clone here checks out as the repo's default branch. Bring a worktree on another branch, or mirror the primary checkout.`,
@@ -262,4 +347,172 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
       );
     }),
   );
+});
+
+// The peer's settings as a patch over the ones a new project starts
+// with: each one the peer leaves unset is cleared here too, so the two
+// read alike. Its default branch only when the clone has it: one on a
+// remote the clone didn't get leaves the one git found here. A custom
+// worktree folder is a path on the peer, so the layout stays this
+// device's then. The port base and the merge method are each device's
+// own.
+const settingsPatch = (
+  stored: ShigomoriConfig,
+  defaultBranchHere: boolean,
+): ProjectSettingsPatch => ({
+  ...(defaultBranchHere ? { defaultBranch: stored.defaultBranch } : {}),
+  "scripts.setup": stored.scripts?.setup ?? null,
+  "scripts.teardown": stored.scripts?.teardown ?? null,
+  launchers: stored.launchers ?? null,
+  carryOver: stored.carryOver ?? null,
+  useWorktreeInclude: stored.useWorktreeInclude ?? null,
+  showPrimaryInInbox: stored.showPrimaryInInbox ?? null,
+  ...(stored.worktreeLayout === "custom"
+    ? {}
+    : { worktreeLayout: stored.worktreeLayout ?? null }),
+});
+
+// A peer's project set up here (projects:cloneFromDevice, and `sm
+// projects clone`): its primary checkout cloned over a source link
+// (the peer's grant) into `parentDir`, or the peer's own layout with
+// the two homes swapped, registered, then the peer's settings copied
+// onto it, and the files its carry-over copies into new worktrees
+// brought from the peer's primary (git never carried them, and a
+// worktree here copies them from this primary). A repo this device
+// already holds is refused, naming where. The clone commits at its
+// register. The settings and the files are answers after it, never a
+// failure, since the project stands.
+export const cloneProjectFromDevice = Effect.fnUntraced(function* (input: {
+  readonly deviceId: string;
+  readonly projectId: string;
+  readonly parentDir?: string | undefined;
+}) {
+  const peer = (yield* peerEffects(
+    projectsContract,
+    input.deviceId,
+  ).list()).find((project) => project.id === input.projectId);
+  if (peer === undefined) {
+    return yield* new PeerProjectGoneError({ projectId: input.projectId });
+  }
+  return yield* clonePeerProject(input.deviceId, peer, input.parentDir);
+});
+
+// The clone itself, of the peer's project as its list reads.
+export const clonePeerProject = Effect.fnUntraced(function* (
+  deviceId: string,
+  peer: Project,
+  parentDir: string | undefined,
+  progress: (frame: ProgressFrame) => void = () => {},
+) {
+  const identity = peer.identity ?? null;
+  if (identity === null) {
+    return yield* new NoRepoIdentityError({ name: peer.name });
+  }
+  const held = yield* findProjectByIdentity(identity);
+  if (held !== undefined) {
+    return yield* new ProjectAlreadyHereError({
+      name: peer.name,
+      path: held.path,
+    });
+  }
+  const cloneInto = cloneIntoOf(
+    parentDir ??
+      moveCloneParent({
+        sourcePath: peer.path,
+        sourceHome: (yield* peerEffects(runtimeContract, deviceId).info())
+          .homedir,
+        destinationHome: homedir(),
+        destinationProjects: loadProjects(),
+      }),
+    peer.path,
+  );
+  progress({ step: "clone" });
+  const primaryId = worktreeIdFromPath(peer.path);
+  const project = yield* peerSource(deviceId, {
+    projectId: peer.id,
+    worktreeId: primaryId,
+  }).pipe(
+    Effect.flatMap((source) =>
+      cloneCheckoutFromPeer(
+        source,
+        cloneInto,
+        undefined,
+        identity,
+        registerClone,
+        (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
+      ),
+    ),
+    Effect.scoped,
+  );
+  // The peer's stored settings, copied (null: it stores none). A failed
+  // read leaves the files too, since the carry-over is among them.
+  const copied = yield* Effect.gen(function* () {
+    const stored = yield* peerEffects(shigomoriContract, deviceId).read({
+      projectId: peer.id,
+    });
+    if (stored === null) return null;
+    const branchHere = yield* (yield* Git.Git)
+      .verifyRev(project.path, `${stored.defaultBranch}^{commit}`)
+      .pipe(
+        Effect.as(true),
+        Effect.orElseSucceed(() => false),
+      );
+    yield* Ops.patchProjectConfig(
+      project.id,
+      settingsPatch(stored, branchHere),
+    );
+    return stored;
+  }).pipe(
+    Effect.map((stored) => ({ settings: { copied: true }, stored })),
+    Effect.catch((error) =>
+      Effect.succeed({
+        settings: { copied: false, error: errorWordsOf(error) },
+        stored: undefined,
+      }),
+    ),
+  );
+  const { settings, stored } = copied;
+  if (stored === undefined) return { project, settings };
+  // What a worktree here copies: the carry-over list, and the ignored
+  // files the repo's .worktreeinclude names unless that is off.
+  const files = yield* Effect.gen(function* () {
+    const included =
+      stored?.useWorktreeInclude === false
+        ? []
+        : (yield* peerEffects(projectsContract, deviceId).worktreeIncludeStatus(
+            { projectId: peer.id },
+          )).matchedPaths;
+    const brought = [
+      ...(stored?.carryOver ?? []).map((entry) => entry.path),
+      ...included,
+    ];
+    if (brought.length === 0) return undefined;
+    progress({ step: "files" });
+    return yield* transferFilesOnce(
+      {
+        localRoot: project.path,
+        localWorktreeId: worktreeIdFromPath(project.path),
+        sourceDeviceId: deviceId,
+        sourceProjectId: peer.id,
+        sourceWorktreeId: primaryId,
+        remoteRoot: peer.path,
+        name: peer.name,
+        // Those files alone: the peer's checkout may hold changes and
+        // files of its own, which aren't the project's to bring.
+        ignores: onlyIgnores(brought),
+      },
+      (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
+    );
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed({
+        crossed: false,
+        conflicts: 0,
+        error: errorWordsOf(error),
+      }),
+    ),
+  );
+  return files === undefined
+    ? { project, settings }
+    : { project, settings, files };
 });

@@ -9,6 +9,7 @@ import {
   CloneFolderNameSchema,
   CommitHashSchema,
   CreatePhaseSchema,
+  FilesBroughtSchema,
   GitRefNameSchema,
   ProjectSchema,
   VoidSchema,
@@ -239,16 +240,6 @@ export const SyncPullProgressSchema = strict(
 );
 export type SyncPullProgress = typeof SyncPullProgressSchema.Type;
 
-// conflicts: paths both sides held differently, which keep this side's
-// version.
-const SyncPullFilesSchema = strict(
-  Schema.Struct({
-    crossed: Schema.Boolean,
-    conflicts: Schema.Natural,
-    error: Schema.optional(Schema.String),
-  }),
-);
-
 export const SyncPullWorktreeResultSchema = strict(
   Schema.Struct({
     worktree: WorktreeSchema,
@@ -257,7 +248,7 @@ export const SyncPullWorktreeResultSchema = strict(
     // dirty state.
     captured: Schema.Boolean,
     dirtyApplied: Schema.Boolean,
-    files: Schema.optional(SyncPullFilesSchema),
+    files: Schema.optional(FilesBroughtSchema),
     cloned: Schema.optional(ProjectSchema),
   }),
 );

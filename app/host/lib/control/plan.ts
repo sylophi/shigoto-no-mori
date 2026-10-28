@@ -11,7 +11,7 @@ import {
 import { type MirrorSession } from "@shigomori/contracts/modules/mirror";
 import { hostsProjects } from "@shigomori/contracts/platform";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
-import { type Worktree } from "@shigomori/contracts/schemas";
+import { type Project, type Worktree } from "@shigomori/contracts/schemas";
 
 export type Named = { deviceId: string; name: string };
 
@@ -186,5 +186,67 @@ export function chooseTarget(
     query === undefined
       ? `No other device can take part: ${why}.`
       : `${why.charAt(0).toUpperCase()}${why.slice(1)}.`,
+  );
+}
+
+// A project as a person names it: its id, its path there, or its
+// name, any case.
+const matchesProject = (project: Project, query: string): boolean =>
+  project.id === query ||
+  project.path === query ||
+  project.name.toLowerCase() === query.toLowerCase();
+
+// The one peer project a clone takes, among what each asked device
+// holds. A device that couldn't be read is named, not taken for empty,
+// and one that holds the project but can't serve it says why.
+export function pickPeerProject(
+  held: readonly {
+    standing: ControlDevice;
+    // Null: the device couldn't be read.
+    projects: readonly Project[] | null;
+  }[],
+  query: string,
+): { device: ControlDevice; project: Project } {
+  const wanted = query.trim();
+  const found = held.flatMap(({ standing, projects }) =>
+    (projects ?? [])
+      .filter((project) => matchesProject(project, wanted))
+      .map((project) => ({ device: standing, project })),
+  );
+  const one = only(found);
+  if (one !== undefined) {
+    if (one.device.block !== undefined) {
+      throw new ControlError(
+        "device-blocked",
+        `"${one.device.name}" ${blockWords(one.device)}.`,
+      );
+    }
+    return one;
+  }
+  if (found.length > 1) {
+    throw new ControlError(
+      "ambiguous-project",
+      `"${query}" names several projects: ${found
+        .map(({ device, project }) => `${project.path} (${device.name})`)
+        .join(", ")}. Name the device with --from, or the project by its path.`,
+    );
+  }
+  const known = held
+    .flatMap(({ standing, projects }) =>
+      (projects ?? []).map((project) => `${project.name} (${standing.name})`),
+    )
+    .join(", ");
+  const unread = held
+    .filter(({ projects }) => projects === null)
+    .map(({ standing }) => standing);
+  throw new ControlError(
+    "no-project",
+    [
+      `No project "${query}" on another device.`,
+      known === "" ? "" : ` There: ${known}.`,
+      unread.length === 0
+        ? ""
+        : ` Not looked at: ${unread.map((device) => `"${device.name}" ${blockWords(device)}`).join(", ")}.`,
+    ].join(""),
   );
 }

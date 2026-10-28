@@ -7,6 +7,7 @@ import {
   SyncPullWorktreeResultSchema,
 } from "./sync.ts";
 import {
+  ClonedFromDeviceSchema,
   VoidSchema,
   WorktreeIdSchema,
   WorktreeSchema,
@@ -68,17 +69,19 @@ const TransferOptionsSchema = Schema.Struct({
   source: Schema.optional(ControlSourceFateSchema),
 });
 
+// The folder the checkout goes in, on the device it lands on (`~` is
+// that device's home). Absent: the source's own layout, the two homes
+// swapped.
+const ControlCloneIntoSchema = Schema.optional(
+  SyncCloneIntoSchema.struct.fields.parentDir.check(Schema.isMaxLength(4096)),
+);
+
 const ControlSendPayloadSchema = strict(
   Schema.Struct({
     ...TransferOptionsSchema.fields,
     projectId: Schema.NonEmptyString,
     worktreeId: WorktreeIdSchema,
-    // On the target (`~` is its home).
-    cloneInto: Schema.optional(
-      SyncCloneIntoSchema.struct.fields.parentDir.check(
-        Schema.isMaxLength(4096),
-      ),
-    ),
+    cloneInto: ControlCloneIntoSchema,
   }),
 );
 
@@ -126,6 +129,39 @@ const ControlTransferEventSchema = Schema.Union([
   Schema.TaggedStruct("result", { result: ControlTransferResultSchema }),
 ]);
 export type ControlTransferEvent = typeof ControlTransferEventSchema.Type;
+
+// A project set up on a device that lacks it: another device's here
+// (`from`), or this device's on the peer `device` names (`to`).
+const ControlClonePayloadSchema = Schema.Union([
+  strict(
+    Schema.TaggedStruct("from", {
+      device: DeviceQuerySchema,
+      // The peer's project: its id, its name, or its path there.
+      project: Schema.String.check(Schema.isBetweenLength(1, 4096)),
+      cloneInto: ControlCloneIntoSchema,
+    }),
+  ),
+  strict(
+    Schema.TaggedStruct("to", {
+      device: Schema.String.check(Schema.isBetweenLength(1, 256)),
+      projectId: Schema.NonEmptyString,
+      cloneInto: ControlCloneIntoSchema,
+    }),
+  ),
+]);
+
+const ControlCloneResultSchema = strict(
+  Schema.Struct({
+    ...ClonedFromDeviceSchema.fields,
+    device: ControlDeviceRefSchema,
+  }),
+);
+export type ControlCloneResult = typeof ControlCloneResultSchema.Type;
+
+const ControlCloneEventSchema = Schema.Union([
+  Schema.TaggedStruct("progress", { progress: SyncPullProgressSchema }),
+  Schema.TaggedStruct("result", { result: ControlCloneResultSchema }),
+]);
 
 const ControlPeerWorktreeSchema = strict(
   Schema.Struct({
@@ -205,6 +241,10 @@ export const controlContract = defineContract(
   view("bring", ControlBringPayloadSchema, ControlTransferEventSchema, {
     gated: true,
   }),
+  // Streams the clone's progress (a clone here only), then the answer.
+  view("clone", ControlClonePayloadSchema, ControlCloneEventSchema, {
+    gated: true,
+  }),
   invoke(
     "mirrors",
     VoidSchema,
@@ -243,6 +283,8 @@ export const CONTROL_ERROR_CODES = [
   "device-blocked",
   "no-worktree",
   "ambiguous-worktree",
+  "no-project",
+  "ambiguous-project",
   "no-mirror",
   "stop-unconfirmed",
   "signed-out",
