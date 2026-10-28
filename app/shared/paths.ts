@@ -43,18 +43,22 @@ type Found = {
 
 let found: Found | null = null;
 
-// Called once at launch (main/index.ts, host/process/host.ts), before
-// anything reads the data dir. Refuses a second call so a stray re-init
-// fails loudly instead of flipping the path under live callers.
-export async function initDataDir(flavor: Flavor): Promise<void> {
-  if (found !== null) throw new Error("dataDir already initialized");
-  const paths = await Effect.runPromise(
+// The engine's Paths of a flavor, as this machine has them now.
+export const resolvePaths = (flavor: Flavor) =>
+  Effect.runPromise(
     Effect.service(Paths.Paths).pipe(
       Effect.provide(
         Paths.layer(flavor).pipe(Layer.provide(NodeServices.layer)),
       ),
     ),
   );
+
+// Called once at launch (main/index.ts, host/process/host.ts), before
+// anything reads the data dir. Refuses a second call so a stray re-init
+// fails loudly instead of flipping the path under live callers.
+export async function initDataDir(flavor: Flavor): Promise<void> {
+  if (found !== null) throw new Error("dataDir already initialized");
+  const paths = await resolvePaths(flavor);
   found = {
     dataDir: paths.dataDir,
     source: paths.dataDirSource,

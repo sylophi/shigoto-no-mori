@@ -77,13 +77,15 @@ export const unitState = (install: LinuxInstall) =>
 
 // Whether the user's service manager runs from boot rather than from
 // their first login to their last logout.
-export const lingering = run("loginctl", [
-  "show-user",
-  String(userInfo().uid),
-  "-p",
-  "Linger",
-  "--value",
-]).pipe(Effect.map((said) => said.trim() === "yes"));
+export const lingering = Effect.suspend(() =>
+  run("loginctl", [
+    "show-user",
+    String(userInfo().uid),
+    "-p",
+    "Linger",
+    "--value",
+  ]),
+).pipe(Effect.map((said) => said.trim() === "yes"));
 
 // The unit written as this build writes it and (re)started, so a host
 // already running moves to the version `current` now names, and

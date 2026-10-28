@@ -22,8 +22,7 @@
 // `SHIGOMORI_UPDATE_RELEASES_URL` overrides the release list for
 // end-to-end testing of a signed build, and `SHIGOMORI_UPDATE_FEED_URL`
 // the update server it falls back to (the engine's Updater). The shell
-// moves both out of its environment and hands them to the check alone
-// (`endpoints`).
+// moves both out of its environment, for the check alone (endpoints.ts).
 import path from "node:path";
 import * as Option from "effect/Option";
 import type {
@@ -37,6 +36,7 @@ import { readJson } from "@shared/jsonFile";
 import { type BusyOperations, busyRemoteRefusal } from "@shared/busy";
 import { log } from "@shared/log";
 import { type InstallOutcome, makeBridge } from "./bridge";
+import { updateEndpoints } from "./endpoints";
 import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
 import * as Updater from "@shigomori/engine/Updater";
 import * as Effect from "effect/Effect";
@@ -55,11 +55,6 @@ export type UpdaterSeat = {
   // A build from a checkout never updates.
   readonly packaged: boolean;
   readonly version: string;
-  // The update stand-ins a test build was handed, for the check alone.
-  readonly endpoints: () => {
-    readonly feedUrl?: string;
-    readonly releasesUrl?: string;
-  };
   // The terminal `sm` this build ships, whose install the engine reads.
   readonly cliBinary: () => string;
   // The state as it moved, for the host, which answers the windows' and
@@ -68,11 +63,12 @@ export type UpdaterSeat = {
   // What the host is busy with; `quitAfter` as for a quit that follows.
   readonly busy: (quitAfter: boolean) => Promise<BusyOperations>;
   // Asks the person at this machine whether a busy restart goes ahead,
-  // true to go on. Null for a shell nobody sits at, which refuses as for
-  // another device.
-  readonly confirmRestart: (() => Promise<boolean>) | null;
-  // Whether a quit the person chose is under way.
-  readonly isQuitting: () => boolean;
+  // true to go on, and whether a quit they chose is under way. Null for
+  // a shell nobody sits at, which refuses as for another device.
+  readonly confirmRestart: {
+    readonly ask: () => Promise<boolean>;
+    readonly isQuitting: () => boolean;
+  } | null;
   // Hands the staged update to its install, settled once that has
   // started (or failed to): the process quits a beat after (`quit`).
   readonly handOff: Effect.Effect<void, unknown, UpdaterServices>;
@@ -240,7 +236,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
     Effect.flatMap(Updater.Updater, (updater) =>
       updater.stage({
         running: runningApp(),
-        ...seat.endpoints(),
+        ...updateEndpoints(),
         // "verifying" arrives too, and the renderer's machine collapses
         // everything between "found one" and "staged" into downloading,
         // which names the release from the first event.
@@ -346,11 +342,12 @@ export const makeUpdater = (seat: UpdaterSeat) => {
     if (installing) return "installing";
     if (held) throw new Error(heldWords);
     if (!(await hasInstallableStaged())) return "nothing-staged";
-    if (unattended || seat.confirmRestart === null) {
+    const confirm = seat.confirmRestart;
+    if (unattended || confirm === null) {
       const refusal = busyRemoteRefusal(await seat.busy(true), "restart");
       if (refusal !== null) throw new Error(refusal);
     } else {
-      if (!(await seat.confirmRestart())) return "declined";
+      if (!(await confirm.ask())) return "declined";
       // The dialog can sit open arbitrarily long. Re-check that another
       // path didn't start the install during it, and that the staged
       // update still exists -- a terminal run whose feed answered 204
@@ -360,7 +357,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       if (!(await hasInstallableStaged())) return "nothing-staged";
       // A quit the person chose meanwhile ends the app without the update
       // (its scripts stopping is what let this prompt go ahead).
-      if (seat.isQuitting()) return "declined";
+      if (confirm.isQuitting()) return "declined";
     }
     // A move or a reset of the data folder that began while the dialog
     // was up.
@@ -513,7 +510,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       );
       // A dev run, or a test flavor, has no releases to move to, but a
       // test flavor the lab hands a stand-in list.
-      const { feedUrl, releasesUrl } = seat.endpoints();
+      const { feedUrl, releasesUrl } = updateEndpoints();
       const names = flavorNames(seat.flavor);
       const standIn = names.debuggable && Boolean(feedUrl || releasesUrl);
       if (!seat.packaged || (!names.updates && !standIn)) {

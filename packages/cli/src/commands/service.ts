@@ -47,13 +47,15 @@ const place = Effect.gen(function* () {
   });
 });
 
-// The install's unit, refused when it isn't installed.
+// The install, refused when its unit isn't installed.
 const installed = Effect.gen(function* () {
   const install = yield* place;
-  const { binaryName } = yield* Effect.service(Output);
-  const state = yield* HostUnit.unitState(install);
-  if (!state.installed) return yield* new NoService({ binaryName });
-  return { install, state };
+  const fs = yield* FileSystem.FileSystem;
+  if (!(yield* fs.exists(install.unit))) {
+    const { binaryName } = yield* Effect.service(Output);
+    return yield* new NoService({ binaryName });
+  }
+  return install;
 });
 
 const installCommand = Command.make("install", { rest }, () =>
@@ -87,7 +89,7 @@ const uninstallCommand = Command.make("uninstall", { rest }, () =>
 
 const startCommand = Command.make("start", { rest }, () =>
   Effect.gen(function* () {
-    const { install } = yield* installed;
+    const install = yield* installed;
     yield* HostUnit.startUnit(install);
     const { json } = yield* Effect.service(Output);
     yield* json ? emit({ ok: true }) : out("started the host");
@@ -96,7 +98,7 @@ const startCommand = Command.make("start", { rest }, () =>
 
 const stopCommand = Command.make("stop", { rest }, () =>
   Effect.gen(function* () {
-    const { install } = yield* installed;
+    const install = yield* installed;
     yield* HostUnit.stopUnit(install);
     const { json } = yield* Effect.service(Output);
     yield* json
@@ -109,8 +111,10 @@ const statusCommand = Command.make("status", { rest }, () =>
   Effect.gen(function* () {
     const install = yield* place;
     const fs = yield* FileSystem.FileSystem;
-    const state = yield* HostUnit.unitState(install);
-    const lingering = yield* HostUnit.lingering;
+    const [state, lingering] = yield* Effect.all(
+      [HostUnit.unitState(install), HostUnit.lingering],
+      { concurrency: "unbounded" },
+    );
     const version = yield* fs.readLink(install.current).pipe(
       Effect.map((target) => basename(target)),
       Effect.orElseSucceed(() => null),
@@ -155,7 +159,7 @@ const logsCommand = Command.make(
   },
   ({ follow }) =>
     Effect.gen(function* () {
-      const { install } = yield* installed;
+      const install = yield* installed;
       yield* handOver(
         "exec",
         "journalctl",

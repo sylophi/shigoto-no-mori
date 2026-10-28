@@ -93,7 +93,7 @@ const catalog = (names: Names) => {
         linux: [
           "nuke --yes",
           "Take everything of this build off the machine",
-          "What Settings' Danger zone does, with no window: the host's service is stopped and taken out, then the host is started to remove its worktrees, this command's links and the shell and agent hooks, then its data folder, logs and install. Runs only from an installed build's command. Exits non-zero when something stayed, saying what.",
+          "The host's service is stopped and taken out, then the host is started to remove its worktrees, this command's links and the shell and agent hooks, then its data folder, logs and install. Runs only from an installed build's command. Exits non-zero when something stayed, saying what.",
         ],
       }),
       [

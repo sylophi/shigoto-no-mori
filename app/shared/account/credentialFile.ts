@@ -19,11 +19,10 @@ import {
   createAccountStore as createCoreStore,
   type AccountStore,
   type StoreCipher,
-  type StoredAccount,
 } from "./credentialStore";
 import { log } from "@shared/log";
 
-export type { AccountStore, StoreCipher, StoredAccount };
+export type { AccountStore, StoreCipher };
 
 export function createAccountStore(opts: {
   filePath: string;

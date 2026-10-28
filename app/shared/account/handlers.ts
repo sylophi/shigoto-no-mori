@@ -1,7 +1,8 @@
-// The account calls both shells serve (accountContract): the desktop's
-// (main/electron/account.ts) and the web bridge's
-// (web/ipc/register.ts) give only what differs, their store, the
-// device's id and defaults, their platform, and what follows a change.
+// The account calls the shells serve (accountContract): the desktop's
+// (main/electron/account.ts), the web bridge's (web/ipc/register.ts)
+// and the headless host's (headless/account.ts) give only what differs,
+// their store, the device's id and defaults, their platform, and what
+// follows a change.
 import type { AccountServiceConfig } from "@shigomori/contracts/accountServiceConfig";
 import { isConfigured } from "@shigomori/contracts/accountServiceConfig";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
@@ -57,10 +58,10 @@ export type AccountShell = {
   readonly devicesListed: (devices: DeviceInfo[]) => void;
   // Whether peers' commands are taken here, and its switch.
   readonly acceptsCommands: () => boolean;
-  readonly setAcceptsCommands: (enabled: boolean) => void;
-  // Ahead of a sign-out's revoke (the desktop's switch, off at once,
-  // before the sign-out waits its turn).
-  readonly beforeSignOut?: (record: StoredAccount) => void;
+  readonly setAcceptsCommands: (enabled: boolean) => Promise<void> | void;
+  // Ahead of a sign-out's revoke (the switch, off at once, before the
+  // sign-out waits its turn).
+  readonly beforeSignOut?: (record: StoredAccount) => Promise<void> | void;
   // The account's changes, one at a time and each whole, its
   // publication included: a sign-out that comes while an enrollment
   // waits on the hub follows it and removes what it stored, where the
@@ -173,7 +174,7 @@ export function makeAccountHandlers(
 
   const signOut = async (): Promise<void> => {
     const record = shell.store().read();
-    if (record !== null) shell.beforeSignOut?.(record);
+    if (record !== null) await shell.beforeSignOut?.(record);
     const config = shell.config();
     const device = {
       config,

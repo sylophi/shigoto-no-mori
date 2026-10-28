@@ -201,10 +201,10 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
 
   // A connection to the listener, closed with the scope, and the link's
   // client over it once the handshake proved both ends hold the token.
-  const connect = Effect.fn(function* (file: {
-    readonly port: number;
-    readonly token: string;
-  }) {
+  const connect = Effect.fn(function* (
+    file: { readonly port: number; readonly token: string },
+    deviceId: string,
+  ) {
     let closeCode: number | undefined;
     const socket = yield* Socket.fromWebSocket(
       Effect.acquireRelease(
@@ -236,7 +236,6 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         ? new AppBusy({ binary: paths.binaryName })
         : notRunning;
 
-    const deviceId = yield* registry.deviceId;
     yield* call("link:hello", {
       deviceId,
       // The loopback holds every caller apart, whatever it says.
@@ -293,7 +292,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         said:
           error.deviceId === ownId
             ? `This device doesn't accept commands from your other devices, and the other one has to reach back into it for this. Turn it on (\`${paths.binaryName} devices control on\`) and try again.`
-            : "The other device doesn't accept commands from this one. Turn on “Allow control from other devices” there and try again.",
+            : "The other device doesn't accept commands from this one. Turn on “Allow control from other devices” there (`devices control on` on Linux) and try again.",
       });
     }
     if (Predicate.isTagged(error, "RpcClientError"))
@@ -307,13 +306,13 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     onPush?: (pushed: string, payload: unknown) => Effect.Effect<void>,
   ) {
     const found = yield* published;
-    const ownId = yield* registry.deviceId;
     // A file left by a crash names a dead pid, or a port nothing (or
     // something else) listens on: both read as not running, the second
     // through the dial or the handshake.
     if (Option.isNone(found) || !(yield* pidAlive(found.value.pid))) {
       return yield* notRunning;
     }
+    const ownId = yield* registry.deviceId;
     const file = found.value;
     return yield* Effect.scoped(
       Effect.gen(function* () {
@@ -321,7 +320,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         // it is set aside, and the one that answered kept for the call.
         const attempt = Effect.gen(function* () {
           const scope = yield* Scope.make();
-          return yield* connect(file).pipe(
+          return yield* connect(file, ownId).pipe(
             Scope.provide(scope),
             Effect.onExit((exit) =>
               Exit.isSuccess(exit) ? Effect.void : Scope.close(scope, exit),

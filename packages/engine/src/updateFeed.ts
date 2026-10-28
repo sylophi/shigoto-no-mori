@@ -5,11 +5,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { parse, type SemVer } from "semver";
 import { APP_REPO } from "./flavor.ts";
-import {
-  byPlatform,
-  current as currentPlatform,
-  type Platform,
-} from "./platform.ts";
+import { byPlatform, current as currentPlatform } from "./platform.ts";
 
 // GitHub's list of the app's releases, the API's one page maximum: the
 // updater's release list and the app's changelog alike.
@@ -92,12 +88,12 @@ export const ReleaseListCache = Schema.Struct({
 // app/scripts/package-linux.mts makes (linuxInstall.ts linuxPackageName).
 const ARCHIVE = { darwin: ".zip", linux: ".tar.gz" } as const;
 
-const assetOf = (release: GitHubRelease, platform: Platform, arch: string) =>
+const assetOf = (release: GitHubRelease, arch: string) =>
   (release?.assets ?? []).find((asset) => {
     const name = asset?.name ?? "";
     return (
-      name.endsWith(byPlatform(ARCHIVE, platform)) &&
-      name.includes(`-${platform}-${arch}-`)
+      name.endsWith(byPlatform(ARCHIVE)) &&
+      name.includes(`-${currentPlatform()}-${arch}-`)
     );
   });
 
@@ -115,7 +111,6 @@ export const pickRelease = (
   current: SemVer,
   releases: ReadonlyArray<GitHubRelease>,
   arch: string,
-  platform: Platform = currentPlatform(),
 ): ReleaseInfo | undefined => {
   const onPrerelease = current.prerelease.length > 0;
   let best: {
@@ -134,7 +129,7 @@ export const pickRelease = (
     } else if (release?.prerelease === true) {
       continue;
     }
-    const asset = assetOf(release, platform, arch);
+    const asset = assetOf(release, arch);
     const url = asset?.browser_download_url ?? "";
     if (url === "") continue;
     best = { release, version, url, digest: asset?.digest ?? "" };

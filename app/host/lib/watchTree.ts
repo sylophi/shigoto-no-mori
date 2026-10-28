@@ -112,14 +112,19 @@ const watchFolders = (
           }
         });
 
+      // Only a watched folder has watched ones below it, so a file's
+      // removal is one lookup.
       const drop = (path: string) =>
-        Effect.forEach(
-          [...watched].filter(
-            ([folder]) => folder === path || folder.startsWith(`${path}/`),
-          ),
-          ([folder]) => FiberMap.remove(watched, folder),
-          { discard: true },
-        );
+        Effect.gen(function* () {
+          if (!(yield* FiberMap.has(watched, path))) return;
+          yield* Effect.forEach(
+            [...watched].filter(
+              ([folder]) => folder === path || folder.startsWith(`${path}/`),
+            ),
+            ([folder]) => FiberMap.remove(watched, folder),
+            { discard: true },
+          );
+        });
 
       // The root's watch is the tree's: its end, or its failure, ends it.
       const rootWatch = yield* Effect.forkScoped(eventsOf(""));

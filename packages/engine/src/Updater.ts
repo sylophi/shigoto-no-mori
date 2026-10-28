@@ -103,21 +103,16 @@ export class Updater extends Context.Service<
     readonly staged: (
       version: string,
     ) => Effect.Effect<Option.Option<StagedManifest>>;
+    // The staged update put in place now by the app it replaces, which
+    // restarts into it on its own (a Linux host, whose unit starts it
+    // again once it exits).
+    readonly install: (
+      running: Running,
+    ) => Effect.Effect<StagedManifest, NotInBundle | InstallError>;
     // --finish-install: the detached installer the app spawns as it quits
     // to restart. Waits for the app's pid to exit, swaps the staged
     // bundle in and relaunches the app. Headless, so every outcome goes
     // to updates/install.log as well.
-    // The staged update put in place now by the app it replaces, which
-    // restarts into it on its own (a Linux host, whose unit starts it
-    // again once it exits).
-    readonly install: (input: {
-      readonly running: Running;
-      readonly feedUrl?: string;
-      readonly releasesUrl?: string;
-    }) => Effect.Effect<
-      StagedManifest,
-      UpdatesUnavailable | NotInBundle | InstallError
-    >;
     readonly finishInstall: (input: {
       readonly running: Running;
       readonly appPid: number;

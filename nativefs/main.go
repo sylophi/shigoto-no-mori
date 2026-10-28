@@ -153,6 +153,10 @@ var verbs = map[string]verb{
 	}},
 	"lstat": {roots: 1, walks: true, op: func(set *flag.FlagSet) op {
 		withPrivate := set.Bool("private", false, "add each regular file's private size")
+		// Only a filesystem that clones shares blocks, so elsewhere every
+		// byte is private and the allocated size says so already.
+		var shares bool
+		var asked sync.Once
 		return func(roots []string, rel string) (any, error) {
 			p := filepath.Join(roots[0], rel)
 			var st unix.Stat_t
@@ -167,8 +171,11 @@ var verbs = map[string]verb{
 				Flags: statFlags(&st), Blocks: st.Blocks, Nlink: uint32(st.Nlink),
 			}
 			if *withPrivate && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Blocks > 0 {
-				if n, ok := privateSize(p); ok {
-					out.PrivateBytes = &n
+				asked.Do(func() { shares, _ = cloneable(roots[0]) })
+				if shares {
+					if n, ok := privateSize(p); ok {
+						out.PrivateBytes = &n
+					}
 				}
 			}
 			return out, nil

@@ -457,6 +457,28 @@ const make = (deps: GitWatcherDeps) =>
               Effect.map((out) => new Set(splitZ(out))),
             );
 
+    // The paths of `asked` git ignores in `checkout`, as the verdicts
+    // hold them, git asked of the rest and its verdicts kept.
+    const ignoredAmong = (
+      checkout: string,
+      verdicts: Map<string, boolean>,
+      asked: ReadonlyArray<string>,
+    ) =>
+      Effect.gen(function* () {
+        const key = (path: string) => `${checkout}\0${path}`;
+        const fresh = yield* ignoredOf(
+          checkout,
+          new Set(asked.filter((path) => !verdicts.has(key(path)))),
+        );
+        const ignored = new Set<string>();
+        for (const path of asked) {
+          const isIgnored = verdicts.get(key(path)) ?? fresh.has(path);
+          verdicts.set(key(path), isIgnored);
+          if (isIgnored) ignored.add(path);
+        }
+        return ignored;
+      });
+
     // Whether one of a checkout's `files` (checkout-relative,
     // `/`-separated) is one git doesn't ignore. Asked a folder level at a
     // time, so a burst under one ignored folder (an install) is one short
@@ -475,21 +497,16 @@ const make = (deps: GitWatcherDeps) =>
               parts.length > depth
                 ? `${parts.slice(0, depth).join("/")}/`
                 : file;
-            return { file, asked, key: `${checkout}\0${asked}` };
+            return { file, asked };
           });
-          const ignored = yield* ignoredOf(
+          const ignored = yield* ignoredAmong(
             checkout,
-            new Set(
-              steps
-                .filter((step) => !verdicts.has(step.key))
-                .map((step) => step.asked),
-            ),
+            verdicts,
+            steps.map((step) => step.asked),
           );
           const deeper: string[] = [];
           for (const step of steps) {
-            const isIgnored = verdicts.get(step.key) ?? ignored.has(step.asked);
-            verdicts.set(step.key, isIgnored);
-            if (isIgnored) continue;
+            if (ignored.has(step.asked)) continue;
             if (step.asked === step.file) return true;
             deeper.push(step.file);
           }
@@ -589,23 +606,18 @@ const make = (deps: GitWatcherDeps) =>
             ) {
               continue;
             }
-            const question = `${inCheckout}/`;
-            const known = verdicts.get(`${checkout}\0${question}`);
-            if (known === true) out.add(folder);
-            if (known !== undefined) continue;
             const questions = asked.get(checkout) ?? [];
-            questions.push({ folder, question });
+            questions.push({ folder, question: `${inCheckout}/` });
             asked.set(checkout, questions);
           }
           for (const [checkout, questions] of asked) {
-            const ignored = yield* ignoredOf(
+            const ignored = yield* ignoredAmong(
               checkout,
-              new Set(questions.map(({ question }) => question)),
+              verdicts,
+              questions.map(({ question }) => question),
             );
             for (const { folder, question } of questions) {
-              const isIgnored = ignored.has(question);
-              verdicts.set(`${checkout}\0${question}`, isIgnored);
-              if (isIgnored) out.add(folder);
+              if (ignored.has(question)) out.add(folder);
             }
           }
           return out;

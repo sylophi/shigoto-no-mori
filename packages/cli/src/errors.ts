@@ -11,6 +11,7 @@ import {
   isUsage,
   withHint,
 } from "@shigomori/engine/errorDocument";
+import { byPlatform } from "@shigomori/engine/platform";
 import { storeErrorOf } from "@shigomori/engine/storeErrors";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -89,8 +90,7 @@ const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
   "projects config":
     "projects config <list|get|set|unset|edit|read|launcher|carryover> [args]",
   config: "config <list|read|get|set|unset|launcher|edit> [args]",
-  devices:
-    "devices [-p <project>], or devices <share|control|reachable> [on|off]",
+  devices: `devices [-p <project>], or devices <${byPlatform({ darwin: "share|control|reachable", linux: "share|control" })}> [on|off]`,
   shell: "shell <install|uninstall|status|init>",
   agents:
     "agents <install|uninstall|status|bind|unbind|idle|resume|event> [args]",

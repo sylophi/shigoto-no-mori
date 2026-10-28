@@ -233,15 +233,10 @@ export const makeMethods = ({
     // The staged update put in place now, by the app it replaces, which
     // restarts into it on its own: a Linux host, which its unit starts
     // again once it exits.
-    const install = Effect.fn("Updater.install")(function* (input: {
-      readonly running: Running;
-      readonly feedUrl?: string;
-      readonly releasesUrl?: string;
-    }) {
-      yield* available(input);
+    const install = Effect.fn("Updater.install")(function* (running: Running) {
       return yield* installStaged(
-        yield* installedOf(input.running.executable),
-        input.running.pid,
+        yield* installedOf(running.executable),
+        running.pid,
       );
     });
 

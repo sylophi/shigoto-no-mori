@@ -5,9 +5,8 @@
 // bridge); this only exchanges its session token for the hub device
 // credential. The calls are the web's too (shared/account/handlers.ts),
 // served by ipc/modules/account.ts.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { parseEnv } from "node:util";
 import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
 import { byPlatform } from "@shigomori/engine/platform";
@@ -29,29 +28,27 @@ import {
   createAccountStore,
   type AccountStore,
   type StoreCipher,
-  type StoredAccount,
 } from "@shared/account/credentialFile";
 import {
   defaultDesktopDeviceName,
   type DefaultDeviceName,
 } from "@shared/account/defaultDeviceName";
 import { detectDesktopDeviceShape } from "../core/account/defaultDeviceIcon";
-import { retryParkedRevoke, signOutDevice } from "@shared/account/enroll";
+import { retryParkedRevoke } from "@shared/account/enroll";
 import type { AccountShell } from "@shared/account/handlers";
-import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
 import {
-  createAccountService,
-  type AccountService,
-} from "@shared/account/service";
+  accountFactsOf,
+  nukeSignOut,
+  serviceConfigOf,
+} from "@shared/account/hostShell";
+import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
+import { createAccountService } from "@shared/account/service";
 import {
   isConfigured,
-  mergeServiceEnv,
-  resolveServiceConfig,
   type AccountServiceConfig,
 } from "@shigomori/contracts/accountServiceConfig";
 import { envSetting } from "@shared/config";
 import { log, warnOnFailure } from "@shared/log";
-import { errorMessageOf } from "@shigomori/contracts/errors";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 
 // Built lazily on first handler use, never at import time. This module is
@@ -114,46 +111,10 @@ function acceptsPeerCommands(): boolean {
   return store().read()?.acceptsCommands === true;
 }
 
-// The resolved service config, resolved once and cached. Three layers,
-// lowest to highest precedence: the optional .env.local file (dev
-// convenience), the account service values baked into the bundle when
-// it was built, then real environment variables. The baked layer is
-// what configures a shipped build: a packaged .app launched from Finder
-// or the Dock inherits launchd's environment, not a shell's, so runtime
-// process.env carries none of these -- but the env layer on top still
-// lets an owner override a baked build. Caching keeps account:status
-// cheap since it runs on every poll.
-//
-// The web shell reads the same .env.local through Vite, so the filename
-// is shared: changing it here strands vite.web.config.ts.
-//
-// The file read is gated behind !app.isPackaged for security: in a
-// packaged build an attacker-planted .env.local in the launch directory
-// could both enable sign-in and point the Clerk key/hub URL at hostile
-// infrastructure, so a shipped build sources config ONLY from the values
-// baked in at build time and real environment variables, neither of
-// which a file can plant. The dev-convenience file stays in dev.
+// The resolved service config (hostShell.ts), resolved once and cached:
+// account:status runs on every poll.
 function serviceConfig(): AccountServiceConfig {
-  if (cachedConfig) return cachedConfig;
-  let fileEnv: Record<string, string | undefined> = {};
-  if (!app.isPackaged) {
-    try {
-      fileEnv = parseEnv(
-        readFileSync(join(process.cwd(), ".env.local"), "utf8"),
-      );
-    } catch {
-      // No dev file. Baked and environment values are the only sources.
-    }
-  }
-  // __SM_ACCOUNT_BAKED_ENV__ is the vite.node.config.ts define. This
-  // module only ever loads through that build, so a bare reference is
-  // safe, and it stays out of the pure contracts module so
-  // accountServiceConfig.ts stays loadable under plain node, where the
-  // Vite configs read it.
-  cachedConfig = resolveServiceConfig(
-    mergeServiceEnv(fileEnv, __SM_ACCOUNT_BAKED_ENV__, process.env),
-  );
-  return cachedConfig;
+  return (cachedConfig ??= serviceConfigOf(app.isPackaged));
 }
 
 // The default name a not-yet-renamed device enrolls under. The macOS
@@ -217,39 +178,9 @@ export function clerkPublishableKey(): string {
   return serviceConfig().publishableKey;
 }
 
-// The signed-in preamble most account-backed calls share: the resolved
-// service against the configured hub plus the stored credential
-// record. Null when the build is unconfigured or no credential is
-// stored, which every caller reads as its own flavor of "nothing to
-// do". Kept module private so the store and config stay private too.
-function signedInService(): {
-  service: AccountService;
-  record: StoredAccount;
-} | null {
-  const config = serviceConfig();
-  if (!isConfigured(config)) return null;
-  const record = store().read();
-  if (record === null) return null;
-  return {
-    service: createAccountService({ baseUrl: config.hubUrl }),
-    record,
-  };
-}
-
-// The account as the host is to know it (host/process/account.ts),
-// reported after every change: null when signed out or unconfigured.
+// The account as the host is to know it, reported after every change.
 export function accountFactsForHost(): AccountFacts | null {
-  const signedIn = signedInService();
-  if (signedIn === null) return null;
-  const config = serviceConfig();
-  return {
-    hubUrl: config.hubUrl,
-    accountId: signedIn.record.accountId,
-    credential: signedIn.record.credential,
-    deviceKey: signedIn.record.deviceKey,
-    webOrigin: config.webOrigin,
-    acceptsCommands: acceptsPeerCommands(),
-  };
+  return accountFactsOf(serviceConfig(), store().read());
 }
 
 // Delivers a revoke a sign-out could not (enroll.ts retryParkedRevoke),
@@ -270,41 +201,21 @@ export async function retryParkedSignOut(): Promise<void> {
 // calls' and a nuke's sign-out alike.
 const transitions = Semaphore.makeUnsafe(1);
 
-// A nuke's sign-out: this device revoked on the hub and its credential
-// dropped. Answers why the revoke didn't land when it stays parked for
-// later (offline, the hub down), since the parking goes with userData
-// at the next start; null when it landed, the hub had already let the
-// device go, or there was nothing to revoke. A device signed out
-// before, whose revoke is parked still, tries that one once more.
+// A nuke's sign-out (hostShell.ts), in the account's turn.
 export const signOutForNuke = (): Promise<string | null> =>
-  Effect.runPromise(transitions.withPermit(Effect.promise(nukeSignOut)));
-
-async function nukeSignOut(): Promise<string | null> {
-  const config = serviceConfig();
-  const service = createAccountService({ baseUrl: config.hubUrl });
-  const deviceId = await hostDeviceId();
-  const signedIn = store().read() !== null;
-  let failure = "";
-  await signOutDevice({
-    config,
-    service,
-    store: store(),
-    deviceId,
-    onRevokeFailure: (error) => {
-      failure = errorMessageOf(error);
-    },
-  });
-  if (!signedIn) {
-    const parked = await retryParkedRevoke({
-      config,
-      service,
-      store: store(),
-      deviceId,
-    });
-    if (parked.kind === "failed") failure = errorMessageOf(parked.error);
-  }
-  return store().readParked() === null ? null : failure;
-}
+  Effect.runPromise(
+    transitions.withPermit(
+      Effect.promise(async () => {
+        const config = serviceConfig();
+        return nukeSignOut({
+          config,
+          service: createAccountService({ baseUrl: config.hubUrl }),
+          store: store(),
+          deviceId: await hostDeviceId(),
+        });
+      }),
+    ),
+  );
 
 // Each change of the account's id (a sign-in, a sign-out, a switch),
 // which the login item follows (liveness.ts).

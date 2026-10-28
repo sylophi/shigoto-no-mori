@@ -2,6 +2,7 @@
 // set with on or off and shown without. The host keeps them where the
 // page does (control:access).
 import type { ControlAccess } from "@shigomori/contracts/modules/control";
+import { byPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
@@ -23,15 +24,9 @@ const accessSwitch = (name: string, key: keyof ControlAccess, label: string) =>
             problem: `Usage: ${binaryName} devices ${name} [on|off]`,
           });
         }
-        const before = yield* askHost<ControlAccess>("control:access");
-        if (before[key] === null) {
-          return yield* new UsageError({
-            problem: `On Linux the service keeps the host running (\`${binaryName} service status\`).`,
-          });
-        }
         const access =
           mode === undefined
-            ? before
+            ? yield* askHost<ControlAccess>("control:access")
             : yield* askHost<ControlAccess>("control:setAccess", {
                 [key]: mode === "on",
               });
@@ -44,5 +39,11 @@ const accessSwitch = (name: string, key: keyof ControlAccess, label: string) =>
 export const accessSwitches = [
   accessSwitch("share", "share", "Share with other devices"),
   accessSwitch("control", "control", "Allow control from other devices"),
-  accessSwitch("reachable", "keepReachable", "Keep this device reachable"),
-] as const;
+  // The service keeps a Linux host running (`service`).
+  ...byPlatform({
+    darwin: [
+      accessSwitch("reachable", "keepReachable", "Keep this device reachable"),
+    ],
+    linux: [],
+  }),
+];

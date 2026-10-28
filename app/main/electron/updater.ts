@@ -54,13 +54,14 @@ const updater = makeUpdater({
   flavor,
   packaged: app.isPackaged,
   version: app.getVersion(),
-  endpoints: updateEndpoints,
   cliBinary: requireCliBinary,
   // Called through: hostProcess.ts imports this module back.
   noteState: (state) => noteUpdaterState(state),
   busy: (quitAfter) => Effect.runPromise(hostBusy(quitAfter)),
-  confirmRestart: () => confirmBusyAction("restart"),
-  isQuitting: () => isQuitting(),
+  confirmRestart: {
+    ask: () => confirmBusyAction("restart"),
+    isQuitting: () => isQuitting(),
+  },
   handOff: Effect.tryPromise(spawnInstaller),
   quit: () => app.quit(),
 });

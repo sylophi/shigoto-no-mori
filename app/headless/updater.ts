@@ -16,7 +16,6 @@ import { quit } from "@host/process/run";
 import { broadcastAll } from "@host/process/wires";
 import type { HostFacts } from "@shared/hostFacts";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
-import { updateEndpoints } from "@shared/updater/endpoints";
 import { makeUpdater } from "@shared/updater/machine";
 
 export const makeHeadlessUpdater = (facts: HostFacts) => {
@@ -26,22 +25,17 @@ export const makeHeadlessUpdater = (facts: HostFacts) => {
     flavor: facts.flavor,
     packaged: facts.packaged,
     version: facts.appVersion,
-    endpoints: updateEndpoints,
     cliBinary,
     noteState: (state) => broadcastAll(updaterContract, "state", state),
     busy: () =>
       Graph.run(Effect.flatMap(Scripts.Scripts, (scripts) => scripts.busy)),
     confirmRestart: null,
-    isQuitting: () => false,
     handOff: Effect.flatMap(Updater.Updater, (engine) =>
       engine.install({
-        running: {
-          version: facts.appVersion,
-          arch: process.arch,
-          executable: cliBinary(),
-          pid: process.pid,
-        },
-        ...updateEndpoints(),
+        version: facts.appVersion,
+        arch: process.arch,
+        executable: cliBinary(),
+        pid: process.pid,
       }),
     ),
     quit: () => quit(true),

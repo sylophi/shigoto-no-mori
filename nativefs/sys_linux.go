@@ -19,18 +19,6 @@ import (
 // folder's entries share a pool of goroutines. Anything but a folder,
 // a regular file or a symlink can't be cloned.
 func cloneTree(src, dst string) error {
-	c := cloner{slots: make(chan struct{}, runtime.NumCPU()*2)}
-	return c.clone(src, dst)
-}
-
-type cloner struct {
-	// An entry gets a goroutine of its own while a slot is free, and is
-	// cloned on the caller's otherwise, so a deep tree never waits on
-	// itself.
-	slots chan struct{}
-}
-
-func (c *cloner) clone(src, dst string) error {
 	var st unix.Stat_t
 	if err := unix.Lstat(src, &st); err != nil {
 		return err
@@ -48,7 +36,7 @@ func (c *cloner) clone(src, dst string) error {
 		}
 		return keepTimes(dst, &st)
 	case unix.S_IFDIR:
-		return c.cloneDir(src, dst, &st)
+		return cloneDir(src, dst, &st)
 	}
 	return unix.EOPNOTSUPP
 }
@@ -79,7 +67,12 @@ func cloneFile(src, dst string, st *unix.Stat_t) error {
 	return err
 }
 
-func (c *cloner) cloneDir(src, dst string, st *unix.Stat_t) error {
+// An entry gets a goroutine of its own while a slot is free, and is
+// cloned on the caller's otherwise, so a deep tree never waits on
+// itself. The slots are the process's, whichever trees it clones.
+var cloneSlots = make(chan struct{}, runtime.NumCPU()*2)
+
+func cloneDir(src, dst string, st *unix.Stat_t) error {
 	// Writable until its entries are in, then the source's mode and times,
 	// which adding them would have moved.
 	if err := unix.Mkdir(dst, 0o700); err != nil {
@@ -102,13 +95,13 @@ func (c *cloner) cloneDir(src, dst string, st *unix.Stat_t) error {
 	for _, entry := range entries {
 		from, to := filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name())
 		select {
-		case c.slots <- struct{}{}:
+		case cloneSlots <- struct{}{}:
 			wg.Go(func() {
-				defer func() { <-c.slots }()
-				note(c.clone(from, to))
+				defer func() { <-cloneSlots }()
+				note(cloneTree(from, to))
 			})
 		default:
-			note(c.clone(from, to))
+			note(cloneTree(from, to))
 		}
 	}
 	wg.Wait()

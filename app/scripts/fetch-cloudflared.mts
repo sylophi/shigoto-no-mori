@@ -6,22 +6,14 @@
 // `pnpm start` runs it best-effort so dev builds carry the binary too.
 //
 // Supply-chain discipline: the version AND the sha256 of every asset
-// are committed (shared/packaging/cloudflaredDist.mts). The download is
-// refused unless the digest matches, nothing is executed during the
-// fetch, and a bump is an ordinary reviewed change to that one file.
+// are committed (shared/packaging/cloudflaredDist.mts). The download
+// (lib/fetchPinned.mts) is refused unless the digest matches, nothing
+// is executed during the fetch, and a bump is an ordinary reviewed
+// change to that one file.
 //
 // Run: node scripts/fetch-cloudflared.mts [--platform darwin] [--arch arm64] [--best-effort]
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   CLOUDFLARED_BINARY_NAME,
@@ -31,6 +23,7 @@ import {
   cloudflaredDownloadUrl,
 } from "../shared/packaging/cloudflaredDist.mts";
 import { appRoot } from "./lib/appRoot.mts";
+import { fetchPinned } from "./lib/fetchPinned.mts";
 
 const args = process.argv.slice(2);
 
@@ -46,11 +39,6 @@ const arch = flag("--arch", process.arch);
 // Packaging has no such leniency, a build must carry the connector.
 const bestEffort = args.includes("--best-effort");
 
-const distDir = join(appRoot, CLOUDFLARED_DIST_DIR);
-const binary = join(distDir, CLOUDFLARED_BINARY_NAME);
-const stampPath = join(distDir, "stamp");
-const stamp = `${CLOUDFLARED_VERSION} ${platform}-${arch}\n`;
-
 function fail(message: string): never {
   if (bestEffort) {
     console.warn(`[cloudflared] ${message} (tunnels stay off this run)`);
@@ -63,64 +51,40 @@ function fail(message: string): never {
 const asset = cloudflaredAsset(platform, arch);
 if (asset === null) fail(`no pinned cloudflared asset for ${platform}-${arch}`);
 
-if (
-  existsSync(binary) &&
-  existsSync(stampPath) &&
-  readFileSync(stampPath, "utf8") === stamp
-) {
-  console.log(
-    `[cloudflared] ${CLOUDFLARED_VERSION} (${platform}-${arch}) already in ${CLOUDFLARED_DIST_DIR}/`,
-  );
-  process.exit(0);
-}
-
-const url = cloudflaredDownloadUrl(asset);
-console.log(`[cloudflared] fetching ${url}`);
-let bytes;
+let kept: boolean;
 try {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  bytes = Buffer.from(await response.arrayBuffer());
+  kept = await fetchPinned({
+    label: "cloudflared",
+    distDir: join(appRoot, CLOUDFLARED_DIST_DIR),
+    binaryName: CLOUDFLARED_BINARY_NAME,
+    stamp: `${CLOUDFLARED_VERSION} ${platform}-${arch}\n`,
+    url: cloudflaredDownloadUrl(asset),
+    name: asset.name,
+    sha256: asset.sha256,
+    unpack: (bytes, staging) => {
+      const binaryPath = join(staging, CLOUDFLARED_BINARY_NAME);
+      if (asset.name.endsWith(".tgz")) {
+        const archive = join(staging, asset.name);
+        writeFileSync(archive, bytes);
+        execFileSync("tar", [
+          "-xzf",
+          archive,
+          "-C",
+          staging,
+          CLOUDFLARED_BINARY_NAME,
+        ]);
+        rmSync(archive);
+      } else {
+        writeFileSync(binaryPath, bytes);
+      }
+      chmodSync(binaryPath, 0o755);
+    },
+  });
 } catch (error) {
-  fail(`download failed: ${error instanceof Error ? error.message : error}`);
-}
-const digest = createHash("sha256").update(bytes).digest("hex");
-if (digest !== asset.sha256) {
-  fail(
-    `sha256 mismatch for ${asset.name}: expected ${asset.sha256}, got ${digest}`,
-  );
-}
-
-// Unpack into a staging dir and swap it in only once the binary is
-// ready, so a failed extraction (a renamed archive member, a full
-// disk) leaves whatever copy was already there untouched.
-const staging = `${distDir}.tmp`;
-try {
-  rmSync(staging, { recursive: true, force: true });
-  mkdirSync(staging, { recursive: true });
-  const binaryPath = join(staging, CLOUDFLARED_BINARY_NAME);
-  if (asset.name.endsWith(".tgz")) {
-    const archive = join(staging, asset.name);
-    writeFileSync(archive, bytes);
-    execFileSync("tar", [
-      "-xzf",
-      archive,
-      "-C",
-      staging,
-      CLOUDFLARED_BINARY_NAME,
-    ]);
-    rmSync(archive);
-  } else {
-    writeFileSync(binaryPath, bytes);
-  }
-  chmodSync(binaryPath, 0o755);
-  writeFileSync(join(staging, "stamp"), stamp);
-  rmSync(distDir, { recursive: true, force: true });
-  renameSync(staging, distDir);
-} catch (error) {
-  rmSync(staging, { recursive: true, force: true });
-  fail(`unpacking failed: ${error instanceof Error ? error.message : error}`);
+  fail(error instanceof Error ? error.message : String(error));
 }
 console.log(
-  `[cloudflared] ${CLOUDFLARED_VERSION} ready at ${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
+  kept
+    ? `[cloudflared] ${CLOUDFLARED_VERSION} (${platform}-${arch}) already in ${CLOUDFLARED_DIST_DIR}/`
+    : `[cloudflared] ${CLOUDFLARED_VERSION} ready at ${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
 );
