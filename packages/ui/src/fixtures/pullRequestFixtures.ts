@@ -283,15 +283,15 @@ export function unposedPullRequests(projectId: string) {
   return FAKE_SM_PROJECT_IDS.has(projectId) ? FAKE_PRS : {};
 }
 
-// The map as the host leaves it, a merge made here included (the host
+// The map as the host leaves it, a merge or close made here included (the host
 // writes the page's merged read into it).
 export function fakePullRequests(projectId: string) {
   if (!FAKE_SM_PROJECT_IDS.has(projectId)) return {};
   const map = posedPullRequestMap(new URLSearchParams(location.search));
-  const merged = fakeMerged ? map[FAKE_PR_BRANCH] : undefined;
-  return merged === undefined
+  const own = map[FAKE_PR_BRANCH];
+  return fakeState === null || own === undefined
     ? map
-    : { ...map, [FAKE_PR_BRANCH]: { ...merged, state: "MERGED" as const } };
+    : { ...map, [FAKE_PR_BRANCH]: { ...own, state: fakeState } };
 }
 
 // A branch's PR as a query's poses (?checks=, ?reviews=, ?prState=,
@@ -562,7 +562,7 @@ function fakePosedDetail() {
   const posed = posedDetail(new URLSearchParams(location.search));
   return {
     ...posed,
-    ...(fakeMerged && { state: "MERGED" as const }),
+    ...(fakeState !== null && { state: fakeState }),
     autoMerge: fakeAutoMerge ? fakeAutoMerge.method : posed.autoMerge,
   };
 }
@@ -580,10 +580,11 @@ export const FAKE_REPO_MERGE_CONFIG: RepoMergeConfig = {
 // What the fake host's merge button does, by the button's own rule: a PR it
 // would arm auto-merge for reads as armed with the method until
 // "Disable auto-merge". Anything else merges, and reads as merged.
+// "Close PR" has it read as closed.
 // Page state, so the flow can be posed and recorded. A reload starts
 // over.
 let fakeAutoMerge: { method: MergeMethod | null } | null = null;
-let fakeMerged = false;
+let fakeState: "MERGED" | "CLOSED" | null = null;
 
 export function fakeMergePullRequest(
   method: MergeMethod,
@@ -592,8 +593,12 @@ export function fakeMergePullRequest(
     fakeAutoMerge = { method };
     return { outcome: "auto-merge" };
   }
-  fakeMerged = true;
+  fakeState = "MERGED";
   return { outcome: "merged" };
+}
+
+export function fakeClosePullRequest(): void {
+  fakeState = "CLOSED";
 }
 
 export function fakeDisableAutoMerge(): void {

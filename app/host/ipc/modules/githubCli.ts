@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import {
+  closePullRequest,
   disablePullRequestAutoMerge,
   getPullRequestDiff,
   listGithubOwners,
@@ -155,6 +156,11 @@ export const githubCliHandlers = {
   disablePullRequestAutoMerge: ({ projectId, number }) =>
     Effect.flatMap(projectPath(projectId), (cwd) =>
       disablePullRequestAutoMerge({ cwd, number }),
+    ),
+
+  closePullRequest: ({ projectId, number, comment }) =>
+    Effect.flatMap(findProject(projectId), (project) =>
+      closePullRequest(project, number, comment),
     ),
 } satisfies EffectHandlers<
   typeof githubCliContract,

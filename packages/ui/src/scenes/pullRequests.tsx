@@ -94,6 +94,7 @@ function mergeBox(
           onMerge: noop,
           others: mode === "armed" ? [] : ["merge", "rebase"],
           onPickMethod: noop,
+          onClosePullRequest: noop,
           draftPending: false,
           onToggleDraft: noop,
           disablePending: false,

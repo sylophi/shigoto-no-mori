@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { ClosePullRequestDialog } from "./ClosePullRequestDialog";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import type { PullRequestStack } from "@shigomori/contracts/pullRequestStack";
 import { describeMergeVerdict } from "@shigomori/ui/lib/pullRequest.ts";
@@ -55,46 +56,57 @@ export function MergeBox({
   const verdict = describeMergeVerdict(pr, status, mode === "armed");
   const reviewsSaid = verdict.by === "reviews";
   const compact = useCompactChips(rowRef, reviewsSaid, canMerge && canCommand);
+  const [closing, setClosing] = useState(false);
 
   // The merge box's one status (or why there's no merge button, with
   // the checks beside it), then the reviews. Items of the row they sit
   // in, so a chip that doesn't fit wraps beside the buttons rather than
   // onto a line of its own.
   return (
-    <MergeBoxView
-      pr={pr}
-      hasMethod={canMerge}
-      verdict={verdict}
-      compact={compact}
-      rowRef={rowRef}
-      merge={
-        primary && activeMethod && canCommand
-          ? {
-              mode,
-              label,
-              pendingLabel,
-              landsStack,
-              blocked,
-              disabled,
-              pending: merge.isPending,
-              armed,
-              onMerge: () => trigger(() => runMerge(activeMethod)),
-              others,
-              onPickMethod: pickMethod,
-              reach: showReach
-                ? { value: reach, onPick: pickReach }
-                : undefined,
-              draftPending: setDraft.isPending,
-              onToggleDraft: toggleDraft,
-              disablePending: disableAutoMerge.isPending,
-              onDisableAutoMerge: runDisableAutoMerge,
-              error: merge.error?.message,
-              disableError: disableAutoMerge.error?.message,
-              draftError: setDraft.error?.message,
-            }
-          : null
-      }
-    />
+    <>
+      <MergeBoxView
+        pr={pr}
+        hasMethod={canMerge}
+        verdict={verdict}
+        compact={compact}
+        rowRef={rowRef}
+        merge={
+          primary && activeMethod && canCommand
+            ? {
+                mode,
+                label,
+                pendingLabel,
+                landsStack,
+                blocked,
+                disabled,
+                pending: merge.isPending,
+                armed,
+                onMerge: () => trigger(() => runMerge(activeMethod)),
+                others,
+                onPickMethod: pickMethod,
+                onClosePullRequest: () => setClosing(true),
+                reach: showReach
+                  ? { value: reach, onPick: pickReach }
+                  : undefined,
+                draftPending: setDraft.isPending,
+                onToggleDraft: toggleDraft,
+                disablePending: disableAutoMerge.isPending,
+                onDisableAutoMerge: runDisableAutoMerge,
+                error: merge.error?.message,
+                disableError: disableAutoMerge.error?.message,
+                draftError: setDraft.error?.message,
+              }
+            : null
+        }
+      />
+      {closing && (
+        <ClosePullRequestDialog
+          worktree={worktree}
+          pr={pr}
+          onClose={() => setClosing(false)}
+        />
+      )}
+    </>
   );
 }
 
