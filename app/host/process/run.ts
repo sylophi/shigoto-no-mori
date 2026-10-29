@@ -7,7 +7,6 @@
 // to stop (quit).
 import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { isTestFlavor } from "@shigomori/engine/flavor";
 import { childDefaults } from "@shigomori/engine/processes";
 import type { HostFailureSchema } from "@shigomori/contracts/modules/shellCalls";
@@ -141,7 +140,7 @@ export async function runHost<E>(root: {
   const reaped = Effect.runPromise(
     reapOrphanedConnector(tunnelPidFile()).pipe(
       Effect.provide(
-        childDefaults.pipe(Layer.provideMerge(NodeServices.layer)),
+        childDefaults.pipe(Layer.provideMerge(HostNodeServices.layer)),
       ),
     ),
   );
