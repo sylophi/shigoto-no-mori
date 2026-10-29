@@ -268,11 +268,13 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: npm pkg set version="${TAG#v}"
 
-      # The postinstall compiles node-pty's addon.
+      # The postinstall compiles node-pty's addon. Scripts are off for
+      # the install, which would run it twice at once (the app's own and
+      # the root's), the builds clearing each other's build/ folder.
       - name: Install dependencies
         working-directory: .
         run: |
-          pnpm install --frozen-lockfile
+          pnpm install --frozen-lockfile --ignore-scripts
           pnpm run postinstall
 
       - name: Build the package
