@@ -8,7 +8,7 @@
 // each function answers in the shape `sm --json` prints, decoded
 // against the shared schemas, so drift fails loudly here instead of
 // surfacing as undefined-flavored breakage in the renderer.
-import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as HostNodeServices from "@host/process/nodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -1013,7 +1013,7 @@ export const runDoctor = Effect.fnUntraced(function* (
           Effect.service(Doctor.Doctor),
           Doctor.layer.pipe(
             Layer.provide(childDefaults),
-            Layer.provide(NodeServices.layer),
+            Layer.provide(HostNodeServices.layer),
             Layer.provide(
               ConfigProvider.layerAdd(
                 ConfigProvider.fromEnv({ env: { ZDOTDIR: input.zdotdir } }),

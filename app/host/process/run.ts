@@ -7,7 +7,6 @@
 // to stop (quit).
 import { closeSync, openSync, renameSync, statSync, writeSync } from "node:fs";
 import { join } from "node:path";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { isTestFlavor } from "@shigomori/engine/flavor";
 import { childDefaults } from "@shigomori/engine/processes";
 import type { HostFailureSchema } from "@shigomori/contracts/modules/shellCalls";
@@ -38,6 +37,7 @@ import * as Loopback from "@host/socket/Loopback";
 import { reapOrphanedConnector } from "@host/direct/Tunnel";
 import { hostBinaryPath, setHostFacts, tunnelPidFile } from "./facts";
 import * as HostLayer from "./layer";
+import * as HostNodeServices from "./nodeServices";
 import { startHost } from "./session";
 
 // Every span that ends, a JSON line in host-trace.log beside the
@@ -140,7 +140,7 @@ export async function runHost<E>(root: {
   const reaped = Effect.runPromise(
     reapOrphanedConnector(tunnelPidFile()).pipe(
       Effect.provide(
-        childDefaults.pipe(Layer.provideMerge(NodeServices.layer)),
+        childDefaults.pipe(Layer.provideMerge(HostNodeServices.layer)),
       ),
     ),
   );
@@ -173,7 +173,7 @@ export async function runHost<E>(root: {
         }),
       ),
       Layer.provideMerge(childDefaults),
-      Layer.provideMerge(NodeServices.layer),
+      Layer.provideMerge(HostNodeServices.layer),
     ),
   );
   runtime = graph;
