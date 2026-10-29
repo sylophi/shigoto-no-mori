@@ -42,7 +42,7 @@ import * as Villagers from "../../host/lib/VillagerData.ts";
 import * as Worktrees from "../../host/lib/Worktrees.ts";
 import { terminalStart, terminalWorktrees } from "../../host/ipc/scriptRun.ts";
 import * as HostStandIns from "./hostStandIns.mts";
-import { macfs } from "../../../packages/engine/test/lib/macfs.ts";
+import { nativefs } from "../../../packages/engine/test/lib/nativefs.ts";
 
 // The engine's data dir for this file's proofs, a fresh one each file.
 // A proof that drives the host's engine calls points the host's own
@@ -87,7 +87,7 @@ process.env.ZDOTDIR = zdotdir;
 process.env.HISTFILE = join(zdotdir, ".bash_history");
 const engine = Engine.layer({
   flavor: "dev",
-  macfs: macfs(),
+  nativefs: nativefs(),
   sm: "smd",
 }).pipe(Layer.provideMerge(Migration.layer));
 

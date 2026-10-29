@@ -17,12 +17,15 @@ import {
   peerWorktrees,
   send,
 } from "@host/lib/control/ops";
+import { access, setAccess } from "@host/lib/control/access";
 
 export const controlHandlers = {
   devices,
   peerWorktrees,
   mirrors,
   mirrorStop,
+  access,
+  setAccess,
 } satisfies EffectHandlers<
   typeof controlContract,
   HandlerContext,

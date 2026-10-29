@@ -1,7 +1,7 @@
 // The terminal binary as its sources are now, for the cli's tests and
 // the app's proofs: built once per flavor and state of its sources into
 // the run's temp dir (../../../../test/testTemp.mts), keyed by a hash of
-// them, with the darwin helper beside it, where the binary looks. No
+// them, with the filesystem helper beside it, where the binary looks. No
 // side effects on import.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -17,18 +17,18 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { flavorNames, type Flavor } from "@shigomori/engine/flavor";
 import { isolatedGitEnv } from "../../../../test/gitIsolation.ts";
-import { macfs } from "../../../engine/test/lib/macfs.ts";
+import { nativefs } from "../../../engine/test/lib/nativefs.ts";
 
 const repoRoot = join(import.meta.dirname, "..", "..", "..", "..");
 
 // What goes into the binary: the sources of the terminal, the engine
-// and the contracts, and the darwin helper's.
+// and the contracts, and the filesystem helper's.
 const SOURCES = [
   "packages/cli/src",
   "packages/cli/build.mts",
   "packages/engine/src",
   "packages/contracts/src",
-  "macfs",
+  "nativefs",
 ];
 
 function hashInto(hash: ReturnType<typeof createHash>, rel: string): void {
@@ -65,9 +65,9 @@ export function builtBinary(flavor: Flavor): string {
   if (existsSync(binary)) return binary;
   const dir = dirname(binary);
   mkdirSync(dir, { recursive: true });
-  const helper = join(dir, `macfs.${process.pid}`);
-  copyFileSync(macfs(), helper);
-  renameSync(helper, join(dir, "macfs"));
+  const helper = join(dir, `nativefs.${process.pid}`);
+  copyFileSync(nativefs(), helper);
+  renameSync(helper, join(dir, "nativefs"));
   const partial = `${binary}.${process.pid}`;
   execFileSync(process.execPath, ["build.mts", partial, `--flavor=${flavor}`], {
     cwd: join(repoRoot, "packages", "cli"),

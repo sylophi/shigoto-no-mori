@@ -2078,6 +2078,7 @@ export function installFakeHostBridge(
     deviceIcon: deviceIcon ?? detectedIcon(),
     detectedDeviceIcon: detectedIcon(),
     sharedSignIn: false,
+    codeSignIn: false,
     needsDeviceKey: keyDue,
   });
 

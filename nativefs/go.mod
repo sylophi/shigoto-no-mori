@@ -1,4 +1,4 @@
-module macfs
+module nativefs
 
 go 1.26
 

@@ -1,5 +1,6 @@
 import { WEB_GITHUB_ID } from "@shigomori/contracts/schemas/launchers";
 import { findExecutable } from "./executables.ts";
+import { byPlatform } from "./platform.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -171,12 +172,19 @@ const launchersOf = (
   };
 };
 
-// Where an installed .app can live, in the order they are looked in.
-export const appFoldersOf = (path: Path.Path, home: string) => [
-  "/Applications",
-  path.join(home, "Applications"),
-  "/System/Applications",
-];
+// Where an installed .app can live, in the order they are looked in,
+// and whether Finder is there, as it always is on a Mac. Linux has
+// neither: its launchers are the tools found on PATH.
+export const appFoldersOf = (path: Path.Path, home: string) =>
+  byPlatform({
+    darwin: [
+      "/Applications",
+      path.join(home, "Applications"),
+      "/System/Applications",
+    ],
+    linux: [],
+  });
+const FINDER = byPlatform({ darwin: true, linux: false });
 
 const apps: ReadonlyArray<CatalogApp> = catalog;
 
@@ -211,7 +219,7 @@ const make = Effect.gen(function* () {
   const available = (app: CatalogApp) =>
     Effect.gen(function* () {
       for (const bundle of app.bundleNames ?? []) {
-        if (bundle === "__finder__") return true;
+        if (bundle === "__finder__") return FINDER;
         for (const folder of appFolders) {
           if (yield* exists(path.join(folder, bundle))) return true;
         }
@@ -306,7 +314,7 @@ const make = Effect.gen(function* () {
   const bundleOf = (app: CatalogApp) =>
     Effect.gen(function* () {
       for (const bundle of app.bundleNames ?? []) {
-        if (bundle === "__finder__") return bundle;
+        if (bundle === "__finder__") return FINDER ? bundle : undefined;
         for (const folder of appFolders) {
           const found = path.join(folder, bundle);
           if (yield* exists(found)) return found;

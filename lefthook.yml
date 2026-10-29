@@ -46,7 +46,7 @@ pre-commit:
           # they run: the host, the shell, the shared code, the engine,
           # the terminal, the contracts and the Go helpers.
           - name: proofs
-            glob: "{app/host/**,app/main/**,app/shared/**,app/test/**,app/vitest.config.ts,packages/engine/**,packages/cli/**,packages/contracts/**,file-sync/**,macfs/**,test/**,pnpm-lock.yaml}"
+            glob: "{app/host/**,app/main/**,app/shared/**,app/test/**,app/vitest.config.ts,packages/engine/**,packages/cli/**,packages/contracts/**,file-sync/**,nativefs/**,test/**,pnpm-lock.yaml}"
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm -C app test
           # The contracts' golden fixtures (packages/contracts/README.md).
           - name: contracts
@@ -54,11 +54,11 @@ pre-commit:
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:contracts
           # The engine's tests (packages/engine/README.md).
           - name: engine
-            glob: "{packages/engine/**,packages/contracts/**,macfs/**,test/**}"
+            glob: "{packages/engine/**,packages/contracts/**,nativefs/**,test/**}"
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:engine
           # The terminal binary, built as it ships (packages/cli/README.md).
           - name: cli
-            glob: "{packages/cli/**,packages/engine/src/**,packages/engine/test/lib/**,packages/contracts/**,macfs/**,test/**}"
+            glob: "{packages/cli/**,packages/engine/src/**,packages/engine/test/lib/**,packages/contracts/**,nativefs/**,test/**}"
             run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE pnpm run check:cli
           # The file-sync engine (continuous worktree mirroring) is its own
           # Go module, tested on its own.

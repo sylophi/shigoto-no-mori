@@ -32,6 +32,7 @@
     "shigomori/no-node-builtins-in-service": "error",
     "shigomori/no-env-in-service": "error",
     "shigomori/no-wall-clock": "error",
+    "shigomori/no-process-platform": "error",
     "shigomori/effect-fn-service-methods": "error",
     "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
     "no-restricted-imports": [

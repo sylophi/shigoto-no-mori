@@ -29,7 +29,6 @@ import * as Schema from "effect/Schema";
 import {
   MIRROR_COPY_STAYED,
   mirrorFilesSettled,
-  mirrorHereBlocker,
   type MirrorIgnoreMode,
   type MirrorListResult,
   type MirrorSession,
@@ -53,8 +52,6 @@ import {
   peerWorktreesFor,
 } from "@host/ipc/PeerReach";
 import * as DeviceId from "@host/lib/config/DeviceId";
-import * as HostAccount from "@host/lib/HostAccount";
-import * as Sharing from "@host/lib/Sharing";
 import * as Moves from "@host/lib/sync/Moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { transferFilesOnce } from "./oneShot";
@@ -79,6 +76,7 @@ import {
   STOPPED_WAITING_DETAIL,
 } from "./registry";
 import { MirrorEngine, MirrorError } from "./MirrorEngine";
+import { ownMirrorHereBlocker } from "./MirrorGateway";
 import { announceServingChange, listMirrorServing } from "./serving";
 import { log } from "@shared/log";
 
@@ -310,12 +308,7 @@ export const startMirrorFrom = (
     (stopRelay) => Effect.sync(stopRelay),
   );
   return Effect.gen(function* () {
-    const blocker = mirrorHereBlocker({
-      acceptsCommands:
-        (yield* (yield* HostAccount.HostAccount).current).facts
-          ?.acceptsCommands === true,
-      sharing: yield* (yield* Sharing.Sharing).current,
-    });
+    const blocker = yield* ownMirrorHereBlocker;
     if (blocker !== undefined) {
       return yield* new MirrorStartRefusedError({ reason: blocker });
     }

@@ -9,6 +9,7 @@ import * as Command from "effect/cli/Command";
 import { rest } from "../here.ts";
 import * as Flag from "effect/cli/Flag";
 import { flavorNames } from "@shigomori/engine/flavor";
+import { byPlatform } from "@shigomori/engine/platform";
 import { RELAUNCH_ENV } from "@shigomori/engine/relaunchEnv";
 import { flavor, version } from "../build.ts";
 import { UsageError } from "../errors.ts";
@@ -48,7 +49,11 @@ const said = (
     case "waiting-for-app":
       return "waiting for the running app";
     case "waiting-for-restart":
-      return `waiting for the app to restart ${dim("(confirm in the app if it's asking)")}`;
+      // A Linux host has no window to ask in.
+      return byPlatform({
+        darwin: `waiting for the app to restart ${dim("(confirm in the app if it's asking)")}`,
+        linux: "waiting for the host to restart",
+      });
   }
 };
 

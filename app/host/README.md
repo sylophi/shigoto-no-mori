@@ -5,7 +5,9 @@ forwards and device link, run as the app's utility process (below).
 Its data model is the engine's (`packages/engine`), which it runs
 in-process (`lib/Engine.ts`, `lib/engineOps.ts`).
 
-- `process/`: the composition root. `layer.ts` is the host's layer
+- `process/`: the composition root. `run.ts` is the host's run,
+  whichever shell started it, and `host.ts` the Electron shell's entry
+  to it. `layer.ts` is the host's layer
   graph, `services.ts` names the services the handlers answer on
   (`HostServices`), `handlers.ts` registers every module's handlers,
   `wires.ts` puts them on the loopback and the device link, and
@@ -28,7 +30,8 @@ in-process (`lib/Engine.ts`, `lib/engineOps.ts`).
 
 The host runs apart from the shell so that its work never stalls a
 window and a crash of it is a reconnect. The shell forks it at launch
-(`main/hostProcess.ts`) and reaches it over RPC as every client does:
+(`main/hostProcess.ts`, or with no shell at all on a machine with no
+screen, `../headless`) and reaches it over RPC as every client does:
 a window, the shell and the terminal `sm` on the loopback, the web
 client and the other devices over the device link. The shell owns the
 account (Clerk, the keychain) and tells the host the account's facts,

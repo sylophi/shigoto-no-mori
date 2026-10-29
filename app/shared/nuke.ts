@@ -1,8 +1,9 @@
-// The start after a nuke (main/electron/nuke.ts writes the marker): the
-// pure half, electron-free so a proof drives it under plain node
-// (test/nuke.mts). It deletes what the marker names and everything in
-// userData, the marker last, so a start that dies halfway through finds
-// the marker and deletes the rest.
+// The start after a nuke (the shells' nuke writes the marker:
+// main/electron/nuke.ts, headless/nuke.ts): electron-free, so the
+// headless host and a proof under plain node (test/nuke.mts) drive it
+// too. It deletes what the marker names and everything in userData, the
+// marker last, so a start that dies halfway through finds the marker
+// and deletes the rest.
 import {
   closeSync,
   existsSync,
@@ -22,8 +23,26 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { DEV_PROFILES_DIR } from "@shared/packaging/appName.mts";
+import {
+  dataDir,
+  dataDirPointerPath,
+  dataDirSource,
+  legacyDataDirPointerPath,
+} from "@shared/paths";
 
 export const NUKE_MARKER = "nuke.pending";
+
+// What goes at the next start besides userData: the data dir, the logs,
+// and the pointer that found the data dir. A data dir set by
+// SHIGOMORI_DATA_DIR (a dev profile) came from no pointer, and the
+// flavor's pointer is another instance's then.
+export function nukedPaths(logs: string): string[] {
+  const pointers =
+    dataDirSource() === "env"
+      ? []
+      : [dataDirPointerPath(), legacyDataDirPointerPath()];
+  return [dataDir(), logs, ...pointers.filter((path) => path !== null)];
+}
 
 // Deletes `path` whole, or as much of it as goes: a folder that won't
 // go says only that it isn't empty, so what stayed in it is found by

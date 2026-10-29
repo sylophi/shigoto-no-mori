@@ -25,7 +25,7 @@ import {
   finishPendingNuke,
   NUKE_MARKER,
   writeNukeMarker,
-} from "../main/core/nuke/finish.ts";
+} from "../shared/nuke.ts";
 
 const fixture = cliSandbox("sm-nuke-");
 beforeAll(async () => {

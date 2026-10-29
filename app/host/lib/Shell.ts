@@ -60,6 +60,17 @@ export class Shell extends Context.Service<
     readonly guide: (
       payload: GuideDrivePayload,
     ) => Effect.Effect<GuideReply, CallFailure>;
+    // This device's command switch, which the shell keeps on the
+    // account's record. Refused signed out.
+    readonly setAcceptsCommands: (
+      enabled: boolean,
+    ) => Effect.Effect<void, CallFailure>;
+    // "Keep this device reachable": the app started at login and after
+    // a crash. Null where the shell has no such switch.
+    readonly keepReachable: Effect.Effect<boolean | null, CallFailure>;
+    readonly setKeepReachable: (
+      on: boolean,
+    ) => Effect.Effect<void, CallFailure>;
   }
 >()("sm/host/Shell") {}
 

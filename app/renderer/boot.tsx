@@ -80,6 +80,8 @@ export interface AppClient {
   queryClient: QueryClient;
   // Settles once the launch's palette rotation has landed.
   paletteTurned: Promise<void>;
+  // Aborts as the page goes, before the registry is disposed.
+  page: AbortSignal;
 }
 
 export function startApp({
@@ -106,10 +108,11 @@ export function startApp({
       [queryClientAtom, queryClient],
     ],
   });
-  // What the page starts outside React and could read or write the
-  // registry as the page goes (a focus or network listener, a list's
-  // end as the registry's own disposal stops its views) ends with
-  // `page`, which ends before the registry is disposed.
+  // What the page starts and could read or write the registry as the
+  // page goes (a focus or network listener, a list's end as the
+  // registry's own disposal stops its views, a window's React tree
+  // still rendering) ends with `page`, which ends before the registry
+  // is disposed.
   const page = new AbortController();
   window.addEventListener("pagehide", (event) => {
     if (event.persisted) return;
@@ -187,7 +190,7 @@ export function startApp({
 
   const paletteTurned = startThemeRotation(api, registry, page.signal);
 
-  return { api, registry, queryClient, paletteTurned };
+  return { api, registry, queryClient, paletteTurned, page: page.signal };
 }
 
 // A window over the page's client, drawn into `element`, its theme
@@ -195,7 +198,7 @@ export function startApp({
 // (a frame on the marketing site); otherwise the window wears its
 // settings'.
 export function mountWindow(
-  { api, registry, queryClient, paletteTurned }: AppClient,
+  { api, registry, queryClient, paletteTurned, page }: AppClient,
   {
     element,
     ClerkProvider,
@@ -249,8 +252,10 @@ export function mountWindow(
 
   // Rendered once the launch's palette rotation has landed, so the
   // first frame wears the palette it moved to.
-  void paletteTurned.then(() =>
-    createRoot(element).render(
+  void paletteTurned.then(() => {
+    const root = createRoot(element);
+    page.addEventListener("abort", () => root.unmount(), { once: true });
+    root.render(
       <StrictMode>
         <ApiProvider api={api}>
           <RegistryContext value={registry}>
@@ -269,8 +274,8 @@ export function mountWindow(
           </RegistryContext>
         </ApiProvider>
       </StrictMode>,
-    ),
-  );
+    );
+  });
 
   return router;
 }

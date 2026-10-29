@@ -202,6 +202,15 @@ const enrollment = HttpApiGroup.make("enrollment", { topLevel: true }).add(
   })
     .middleware(LoginAuth)
     .middleware(ProtocolFloor),
+  // A Clerk sign-in token for the account the login names, which a
+  // window with no browser to sign in through (it signed in with a
+  // device code) redeems once for a Clerk session.
+  HttpApiEndpoint.post("signInToken", "/sign-in-token", {
+    success: Schema.Struct({ token: Schema.String }),
+    error: HubUnavailableError,
+  })
+    .middleware(LoginAuth)
+    .middleware(ProtocolFloor),
 );
 
 const devices = HttpApiGroup.make("devices", { topLevel: true })

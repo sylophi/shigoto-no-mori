@@ -37,6 +37,6 @@ Each change of state in several steps has one step after which it counts as done
 - **The move into `wt/`** (`WtFolder.ts`): each worktree's move as above; one that can't be made stays stuck, with why and a Retry.
 - **Project removal** (`Registry.ts`, `unregister`): one transaction, its primary's marks, shelf, agent sessions, unshelve time, clone records and icon included.
 - **Project relocate** (`worktrees/relocating.ts`): the new path and what its worktrees kept commit in one transaction.
-- **The updater's swap** (`updater/swap.ts`): one exchange commits it where the darwin helper can make one, else two renames.
+- **The updater's swap** (`updater/swap.ts`): one exchange commits it where the filesystem helper can make one, else two renames.
 - **Carry-over** (`CarryOver.ts`): each entry is renamed in whole from a staging folder.
 - **The data-folder lock** (`DataDirLock.ts`) makes a data-folder move the one change under way, and says how. The move itself is the host's (`app/host/lib/dataDirMove.ts`); its recovery is the engine's (`src/dataDirMove.ts`).

@@ -19,6 +19,14 @@ import { fixedDevServerPort } from "../../scripts/lib/portsEnvFile.mts";
 const here = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(here, "..", "..");
 
+// Each flavor's own prebundle cache, as the web client has
+// (vite.web.config.ts): sharing one, a flavor starting re-optimizes
+// over the other's, whose page then asks for deps it has replaced.
+const CACHE_DIRS = {
+  FAKE_HOST_PORT: ".vite-fake-host",
+  FAKE_HOST_WEB_PORT: ".vite-fake-host-web",
+} as const;
+
 // What any build of the renderer tree over the fixtures needs, the fake
 // host's and the marketing site's live frames (frames.tsx): the app's
 // aliases, Clerk's two flavors on the in-memory stub so the account UI
@@ -55,14 +63,23 @@ export function fakeHostBaseConfig(opts: {
       port: fixedDevServerPort(opts.portKey),
       strictPort: true,
     },
+    cacheDir: resolve(appRoot, "node_modules", CACHE_DIRS[opts.portKey]),
     // The contracts package is served as source. Prebundled, it carries a
     // copy of effect's Schema of its own, and the renderer's Schema calls
     // fail on schemas built by that copy.
     // The ui package is source the app imports, so the scanner crawls it
     // too: a dependency only it imports (Base UI's dialog) is served raw
-    // otherwise, and its CommonJS imports fail in the page.
+    // otherwise, and its CommonJS imports fail in the page. Nor does the
+    // scanner enter the contracts package, an excluded one, so it
+    // crawls that source too: a dependency only it imports (effect's
+    // RpcMiddleware) is otherwise met as the page loads, bundled then,
+    // and the page reloads.
     optimizeDeps: {
-      entries: [opts.entry, "../../../packages/ui/src/**/*.{ts,tsx}"],
+      entries: [
+        opts.entry,
+        "../../../packages/ui/src/**/*.{ts,tsx}",
+        "../../../packages/contracts/src/**/*.ts",
+      ],
       exclude: ["@shigomori/contracts"],
       // Imported only by a module of the app's (HighlightWorkers.tsx),
       // which the scan doesn't reach: met as a page draws, it's bundled

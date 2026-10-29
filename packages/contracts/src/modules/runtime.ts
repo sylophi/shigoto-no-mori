@@ -13,8 +13,9 @@ import {
 // nuke stays on the loopback (remote false): wiping a machine is
 // for whoever sits at it. moveDataDir rides the wire behind the command
 // grant, so a peer's Settings page can relocate that device's data
-// folder. The host relaunches itself after such a call, since the peer
-// has no window module to acknowledge with (host/ipc/modules/runtime).
+// folder. The host relaunches itself after a call from no window (a
+// peer's, `sm data`), which has no window module to acknowledge with
+// (host/ipc/modules/runtime).
 // info rides the wire so a peer's pages spell this host's paths the
 // way the local ones do (its home as ~, where a worktree will land).
 // Ungated, under the sharing switch like the lists. Their paths show

@@ -53,15 +53,15 @@ export function devProfilePaths(name: string): DevProfile {
   };
 }
 
-// Electron's userData for the plain dev instance: macOS's appData
-// joined with the dev flavor's folder (main/flavor.ts).
+// Electron's userData for the plain dev instance: its appData (macOS's
+// Application Support, Linux's XDG config home) joined with the dev
+// flavor's folder (main/flavor.ts).
 function devUserDataDir(): string {
-  return join(
-    homedir(),
-    "Library",
-    "Application Support",
-    flavorNames("dev").userDataDir,
-  );
+  const appData =
+    process.platform === "darwin"
+      ? join(homedir(), "Library", "Application Support")
+      : process.env["XDG_CONFIG_HOME"] || join(homedir(), ".config");
+  return join(appData, flavorNames("dev").userDataDir);
 }
 
 // The two env vars that make a launched app run as the profile.

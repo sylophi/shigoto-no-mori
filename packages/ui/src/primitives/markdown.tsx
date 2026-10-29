@@ -65,6 +65,9 @@ if (purify.isSupported) {
   });
   purify.addHook("afterSanitizeAttributes", (node) => {
     node.removeAttribute("style");
+    // The app's own classes would let a description lay itself out over
+    // the window.
+    node.removeAttribute("class");
     node.removeAttribute("background");
     // An image on another https host is not loaded from it: its src
     // waits under REMOTE_SRC for the caller's `remoteImage`, and a local

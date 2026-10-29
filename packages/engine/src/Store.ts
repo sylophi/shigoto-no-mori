@@ -261,8 +261,12 @@ export const layer = (
           );
         });
       const sql = yield* Effect.gen(function* () {
-        // A fresh device has no data dir until its first command.
+        // A fresh device has no data dir until its first command. It is
+        // the user's alone, as what it holds (managed worktrees, script
+        // output, staged PR attachments) is no other account's to read.
+        // A filesystem with no modes keeps it as it is.
         yield* fs.makeDirectory(dataDir, { recursive: true });
+        yield* Effect.ignore(fs.chmod(dataDir, 0o700));
         // The store holds what the machine's other accounts must not
         // read, a terminal's saved history among it, so it is the
         // owner's alone. SQLite gives the journal files it makes the

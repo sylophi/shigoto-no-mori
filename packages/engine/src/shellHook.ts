@@ -21,6 +21,7 @@ import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import { flavorNames } from "./flavor.ts";
+import { byPlatform } from "./platform.ts";
 import type { Paths } from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
 
@@ -206,18 +207,25 @@ const hookPath = (place: HookPlace, kind: ShellKind) =>
       );
     }
     if (kind === "bash") {
-      // macOS terminals start bash as a login shell, which never reads
-      // .bashrc, so the first login file that exists, never creating
-      // one that would shadow another.
-      for (const name of [".bash_profile", ".bash_login", ".profile"]) {
-        const candidate = path.join(place.home, name);
-        const isFile = yield* fs.stat(candidate).pipe(
-          Effect.map((info) => info.type === "File"),
-          Effect.orElseSucceed(() => false),
-        );
-        if (isFile) return candidate;
-      }
-      return path.join(place.home, ".bash_profile");
+      return yield* byPlatform({
+        // macOS terminals start bash as a login shell, which never reads
+        // .bashrc, so the first login file that exists, never creating
+        // one that would shadow another.
+        darwin: Effect.gen(function* () {
+          for (const name of [".bash_profile", ".bash_login", ".profile"]) {
+            const candidate = path.join(place.home, name);
+            const isFile = yield* fs.stat(candidate).pipe(
+              Effect.map((info) => info.type === "File"),
+              Effect.orElseSucceed(() => false),
+            );
+            if (isFile) return candidate;
+          }
+          return path.join(place.home, ".bash_profile");
+        }),
+        // Linux reads .bashrc in every interactive shell, and its login
+        // files source it.
+        linux: Effect.succeed(path.join(place.home, ".bashrc")),
+      });
     }
     return path.join(
       place.configHome,

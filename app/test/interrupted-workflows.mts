@@ -321,7 +321,7 @@ it("the app's start finishes or undoes each move a crash cut short", async () =>
   );
   const engine = await hostEngine(
     place.dataDir,
-    join(dirname(builtSm()), "macfs"),
+    join(dirname(builtSm()), "nativefs"),
   );
   await engine.close();
   await assertRecovered(place, cuts);

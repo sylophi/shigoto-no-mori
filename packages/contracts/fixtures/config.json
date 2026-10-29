@@ -653,6 +653,17 @@
       }
     ]
   },
+  "DeviceConfigKeysSchema": {
+    "accepts": [
+      {},
+      {
+        "terminal": "app",
+        "directConnections": false,
+        "cloudflaredPath": "/opt/cloudflared/cloudflared"
+      }
+    ],
+    "rejects": [{ "directConnections": "no" }, { "cloudflaredPath": 1 }]
+  },
   "WriteDeviceSettingsPayloadSchema": {
     "accepts": [
       {

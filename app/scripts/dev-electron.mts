@@ -70,6 +70,10 @@ if (process.platform === "darwin") {
   }
 }
 
+// Ubuntu 24.04 and later refuse Chromium's sandbox to an Electron run
+// from node_modules (its helper isn't root's), and it aborts at start.
+if (process.platform === "linux") process.env.ELECTRON_DISABLE_SANDBOX = "1";
+
 // The app asks for a relaunch (a data folder move) by touching this
 // file before it quits (main/electron/relaunch.ts). Forge exits with
 // Electron, so the relaunch is ours: start forge again, vite and all.

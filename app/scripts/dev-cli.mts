@@ -1,10 +1,10 @@
 // Runs before `pnpm dev`: compiles the dev-flavor terminal binary into
-// dist-cli/, the file-sync engine into dist-file-sync/ and the darwin
-// helper into dist-macfs/. Installing the `smd` PATH link is NOT done
+// dist-cli/, the file-sync engine into dist-file-sync/ and the
+// filesystem helper into dist-nativefs/. Installing the `smd` PATH link is NOT done
 // here; the app prompts for that on launch, same as the packaged app
 // does for `sm` (host/lib/cli/install.ts). A failed build (a missing
 // Go or Bun toolchain) aborts the dev run. The terminal binary takes a
-// copy of the darwin helper, so it builds once that is in.
+// copy of the filesystem helper, so it builds once that is in.
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { appRoot } from "./lib/appRoot.mts";
@@ -23,10 +23,10 @@ function build(script: string, ...args: string[]): Promise<void> {
   });
 }
 
-// The file-sync engine and the darwin helper ship beside the CLI, so a
+// The file-sync engine and the filesystem helper ship beside the CLI, so a
 // dev run builds them here too (one flavor each, see
-// shared/packaging/fileSyncDist.mts and macfsDist.mts).
+// shared/packaging/fileSyncDist.mts and nativefsDist.mts).
 await Promise.all([
-  build("build-macfs.mts").then(() => build("build-cli.mts", "--dev")),
+  build("build-nativefs.mts").then(() => build("build-cli.mts", "--dev")),
   build("build-file-sync.mts"),
 ]);

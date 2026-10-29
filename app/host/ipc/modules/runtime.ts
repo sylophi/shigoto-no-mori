@@ -37,6 +37,29 @@ class MoveRefusedError extends Schema.TaggedError<MoveRefusedError>()(
   }
 }
 
+// The host's half of "Nuke everything", for a window and for the
+// headless host's own (headless/nuke.ts).
+export const nukeHost = Effect.gen(function* () {
+  const terminals = yield* Terminals.Terminals;
+  return yield* nukeEverything({
+    onProgress: (progress) =>
+      HostPushes.push(runtimeContract, "nukeProgress", progress),
+    killAllScripts: (yield* Scripts.Scripts).stopAll(),
+    closeTerminals: terminals.closeEvery,
+    holdUpdater: (yield* Shell.Shell).holdUpdater("reset"),
+    uninstall: Effect.map(
+      Effect.all([
+        leftIf(
+          "The terminal command and its shell hooks",
+          uninstallCliEverything,
+        ),
+        leftIf("The agent hooks", Ops.removeAllAgentHooks),
+      ]),
+      (lists) => lists.flat(),
+    ),
+  });
+});
+
 let moveInFlight = false;
 
 // What the moves have under way, the peers bringing from here by their
@@ -172,33 +195,13 @@ export const runtimeHandlers = {
       // can't change under live callers), so until the restart this
       // process still names the old folder and must not move it again.
       // The local renderer calls the window module's `relaunch` once
-      // this reply lands. A peer has no window module on this machine
-      // to acknowledge with, so the host relaunches itself, after the
-      // reply has left (the shell owns that timing).
-      if (unattended) yield* shell.relaunch;
+      // this reply lands. A peer or the terminal has no window module on
+      // this machine to acknowledge with, so the host relaunches itself,
+      // after the reply has left (the shell owns that timing).
+      if (ctx.windowId === undefined) yield* shell.relaunch;
     }),
 
-  nuke: () =>
-    Effect.gen(function* () {
-      const terminals = yield* Terminals.Terminals;
-      return yield* nukeEverything({
-        onProgress: (progress) =>
-          HostPushes.push(runtimeContract, "nukeProgress", progress),
-        killAllScripts: (yield* Scripts.Scripts).stopAll(),
-        closeTerminals: terminals.closeEvery,
-        holdUpdater: (yield* Shell.Shell).holdUpdater("reset"),
-        uninstall: Effect.map(
-          Effect.all([
-            leftIf(
-              "The terminal command and its shell hooks",
-              uninstallCliEverything,
-            ),
-            leftIf("The agent hooks", Ops.removeAllAgentHooks),
-          ]),
-          (lists) => lists.flat(),
-        ),
-      });
-    }),
+  nuke: () => nukeHost,
 } satisfies EffectHandlers<
   typeof runtimeContract,
   HandlerContext,

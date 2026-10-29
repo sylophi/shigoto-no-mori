@@ -26,9 +26,9 @@ import {
   FILE_SYNC_DIST_DIR,
 } from "./shared/packaging/fileSyncDist.mts";
 import {
-  MACFS_BINARY_NAME,
-  MACFS_DIST_DIR,
-} from "./shared/packaging/macfsDist.mts";
+  NATIVEFS_BINARY_NAME,
+  NATIVEFS_DIST_DIR,
+} from "./shared/packaging/nativefsDist.mts";
 import {
   APPLE_EVENTS_USAGE_DESCRIPTION,
   LOCAL_NETWORK_USAGE_DESCRIPTION,
@@ -50,32 +50,34 @@ import {
   dmgBackgroundFor,
 } from "./shared/packaging/dmgLayout.mts";
 
-loadEnv();
+// app/.env's signing and notarization settings, for this file alone:
+// in process.env they would reach every terminal and script a dev
+// instance runs.
+const env = { ...process.env };
+loadEnv({ processEnv: env });
 
 // The flavor this build is made as (SM_FLAVOR, prod when unset), whose
 // row in the flavor table names the bundle, its id, its scheme and its
 // `sm`, so a test flavor installs beside the prod app.
-const flavor = buildFlavor(process.env);
+const flavor = buildFlavor(env);
 const names = flavorNames(flavor);
 
-const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
+const osxNotarizeConfig = env.APPLE_NOTARY_KEYCHAIN_PROFILE
   ? {
-      keychainProfile: process.env.APPLE_NOTARY_KEYCHAIN_PROFILE,
+      keychainProfile: env.APPLE_NOTARY_KEYCHAIN_PROFILE,
     }
-  : process.env.APPLE_ID &&
-      process.env.APPLE_APP_SPECIFIC_PASSWORD &&
-      process.env.APPLE_TEAM_ID
+  : env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID
     ? {
-        appleId: process.env.APPLE_ID,
-        appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
-        teamId: process.env.APPLE_TEAM_ID,
+        appleId: env.APPLE_ID,
+        appleIdPassword: env.APPLE_APP_SPECIFIC_PASSWORD,
+        teamId: env.APPLE_TEAM_ID,
       }
     : undefined;
 
 // The same reading vite.node.config.ts bakes into main as
 // __SM_SIGNED_MAC_BUILD__: the two must agree on whether this bundle
 // carries a Developer ID signature (see shared/packaging/macSigning.mts).
-const signingIdentity = macSigningIdentity(process.env);
+const signingIdentity = macSigningIdentity(env);
 const shouldSignMac = signingIdentity !== null;
 // A test flavor takes a debugger (flavor.ts debuggable), which on a
 // Developer-ID build would act with that signature's keychain access.
@@ -165,9 +167,9 @@ const config: ForgeConfig = {
       // by the prePackage hook and spawned by the host
       // (host/fileSync/runner.ts).
       `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
-      // The darwin helper (the filesystem calls Node lacks), compiled by
+      // The filesystem helper (the filesystem calls Node lacks), compiled by
       // the prePackage hook the same way.
-      `${MACFS_DIST_DIR}/${MACFS_BINARY_NAME}`,
+      `${NATIVEFS_DIST_DIR}/${NATIVEFS_BINARY_NAME}`,
     ],
     // The Local Network (macOS 15+) and Automation prompts' sentences,
     // shared with the dev bundle. See shared/packaging/infoPlist.mts.
@@ -199,7 +201,7 @@ const config: ForgeConfig = {
       : {}),
   },
   // node-pty ships Node-API prebuilds that work in Electron as-is
-  // (scripts/fix-node-pty-helper.mts makes the helper executable, since
+  // (scripts/prepare-node-pty.mts makes the helper executable, since
   // install scripts are disabled). Skipping the rebuild keeps a compiler
   // toolchain out of the dev loop and makes dev and packaged builds run
   // the same binary.
@@ -210,11 +212,11 @@ const config: ForgeConfig = {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
-      // Compile the file-sync engine and the darwin helper (Go), then
+      // Compile the file-sync engine and the filesystem helper (Go), then
       // the terminal sm (Bun).
       for (const script of [
         "build-file-sync.mts",
-        "build-macfs.mts",
+        "build-nativefs.mts",
         "build-cli.mts",
       ]) {
         execFileSync("node", [`scripts/${script}`], {

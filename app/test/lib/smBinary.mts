@@ -27,9 +27,9 @@ export const smBinaryPath = () => binaryPath("prod");
 
 export const builtSm = () => builtBinary("prod");
 
-// The darwin helper beside the built binary.
-function builtMacfs(): string {
-  return join(builtSm(), "..", "macfs");
+// The filesystem helper beside the built binary.
+function builtNativefs(): string {
+  return join(builtSm(), "..", "nativefs");
 }
 
 export type WiredHostCli = CliRunner & {
@@ -50,21 +50,21 @@ export async function wireHostCli(
 ): Promise<WiredHostCli> {
   const binary = builtSm();
   const env = { ...process.env, SHIGOMORI_DATA_DIR: dataDir, ...extraEnv };
-  const engine = await hostEngine(dataDir, builtMacfs());
+  const engine = await hostEngine(dataDir, builtNativefs());
   const { runCli, sm } = createCliRunner(binary, env);
   return { binary, env, runCli, sm, close: engine.close };
 }
 
 // The host pointed at `dataDir` with the engine up on it, as the app's
-// graph does at launch, until `close`. `macfs` only matters to a proof
-// that reaches the darwin helper.
-export async function hostEngine(dataDir: string, macfs = "macfs") {
+// graph does at launch, until `close`. `nativefs` only matters to a proof
+// that reaches the filesystem helper.
+export async function hostEngine(dataDir: string, nativefs = "nativefs") {
   const { initDataDirAt } = await import("@shared/paths");
   const Engine = await import("@host/lib/Engine");
   initDataDirAt(dataDir);
   process.env["SHIGOMORI_DATA_DIR"] = dataDir;
   const runtime = ManagedRuntime.make(
-    Engine.layer({ flavor: "prod", macfs, sm: "sm" }).pipe(
+    Engine.layer({ flavor: "prod", nativefs, sm: "sm" }).pipe(
       Layer.provideMerge(Migration.layer),
       Layer.provideMerge(NodeServices.layer),
     ),

@@ -28,7 +28,7 @@ import {
   type HostFailureSchema,
   shellCallsContract,
 } from "@shigomori/contracts/modules/shellCalls";
-import type { UpdaterState } from "@shigomori/contracts/schemas";
+import { clientSetting, type UpdaterState } from "@shigomori/contracts/schemas";
 import {
   type HostAddressSchema,
   type HostRestartReasonSchema,
@@ -46,9 +46,20 @@ import { migrationFailed, noteMigration } from "./electron/migration";
 import { showMoveFailed } from "./electron/moveFailed";
 import { relaunchAppUnattended } from "./electron/relaunch";
 import { onGuide } from "./electron/guide";
-import { currentUpdaterState, updaterCalls } from "./electron/updater";
-import { releaseUpdaterBridge } from "./electron/updaterBridge";
-import { accountFactsForHost, retryParkedSignOut } from "./electron/account";
+import {
+  currentUpdaterState,
+  releaseUpdaterBridge,
+  updaterCalls,
+} from "./electron/updater";
+import {
+  accountFactsForHost,
+  desktopAccount,
+  retryParkedSignOut,
+} from "./electron/account";
+import {
+  patchClientConfig,
+  readClientConfigSync,
+} from "./electron/clientConfig";
 import { makePortServer } from "./ipc/ShellLink";
 import { broadcastAll } from "./ipc/register";
 import { createShellRegistrar } from "./ipc/shellRegistrar";
@@ -276,6 +287,11 @@ const shellCalls: Handlers<typeof shellCallsContract, HandlerContext> = {
   stopUpdaterBridge: () => releaseUpdaterBridge(),
   guide: ({ session: token, action }) =>
     onGuide((guide) => guide.drive(token, action)),
+  setAcceptsCommands: (enabled) => desktopAccount.setAcceptsCommands(enabled),
+  keepReachable: () => clientSetting(readClientConfigSync(), "keepReachable"),
+  setKeepReachable: async (on) => {
+    await patchClientConfig({ keepReachable: on }, []);
+  },
 };
 
 // Asks the host to exit, and makes it once the grace runs out.

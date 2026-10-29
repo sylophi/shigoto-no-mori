@@ -15,10 +15,10 @@ import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 // the bundle. A packaged .app launched from Finder or the Dock inherits
 // launchd's environment, not the owner's shell, so at runtime
 // process.env carries none of these. Capturing them at package time is
-// how a shipped build arrives configured. Every value is a public
-// endpoint or Clerk's publishable key by design
-// (packages/contracts/src/accountServiceConfig.ts), so inlining them
-// leaks nothing.
+// how a shipped build arrives configured. Every value is public by
+// design, an endpoint, Clerk's publishable key or the device grant's
+// client id (packages/contracts/src/accountServiceConfig.ts), so
+// inlining them leaks nothing.
 // An explicit define of one named constant rather than envPrefix +
 // import.meta.env: this build targets node, and import.meta.env
 // substitution is fragile enough on the web side (see the warning in

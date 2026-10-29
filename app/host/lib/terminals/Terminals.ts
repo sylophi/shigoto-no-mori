@@ -47,6 +47,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Processes from "@shigomori/engine/processes";
+import { byPlatform } from "@shigomori/engine/platform";
 import { type PtyHandle, PtySpawnError, spawn } from "../scripts/ScriptRuns";
 import { type History, makeHistory } from "./history";
 import { makeScreen, type Screen } from "./screen";
@@ -388,28 +389,40 @@ const make = <R, E>(options: {
     const living = () =>
       [...sessions.values()].filter((session) => Option.isNone(session.exited));
 
-    // The folder a shell is in now, read off the process.
-    const folderOf = (session: Session) =>
-      Processes.exec("lsof", [
-        "-a",
-        "-p",
-        String(session.pty.pid),
-        "-d",
-        "cwd",
-        "-Fn",
-      ]).pipe(
-        Effect.map(({ stdout }) =>
-          Option.fromNullishOr(
-            stdout
-              .split("\n")
-              .find((line) => line.startsWith("n"))
-              ?.slice(1),
+    // The folder a shell is in now, read off the process: by lsof on a
+    // Mac, and on Linux by the link the kernel keeps in /proc.
+    const folderOf = (session: Session) => {
+      const read: Effect.Effect<Option.Option<string>, unknown> = byPlatform({
+        darwin: Processes.exec("lsof", [
+          "-a",
+          "-p",
+          String(session.pty.pid),
+          "-d",
+          "cwd",
+          "-Fn",
+        ]).pipe(
+          Effect.map(({ stdout }) =>
+            Option.fromNullishOr(
+              stdout
+                .split("\n")
+                .find((line) => line.startsWith("n"))
+                ?.slice(1),
+            ),
+          ),
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
           ),
         ),
+        linux: fs
+          .readLink(`/proc/${session.pty.pid}/cwd`)
+          .pipe(Effect.map(Option.some)),
+      });
+      return read.pipe(
         Effect.timeout(Duration.seconds(2)),
         Effect.orElseSucceed(() => Option.none<string>()),
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       );
+    };
 
     const exists = (path: string) =>
       fs.exists(path).pipe(Effect.orElseSucceed(() => false));

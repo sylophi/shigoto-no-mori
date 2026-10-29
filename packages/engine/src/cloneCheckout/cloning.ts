@@ -7,7 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import * as Darwin from "../Darwin.ts";
+import * as NativeFs from "../NativeFs.ts";
 import * as Git from "../Git.ts";
 import {
   ancestors,
@@ -47,7 +47,7 @@ export const makeCloning = ({
 }) =>
   Effect.gen(function* () {
     const git = yield* Git.Git;
-    const darwin = yield* Darwin.Darwin;
+    const nativeFs = yield* NativeFs.NativeFs;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const crypto = yield* Crypto.Crypto;
@@ -59,17 +59,17 @@ export const makeCloning = ({
       fs.remove(target, { recursive: true, force: true }).pipe(
         Effect.catch(() =>
           Effect.gen(function* () {
-            yield* darwin
+            yield* nativeFs
               .flags({ root: target, clear: true })
               .pipe(Stream.runDrain, Effect.ignore);
-            const entries = yield* darwin.lstat({ root: target }).pipe(
+            const entries = yield* nativeFs.lstat({ root: target }).pipe(
               Stream.runCollect,
               Effect.orElseSucceed(() => []),
             );
             for (const entry of entries) {
               if (
-                !Darwin.isFailed(entry) &&
-                (entry.mode & Darwin.S_IFMT) === Darwin.S_IFDIR
+                !NativeFs.isFailed(entry) &&
+                (entry.mode & NativeFs.S_IFMT) === NativeFs.S_IFDIR
               ) {
                 yield* fs
                   .chmod(path.join(target, entry.path), 0o700)
@@ -256,14 +256,15 @@ export const makeCloning = ({
           fs.makeDirectory(path.join(worktree, parent), { recursive: true }),
         { concurrency: 8, discard: true },
       ).pipe(Effect.mapError(fail("clone")));
-      const cloned = yield* darwin
+      const cloned = yield* nativeFs
         .clone({ from: source, to: worktree, paths: units })
         .pipe(Stream.runCollect, Effect.mapError(fail("clone")));
       // Gone from the source since its index was written, or not ours to
       // read: git writes it instead (the check below turns down whatever
       // did or didn't land).
       const refused = cloned.find(
-        (entry) => Darwin.isFailed(entry) && !LEFT_TO_GIT.has(entry.error.code),
+        (entry) =>
+          NativeFs.isFailed(entry) && !LEFT_TO_GIT.has(entry.error.code),
       );
       if (refused !== undefined) {
         return yield* new CloneFailed({ reason: "clone", cause: refused });
@@ -320,13 +321,13 @@ export const makeCloning = ({
         [
           lstatUnder(source, clonableList),
           lstatUnder(worktree, clonableList),
-          darwin.xattrs({ root: source, paths: clonableList }).pipe(
+          nativeFs.xattrs({ root: source, paths: clonableList }).pipe(
             Stream.runCollect,
             Effect.map(
               (entries) =>
                 new Map(
                   entries.flatMap((entry) =>
-                    Darwin.isFailed(entry) ? [] : [[entry.path, entry.names]],
+                    NativeFs.isFailed(entry) ? [] : [[entry.path, entry.names]],
                   ),
                 ),
             ),
@@ -403,7 +404,7 @@ export const makeCloning = ({
     // Walks the whole-directory clones and removes whatever isn't a tracked
     // file or a folder leading to one, giving each folder what a checkout
     // creates it with: the mode, no file flags, no extended attributes but
-    // provenance.
+    // the one the OS stamps.
     const pruneUntracked = Effect.fnUntraced(function* (
       worktree: string,
       dirs: ReadonlyArray<string>,
@@ -417,7 +418,7 @@ export const makeCloning = ({
       const plans = yield* Effect.forEach(
         dirs,
         (unit) =>
-          darwin.lstat({ root: path.join(worktree, unit) }).pipe(
+          nativeFs.lstat({ root: path.join(worktree, unit) }).pipe(
             Stream.runCollect,
             Effect.map((entries) => {
               const keep: Array<{ rel: string; chmod: boolean }> = [];
@@ -428,7 +429,7 @@ export const makeCloning = ({
               )) {
                 // A unit that never landed has nothing to prune. A folder
                 // the walk couldn't read may hold what must go.
-                if (Darwin.isFailed(entry)) {
+                if (NativeFs.isFailed(entry)) {
                   if (entry.error.code === "ENOENT") continue;
                   return Effect.fail(entry.error);
                 }
@@ -436,7 +437,8 @@ export const makeCloning = ({
                 if ([...ancestors(rel)].some((dir) => goneSet.has(dir))) {
                   continue;
                 }
-                const isDir = (entry.mode & Darwin.S_IFMT) === Darwin.S_IFDIR;
+                const isDir =
+                  (entry.mode & NativeFs.S_IFMT) === NativeFs.S_IFDIR;
                 if (isDir ? targetDirs.has(rel) : tracked.has(rel)) {
                   if (isDir) {
                     keep.push({
@@ -468,10 +470,10 @@ export const makeCloning = ({
       );
       if (keep.length > 0) {
         const folders = keep.map(({ rel }) => rel);
-        yield* darwin
+        yield* nativeFs
           .flags({ root: worktree, paths: folders, clear: true })
           .pipe(Stream.runDrain);
-        yield* darwin
+        yield* nativeFs
           .xattrs({ root: worktree, paths: folders, strip: true })
           .pipe(Stream.runDrain);
       }

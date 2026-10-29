@@ -9,18 +9,6 @@
 
 import { GITHUB_IMAGE_HOSTS } from "@shigomori/contracts/predicates/imageHosts";
 
-// The Clerk instance's Frontend API host, which serves its script and
-// answers its calls: what a publishable key encodes, base64 after its
-// pk_test_ or pk_live_ prefix and ending in "$". None for an
-// unconfigured build or a key that isn't one.
-export function clerkFrontendHost(publishableKey: string): string | null {
-  const match = /^pk_(?:test|live)_([A-Za-z0-9+/=_-]+)$/.exec(publishableKey);
-  if (match === null) return null;
-  const decoded = Buffer.from(match[1] ?? "", "base64").toString("utf8");
-  const host = decoded.endsWith("$") ? decoded.slice(0, -1) : "";
-  return /^[a-z0-9.-]+$/i.test(host) ? host : null;
-}
-
 export function rendererContentPolicy(options: {
   readonly clerkHost: string | null;
   readonly dev: boolean;

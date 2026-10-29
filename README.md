@@ -8,6 +8,18 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 
 `Shigoto no Mori` plays on *Doubutsu no Mori* (Animal Crossing), "work forest", and the idea of a forest of worktrees: many pieces of work growing side by side without becoming chaos.
 
+## On Linux
+
+A Linux machine, such as a server you reach over SSH, runs the app with no window: its host, which the terminal `sm` and your other devices drive. It needs x86_64, glibc 2.35 or newer (Ubuntu 22.04, Debian 12) and systemd.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sylophi/shigoto-no-mori/main/install.sh | sh
+```
+
+The install keeps its versions in `~/.local/share/shigomori`, links `sm` into `~/.local/bin`, and runs the host as a systemd user service, from boot where lingering is on (`sm service status`). `sm update` moves it to the latest release, and `sm nuke --yes` takes everything of it off the machine.
+
+`sm login` makes the machine one of your devices: it shows a code to approve in a browser on any device, signed in to your account. `sm logout` takes it off the account.
+
 ## Repository
 
 | Folder | What it is |
@@ -18,7 +30,7 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 | `lint/` | The repo's own oxlint rules |
 | `packages/` | The workspace packages: `contracts` (what crosses a wire), `engine` (the data model, the store and git), `ui` (the views and the fixture world), and `cli` (the terminal `sm`) |
 | `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
-| `macfs/` | The macOS filesystem calls Node lacks (clone, exchange, flags, xattrs, lstat with private size, filesystem type), a Go module bundled into the app |
+| `nativefs/` | The filesystem calls Node lacks, on macOS and Linux (copy-on-write clone, exchange, flags, xattrs, lstat with private size, whether a volume can clone), a Go module bundled into the app |
 | `skills/` | Agent skills for the `sm` workflow (below) |
 | `test/` | What every test runner and the lab's harnesses share: `gitIsolation.ts` keeps a run's git off this repository, `testTemp.mts` gives the run a temp folder of its own, and `testProcesses.mts` ends what the run started |
 

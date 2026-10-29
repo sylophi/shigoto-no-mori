@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Darwin from "../Darwin.ts";
+import * as NativeFs from "../NativeFs.ts";
 import { envVar } from "../environment.ts";
 import * as Git from "../Git.ts";
 import {
@@ -18,7 +18,7 @@ import * as Paths from "../Paths.ts";
 
 export const makeReads = Effect.gen(function* () {
   const git = yield* Git.Git;
-  const darwin = yield* Darwin.Darwin;
+  const nativeFs = yield* NativeFs.NativeFs;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const crypto = yield* Crypto.Crypto;
@@ -46,7 +46,7 @@ export const makeReads = Effect.gen(function* () {
   );
 
   const lstatUnder = (root: string, relative: ReadonlyArray<string>) =>
-    Darwin.lstatByPath(darwin, root, relative);
+    NativeFs.lstatByPath(nativeFs, root, relative);
 
   // lstat of absolute paths, by path. Best effort: a path it can't answer
   // for reads as absent.
@@ -59,7 +59,7 @@ export const makeReads = Effect.gen(function* () {
         (found) =>
           new Map([...found].map(([rel, entry]) => [`/${rel}`, entry])),
       ),
-      Effect.orElseSucceed(() => new Map<string, Darwin.LstatEntry>()),
+      Effect.orElseSucceed(() => new Map<string, NativeFs.LstatEntry>()),
     );
 
   const configValue = (checkout: string, args: ReadonlyArray<string>) =>

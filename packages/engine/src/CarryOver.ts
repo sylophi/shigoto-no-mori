@@ -24,7 +24,7 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Darwin from "./Darwin.ts";
+import * as NativeFs from "./NativeFs.ts";
 import { copyFailure, copyTree, entryExists } from "./entries.ts";
 import { stagingName } from "./worktreeLayout.ts";
 import { pidAlive } from "./processes.ts";
@@ -135,7 +135,7 @@ export const orderSources = (
 
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
-  const darwin = yield* Darwin.Darwin;
+  const nativeFs = yield* NativeFs.NativeFs;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -237,9 +237,9 @@ const make = Effect.gen(function* () {
   // -P`. The destination must not exist.
   const cloneOrCopy = (from: string, to: string) =>
     Effect.gen(function* () {
-      const cloned = yield* darwin.clone({ from, to }).pipe(
+      const cloned = yield* nativeFs.clone({ from, to }).pipe(
         Stream.runCollect,
-        Effect.map((entries) => entries.find(Darwin.isFailed)),
+        Effect.map((entries) => entries.find(NativeFs.isFailed)),
         Effect.orElseSucceed(() => ({ error: { code: "", message: "" } })),
       );
       if (cloned === undefined) return;

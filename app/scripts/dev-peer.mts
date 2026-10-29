@@ -72,6 +72,8 @@ try {
   const env = { ...process.env, ...devProfileEnv(profile) };
   // Would boot Electron as plain node.
   delete env.ELECTRON_RUN_AS_NODE;
+  // As dev-electron.mts says.
+  if (process.platform === "linux") env.ELECTRON_DISABLE_SANDBOX = "1";
 
   console.log(
     `[dev-peer] profile ${profile.name}: data dir ${profile.dataDir}, userData ${profile.userData}`,

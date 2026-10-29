@@ -18,6 +18,8 @@ import { errnoText } from "../platformErrors.ts";
 import { parse, SemVer } from "semver";
 import { StagingLockUnavailable, UpdateInProgress } from "../stagingLock.ts";
 import { APP_REPO } from "../flavor.ts";
+import { byPlatform } from "../platform.ts";
+import { capitalized } from "@shigomori/contracts/words";
 import { formatKitchen, RELEASE_LIST_URL } from "../updateFeed.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -238,6 +240,21 @@ export class SignatureRejected extends Schema.TaggedError<SignatureRejected>()(
 
 // A removal a later step needs (a clear folder to stage or swap into)
 // failed: `rm -rf` of `path`.
+// A Linux release's tarball that isn't the one the release names.
+export class DigestRejected extends Schema.TaggedError<DigestRejected>()(
+  "DigestRejected",
+  {
+    reason: Schema.Literals(["missing", "other"]),
+    version: Schema.String,
+  },
+) {
+  override get message(): string {
+    return this.reason === "missing"
+      ? `The release ${this.version} names no digest for its download, so it can't be checked. Refusing to install.`
+      : `The download of ${this.version} doesn't match the digest its release names. Refusing to install.`;
+  }
+}
+
 export class RemoveFailed extends Schema.TaggedError<RemoveFailed>()(
   "RemoveFailed",
   { path: Schema.String, cause: Schema.Defect() },
@@ -308,12 +325,15 @@ export class AppStillRunning extends Schema.TaggedError<AppStillRunning>()(
   }
 }
 
+// What runs the host: the app on a Mac, and on Linux the host alone.
+const theApp = () => byPlatform({ darwin: "the app", linux: "the host" });
+
 export class RelaunchFailed extends Schema.TaggedError<RelaunchFailed>()(
   "RelaunchFailed",
   { version: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return `Installed ${this.version} but couldn't relaunch the app: ${causeText(this.cause)}`;
+    return `Installed ${this.version} but couldn't restart ${theApp()}: ${causeText(this.cause)}`;
   }
 }
 
@@ -344,23 +364,36 @@ export class HandoffFailed extends Schema.TaggedError<HandoffFailed>()(
   override get message(): string {
     switch (this.reason) {
       case "unpublished":
-        return `The app is running but hasn't published its updater state. Wait for it to finish starting (or quit it) and rerun \`${this.binary} update\`.`;
+        return byPlatform({
+          darwin: `The app is running but hasn't published its updater state. Wait for it to finish starting (or quit it) and rerun \`${this.binary} update\`.`,
+          linux: `The host is running but hasn't published its updater state. Wait for it to finish starting and rerun \`${this.binary} update\`.`,
+        });
       case "request":
         return `Couldn't write the update request: ${causeText(this.cause)}`;
       case "withdraw":
         return `Couldn't take the update request back: ${causeText(this.cause)}`;
       case "not-taken":
-        return "The app didn't pick up the update request. Quit the app and run the update again.";
+        return byPlatform({
+          darwin:
+            "The app didn't pick up the update request. Quit the app and run the update again.",
+          linux:
+            "The host didn't pick up the update request. Restart it (`service restart`) and run the update again.",
+        });
       case "declined":
         return "The restart was declined in the app, so the update wasn't installed. It stays staged for the next restart.";
       case "nothing-staged":
-        return "The app found no update newer than itself to install.";
+        return `${capitalized(theApp())} found no update newer than itself to install.`;
       case "install":
         return `Install failed: ${this.detail}`;
       case "same-version":
-        return `The app restarted but is still on ${this.version}, so the install may have failed. Check ${this.log}.`;
+        return `${capitalized(theApp())} restarted but is still on ${this.version}, so the install may have failed. Check ${this.log}.`;
       case "timeout":
-        return "The app hasn't restarted yet. It may still be waiting on a confirmation in the app (confirming there will still install the update), or the install failed. Check the app.";
+        return byPlatform({
+          darwin:
+            "The app hasn't restarted yet. It may still be waiting on a confirmation in the app (confirming there will still install the update), or the install failed. Check the app.",
+          linux:
+            "The host hasn't restarted yet, so the install may have failed. Check `service status` and `service logs`.",
+        });
     }
   }
 }
@@ -439,6 +472,7 @@ export type StageError =
   | LockError
   | DownloadFailed
   | SignatureRejected
+  | DigestRejected
   | RemoveFailed;
 
 export type InstallError =
@@ -570,11 +604,14 @@ export const discard = (
 export const ZERO_VERSION = new SemVer("0.0.0");
 
 // The two endpoints, either a stand-in's, or "" for one with none while
-// the other has one.
+// the other has one. The update server serves the Mac's zips alone.
 export const updateServerUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl
     ? (input.feedUrl ?? "")
-    : `https://update.electronjs.org/${APP_REPO}/darwin-${input.running.arch}/${input.running.version}`;
+    : byPlatform({
+        darwin: `https://update.electronjs.org/${APP_REPO}/darwin-${input.running.arch}/${input.running.version}`,
+        linux: "",
+      });
 
 export const releaseListUrl = (input: UpdateInput) =>
   input.feedUrl || input.releasesUrl

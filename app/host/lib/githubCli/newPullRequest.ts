@@ -3,7 +3,6 @@
 // PR into a base would hold, who and what it can name, the files pasted
 // into its description, and the create itself.
 import { isIPv4, isIPv6 } from "node:net";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
@@ -28,6 +27,7 @@ import {
 import { orderRemotesByPrecedence } from "@shigomori/engine/gitParse";
 import { parseNumstat } from "@shigomori/engine/gitParse";
 import * as Git from "@shigomori/engine/Git";
+import * as Paths from "@shigomori/engine/Paths";
 import { GhActionError, ghReady, ghStream, runGh } from "./actions";
 import { GithubCli } from "./GithubCli";
 import * as PullRequestMaps from "./PullRequestMaps";
@@ -305,14 +305,12 @@ export const getPullRequestOptions = Effect.fn("NewPullRequest.options")(
   },
 );
 
-// Pasted files wait here, one folder per attachment, until the PR that
-// uploads them is created. GitHub takes a video of up to 100 MiB, an
-// image of far less, so nothing larger is worth holding.
-const ATTACHMENTS_DIR = join(tmpdir(), "shigomori-pr-attachments");
-
-function stagedAttachmentPath(id: string, name: string): string {
-  return join(ATTACHMENTS_DIR, id, name);
-}
+// Pasted files wait in the data dir, which is the user's alone, one
+// folder per attachment, until the PR that uploads them is created.
+// GitHub takes a video of up to 100 MiB, an image of far less, so
+// nothing larger is worth holding. With no id, the folder of them all.
+const attachmentDir = (id = "") =>
+  Effect.map(Paths.Paths, ({ dataDir }) => join(dataDir, "pr-attachments", id));
 
 // A form left unsent keeps its files, so each new attachment clears the
 // ones staged over a day ago: by then the form that held them is gone
@@ -322,8 +320,9 @@ const STALE_ATTACHMENT = Duration.days(1);
 
 const sweepStaleAttachments = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
+  const root = yield* attachmentDir();
   const ids = yield* fs
-    .readDirectory(ATTACHMENTS_DIR)
+    .readDirectory(root)
     .pipe(Effect.orElseSucceed((): string[] => []));
   const cutoff =
     (yield* Clock.currentTimeMillis) - Duration.toMillis(STALE_ATTACHMENT);
@@ -331,7 +330,7 @@ const sweepStaleAttachments = Effect.gen(function* () {
     ids,
     (id) =>
       Effect.gen(function* () {
-        const dir = join(ATTACHMENTS_DIR, id);
+        const dir = join(root, id);
         const info = yield* Effect.option(fs.stat(dir));
         const at = Option.flatMap(info, (i) => i.mtime);
         if (Option.isSome(at) && at.value.getTime() < cutoff) {
@@ -346,7 +345,7 @@ const sweepStaleAttachments = Effect.gen(function* () {
 export const discardAttachment = Effect.fn("NewPullRequest.discardAttachment")(
   function* (id: string) {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.remove(join(ATTACHMENTS_DIR, id), {
+    yield* fs.remove(yield* attachmentDir(id), {
       recursive: true,
       force: true,
     });
@@ -372,7 +371,8 @@ export const stageAttachment = Effect.fn("NewPullRequest.stageAttachment")(
     readonly base64: string;
   }) {
     const fs = yield* FileSystem.FileSystem;
-    const path = stagedAttachmentPath(chunk.id, chunk.name);
+    const dir = yield* attachmentDir(chunk.id);
+    const path = join(dir, chunk.name);
     const bytes = Buffer.from(chunk.base64, "base64");
     // By the file's whole size so far, as the dialog checked the file.
     const refusal = attachmentRefusal({
@@ -383,9 +383,7 @@ export const stageAttachment = Effect.fn("NewPullRequest.stageAttachment")(
     if (refusal !== null) return yield* new GhActionError({ reason: refusal });
     if (chunk.offset === 0) {
       yield* sweepStaleAttachments;
-      yield* fs.makeDirectory(join(ATTACHMENTS_DIR, chunk.id), {
-        recursive: true,
-      });
+      yield* fs.makeDirectory(dir, { recursive: true });
       yield* fs.writeFile(path, bytes);
       return;
     }
@@ -441,9 +439,8 @@ export const stageAttachmentFromUrl = Effect.fn(
     }
     const name = `${source.stem}.${attachmentExtension(type)}`;
     yield* sweepStaleAttachments;
-    yield* fs.makeDirectory(join(ATTACHMENTS_DIR, source.id), {
-      recursive: true,
-    });
+    const dir = yield* attachmentDir(source.id);
+    yield* fs.makeDirectory(dir, { recursive: true });
     let size = 0;
     yield* Stream.fromReadableStream({
       evaluate: () => body,
@@ -455,7 +452,7 @@ export const stageAttachmentFromUrl = Effect.fn(
         const late = refused(size);
         return late === null ? Effect.succeed(bytes) : Effect.fail(late);
       }),
-      Stream.run(fs.sink(stagedAttachmentPath(source.id, name))),
+      Stream.run(fs.sink(join(dir, name))),
     );
     const empty = refused(size);
     if (empty !== null) return yield* empty;
@@ -579,10 +576,11 @@ export const createPullRequest = Effect.fn("NewPullRequest.create")(
   }) {
     const { cwd, project } = opts;
     const maps = yield* PullRequestMaps.PullRequestMaps;
+    const root = yield* attachmentDir();
     const staged = opts.attachments.map(({ id, name }) => ({
       id,
       name,
-      path: stagedAttachmentPath(id, name),
+      path: join(root, id, name),
     }));
     const fs = yield* FileSystem.FileSystem;
     const present = yield* Effect.forEach(

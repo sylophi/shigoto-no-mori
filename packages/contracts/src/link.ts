@@ -22,6 +22,7 @@ import {
 } from "./errors.ts";
 import { controlContract } from "./modules/control.ts";
 import { guideDriveContract } from "./modules/guide.ts";
+import { loginContract } from "./modules/login.ts";
 import { sessionContract } from "./modules/session.ts";
 import { shellCallsContract } from "./modules/shellCalls.ts";
 import { linkContract } from "./modules/link.ts";
@@ -143,6 +144,7 @@ const loopbackCalls = [
     .flatMap((module) => callsOf(module)),
   ...callsOf(controlContract),
   ...callsOf(guideDriveContract),
+  ...callsOf(loginContract),
   ...callsOf(sessionContract),
 ];
 

@@ -18,7 +18,7 @@ import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Doctor from "../src/Doctor.ts";
-import { macfs } from "./lib/macfs.ts";
+import { nativefs } from "./lib/nativefs.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
 
 let box: Sandbox;
@@ -148,17 +148,17 @@ it("prunes nothing while a managed folder can't be listed", async () => {
   box.git(moved, "status");
 });
 
-it("prunes nothing it couldn't see when the darwin helper fails", async () => {
+it("prunes nothing it couldn't see when the filesystem helper fails", async () => {
   // A helper that can't lstat, as one that can't run would be.
-  const bin = realpathSync(mkdtempSync(join(tmpdir(), "engine-macfs-")));
-  const broken = join(bin, "macfs");
+  const bin = realpathSync(mkdtempSync(join(tmpdir(), "engine-nativefs-")));
+  const broken = join(bin, "nativefs");
   writeFileSync(
     broken,
-    `#!/bin/sh\nif [ "$1" = lstat ]; then echo "lstat refused" >&2; exit 3; fi\nexec '${macfs()}' "$@"\n`,
+    `#!/bin/sh\nif [ "$1" = lstat ]; then echo "lstat refused" >&2; exit 3; fi\nexec '${nativefs()}' "$@"\n`,
     { mode: 0o755 },
   );
   await box.remove();
-  box = sandbox({ macfs: broken });
+  box = sandbox({ nativefs: broken });
   try {
     const { moved } = movedAndGone();
     await run({ fix: true });

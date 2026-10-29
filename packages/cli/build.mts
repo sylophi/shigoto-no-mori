@@ -2,8 +2,8 @@
 // `node build.mts [outfile] [--flavor=prod|dev|<test word>] [--version=<v>]`,
 // dev without a flavor, and the version a release stamps ("dev" without
 // one).
-// Bun compiles it to bytecode, which starts faster, and the binary is
-// signed ad hoc, which macOS requires to run it.
+// Bun compiles it to bytecode, which starts faster, and on macOS the
+// binary is signed ad hoc, which macOS requires to run it.
 import { execFileSync } from "node:child_process";
 import { flavorNames, isFlavor } from "@shigomori/engine/flavor";
 
@@ -39,7 +39,9 @@ execFileSync(
   ],
   { cwd: import.meta.dirname, stdio: "inherit" },
 );
-execFileSync("codesign", ["--force", "--sign", "-", outfile], {
-  cwd: import.meta.dirname,
-  stdio: "inherit",
-});
+if (process.platform === "darwin") {
+  execFileSync("codesign", ["--force", "--sign", "-", outfile], {
+    cwd: import.meta.dirname,
+    stdio: "inherit",
+  });
+}

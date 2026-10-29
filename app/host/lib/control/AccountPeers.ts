@@ -15,6 +15,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { answerWithin } from "@shigomori/engine/liveness";
+import { byPlatform } from "@shigomori/engine/platform";
 import * as Schema from "effect/Schema";
 
 export type DirectPeer = {
@@ -81,7 +82,7 @@ export function listDevicesFailure(
   return isHubRefusal(error)
     ? new ControlError(
         "signed-out",
-        "This device's access to the account was removed. Sign in again from the app.",
+        `This device's access to the account was removed. ${byPlatform({ darwin: "Sign in again from the app.", linux: "Sign in again (`login`)." })}`,
       )
     : new AccountUnreachableError({ reason: errorWordsOf(error) });
 }

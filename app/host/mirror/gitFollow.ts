@@ -126,6 +126,9 @@ export const makeGitFollower = (deps: {
   // Whether `sessions` is the running daemon's own snapshot
   // (MirrorDaemon's fresh). Absent, always.
   fresh?: Effect.Effect<boolean>;
+  // Whether this device's switches pause its mirrors now, as they do
+  // the files (MirrorGateway). Absent, never.
+  switchedOff?: Effect.Effect<boolean>;
   // Persists the agreed state per session. Absent means memory only
   // (the checks).
   agreedStore?: AgreedStore;
@@ -226,7 +229,7 @@ const reconcileOf = (
   Effect.fnUntraced(function* (record: FollowRecord) {
     const { setStatus, setAgreed, filesSettled, copyGone, warn } = helpers;
     const { session } = record;
-    if (session.paused) {
+    if (session.paused || (yield* deps.switchedOff ?? Effect.succeed(false))) {
       record.waitingForFiles = false;
       setStatus(record, { status: "off", detail: "paused" });
       return;

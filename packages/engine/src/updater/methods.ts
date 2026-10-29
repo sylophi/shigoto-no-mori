@@ -25,7 +25,7 @@ import {
 } from "./documents.ts";
 import type { FilesArea } from "./files.ts";
 import type { FeedsArea } from "./feeds.ts";
-import type { SignaturesArea } from "./signatures.ts";
+import type { Installation } from "./installation.ts";
 import type { StagingArea } from "./staging.ts";
 import type { SwapArea } from "./swap.ts";
 import type { RestartArea } from "./restart.ts";
@@ -34,14 +34,14 @@ import { openEnvArgs, type Relaunched } from "../relaunchEnv.ts";
 export const makeMethods = ({
   files,
   feeds,
-  signatures,
+  installation,
   staging,
   swap,
   restart,
 }: {
   readonly files: FilesArea;
   readonly feeds: FeedsArea;
-  readonly signatures: SignaturesArea;
+  readonly installation: Installation;
   readonly staging: StagingArea;
   readonly swap: SwapArea;
   readonly restart: RestartArea;
@@ -51,9 +51,9 @@ export const makeMethods = ({
 
     const requestPath = files.at.request;
 
-    const { run, writeShared, appRunning, runningApp, installedBundle } = files;
+    const { run, writeShared, appRunning, runningApp } = files;
     const { updates, queryFeed } = feeds;
-    const { anchorOf } = signatures;
+    const { installed: installedOf } = installation;
     const { stageUpdate } = staging;
     const { installStaged } = swap;
     const { waitForRestart, appendInstallLog, noteInstallFailure } = restart;
@@ -91,9 +91,7 @@ export const makeMethods = ({
       input: UpdateInput,
     ) {
       yield* available(input);
-      const installed = yield* anchorOf(
-        yield* installedBundle(input.running.executable),
-      );
+      const installed = yield* installedOf(input.running.executable);
       yield* report(input, { phase: "checking" });
       return { installed, staged: yield* stageUpdate(installed, input) };
     });
@@ -114,7 +112,7 @@ export const makeMethods = ({
 
     const update = Effect.fn("Updater.update")(function* (input: UpdateInput) {
       const { running } = input;
-      const { installed: anchor, staged } = yield* stageFor(input);
+      const { installed, staged } = yield* stageFor(input);
       if (Option.isNone(staged)) return upToDate(running);
       let app = yield* runningApp;
       if (Option.isNone(app) && (yield* appRunning)) {
@@ -140,12 +138,12 @@ export const makeMethods = ({
           phase: "installing",
           version: staged.value.version,
         });
-        const installed = yield* installStaged(anchor.bundle, running.pid);
+        const manifest = yield* installStaged(installed, running.pid);
         return {
           ok: true,
           status: "updated",
           from: running.version,
-          to: installed.version,
+          to: manifest.version,
         } satisfies Updated;
       }
       const request: UpdateRequest = {
@@ -190,7 +188,7 @@ export const makeMethods = ({
         noteInstallFailure(pid, `${causeText(error)}${after}`, {
           message: causeText(error),
         });
-      const bundle = yield* installedBundle(input.running.executable).pipe(
+      const bundle = yield* installedOf(input.running.executable).pipe(
         Effect.tapError((error) => failed(error)),
       );
       yield* appendInstallLog(
@@ -232,5 +230,15 @@ export const makeMethods = ({
       );
     });
 
-    return { check, stage, update, finishInstall };
+    // The staged update put in place now, by the app it replaces, which
+    // restarts into it on its own: a Linux host, which its unit starts
+    // again once it exits.
+    const install = Effect.fn("Updater.install")(function* (running: Running) {
+      return yield* installStaged(
+        yield* installedOf(running.executable),
+        running.pid,
+      );
+    });
+
+    return { check, stage, update, finishInstall, install };
   });

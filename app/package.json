@@ -19,6 +19,9 @@
     "start": "node scripts/dev-cli.mts && node scripts/fetch-cloudflared.mts --best-effort && node scripts/ensure-ports.mts && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-electron.mts",
     "dev": "pnpm run start",
     "device": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-device.mts",
+    "headless": "node scripts/dev-cli.mts && node scripts/fetch-cloudflared.mts --best-effort && node scripts/build-headless.mts --dev && node dist-headless/host.cjs",
+    "headless:build": "node scripts/build-headless.mts",
+    "package:linux": "node scripts/package-linux.mts",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
@@ -31,6 +34,7 @@
     "fake-host:web": "node scripts/ensure-ports.mts && NODE_COMPILE_CACHE=$PWD/node_modules/.cache/node-compile-cache vite --config lab/fake-host/vite.web.config.ts",
     "scenes:compare": "node lab/scene-compare/compare.mts",
     "reliability": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lab/reliability/run.mts",
+    "sign-in": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lab/sign-in.mts",
     "guide-eval": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON lab/guide-eval/run.mts",
     "licenses": "node scripts/generate-third-party-licenses.mts",
     "villagers:fetch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mts scripts/fetch-villager-data.mts",
@@ -39,9 +43,9 @@
     "dmg:background": "electron scripts/build-dmg-background.cts",
     "cli:build": "node scripts/build-cli.mts",
     "file-sync:build": "node scripts/build-file-sync.mts",
-    "macfs:build": "node scripts/build-macfs.mts",
+    "nativefs:build": "node scripts/build-nativefs.mts",
     "cli:install": "node scripts/install-cli.mts",
-    "postinstall": "node scripts/copy-material-icons.mts && node scripts/fix-node-pty-helper.mts"
+    "postinstall": "node scripts/copy-material-icons.mts && node scripts/prepare-node-pty.mts"
   },
   "dependencies": {
     "@base-ui/react": "catalog:",

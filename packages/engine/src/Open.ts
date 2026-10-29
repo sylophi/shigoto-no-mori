@@ -20,7 +20,9 @@ import { flavorNames } from "./flavor.ts";
 import * as Paths from "./Paths.ts";
 import { openEnvArgs } from "./relaunchEnv.ts";
 import { errnoText, isAbsent } from "./platformErrors.ts";
+import { byPlatform } from "./platform.ts";
 import { capture } from "./processes.ts";
+import { NO_SCREEN, screenOpener } from "./screen.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import * as Usage from "./Usage.ts";
 import * as Worktrees from "./Worktrees.ts";
@@ -86,6 +88,16 @@ export class AppNotOpened extends Schema.TaggedError<AppNotOpened>()(
 export class NoDevApp extends Schema.TaggedError<NoDevApp>()("NoDevApp", {}) {
   override get message(): string {
     return "This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.";
+  }
+}
+
+// On Linux the app is its host alone, with no window to open.
+export class NoAppWindow extends Schema.TaggedError<NoAppWindow>()(
+  "NoAppWindow",
+  {},
+) {
+  override get message(): string {
+    return "On Linux the app is its host, with no window to open: open this machine from the app on another device.";
   }
 }
 
@@ -214,7 +226,7 @@ export class Open extends Context.Service<
       file: string,
     ) => Effect.Effect<string, MissingFile | NotAFile | LaunchFailed>;
     // Opens (or brings forward) the installed app.
-    readonly app: Effect.Effect<void, AppNotOpened | NoDevApp>;
+    readonly app: Effect.Effect<void, AppNotOpened | NoDevApp | NoAppWindow>;
   }
 >()("sm/engine/Open") {}
 
@@ -252,13 +264,24 @@ const make = Effect.gen(function* () {
           ),
     );
 
+  // What `args` name, opened on this machine's screen.
+  const onScreen = (label: string, args: ReadonlyArray<string>) =>
+    Effect.flatMap(
+      screenOpener,
+      Option.match({
+        onNone: () => Effect.fail(new LaunchFailed({ label, said: NO_SCREEN })),
+        onSome: (opener) => run(label, opener, args),
+      }),
+    );
+
   // A terminal tool's command line, run in a folder or a worktree in
   // `picked`, else the user's chosen terminal: a worktree's in the app
   // when that is chosen and the app is the one opening, else the chosen
   // terminal app (Terminal when that one isn't installed, or the app's
   // own can't take it). `entries` are the launchers already read, which say
   // whether the chosen terminal is installed. Without them it is
-  // looked up.
+  // looked up. Linux has no terminal app sm drives, so there the app's
+  // is the only one.
   const inTerminal = (
     label: string,
     command: string,
@@ -267,7 +290,12 @@ const make = Effect.gen(function* () {
     picked?: TerminalId,
   ) =>
     Effect.gen(function* () {
-      const chosen = picked ?? (yield* config.device("terminal"));
+      const chosen =
+        picked ??
+        (yield* byPlatform({
+          darwin: config.device("terminal"),
+          linux: Effect.succeed("app" as const),
+        }));
       const appTerminal = yield* Effect.serviceOption(AppTerminal);
       if (
         chosen === "app" &&
@@ -283,6 +311,27 @@ const make = Effect.gen(function* () {
           );
       }
       const folder = typeof where === "string" ? where : where.worktree.path;
+      return yield* byPlatform({
+        darwin: inTerminalApp(label, command, folder, chosen, entries),
+        linux: Effect.fail(
+          new LaunchFailed({
+            label,
+            said: `Linux has no terminal app for sm to open, so run \`${command}\` in a terminal of your own`,
+          }),
+        ),
+      });
+    });
+
+  // The command line in a new window of the chosen terminal app, driven
+  // by AppleScript.
+  const inTerminalApp = (
+    label: string,
+    command: string,
+    folder: string,
+    chosen: string,
+    entries?: ReadonlyArray<Launchers.Launchable>,
+  ) =>
+    Effect.gen(function* () {
       const installed =
         TERMINAL_SCRIPTS[chosen] === undefined
           ? undefined
@@ -316,7 +365,7 @@ const make = Effect.gen(function* () {
       const where = located.worktree.path;
       switch (entry.kind) {
         case "web":
-          return yield* run(entry.label, "open", [entry.url]);
+          return yield* onScreen(entry.label, [entry.url]);
         case "custom": {
           // Started in its own session and left running, the worktree's
           // script variables set.
@@ -370,7 +419,7 @@ const make = Effect.gen(function* () {
             );
           }
           if (app.deepLink !== undefined) {
-            return yield* run(entry.label, "open", [
+            return yield* onScreen(entry.label, [
               app.deepLink.replaceAll("{path}", queryEscape(where)),
             ]);
           }
@@ -380,7 +429,7 @@ const make = Effect.gen(function* () {
           }
           const bundle = entry.bundle;
           if (bundle === "__finder__") {
-            return yield* run(entry.label, "open", [where]);
+            return yield* onScreen(entry.label, [where]);
           }
           if (bundle === undefined) {
             return yield* new LaunchFailed({
@@ -433,18 +482,22 @@ const make = Effect.gen(function* () {
     yield* inTerminal("the terminal", command, where, undefined, terminal);
   });
 
-  // An executable's default app runs it, and a file no app claims (a
-  // Makefile, often a .ts) has none, so those open in the default text
-  // editor (open -t).
+  // On a Mac an executable's default app runs it, and a file no app
+  // claims (a Makefile, often a .ts) has none, so those open in the
+  // default text editor (open -t). xdg-open goes by the file's type,
+  // which hands a script to its editor.
   const withDefaultApp = (label: string, file: string, executable: boolean) =>
-    Effect.gen(function* () {
-      if (!executable && (yield* ran("open", [file])).code === 0) return;
-      const { code, output } = yield* ran("open", ["-t", file]);
-      if (code === 0) return;
-      return yield* new LaunchFailed({
-        label,
-        said: output === "" ? `exit status ${code}` : output,
-      });
+    byPlatform({
+      darwin: Effect.gen(function* () {
+        if (!executable && (yield* ran("open", [file])).code === 0) return;
+        const { code, output } = yield* ran("open", ["-t", file]);
+        if (code === 0) return;
+        return yield* new LaunchFailed({
+          label,
+          said: output === "" ? `exit status ${code}` : output,
+        });
+      }),
+      linux: onScreen(label, [file]),
     });
 
   const edit = Effect.fn("Open.edit")(function* (
@@ -501,13 +554,12 @@ const make = Effect.gen(function* () {
     return absolute;
   });
 
-  const app = Effect.gen(function* () {
-    if (flavor === "dev") return yield* new NoDevApp();
+  // The installed app's bundle, opened by its id, which still finds it
+  // renamed or moved.
+  const openBundle = Effect.gen(function* () {
     const code = yield* Effect.scoped(
       Effect.flatMap(
         spawner.spawn(
-          // The installed app's bundle id, which still finds it renamed
-          // or moved.
           ChildProcess.make(
             "open",
             [
@@ -535,6 +587,14 @@ const make = Effect.gen(function* () {
         cause: `exit status ${code}`,
       });
     }
+  });
+
+  const app = Effect.gen(function* () {
+    if (flavor === "dev") return yield* new NoDevApp();
+    return yield* byPlatform({
+      darwin: openBundle,
+      linux: Effect.fail(new NoAppWindow()),
+    });
   }).pipe(Effect.withSpan("Open.app"));
 
   return Open.of({ open, inTerminal: inTerminalAt, edit, app });

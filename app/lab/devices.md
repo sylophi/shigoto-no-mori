@@ -25,6 +25,15 @@ build, the renderer's vite server, deep links. A window started while
 that server answers is a peer on the primary's build, so open the
 primary first, and end the peers before it, or everything at once.
 
+On a Linux machine with no display, put `xvfb-run -a` (the `xvfb`
+package) in front of `pnpm device` in `start`, which gives each
+window a virtual display of its own. No one can reach GitHub's page
+on that display, so sign the plain dev app in once with a code
+(`SHIGOMORI_CODE_SIGN_IN=1 SHIGOMORI_DEBUG_PORT=<port> xvfb-run -a pnpm dev`,
+attached the same way): Sign in shows a link and a code, which
+`pnpm sign-in <link>` approves (`sign-in.mts`). `--clone-login` copies
+its sign-in from then on.
+
 Each window's account page should list the other device as online,
 then connected. The device names end in `[<tag>-a]` and `[<tag>-b]`.
 Then drive them:

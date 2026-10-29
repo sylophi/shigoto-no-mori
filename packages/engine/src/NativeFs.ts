@@ -1,5 +1,6 @@
-// The macOS filesystem calls Node has no binding for, through the
-// bundled helper (macfs/ at the repo root). Each method asks once for
+// The filesystem calls Node has no binding for, through the bundled
+// helper (nativefs/ at the repo root), whose own files answer for each
+// OS, so nothing here knows which one it runs on. Each method asks once for
 // a whole tree, or for a list of paths, and streams one entry per
 // path in no particular order. A path the helper could not answer for
 // is an entry with an `error`, not a failure of the stream: the stream
@@ -14,15 +15,15 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-export class DarwinHelperError extends Schema.TaggedError<DarwinHelperError>()(
-  "DarwinHelperError",
+export class NativeFsError extends Schema.TaggedError<NativeFsError>()(
+  "NativeFsError",
   {
     method: Schema.Literals([
       "clone",
       "exchange",
       "flags",
       "xattrs",
-      "fsType",
+      "cloneable",
       "lstat",
     ]),
     reason: Schema.Literals(["spawn", "exit", "output"]),
@@ -30,7 +31,7 @@ export class DarwinHelperError extends Schema.TaggedError<DarwinHelperError>()(
   },
 ) {
   override get message(): string {
-    return `The darwin helper failed (${this.method}, ${this.reason}).`;
+    return `The filesystem helper failed (${this.method}, ${this.reason}).`;
   }
 }
 
@@ -56,7 +57,8 @@ const Xattrs = Schema.Struct({
 });
 
 // lstat(2), times to the nanosecond: what git's index records of a file,
-// its flags, and the blocks and links a disk usage count needs.
+// the file flags a checkout's own files don't carry, and the blocks and
+// links a disk usage count needs.
 const Lstat = Schema.Struct({
   path: Schema.String,
   dev: Schema.Int,
@@ -82,49 +84,48 @@ export const S_IFDIR = 0o040000;
 export const S_IFREG = 0o100000;
 export const S_IFLNK = 0o120000;
 
-const FsType = Schema.Struct({
+const Cloneability = Schema.Struct({
   path: Schema.String,
-  type: Schema.String,
+  cloneable: Schema.Boolean,
 });
 
 export type Entry<A> = A | typeof Failed.Type;
 
 // `paths` are relative to the root (clone: to both roots). Without
 // them the reads walk the whole tree under the root, the root included
-// as ".", and clone and fsType answer for the root itself.
+// as ".", and clone and cloneable answer for the root itself.
 type Target = {
   readonly root: string;
   readonly paths?: readonly string[] | undefined;
 };
 
-export class Darwin extends Context.Service<
-  Darwin,
+export class NativeFs extends Context.Service<
+  NativeFs,
   {
-    // clonefile(2), keeping each entry's mode and mtime. A destination
-    // must not exist, and its parent must.
+    // A copy-on-write clone of each tree, keeping each entry's mode and
+    // mtime. A destination must not exist, and its parent must.
     readonly clone: (input: {
       readonly from: string;
       readonly to: string;
       readonly paths?: readonly string[] | undefined;
-    }) => Stream.Stream<Entry<typeof Cloned.Type>, DarwinHelperError>;
-    // renamex_np(2)'s RENAME_SWAP: `a` and `b`, both there on one
-    // volume, trade places in one step, so neither path is ever missing.
+    }) => Stream.Stream<Entry<typeof Cloned.Type>, NativeFsError>;
+    // `a` and `b`, both there on one volume, trade places in one step,
+    // so neither path is ever missing.
     // Answers what the call said, a failure among it.
     readonly exchange: (input: {
       readonly a: string;
       readonly b: string;
-    }) => Effect.Effect<Entry<typeof Cloned.Type>, DarwinHelperError>;
-    // st_flags as found. `clear` then removes the owner's flags but
-    // compression and tracking.
+    }) => Effect.Effect<Entry<typeof Cloned.Type>, NativeFsError>;
+    // The file flags a checkout's own files don't carry, as found.
+    // `clear` then removes the ones the owner may.
     readonly flags: (
       input: Target & { readonly clear?: boolean | undefined },
-    ) => Stream.Stream<Entry<typeof Flags.Type>, DarwinHelperError>;
-    // Extended attribute names as found. `strip` then removes every one
-    // but com.apple.provenance, which macOS stamps on whatever this
-    // process writes.
+    ) => Stream.Stream<Entry<typeof Flags.Type>, NativeFsError>;
+    // Extended attribute names as found, but the one the OS stamps on
+    // whatever this process writes. `strip` then removes them.
     readonly xattrs: (
       input: Target & { readonly strip?: boolean | undefined },
-    ) => Stream.Stream<Entry<typeof Xattrs.Type>, DarwinHelperError>;
+    ) => Stream.Stream<Entry<typeof Xattrs.Type>, NativeFsError>;
     // lstat(2) of each entry, a symlink's own. `private` adds each
     // regular file's private size, where the volume can tell. A walk
     // steps over the `skip` folders (relative to the root) whole, and a
@@ -135,26 +136,26 @@ export class Darwin extends Context.Service<
         readonly private?: boolean | undefined;
         readonly skip?: ReadonlyArray<string> | undefined;
       },
-    ) => Stream.Stream<Entry<typeof Lstat.Type>, DarwinHelperError>;
-    // The filesystem's type name ("apfs", "smbfs").
-    readonly fsType: (
+    ) => Stream.Stream<Entry<typeof Lstat.Type>, NativeFsError>;
+    // Whether the volume can clone.
+    readonly cloneable: (
       input: Target,
-    ) => Stream.Stream<Entry<typeof FsType.Type>, DarwinHelperError>;
+    ) => Stream.Stream<Entry<typeof Cloneability.Type>, NativeFsError>;
   }
->()("sm/engine/Darwin") {}
+>()("sm/engine/NativeFs") {}
 
 export const isFailed = Schema.is(Failed);
 
 // lstat of paths relative to a root, keyed by the relative path. A path
 // the helper had no answer for has no key.
 export const lstatByPath = (
-  darwin: Darwin["Service"],
+  nativeFs: NativeFs["Service"],
   root: string,
   paths: ReadonlyArray<string>,
 ) =>
   paths.length === 0
     ? Effect.succeed(new Map<string, LstatEntry>())
-    : darwin.lstat({ root, paths }).pipe(
+    : nativeFs.lstat({ root, paths }).pipe(
         Stream.runCollect,
         Effect.map(
           (entries) =>
@@ -176,8 +177,8 @@ const lineOf = <F extends Schema.Struct.Fields>(entry: Schema.Struct<F>) =>
     Schema.fromJsonString(Schema.Union([Failed, entry])),
   );
 
-// `binary` is the helper's path: Resources/macfs when packaged, the
-// build's dist-macfs/macfs in dev.
+// `binary` is the helper's path: Resources/nativefs when packaged, the
+// build's dist-nativefs/nativefs in dev.
 const make = (binary: string) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -185,14 +186,14 @@ const make = (binary: string) =>
     // `verb` and its flags, then the roots after a `--`, so a root that
     // starts with a dash stays a root.
     const run = <A>(
-      method: DarwinHelperError["method"],
+      method: NativeFsError["method"],
       verb: readonly string[],
       roots: readonly string[],
       paths: readonly string[] | undefined,
       decodeLine: (line: string) => Effect.Effect<A, Schema.SchemaError>,
-    ): Stream.Stream<A, DarwinHelperError> => {
-      const fail = (reason: DarwinHelperError["reason"]) => (cause: unknown) =>
-        new DarwinHelperError({ method, reason, cause });
+    ): Stream.Stream<A, NativeFsError> => {
+      const fail = (reason: NativeFsError["reason"]) => (cause: unknown) =>
+        new NativeFsError({ method, reason, cause });
       return Stream.unwrap(
         Effect.gen(function* () {
           const handle = yield* spawner
@@ -235,13 +236,13 @@ const make = (binary: string) =>
             Stream.concat(Stream.fromEffectDrain(exited)),
           );
         }),
-      ).pipe(Stream.withSpan(`Darwin.${method}`));
+      ).pipe(Stream.withSpan(`NativeFs.${method}`));
     };
 
-    return Darwin.of({
+    return NativeFs.of({
       clone: ({ from, to, paths }) =>
         run("clone", ["clone"], [from, to], paths, lineOf(Cloned)),
-      exchange: Effect.fn("Darwin.exchange")(function* ({ a, b }) {
+      exchange: Effect.fn("NativeFs.exchange")(function* ({ a, b }) {
         const line = yield* run(
           "exchange",
           ["exchange"],
@@ -250,7 +251,7 @@ const make = (binary: string) =>
           lineOf(Cloned),
         ).pipe(Stream.runHead);
         if (Option.isNone(line)) {
-          return yield* new DarwinHelperError({
+          return yield* new NativeFsError({
             method: "exchange",
             reason: "output",
             cause: new Error("no line"),
@@ -286,9 +287,9 @@ const make = (binary: string) =>
           paths,
           lineOf(Lstat),
         ),
-      fsType: ({ root, paths }) =>
-        run("fsType", ["fstype"], [root], paths, lineOf(FsType)),
+      cloneable: ({ root, paths }) =>
+        run("cloneable", ["cloneable"], [root], paths, lineOf(Cloneability)),
     });
   });
 
-export const layer = (binary: string) => Layer.effect(Darwin, make(binary));
+export const layer = (binary: string) => Layer.effect(NativeFs, make(binary));

@@ -16,32 +16,11 @@ import { join } from "node:path";
 import { app, dialog, shell } from "electron";
 import type { NukeReport } from "@shigomori/contracts/schemas";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import {
-  dataDir,
-  dataDirPointerPath,
-  dataDirSource,
-  legacyDataDirPointerPath,
-} from "@shared/paths";
-import { NUKE_MARKER, writeNukeMarker } from "../core/nuke/finish";
+import { NUKE_MARKER, nukedPaths, writeNukeMarker } from "@shared/nuke";
 import { names } from "../flavor";
 import { signOutForNuke } from "./account";
 import { setsLoginItem } from "./liveness";
-
-// What goes at the next start besides userData: the data dir, the logs,
-// and the pointer that found the data dir. A data dir set by
-// SHIGOMORI_DATA_DIR (a dev profile) came from no pointer, and the
-// flavor's pointer is another instance's then.
-function pathsToDelete(): string[] {
-  const pointers =
-    dataDirSource() === "env"
-      ? []
-      : [dataDirPointerPath(), legacyDataDirPointerPath()];
-  return [
-    dataDir(),
-    app.getPath("logs"),
-    ...pointers.filter((path) => path !== null),
-  ];
-}
+import { current as currentPlatform } from "@shigomori/engine/platform";
 
 export async function nukeShell(): Promise<NukeReport> {
   const left: NukeReport["left"][number][] = [];
@@ -59,10 +38,10 @@ export async function nukeShell(): Promise<NukeReport> {
       why: errorMessageOf(error),
     });
   }
-  if (process.platform === "darwin" && setsLoginItem()) {
+  if (currentPlatform() === "darwin" && setsLoginItem()) {
     app.setLoginItemSettings({ openAtLogin: false });
   }
-  writeNukeMarker(app.getPath("userData"), pathsToDelete());
+  writeNukeMarker(app.getPath("userData"), nukedPaths(app.getPath("logs")));
   return { left };
 }
 

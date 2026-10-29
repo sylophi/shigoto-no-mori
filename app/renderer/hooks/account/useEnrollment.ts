@@ -16,7 +16,9 @@
 // through the Electron bridge on the desktop and by redirect in the web
 // client, which finishes the sign-in on the way back
 // (useFinishRedirectSignIn). Clerk's modal opens only when there is a
-// choice to make.
+// choice to make. A window no one sits at (SHIGOMORI_CODE_SIGN_IN, the
+// lab's on a server's virtual display) signs in with a code instead,
+// approved on another device (signInWithCode).
 import { useAuth, useClerk } from "@clerk/react";
 import { useIsMutating } from "@tanstack/react-query";
 import { useEffect } from "react";
@@ -26,8 +28,11 @@ import {
   useEnroll,
 } from "@/hooks/account/useAccount";
 import { useHasLocalHost } from "@/lib/localHost";
+import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 import { toast } from "@/lib/toast";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import type { LoginCode } from "@shigomori/contracts/modules/login";
+import { createExternalStore } from "@shigomori/ui/lib/externalStore.ts";
 import { type Outside, useOutside } from "@shigomori/ui/outside.tsx";
 
 export type EnrollmentStep =
@@ -85,6 +90,35 @@ function onlyProvider(clerk: Clerk): OAuthStrategy | null {
 // clerk-js has already replaced the attempt the first one's tab
 // belongs to, so a press while one is out opens that tab's page again.
 let signingIn = false;
+
+// The sign-in with a code that waits on its approval, which
+// CodeSignInDialog shows. Dropped, it's null.
+export const codeSignIn = createExternalStore<LoginCode | null>(null);
+
+// Clerk's device grant, approved from any device: the host's shell
+// trades it with the hub for a sign-in token (account:finishCodeSignIn),
+// which becomes this window's session, and ClerkAccountSync enrolls.
+async function signInWithCode(clerk: Clerk, api: RendererApi): Promise<void> {
+  if (codeSignIn.get() !== null) return;
+  let code: LoginCode | undefined;
+  try {
+    code = await api.run(api.account.startCodeSignIn());
+    codeSignIn.publish(code);
+    const ticket = await api.run(api.account.finishCodeSignIn(code));
+    if (codeSignIn.get() !== code) return;
+    const attempt = await clerk.client?.signIn.create({
+      strategy: "ticket",
+      ticket,
+    });
+    await clerk.setActive({ session: attempt?.createdSessionId ?? null });
+  } catch (error) {
+    if (code === undefined || codeSignIn.get() === code) {
+      toast.error("Couldn't sign in", { description: errorMessageOf(error) });
+    }
+  } finally {
+    if (codeSignIn.get() === code) codeSignIn.publish(null);
+  }
+}
 
 function startSignIn(
   clerk: Clerk,
@@ -181,6 +215,7 @@ export function useEnrollment({ again = false } = {}): {
   const clerk = useClerk();
   const hasLocalHost = useHasLocalHost();
   const { openUrl } = useOutside();
+  const api = useApi();
   const enroll = useEnroll();
   const enrolling = useIsMutating({ mutationKey: ENROLL_MUTATION_KEY }) > 0;
   const step = enrollmentStep({
@@ -196,6 +231,8 @@ export function useEnrollment({ again = false } = {}): {
     run: () => {
       if (step === "enroll") {
         enroll.mutate(() => getToken({ skipCache: true }));
+      } else if (step === "sign-in" && status?.codeSignIn === true) {
+        void signInWithCode(clerk, api);
       } else if (step === "sign-in") {
         startSignIn(clerk, hasLocalHost, openUrl);
       }

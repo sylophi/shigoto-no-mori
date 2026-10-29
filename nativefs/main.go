@@ -1,16 +1,15 @@
-//go:build darwin
-
-// macfs: the macOS filesystem calls Node has no binding for, for the
-// engine's Darwin service. Six verbs:
+// nativefs: the filesystem calls Node has no binding for, for the
+// engine's NativeFs service, on macOS (sys_darwin.go) and Linux
+// (sys_linux.go). Six verbs:
 //
-//	macfs clone [-stdin] <src> <dst>   clonefile(2) a tree, mode and mtime kept
-//	macfs exchange <a> <b>             renamex_np(2) RENAME_SWAP: the two swapped in one step
-//	macfs flags [-stdin] [-clear] <root>   st_flags, the owner's cleared but compression and tracking
-//	macfs xattrs [-stdin] [-strip] <root>  xattr names, stripped but provenance
-//	macfs fstype [-stdin] <root>       the filesystem's type name
-//	macfs lstat [-stdin] [-private] [-skip <dir>...] <root>  lstat(2): what git's index records, the flags, blocks and links
+//	nativefs clone [-stdin] <src> <dst>   copy-on-write clone of a tree, mode and mtime kept
+//	nativefs exchange <a> <b>             the two swapped in one step
+//	nativefs flags [-stdin] [-clear] <root>   the file flags a checkout's files don't carry, cleared
+//	nativefs xattrs [-stdin] [-strip] <root>  the xattr names the OS doesn't stamp, stripped
+//	nativefs cloneable [-stdin] <root>    whether the volume can clone
+//	nativefs lstat [-stdin] [-private] [-skip <dir>...] <root>  lstat(2): what git's index records, the flags, blocks and links
 //
-// Without -stdin, clone, exchange and fstype answer for the root itself and the
+// Without -stdin, clone, exchange and cloneable answer for the root itself and the
 // other three walk the whole tree under it (but any -skip folder) (the root included, no
 // symlink followed). With -stdin they answer for the NUL-separated
 // paths on stdin, each relative to the root (clone: under both roots).
@@ -66,7 +65,8 @@ type attributed struct {
 }
 
 // An entry's lstat(2), each time to the nanosecond: the fields git's
-// index records and compares, and the file flags.
+// index records and compares, and the file flags a checkout's files
+// don't carry.
 type statted struct {
 	Path string `json:"path"`
 	// As git's index stores it: 32 bits.
@@ -85,14 +85,14 @@ type statted struct {
 	// many names the inode has.
 	Blocks int64  `json:"blocks"`
 	Nlink  uint32 `json:"nlink"`
-	// With -private, a regular file's APFS private size: the bytes no
-	// clone shares. Absent where the volume can't say.
+	// With -private, a regular file's private size: the bytes no clone
+	// shares. Absent where the volume can't say.
 	PrivateBytes *int64 `json:"privateBytes,omitempty"`
 }
 
-type typed struct {
-	Path string `json:"path"`
-	Type string `json:"type"`
+type cloneability struct {
+	Path      string `json:"path"`
+	Cloneable bool   `json:"cloneable"`
 }
 
 type failed struct {
@@ -130,18 +130,18 @@ var verbs = map[string]verb{
 		}
 	}},
 	"flags": {roots: 1, walks: true, op: func(set *flag.FlagSet) op {
-		clear := set.Bool("clear", false, "clear the owner's flags but compression and tracking")
+		clear := set.Bool("clear", false, "clear the flags the owner may")
 		return func(roots []string, rel string) (any, error) {
 			p := filepath.Join(roots[0], rel)
 			flags, err := fileFlags(p)
-			if err == nil && *clear {
-				err = clearFlags(p, flags)
+			if err == nil && *clear && flags != 0 {
+				err = clearFlags(p)
 			}
 			return flagged{rel, flags}, err
 		}
 	}},
 	"xattrs": {roots: 1, walks: true, op: func(set *flag.FlagSet) op {
-		strip := set.Bool("strip", false, "remove every attribute but provenance")
+		strip := set.Bool("strip", false, "remove every attribute the OS doesn't stamp")
 		return func(roots []string, rel string) (any, error) {
 			p := filepath.Join(roots[0], rel)
 			names, err := listXattrs(p)
@@ -152,7 +152,11 @@ var verbs = map[string]verb{
 		}
 	}},
 	"lstat": {roots: 1, walks: true, op: func(set *flag.FlagSet) op {
-		withPrivate := set.Bool("private", false, "add each regular file's APFS private size")
+		withPrivate := set.Bool("private", false, "add each regular file's private size")
+		// Only a filesystem that clones shares blocks, so elsewhere every
+		// byte is private and the allocated size says so already.
+		var shares bool
+		var asked sync.Once
 		return func(roots []string, rel string) (any, error) {
 			p := filepath.Join(roots[0], rel)
 			var st unix.Stat_t
@@ -164,11 +168,14 @@ var verbs = map[string]verb{
 				UID: st.Uid, GID: st.Gid, Size: st.Size,
 				CtimeSec: st.Ctim.Sec, CtimeNsec: st.Ctim.Nsec,
 				MtimeSec: st.Mtim.Sec, MtimeNsec: st.Mtim.Nsec,
-				Flags: st.Flags, Blocks: st.Blocks, Nlink: uint32(st.Nlink),
+				Flags: statFlags(&st), Blocks: st.Blocks, Nlink: uint32(st.Nlink),
 			}
 			if *withPrivate && st.Mode&unix.S_IFMT == unix.S_IFREG && st.Blocks > 0 {
-				if n, ok := privateSize(p); ok {
-					out.PrivateBytes = &n
+				asked.Do(func() { shares, _ = cloneable(roots[0]) })
+				if shares {
+					if n, ok := privateSize(p); ok {
+						out.PrivateBytes = &n
+					}
 				}
 			}
 			return out, nil
@@ -179,15 +186,15 @@ var verbs = map[string]verb{
 			return cloned{rel}, exchange(filepath.Join(roots[0], rel), filepath.Join(roots[1], rel))
 		}
 	}},
-	"fstype": {roots: 1, op: func(*flag.FlagSet) op {
+	"cloneable": {roots: 1, op: func(*flag.FlagSet) op {
 		return func(roots []string, rel string) (any, error) {
-			name, err := fsType(filepath.Join(roots[0], rel))
-			return typed{rel, name}, err
+			ok, err := cloneable(filepath.Join(roots[0], rel))
+			return cloneability{rel, ok}, err
 		}
 	}},
 }
 
-const usage = "usage: macfs clone|exchange|flags|xattrs|fstype|lstat [-stdin] [-clear|-strip|-private] <root> [<dst>]"
+const usage = "usage: nativefs clone|exchange|flags|xattrs|cloneable|lstat [-stdin] [-clear|-strip|-private] <root> [<dst>]"
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -196,10 +203,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	v, ok := verbs[args[0]]
 	if !ok {
-		fmt.Fprintf(stderr, "macfs: unknown verb %q\n%s\n", args[0], usage)
+		fmt.Fprintf(stderr, "nativefs: unknown verb %q\n%s\n", args[0], usage)
 		return 2
 	}
-	set := flag.NewFlagSet("macfs "+args[0], flag.ContinueOnError)
+	set := flag.NewFlagSet("nativefs "+args[0], flag.ContinueOnError)
 	set.SetOutput(stderr)
 	fromStdin := set.Bool("stdin", false, "answer for the NUL-separated relative paths on stdin")
 	// A walk steps over these folders (relative to the root) whole.
@@ -253,7 +260,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	writeErr := <-written
 
 	if err := cmp.Or(readErr, writeErr); err != nil {
-		fmt.Fprintf(stderr, "macfs: %v\n", err)
+		fmt.Fprintf(stderr, "nativefs: %v\n", err)
 		return 1
 	}
 	return 0

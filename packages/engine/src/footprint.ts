@@ -8,13 +8,41 @@
 // commands/nuke.ts).
 import { join } from "node:path";
 import { type Flavor, flavorNames } from "./flavor.ts";
+import { byPlatform } from "./platform.ts";
 
 export type FootprintPlace = {
   readonly home: string;
   // XDG_CONFIG_HOME, or ~/.config.
   readonly configHome: string;
+  // XDG_DATA_HOME and XDG_STATE_HOME (Paths), where Linux keeps the
+  // app's own folders.
+  readonly dataHome: string;
+  readonly stateHome: string;
   // Where the terminal command is linked (XDG_BIN_HOME, or ~/.local/bin).
   readonly binHome: string;
+};
+
+// The app's own folders outside the data dir: its userData (the
+// single-instance lock, the hub credential, the Clerk tokens) and its
+// logs, where each OS keeps an app's, and on a Mac its preferences.
+export const appFolders = (
+  flavor: Flavor,
+  place: Pick<FootprintPlace, "home" | "dataHome" | "stateHome">,
+) => {
+  const names = flavorNames(flavor);
+  const library = join(place.home, "Library");
+  return byPlatform({
+    darwin: {
+      userData: join(library, "Application Support", names.userDataDir),
+      logs: join(library, "Logs", names.appName),
+      preferences: join(library, "Preferences", `${names.bundleId}.plist`),
+    },
+    linux: {
+      userData: join(place.dataHome, names.configDir),
+      logs: join(place.stateHome, names.configDir),
+      preferences: null,
+    },
+  });
 };
 
 // The data-folder lock's file (DataDirLock.ts), beside the pointer.
@@ -48,26 +76,22 @@ export type Footprint = {
 
 export const footprint = (flavor: Flavor, place: FootprintPlace): Footprint => {
   const names = flavorNames(flavor);
-  const library = join(place.home, "Library");
+  const own = appFolders(flavor, place);
   const config = join(place.configHome, names.configDir);
   return {
     paths: [
       // A pointer can move it: the one the pointer names is the
       // flavor's then, and the nuke reads it from the running build.
       { id: "data", path: join(place.home, names.dataDir) },
-      {
-        id: "userData",
-        path: join(library, "Application Support", names.userDataDir),
-      },
-      { id: "logs", path: join(library, "Logs", names.appName) },
+      { id: "userData", path: own.userData },
+      { id: "logs", path: own.logs },
       // Shared by every process of the flavor, whatever its data dir.
       // Before the config folder, which goes once empty.
       { id: "dataDirLock", path: join(config, DATA_DIR_LOCK) },
       { id: "config", path: config },
-      {
-        id: "preferences",
-        path: join(library, "Preferences", `${names.bundleId}.plist`),
-      },
+      ...(own.preferences === null
+        ? []
+        : [{ id: "preferences" as const, path: own.preferences }]),
       {
         id: "command",
         path: join(place.binHome, names.binaryName),

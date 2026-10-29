@@ -1,8 +1,8 @@
-// The shell's JSON files it writes while it runs (the client config,
-// the updater's bridge), on FileSystem: whole-file writes through a
-// temp sibling, renamed in, so a reader (the terminal `sm` included)
-// never sees one half written, and schema-checked reads. The files it
-// writes on the way out are exitFiles.ts's.
+// The JSON files a shell writes while it runs (the client config, the
+// updater's bridge), on FileSystem: whole-file writes through a temp
+// sibling, renamed in, so a reader (the terminal `sm` included) never
+// sees one half written, and schema-checked reads. The files the
+// Electron shell writes on the way out are main/core/files/exitFiles.ts's.
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

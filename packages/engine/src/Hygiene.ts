@@ -1,8 +1,8 @@
 // What the tidy page shows of a project's worktrees: how stale each is,
 // whether its work already landed in the primary branch, and how much
 // disk it holds. The facts are all git and fast enough to wait for. Disk
-// usage walks the whole folder (node_modules and all) through the darwin
-// helper and is asked per row, so a slow disk never holds the page up.
+// usage walks the whole folder (node_modules and all) through the
+// filesystem helper and is asked per row, so a slow disk never holds the page up.
 import { isRealBranch } from "@shigomori/contracts/schemas/project";
 import type {
   WorktreeDiskUsage,
@@ -16,7 +16,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
-import * as Darwin from "./Darwin.ts";
+import * as NativeFs from "./NativeFs.ts";
 import * as Git from "./Git.ts";
 import { splitRemoteRef } from "./gitParse.ts";
 import type { RegisteredProject } from "./Registry.ts";
@@ -90,13 +90,13 @@ const PROBE_SLOTS = 6;
 const WALK_SLOTS = 3;
 
 // What deleting a file of `allocated` bytes would free: its private
-// blocks where the volume can tell (APFS), else all of them.
+// blocks where the volume can tell (APFS, XFS, btrfs), else all of them.
 const ownBytes = (allocated: number, privateBytes: number | undefined) =>
   privateBytes === undefined ? allocated : Math.min(privateBytes, allocated);
 
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
-  const darwin = yield* Darwin.Darwin;
+  const nativeFs = yield* NativeFs.NativeFs;
   const worktrees = yield* Worktrees.Worktrees;
   const walks = yield* Semaphore.make(WALK_SLOTS);
   const probes = yield* Semaphore.make(PROBE_SLOTS);
@@ -331,14 +331,14 @@ const make = Effect.gen(function* () {
       string,
       { nlink: number; seen: number; allocated: number; own: number }
     >();
-    const add = (entry: Darwin.Entry<Darwin.LstatEntry>) => {
-      if (Darwin.isFailed(entry)) {
+    const add = (entry: NativeFs.Entry<NativeFs.LstatEntry>) => {
+      if (NativeFs.isFailed(entry)) {
         total.partial = true;
         return;
       }
-      const kind = entry.mode & Darwin.S_IFMT;
+      const kind = entry.mode & NativeFs.S_IFMT;
       const allocated = entry.blocks * 512;
-      if (kind === Darwin.S_IFDIR) {
+      if (kind === NativeFs.S_IFDIR) {
         // A folder's own blocks: 0 on APFS, a block or more on ext4.
         total.bytes += allocated;
         total.reclaimableBytes += allocated;
@@ -346,8 +346,8 @@ const make = Effect.gen(function* () {
       }
       // Symlinks count as themselves, never their target, and never as
       // activity. Anything else (a fifo, a socket) is skipped.
-      if (kind !== Darwin.S_IFREG && kind !== Darwin.S_IFLNK) return;
-      if (kind === Darwin.S_IFREG) {
+      if (kind !== NativeFs.S_IFREG && kind !== NativeFs.S_IFLNK) return;
+      if (kind === NativeFs.S_IFREG) {
         const mtime =
           entry.mtimeSec * 1000 + Math.floor(entry.mtimeNsec / 1_000_000);
         if (
@@ -375,7 +375,7 @@ const make = Effect.gen(function* () {
     };
 
     yield* walks.withPermit(
-      darwin.lstat({ root: base, private: true, skip }).pipe(
+      nativeFs.lstat({ root: base, private: true, skip }).pipe(
         Stream.runForEach((entry) => Effect.sync(() => add(entry))),
         // The helper failing outright is a measure that couldn't finish.
         Effect.catch(() => Effect.sync(() => void (total.partial = true))),

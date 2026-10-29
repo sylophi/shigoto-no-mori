@@ -10,7 +10,8 @@
 //
 // What follows from the table rather than sitting in it: the userData
 // folder holds the single-instance lock, the Clerk tokens and the hub
-// credential; the logs are ~/Library/Logs/<appName>; the keychain item
+// credential, and it and the logs are where each OS keeps an app's
+// (footprint.ts appFolders); the keychain item
 // safeStorage keeps its key in is "<appName> Safe Storage"; the
 // file-sync daemon's state is <dataDir>/file-sync; a managed root on a
 // project's own drive is /Volumes/<drive>/<dataDir>/wt.
@@ -20,7 +21,8 @@ export type Flavor = "prod" | "dev" | (string & {});
 export type FlavorNames = {
   // What the OS shows: the bundle's name, the dock and the menu bar.
   readonly appName: string;
-  // Under ~/Library/Application Support.
+  // Under ~/Library/Application Support (on Linux the configDir names
+  // the app's own folders).
   readonly userDataDir: string;
   // A dev run's bundle adds the worktree to it, so each checkout owns
   // the scheme in turn (app/scripts/lib/devBundle.mts).
@@ -31,7 +33,8 @@ export type FlavorNames = {
   readonly dataDir: string;
   // The pre-2.0 data dir, adopted in place while it still holds state.
   readonly legacyDataDir: string | null;
-  // Under XDG_CONFIG_HOME, where the data dir's pointer file lives.
+  // Under XDG_CONFIG_HOME, where the data dir's pointer file lives, and
+  // on Linux under XDG_DATA_HOME and XDG_STATE_HOME too.
   readonly configDir: string;
   readonly pointer: string;
   // The pointer's pre-2.0 file name, read only when `pointer` is absent.

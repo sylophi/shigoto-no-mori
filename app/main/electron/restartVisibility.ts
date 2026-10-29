@@ -14,6 +14,7 @@ import {
   atomicWriteJsonSync,
   readJsonOrNullSync,
 } from "../core/files/exitFiles";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 
 // Whether the app was hidden. Which windows were minimized is each
 // window's own (main/electron/windows.ts remembers it).
@@ -35,7 +36,7 @@ function markerPath(): string {
 // path in index.ts, and from the crash relaunch in liveness.ts, which
 // exits without a before-quit.
 export function rememberVisibilityForRestart(): void {
-  if (process.platform !== "darwin") return;
+  if (currentPlatform() !== "darwin") return;
   try {
     const visibility: RestartVisibility = { hidden: app.isHidden() };
     const minimized = BrowserWindow.getAllWindows().some((window) =>
@@ -60,7 +61,7 @@ export function rememberVisibilityAtShutdown(): void {
 // Once per marker, so only the first boot after the restart applies
 // it. Never throws: the boot window is created from what it returns.
 export function takeRestartVisibility(): RestartVisibility | null {
-  if (process.platform !== "darwin") return null;
+  if (currentPlatform() !== "darwin") return null;
   const path = markerPath();
   let visibility: RestartVisibility | null = null;
   try {

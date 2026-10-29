@@ -3,7 +3,7 @@
 // file to, which attributes make a checkout convert, and the version 2
 // index file itself.
 
-import { S_IFLNK, S_IFMT, S_IFREG } from "./Darwin.ts";
+import { S_IFLNK, S_IFMT, S_IFREG } from "./NativeFs.ts";
 
 // The stat data an index entry records, each field truncated to the 32
 // bits the index stores, as git does.

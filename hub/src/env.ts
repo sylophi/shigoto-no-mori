@@ -10,6 +10,9 @@ export interface Env {
   DB: D1Database;
   DEVICE_HUB: DurableObjectNamespace<DeviceHub>;
   CLERK_SECRET_KEY: string;
+  // The device grant's OAuth application. Without it, an OAuth access
+  // token enrolls nothing.
+  CLERK_OAUTH_CLIENT_ID?: string;
   // Optional because a deploy can miss it: minting then answers
   // HubTicketSigningUnconfiguredError instead of an unsigned ticket.
   TICKET_SIGNING_KEY?: string;

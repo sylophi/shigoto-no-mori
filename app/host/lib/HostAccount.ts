@@ -14,7 +14,8 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Ref from "effect/Ref";
+import type * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 
 export type Account = {
   readonly reported: boolean;
@@ -32,6 +33,8 @@ export class HostAccount extends Context.Service<
   HostAccount,
   {
     readonly current: Effect.Effect<Account>;
+    // The account, then each time it is set.
+    readonly changes: Stream.Stream<Account>;
     // Replaces the facts, answering the account they replaced.
     readonly set: (next: AccountFacts | null) => Effect.Effect<Account>;
   }
@@ -39,11 +42,12 @@ export class HostAccount extends Context.Service<
 
 export const layer = Layer.effect(
   HostAccount,
-  Effect.map(Ref.make<Account>(UNREPORTED), (account) =>
+  Effect.map(SubscriptionRef.make<Account>(UNREPORTED), (account) =>
     HostAccount.of({
-      current: Ref.get(account),
+      current: SubscriptionRef.get(account),
+      changes: SubscriptionRef.changes(account),
       set: Effect.fn("HostAccount.set")((next: AccountFacts | null) =>
-        Ref.modify(account, (previous) => [
+        SubscriptionRef.modify(account, (previous) => [
           previous,
           {
             reported: true,

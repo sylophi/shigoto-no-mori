@@ -1,7 +1,8 @@
-// The account calls both shells serve (accountContract): the desktop's
-// (main/electron/account.ts) and the web bridge's
-// (web/ipc/register.ts) give only what differs, their store, the
-// device's id and defaults, their platform, and what follows a change.
+// The account calls the shells serve (accountContract): the desktop's
+// (main/electron/account.ts), the web bridge's (web/ipc/register.ts)
+// and the headless host's (headless/account.ts) give only what differs,
+// their store, the device's id and defaults, their platform, and what
+// follows a change.
 import type { AccountServiceConfig } from "@shigomori/contracts/accountServiceConfig";
 import { isConfigured } from "@shigomori/contracts/accountServiceConfig";
 import type { DeviceIcon } from "@shigomori/contracts/deviceIcon";
@@ -24,6 +25,7 @@ import {
   syncHubDevice,
   updateDevice,
 } from "./enroll";
+import { awaitDeviceGrant, startDeviceGrant } from "./deviceGrant";
 import type { AccountService } from "./service";
 
 export type AccountShell = {
@@ -43,6 +45,8 @@ export type AccountShell = {
   readonly platform: string;
   // Whether this device signed in by copying another's sign-in.
   readonly sharedSignIn: () => boolean;
+  // Whether a window signs in with a code (account:startCodeSignIn).
+  readonly codeSignIn: boolean;
   // The account changed, under the ids before and after it (a rename
   // keeps the id). Awaited before the call answers. A shell that hears
   // changes from elsewhere too (the web's other tabs) keeps its own.
@@ -54,10 +58,10 @@ export type AccountShell = {
   readonly devicesListed: (devices: DeviceInfo[]) => void;
   // Whether peers' commands are taken here, and its switch.
   readonly acceptsCommands: () => boolean;
-  readonly setAcceptsCommands: (enabled: boolean) => void;
-  // Ahead of a sign-out's revoke (the desktop's switch, off at once,
-  // before the sign-out waits its turn).
-  readonly beforeSignOut?: (record: StoredAccount) => void;
+  readonly setAcceptsCommands: (enabled: boolean) => Promise<void> | void;
+  // Ahead of a sign-out's revoke (the switch, off at once, before the
+  // sign-out waits its turn).
+  readonly beforeSignOut?: (record: StoredAccount) => Promise<void> | void;
   // The account's changes, one at a time and each whole, its
   // publication included: a sign-out that comes while an enrollment
   // waits on the hub follows it and removes what it stored, where the
@@ -102,6 +106,7 @@ export function makeAccountHandlers(
       deviceIcon: effectiveDeviceIcon(record, store, detectedIcon),
       detectedDeviceIcon: detectedIcon,
       sharedSignIn: shell.sharedSignIn(),
+      codeSignIn: shell.codeSignIn,
       needsDeviceKey: store.readWithoutKey() !== null,
     };
   };
@@ -169,7 +174,7 @@ export function makeAccountHandlers(
 
   const signOut = async (): Promise<void> => {
     const record = shell.store().read();
-    if (record !== null) shell.beforeSignOut?.(record);
+    if (record !== null) await shell.beforeSignOut?.(record);
     const config = shell.config();
     const device = {
       config,
@@ -198,6 +203,13 @@ export function makeAccountHandlers(
     enroll: (token) =>
       Effect.runPromise(Effect.provideService(enrollOnce, EnrollToken, token)),
     signOut: () => Effect.runPromise(signOutOnce),
+
+    startCodeSignIn: () => startDeviceGrant(shell.config()),
+    finishCodeSignIn: async (code) => {
+      const config = shell.config();
+      const token = await awaitDeviceGrant(config, code);
+      return shell.service(config).signInToken(token);
+    },
 
     revokeDevice: async (deviceId) => {
       const account = signedIn();

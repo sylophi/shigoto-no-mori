@@ -1,8 +1,8 @@
-// The name a desktop device enrolls under before anyone renames it:
-// what the machine's owner already calls it, as far as the OS will
-// say. Pure node (os and a child process), electron-free like the rest
-// of main/core/account/.
-import { hostname, platform } from "node:os";
+// The name a machine enrolls under before anyone renames it: what its
+// owner already calls it, as far as the OS will say. Pure node (os and
+// a child process), for the desktop shell and the headless host.
+import { hostname } from "node:os";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -49,7 +49,7 @@ async function macComputerName(): Promise<string | null> {
 
 export async function defaultDesktopDeviceName(): Promise<DefaultDeviceName> {
   const fallback = { name: shortHostname(hostname()), provisional: false };
-  if (platform() !== "darwin") return fallback;
+  if (currentPlatform() !== "darwin") return fallback;
   const computerName = await macComputerName();
   return computerName === null
     ? { ...fallback, provisional: true }

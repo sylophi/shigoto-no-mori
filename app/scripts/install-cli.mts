@@ -1,4 +1,4 @@
-// Builds the prod-flavor sm (with the darwin helper beside it) and
+// Builds the prod-flavor sm (with the filesystem helper beside it) and
 // symlinks it into the user's bin dir,
 // the repo-checkout equivalent of the app's Settings install (which
 // links the binary bundled in its Resources). Both command names (sm
@@ -20,7 +20,7 @@ import { appRoot } from "./lib/appRoot.mts";
 
 const binary = join(appRoot, CLI_DIST_DIR, cliBinaryName("prod"));
 
-for (const script of ["build-macfs.mts", "build-cli.mts"]) {
+for (const script of ["build-nativefs.mts", "build-cli.mts"]) {
   execFileSync("node", [join(appRoot, "scripts", script)], {
     cwd: appRoot,
     stdio: "inherit",

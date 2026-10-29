@@ -36,6 +36,7 @@ import {
   readAllBytes,
   readToExit,
 } from "../processes.ts";
+import { current } from "../platform.ts";
 
 // A transfer that stalls (a connection left half open by a sleep or a
 // network that changed) ends rather than waiting for good: http's own
@@ -200,7 +201,7 @@ export const makeRunning = Effect.gen(function* () {
   const readGit = Effect.fnUntraced(function* (
     env: Readonly<Record<string, string>>,
   ) {
-    if (process.platform !== "darwin") return "git";
+    if (current() !== "darwin") return "git";
     const [searched, developerDir] = yield* lookupVariables(env);
     // Only the entries ahead of the first relative or empty one, which
     // the spawn searches from its cwd and the lookup can't: a git not

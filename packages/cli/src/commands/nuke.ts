@@ -1,20 +1,30 @@
 // sm nuke: everything of this build off the machine, Settings' Danger
-// zone with no window. The app in this command's bundle runs "Nuke
-// everything" itself (--sm-nuke, the Danger zone's two halves and the
-// start that deletes the files), as only it can revoke the device and
-// turn its login item off. Then what a start can't take, as something
-// of the app's is still running through it: the app's own folder, its
-// logs and preferences, the data-folder lock, the config folder once
-// empty, and the bundle (--keep-app keeps it). A kept app whose start
-// couldn't delete a file keeps its own folder too, the nuke's marker in
-// it, for its next start to finish.
+// zone with no window. The app this command came with runs "Nuke
+// everything" itself (--sm-nuke, the Danger zone's halves and the start
+// that deletes the files), as only it can revoke the device and turn
+// its login item off: a Mac's bundle, or a Linux install's host, its
+// unit taken out first. Then what a start can't take, as something of
+// the app's is still running through it: the app's own folder (a Linux
+// install's, the install with it), its logs and preferences, the
+// data-folder lock, the config folder once empty, and a Mac's bundle
+// (--keep-app keeps it). A kept app whose start couldn't delete a file
+// keeps its own folder too, the nuke's marker in it, for its next start
+// to finish.
 import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, realpathSync, rmdirSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { footprint, NUKE_EXIT, NUKE_SWITCH } from "@shigomori/engine/footprint";
-import { flavorNames } from "@shigomori/engine/flavor";
+import { type Flavor, flavorNames } from "@shigomori/engine/flavor";
+import * as HostUnit from "@shigomori/engine/hostUnit";
+import {
+  HOST_BUNDLE,
+  HOST_RUNTIME,
+  installedVersionOf,
+  linuxInstall,
+} from "@shigomori/engine/linuxInstall";
 import { childEnv } from "@shigomori/engine/processes";
 import * as Paths from "@shigomori/engine/Paths";
+import { byPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -28,26 +38,6 @@ import { note, out } from "../output.ts";
 const QUIT_WITHIN_MS = 30_000;
 const GONE_WITHIN_MS = 60_000;
 
-// The bundle this command runs from, <bundle>/Contents/Resources/<name>.
-const bundleOf = (executable: string): string | null => {
-  const resources = dirname(realpathSync(executable));
-  const contents = dirname(resources);
-  const bundle = dirname(contents);
-  return basename(resources) === "Resources" &&
-    basename(contents) === "Contents" &&
-    bundle.endsWith(".app")
-    ? bundle
-    : null;
-};
-
-// The processes running the app's executable.
-const runningFrom = (executable: string): number[] =>
-  execFileSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" })
-    .split("\n")
-    .map((row) => row.trim())
-    .filter((row) => row.replace(/^\d+\s+/, "").startsWith(executable))
-    .map((row) => Number.parseInt(row, 10));
-
 // Whether `done` came to hold within `ms` of awake time, looked at every
 // quarter second.
 const until = (done: () => boolean, ms: number) =>
@@ -59,6 +49,81 @@ const until = (done: () => boolean, ms: number) =>
     Effect.timeoutOption(ms),
     Effect.map(Option.getOrElse(done)),
   );
+
+// The app this command came with, as the nuke drives it, or null for a
+// dev build's command.
+type NukedApp = {
+  // What starts it to nuke.
+  readonly start: readonly [string, ...string[]];
+  // It quit, and whether it did.
+  readonly quit: Effect.Effect<
+    boolean,
+    Effect.Error<Unit>,
+    Effect.Services<Unit>
+  >;
+  // Its helpers gone, which go a moment after it.
+  readonly gone: Effect.Effect<void>;
+  // A Mac's bundle, deleted last but for --keep-app. A Linux install
+  // is in the app's own folder, so it has none.
+  readonly bundle: string | null;
+};
+type Unit = ReturnType<typeof HostUnit.uninstallUnit>;
+
+// A Mac's bundle, <bundle>/Contents/Resources/<name>, its app quit as
+// any other.
+const macApp = (appName: string): NukedApp | null => {
+  const resources = dirname(realpathSync(process.execPath));
+  const contents = dirname(resources);
+  const bundle = dirname(contents);
+  if (
+    basename(resources) !== "Resources" ||
+    basename(contents) !== "Contents" ||
+    !bundle.endsWith(".app")
+  ) {
+    return null;
+  }
+  const executable = join(bundle, "Contents", "MacOS", appName);
+  // The processes running the app's executable.
+  const runningFrom = (): number[] =>
+    execFileSync("ps", ["-axo", "pid=,command="], { encoding: "utf8" })
+      .split("\n")
+      .map((row) => row.trim())
+      .filter((row) => row.replace(/^\d+\s+/, "").startsWith(executable))
+      .map((row) => Number.parseInt(row, 10));
+  return {
+    start: [executable],
+    quit: Effect.suspend(() => {
+      // Its window's own nuke would ask: this one quits it.
+      const open = runningFrom();
+      for (const pid of open) process.kill(pid, "SIGTERM");
+      return open.length === 0
+        ? Effect.succeed(true)
+        : until(() => runningFrom().length === 0, QUIT_WITHIN_MS);
+    }),
+    gone: until(() => runningFrom().length === 0, GONE_WITHIN_MS).pipe(
+      Effect.asVoid,
+    ),
+    bundle,
+  };
+};
+
+// A Linux install's version, versions/<version>/<name>, its host
+// stopped for good with its unit.
+const linuxApp = (
+  flavor: Flavor,
+  paths: Paths.Paths["Service"],
+): NukedApp | null => {
+  const install = linuxInstall(flavor, paths);
+  const real = realpathSync(process.execPath);
+  if (installedVersionOf(install, real) === undefined) return null;
+  const folder = dirname(real);
+  return {
+    start: [join(folder, HOST_RUNTIME), join(folder, HOST_BUNDLE)],
+    quit: HostUnit.uninstallUnit(install).pipe(Effect.as(true)),
+    gone: Effect.void,
+    bundle: null,
+  };
+};
 
 export const nuke = Command.make(
   "nuke",
@@ -79,24 +144,22 @@ export const nuke = Command.make(
           problem: `nuke deletes ${names.appName}'s data, worktrees, settings and sign-in from this machine, removes this device from your account, and deletes the app. Pass --yes to go ahead.`,
         });
       }
-      const bundle = bundleOf(process.execPath);
-      if (bundle === null) {
+      const nuked = byPlatform({
+        darwin: () => macApp(names.appName),
+        linux: () => linuxApp(paths.flavor, paths),
+      })();
+      if (nuked === null) {
         return yield* new UsageError({
           problem: `nuke runs from a packaged build's ${paths.binaryName}. A dev build's is in Settings, under Danger zone.`,
         });
       }
-      const executable = join(bundle, "Contents", "MacOS", names.appName);
-
-      // Its window's own nuke would ask: this one quits it.
-      const open = runningFrom(executable);
-      for (const pid of open) process.kill(pid, "SIGTERM");
-      if (
-        open.length > 0 &&
-        !(yield* until(
-          () => runningFrom(executable).length === 0,
-          QUIT_WITHIN_MS,
-        ))
-      ) {
+      if (input.keepApp && nuked.bundle === null) {
+        return yield* new UsageError({
+          problem:
+            "--keep-app keeps a Mac's bundle. A Linux install is in the app's own folder, so it goes.",
+        });
+      }
+      if (!(yield* nuked.quit)) {
         return yield* new UsageError({
           problem: `${names.appName} didn't quit. Quit it and run nuke again.`,
         });
@@ -110,7 +173,8 @@ export const nuke = Command.make(
             problem: `${names.appName} didn't finish its nuke.`,
           });
         }
-        const code = spawnSync(executable, [`--${NUKE_SWITCH}`], {
+        const [command, ...args] = nuked.start;
+        const code = spawnSync(command, [...args, `--${NUKE_SWITCH}`], {
           stdio: "inherit",
           env: childEnv(process.env),
         }).status;
@@ -134,12 +198,13 @@ export const nuke = Command.make(
           });
         }
       }
-      // Its helpers go a moment after it.
-      yield* until(() => runningFrom(executable).length === 0, GONE_WITHIN_MS);
+      yield* nuked.gone;
 
       const place = footprint(paths.flavor, {
         home: paths.home,
         configHome: paths.configHome,
+        dataHome: paths.dataHome,
+        stateHome: paths.stateHome,
         binHome: "",
       });
       for (const { id, path } of place.paths) {
@@ -171,7 +236,8 @@ export const nuke = Command.make(
           }
         }
       }
-      if (!input.keepApp) {
+      const { bundle } = nuked;
+      if (bundle !== null && !input.keepApp) {
         // The URL scheme it registered goes with it.
         spawnSync(
           "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
@@ -181,7 +247,7 @@ export const nuke = Command.make(
         rmSync(bundle, { recursive: true, force: true });
       }
       yield* out(
-        `nuked ${names.appName}${input.keepApp ? "" : `, ${bundle} with it`}`,
+        `nuked ${names.appName}${bundle === null || input.keepApp ? "" : `, ${bundle} with it`}`,
       );
       if (left) {
         yield* note(

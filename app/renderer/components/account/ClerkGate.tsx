@@ -12,6 +12,7 @@ import type { ClerkProviderProps } from "@clerk/react";
 import { clerkAppearance } from "@/lib/clerkAppearance";
 import { useWindowRoot } from "@/lib/themeRoot";
 import { ClerkAccountSync } from "./ClerkAccountSync";
+import { CodeSignInDialog } from "./CodeSignInDialog";
 import { useApi } from "@/lib/runtime/pageApi";
 
 export type ClerkProviderComponent = ComponentType<{
@@ -41,6 +42,7 @@ export function ClerkGate({
       telemetry={false}
     >
       <ClerkAccountSync />
+      <CodeSignInDialog />
       {children}
     </Provider>
   );

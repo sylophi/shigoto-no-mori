@@ -31,6 +31,7 @@ import {
   type Page,
 } from "playwright-core";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
+import { createAccountService } from "../../shared/account/service.ts";
 import { DevApp } from "./devApp.mts";
 import { withPageApi } from "./pageApi.mts";
 import {
@@ -102,7 +103,7 @@ const PAGE_HOOKS = `(() => {
 })();`;
 
 // What the harness reaches in a page besides its api: its own hooks
-// (PAGE_HOOKS), and the part of Clerk's global it uses.
+// (PAGE_HOOKS), and the part of Clerk's global it and sign-in.mts use.
 declare global {
   interface Window {
     harnessSetHidden(hidden: boolean): void;
@@ -114,13 +115,11 @@ declare global {
       } | null;
       client: {
         signIn: {
-          create(options: object): Promise<{
-            firstFactorVerification: {
-              externalVerificationRedirectURL: URL | null;
-            };
-          }>;
+          create(options: object): Promise<{ createdSessionId: string | null }>;
         };
       };
+      setActive(options: { session: string | null }): Promise<void>;
+      signOut(): Promise<void>;
     };
   }
 }
@@ -614,10 +613,9 @@ export class Lab {
     this.tabs.splice(this.tabs.indexOf(tab), 1);
   }
 
-  // Signs the browser profile in when it holds no Clerk session: by a
-  // person in a headed run, or with the command in RELIABILITY_SIGN_IN,
-  // which is handed GitHub's authorize URL for this tab's sign-in
-  // attempt as $AUTH_URL and prints the URL GitHub sends it back to.
+  // Signs the browser profile in when it holds no Clerk session: the
+  // hub mints a sign-in token for B's session (B signs in by cloning the
+  // plain dev app's), and the tab redeems it for a session of its own.
   async ensureSignedIn(tab: Tab): Promise<void> {
     const signedIn = () =>
       tab.page.evaluate(() => {
@@ -630,42 +628,29 @@ export class Lab {
       120_000,
     );
     if (await signedIn()) return;
-    const command = process.env.RELIABILITY_SIGN_IN;
-    if (command !== undefined && command !== "") {
-      this.note("signing the browser profile in (RELIABILITY_SIGN_IN)");
-      const authUrl = await tab.page.evaluate(async () => {
-        const clerk = window.Clerk;
-        if (clerk === undefined) throw new Error("no Clerk on the page");
-        const attempt = await clerk.client.signIn.create({
-          strategy: "oauth_github",
-          redirectUrl: `${location.origin}/`,
-          actionCompleteRedirectUrl: `${location.origin}/`,
-        });
-        return String(
-          attempt.firstFactorVerification.externalVerificationRedirectURL,
-        );
-      });
-      const callback = execFileSync("sh", ["-c", command], {
-        cwd: appDir,
-        env: { ...process.env, AUTH_URL: authUrl },
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "inherit"],
-      })
-        .trim()
-        .split("\n")
-        .at(-1);
-      if (callback === undefined || !callback.startsWith("https://")) {
-        throw new Error("RELIABILITY_SIGN_IN printed no callback URL");
-      }
-      await tab.page.goto(callback);
-    } else if (this.options.headed) {
-      this.note("sign in with GitHub in the browser window");
-    } else {
+    this.note(`signing the browser profile in as ${this.hostApp.profile}`);
+    const sessionToken = await this.hostApp
+      .windows()[0]
+      ?.evaluate(() => window.Clerk?.session?.getToken({ skipCache: true }));
+    if (sessionToken === undefined || sessionToken === null) {
       throw new Error(
-        "the browser profile is signed out: run once with --headed and sign in, or set RELIABILITY_SIGN_IN",
+        `${this.hostApp.profile} holds no Clerk session to sign the browser in with`,
       );
     }
-    await waitFor("the browser profile's sign-in", signedIn, 600_000, 1000);
+    const hubUrl = envFile(".env.local").SM_DEVICE_HUB_URL ?? "";
+    const ticket = await createAccountService({
+      baseUrl: hubUrl,
+    }).signInToken(sessionToken);
+    await tab.page.evaluate(async (redeem) => {
+      const clerk = window.Clerk;
+      if (clerk === undefined) throw new Error("no Clerk on the page");
+      const attempt = await clerk.client.signIn.create({
+        strategy: "ticket",
+        ticket: redeem,
+      });
+      await clerk.setActive({ session: attempt.createdSessionId });
+    }, ticket);
+    await waitFor("the browser profile's sign-in", signedIn, 60_000, 1000);
   }
 
   async close(): Promise<void> {

@@ -1,4 +1,4 @@
-// The updater's staging: a release downloaded, extracted, checked and staged under the lock.
+// The updater's staging: a release downloaded, unpacked and checked as the installation does it, and staged under the lock.
 import type { StagedManifest } from "@shigomori/contracts/schemas/runtime";
 import { StagedManifestSchema } from "@shigomori/contracts/schemas/runtime";
 import * as Effect from "effect/Effect";
@@ -15,34 +15,29 @@ import {
 } from "../stagingLock.ts";
 import {
   deadlineIn,
-  type Anchor,
   DOWNLOAD_TIMEOUT,
   DownloadFailed,
   type Running,
-  SignatureRejected,
   StagingFailed,
   type UpdateInput,
   discard,
   feedRequest,
-  bundleVersionArgs,
-  isAsideName,
-  isIncomingName,
   isNewer,
   report,
   within,
 } from "./documents.ts";
 import type { FilesArea } from "./files.ts";
 import type { FeedsArea } from "./feeds.ts";
-import type { SignaturesArea } from "./signatures.ts";
+import type { Installation } from "./installation.ts";
 
 export const makeStaging = ({
   files,
   feeds,
-  signatures,
+  installation,
 }: {
   readonly files: FilesArea;
   readonly feeds: FeedsArea;
-  readonly signatures: SignaturesArea;
+  readonly installation: Installation;
 }) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -56,9 +51,8 @@ export const makeStaging = ({
       download: downloadPath,
       extract: extractDir,
     } = files.at;
-    const { removeAll, prune, run, readShared, writeShared } = files;
+    const { removeAll, prune, makeDirectory, readShared, writeShared } = files;
     const { send, queryFeed } = feeds;
-    const { verify } = signatures;
     // The stager's pidfile for the rest of the run. A failure other than
     // the lock's own reads as its folder's.
     const lock = acquireStagingLock(lockPath).pipe(
@@ -105,25 +99,13 @@ export const makeStaging = ({
 
     const clearStaged = removeAll(stagedDir);
 
-    // What a crashed or superseded run leaves behind. An aside bundle
-    // (<target>.old-*) goes only while the target exists: a crash between
-    // the swap's two renames leaves the aside as the only copy of the app.
+    // What a crashed or superseded run leaves behind.
     const pruneLeftovers = Effect.fn("Updater.pruneLeftovers")(function* (
-      target: string,
+      installed: string,
     ) {
       yield* prune(downloadPath);
       yield* prune(extractDir);
-      if (Option.isNone(yield* fs.stat(target).pipe(Effect.option))) return;
-      const dir = path.dirname(target);
-      const base = path.basename(target);
-      const names = yield* fs
-        .readDirectory(dir)
-        .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
-      for (const name of names) {
-        if (isAsideName(base, name) || isIncomingName(base, name)) {
-          yield* prune(path.join(dir, name));
-        }
-      }
+      yield* installation.pruneLeftovers(installed);
     });
 
     const download = Effect.fn("Updater.download")(function* (
@@ -180,99 +162,17 @@ export const makeStaging = ({
       yield* written.pipe(Effect.tapError(() => prune(downloadPath)));
     });
 
-    // A directory entry that is a directory itself, not a link to one.
-    const isRealDirectory = (target: string) =>
-      Effect.gen(function* () {
-        if (Option.isSome(yield* fs.readLink(target).pipe(Effect.option))) {
-          return false;
-        }
-        const info = yield* fs.stat(target).pipe(Effect.option);
-        return Option.isSome(info) && info.value.type === "Directory";
-      });
-
-    // The release zip holds exactly the .app at its top (Electron Forge's
-    // zip maker). It is found rather than named, so renaming the app
-    // doesn't strand old installs.
-    const extractedBundle = Effect.gen(function* () {
-      const names = yield* fs
-        .readDirectory(extractDir)
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new StagingFailed({ reason: "read", path: extractDir, cause }),
-          ),
-        );
-      const bundles: string[] = [];
-      for (const name of names.toSorted()) {
-        const entry = path.join(extractDir, name);
-        if (name.endsWith(".app") && (yield* isRealDirectory(entry))) {
-          bundles.push(entry);
-        }
-      }
-      const [bundle] = bundles;
-      if (bundle === undefined || bundles.length !== 1) {
-        return yield* new StagingFailed({
-          reason: "bundles",
-          count: bundles.length,
-        });
-      }
-      return bundle;
-    });
-
-    const makeDirectory = (target: string) =>
-      fs
-        .makeDirectory(target, { recursive: true })
-        .pipe(
-          Effect.mapError(
-            (cause) =>
-              new StagingFailed({ reason: "directory", path: target, cause }),
-          ),
-        );
-
-    // A bundle's own version (its Info.plist's), "" when it has none.
-    const bundleVersion = (bundle: string) =>
-      Effect.map(
-        run(
-          "plutil",
-          bundleVersionArgs(path.join(bundle, "Contents", "Info.plist")),
-          "stdout",
-        ),
-        (read) => (read.ok ? read.output.trim() : ""),
-      );
-
-    // The downloaded bundle is the release the feed offered and newer than
-    // this build, so a feed that serves an older release of ours under a
-    // newer name gets nothing.
-    const offeredBundle = (bundle: string, release: string, running: Running) =>
-      Effect.gen(function* () {
-        const version = yield* bundleVersion(bundle);
-        if (version !== release) {
-          return yield* new SignatureRejected({
-            reason: "other-version",
-            bundle,
-            version,
-          });
-        }
-        if (!isNewer(version, running.version)) {
-          return yield* new SignatureRejected({
-            reason: "not-newer",
-            bundle,
-            version,
-          });
-        }
-      });
-
     // Checks the feed and, when a release is newer than this build, leaves
-    // a verified bundle in updates/staged. None when already up to date.
+    // a verified copy in updates/staged. None when already up to date.
     // Everything runs under the lock, so a concurrent stager never sees
     // another's half-written files or deletes them.
     const stageUpdate = Effect.fn("Updater.stageUpdate")(function* (
-      installed: Anchor,
+      installed: string,
       input: UpdateInput,
     ) {
       const { running } = input;
       yield* lock;
-      yield* pruneLeftovers(installed.bundle);
+      yield* pruneLeftovers(installed);
       const { release, confirmed } = yield* queryFeed(input);
       if (release === undefined) {
         // A fresh boot after an install can find its own (or an older)
@@ -302,35 +202,7 @@ export const makeStaging = ({
       // verified: a failed download never costs the update already there.
       yield* report(input, { phase: "downloading", version: release.version });
       yield* download(release.url, running);
-      yield* removeAll(extractDir);
-      yield* makeDirectory(extractDir);
-      // ditto keeps the resource forks and extended attributes the signature
-      // covers, which a plain unzip can quietly break.
-      const extracted = yield* run("ditto", [
-        "-x",
-        "-k",
-        downloadPath,
-        extractDir,
-      ]);
-      if (!extracted.ok) {
-        return yield* new StagingFailed({
-          reason: "extract",
-          cause: new Error(extracted.output.trim()),
-        });
-      }
-      yield* fs.remove(downloadPath).pipe(Effect.ignore);
-      const candidate = yield* extractedBundle;
-      // As Squirrel.Mac does: no quarantine flag on what gets installed,
-      // which would translocate the app or prompt on relaunch. The zip's
-      // own metadata is out of our hands. Quarantine is an xattr, not part
-      // of the signature, so this is best effort.
-      yield* run("xattr", ["-dr", "com.apple.quarantine", candidate]);
-
-      yield* report(input, { phase: "verifying", version: release.version });
-      yield* verify(installed, candidate).pipe(
-        Effect.andThen(offeredBundle(candidate, release.version, running)),
-        Effect.tapError(() => prune(extractDir)),
-      );
+      const candidate = yield* installation.unpack(installed, release, input);
       yield* clearStaged;
       yield* makeDirectory(stagedDir);
       const name = path.basename(candidate);
@@ -368,7 +240,6 @@ export const makeStaging = ({
       readManifest,
       installable,
       clearStaged,
-      bundleVersion,
       stageUpdate,
     };
   });

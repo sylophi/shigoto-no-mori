@@ -38,6 +38,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/socket/Socket";
 import { type Flavor, flavorNames, isFlavor } from "./flavor.ts";
+import { byPlatform } from "./platform.ts";
 import { answerWithin } from "./liveness.ts";
 import * as Paths from "./Paths.ts";
 import { pidAlive } from "./processes.ts";
@@ -51,11 +52,19 @@ class AppNotRunning extends Schema.TaggedError<AppNotRunning>()(
   { flavor: Schema.String.check(Schema.makeFilter(isFlavor)) },
 ) {
   override get message(): string {
-    const hint =
-      this.flavor === "dev"
-        ? "Start it with `pnpm dev` in a checkout, sign in, and try again."
-        : `Open it (${flavorNames(this.flavor).binaryName} app), sign in, and try again.`;
-    return `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${hint}`;
+    const bin = flavorNames(this.flavor).binaryName;
+    return byPlatform({
+      darwin: `The Shigoto no Mori app isn't running, and it is what reaches your other devices. ${
+        this.flavor === "dev"
+          ? "Start it with `pnpm dev` in a checkout, sign in, and try again."
+          : `Open it (${bin} app), sign in, and try again.`
+      }`,
+      linux: `This machine's host isn't running, and it is what reaches your other devices. ${
+        this.flavor === "dev"
+          ? "Start it with `pnpm headless` in a checkout and try again."
+          : `Start it (${bin} service start) and try again.`
+      }`,
+    });
   }
 
   get documentCode(): string {
@@ -192,10 +201,10 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
 
   // A connection to the listener, closed with the scope, and the link's
   // client over it once the handshake proved both ends hold the token.
-  const connect = Effect.fn(function* (file: {
-    readonly port: number;
-    readonly token: string;
-  }) {
+  const connect = Effect.fn(function* (
+    file: { readonly port: number; readonly token: string },
+    deviceId: string,
+  ) {
     let closeCode: number | undefined;
     const socket = yield* Socket.fromWebSocket(
       Effect.acquireRelease(
@@ -227,7 +236,6 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         ? new AppBusy({ binary: paths.binaryName })
         : notRunning;
 
-    const deviceId = yield* registry.deviceId;
     yield* call("link:hello", {
       deviceId,
       // The loopback holds every caller apart, whatever it says.
@@ -246,8 +254,14 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     return { client, call };
   });
 
-  // A call's failure as the verbs read it.
-  const refusal = (channel: string, error: unknown): ControlError => {
+  // A call's failure as the verbs read it. A refusal of commands is a
+  // peer's (the loopback's callers pass no gate), and names the device
+  // that refused: this one, when the peer had to reach back into it.
+  const refusal = (
+    channel: string,
+    error: unknown,
+    ownId: string,
+  ): ControlError => {
     if (
       error instanceof AppNotRunning ||
       error instanceof AppBusy ||
@@ -271,11 +285,15 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         said: error.text,
       });
     }
-    if (
-      error instanceof LinkRefusedError ||
-      error instanceof CommandRefusedError
-    ) {
-      return notRunning;
+    if (error instanceof LinkRefusedError) return notRunning;
+    if (error instanceof CommandRefusedError) {
+      return new ControlRefused({
+        channel,
+        said:
+          error.deviceId === ownId
+            ? `This device doesn't accept commands from your other devices, and the other one has to reach back into it for this. Turn it on (\`${paths.binaryName} devices control on\`) and try again.`
+            : "The other device doesn't accept commands from this one. Turn on “Allow control from other devices” there (`devices control on` on Linux) and try again.",
+      });
     }
     if (Predicate.isTagged(error, "RpcClientError"))
       return new ConnectionLost();
@@ -294,6 +312,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     if (Option.isNone(found) || !(yield* pidAlive(found.value.pid))) {
       return yield* notRunning;
     }
+    const ownId = yield* registry.deviceId;
     const file = found.value;
     return yield* Effect.scoped(
       Effect.gen(function* () {
@@ -301,7 +320,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         // it is set aside, and the one that answered kept for the call.
         const attempt = Effect.gen(function* () {
           const scope = yield* Scope.make();
-          return yield* connect(file).pipe(
+          return yield* connect(file, ownId).pipe(
             Scope.provide(scope),
             Effect.onExit((exit) =>
               Exit.isSuccess(exit) ? Effect.void : Scope.close(scope, exit),
@@ -345,7 +364,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
           Effect.fail(
             Cause.hasInterruptsOnly(cause)
               ? new ConnectionLost()
-              : refusal(channel, Cause.squash(cause)),
+              : refusal(channel, Cause.squash(cause), ownId),
           ),
         ),
       ),

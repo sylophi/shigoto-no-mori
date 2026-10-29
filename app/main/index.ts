@@ -3,7 +3,6 @@ import * as Fiber from "effect/Fiber";
 import { app, dialog, session, shell } from "electron";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import { platform } from "node:os";
 import path from "node:path";
 import { devProfileUserData } from "@shared/packaging/appName.mts";
 import { flavor, names } from "./flavor";
@@ -16,7 +15,7 @@ import { clerkPublishableKey } from "./electron/account";
 import { setNotificationOpener } from "./electron/notifications";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { unmountedVolume } from "@shared/unmountedVolume";
-import { finishPendingNuke } from "./core/nuke/finish";
+import { finishPendingNuke } from "@shared/nuke";
 import { openPastStuckNuke } from "./electron/nuke";
 import {
   finishHeadlessNuke,
@@ -24,6 +23,7 @@ import {
   runHeadlessNuke,
 } from "./electron/headlessNuke";
 import { NUKE_EXIT } from "@shigomori/engine/footprint";
+import { HARNESSES } from "@shigomori/engine/agentHooks";
 import { asksForRemoteDebugging } from "./electron/debugSwitches";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { captureConsoleToFile } from "./electron/logFile";
@@ -74,7 +74,8 @@ import {
 } from "./electron/liveness";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { isInstallingUpdate } from "./electron/updater";
-import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
+import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
+import { current as currentPlatform } from "@shigomori/engine/platform";
 
 if (
   app.isPackaged &&
@@ -125,8 +126,7 @@ delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
 // An agent session's id, when an agent started the app (a dev run):
 // nothing the app spawns is that session, and an `sm` it runs would
 // bind the session wherever it runs (the engine's Agents).
-delete process.env.CLAUDE_CODE_SESSION_ID;
-delete process.env.CODEX_THREAD_ID;
+for (const harness of HARNESSES) delete process.env[harness.sessionEnv];
 takeUpdateEndpointOverrides();
 
 // What a nuke's start couldn't delete, asked about before the app opens.
@@ -161,12 +161,8 @@ captureConsoleToFile();
 // files for nothing) and before Chromium's own startup, which the
 // shell then runs alongside. Awaited in the ready handler, before
 // anything spawns on the user's behalf. A dev
-// launch starts from the developer's terminal and keeps it. macOS
-// only: the base it rebuilds from is launchd's.
-const shellEnvReady =
-  app.isPackaged && platform() === "darwin"
-    ? applyUserShellEnv()
-    : Promise.resolve();
+// launch starts from the developer's terminal and keeps it.
+const shellEnvReady = app.isPackaged ? applyUserShellEnv() : Promise.resolve();
 
 // The macOS keychain policy. Only a Developer-ID-signed packaged
 // build gets the real keychain, after making sure the Safe Storage
@@ -179,13 +175,19 @@ const shellEnvReady =
 // lock: a losing second instance must not delete the running app's
 // key on its way out. Before the Clerk bridge and the IPC handlers,
 // the two paths to safeStorage.
-if (platform() === "darwin") {
+if (currentPlatform() === "darwin") {
   if (app.isPackaged && __SM_SIGNED_MAC_BUILD__) {
     resetSafeStorageItemOnce();
   } else {
     app.commandLine.appendSwitch("use-mock-keychain");
   }
 }
+
+// Vite marks a module it serves under ?v= (the contracts source among
+// them) cacheable for a year, keyed on a hash only its prebundle
+// changes, so a dev window restarted after a contracts change would
+// run the copy it cached first.
+if (!app.isPackaged) app.commandLine.appendSwitch("disable-http-cache");
 
 // The Clerk main-process bridge: renderer-scheme privileges (pre-ready
 // requirement), token storage, and the OAuth deep-link transport. After

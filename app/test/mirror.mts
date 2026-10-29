@@ -55,6 +55,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, it } from "vitest";
 import * as PeerReach from "@host/ipc/PeerReach";
+import * as HostAccount from "@host/lib/HostAccount";
+import * as Sharing from "@host/lib/Sharing";
 import { forwardContract } from "@shigomori/contracts/modules/forward";
 import {
   MIRROR_LABEL_MODE,
@@ -199,7 +201,10 @@ let listenerProjectId: string;
 let dialerProjectId: string;
 let listener: DirectWire["listener"];
 let toListener: DirectWire["toListener"];
-let gateway: ManagedRuntime.ManagedRuntime<MirrorGateway.MirrorGateway, never>;
+let gateway: ManagedRuntime.ManagedRuntime<
+  MirrorGateway.MirrorGateway | HostAccount.HostAccount,
+  never
+>;
 let runtime: ManagedRuntime.ManagedRuntime<MirrorDaemon.MirrorDaemon, never>;
 let session: string;
 let follower: GitFollower;
@@ -288,7 +293,8 @@ beforeAll(async () => {
   standInDeviceId(DIALER);
 
   // The dialer's half: the real gateway over the real peer client, the real
-  // daemon on the freshly built binary.
+  // daemon on the freshly built binary, on a device whose switches let a
+  // peer mirror into it.
   gateway = ManagedRuntime.make(
     MirrorGateway.layer.pipe(
       Layer.provide(
@@ -300,9 +306,33 @@ beforeAll(async () => {
           }),
         ),
       ),
+      Layer.provideMerge(HostAccount.layer),
+      Layer.provide(
+        Layer.succeed(
+          Sharing.Sharing,
+          Sharing.Sharing.of({
+            current: Effect.succeed(true),
+            now: () => true,
+            changes: Stream.make(true),
+            set: () => Effect.void,
+          }),
+        ),
+      ),
     ),
   );
   track(() => gateway.dispose());
+  await gateway.runPromise(
+    Effect.flatMap(HostAccount.HostAccount, (account) =>
+      account.set({
+        hubUrl: "http://127.0.0.1:9",
+        accountId: "account",
+        credential: "",
+        deviceKey: "",
+        webOrigin: "",
+        acceptsCommands: true,
+      }),
+    ),
+  );
 
   // The dialer's daemon, behind the gateway once it has bound.
   await gatewayAddress();

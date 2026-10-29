@@ -301,6 +301,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // EnrollRequestSchema's 1..64 bound.
     platform: WEB_PLATFORM,
     sharedSignIn: () => false,
+    codeSignIn: false,
     changed: accountChanged,
     transitions: Semaphore.makeUnsafe(1),
     devicesListed: () => {},

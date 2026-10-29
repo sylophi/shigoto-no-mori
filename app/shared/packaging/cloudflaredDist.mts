@@ -7,10 +7,9 @@
 // here.
 //
 // One version and one sha256 per asset, committed, so a bump is a
-// reviewed diff to this file and the fetch refuses anything else.
-// Darwin only: the makers build for macOS alone, and a platform with
-// no pinned asset ships no connector (the runner reports "no-binary"
-// and the account page says so).
+// reviewed diff to this file and the fetch refuses anything else. A
+// platform with no pinned asset ships no connector (the runner reports
+// "no-binary" and the account page says so).
 //
 // .mts with no imports, loadable by plain `node scripts/*.mts` and by
 // the host through the @shared alias. Never import this from the renderer.
@@ -24,6 +23,7 @@ export const CLOUDFLARED_LICENSE = "Apache-2.0";
 export const CLOUDFLARED_REPOSITORY =
   "https://github.com/cloudflare/cloudflared";
 
+// A Mac's asset is a tgz holding the binary, and Linux's the binary.
 type CloudflaredAsset = { name: string; sha256: string };
 
 // Keyed by node's `${process.platform}-${process.arch}`, the vocabulary
@@ -36,6 +36,10 @@ const ASSETS: Record<string, CloudflaredAsset> = {
   "darwin-x64": {
     name: "cloudflared-darwin-amd64.tgz",
     sha256: "f11fbef4207d715892331917dafd437f032cf4b7137ed64dea3008338c1c613d",
+  },
+  "linux-x64": {
+    name: "cloudflared-linux-amd64",
+    sha256: "ae5e8add7884b0531d66bbca4570d1de491ff6da51e4ebe7eb160cdf241d9e42",
   },
 };
 
