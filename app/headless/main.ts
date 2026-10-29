@@ -38,6 +38,16 @@ function holdInstanceLock(userData: string): boolean {
 }
 
 async function main(): Promise<void> {
+  // A test build's update stand-ins, before anything is spawned.
+  takeUpdateEndpointOverrides();
+  // A unit starts with the service manager's environment, not the
+  // owner's shell's: rebuilt from the login shell (shared/shellEnv.ts).
+  // A dev run starts from the developer's terminal and keeps it, but for
+  // an agent session's id when an agent started it: nothing the host
+  // spawns is that session. Both before the first config read (the
+  // paths, below): Effect keeps the environment that read saw.
+  if (__SM_HEADLESS_PACKAGED__) await applyUserShellEnv();
+  for (const harness of HARNESSES) delete process.env[harness.sessionEnv];
   const facts = await headlessFacts();
   if (!holdInstanceLock(facts.userDataPath)) {
     log.error("[host] another host of this build is running on this machine");
@@ -47,15 +57,6 @@ async function main(): Promise<void> {
   // no other host is using them.
   const nuked = finishPendingNuke(facts.userDataPath);
   if (nuked !== null) finishNuke(nuked.left);
-  // A test build's update stand-ins, before anything is spawned.
-  takeUpdateEndpointOverrides();
-  // A unit starts with the service manager's environment, not the
-  // owner's shell's: rebuilt from the login shell (shared/shellEnv.ts).
-  // A dev run starts from the developer's terminal and keeps it, but for
-  // an agent session's id when an agent started it: nothing the host
-  // spawns is that session.
-  if (facts.packaged) await applyUserShellEnv();
-  for (const harness of HARNESSES) delete process.env[harness.sessionEnv];
   process.on("SIGTERM", () => quit(false));
   process.on("SIGINT", () => quit(false));
   const account = headlessAccount(facts);
