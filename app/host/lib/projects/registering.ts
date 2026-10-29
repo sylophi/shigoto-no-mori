@@ -14,6 +14,7 @@ import * as Ops from "@host/lib/engineOps";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import * as Scripts from "@host/lib/Scripts";
+import { bookingScripts } from "@host/lib/worktrees/documents";
 import { addProject, freshProjects, loadProjects, refresh } from "./index";
 
 // Moves run one at a time: each writes the whole order, so a second
@@ -147,22 +148,43 @@ export const createProject = Effect.fn("projects.create")(function* (input: {
   return yield* registerNewCheckout(path, input.terrier, "Created");
 });
 
-export const removeProject = Effect.fn("projects.remove")(function* (
+// The mark blocks a renderer script run from spawning into the project
+// for the whole removal, so the reap after it snapshots a set nothing
+// can add to. Registry drop and per-project state deletion (the icon
+// cache entry included) run in the engine, as `sm projects unregister`
+// runs them.
+const removing = Effect.fnUntraced(function* <E, R>(
   id: string,
+  removal: (scripts: Scripts.Scripts["Service"]) => Effect.Effect<void, E, R>,
 ) {
-  const removed = (yield* freshProjects).find((p) => p.id === id);
-  if (!removed) return;
-  // The mark blocks a renderer script run from spawning into the
-  // project for the whole removal, so the reap below snapshots a set
-  // nothing can add to. Registry drop and per-project state deletion
-  // (the icon cache entry included) run in the engine, as `sm
-  // projects remove` runs them.
+  if (!(yield* freshProjects).some((p) => p.id === id)) return;
   const scripts = yield* Scripts.Scripts;
   yield* scripts.removingProject(
     id,
-    Effect.andThen(Ops.removeProject(id), scripts.reapRemovedProjects),
+    Effect.andThen(removal(scripts), scripts.reapRemovedProjects),
   );
 });
+
+export const removeProject = Effect.fn("projects.remove")((id: string) =>
+  removing(id, () => Ops.removeProject(id)),
+);
+
+// Its scripts are stopped once nothing refuses the delete, as a
+// worktree's removal stops them, and the worktrees' teardowns are told
+// to `notify`.
+export const deleteProject = Effect.fn("projects.delete")(
+  (id: string, notify: Scripts.NotifyScriptEvent) =>
+    removing(id, (scripts) =>
+      Ops.checkDeletable(id).pipe(
+        Effect.andThen(scripts.stopProject(id)),
+        Effect.andThen(
+          bookingScripts(scripts, notify, (reporter) =>
+            Ops.deleteProject(id, reporter),
+          ),
+        ),
+      ),
+    ),
+);
 
 // Over the whole list, terrier-only projects included: the engine stores
 // the order apart from the registry entries, so any project can hold

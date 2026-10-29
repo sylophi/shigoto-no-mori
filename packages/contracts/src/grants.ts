@@ -27,7 +27,7 @@ export const GRANTS = {
   changeCode: {
     title: "Change your code",
     detail:
-      "Create, delete and move worktrees, mirror worktrees into this machine (writing their files as they change), commit, discard changes, push (force push too), publish new repositories, and open, merge and close pull requests with this machine's Git and GitHub credentials.",
+      "Create, delete and move worktrees, delete projects from disk, mirror worktrees into this machine (writing their files as they change), commit, discard changes, push (force push too), publish new repositories, and open, merge and close pull requests with this machine's Git and GitHub credentials.",
     calls: [
       "branches:create",
       "branches:delete",
@@ -51,6 +51,7 @@ export const GRANTS = {
       "mirror:setIgnores",
       "mirror:startTo",
       "mirror:stop",
+      "projects:delete",
       "sync:cancelMove",
       "sync:receiveBundle",
       "sync:receiveWorktree",

@@ -12,12 +12,12 @@
 // follows the `+`, and the pages open for this machine's copy (the
 // `+`'s device on a header with no local checkout). Every page carries
 // a device tab bar (ProjectDevicePage), so the menu offers no device
-// choice of its own, save for two entries with no page to make the
-// choice on, which open a submenu naming devices instead: Remove, on a
-// group spanning devices, names each member, and Add to device names
-// the machines that don't hold the repo yet (AddToDeviceSubmenu). A
-// member with no session gets no actions, the same as a missing local
-// project.
+// choice of its own, save for the entries with no page to make the
+// choice on, which open a submenu naming devices instead: Unregister
+// and Delete from disk, on a group spanning devices, name each member,
+// and Add to device names the machines that don't hold the repo yet
+// (AddToDeviceSubmenu). A member with no session gets no actions, the
+// same as a missing local project.
 import { useState } from "react";
 import {
   DropdownMenuItem,
@@ -215,7 +215,7 @@ export function ProjectGroupActions({
     members.find((member) => member.isThisDevice) ??
     creator ??
     members.find((member): member is LiveMember => member.api !== undefined);
-  // One arm for the whole menu, keyed by device in the Remove submenu.
+  // One arm for the whole menu, keyed by device in the submenus.
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   const spansDevices = members.length > 1;
   if (primary === undefined) return null;
@@ -267,18 +267,33 @@ export function ProjectGroupActions({
           <MaybeHostScope deviceId={primary.deviceId} api={primary.api}>
             <ProjectPageMenuItems project={primary.project} />
             {!spansDevices && (
-              <ProjectRemoveMenuItem
-                project={primary.project}
-                removeArm={removeArm}
-              />
+              <>
+                <ProjectRemoveMenuItem
+                  project={primary.project}
+                  removeArm={removeArm}
+                />
+                <ProjectRemoveMenuItem
+                  project={primary.project}
+                  removeArm={removeArm}
+                  deleteFiles
+                />
+              </>
             )}
           </MaybeHostScope>
           {spansDevices && (
-            <RemoveSubmenu
-              members={members}
-              removeArm={removeArm}
-              onOpenChange={onOpenChange}
-            />
+            <>
+              <RemoveSubmenu
+                members={members}
+                removeArm={removeArm}
+                onOpenChange={onOpenChange}
+              />
+              <RemoveSubmenu
+                members={members}
+                removeArm={removeArm}
+                onOpenChange={onOpenChange}
+                deleteFiles
+              />
+            </>
           )}
         </>
       }
@@ -286,25 +301,28 @@ export function ProjectGroupActions({
   );
 }
 
-// Remove is the one entry with no page to pick a device on, so on a
-// header spanning devices it opens onto the pick itself: every member
-// by name, each a two-step remove of that device's copy. A member with
-// no session stays listed but inert, so the list always matches the
-// open header's badges, which already say it is away. Leaving the submenu
-// drops a half-confirmed remove, the same as closing the menu.
+// Unregister and Delete from disk are the entries with no page to pick
+// a device on, so on a header spanning devices each opens onto the pick
+// itself: every member by name, each a two-step remove of that device's
+// copy. A member with no session stays listed but inert, so the list
+// always matches the open header's badges, which already say it is
+// away. Leaving the submenu drops a half-confirmed remove, the same as
+// closing the menu.
 function RemoveSubmenu({
   members,
   removeArm,
   onOpenChange,
+  deleteFiles = false,
 }: {
   members: readonly GroupMember[];
   removeArm: ProjectMenuRemoveArm;
   onOpenChange: (open: boolean) => void;
+  deleteFiles?: boolean;
 }) {
   return (
     <DropdownMenuSub onOpenChange={onOpenChange}>
       <DropdownMenuSubTrigger variant="destructive">
-        Remove
+        {deleteFiles ? "Delete from disk" : "Unregister"}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         {members.map((member) =>
@@ -328,6 +346,7 @@ function RemoveSubmenu({
               <ProjectRemoveMenuItem
                 project={member.project}
                 removeArm={removeArm}
+                deleteFiles={deleteFiles}
                 device={{
                   id: member.deviceId,
                   label: member.deviceLabel,

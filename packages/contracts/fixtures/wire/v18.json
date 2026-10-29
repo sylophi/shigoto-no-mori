@@ -1872,6 +1872,11 @@
     },
     "success": ""
   },
+  "projects:delete": {
+    "payload": {
+      "id": "\t"
+    }
+  },
   "projects:icon": {
     "payload": {
       "projectId": " "

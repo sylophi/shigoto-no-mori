@@ -112,6 +112,12 @@ export const projectsContract = defineContract(
     gated: true,
     grant: "changeApp",
   }),
+  // A remove that deletes the project's worktrees and repo folder too.
+  invoke("delete", RemoveProjectPayloadSchema, VoidSchema, {
+    remote: true,
+    gated: true,
+    grant: "changeCode",
+  }),
   // For a project whose repo was moved or renamed by hand. Answers the
   // project at its new path.
   invoke("relocate", RelocateProjectPayloadSchema, ProjectSchema, {

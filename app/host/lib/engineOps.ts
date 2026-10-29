@@ -484,6 +484,31 @@ export const removeProject = Effect.fnUntraced(function* (projectId: string) {
   );
 });
 
+// What deleteProject refuses, checked alone.
+export const checkDeletable = Effect.fnUntraced(function* (projectId: string) {
+  yield* asCall(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      yield* (yield* Projects.Projects).checkDeletable(project);
+    }),
+    { projectId },
+  );
+});
+
+// The removal with its worktrees and repo folder deleted too.
+export const deleteProject = Effect.fnUntraced(function* (
+  projectId: string,
+  reporter: Worktrees.Reporter,
+) {
+  yield* asChange(
+    Effect.gen(function* () {
+      const project = yield* projectById(projectId);
+      yield* (yield* Projects.Projects).removeWithFiles(project, reporter);
+    }),
+    { projectId },
+  );
+});
+
 // Repoints the registry entry at the moved repo and reconnects its
 // worktrees, answering the project at its new path.
 export const relocateProject = Effect.fnUntraced(function* (

@@ -100,7 +100,7 @@ it("refuses for a project inside the data dir, touching nothing", async () => {
   assert.ok(existsSync(kept), "no worktree went");
   assert.deepEqual(uninstalled, [], "nothing was uninstalled");
   // Out of the way for the next proofs: the trap's repo, unregistered.
-  await fixture.sm("projects", "remove", "--yes", inside);
+  await fixture.sm("projects", "unregister", "--yes", inside);
   rmSync(inside, { recursive: true, force: true });
 });
 

@@ -59,7 +59,7 @@ follows.
 ## Agent skills
 
 `skills/` holds instruction snippets that teach coding agents the `sm`
-workflow: `sm-basics` (register, relocate or remove a project, create
+workflow: `sm-basics` (register, relocate or unregister a project, create
 a worktree, rename its branch, land it and tear it down),
 `sm-for-agents` (the features built for agentic work: a worktree's
 title and description, agent sessions, links into the app) and
