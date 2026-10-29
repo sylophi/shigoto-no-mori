@@ -14,6 +14,7 @@ ownTestTemp("engine");
 export default defineConfig({
   test: {
     setupFiles: ["../../test/testProcesses.setup.mts"],
+    globalSetup: ["./test/lib/nativefs.ts"],
     pool: "forks",
     testTimeout: 30_000,
   },

@@ -52,3 +52,10 @@ export function nativefs(): string {
   built = binary;
   return binary;
 }
+
+// The engine's run builds it before its files start, which would
+// otherwise each build it at once, past a hook's time from a cold Go
+// cache (vitest.config.ts globalSetup).
+export function setup(): void {
+  nativefs();
+}
