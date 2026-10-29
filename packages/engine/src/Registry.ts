@@ -285,6 +285,10 @@ const make = Effect.gen(function* () {
               return yield* new UnknownProject({ projectId: project.id });
             }
             yield* sql`DELETE FROM projects WHERE id = ${project.id}`;
+          } else {
+            // No row of its own to delete, so the list's watchers are
+            // told by hand.
+            yield* sql`UPDATE changes SET version = version + 1 WHERE name = 'projects'`;
           }
           yield* forgetKept(project);
         }),
