@@ -17,10 +17,9 @@ import { CenteredMessage } from "@shigomori/ui/primitives/centered-message.tsx";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import {
   useProjectNav,
-  useScopedProjectParams,
+  useRoutedProject,
   type ProjectPage,
 } from "@/hooks/projects/useProjectNav";
-import { useProjects } from "@/hooks/projects/useProjects";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
@@ -40,6 +39,7 @@ export function ProjectDevicePage({
   title,
   parent,
   renderAllDevices,
+  devicesLocked = false,
   children,
 }: {
   title: string;
@@ -52,17 +52,23 @@ export function ProjectDevicePage({
   // joins the bar only when there is one, so a project on a single
   // device, with nothing to share, never shows it.
   renderAllDevices?: (project: Project) => ReactNode;
-  // The body, given the picked device's copy of the project and, when
-  // there is a choice, the tab it came from. It reads everything else
-  // through the host-scoped hooks, so it needs no remote-awareness of
-  // its own.
-  children: (project: Project, tab: DeviceTab | undefined) => ReactNode;
+  // Every device's copy is kept the same (Configure while the settings
+  // sync): the device tabs are disabled, and the all-devices tab shows
+  // the routed device's body.
+  devicesLocked?: boolean;
+  // The body, given the picked device's copy of the project, when
+  // there is a choice the tab it came from, and whether it shows under
+  // the locked all-devices tab. It reads everything else through the
+  // host-scoped hooks, so it needs no remote-awareness of its own.
+  children: (
+    project: Project,
+    tab: DeviceTab | undefined,
+    locked: boolean,
+  ) => ReactNode;
 }) {
-  const { projectId } = useScopedProjectParams();
   const scope = useHostScope();
-  const { data: projects = [] } = useProjects();
   const { toProjectPage } = useProjectNav();
-  const project = projects.find((p) => p.id === projectId);
+  const project = useRoutedProject();
   const holders = useDeviceTargets(project).filter(isHolder);
   // The tab the page opens on is the device the route named. A route
   // change remounts the page (remountDeps), so this never goes stale.
@@ -70,6 +76,11 @@ export function ProjectDevicePage({
   const [allDevicesPicked, setAllDevicesPicked] = useState(false);
   const { canCommand } = useCommandAccess();
   const scopedLabel = useRemoteDeviceLabel(scope.deviceId);
+
+  const tabbed = holders.length > 1 && picked !== undefined;
+  const locked = tabbed && devicesLocked;
+  // Turning the lock off stays on the tab it was turned off from.
+  if (locked && !allDevicesPicked) setAllDevicesPicked(true);
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
@@ -82,10 +93,10 @@ export function ProjectDevicePage({
   // unannounced. The scoped device is what the first holder resolves
   // to anyway, so the panel keeps its key when the bar appears, and it
   // is blocked the way its tab would be.
-  const tabbed = holders.length > 1 && picked !== undefined;
+  const devicePicked = tabbed && !locked;
   const showAllDevices =
-    tabbed && renderAllDevices !== undefined && allDevicesPicked;
-  const shown: DeviceTab = tabbed
+    devicePicked && renderAllDevices !== undefined && allDevicesPicked;
+  const shown: DeviceTab = devicePicked
     ? picked
     : {
         deviceId: scope.deviceId,
@@ -109,7 +120,7 @@ export function ProjectDevicePage({
           onOpen: () =>
             toProjectPage(
               parent.page,
-              tabbed ? picked.project.id : project.id,
+              devicePicked ? picked.project.id : project.id,
               shown.deviceId,
             ),
         }
@@ -118,12 +129,13 @@ export function ProjectDevicePage({
         tabbed ? (
           <DeviceTabBarView
             tabs={holders}
-            selectedId={showAllDevices ? ALL_DEVICES_TAB_ID : picked.deviceId}
+            selectedId={allDevicesPicked ? ALL_DEVICES_TAB_ID : picked.deviceId}
             onSelect={(id) => {
               setAllDevicesPicked(id === ALL_DEVICES_TAB_ID);
               if (id !== ALL_DEVICES_TAB_ID) pick(id);
             }}
             allDevicesTab={renderAllDevices !== undefined}
+            devicesDisabled={locked}
           />
         ) : undefined
       }
@@ -134,8 +146,9 @@ export function ProjectDevicePage({
       body={
         <DeviceTabPanel tab={shown} subject="its copy of this project">
           {children(
-            tabbed ? picked.project : project,
-            tabbed ? picked : undefined,
+            devicePicked ? picked.project : project,
+            devicePicked ? picked : undefined,
+            locked,
           )}
         </DeviceTabPanel>
       }

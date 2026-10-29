@@ -1832,6 +1832,23 @@
       }
     }
   },
+  "projects:cloneFromDeviceProgress": {
+    "payload": {
+      "deviceId": "}{",
+      "projectId": "\n",
+      "step": "files"
+    }
+  },
+  "projects:cloneProgress": {
+    "payload": {
+      "parentDir": "ew",
+      "name": "",
+      "progress": {
+        "step": "remote",
+        "percent": 4
+      }
+    }
+  },
   "projects:cloneUrl": {
     "payload": {
       "projectId": "0"
@@ -2279,6 +2296,12 @@
       "projectId": " "
     },
     "success": null
+  },
+  "shigomori:syncSettings": {
+    "payload": {
+      "projectId": "\n",
+      "on": true
+    }
   },
   "sync:cancelMove": {
     "payload": {

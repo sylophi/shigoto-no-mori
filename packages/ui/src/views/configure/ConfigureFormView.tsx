@@ -47,6 +47,7 @@ export function ConfigureFormView({
   carryOver,
   saveError,
   footer,
+  leading,
 }: {
   form: ConfigureFormState;
   setForm: Dispatch<SetStateAction<ConfigureFormState>>;
@@ -67,6 +68,9 @@ export function ConfigureFormView({
   carryOver: ReactNode;
   saveError: string | null;
   footer: ReactNode;
+  // Sections ahead of the device's own (the shared ones, while the
+  // settings sync).
+  leading?: ReactNode;
 }) {
   const setField = fieldSetter(setForm);
   const { addLauncher, updateLauncher, removeLauncher } =
@@ -76,6 +80,7 @@ export function ConfigureFormView({
     <>
       <div className={PAGE_BODY}>
         <div className="flex flex-col gap-10">
+          {leading}
           <section className="space-y-3">
             <SectionHeading className="mb-1">Location</SectionHeading>
             <div className="flex font-mono text-sm select-text">

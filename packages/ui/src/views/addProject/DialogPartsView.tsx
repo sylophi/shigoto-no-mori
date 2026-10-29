@@ -6,6 +6,7 @@ import { KbdHint } from "../../primitives/kbd.tsx";
 import { PathSpan } from "../../primitives/path-span.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { FooterRow } from "../../primitives/footer-row.tsx";
+import { ProgressBar } from "../../primitives/progress-bar.tsx";
 
 // The clone's and the new repository's top row: what to make, and the
 // button that makes it, the way the folder browser's row reads. Inside
@@ -140,6 +141,7 @@ export function ProgressPanelView({
   title,
   status,
   dest,
+  progress,
   onCancel,
   cancelling = false,
 }: {
@@ -148,6 +150,8 @@ export function ProgressPanelView({
   status: string;
   // Already tildified by the caller.
   dest: string;
+  // How far it has got, once that is known.
+  progress?: { ratio: number; caption: string };
   onCancel?: () => void;
   cancelling?: boolean;
 }) {
@@ -164,6 +168,9 @@ export function ProgressPanelView({
       <div className="flex flex-col items-center gap-3 px-4 py-14 text-sm text-muted-foreground">
         <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
         <span>{status}</span>
+        {progress && (
+          <ProgressBar {...progress} label={status} className="w-64" />
+        )}
         {/* Spelled whole: PathSpan shortens to its box, and a centered
             line has none to measure. */}
         <span className="font-mono text-xs">{dest}</span>

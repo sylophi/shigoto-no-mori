@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { EditorFooterView } from "@shigomori/ui/views/shared/EditorFooterView.tsx";
@@ -34,6 +34,7 @@ interface ConfigureFormProps {
   projectPath: string;
   initialConfig: ShigomoriConfig | null;
   resolvedDefaultBranch: string;
+  leading?: ReactNode;
 }
 
 export function ConfigureForm({
@@ -41,6 +42,7 @@ export function ConfigureForm({
   projectPath,
   initialConfig,
   resolvedDefaultBranch,
+  leading,
 }: ConfigureFormProps) {
   const api = useApi();
   const { data: runtime } = useRuntimeInfo();
@@ -115,6 +117,7 @@ export function ConfigureForm({
   return (
     <ConfigureFormView
       form={form}
+      leading={leading}
       setForm={setForm}
       projectPath={projectPath}
       home={home}

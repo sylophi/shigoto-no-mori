@@ -956,6 +956,16 @@
       }
     ]
   },
+  "SyncProjectSettingsPayloadSchema": {
+    "accepts": [
+      { "projectId": "shigoto-no-mori", "on": true },
+      { "projectId": "shigoto-no-mori", "on": false }
+    ],
+    "rejects": [
+      { "projectId": "shigoto-no-mori" },
+      { "projectId": "shigoto-no-mori", "on": "yes" }
+    ]
+  },
   "PatchShigomoriPayloadSchema": {
     "accepts": [
       {

@@ -9,11 +9,13 @@ import {
 } from "@shigomori/contracts/predicates/remoteUrl";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useGithubRepos } from "@/hooks/githubCli/useGithubRepos";
+import { useCloneProgress } from "@/hooks/projects/useCloneProgress";
 import { useCloneProject } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import { CloneFormView } from "@shigomori/ui/views/addProject/CloneFormView.tsx";
 import { ProgressPanelView } from "@shigomori/ui/views/addProject/DialogPartsView.tsx";
+import { cloneProgressBar } from "@shigomori/ui/views/addProject/cloneProgress.ts";
 import { useNewCheckout } from "./useNewCheckout";
 
 // Clones a remote onto the scoped device and opens it as a project, or
@@ -77,6 +79,7 @@ export function CloneForm({
   // The repository as repo identity spells it (host/owner/repo): the
   // credentials and scheme of a pasted URL are noise here.
   const repo = normalizeRemoteUrl(cloneUrlOf(source)) ?? source.trim();
+  const progress = useCloneProgress(cloning && checkout.parent, name);
 
   const cloneAndOpen = async () => {
     if (name === null) return;
@@ -116,6 +119,7 @@ export function CloneForm({
         title={repo}
         status={`Cloning${checkout.onDevice}…`}
         dest={checkout.dest}
+        progress={progress ? cloneProgressBar(progress) : undefined}
         cancelling={cancelling}
         onCancel={() => {
           setCancelling(true);

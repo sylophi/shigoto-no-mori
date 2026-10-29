@@ -49,7 +49,10 @@ import {
   loadProjects,
 } from "@host/lib/projects";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
-import { projectsContract } from "@shigomori/contracts/modules/projects";
+import {
+  type CloneFromDeviceProgress,
+  projectsContract,
+} from "@shigomori/contracts/modules/projects";
 import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { homedir } from "node:os";
 import { peerEffects } from "@host/ipc/PeerReach";
@@ -382,11 +385,14 @@ const settingsPatch = (
 // already holds is refused, naming where. The clone commits at its
 // register. The settings and the files are answers after it, never a
 // failure, since the project stands.
-export const cloneProjectFromDevice = Effect.fnUntraced(function* (input: {
-  readonly deviceId: string;
-  readonly projectId: string;
-  readonly parentDir?: string | undefined;
-}) {
+export const cloneProjectFromDevice = Effect.fnUntraced(function* (
+  input: {
+    readonly deviceId: string;
+    readonly projectId: string;
+    readonly parentDir?: string | undefined;
+  },
+  notify: (push: CloneFromDeviceProgress) => void,
+) {
   const peer = (yield* peerEffects(
     projectsContract,
     input.deviceId,
@@ -394,7 +400,17 @@ export const cloneProjectFromDevice = Effect.fnUntraced(function* (input: {
   if (peer === undefined) {
     return yield* new PeerProjectGoneError({ projectId: input.projectId });
   }
-  return yield* clonePeerProject(input.deviceId, peer, input.parentDir);
+  return yield* clonePeerProject(
+    input.deviceId,
+    peer,
+    input.parentDir,
+    (frame) =>
+      notify({
+        deviceId: input.deviceId,
+        projectId: input.projectId,
+        ...frame,
+      }),
+  );
 });
 
 // The clone itself, of the peer's project as its list reads.
@@ -460,6 +476,7 @@ export const clonePeerProject = Effect.fnUntraced(function* (
     yield* Ops.patchProjectConfig(
       project.id,
       settingsPatch(stored, branchHere),
+      { stamp: false },
     );
     return stored;
   }).pipe(

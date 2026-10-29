@@ -9,6 +9,18 @@ import {
   type ProjectSettingsPatch,
   ShigomoriConfigSchema,
 } from "@shigomori/contracts/schemas/config";
+import {
+  anyProjectSettingsSync,
+  mergeSharedSettings,
+  nextSharedSettingStamp,
+  projectSettingsSync,
+  sharedSettingKeys,
+  SYNCED_PROJECT_SETTINGS,
+  type SyncedProjectValues,
+  syncedProjectSettingValue,
+  withSharedSetting,
+} from "@shigomori/contracts/sharedSettings";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -30,7 +42,9 @@ import {
 } from "./configDoc.ts";
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as Git from "./Git.ts";
+import * as Identity from "./Identity.ts";
 import * as Paths from "./Paths.ts";
+import * as SharedSettings from "./SharedSettings.ts";
 
 // Which settings document a call reads or writes: the device's, or a
 // project's.
@@ -42,6 +56,11 @@ export type ConfigScope =
       // The primary checkout, which a write asks git about.
       readonly path: string;
     };
+
+// `stamp: false` is a write that copies settings rather than edits them
+// (a new project's seed, its repo's settings arriving from another
+// device), which mustn't outrank an edit made elsewhere.
+export type WriteOptions = { readonly stamp?: boolean };
 
 // One row of a settings listing: the key's effective value, and whether
 // the document sets it (a key it doesn't takes its default, or null).
@@ -216,6 +235,7 @@ export class Config extends Context.Service<
       scope: ConfigScope,
       key: string,
       raw: string,
+      options?: WriteOptions,
     ) => Effect.Effect<
       unknown,
       | UnknownConfigKey
@@ -235,6 +255,7 @@ export class Config extends Context.Service<
     readonly patchProject: (
       scope: Extract<ConfigScope, { readonly kind: "project" }>,
       patch: ProjectSettingsPatch,
+      options?: WriteOptions,
     ) => Effect.Effect<void, InvalidConfigDocument | MissingDefaultBranch>;
     // `config edit`'s whole-document save, only over `ifStoredIs`, the
     // settings as they were read: stored as saved, a null deleting its
@@ -364,6 +385,22 @@ const lookupKey = (scope: ConfigScope, name: string) => {
       );
 };
 
+// What the entries of a project's synced settings would hold for its
+// stored settings.
+export const syncedProjectValues = (
+  doc: ConfigDoc | null,
+): SyncedProjectValues => {
+  const values: Partial<Record<string, unknown>> = {};
+  for (const setting of SYNCED_PROJECT_SETTINGS) {
+    const [value, present] = docGet(doc ?? {}, setting);
+    values[setting] = syncedProjectSettingValue(
+      setting,
+      present ? value : undefined,
+    );
+  }
+  return values as SyncedProjectValues;
+};
+
 // A project's settings as they apply: none until its default branch is
 // set, a blank one counting as unset.
 export const projectSettingsOf = (doc: ConfigDoc | null) => {
@@ -427,6 +464,8 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const { expandHome, binaryName } = yield* Paths.Paths;
   const git = yield* Git.Git;
+  const identities = yield* Identity.Identity;
+  const sharedSettings = yield* SharedSettings.SharedSettings;
 
   const load = (scope: ConfigScope) =>
     (scope.kind === "device"
@@ -470,18 +509,83 @@ const make = Effect.gen(function* () {
       { discard: true },
     );
 
+  // The repo a project write's synced settings are stamped for while
+  // its sync is on, and the device stamping them. Found ahead of the
+  // write, as git is asked outside it. Only a device the app has run on
+  // has an id, and only it reaches other devices.
+  const stampTarget = Effect.fnUntraced(function* (
+    scope: ConfigScope,
+    options: WriteOptions,
+  ) {
+    if (scope.kind !== "project" || options.stamp === false) return undefined;
+    if (!anyProjectSettingsSync(yield* sharedSettings.read)) return undefined;
+    const [device] = yield* sql<{ readonly device_id: string }>`
+      SELECT device_id FROM device WHERE id = 1`.pipe(Effect.orDie);
+    if (device === undefined) return undefined;
+    const { identity } = yield* identities.of(scope.path);
+    return identity === null
+      ? undefined
+      : { identity, deviceId: device.device_id };
+  });
+
+  // A project edit's synced settings, stamped into the shared settings
+  // in the edit's own transaction, so edits stamp in the order they are
+  // stored. The app carries them to the repo's other devices. An entry
+  // from before the sync was turned on, which every device passes over,
+  // is stamped again even when the edit sets its value.
+  const stampSynced = Effect.fnUntraced(function* (
+    target: { readonly identity: string; readonly deviceId: string },
+    before: ConfigDoc,
+    next: ConfigDoc,
+  ) {
+    const was = syncedProjectValues(before);
+    const now = syncedProjectValues(next);
+    const changed = SYNCED_PROJECT_SETTINGS.flatMap((setting) => {
+      const value = now[setting];
+      return value !== undefined && value !== was[setting]
+        ? [[setting, value] as const]
+        : [];
+    });
+    if (changed.length === 0) return;
+    const at = yield* Clock.currentTimeMillis;
+    yield* sharedSettings.update((doc) => {
+      const sync = projectSettingsSync(doc, target.identity);
+      if (sync === undefined) return doc;
+      return changed.reduce((held, [setting, value]) => {
+        const key = sharedSettingKeys.projectSetting(target.identity, setting);
+        const entry = held.entries[key];
+        return entry !== undefined && entry.at < sync.at
+          ? mergeSharedSettings(held, {
+              entries: {
+                [key]: {
+                  value,
+                  at: nextSharedSettingStamp(held, at),
+                  by: target.deviceId,
+                },
+              },
+            })
+          : withSharedSetting(held, key, value, target.deviceId, at);
+      }, doc);
+    });
+  });
+
   // A read-modify-write of the scope's document in one transaction. A
   // project's document keeps its default branch, from git when the
   // write would leave it out, and one on the in-project layout hides
   // `.shigomori/` from the primary's git status. A change that answers
-  // false changes nothing, and nothing is written or filled in.
+  // false changes nothing, and nothing is written or filled in. An edit
+  // to a project's synced settings is stamped with it.
   const update = (
     scope: ConfigScope,
     change: (doc: ConfigDoc) => void | false,
+    options: WriteOptions = {},
   ) => {
     // One try at the write. Without a default branch it fails, unless
     // git named one to fill in.
-    const attempt = (fallbackBranch: Option.Option<string>) =>
+    const attempt = (
+      target: Effect.Success<ReturnType<typeof stampTarget>>,
+      fallbackBranch: Option.Option<string>,
+    ) =>
       sql.withTransaction(
         Effect.gen(function* () {
           const before = (yield* load(scope)) ?? {};
@@ -500,31 +604,34 @@ const make = Effect.gen(function* () {
             docSet(next, "defaultBranch", fallbackBranch.value);
           }
           yield* store(scope, before, next);
+          if (target !== undefined) yield* stampSynced(target, before, next);
           return docGet(next, "worktreeLayout")[0] === "in-project";
         }),
       );
-    return attempt(Option.none()).pipe(
-      // Git is asked outside the write, which holds the store's lock.
-      Effect.catchTags({
-        MissingDefaultBranch: (missing) =>
-          scope.kind === "project"
-            ? git
-                .resolveDefaultBranch(scope.path)
-                .pipe(
-                  Effect.flatMap((found) =>
-                    Option.isSome(found)
-                      ? attempt(found)
-                      : Effect.fail(missing),
-                  ),
-                )
-            : Effect.fail(missing),
-      }),
-      Effect.tap((inProject) =>
-        scope.kind === "project" && inProject
-          ? git.appendExcludes(scope.path, [".shigomori"])
-          : Effect.void,
+    return Effect.flatMap(stampTarget(scope, options), (target) =>
+      attempt(target, Option.none()).pipe(
+        // Git is asked outside the write, which holds the store's lock.
+        Effect.catchTags({
+          MissingDefaultBranch: (missing) =>
+            scope.kind === "project"
+              ? git
+                  .resolveDefaultBranch(scope.path)
+                  .pipe(
+                    Effect.flatMap((found) =>
+                      Option.isSome(found)
+                        ? attempt(target, found)
+                        : Effect.fail(missing),
+                    ),
+                  )
+              : Effect.fail(missing),
+        }),
+        Effect.tap((inProject) =>
+          scope.kind === "project" && inProject
+            ? git.appendExcludes(scope.path, [".shigomori"])
+            : Effect.void,
+        ),
+        Effect.catchTags({ SqlError: Effect.die }),
       ),
-      Effect.catchTags({ SqlError: Effect.die }),
     );
   };
 
@@ -595,6 +702,7 @@ const make = Effect.gen(function* () {
   const patchProject = Effect.fn("Config.patchProject")(function* (
     scope: Extract<ConfigScope, { readonly kind: "project" }>,
     changes: ProjectSettingsPatch,
+    options?: WriteOptions,
   ) {
     const given = Object.entries(changes).filter(
       ([, value]) => value !== undefined,
@@ -612,12 +720,16 @@ const make = Effect.gen(function* () {
     if (problem !== undefined) {
       return yield* new InvalidConfigDocument({ problem });
     }
-    yield* update(scope, (doc) => {
-      for (const [key, value] of given) {
-        if (value === null) docDelete(doc, key);
-        else docSet(doc, key, value);
-      }
-    });
+    yield* update(
+      scope,
+      (doc) => {
+        for (const [key, value] of given) {
+          if (value === null) docDelete(doc, key);
+          else docSet(doc, key, value);
+        }
+      },
+      options,
+    );
   });
 
   const unset = Effect.fn("Config.unset")(function* (
@@ -639,6 +751,7 @@ const make = Effect.gen(function* () {
     scope: ConfigScope,
     name: string,
     raw: string,
+    options?: WriteOptions,
   ) {
     const key = yield* lookupKey(scope, name);
     if (key.kind === "list") {
@@ -664,10 +777,13 @@ const make = Effect.gen(function* () {
       return undefined;
     }
     const value = yield* parseValue(key, key.kind, raw, expandHome);
-    yield* update(scope, (doc) =>
-      JSON.stringify(value) === JSON.stringify(key.default)
-        ? docDelete(doc, key.name)
-        : docSet(doc, key.name, value),
+    yield* update(
+      scope,
+      (doc) =>
+        JSON.stringify(value) === JSON.stringify(key.default)
+          ? docDelete(doc, key.name)
+          : docSet(doc, key.name, value),
+      options,
     );
     return value;
   });

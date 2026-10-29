@@ -94,9 +94,10 @@ const services = (options: EngineOptions) =>
     Layer.provideMerge(CloneCheckout.layer),
     Layer.provideMerge(Terrier.layer),
     Layer.provideMerge(NativeFs.layer(options.nativefs)),
+    // Above Identity and SharedSettings, which an edit is stamped with.
+    Layer.provideMerge(Config.layer),
     Layer.provideMerge(
       Layer.mergeAll(
-        Config.layer,
         WorktreeData.layer,
         Dirty.layer,
         Usage.layer,
@@ -147,14 +148,15 @@ const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
     ),
     Layer.provideMerge(CloneCheckout.layer),
     Layer.provideMerge(Terrier.layer),
+    Layer.provideMerge(Config.layer),
     Layer.provideMerge(
       Layer.mergeAll(
-        Config.layer,
         WorktreeData.layer,
         Dirty.layer,
         Usage.layer,
         Identity.layer,
         Icons.layer,
+        SharedSettings.layer,
         RunningScripts.layer,
       ),
     ),
