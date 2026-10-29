@@ -1,7 +1,7 @@
 // NodeServices for the host, its removes past Electron's asar support.
 // Electron's fs takes an .asar for a folder, so a remove of a folder
 // holding an Electron.app (a node_modules with electron in it, a staged
-// update) stops partway. original-fs is Node's fs without it; the
+// update) stops partway. original-fs is Node's fs without it, and the
 // headless host's plain node has only that.
 import * as NFS from "node:fs";
 import * as NodeServices from "@effect/platform-node/NodeServices";
