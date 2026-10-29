@@ -226,6 +226,14 @@ export function headlessAccount(facts: HostFacts) {
     // couldn't deliver, delivered now.
     boot: async (deviceId: string) => {
       deviceIdIs(deviceId);
+      // Removed from the account, it signs out, as a window does
+      // (ClerkAccountSync), so `sm login` can sign it in afresh. Heard
+      // from before the hub is dialed, since a revoked device is blocked
+      // at its first ticket and the block isn't said again.
+      onHubStatus(({ socket }) => {
+        if (!credentialRevoked(socket) || store.read() === null) return;
+        void Promise.resolve(account.signOut(undefined, null)).catch(() => {});
+      });
       await tellHost();
       const parked = await retryParkedRevoke({
         config,
@@ -240,12 +248,6 @@ export function headlessAccount(facts: HostFacts) {
       }
       void listDevices();
       setInterval(() => void listDevices(), LIST_DEVICES_EVERY_MS).unref();
-      // Removed from the account, it signs out, as a window does
-      // (ClerkAccountSync), so `sm login` can sign it in afresh.
-      onHubStatus(({ socket }) => {
-        if (!credentialRevoked(socket) || store.read() === null) return;
-        void Promise.resolve(account.signOut(undefined, null)).catch(() => {});
-      });
     },
     signOutForNuke: async () => {
       const deviceId = await deviceIdOf;
