@@ -48,6 +48,7 @@ import { makeStash } from "./git/stash.ts";
 import { makeMerging } from "./git/merging.ts";
 import { makeRewriting } from "./git/rewriting.ts";
 import type { SyncConflictsError } from "@shigomori/contracts/errors";
+import type { CloneProgress } from "@shigomori/contracts/modules/projects";
 import {
   type BranchMovedError,
   BranchNotMergedError,
@@ -634,12 +635,16 @@ export class Git extends Context.Service<
     // Clones `url` into `parentDir/name` and returns the checkout, with
     // `config` (git's key and value) in the clone's own config. Git
     // never prompts for credentials here, and a URL's userinfo stays
-    // out of the error.
+    // out of the error. `onProgress` hears each step and percent git
+    // reports on the way.
     readonly clone: (input: {
       readonly url: string;
       readonly parentDir: string;
       readonly name: string;
       readonly config?: ReadonlyArray<readonly [string, string]> | undefined;
+      readonly onProgress?:
+        | ((progress: CloneProgress) => Effect.Effect<void>)
+        | undefined;
     }) => Effect.Effect<
       string,
       GitError | CloneDestinationError | PlatformError.PlatformError

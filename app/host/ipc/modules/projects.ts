@@ -1,4 +1,5 @@
 import { expandHome } from "@shared/paths";
+import type { HandlerContext } from "@shared/ipc/transport";
 import { fetchRemoteImage } from "@host/lib/projects/remoteImage";
 import type { ViewHandlers } from "@shigomori/contracts/types";
 import type { EffectHandlers } from "@shigomori/contracts/types";
@@ -67,9 +68,14 @@ export const projectsHandlers = {
 
   add: ({ path, terrier }) => addCheckout(path, terrier),
 
-  clone: (input) => cloneProject(input),
+  clone: (input, ctx) =>
+    cloneProject(input, ctx.notifier(projectsContract, "cloneProgress")),
 
-  cloneFromDevice: cloneProjectFromDevice,
+  cloneFromDevice: (input, ctx) =>
+    cloneProjectFromDevice(
+      input,
+      ctx.notifier(projectsContract, "cloneFromDeviceProgress"),
+    ),
 
   create: (input) => createProject(input),
 
@@ -132,4 +138,8 @@ export const projectsHandlers = {
         url,
       );
     }),
-} satisfies EffectHandlers<typeof projectsContract, unknown, HostServices>;
+} satisfies EffectHandlers<
+  typeof projectsContract,
+  HandlerContext,
+  HostServices
+>;

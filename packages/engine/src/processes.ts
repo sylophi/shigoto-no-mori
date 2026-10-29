@@ -229,6 +229,11 @@ export const captureToFiles = (
     // A variable set to undefined is unset.
     readonly env?: Record<string, string | undefined> | undefined;
     readonly stdin?: Stream.Stream<Uint8Array>;
+    // Stderr as it is written, for a command that reports its progress
+    // there (a clone). It is still read whole at the exit.
+    readonly onStderr?:
+      | ((chunk: Uint8Array) => Effect.Effect<void>)
+      | undefined;
   } = {},
 ) =>
   Effect.scoped(
@@ -237,6 +242,9 @@ export const captureToFiles = (
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "sm-run-" });
       const out = `${dir}/out`;
       const err = options.all === true ? out : `${dir}/err`;
+      const { onStderr } = options;
+      // There before the shell opens it, for the tail to open first.
+      if (onStderr !== undefined) yield* fs.writeFile(err, new Uint8Array());
       const handle = yield* spawner.spawn(
         ChildProcess.make(
           "/bin/sh",
@@ -251,10 +259,18 @@ export const captureToFiles = (
           },
         ),
       );
+      const exited = Effect.gen(function* () {
+        const said = yield* text(handle.stdout);
+        yield* handle.exitCode;
+        return said;
+      });
+      const said = (
+        onStderr === undefined
+          ? yield* exited
+          : yield* fileUntilExit(err, exited, onStderr)
+      ).trim();
       // A shell that ended before saying failed.
-      const said = (yield* text(handle.stdout)).trim();
       const code = said === "" ? 1 : Number(said);
-      yield* handle.exitCode;
       const sizeOf = (file: string) =>
         Effect.map(fs.stat(file), ({ size }) => Number(size));
       const [outSize, errSize] = yield* Effect.all([sizeOf(out), sizeOf(err)]);

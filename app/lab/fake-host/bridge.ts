@@ -513,26 +513,44 @@ function hostHandlersFor(
     "projects:list": () => [...forest.projects],
     "projects:add": ({ path }) =>
       registerProject(disk, forest, resolveOnDisk(disk, path)),
-    // Takes a moment, as a clone does, so the cloning stage is seen. An
-    // interrupted call (the dialog's Cancel) stops it with nothing
-    // made, as the host's git does.
+    // Takes a moment, as a clone of a large repo does, reporting each
+    // step as git would, so the cloning stage is seen. An interrupted
+    // call (the dialog's Cancel) stops it with nothing made, as the
+    // host's git does.
     "projects:clone": async (
       { url, parentDir, name },
       signal?: AbortSignal,
     ) => {
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, 2200);
-        signal?.addEventListener("abort", () => {
-          clearTimeout(timer);
-          reject(new Error("The clone was interrupted"));
-        });
-      });
+      const folder = name ?? cloneFolderName(url) ?? "repo";
       const parent = resolveOnDisk(disk, parentDir);
       const entries = disk.dirs[parent];
       if (entries === undefined) throw new Error(`${parent} is not a folder`);
-      const folder = name ?? cloneFolderName(url) ?? "repo";
       if (entries.some((entry) => entry.name === folder)) {
         throw new Error(`${parent}/${folder} already exists`);
+      }
+      const steps = [
+        ["remote", 10],
+        ["receiving", 40],
+        ["resolving", 10],
+        ["checkout", 10],
+      ] as const;
+      for (const [step, ticks] of steps) {
+        for (let tick = 0; tick <= ticks; tick += 1) {
+          if (signal?.aborted) throw new Error("The clone was interrupted");
+          const percent = Math.round((tick / ticks) * 100);
+          emit("projects:cloneProgress", {
+            parentDir,
+            name: folder,
+            progress: {
+              step,
+              percent,
+              ...(step === "receiving"
+                ? { bytes: Math.round(percent * 4_812_000) }
+                : {}),
+            },
+          });
+          await sleep(120);
+        }
       }
       entries.push({ name: folder, isGitRepo: true });
       const identity =
@@ -592,10 +610,21 @@ function hostHandlersFor(
     // Any image a description names on a remote's host, as a swatch.
     "projects:remoteImage": () =>
       `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120"><rect width="320" height="120" rx="12" fill="#7fb069"/></svg>')}`,
-    // Takes a moment, as a clone does, and lands where the other device
-    // keeps it, the two homes swapped, as the host's default does.
+    // Takes a moment, reporting its bytes, as a clone does, and lands
+    // where the other device keeps it, the two homes swapped, as the
+    // host's default does.
     "projects:cloneFromDevice": async ({ deviceId, projectId, parentDir }) => {
-      await sleep(2200);
+      const totalBytes = 186_000_000;
+      for (let tick = 0; tick <= 40; tick += 1) {
+        emit("projects:cloneFromDeviceProgress", {
+          deviceId,
+          projectId,
+          step: "clone",
+          bytes: Math.round((tick / 40) * totalBytes),
+          totalBytes,
+        });
+        await sleep(120);
+      }
       const source = forests[deviceId]?.projects.find(
         (project) => project.id === projectId,
       );

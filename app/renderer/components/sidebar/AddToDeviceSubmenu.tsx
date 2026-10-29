@@ -8,6 +8,8 @@
 // The clone runs on the picked device, which asks the member for the
 // repo itself: the member needs to take commands from that device, not
 // from this one.
+import { ProgressBar } from "@shigomori/ui/primitives/progress-bar.tsx";
+import { cloneFromDeviceProgressBar } from "@shigomori/ui/views/addProject/cloneProgress.ts";
 import { DeviceMenuRowView } from "@shigomori/ui/views/sidebar/DeviceMenuRowView.tsx";
 import {
   DropdownMenuItem,
@@ -17,6 +19,8 @@ import {
 } from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
 import { notifyError, toast } from "@/lib/toast";
+import { useCloneFromDeviceProgress } from "@/hooks/projects/useCloneProgress";
+import type { HostApi } from "@/hooks/remote/useHostScope";
 import type { GroupMember } from "./ProjectGroupActions";
 
 export function AddToDeviceSubmenu({
@@ -44,7 +48,17 @@ export function AddToDeviceSubmenu({
   const addTo = (tab: DeviceTab) => {
     const { api } = tab;
     if (api === undefined) return;
-    const id = toast.loading(`Cloning ${name} onto ${tab.label}…`);
+    const title = `Cloning ${name} onto ${tab.label}…`;
+    const id = toast.loading(title, {
+      description: (
+        <CloneProgressBar
+          api={api}
+          deviceId={source.deviceId}
+          projectId={source.project.id}
+          label={title}
+        />
+      ),
+    });
     api
       .run(
         api.projects.cloneFromDevice({
@@ -101,5 +115,30 @@ export function AddToDeviceSubmenu({
         ))}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
+  );
+}
+
+// The toast's bar, following the clone itself, so a frame redraws the
+// bar and not the toast.
+function CloneProgressBar({
+  api,
+  deviceId,
+  projectId,
+  label,
+}: {
+  api: HostApi;
+  deviceId: string;
+  projectId: string;
+  label: string;
+}) {
+  const progress = useCloneFromDeviceProgress(api, deviceId, projectId);
+  return (
+    progress && (
+      <ProgressBar
+        {...cloneFromDeviceProgressBar(progress)}
+        label={label}
+        className="mt-1.5 items-start"
+      />
+    )
   );
 }

@@ -4,6 +4,7 @@
 import { cloneFolderName } from "@shared/cloneUrl";
 import { expandHome } from "@shared/paths";
 import { reorderProjects } from "@shared/reorder";
+import type { CloneProgressPush } from "@shigomori/contracts/modules/projects";
 import { cloneUrlOf } from "@shigomori/contracts/predicates/remoteUrl";
 import * as Git from "@shigomori/engine/Git";
 import * as Effect from "effect/Effect";
@@ -107,12 +108,15 @@ export const addCheckout = Effect.fn("projects.add")(function* (
   return yield* addProject(path, terrier);
 });
 
-export const cloneProject = Effect.fn("projects.clone")(function* (input: {
-  readonly url: string;
-  readonly parentDir: string;
-  readonly name?: string | undefined;
-  readonly terrier?: boolean | undefined;
-}) {
+export const cloneProject = Effect.fn("projects.clone")(function* (
+  input: {
+    readonly url: string;
+    readonly parentDir: string;
+    readonly name?: string | undefined;
+    readonly terrier?: boolean | undefined;
+  },
+  notify: (push: CloneProgressPush) => void,
+) {
   const folder = input.name ?? cloneFolderName(input.url);
   // The payload schema has held the URL to a clone source already.
   // Not echoed: it may carry a token.
@@ -123,6 +127,10 @@ export const cloneProject = Effect.fn("projects.clone")(function* (input: {
     parentDir: expandHome(input.parentDir),
     name: folder,
     config: yield* ghCredentials(source),
+    onProgress: (progress) =>
+      Effect.sync(() =>
+        notify({ parentDir: input.parentDir, name: folder, progress }),
+      ),
   });
   return yield* registerNewCheckout(path, input.terrier, "Cloned into");
 });
