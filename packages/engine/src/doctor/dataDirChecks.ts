@@ -353,7 +353,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       const registry = yield* Registry.Registry;
       return registeredLine(
         yield* registry.projects,
-        `Remove each with \`${binaryName} projects remove <name>\`, then add it again.`,
+        `Unregister each with \`${binaryName} projects unregister <name>\`, then add it again.`,
       );
     });
 

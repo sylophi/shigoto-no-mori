@@ -1,5 +1,6 @@
 // Adding and removing projects: the registry's entry, and what a new
 // project starts with.
+import { listed } from "@shigomori/contracts/words";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -7,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Config from "./Config.ts";
 import * as Git from "./Git.ts";
@@ -31,6 +33,18 @@ export class NotADirectory extends Schema.TaggedError<NotADirectory>()(
 ) {
   override get message(): string {
     return `${this.path} is not a directory`;
+  }
+}
+
+// The checkouts a project's delete found uncommitted changes in, before
+// it deleted anything.
+export class UncommittedCheckouts extends Schema.TaggedError<UncommittedCheckouts>()(
+  "UncommittedCheckouts",
+  { paths: Schema.Array(Schema.String) },
+) {
+  readonly documentCode = "uncommitted-changes";
+  override get message(): string {
+    return `Uncommitted changes in ${listed(this.paths)}. Commit or discard them first.`;
   }
 }
 
@@ -87,6 +101,24 @@ export class Projects extends Context.Service<
     readonly remove: (
       project: Registry.ListedProject,
     ) => Effect.Effect<void, Terrier.TerrierRefused | Registry.UnknownProject>;
+    // Removes its worktrees as a removal does (teardown, port release),
+    // then deletes its repo folder and drops the entry. Refused before
+    // anything goes while any checkout has uncommitted changes.
+    readonly removeWithFiles: (
+      project: Registry.ListedProject,
+      reporter: Worktrees.Reporter,
+    ) => Effect.Effect<
+      void,
+      | UncommittedCheckouts
+      | Worktrees.WorktreeRefused
+      | Worktrees.DirtyWorktree
+      | Worktrees.CleanupFailed
+      | Worktrees.OrphanedWorktree
+      | Git.GitError
+      | PlatformError.PlatformError
+      | Terrier.TerrierRefused
+      | Registry.UnknownProject
+    >;
   }
 >()("sm/engine/Projects") {}
 
@@ -309,7 +341,52 @@ const make = Effect.gen(function* () {
     yield* registry.unregister(project);
   });
 
-  return Projects.of({ add, register, scan, leftovers, remove });
+  const removeWithFiles = Effect.fn("Projects.removeWithFiles")(function* (
+    project: Registry.ListedProject,
+    reporter: Worktrees.Reporter,
+  ) {
+    const checkouts = yield* worktrees.identities(project);
+    // A folder gone by hand has nothing left to lose.
+    const dirty = yield* Effect.filter(
+      checkouts,
+      (checkout) =>
+        Effect.flatMap(fs.exists(checkout.path), (there) =>
+          there
+            ? Effect.map(git.changedCount(checkout.path), (count) => count > 0)
+            : Effect.succeed(false),
+        ),
+      { concurrency: 8 },
+    );
+    if (dirty.length > 0) {
+      return yield* new UncommittedCheckouts({
+        paths: dirty.map((checkout) => checkout.path),
+      });
+    }
+    for (const worktree of checkouts.filter((it) => !it.isPrimary)) {
+      yield* worktrees.remove(
+        { project, worktree },
+        // The repo goes with its branches.
+        {
+          force: false,
+          keepBranch: true,
+          skipCleanup: false,
+          preflighted: true,
+        },
+        reporter,
+      );
+    }
+    yield* fs.remove(project.path, { recursive: true, force: true });
+    yield* remove(project);
+  });
+
+  return Projects.of({
+    add,
+    register,
+    scan,
+    leftovers,
+    remove,
+    removeWithFiles,
+  });
 });
 
 export const layer = Layer.effect(Projects, make);

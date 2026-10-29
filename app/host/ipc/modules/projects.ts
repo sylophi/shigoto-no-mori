@@ -12,6 +12,7 @@ import {
   addCheckout,
   cloneProject,
   createProject,
+  deleteProject,
   removeProject,
   reorderProject,
 } from "@host/lib/projects/registering";
@@ -23,6 +24,7 @@ import {
   relocateProject,
 } from "@host/lib/projects";
 import { cloneProjectFromDevice } from "@host/lib/sync/cloneFromPeer";
+import { scriptEventNotifier } from "../scriptRun";
 import * as CarryOver from "@shigomori/engine/CarryOver";
 import type { HostServices } from "@host/process/services";
 import * as Worktrees from "@host/lib/Worktrees";
@@ -80,6 +82,8 @@ export const projectsHandlers = {
   create: (input) => createProject(input),
 
   remove: ({ id }) => removeProject(id),
+
+  delete: ({ id }, ctx) => deleteProject(id, scriptEventNotifier(ctx)),
 
   relocate: ({ id, path }) => relocateProject(id, expandHome(path)),
 

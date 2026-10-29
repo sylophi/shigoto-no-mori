@@ -69,7 +69,7 @@ export const makeProjectChecks = ({
     } = reads;
     const { launcherFindings } = dataDirChecks;
     const unregisterHint = (project: ListedProject) =>
-      `\`${binaryName} projects remove ${project.name}\``;
+      `\`${binaryName} projects unregister ${project.name}\``;
 
     // Whether the project's path is a working repo, which every other
     // check needs: its common dir when it is, what is wrong when it isn't.

@@ -2,8 +2,8 @@ import type * as Command from "effect/cli/Command";
 
 // The aliases, folded before parsing, since effect/cli takes one per
 // command: a namespace's, a worktree verb's (at the top level and after
-// `worktrees`), and a project verb's, which differ: `rm` alone removes
-// a worktree, after `projects` a project.
+// `worktrees`), and a project verb's, apart from the worktree verbs'
+// (`remove` is a worktree's `rm`, never a project's).
 const VERBS: Readonly<Record<string, string>> = {
   ls: "list",
   l: "list",
@@ -18,7 +18,6 @@ const VERBS: Readonly<Record<string, string>> = {
 };
 const PROJECT_VERBS: Readonly<Record<string, string>> = {
   ls: "list",
-  rm: "remove",
 };
 const NAMESPACES: Readonly<Record<string, string>> = {
   worktree: "worktrees",

@@ -1,4 +1,4 @@
-// sm projects <list|icon|add|clone|remove|relocate|config>: the
+// sm projects <list|icon|add|clone|unregister|delete|relocate|config>: the
 // registered projects, terrier's included (and written through to it),
 // and each one's settings. clone is a cross-device verb (transfer.ts).
 import { basename } from "node:path";
@@ -30,7 +30,9 @@ import {
   warnTerrier,
 } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
+import { pluralize } from "@shigomori/contracts/words";
 import { pickProject } from "../pickers.ts";
+import { reporter } from "../reporter.ts";
 import { confirm, interactive } from "../prompt.ts";
 import { configVerbs, type Settings } from "./config.ts";
 import { carryOverVerb } from "./configLists.ts";
@@ -269,52 +271,93 @@ const add = Command.make(
     }),
 );
 
-const remove = Command.make(
-  "remove",
-  {
-    name: Argument.String("project").pipe(Argument.optional),
-    rest,
-    projectId: projectFlags.projectId,
-    yes: yesFlag,
-  },
-  (input) =>
-    Effect.gen(function* () {
-      const worktrees = yield* Worktrees.Worktrees;
-      const projects = yield* Projects.Projects;
-      const { json, binaryName } = yield* Effect.service(Output);
-      const at = yield* here;
-      const projectId = given(input.projectId);
-      const project = Option.isSome(projectId)
-        ? yield* worktrees.resolveProjectById(at, projectId.value)
-        : Option.isSome(input.name)
-          ? yield* worktrees.resolveProject(at, input.name.value)
-          : (yield* interactive)
-            ? yield* pickProject(at)
-            : yield* new UsageError({
-                problem: `Specify a project to remove (see \`${binaryName} projects list\`).`,
-              });
-      if (!input.yes) {
-        const left = yield* projects.leftovers(project);
-        if (!(yield* interactive)) {
-          return yield* new UsageError({
-            problem: `Refusing to remove ${project.name} without confirmation. Re-run with --yes, or interactively.`,
-          });
-        }
-        const remains =
-          (left.worktrees > 0
-            ? `Its ${left.worktrees} worktrees stay on disk.`
-            : "No files are deleted from disk.") +
-          (left.inTerrier ? " It's unregistered from terrier too." : "");
-        const sure = yield* confirm(
-          `Remove ${project.name} (${project.path}) from Shigoto no Mori? ${remains}`,
-        );
-        if (!sure) return yield* new Cancelled();
-      }
-      yield* projects.remove(project);
-      yield* json
-        ? emit({ ok: true, removed: project.name, path: project.path })
-        : out(`removed ${project.name} (${project.path})`);
-    }),
+const unregisterArgs = {
+  name: Argument.String("project").pipe(Argument.optional),
+  rest,
+  projectId: projectFlags.projectId,
+  yes: yesFlag,
+};
+
+// The project the verb names, once confirmed: the question is asked of
+// what removing it would leave.
+const confirmedProject = (
+  input: Command.Command.Config.Infer<typeof unregisterArgs>,
+  verb: string,
+  question: (
+    project: Registry.ListedProject,
+    left: Projects.Leftovers,
+  ) => string,
+) =>
+  Effect.gen(function* () {
+    const worktrees = yield* Worktrees.Worktrees;
+    const { binaryName } = yield* Effect.service(Output);
+    const at = yield* here;
+    const projectId = given(input.projectId);
+    const project = Option.isSome(projectId)
+      ? yield* worktrees.resolveProjectById(at, projectId.value)
+      : Option.isSome(input.name)
+        ? yield* worktrees.resolveProject(at, input.name.value)
+        : (yield* interactive)
+          ? yield* pickProject(at)
+          : yield* new UsageError({
+              problem: `Specify a project to ${verb} (see \`${binaryName} projects list\`).`,
+            });
+    if (input.yes) return project;
+    const left = yield* (yield* Projects.Projects).leftovers(project);
+    if (!(yield* interactive)) {
+      return yield* new UsageError({
+        problem: `Refusing to ${verb} ${project.name} without confirmation. Re-run with --yes, or interactively.`,
+      });
+    }
+    const terrier = left.inTerrier
+      ? " It's unregistered from terrier too."
+      : "";
+    if (!(yield* confirm(question(project, left) + terrier))) {
+      return yield* new Cancelled();
+    }
+    return project;
+  });
+
+const unregister = Command.make("unregister", unregisterArgs, (input) =>
+  Effect.gen(function* () {
+    const project = yield* confirmedProject(
+      input,
+      "unregister",
+      (it, left) =>
+        `Unregister ${it.name} (${it.path})? ` +
+        (left.worktrees > 0
+          ? `Its ${pluralize(left.worktrees, "worktree")} stay on disk.`
+          : "No files are deleted from disk."),
+    );
+    yield* (yield* Projects.Projects).remove(project);
+    const { json } = yield* Effect.service(Output);
+    yield* json
+      ? emit({ ok: true, unregistered: project.name, path: project.path })
+      : out(`unregistered ${project.name} (${project.path})`);
+  }),
+).pipe(changing);
+
+const deleteProject = Command.make("delete", unregisterArgs, (input) =>
+  Effect.gen(function* () {
+    const project = yield* confirmedProject(
+      input,
+      "delete",
+      (it, left) =>
+        `Delete ${it.name} (${it.path})` +
+        (left.worktrees > 0
+          ? ` and its ${pluralize(left.worktrees, "worktree")}`
+          : "") +
+        " from disk?",
+    );
+    yield* (yield* Projects.Projects).removeWithFiles(
+      project,
+      yield* reporter(),
+    );
+    const { json } = yield* Effect.service(Output);
+    yield* json
+      ? emit({ ok: true, deleted: project.name, path: project.path })
+      : out(`deleted ${project.name} (${project.path})`);
+  }),
 ).pipe(changing);
 
 // For a repo moved or renamed by hand: the last positional is where it
@@ -357,7 +400,8 @@ export const projectsCommand = Command.make("projects").pipe(
     list,
     add,
     cloneProject,
-    remove,
+    unregister,
+    deleteProject,
     relocate,
     icon,
     projectConfig,
