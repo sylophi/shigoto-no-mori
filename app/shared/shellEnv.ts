@@ -51,8 +51,7 @@ const LAUNCHER = byPlatform({
     path: "/usr/bin:/bin:/usr/sbin:/sbin",
   },
   // The systemd user manager's, for a unit, the base folders the host
-  // found its own in as it started among them (Paths). Its PATH is
-  // systemd's own.
+  // finds its own in among them (Paths). Its PATH is systemd's own.
   linux: {
     keys: [
       "HOME",
