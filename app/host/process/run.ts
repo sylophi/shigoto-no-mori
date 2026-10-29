@@ -38,6 +38,7 @@ import * as Loopback from "@host/socket/Loopback";
 import { reapOrphanedConnector } from "@host/direct/Tunnel";
 import { hostBinaryPath, setHostFacts, tunnelPidFile } from "./facts";
 import * as HostLayer from "./layer";
+import * as HostNodeServices from "./nodeServices";
 import { startHost } from "./session";
 
 // Every span that ends, a JSON line in host-trace.log beside the
@@ -173,7 +174,7 @@ export async function runHost<E>(root: {
         }),
       ),
       Layer.provideMerge(childDefaults),
-      Layer.provideMerge(NodeServices.layer),
+      Layer.provideMerge(HostNodeServices.layer),
     ),
   );
   runtime = graph;
