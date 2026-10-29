@@ -68,6 +68,9 @@ binary=$(printf '%s' "$binary" | tr -d -)
 
 root=${XDG_DATA_HOME:-$HOME/.local/share}/$config_dir
 bin=${XDG_BIN_HOME:-$HOME/.local/bin}
+# The user's alone, as the host makes it: the account's credential is
+# kept here.
+mkdir -p -m 700 "$root"
 mkdir -p "$root/versions" "$bin"
 
 # Unpacked beside versions/, where the updater's pruning doesn't look,

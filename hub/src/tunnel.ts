@@ -254,8 +254,9 @@ export async function provisionTunnel(
 // drops its live connections) and its DNS record. The two halves are
 // independent and each individually swallowed, so they run
 // concurrently and revoke succeeds whether or not the CF cleanup does.
-// An orphaned tunnel is idle configuration, not a capability (its
-// connector token died with the revoked device's provisioning access).
+// An orphaned tunnel keeps its connector token, which only the revoked
+// device ever held, and leads only to that device's loopback: no device
+// of the account is sent to its hostname again.
 export async function teardownTunnel(
   cf: TunnelEnv,
   cfFetch: typeof fetch,

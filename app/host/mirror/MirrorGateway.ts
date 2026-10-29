@@ -14,6 +14,12 @@
 // streams against peer devices. So the preface carries a token minted
 // at bind and handed to the daemon through its environment, never
 // argv, which every account can read from `ps`.
+//
+// A live mirror's stream has the peer write into this device, which it
+// may only while this device's switches let it (mirrorHereBlocker): one
+// is refused while they don't, and those open close when one turns
+// off. The daemon asks again every 15 s, so the mirror goes on once
+// they are back on. A move's files step is the move's to allow.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -24,13 +30,20 @@ import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { createServer, type Socket } from "node:net";
 import {
   isNoDirectConnectionError,
   isPeerRefusal,
 } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
-import { mirrorContract } from "@shigomori/contracts/modules/mirror";
+import {
+  mirrorContract,
+  mirrorHereBlocker,
+} from "@shigomori/contracts/modules/mirror";
+import { byPlatform } from "@shigomori/engine/platform";
+import * as HostAccount from "@host/lib/HostAccount";
+import * as Sharing from "@host/lib/Sharing";
 import * as PeerReach from "@host/ipc/PeerReach";
 import { WorktreeIdSchema } from "@shigomori/contracts/schemas";
 import { mintHexId } from "@host/lib/hexId";
@@ -73,13 +86,20 @@ const PrefaceSchema = Schema.fromJsonString(
   }),
 );
 const decodePreface = Schema.decodeUnknownResult(PrefaceSchema);
+type Preface = typeof PrefaceSchema.Type;
 
-// A move's files step, told to the peer so it counts the stream as
-// under way (registry.ts transferInto). A live mirror's is not.
-const transferOf = (preface: { deviceId: string; worktreeId: string }) => {
-  const transfer = transferInto(preface.deviceId, preface.worktreeId);
-  return transfer === undefined ? {} : { transfer };
-};
+// What keeps this device's switches from letting a peer mirror into it,
+// as they stand.
+export const ownMirrorHereBlocker = Effect.gen(function* () {
+  const account = yield* (yield* HostAccount.HostAccount).current;
+  return mirrorHereBlocker(
+    {
+      acceptsCommands: account.facts?.acceptsCommands === true,
+      sharing: yield* (yield* Sharing.Sharing).current,
+    },
+    byPlatform({ darwin: false, linux: true }),
+  );
+});
 
 // A preface is a short JSON line. Anything longer is not our daemon.
 const PREFACE_LIMIT_BYTES = 8 * 1024;
@@ -164,7 +184,24 @@ const make = Effect.gen(function* () {
   const reach = yield* PeerReach.PeerReach;
   const listening = yield* Ref.make(Option.none<MirrorGatewayAddress>());
   const streams = new Set<BridgedConn>();
-  const run = yield* FiberSet.makeRuntimePromise<never>();
+  // The live mirrors' among them.
+  const mirrors = new Set<BridgedConn>();
+  const run = yield* FiberSet.makeRuntimePromise<
+    HostAccount.HostAccount | Sharing.Sharing
+  >();
+
+  yield* Stream.merge(
+    (yield* Sharing.Sharing).changes,
+    (yield* HostAccount.HostAccount).changes,
+  ).pipe(
+    Stream.runForEach(() =>
+      Effect.gen(function* () {
+        if ((yield* ownMirrorHereBlocker) === undefined) return;
+        for (const conn of mirrors) conn.destroy();
+      }),
+    ),
+    Effect.forkScoped,
+  );
 
   const handleConnection = (token: string) => (socket: Socket) => {
     // 'close' always follows 'error'. The listener must exist or the
@@ -188,51 +225,76 @@ const make = Effect.gen(function* () {
           socket.end("error bad preface\n");
           return;
         }
-        const api = reach.calls(mirrorContract, preface.deviceId);
-        const conn = bridgeSocket(socket, {
-          channels: reach.channels(preface.deviceId),
-          open: (channelId) =>
-            run(
-              api.openStream({
-                projectId: preface.projectId,
-                worktreeId: preface.worktreeId,
-                channelId,
-                ...(preface.localWorktreeId === undefined
-                  ? {}
-                  : { peerWorktreeId: preface.localWorktreeId }),
-                ...transferOf(preface),
-              }),
-            ),
-          carried,
-          // The bridge resumes the socket itself once the far end is
-          // open. The answer line goes out just before.
-          onOpened: () => {
-            socket.write("ok\n");
-          },
-          onOpenFailed: (error) => {
-            // The peer turning this device away or out of reach is a
-            // mirror paused or waiting, which the engine asks again
-            // about every 15 s for as long as it lasts, or a move's
-            // files step failing, which the move reports itself: no
-            // news.
-            if (!isPeerRefusal(error) && !isNoDirectConnectionError(error)) {
-              log.warn(
-                `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorWordsOf(error)}`,
-              );
-            }
-            socket.write(`error ${errorWordsOf(error).replace(/\n/g, " ")}\n`);
-          },
-          onClosed: () => {
-            streams.delete(conn);
-          },
+        // A move's files step, told to the peer so it counts the stream
+        // as under way (registry.ts transferInto). A live mirror's is not.
+        const transfer = transferInto(preface.deviceId, preface.worktreeId);
+        if (transfer !== undefined) {
+          bridge(socket, preface, carried, transfer);
+          return;
+        }
+        void run(ownMirrorHereBlocker).then((refusal) => {
+          if (refusal !== undefined) {
+            socket.end(`error ${refusal}\n`);
+            return;
+          }
+          mirrors.add(bridge(socket, preface, carried, undefined));
         });
-        streams.add(conn);
       },
       (error: unknown) => {
         log.warn(`[mirror] gateway: ${errorWordsOf(error)}`);
         socket.destroy();
       },
     );
+  };
+
+  // The socket bridged onto a stream the peer opens for it.
+  const bridge = (
+    socket: Socket,
+    preface: Preface,
+    carried: Buffer,
+    transfer: ReturnType<typeof transferInto>,
+  ) => {
+    const api = reach.calls(mirrorContract, preface.deviceId);
+    const conn = bridgeSocket(socket, {
+      channels: reach.channels(preface.deviceId),
+      open: (channelId) =>
+        run(
+          api.openStream({
+            projectId: preface.projectId,
+            worktreeId: preface.worktreeId,
+            channelId,
+            ...(preface.localWorktreeId === undefined
+              ? {}
+              : { peerWorktreeId: preface.localWorktreeId }),
+            ...(transfer === undefined ? {} : { transfer }),
+          }),
+        ),
+      carried,
+      // The bridge resumes the socket itself once the far end is
+      // open. The answer line goes out just before.
+      onOpened: () => {
+        socket.write("ok\n");
+      },
+      onOpenFailed: (error) => {
+        // The peer turning this device away or out of reach is a
+        // mirror paused or waiting, which the engine asks again
+        // about every 15 s for as long as it lasts, or a move's
+        // files step failing, which the move reports itself: no
+        // news.
+        if (!isPeerRefusal(error) && !isNoDirectConnectionError(error)) {
+          log.warn(
+            `[mirror] gateway: opening ${preface.deviceId}/${preface.worktreeId} failed: ${errorWordsOf(error)}`,
+          );
+        }
+        socket.write(`error ${errorWordsOf(error).replace(/\n/g, " ")}\n`);
+      },
+      onClosed: () => {
+        streams.delete(conn);
+        mirrors.delete(conn);
+      },
+    });
+    streams.add(conn);
+    return conn;
   };
 
   // The loopback listener on an ephemeral port, held until the layer

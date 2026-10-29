@@ -50,32 +50,34 @@ import {
   dmgBackgroundFor,
 } from "./shared/packaging/dmgLayout.mts";
 
-loadEnv();
+// app/.env's signing and notarization settings, for this file alone:
+// in process.env they would reach every terminal and script a dev
+// instance runs.
+const env = { ...process.env };
+loadEnv({ processEnv: env });
 
 // The flavor this build is made as (SM_FLAVOR, prod when unset), whose
 // row in the flavor table names the bundle, its id, its scheme and its
 // `sm`, so a test flavor installs beside the prod app.
-const flavor = buildFlavor(process.env);
+const flavor = buildFlavor(env);
 const names = flavorNames(flavor);
 
-const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
+const osxNotarizeConfig = env.APPLE_NOTARY_KEYCHAIN_PROFILE
   ? {
-      keychainProfile: process.env.APPLE_NOTARY_KEYCHAIN_PROFILE,
+      keychainProfile: env.APPLE_NOTARY_KEYCHAIN_PROFILE,
     }
-  : process.env.APPLE_ID &&
-      process.env.APPLE_APP_SPECIFIC_PASSWORD &&
-      process.env.APPLE_TEAM_ID
+  : env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID
     ? {
-        appleId: process.env.APPLE_ID,
-        appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
-        teamId: process.env.APPLE_TEAM_ID,
+        appleId: env.APPLE_ID,
+        appleIdPassword: env.APPLE_APP_SPECIFIC_PASSWORD,
+        teamId: env.APPLE_TEAM_ID,
       }
     : undefined;
 
 // The same reading vite.node.config.ts bakes into main as
 // __SM_SIGNED_MAC_BUILD__: the two must agree on whether this bundle
 // carries a Developer ID signature (see shared/packaging/macSigning.mts).
-const signingIdentity = macSigningIdentity(process.env);
+const signingIdentity = macSigningIdentity(env);
 const shouldSignMac = signingIdentity !== null;
 // A test flavor takes a debugger (flavor.ts debuggable), which on a
 // Developer-ID build would act with that signature's keychain access.

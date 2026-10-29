@@ -14,7 +14,7 @@ export async function headlessFacts(): Promise<HostFacts> {
   const flavor = packaged ? __SM_PACKAGED_FLAVOR__ : "dev";
   const { userData, logs } = appFolders(flavor, await resolvePaths(flavor));
   await mkdir(userData, { recursive: true, mode: 0o700 });
-  await mkdir(logs, { recursive: true });
+  await mkdir(logs, { recursive: true, mode: 0o700 });
   const appPath = packaged ? __dirname : dirname(__dirname);
   return {
     packaged,

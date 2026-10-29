@@ -19,7 +19,9 @@ import { errorWordsOf } from "@host/lib/errorWords";
 import { PeerReach } from "@host/ipc/PeerReach";
 import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import * as HostAccount from "@host/lib/HostAccount";
+import * as Sharing from "@host/lib/Sharing";
 import { makeGitFollower } from "./gitFollow";
+import { ownMirrorHereBlocker } from "./MirrorGateway";
 import { createMirrorHistory } from "./history";
 import * as MirrorDaemon from "./MirrorDaemon";
 import {
@@ -129,9 +131,16 @@ const make = (options: {
       Effect.forkScoped,
     );
 
+    const switches = yield* Effect.context<
+      HostAccount.HostAccount | Sharing.Sharing
+    >();
     const follower = yield* makeGitFollower({
       sessions: mirrorSessions(daemon),
       fresh: daemon.fresh,
+      switchedOff: ownMirrorHereBlocker.pipe(
+        Effect.map((refusal) => refusal !== undefined),
+        Effect.provide(switches),
+      ),
       followDescription: true,
       // The states both sides last agreed on, in the store so a restart
       // resumes the follow rule rather than falling back to ancestry.
