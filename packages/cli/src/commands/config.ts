@@ -9,6 +9,7 @@ import {
   keyDescriptions,
 } from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
+import { byPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
@@ -185,7 +186,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       if (json || editor === "" || !(yield* interactive)) {
         const verbs = settings.listCommand.replace(/ list$/, "");
         return yield* new UsageError({
-          problem: `edit opens the settings in $VISUAL or $EDITOR at a terminal. Use \`${binaryName} ${verbs} set\` instead, or the app.`,
+          problem: `edit opens the settings in $VISUAL or $EDITOR at a terminal. Use \`${binaryName} ${verbs} set\` instead${byPlatform({ darwin: ", or the app", linux: "" })}.`,
         });
       }
       const config = yield* Config.Config;

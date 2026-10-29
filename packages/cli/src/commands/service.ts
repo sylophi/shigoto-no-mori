@@ -1,5 +1,5 @@
-// sm service <install|uninstall|start|stop|status|logs>: the host of a
-// Linux install, which the user's systemd runs as a unit
+// sm service <install|uninstall|start|stop|restart|status|logs>: the
+// host of a Linux install, which the user's systemd runs as a unit
 // (engine hostUnit.ts): from boot, and again whenever it exits but for
 // a stop. On a Mac the app is the host, so there is none to manage.
 import { basename, join } from "node:path";
@@ -107,6 +107,15 @@ const stopCommand = Command.make("stop", { rest }, () =>
   }),
 );
 
+const restartCommand = Command.make("restart", { rest }, () =>
+  Effect.gen(function* () {
+    const install = yield* installed;
+    yield* HostUnit.restartUnit(install);
+    const { json } = yield* Effect.service(Output);
+    yield* json ? emit({ ok: true }) : out("restarted the host");
+  }),
+);
+
 const statusCommand = Command.make("status", { rest }, () =>
   Effect.gen(function* () {
     const install = yield* place;
@@ -181,6 +190,7 @@ export const serviceCommand = Command.make("service").pipe(
     uninstallCommand,
     startCommand,
     stopCommand,
+    restartCommand,
     statusCommand,
     logsCommand,
   ]),

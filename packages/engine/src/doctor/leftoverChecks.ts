@@ -8,6 +8,7 @@ import { parseProcessTable } from "../doctorParse.ts";
 import { LOOPBACK_FILE, LoopbackFile } from "../Control.ts";
 import { appFolders } from "../footprint.ts";
 import * as Paths from "../Paths.ts";
+import { byPlatform } from "../platform.ts";
 import { pidAlive, PS_BIRTH_ENV } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
 import { readTunnelPid } from "../tunnelPid.ts";
@@ -18,8 +19,13 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
-    const { flavor } = paths;
+    const { flavor, binaryName } = paths;
     const { capture, readText } = reads;
+    // What stops a process the host left behind: its next start.
+    const STOPS_LEFTOVERS = byPlatform({
+      darwin: "Open the app, which stops",
+      linux: `Restart the host (\`${binaryName} service restart\`), which stops`,
+    });
     // The app records its cloudflared child's pid and kills a leftover one
     // at its next launch. Until then a tunnel whose app crashed keeps this
     // machine reachable.
@@ -58,7 +64,7 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       return [
         check("Processes", "tunnel", "tunnel").warn(
           `a cloudflared tunnel (pid ${pid}) outlived the app that started it, so this machine stays reachable through it`,
-          `Open the app, which stops it at launch, or run \`kill ${pid}\`.`,
+          `${STOPS_LEFTOVERS} it at launch, or run \`kill ${pid}\`.`,
         ),
       ];
     });
@@ -98,7 +104,7 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       return [
         check("Processes", "scripts", "scripts").warn(
           `${pluralize(n, "script")} the app started ${plural(n, "is", "are")} still running after it quit (${orphans.map(({ command }) => command).join(", ")}), holding ${plural(n, "its", "their")} ports`,
-          `Open the app, which stops them at launch, or run \`kill ${orphans.map(({ pid }) => String(pid)).join(" ")}\`.`,
+          `${STOPS_LEFTOVERS} them at launch, or run \`kill ${orphans.map(({ pid }) => String(pid)).join(" ")}\`.`,
         ),
       ];
     });

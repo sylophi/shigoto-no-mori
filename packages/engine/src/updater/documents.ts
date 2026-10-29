@@ -19,6 +19,7 @@ import { parse, SemVer } from "semver";
 import { StagingLockUnavailable, UpdateInProgress } from "../stagingLock.ts";
 import { APP_REPO } from "../flavor.ts";
 import { byPlatform } from "../platform.ts";
+import { capitalized } from "@shigomori/contracts/words";
 import { formatKitchen, RELEASE_LIST_URL } from "../updateFeed.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -324,12 +325,15 @@ export class AppStillRunning extends Schema.TaggedError<AppStillRunning>()(
   }
 }
 
+// What runs the host: the app on a Mac, and on Linux the host alone.
+const theApp = () => byPlatform({ darwin: "the app", linux: "the host" });
+
 export class RelaunchFailed extends Schema.TaggedError<RelaunchFailed>()(
   "RelaunchFailed",
   { version: Schema.String, cause: Schema.Defect() },
 ) {
   override get message(): string {
-    return `Installed ${this.version} but couldn't relaunch the app: ${causeText(this.cause)}`;
+    return `Installed ${this.version} but couldn't restart ${theApp()}: ${causeText(this.cause)}`;
   }
 }
 
@@ -360,23 +364,36 @@ export class HandoffFailed extends Schema.TaggedError<HandoffFailed>()(
   override get message(): string {
     switch (this.reason) {
       case "unpublished":
-        return `The app is running but hasn't published its updater state. Wait for it to finish starting (or quit it) and rerun \`${this.binary} update\`.`;
+        return byPlatform({
+          darwin: `The app is running but hasn't published its updater state. Wait for it to finish starting (or quit it) and rerun \`${this.binary} update\`.`,
+          linux: `The host is running but hasn't published its updater state. Wait for it to finish starting and rerun \`${this.binary} update\`.`,
+        });
       case "request":
         return `Couldn't write the update request: ${causeText(this.cause)}`;
       case "withdraw":
         return `Couldn't take the update request back: ${causeText(this.cause)}`;
       case "not-taken":
-        return "The app didn't pick up the update request. Quit the app and run the update again.";
+        return byPlatform({
+          darwin:
+            "The app didn't pick up the update request. Quit the app and run the update again.",
+          linux:
+            "The host didn't pick up the update request. Restart it (`service restart`) and run the update again.",
+        });
       case "declined":
         return "The restart was declined in the app, so the update wasn't installed. It stays staged for the next restart.";
       case "nothing-staged":
-        return "The app found no update newer than itself to install.";
+        return `${capitalized(theApp())} found no update newer than itself to install.`;
       case "install":
         return `Install failed: ${this.detail}`;
       case "same-version":
-        return `The app restarted but is still on ${this.version}, so the install may have failed. Check ${this.log}.`;
+        return `${capitalized(theApp())} restarted but is still on ${this.version}, so the install may have failed. Check ${this.log}.`;
       case "timeout":
-        return "The app hasn't restarted yet. It may still be waiting on a confirmation in the app (confirming there will still install the update), or the install failed. Check the app.";
+        return byPlatform({
+          darwin:
+            "The app hasn't restarted yet. It may still be waiting on a confirmation in the app (confirming there will still install the update), or the install failed. Check the app.",
+          linux:
+            "The host hasn't restarted yet, so the install may have failed. Check `service status` and `service logs`.",
+        });
     }
   }
 }

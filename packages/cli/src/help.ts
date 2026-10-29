@@ -71,18 +71,46 @@ const catalog = (names: Names) => {
             "Opens the app at login and again after a crash it can recover from.",
           ],
         ],
-        // The service does it (`service`).
-        linux: [],
+        // The service keeps it reachable (`service`).
+        linux: [
+          [
+            "devices rename <name>",
+            "Rename this machine on your account",
+            "The name your other devices list it by, and --to and --from take.",
+          ],
+          [
+            "devices icon [<icon>]",
+            "Pick this machine's icon on your account",
+            "Without one, prints the icon and the ones to pick from.",
+          ],
+          [
+            "devices remove <device> [--yes]",
+            "Remove another device from your account",
+            "<device> is its name or id, or the start of either. It's signed out there, and its mirrors and forwards here end. Asks first, unless --yes.",
+          ],
+        ],
       }),
-      [
-        "update [--check]",
-        "Update the app to the latest release",
-        "Checks GitHub releases, downloads, verifies and installs without opening the app (the linked CLI updates with it), restarting a running app into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
-      ],
+      byPlatform<{ darwin: Item; linux: Item }>({
+        darwin: [
+          "update [--check]",
+          "Update the app to the latest release",
+          "Checks GitHub releases, downloads, verifies and installs without opening the app (the linked CLI updates with it), restarting a running app into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
+        ],
+        linux: [
+          "update [--check]",
+          "Update the host to the latest release",
+          "Checks GitHub releases, downloads, verifies and installs it (the linked CLI updates with it), restarting a running host into the new version. --check only reports. A prerelease build takes any later prerelease or release, a release build only a later release.",
+        ],
+      }),
       [
         "doctor [--fix] [--yes]",
         "Check the installation and data dir",
-        "Checks the environment, the data dir, each project, and the processes a crashed app left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts); anything else is reported. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.",
+        `Checks the environment, the data dir, each project, and the processes a crashed ${byPlatform({ darwin: "app", linux: "host" })} left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts); anything else is reported. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.`,
+      ],
+      [
+        "data [move <folder> | reset]",
+        "Show or move the data folder",
+        `Prints where it is. move puts it inside <folder> under its own name, and reset puts it back where it starts, as Settings' Data location does. Either stops every running script and restarts the ${byPlatform({ darwin: "app", linux: "host" })} into the new place. Refused while SHIGOMORI_DATA_DIR sets it. --json prints {ok, dataDir, dataDirSource, atDefaultDataDir}, and after a move {ok, dataDir}, null for a reset.`,
       ],
       byPlatform<{ darwin: Item; linux: Item }>({
         darwin: [
@@ -417,6 +445,11 @@ const catalog = (names: Names) => {
         "service stop",
         "Stop the host",
         "Until the next start, or the next boot.",
+      ],
+      [
+        "service restart",
+        "Restart the host",
+        "It stops what it ran, and what an earlier run left behind as it starts.",
       ],
       [
         "service status",

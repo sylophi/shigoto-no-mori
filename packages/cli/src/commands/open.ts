@@ -1,10 +1,13 @@
 // sm [worktrees] open <tool> [<worktree>]: a worktree opened in one of
 // its launchers, and sm [worktrees] edit <file> [<worktree>]: one of its
 // files in the editor.
+import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Open from "@shigomori/engine/Open";
 import * as Paths from "@shigomori/engine/Paths";
+import { childEnv } from "@shigomori/engine/processes";
+import { NO_SCREEN } from "@shigomori/engine/screen";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -125,11 +128,43 @@ export const edit = Command.make(
         });
       }
       const { located, fromCwd } = yield* commandTarget(input, "edit <file>");
-      const opened = yield* (yield* Open.Open).edit(
-        located,
-        fromCwd ? resolve(yield* cwd, file) : file,
+      const target = fromCwd ? resolve(yield* cwd, file) : file;
+      const opened = yield* (yield* Open.Open).edit(located, target).pipe(
+        Effect.map(Option.some),
+        // With no screen to open it on (a Linux server over SSH), it
+        // opens in $VISUAL or $EDITOR at this terminal, as `config edit`
+        // opens the settings.
+        Effect.catchTag("LaunchFailed", (error) =>
+          Effect.gen(function* () {
+            const editor = process.env["VISUAL"] || process.env["EDITOR"] || "";
+            if (error.said !== NO_SCREEN || json || !(yield* interactive)) {
+              return yield* error;
+            }
+            if (editor === "") {
+              return yield* new Open.LaunchFailed({
+                label: error.label,
+                said: `${NO_SCREEN}. Set $EDITOR to edit it at this terminal.`,
+              });
+            }
+            const ran = spawnSync(
+              "/bin/sh",
+              ["-c", `${editor} "$0"`, resolve(located.worktree.path, target)],
+              { stdio: "inherit", env: childEnv(process.env) },
+            );
+            if (ran.status !== 0) {
+              return yield* new Open.LaunchFailed({
+                label: error.label,
+                said: `${editor} failed: ${ran.error?.message ?? `exit status ${String(ran.status)}`}`,
+              });
+            }
+            return Option.none<string>();
+          }),
+        ),
       );
-      yield* json ? emit({ ok: true, path: opened }) : out(`opened ${opened}`);
+      if (Option.isNone(opened)) return;
+      yield* json
+        ? emit({ ok: true, path: opened.value })
+        : out(`opened ${opened.value}`);
     }),
 );
 

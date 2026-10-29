@@ -124,3 +124,6 @@ export const startUnit = (install: LinuxInstall) =>
 
 export const stopUnit = (install: LinuxInstall) =>
   systemctl("stop", install.unitName).pipe(Effect.asVoid);
+
+export const restartUnit = (install: LinuxInstall) =>
+  systemctl("restart", install.unitName).pipe(Effect.asVoid);

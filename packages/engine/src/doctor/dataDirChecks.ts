@@ -22,6 +22,7 @@ import { flavorNames } from "../flavor.ts";
 import * as NativeFs from "../NativeFs.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
+import { byPlatform } from "../platform.ts";
 import { heldV2Files, removeV2Files, v2Files } from "../v2Files.ts";
 import * as Registry from "../Registry.ts";
 import { acquireStagingLock } from "../stagingLock.ts";
@@ -128,7 +129,10 @@ const checkDormantState = (
 // none when there are none.
 const checkGlobalConfig = (
   stored: Option.Option<ConfigDoc>,
-  fix = "Set it again in the app's Settings.",
+  fix = byPlatform({
+    darwin: "Set it again in the app's Settings.",
+    linux: "Set it again with `config set`.",
+  }),
 ) => {
   const line = check("Data dir", "config", "settings");
   if (Option.isNone(stored)) return line.ok("absent, so defaults apply");
@@ -612,7 +616,11 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
         return [
           line.warn(
             "on in Settings but `port-pool` isn't on PATH, so provisioning is skipped",
-            "Install port-pool, or turn the toggle off in the app's Settings.",
+            byPlatform({
+              darwin:
+                "Install port-pool, or turn the toggle off in the app's Settings.",
+              linux: `Install port-pool, or turn it off (\`${paths.binaryName} config set portPool false\`).`,
+            }),
           ),
         ];
       }

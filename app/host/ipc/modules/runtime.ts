@@ -195,10 +195,10 @@ export const runtimeHandlers = {
       // can't change under live callers), so until the restart this
       // process still names the old folder and must not move it again.
       // The local renderer calls the window module's `relaunch` once
-      // this reply lands. A peer has no window module on this machine
-      // to acknowledge with, so the host relaunches itself, after the
-      // reply has left (the shell owns that timing).
-      if (unattended) yield* shell.relaunch;
+      // this reply lands. A peer or the terminal has no window module on
+      // this machine to acknowledge with, so the host relaunches itself,
+      // after the reply has left (the shell owns that timing).
+      if (ctx.windowId === undefined) yield* shell.relaunch;
     }),
 
   nuke: () => nukeHost,

@@ -18,6 +18,7 @@ import { takeUpdateEndpointOverrides } from "@shared/updater/endpoints";
 import { headlessAccount } from "./account";
 import { headlessFacts } from "./facts";
 import { finishNuke, nuking, runNuke } from "./nuke";
+import { followSharedSettings } from "./sharedSettings";
 import * as HeadlessShell from "./shell";
 
 // One host per flavor on this machine: a database in its userData,
@@ -58,6 +59,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => quit(false));
   process.on("SIGINT", () => quit(false));
   const account = headlessAccount(facts);
+  followSharedSettings();
   await runHost({
     facts,
     shell: HeadlessShell.layer(facts, account),

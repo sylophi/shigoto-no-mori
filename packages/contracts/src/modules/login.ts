@@ -1,15 +1,17 @@
 import * as Schema from "effect/Schema";
 import { defineContract, invoke, Remote } from "../contract.ts";
+import { DeviceIconSchema } from "../deviceIcon.ts";
 import { VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
 
-// The terminal's sign-in on a machine with no windows (`sm login`,
-// `sm logout`), which only the headless host serves: an app with
-// windows signs in at them. It is Clerk's device grant: the host asks
-// Clerk for a code, the person approves it on Clerk's page from another
-// device, and the host, asking Clerk until they have, enrolls this
-// device with the hub under the token it gets. Loopback only, and kept
-// out of allContractModules, so no window's api carries it.
+// The terminal's account page on a machine with no windows (`sm login`,
+// `sm logout`, `sm devices rename|icon|remove`), which only the
+// headless host serves: an app with windows has the page. Its sign-in
+// is Clerk's device grant: the host asks Clerk for a code, the person
+// approves it on Clerk's page from another device, and the host, asking
+// Clerk until they have, enrolls this device with the hub under the
+// token it gets. Loopback only, and kept out of allContractModules, so
+// no window's api carries it.
 
 export const LoginCodeSchema = strict(
   Schema.Struct({
@@ -34,6 +36,7 @@ const LoginStatusSchema = strict(
     // The name this device goes by on the account, or would enroll
     // under.
     deviceName: Schema.String,
+    deviceIcon: DeviceIconSchema,
   }),
 );
 export type LoginStatus = typeof LoginStatusSchema.Type;
@@ -48,4 +51,15 @@ export const loginContract = defineContract(
   // when they denied it or the code expired.
   invoke("finish", LoginCodeSchema, LoginStatusSchema),
   invoke("signOut", VoidSchema, VoidSchema),
+  // This device's name and icon on the account.
+  invoke(
+    "rename",
+    Schema.String.check(Schema.isBetweenLength(1, 256)),
+    LoginStatusSchema,
+  ),
+  invoke("setIcon", DeviceIconSchema, LoginStatusSchema),
+  // Removes the account's other device a name or id (or the start of
+  // either) picks, answering its name. Refused when it picks none or
+  // several.
+  invoke("removeDevice", Schema.String, Schema.String),
 ).annotateRpcs(Remote, false);

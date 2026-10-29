@@ -29,6 +29,7 @@ import { isHostSide } from "@shigomori/contracts/link";
 import {
   hubContract,
   type HubPeerPush,
+  type HubStatus,
 } from "@shigomori/contracts/modules/hub";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
@@ -233,6 +234,16 @@ export function onPeerPush(listener: PeerPushListener): () => void {
   };
 }
 
+// The hub's status for the host's own followers, beside the windows':
+// a headless host's, which has no window to act on it
+// (headless/account.ts, headless/sharedSettings.ts).
+type HubStatusListener = (status: HubStatus) => void;
+const hubStatusListeners = new Set<HubStatusListener>();
+
+export function onHubStatus(listener: HubStatusListener): void {
+  hubStatusListeners.add(listener);
+}
+
 // Each peer as it comes to take this device's calls (PeerReach's
 // admissions), off the status snapshots.
 export const peerAdmissions = Effect.runSync(PeerReach.makeAdmissions);
@@ -303,6 +314,7 @@ export const remotePlanesLayer = Layer.effectDiscard(
         broadcastStatus: (status) => {
           peerAdmissions.note(status);
           broadcastAll(hubContract, "statusChanged", status);
+          for (const listener of hubStatusListeners) listener(status);
         },
         broadcastPeerPush: (push) => {
           broadcastAll(hubContract, "peerPush", push);

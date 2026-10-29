@@ -8,7 +8,11 @@
 // (shared/account/deviceGrant.ts), whose access token enrolls this
 // device once and is dropped.
 import { join } from "node:path";
-import { callFailureOf, errorMessageOf } from "@shigomori/contracts/errors";
+import {
+  callFailureOf,
+  errorMessageOf,
+  isHubRefusal,
+} from "@shigomori/contracts/errors";
 import type { AccountStatus } from "@shigomori/contracts/modules/account";
 import {
   loginContract,
@@ -18,9 +22,15 @@ import type { EffectHandlers } from "@shigomori/contracts/types";
 import { current as currentPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
-import { applyAccount } from "@host/process/handlers";
+import {
+  listed,
+  matchDevices,
+  nameOf,
+  type Named,
+} from "@host/lib/control/plan";
+import { applyAccount, noteAccountDevices } from "@host/process/handlers";
 import type { HostServices } from "@host/process/services";
-import { registerLoopbackContract } from "@host/process/wires";
+import { onHubStatus, registerLoopbackContract } from "@host/process/wires";
 import { createAccountStore } from "@shared/account/credentialFile";
 import { defaultDesktopDeviceName } from "@shared/account/defaultDeviceName";
 import { retryParkedRevoke } from "@shared/account/enroll";
@@ -37,15 +47,23 @@ import {
 import { createAccountService } from "@shared/account/service";
 import type { HostFacts } from "@shared/hostFacts";
 import type { HandlerContext } from "@shared/ipc/transport";
+import { credentialRevoked } from "@shared/remote/supervisor";
 import { log } from "@shared/log";
 
 const call = <A>(run: (signal: AbortSignal) => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: callFailureOf });
 
-const loginStatus = ({ signedIn, deviceName }: AccountStatus): LoginStatus => ({
+// How often a host with no window reads the account's devices, which a
+// window does as it comes into focus: a device removed from the account
+// ends its mirrors and forwards here, and a peer's rename of this one
+// lands.
+const LIST_DEVICES_EVERY_MS = 10 * 60_000;
+
+const loginStatus = ({
   signedIn,
   deviceName,
-});
+  deviceIcon,
+}: AccountStatus): LoginStatus => ({ signedIn, deviceName, deviceIcon });
 
 export type HeadlessAccount = ReturnType<typeof headlessAccount>;
 
@@ -91,7 +109,8 @@ export function headlessAccount(facts: HostFacts) {
     sharedSignIn: () => false,
     codeSignIn: false,
     changed: tellHost,
-    devicesListed: () => {},
+    devicesListed: (devices) =>
+      noteAccountDevices(devices.map((device) => device.deviceId)),
     acceptsCommands: () => store.read()?.acceptsCommands === true,
     setAcceptsCommands,
     // Commands are refused from the first moment, ahead of the revoke's
@@ -100,12 +119,28 @@ export function headlessAccount(facts: HostFacts) {
       record.acceptsCommands === true ? setAcceptsCommands(false) : undefined,
     transitions,
     // The revoke is best effort: offline, it is parked for the next
-    // start (boot), and this device signs out here anyway.
-    onRevokeFailure: (error) =>
+    // start (boot), and this device signs out here anyway. A refusal is
+    // a device the hub has let go already.
+    onRevokeFailure: (error) => {
+      if (isHubRefusal(error)) return;
       log.warn(
         `[account] the hub didn't take this device's revoke, so it's kept for later: ${errorMessageOf(error)}`,
-      ),
+      );
+    },
   });
+
+  // Signed out or offline, there is nothing to read until the next.
+  const listDevices = () =>
+    Promise.resolve()
+      .then(() => account.listDevices(undefined, null))
+      .catch(() => {});
+
+  // What the device calls take, said for the terminal.
+  const signedIn = () => {
+    if (store.read() === null) {
+      throw new Error("This machine isn't signed in. `login` signs it in.");
+    }
+  };
 
   const login: EffectHandlers<
     typeof loginContract,
@@ -135,6 +170,53 @@ export function headlessAccount(facts: HostFacts) {
         ),
       ),
     signOut: () => call(async () => account.signOut(undefined, null)),
+    rename: (name) =>
+      call(async () => {
+        signedIn();
+        return loginStatus(
+          await account.setDeviceName(
+            { deviceId: await deviceIdOf, name },
+            null,
+          ),
+        );
+      }),
+    setIcon: (icon) =>
+      call(async () => {
+        signedIn();
+        return loginStatus(
+          await account.setDeviceIcon(
+            { deviceId: await deviceIdOf, icon },
+            null,
+          ),
+        );
+      }),
+    removeDevice: (query) =>
+      call(async () => {
+        signedIn();
+        const self = await deviceIdOf;
+        const peers = (await account.listDevices(undefined, null)).filter(
+          (device) => device.deviceId !== self,
+        );
+        const matched = matchDevices(peers, query).map((device) => ({
+          deviceId: device.deviceId,
+          name: nameOf(device),
+        }));
+        if (matched.length === 0) {
+          throw new Error(
+            `No other device on the account goes by "${query}". \`devices\` lists them.`,
+          );
+        }
+        if (matched.length > 1) {
+          throw new Error(
+            `"${query}" picks ${listed(matched)}. Give more of the name or its id.`,
+          );
+        }
+        const [device] = matched as [Named];
+        await account.revokeDevice(device.deviceId, null);
+        // Its mirrors and forwards here end with the listing.
+        await listDevices();
+        return device.name;
+      }),
   };
   registerLoopbackContract(loginContract, login);
 
@@ -156,6 +238,14 @@ export function headlessAccount(facts: HostFacts) {
           `[account] a revoke kept from a sign-out still didn't land: ${errorMessageOf(parked.error)}`,
         );
       }
+      void listDevices();
+      setInterval(() => void listDevices(), LIST_DEVICES_EVERY_MS).unref();
+      // Removed from the account, it signs out, as a window does
+      // (ClerkAccountSync), so `sm login` can sign it in afresh.
+      onHubStatus(({ socket }) => {
+        if (!credentialRevoked(socket) || store.read() === null) return;
+        void Promise.resolve(account.signOut(undefined, null)).catch(() => {});
+      });
     },
     signOutForNuke: async () => {
       const deviceId = await deviceIdOf;

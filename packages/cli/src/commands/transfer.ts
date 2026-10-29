@@ -12,6 +12,7 @@ import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { ExitCode, UsageError } from "../errors.ts";
 import { accessSwitches } from "./access.ts";
+import { deviceCommands } from "./login.ts";
 import { given, here, projectFlags, rest, worktreeFlags } from "../here.ts";
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 
@@ -312,7 +313,7 @@ export const devices = Command.make("devices", {}, (input) =>
   }),
 ).pipe(
   Command.withSharedFlags(projectFlags),
-  Command.withSubcommands(accessSwitches),
+  Command.withSubcommands([...accessSwitches, ...deviceCommands]),
 );
 
 // list --remote [--from <device>]: the project's worktrees on the other

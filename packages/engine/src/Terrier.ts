@@ -10,6 +10,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Config from "./Config.ts";
 import * as Paths from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
+import { byPlatform } from "./platform.ts";
 import { captureWithin, exec, stderrOf } from "./processes.ts";
 import { terrierProjectId } from "./terrierId.ts";
 
@@ -227,7 +228,11 @@ const make = Effect.gen(function* () {
     if (listed.kind === "missing") {
       return trouble(
         "on in Settings but `terrier` isn't on PATH, so no terrier projects are listed",
-        "Install terrier, or turn the toggle off in the app's Settings.",
+        byPlatform({
+          darwin:
+            "Install terrier, or turn the toggle off in the app's Settings.",
+          linux: `Install terrier, or turn it off (\`${binaryName} config set terrier false\`).`,
+        }),
       );
     }
     if (listed.kind === "unreadable") {

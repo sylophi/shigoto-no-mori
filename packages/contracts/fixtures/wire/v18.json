@@ -938,7 +938,28 @@
     },
     "success": {
       "signedIn": false,
-      "deviceName": "nM"
+      "deviceName": "nM",
+      "deviceIcon": "pine"
+    }
+  },
+  "login:removeDevice": {
+    "payload": "u2",
+    "success": "03"
+  },
+  "login:rename": {
+    "payload": "\u0000",
+    "success": {
+      "signedIn": false,
+      "deviceName": "X>",
+      "deviceIcon": "flame"
+    }
+  },
+  "login:setIcon": {
+    "payload": "zap",
+    "success": {
+      "signedIn": false,
+      "deviceName": "3w",
+      "deviceIcon": "tablet"
     }
   },
   "login:signOut": {},
@@ -954,7 +975,8 @@
   "login:status": {
     "success": {
       "signedIn": true,
-      "deviceName": "\u0000"
+      "deviceName": "\u0000",
+      "deviceIcon": "flower"
     }
   },
   "menu:setChords": {

@@ -90,8 +90,14 @@ const NAMESPACE_USAGE: Readonly<Record<string, string>> = {
   "projects config":
     "projects config <list|get|set|unset|edit|read|launcher|carryover> [args]",
   config: "config <list|read|get|set|unset|launcher|edit> [args]",
-  devices: `devices [-p <project>], or devices <${byPlatform({ darwin: "share|control|reachable", linux: "share|control" })}> [on|off]`,
+  devices: byPlatform({
+    darwin:
+      "devices [-p <project>], or devices <share|control|reachable> [on|off]",
+    linux:
+      "devices [-p <project>], devices <share|control> [on|off], or devices <rename|icon|remove> [args]",
+  }),
   shell: "shell <install|uninstall|status|init>",
+  data: "data [move <folder> | reset]",
   agents:
     "agents <install|uninstall|status|bind|unbind|idle|resume|event> [args]",
 };
