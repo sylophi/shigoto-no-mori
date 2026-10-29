@@ -639,8 +639,8 @@ export const fakeGlobalConfig = {
   launchScripts: true,
   deleteBranchOnRemove: true,
   autoPopulateInstall: true,
-  autoPullNew: false,
-  autoPullPrimaryOnly: false,
+  autoPullNew: true,
+  autoPullPrimaryOnly: true,
   // A fresh install's seed: names on, Village life unset (off).
   doubutsuNames: true,
   codexWorktreeNames: false,
