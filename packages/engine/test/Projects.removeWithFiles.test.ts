@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
@@ -74,4 +74,28 @@ it("deletes a project whose worktree folder went by hand", async () => {
   assert.equal(answer, undefined, JSON.stringify(answer));
   assert.ok(!existsSync(repo), "the repo folder stayed");
   assert.equal(listed.length, 0);
+});
+
+it("deletes nothing when the repo folder holds another project", async () => {
+  const outer = box.repo("outer", { ".gitignore": "vendor/\n" });
+  mkdirSync(join(outer, "vendor"));
+  const inner = box.repo("outer/vendor/lib", { "README.md": "hi\n" });
+  const answer = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const project = yield* registry.register({ name: "outer", path: outer });
+      yield* registry.register({ name: "lib", path: inner });
+      const listed = (yield* registry.listed).find(
+        (row) => row.id === project.id,
+      );
+      assert.ok(listed);
+      yield* (yield* Projects.Projects).removeWithFiles(listed, silent);
+    }),
+  );
+  assert.match(
+    (answer as Record<string, unknown>)["error"] as string,
+    /holds .*vendor\/lib/,
+    JSON.stringify(answer),
+  );
+  assert.ok(existsSync(join(inner, "README.md")), "the other project went");
 });

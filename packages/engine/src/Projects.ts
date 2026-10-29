@@ -1,6 +1,7 @@
 // Adding and removing projects: the registry's entry, and what a new
 // project starts with.
 import { listed } from "@shigomori/contracts/words";
+import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -12,6 +13,7 @@ import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Config from "./Config.ts";
 import * as Git from "./Git.ts";
+import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
 import * as Scripts from "./Scripts.ts";
 import * as Terrier from "./Terrier.ts";
@@ -36,15 +38,24 @@ export class NotADirectory extends Schema.TaggedError<NotADirectory>()(
   }
 }
 
-// The checkouts a project's delete found uncommitted changes in, before
-// it deleted anything.
-export class UncommittedCheckouts extends Schema.TaggedError<UncommittedCheckouts>()(
-  "UncommittedCheckouts",
-  { paths: Schema.Array(Schema.String) },
+// What a project's delete won't take, found before it deletes anything:
+// checkouts with uncommitted changes, or what its repo folder holds that
+// isn't the project's (the home folder, the data folder, another
+// project).
+export class DeleteRefused extends Schema.TaggedError<DeleteRefused>()(
+  "DeleteRefused",
+  {
+    reason: Schema.Literals(["uncommitted", "holds"]),
+    paths: Schema.Array(Schema.String),
+  },
 ) {
-  readonly documentCode = "uncommitted-changes";
+  get documentCode(): string | undefined {
+    return this.reason === "uncommitted" ? "uncommitted-changes" : undefined;
+  }
   override get message(): string {
-    return `Uncommitted changes in ${listed(this.paths)}. Commit or discard them first.`;
+    return this.reason === "uncommitted"
+      ? `Uncommitted changes in ${listed(this.paths)}. Commit or discard them first.`
+      : `The repo's folder holds ${listed(this.paths)}, which deleting it would take too.`;
   }
 }
 
@@ -101,15 +112,22 @@ export class Projects extends Context.Service<
     readonly remove: (
       project: Registry.ListedProject,
     ) => Effect.Effect<void, Terrier.TerrierRefused | Registry.UnknownProject>;
+    // What removeWithFiles refuses, checked alone.
+    readonly checkDeletable: (
+      project: Registry.ListedProject,
+    ) => Effect.Effect<
+      void,
+      DeleteRefused | Git.GitError | PlatformError.PlatformError
+    >;
     // Removes its worktrees as a removal does (teardown, port release),
-    // then deletes its repo folder and drops the entry. Refused before
-    // anything goes while any checkout has uncommitted changes.
+    // then deletes its repo folder and drops the entry, once
+    // checkDeletable passes.
     readonly removeWithFiles: (
       project: Registry.ListedProject,
       reporter: Worktrees.Reporter,
     ) => Effect.Effect<
       void,
-      | UncommittedCheckouts
+      | DeleteRefused
       | Worktrees.WorktreeRefused
       | Worktrees.DirtyWorktree
       | Worktrees.CleanupFailed
@@ -153,6 +171,7 @@ const make = Effect.gen(function* () {
   const scripts = yield* Scripts.Scripts;
   const terrier = yield* Terrier.Terrier;
   const worktrees = yield* Worktrees.Worktrees;
+  const { home, dataDir } = yield* Paths.Paths;
 
   // What a project starts with: auto-pull on its primary per the
   // autoPullNew setting, its default branch, and a `<pm> install` setup
@@ -341,35 +360,62 @@ const make = Effect.gen(function* () {
     yield* registry.unregister(project);
   });
 
+  // The checkouts, each with whether its folder is still there.
+  const deletable = Effect.fnUntraced(function* (
+    project: Registry.ListedProject,
+  ) {
+    const others = (yield* registry.listed)
+      .filter((it) => it.id !== project.id)
+      .map((it) => it.path);
+    const holds = [home, dataDir, ...others].filter((held) =>
+      isSameOrInside(held, project.path),
+    );
+    if (holds.length > 0) {
+      return yield* new DeleteRefused({ reason: "holds", paths: holds });
+    }
+    const checkouts = yield* Effect.forEach(
+      yield* worktrees.identities(project),
+      (checkout) =>
+        Effect.map(fs.exists(checkout.path), (there) => ({ checkout, there })),
+      { concurrency: 8 },
+    );
+    // A folder gone by hand has nothing left to lose.
+    const dirty = yield* Effect.filter(
+      checkouts.filter((it) => it.there),
+      ({ checkout }) =>
+        Effect.map(git.changedCount(checkout.path), (count) => count > 0),
+      { concurrency: 8 },
+    );
+    if (dirty.length > 0) {
+      return yield* new DeleteRefused({
+        reason: "uncommitted",
+        paths: dirty.map(({ checkout }) => checkout.path),
+      });
+    }
+    return checkouts;
+  });
+
+  const checkDeletable = Effect.fn("Projects.checkDeletable")(function* (
+    project: Registry.ListedProject,
+  ) {
+    yield* deletable(project);
+  });
+
   const removeWithFiles = Effect.fn("Projects.removeWithFiles")(function* (
     project: Registry.ListedProject,
     reporter: Worktrees.Reporter,
   ) {
-    const checkouts = yield* worktrees.identities(project);
-    // A folder gone by hand has nothing left to lose.
-    const dirty = yield* Effect.filter(
-      checkouts,
-      (checkout) =>
-        Effect.flatMap(fs.exists(checkout.path), (there) =>
-          there
-            ? Effect.map(git.changedCount(checkout.path), (count) => count > 0)
-            : Effect.succeed(false),
-        ),
-      { concurrency: 8 },
-    );
-    if (dirty.length > 0) {
-      return yield* new UncommittedCheckouts({
-        paths: dirty.map((checkout) => checkout.path),
-      });
-    }
-    for (const worktree of checkouts.filter((it) => !it.isPrimary)) {
+    const checkouts = yield* deletable(project);
+    for (const { checkout: worktree, there } of checkouts) {
+      if (worktree.isPrimary) continue;
       yield* worktrees.remove(
         { project, worktree },
-        // The repo goes with its branches.
+        // The repo goes with its branches. A teardown has no folder to
+        // run in once it went by hand.
         {
           force: false,
           keepBranch: true,
-          skipCleanup: false,
+          skipCleanup: !there,
           preflighted: true,
         },
         reporter,
@@ -385,6 +431,7 @@ const make = Effect.gen(function* () {
     scan,
     leftovers,
     remove,
+    checkDeletable,
     removeWithFiles,
   });
 });

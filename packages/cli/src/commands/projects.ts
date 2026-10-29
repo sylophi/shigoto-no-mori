@@ -1,7 +1,7 @@
 // sm projects <list|icon|add|clone|unregister|delete|relocate|config>: the
 // registered projects, terrier's included (and written through to it),
 // and each one's settings. clone is a cross-device verb (transfer.ts).
-import { basename } from "node:path";
+import { basename, dirname } from "node:path";
 import {
   keyDescriptions,
   ShigomoriConfigSchema,
@@ -17,7 +17,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
-import { changing } from "../engine.ts";
+import { changing, refuseUnmigrated } from "../engine.ts";
 import * as Flag from "effect/cli/Flag";
 import { Cancelled, UsageError } from "../errors.ts";
 import {
@@ -32,6 +32,7 @@ import {
 import { emit, note, out, Output, renderTable, styles } from "../output.ts";
 import { pluralize } from "@shigomori/contracts/words";
 import { pickProject } from "../pickers.ts";
+import { cdHintFor, cdNote } from "../removal.ts";
 import { reporter } from "../reporter.ts";
 import { confirm, interactive } from "../prompt.ts";
 import { configVerbs, type Settings } from "./config.ts";
@@ -353,12 +354,21 @@ const deleteProject = Command.make("delete", unregisterArgs, (input) =>
       project,
       yield* reporter(),
     );
+    // A shell left standing in the deleted folder is told where to go.
+    const hint = cdHintFor(project.path, dirname(project.path));
     const { json } = yield* Effect.service(Output);
-    yield* json
-      ? emit({ ok: true, deleted: project.name, path: project.path })
-      : out(`deleted ${project.name} (${project.path})`);
+    if (json) {
+      return yield* emit({
+        ok: true,
+        deleted: project.name,
+        path: project.path,
+        ...(hint === "" ? {} : { cdHint: hint }),
+      });
+    }
+    yield* out(`deleted ${project.name} (${project.path})`);
+    if (hint !== "") yield* cdNote("the deleted project", hint);
   }),
-).pipe(changing);
+).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
 // For a repo moved or renamed by hand: the last positional is where it
 // is now, the project before it.

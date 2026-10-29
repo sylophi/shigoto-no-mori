@@ -169,15 +169,18 @@ export const removeProject = Effect.fn("projects.remove")((id: string) =>
   removing(id, () => Ops.removeProject(id)),
 );
 
-// Its scripts are stopped first, as a worktree's removal stops them, and
-// the worktrees' teardowns are told to `notify`.
+// Its scripts are stopped once nothing refuses the delete, as a
+// worktree's removal stops them, and the worktrees' teardowns are told
+// to `notify`.
 export const deleteProject = Effect.fn("projects.delete")(
   (id: string, notify: Scripts.NotifyScriptEvent) =>
     removing(id, (scripts) =>
-      Effect.andThen(
-        scripts.stopProject(id),
-        bookingScripts(scripts, notify, (reporter) =>
-          Ops.deleteProject(id, reporter),
+      Ops.checkDeletable(id).pipe(
+        Effect.andThen(scripts.stopProject(id)),
+        Effect.andThen(
+          bookingScripts(scripts, notify, (reporter) =>
+            Ops.deleteProject(id, reporter),
+          ),
         ),
       ),
     ),

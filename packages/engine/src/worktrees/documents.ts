@@ -398,7 +398,7 @@ export class RelocateRefused extends Schema.TaggedError<RelocateRefused>()(
       case "still-there":
         return `${this.path} is still there. Relocate is for a repo that was moved or renamed by hand.`;
       case "terrier-lists-new":
-        return `${this.path} is already a project, via terrier. Remove ${this.name} instead (\`${this.binary} projects remove ${this.name}\`).`;
+        return `${this.path} is already a project, via terrier. Unregister ${this.name} instead (\`${this.binary} projects unregister ${this.name}\`).`;
     }
   }
 }

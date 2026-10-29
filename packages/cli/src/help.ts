@@ -244,7 +244,7 @@ const catalog = (names: Names) => {
         "projects delete [<name-or-path>]",
         "Delete a project from disk",
         "Removes its worktrees as rm does, then deletes the repo's folder and unregisters it as unregister does. " +
-          "Refused before anything goes while any checkout has uncommitted changes. " +
+          "Refused before anything goes while any checkout has uncommitted changes, or when the folder holds your home folder, the data folder or another project. " +
           "Prompts for confirmation (--yes skips).",
       ],
       [
