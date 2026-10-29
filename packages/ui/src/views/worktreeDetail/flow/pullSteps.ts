@@ -109,7 +109,10 @@ export function overallProgress(frame: SyncPullProgress | null): number {
 }
 
 // How far a byte-counted step has come, 0 until the total is known.
-function byteRatio(frame: SyncPullProgress): number {
+export function byteRatio(frame: {
+  readonly bytes?: number | undefined;
+  readonly totalBytes?: number | undefined;
+}): number {
   const total = frame.totalBytes ?? 0;
   return total > 0 ? Math.min(1, (frame.bytes ?? 0) / total) : 0;
 }

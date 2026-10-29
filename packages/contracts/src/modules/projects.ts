@@ -1,5 +1,7 @@
 import * as Schema from "effect/Schema";
 import { push, defineContract, invoke, view } from "../contract.ts";
+import { strict } from "../schemas/strict.ts";
+import { SyncPullProgressSchema } from "./sync.ts";
 import {
   AddProjectPayloadSchema,
   BranchListSchema,
@@ -20,6 +22,43 @@ import {
   VoidSchema,
   WorktreeIncludeStatusSchema,
 } from "../schemas/index.ts";
+
+// How far a clone has got, as git reports it: the step it is on (the
+// remote's packing, the download, the delta resolve, the checkout) and
+// that step's percent, with the bytes received so far once it downloads.
+const CloneProgressSchema = strict(
+  Schema.Struct({
+    step: Schema.Literals(["remote", "receiving", "resolving", "checkout"]),
+    percent: Schema.Natural,
+    bytes: Schema.optional(Schema.Natural),
+  }),
+);
+export type CloneProgress = typeof CloneProgressSchema.Type;
+
+// A clone's progress, for the call that asked for it, keyed by the
+// parentDir and name it was asked with.
+const CloneProgressPushSchema = strict(
+  Schema.Struct({
+    parentDir: Schema.String,
+    name: Schema.String,
+    progress: CloneProgressSchema,
+  }),
+);
+export type CloneProgressPush = typeof CloneProgressPushSchema.Type;
+
+// How far a clone of another device's project has got, for the call
+// that asked for it, keyed by the deviceId and projectId it was asked
+// with: the repo's bytes as they cross, then the carry-over files'.
+const CloneFromDeviceProgressSchema = strict(
+  Schema.Struct({
+    deviceId: Schema.String,
+    projectId: Schema.String,
+    step: SyncPullProgressSchema.struct.fields.step,
+    bytes: SyncPullProgressSchema.struct.fields.bytes,
+    totalBytes: SyncPullProgressSchema.struct.fields.totalBytes,
+  }),
+);
+export type CloneFromDeviceProgress = typeof CloneFromDeviceProgressSchema.Type;
 
 export const projectsContract = defineContract(
   "projects",
@@ -44,6 +83,7 @@ export const projectsContract = defineContract(
     gated: true,
     grant: "browseFiles",
   }),
+  push("cloneProgress", CloneProgressPushSchema, { remote: true }),
   // Another device's project, cloned here from its checkout (that
   // device's grant) with its settings and the files its carry-over
   // names. Runs for as long as the clone does.
@@ -57,6 +97,9 @@ export const projectsContract = defineContract(
       grant: "browseFiles",
     },
   ),
+  push("cloneFromDeviceProgress", CloneFromDeviceProgressSchema, {
+    remote: true,
+  }),
   // A new repository with an empty first commit, so its default
   // branch exists for worktrees to branch off.
   invoke("create", CreateProjectPayloadSchema, ProjectSchema, {

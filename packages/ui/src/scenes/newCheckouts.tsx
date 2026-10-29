@@ -14,6 +14,7 @@ import { AddExistingFormView } from "../views/addProject/AddExistingFormView.tsx
 import { CloneFormView } from "../views/addProject/CloneFormView.tsx";
 import { CreateFormView } from "../views/addProject/CreateFormView.tsx";
 import { ProgressPanelView } from "../views/addProject/DialogPartsView.tsx";
+import { cloneProgressBar } from "../views/addProject/cloneProgress.ts";
 import { ResultsPanelView } from "../views/addProject/ResultsPanelView.tsx";
 import { ScanningPanelView } from "../views/addProject/ScanningPanelView.tsx";
 import { TerrierOptInView } from "../views/addProject/TerrierOptInView.tsx";
@@ -333,6 +334,20 @@ export function AddProjectPartsScene() {
           title="sylophi/kawaii-cam"
           status="Cloning…"
           dest={`${DEV}/kawaii-cam`}
+          onCancel={noop}
+        />
+      </ModalBox>
+      <ModalBox>
+        <ProgressPanelView
+          icon={<FolderGit2 className="size-4 text-muted-foreground/80" />}
+          title="sylophi/kawaii-cam"
+          status="Cloning…"
+          dest={`${DEV}/kawaii-cam`}
+          progress={cloneProgressBar({
+            step: "receiving",
+            percent: 45,
+            bytes: 216_540_000,
+          })}
           onCancel={noop}
         />
       </ModalBox>

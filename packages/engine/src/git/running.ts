@@ -263,7 +263,12 @@ export const makeRunning = Effect.gen(function* () {
           // also leaves it no terminal to prompt on: a credential or
           // host-key question fails instead of waiting.
           const ran = RUNS_HOOKS.has(slotKey)
-            ? captureToFiles(spawner, "git", gitArgs, { cwd, env, stdin }).pipe(
+            ? captureToFiles(spawner, "git", gitArgs, {
+                cwd,
+                env,
+                stdin,
+                onStderr: options.onStderr,
+              }).pipe(
                 Effect.provideService(FileSystem.FileSystem, fs),
                 Effect.flatMap(({ stdout, stderr, code }) =>
                   Effect.map(
@@ -287,6 +292,9 @@ export const makeRunning = Effect.gen(function* () {
                     stdin: stdin ?? "ignore",
                   }),
                 );
+                const stderr = handle.stderr.pipe(
+                  Stream.mapError(failed(null)),
+                );
                 // Its exit ends its process group: what a child of it
                 // leaves running would hold its pipes open.
                 return yield* readToExit(
@@ -299,7 +307,9 @@ export const makeRunning = Effect.gen(function* () {
                         tooLarge,
                       ),
                       readAll(
-                        handle.stderr.pipe(Stream.mapError(failed(null))),
+                        options.onStderr === undefined
+                          ? stderr
+                          : stderr.pipe(Stream.tap(options.onStderr)),
                         DEFAULT_MAX_OUTPUT,
                         { decoder },
                       ),

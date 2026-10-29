@@ -166,6 +166,8 @@ export type RunOptions = {
   // A write asked once, not again on a held index.lock, for a caller
   // that checks before each ask (a stash's finish).
   readonly once?: boolean | undefined;
+  // Stderr as git writes it, for one that reports its progress there.
+  readonly onStderr?: ((chunk: Uint8Array) => Effect.Effect<void>) | undefined;
 };
 
 // A commit from the changes page: the picks, and the message. Two `-m`
