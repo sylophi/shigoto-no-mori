@@ -26,7 +26,7 @@ interface ProjectMenuItemsProps {
 
 export type ProjectMenuRemoveArm = ReturnType<typeof useConfirmTwiceKeyed>;
 
-// Two-step confirm so accidentally landing on "Remove" doesn't drop the
+// Two-step confirm so accidentally landing on a remove doesn't drop the
 // project. Menu stays open while armed; second click within the timeout
 // fires the actual remove. The host wires `onOpenChange` to its menu
 // root so a leftover arm is cleared the instant the menu closes. The
@@ -94,25 +94,28 @@ export function ProjectPageMenuItems({ project }: { project: Project }) {
   );
 }
 
-// The remove that closes the list, under the scope of the device it
-// removes from. Plain, it reads "Remove". Given a `device` it is that
-// device's row in a header's Remove submenu: named for the device and
-// keyed by it in the shared arm.
+// The removes that close the list, under the scope of the device they
+// remove from. Plain, it reads "Unregister", or with `deleteFiles` "Delete
+// from disk". Given a `device` it is that device's row in a header's
+// submenu: named for the device and keyed by it in the shared arm.
 export function ProjectRemoveMenuItem({
   project,
   removeArm,
   device,
+  deleteFiles = false,
 }: ProjectMenuItemsProps & {
   device?: { id: string; label: string; icon: DeviceIcon };
+  deleteFiles?: boolean;
 }) {
-  const armKey = device?.id ?? "";
+  const armKey = `${deleteFiles ? "delete:" : ""}${device?.id ?? ""}`;
   // The row is the device, so it leads with the device's glyph, like
   // every other list that names one.
   const deviceRow = device && (
     <DeviceMenuRowView icon={device.icon} label={device.label} />
   );
-  const removeProject = useRemoveProject();
+  const removeProject = useRemoveProject(deleteFiles);
   const armed = removeArm.armedKey === armKey;
+  if (deleteFiles && project.pathExists === false) return null;
   return (
     <DropdownMenuItem
       variant="destructive"
@@ -124,7 +127,7 @@ export function ProjectRemoveMenuItem({
     >
       <DropdownMenuArmedLabel
         armed={armed}
-        label={deviceRow ?? "Remove"}
+        label={deviceRow ?? (deleteFiles ? "Delete from disk" : "Unregister")}
         armedLabel="Click again to confirm"
       />
     </DropdownMenuItem>

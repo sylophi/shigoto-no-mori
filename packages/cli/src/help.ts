@@ -233,12 +233,19 @@ const catalog = (names: Names) => {
           "Prints the checkout's path when it lands here. Exits 3 when the clone stands but the settings or those files didn't come along. --json prints {ok, project, device, settings: {copied, error}, files: {crossed, conflicts, error}, caveats}.",
       ],
       [
-        "projects remove [<name-or-path>]",
+        "projects unregister [<name-or-path>]",
         "Unregister a project",
         "Worktrees stay on disk. While the terrier integration is on, a repo terrier lists is unregistered there too. " +
           "Prompts for confirmation (--yes skips). " +
-          "When two projects share a name, remove by path (which also " +
+          "When two projects share a name, unregister by path (which also " +
           "reaches an entry whose repo has since moved away).",
+      ],
+      [
+        "projects delete [<name-or-path>]",
+        "Delete a project from disk",
+        "Removes its worktrees as rm does, then deletes the repo's folder and unregisters it as unregister does. " +
+          "Refused before anything goes while any checkout has uncommitted changes, or when the folder holds your home folder, the data folder or another project. " +
+          "Prompts for confirmation (--yes skips).",
       ],
       [
         "projects relocate [<name-or-path>] <new-path>",

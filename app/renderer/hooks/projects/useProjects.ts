@@ -129,12 +129,16 @@ export function useCreateProject() {
   });
 }
 
-export function useRemoveProject() {
+// With `deleteFiles`, its worktrees and repo folder are deleted too.
+export function useRemoveProject(deleteFiles = false) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { api, deviceId } = useHostScope();
   return useMutation<void, Error, string>({
-    mutationFn: (id) => api.run(api.projects.remove({ id })),
+    mutationFn: (id) =>
+      api.run(
+        deleteFiles ? api.projects.delete({ id }) : api.projects.remove({ id }),
+      ),
     onMutate: async (id) => {
       // Cancel this project's in-flight fetches before the host starts the
       // removal (mirrors the nuke path): left to settle, one would
@@ -169,7 +173,11 @@ export function useRemoveProject() {
           query.queryKey.includes(id),
       });
     },
-    meta: { errorTitle: "Couldn't remove project" },
+    meta: {
+      errorTitle: deleteFiles
+        ? "Couldn't delete project"
+        : "Couldn't unregister project",
+    },
   });
 }
 
