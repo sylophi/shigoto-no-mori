@@ -2199,6 +2199,12 @@
     },
     "success": null
   },
+  "shigomori:syncSettings": {
+    "payload": {
+      "projectId": "\n",
+      "on": true
+    }
+  },
   "sync:cancelMove": {
     "payload": {
       "sourceWorktreeId": "4e64cca988f8"

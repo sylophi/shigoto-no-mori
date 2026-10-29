@@ -64,6 +64,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import { DoctorReportSchema } from "@shigomori/contracts/modules/cli";
 import type { SharedSettingsDoc } from "@shigomori/contracts/schemas/sharedSettings";
+import { mergeSharedSettings } from "@shigomori/contracts/sharedSettings";
 import { ConvertRefusedError } from "@shigomori/contracts/errors";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import {
@@ -420,15 +421,36 @@ const projectScope = (projectId: string) =>
 export const patchProjectConfig = Effect.fnUntraced(function* (
   projectId: string,
   patch: ProjectSettingsPatch,
+  options?: EngineConfig.WriteOptions,
 ) {
   yield* asChange(
     Effect.gen(function* () {
       const scope = yield* projectScope(projectId);
-      yield* (yield* EngineConfig.Config).patchProject(scope, patch);
+      yield* (yield* EngineConfig.Config).patchProject(scope, patch, options);
     }),
     { projectId },
   );
 });
+
+// What the entries of a project's synced settings would hold.
+export const readSyncedProjectValues = (projectId: string) =>
+  asCall(
+    Effect.gen(function* () {
+      const scope = yield* projectScope(projectId);
+      const stored = yield* (yield* EngineConfig.Config).read(scope);
+      return EngineConfig.syncedProjectValues(stored);
+    }),
+    { projectId },
+  );
+
+// A project's repo identity, or null.
+export const projectRepoIdentity = (projectId: string) =>
+  asCall(
+    Effect.flatMap(projectById(projectId), (project) =>
+      repoIdentity(project.path),
+    ),
+    { projectId },
+  );
 
 // The proofs' fixture: the project's settings as a whole document.
 export const writeProjectConfig = Effect.fnUntraced(function* (
@@ -1204,9 +1226,16 @@ export const readSharedSettings = Effect.flatMap(
   (settings) => settings.read,
 );
 
+// Merged into what the store holds, which the terminal stamps a project
+// edit into. An empty copy is a device leaving the account, which
+// replaces it.
 export const storeSharedSettings = (doc: SharedSettingsDoc) =>
   Effect.flatMap(SharedSettings.SharedSettings, (settings) =>
-    settings.update(() => doc),
+    settings.update((stored) =>
+      Object.keys(doc.entries).length === 0
+        ? doc
+        : mergeSharedSettings(stored, doc),
+    ),
   );
 
 // ---- The terminal's shell integration (host/lib/cli/shell.ts) ----

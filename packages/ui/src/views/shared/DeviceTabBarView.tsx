@@ -47,6 +47,7 @@ export function DeviceTabBarView({
   selectedId,
   onSelect,
   allDevicesTab = false,
+  devicesDisabled = false,
   trailing,
   className,
 }: {
@@ -56,6 +57,9 @@ export function DeviceTabBarView({
   // Leads the row with the tab for what every device shares, picked
   // as ALL_DEVICES_TAB_ID.
   allDevicesTab?: boolean;
+  // Leaves the all-devices tab the only one to pick (Configure while
+  // the settings sync).
+  devicesDisabled?: boolean;
   // An action for every tab at once (Settings' Update all), after the
   // last tab in the same scrolling row, so it never covers one. It
   // keeps to the row's end while the tabs leave room, and takes their
@@ -76,6 +80,7 @@ export function DeviceTabBarView({
             note: undefined,
             arrowBefore: false,
             badge: undefined,
+            disabled: false,
           },
         ]
       : []),
@@ -88,6 +93,7 @@ export function DeviceTabBarView({
       note: tab.note,
       arrowBefore: tab.arrowBefore === true,
       badge: tab.badge,
+      disabled: devicesDisabled,
     })),
   ];
   const listRef = useRevealPicked(
@@ -127,6 +133,7 @@ export function DeviceTabBarView({
               )}
               <Tabs.Tab
                 value={pill.id}
+                disabled={pill.disabled}
                 data-slot="device-chip"
                 // A page header puts the row under the window's drag strip
                 // (AppShell): each pill carves its own click out of it.
@@ -136,7 +143,9 @@ export function DeviceTabBarView({
                   "transition-colors",
                   selected
                     ? "border-transparent bg-accent text-accent-foreground"
-                    : "hover:text-foreground",
+                    : pill.disabled
+                      ? "cursor-not-allowed opacity-50"
+                      : "hover:text-foreground",
                 )}
               >
                 {pill.lead}

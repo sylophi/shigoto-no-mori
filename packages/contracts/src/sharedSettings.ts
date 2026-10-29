@@ -2,6 +2,10 @@
 // associative and idempotent, so copies may exchange entries in any
 // order, any number of times, over any path, and still agree.
 import { isSafeRelPath } from "./predicates/relPath.ts";
+import {
+  PatchShigomoriPayloadSchema,
+  type ProjectSettingsPatch,
+} from "./schemas/config.ts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -21,6 +25,8 @@ export const EMPTY_SHARED_SETTINGS: SharedSettingsDoc = { entries: {} };
 const PINNED_PROJECT_PREFIX = "pinnedProject/";
 const WORKTREE_SORT_PREFIX = "worktreeSort/";
 const PROJECT_FOLDER_PREFIX = "projectFolder/";
+const PROJECT_SETTING_PREFIX = "projectSetting/";
+const PROJECT_SETTINGS_SYNC_PREFIX = "projectSettingsSync/";
 
 // The keys this build reads. Copies hold and forward any key, so a
 // name here is a promise to every build that ever synced it: reuse one
@@ -38,11 +44,132 @@ export const sharedSettingKeys = {
   pinnedProject: (groupKey: string) => `${PINNED_PROJECT_PREFIX}${groupKey}`,
   // The name of the folder the project is in, or null once taken out.
   projectFolder: (groupKey: string) => `${PROJECT_FOLDER_PREFIX}${groupKey}`,
+  // true while every device holding the repo keeps its synced settings
+  // level, or null once turned off.
+  projectSettingsSync: (identity: string) =>
+    `${PROJECT_SETTINGS_SYNC_PREFIX}${identity}`,
+  // syncedProjectSettingValue's answer, for every device holding the
+  // repo.
+  projectSetting: (identity: string, setting: SyncedProjectSetting) =>
+    `${PROJECT_SETTING_PREFIX}${identity}/${setting}`,
   // Prefixes, one per line.
   hiddenWorktreePrefixes: "hiddenWorktreePrefixes",
   // Prefixes, one per line.
   groupedWorktreePrefixes: "groupedWorktreePrefixes",
 };
+
+// The project settings that follow a repo to every device holding it
+// while its sync is on, by their names in a ProjectSettingsPatch. The port base, the merge
+// method and a custom worktree folder are each device's own.
+export const SYNCED_PROJECT_SETTINGS = [
+  "defaultBranch",
+  "scripts.setup",
+  "scripts.teardown",
+  "launchers",
+  "carryOver",
+  "useWorktreeInclude",
+  "showPrimaryInInbox",
+  "worktreeLayout",
+] as const;
+export type SyncedProjectSetting = (typeof SYNCED_PROJECT_SETTINGS)[number];
+
+const decodePatch = Schema.decodeUnknownOption(
+  PatchShigomoriPayloadSchema.fields.patch,
+);
+const decodeJson = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Unknown),
+);
+
+// A synced setting's stored value (undefined while unset) as its entry
+// holds it: JSON, or null once cleared. Undefined for a value that stays
+// this device's: the custom layout, whose folder is a path here, and
+// one too long for an entry. The default branch is never cleared.
+export function syncedProjectSettingValue(
+  setting: SyncedProjectSetting,
+  value: unknown,
+): SharedSettingValue | undefined {
+  if (value === undefined)
+    return setting === "defaultBranch" ? undefined : null;
+  if (setting === "worktreeLayout" && value === "custom") return undefined;
+  // In the schema's key order, so one value encodes alike wherever it
+  // was written.
+  const encoded = JSON.stringify(
+    Option.match(decodePatch({ [setting]: value }), {
+      onNone: () => value,
+      onSome: (patch) => patch[setting],
+    }),
+  );
+  return isSharedSettingValue(encoded) ? encoded : undefined;
+}
+
+export type SyncedProjectValues = Readonly<
+  Record<SyncedProjectSetting, SharedSettingValue | undefined>
+>;
+
+// The repo's sync switch while it is on, its stamp saying since when.
+export function projectSettingsSync(
+  doc: SharedSettingsDoc,
+  identity: string,
+): SharedSettingEntry | undefined {
+  const entry = doc.entries[sharedSettingKeys.projectSettingsSync(identity)];
+  return entry?.value === true ? entry : undefined;
+}
+
+// Whether any repo's sync is on, which spares the work of finding out
+// which repo a project is when none is.
+export function anyProjectSettingsSync(doc: SharedSettingsDoc): boolean {
+  return entriesUnder(doc, PROJECT_SETTINGS_SYNC_PREFIX).some(
+    ([, value]) => value === true,
+  );
+}
+
+// What a project with these values takes from its repo's entries while
+// the sync is on. Entries from before it was turned on are passed over,
+// as are the values that stay this device's and entries this build
+// can't read.
+export function syncedProjectSettingsPatch(
+  doc: SharedSettingsDoc,
+  identity: string,
+  local: SyncedProjectValues,
+): ProjectSettingsPatch {
+  const sync = projectSettingsSync(doc, identity);
+  let patch: ProjectSettingsPatch = {};
+  if (sync === undefined) return patch;
+  for (const setting of SYNCED_PROJECT_SETTINGS) {
+    const entry =
+      doc.entries[sharedSettingKeys.projectSetting(identity, setting)];
+    if (entry === undefined || entry.at < sync.at) continue;
+    if (local[setting] === undefined || entry.value === local[setting]) {
+      continue;
+    }
+    const value =
+      entry.value === null ? Option.some(null) : decodeJson(entry.value);
+    const taken = Option.flatMap(value, (it) =>
+      decodePatch({ ...patch, [setting]: it }),
+    );
+    if (Option.isSome(taken)) patch = taken.value;
+  }
+  return patch;
+}
+
+// A project's values stamped as the sync switch just turned on, which
+// the repo's other devices take.
+export function projectSettingsSnapshot(
+  identity: string,
+  local: SyncedProjectValues,
+  sync: SharedSettingEntry,
+): SharedSettingsDoc {
+  const entries: Record<string, SharedSettingEntry> = {};
+  for (const setting of SYNCED_PROJECT_SETTINGS) {
+    const value = local[setting];
+    if (value === undefined) continue;
+    entries[sharedSettingKeys.projectSetting(identity, setting)] = {
+      ...sync,
+      value,
+    };
+  }
+  return { entries };
+}
 
 // So the same list is the same value.
 export function normalizeWorktreePrefixes(
@@ -181,7 +308,10 @@ function outranks(a: SharedSettingEntry, b: SharedSettingEntry): boolean {
 
 // Never at or below anything the copy has seen: a device whose clock
 // runs behind would otherwise make picks that silently lose.
-function nextSharedSettingStamp(doc: SharedSettingsDoc, now: number): number {
+export function nextSharedSettingStamp(
+  doc: SharedSettingsDoc,
+  now: number,
+): number {
   let highest = 0;
   for (const entry of Object.values(doc.entries)) {
     if (entry.at > highest) highest = entry.at;
@@ -191,7 +321,7 @@ function nextSharedSettingStamp(doc: SharedSettingsDoc, now: number): number {
 
 // Answers `base` itself when nothing changed, which is what stops two
 // copies announcing the same state at each other forever.
-function mergeSharedSettings(
+export function mergeSharedSettings(
   base: SharedSettingsDoc,
   incoming: SharedSettingsDoc,
 ): SharedSettingsDoc {
@@ -225,7 +355,7 @@ function sharedSettingsAhead(
 
 // Re-picking the held value is not a write: a fresh stamp would outrank
 // a different pick made elsewhere meanwhile.
-function withSharedSetting(
+export function withSharedSetting(
   doc: SharedSettingsDoc,
   key: string,
   value: SharedSettingValue,

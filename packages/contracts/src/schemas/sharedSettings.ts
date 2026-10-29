@@ -6,11 +6,12 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
-// A whole document rides pushes, so it stays well under the link's 1 MiB
-// frame cap.
+// A whole document rides pushes, so it stays well under the link's
+// 32 MiB frame cap. A string holds a project's setup script or its
+// launchers as JSON.
 const MAX_SHARED_SETTING_KEY_LENGTH = 512;
-const MAX_SHARED_SETTING_STRING_LENGTH = 256;
-export const MAX_SHARED_SETTING_ENTRIES = 512;
+const MAX_SHARED_SETTING_STRING_LENGTH = 4096;
+export const MAX_SHARED_SETTING_ENTRIES = 2048;
 // Far enough under the largest safe integer that a stamp can always be
 // outranked.
 const MAX_SHARED_SETTING_STAMP = 8.64e15;

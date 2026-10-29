@@ -17,6 +17,7 @@ import * as HostAccount from "@host/lib/HostAccount";
 import { DataDirHolders } from "@host/lib/DataDirHolders";
 import * as Loopback from "@host/socket/Loopback";
 import { firstList } from "@host/lib/projects";
+import * as ProjectSettingsSync from "@host/lib/sharedSettings/projectSettings";
 import * as SharedSettingsStore from "@host/lib/sharedSettings/store";
 import * as Scripts from "@host/lib/Scripts";
 import * as Engine from "@host/lib/Engine";
@@ -333,6 +334,9 @@ export const layer = (options: {
       starts("the CLI link repair", () => void repairCliLinks(hostFacts())),
     ),
     Layer.provideMerge(firstProjectList),
+    Layer.provideMerge(
+      logged("the synced project settings", ProjectSettingsSync.layer),
+    ),
     // The handlers read this device's copy of the shared settings
     // synchronously.
     Layer.provideMerge(
