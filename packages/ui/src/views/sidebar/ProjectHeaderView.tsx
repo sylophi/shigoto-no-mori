@@ -11,14 +11,12 @@ interface ProjectHeaderProps {
   // The project's icon (ProjectIcon): a project only peers hold reads
   // it off one of them.
   icon: React.ReactNode;
-  // The merged tree's device badge cluster, rendered after the name of
-  // the open (or inline, an unfolded) project only: the list's rows are
-  // names alone, since badges on every row would make the list a wall
-  // of icons.
+  // The merged tree's device badge cluster, rendered after the name.
   badges?: React.ReactNode;
   // Some checkout in the header's group is terrier-sourced and Mark
   // terrier projects is on (useSidebarMarks), which puts the paw after
-  // the open project's name.
+  // the name. Only the open (or inline, an unfolded) project is given
+  // it.
   terrier?: boolean;
   // Pinned to the top of the list, which puts the pin after the name.
   pinned?: boolean;
@@ -179,12 +177,8 @@ export function ProjectHeaderView({
       {lead}
       {name}
       {pinned && <PinnedMarkView />}
-      {folded === false && (
-        <>
-          {terrier && <TerrierPawView className="size-3" />}
-          {badges}
-        </>
-      )}
+      {terrier && <TerrierPawView className="size-3" />}
+      {badges}
     </button>
   );
 

@@ -52,7 +52,7 @@ function useTerrierMarksHere(): boolean {
   return terrierMarksHere(useHasLocalHost(), config?.terrier === true);
 }
 
-// The device badges on the open project's header and worktree rows. On unless
+// The device badges on project headers and worktree rows. On unless
 // switched off.
 export function useShowDeviceBadges(): boolean {
   return useClientFlag(showDeviceBadges);
