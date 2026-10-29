@@ -97,10 +97,10 @@ export function DeviceRegistryRowView({
   // confirms it once its direct session's welcome lands.
   appVersion: string;
   // THIS device's tunnel endpoint state, set on the this-device row
-  // only. "up" joins the status phrase. The phases that mean "peers off
-  // this network cannot reach me" get one quiet line under it
-  // (tunnelNote), because that fact is what decides whether the other
-  // machine can load this one's forest.
+  // only. The phases that mean "peers off this network cannot reach
+  // me" get one quiet line under the status (tunnelNote), because that
+  // fact is what decides whether the other machine can load this one's
+  // forest.
   tunnel: TunnelState | undefined;
   // Whether THIS device may run commands on the peer: the peer's own
   // switch, as it answers us. Ignored on the this-device row.
@@ -144,12 +144,6 @@ export function DeviceRegistryRowView({
     : readOnlyHere
       ? peerReadOnlyNote(name)
       : null;
-  // The tunnel being up is part of what "online" means for this
-  // machine, so it joins the state phrase rather than trailing it.
-  const stateLabel =
-    isThisDevice && tunnel === "up"
-      ? `${status.label}, reachable from anywhere`
-      : status.label;
 
   return (
     // The mark hangs beside the header only. Everything under it (the
@@ -186,7 +180,7 @@ export function DeviceRegistryRowView({
                       TONE_TEXT[status.tone],
                     )}
                   >
-                    {stateLabel}
+                    {status.label}
                   </span>
                 }
               />
