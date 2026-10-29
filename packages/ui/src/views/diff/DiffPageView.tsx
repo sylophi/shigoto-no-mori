@@ -12,6 +12,7 @@ import { BackButton } from "../../primitives/back-button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
+import { CopyButton } from "../../primitives/copy-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { Sheet, SheetContent, SheetTitle } from "../../primitives/sheet.tsx";
@@ -387,7 +388,9 @@ export function DiffFileRowView({
 }) {
   const binary = isBinaryChange(fileDiff);
   return (
-    <div data-diff-file={fileId}>
+    // The header is pierre's shadow DOM, out of a hover's reach, so the
+    // copy button shows while its file is hovered.
+    <div data-diff-file={fileId} className="group/copy">
       {/* `PatchDiff` requires a single-file patch. For multi-file output
           we parse with `parsePatchFiles` and spawn one `<FileDiff>` per
           file per the library's recommended pattern. */}
@@ -413,6 +416,13 @@ export function DiffFileRowView({
               )
             : undefined
         }
+        renderHeaderFilenameSuffix={() => (
+          <CopyButton
+            value={fileDiff.name}
+            label={`Copy ${fileDiff.name}`}
+            size="xs"
+          />
+        )}
         renderHeaderPrefix={
           onToggle
             ? () => (
