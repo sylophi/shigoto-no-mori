@@ -13,9 +13,9 @@ import {
 
 export type DeviceRowStatus = DeviceStatusView;
 
-// This device's tunnel note, or null ("up" joins the state phrase,
-// "off" means the listener is down). It states the consequence, the
-// commonest reason a peer on another network can't load this forest.
+// This device's tunnel note, or null ("off" means the listener is
+// down). It states the consequence, the commonest reason a peer on
+// another network can't load this forest.
 const LOCAL_ONLY =
   "other devices can only reach this machine over the local network.";
 

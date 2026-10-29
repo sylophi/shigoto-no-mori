@@ -35,6 +35,7 @@ import {
   useTunnelState,
 } from "@/hooks/remote/useHubStatus";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";
+import { hostsProjects } from "@shigomori/ui/lib/deviceTraits.ts";
 import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
 import {
@@ -83,8 +84,8 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   const now = useNow();
 
   // This device's row is drawn from what the window knows, so its
-  // switches are there whatever the hub's list is doing. The peers keep
-  // the order the device hub listed them in.
+  // switches are there whatever the hub's list is doing. The peers list
+  // machines before browsers, each in the order the device hub gave.
   const self = {
     device: { deviceId: localDeviceId, platform: api.platform },
     isThisDevice: true,
@@ -100,6 +101,10 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   const listed = devicesQuery.isError ? [] : (devicesQuery.data ?? []);
   const peers = listed
     .filter((device) => device.deviceId !== localDeviceId)
+    .toSorted(
+      (a, b) =>
+        Number(hostsProjects(b.platform)) - Number(hostsProjects(a.platform)),
+    )
     .map((device) => {
       const hubDevice = hubById.get(device.deviceId);
       return {
