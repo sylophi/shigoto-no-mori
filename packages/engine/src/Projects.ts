@@ -163,13 +163,21 @@ const make = Effect.gen(function* () {
         projectId: project.id,
         path: project.path,
       } as const;
+      // Guesses, which the settings the repo's other devices share
+      // replace.
+      const guess = { stamp: false };
       if (Option.isSome(branch)) {
-        yield* config.set(scope, "defaultBranch", branch.value);
+        yield* config.set(scope, "defaultBranch", branch.value, guess);
       }
       // A setup script is a setting a project without a default branch
       // can't take yet.
       if (install && Option.isSome(manager) && Option.isSome(branch)) {
-        yield* config.set(scope, "scripts.setup", `${manager.value} install`);
+        yield* config.set(
+          scope,
+          "scripts.setup",
+          `${manager.value} install`,
+          guess,
+        );
       }
     }).pipe(
       // Inside the register's transaction: a write that fails takes the

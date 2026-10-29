@@ -476,6 +476,7 @@ export const clonePeerProject = Effect.fnUntraced(function* (
     yield* Ops.patchProjectConfig(
       project.id,
       settingsPatch(stored, branchHere),
+      { stamp: false },
     );
     return stored;
   }).pipe(

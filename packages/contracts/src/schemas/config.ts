@@ -548,6 +548,11 @@ export const PatchShigomoriPayloadSchema = Schema.Struct({
   patch: ProjectSettingsPatchSchema,
 });
 
+export const SyncProjectSettingsPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  on: Schema.Boolean,
+});
+
 // worktreeIdFromPath's shape. Held exactly, since the worktree data
 // payloads key the engine's rows by it without a pass through git's list.
 export const WorktreeIdSchema = Schema.String.check(

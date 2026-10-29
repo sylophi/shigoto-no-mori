@@ -37,6 +37,7 @@ import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
+  sharedSettingKeys,
 } from "@shigomori/contracts/sharedSettings";
 import {
   type ContractScope,
@@ -349,7 +350,7 @@ function createFixtureWire(
 function sharedSettingsHandlersFor(
   deviceId: string,
   emit: FixtureWire["emit"],
-): FixtureHandlers {
+) {
   let doc: SharedSettingsDoc = EMPTY_SHARED_SETTINGS;
   const copy = createSharedSettingsCopy(
     {
@@ -367,7 +368,7 @@ function sharedSettingsHandlersFor(
     "sharedSettings:read": () => copy.read(),
     "sharedSettings:set": ({ key, value }) => copy.set(key, value),
     "sharedSettings:merge": ({ doc: incoming }) => copy.merge(incoming),
-  };
+  } satisfies FixtureHandlers;
 }
 
 // A typed path as the device's disk spells it: `~` expanded against
@@ -504,9 +505,21 @@ function hostHandlersFor(
       emit("updater:state", updaterState());
     }, 5_000);
   };
+  const sharedSettings = sharedSettingsHandlersFor(forest.deviceId, emit);
   return {
-    ...sharedSettingsHandlersFor(forest.deviceId, emit),
+    ...sharedSettings,
     ...villagerHandlersFor(),
+    "shigomori:syncSettings": ({ projectId, on }) => {
+      const identity = forest.projects.find(
+        (project) => project.id === projectId,
+      )?.identity;
+      if (identity != null) {
+        sharedSettings["sharedSettings:set"]({
+          key: sharedSettingKeys.projectSettingsSync(identity),
+          value: on ? true : null,
+        });
+      }
+    },
     // A copy, as a wire would hand over: projects:add and projects:clone
     // push onto the list, and the same array back would read as "nothing
     // changed" to the query cache's structural sharing.

@@ -130,11 +130,11 @@ const runtime = ManagedRuntime.make(
         OrphanSweep.layer,
       ),
     ),
-    Layer.provideMerge(
-      Layer.mergeAll(HostStandIns.pushesLayer, EngineStoreChanges.layer),
-    ),
-    // The copy of the shared settings, read from the store.
+    Layer.provideMerge(HostStandIns.pushesLayer),
+    // The copy of the shared settings, read from the store and following
+    // its changes.
     Layer.provideMerge(SharedSettingsStore.layer),
+    Layer.provideMerge(EngineStoreChanges.layer),
     // What the app's root provides from its own wiring.
     Layer.provideMerge(HostStandIns.layer),
     Layer.provideMerge(ScriptRuns.layer),
