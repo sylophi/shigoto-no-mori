@@ -3,6 +3,7 @@
 // and the marks a quiet fixture forest has no row for.
 import type { ReactNode } from "react";
 import { ActivityIconView } from "../views/sidebar/ActivityIconView.tsx";
+import { TerminalMarkView } from "../views/sidebar/TerminalMarkView.tsx";
 import { AgentWaitingMarkView } from "../views/sidebar/AgentWaitingMarkView.tsx";
 import { MirrorBadgeView } from "../views/sidebar/DeviceBadgeView.tsx";
 import { DeviceMenuRowView } from "../views/sidebar/DeviceMenuRowView.tsx";
@@ -122,6 +123,8 @@ export function SidebarPartsScene() {
           <span className="flex items-center gap-2 text-3xs">
             <ActivityIconView kind="setup" />
             <ActivityIconView kind="failed" />
+            <TerminalMarkView mark="open" />
+            <TerminalMarkView mark="busy" />
             <MirrorBadgeView mirror={badge} showBadge />
             <AgentWaitingMarkView worktree={worktreeNamed(SM, "quiet-quail")} />
             <StatusIndicatorView worktree={worktree} />

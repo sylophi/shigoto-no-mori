@@ -1,10 +1,12 @@
 // How a worktree's sidebar row looks right now (useWorktreeEntry reads
 // it): the open one, what runs in it, a delete in flight.
 import type { ScriptActivityKind } from "../../lib/scriptRun.ts";
+import type { TerminalMark } from "./TerminalMarkView.tsx";
 
 export interface WorktreeRowLook {
   isSelected: boolean;
   activity: ScriptActivityKind | null;
+  terminal: TerminalMark | null;
   isDeleting: boolean;
 }
 

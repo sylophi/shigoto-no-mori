@@ -12,6 +12,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
 import { ActivityIconView } from "../ActivityIconView.tsx";
+import { TerminalMarkView } from "../TerminalMarkView.tsx";
 import {
   DeviceBadgeView,
   MirrorBadgeView,
@@ -102,7 +103,7 @@ export function InboxRowView({
 // Right end of the context line: normally "when did this last move",
 // which is what the inbox sorts on. A running script or a delete in
 // flight displaces it. Those are happening now, so they outrank a
-// timestamp.
+// timestamp. The terminals' mark leads either, until a delete.
 function TrailingSlot({
   worktree,
   look,
@@ -115,7 +116,10 @@ function TrailingSlot({
   const now = useNow();
 
   return (
-    <span className="ml-auto flex shrink-0 items-center">
+    <span className="ml-auto flex shrink-0 items-center gap-1.5">
+      {look.terminal && !look.isDeleting && (
+        <TerminalMarkView mark={look.terminal} />
+      )}
       {mark ? (
         <ActivityIconView kind={mark} />
       ) : (

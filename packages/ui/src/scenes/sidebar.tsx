@@ -292,6 +292,7 @@ function entryOf(
     look: {
       isSelected: worktreeId === selected,
       activity: null,
+      terminal: null,
       isDeleting: false,
     },
     open: noop,

@@ -723,8 +723,8 @@ export const fakeRunningScripts: Record<string, RunningScript[]> = {
 
 // The terminals each device has open, as terminals:list answers (a
 // worktree page's drawer, the Live page): two in brave-badger and one
-// in happy-hummingbird on Studio Mac, one in a MacBook worktree.
-// Closing one drops it here.
+// in happy-hummingbird on Studio Mac, one in a MacBook worktree. One of
+// brave-badger's runs a command. Closing one drops it here.
 export const fakeOpenTerminals: Record<string, Terminal[]> = {
   [LOCAL_DEVICE_ID]: [
     {
@@ -732,18 +732,21 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
       projectId: "p_sm",
       worktreeId: "a10000000003",
       openedAt: minutesAgo(240),
+      busy: true,
     },
     {
       terminalId: "t-sm-hum-1",
       projectId: "p_sm",
       worktreeId: "a10000000002",
       openedAt: minutesAgo(35),
+      busy: false,
     },
     {
       terminalId: "t-sm-badger-2",
       projectId: "p_sm",
       worktreeId: "a10000000003",
       openedAt: minutesAgo(12),
+      busy: false,
     },
   ],
   [MACBOOK_ID]: [
@@ -752,6 +755,7 @@ export const fakeOpenTerminals: Record<string, Terminal[]> = {
       projectId: "mb_sm",
       worktreeId: "a1b2c3d4e5f6",
       openedAt: minutesAgo(95),
+      busy: false,
     },
   ],
 };

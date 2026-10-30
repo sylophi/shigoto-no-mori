@@ -448,7 +448,7 @@ function hostHandlersFor(
     const terminalId = `t-${Date.now().toString(36)}`;
     fakeOpenTerminals[forest.deviceId] = [
       ...(fakeOpenTerminals[forest.deviceId] ?? []),
-      { terminalId, projectId, worktreeId, openedAt: Date.now() },
+      { terminalId, projectId, worktreeId, openedAt: Date.now(), busy: false },
     ];
     return terminalId;
   };

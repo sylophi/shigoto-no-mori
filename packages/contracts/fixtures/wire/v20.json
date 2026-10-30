@@ -2612,7 +2612,8 @@
           "terminalId": "0",
           "projectId": "Wv",
           "worktreeId": "D",
-          "openedAt": -5.2161211745009093e-73
+          "openedAt": -5.2161211745009093e-73,
+          "busy": false
         }
       ]
     }
