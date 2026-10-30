@@ -1,3 +1,4 @@
+import * as Schema from "effect/Schema";
 import { defineContract, invoke } from "../contract.ts";
 import {
   SetLaunchToolsEnabledPayloadSchema,
@@ -17,4 +18,5 @@ export const menuContract = defineContract(
   invoke("setChords", SetMenuChordsPayloadSchema, VoidSchema),
   // What the Help menu's guide items offer.
   invoke("setGuideChoices", GuideChoicesSchema, VoidSchema),
+  invoke("setTerminalFocused", Schema.Boolean, VoidSchema),
 );

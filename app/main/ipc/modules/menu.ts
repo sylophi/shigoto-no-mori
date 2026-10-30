@@ -5,6 +5,7 @@ import {
   setChords,
   setGuideChoices,
   setLaunchToolsEnabled,
+  setTerminalFocused,
 } from "../../electron/menu";
 
 export const menuHandlers: Handlers<typeof menuContract, HandlerContext> = {
@@ -21,5 +22,8 @@ export const menuHandlers: Handlers<typeof menuContract, HandlerContext> = {
   // The guide's choices on the calling window's device.
   setGuideChoices: (choices, { windowId }) => {
     if (windowId !== undefined) setGuideChoices(windowId, choices);
+  },
+  setTerminalFocused: (focused, { windowId }) => {
+    if (windowId !== undefined) setTerminalFocused(windowId, focused);
   },
 };

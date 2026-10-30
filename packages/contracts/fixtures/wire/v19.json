@@ -1011,6 +1011,9 @@
       "enabled": false
     }
   },
+  "menu:setTerminalFocused": {
+    "payload": false
+  },
   "migration:changed": {
     "payload": {
       "planned": false,
@@ -1614,6 +1617,7 @@
     }
   },
   "nav:addProject": {},
+  "nav:closeTab": {},
   "nav:deepLink": {},
   "nav:launchById": {
     "payload": "\udc00"

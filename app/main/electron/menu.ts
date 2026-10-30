@@ -75,6 +75,14 @@ function shownGuideChoices(): GuideChoices {
   );
 }
 
+// The windows whose focus a terminal holds, which take ⌘W for its tab.
+const terminalFocused = new Set<number>();
+
+export function setTerminalFocused(windowId: number, focused: boolean): void {
+  if (focused) terminalFocused.add(windowId);
+  else terminalFocused.delete(windowId);
+}
+
 function sameChords(a: Chords, b: Chords): boolean {
   const keys = Object.keys(a);
   return (
@@ -151,6 +159,7 @@ export function forgetWindowMenu(windowId: number): void {
     launchToolsByWindow.delete(windowId);
     chordsByWindow.delete(windowId);
     guideChoicesByWindow.delete(windowId);
+    terminalFocused.delete(windowId);
     if (focusedWindowId === windowId) focusedWindowId = null;
   });
 }
@@ -291,7 +300,19 @@ export function buildAppMenu(): void {
       label: "Window",
       submenu: [
         { role: "minimize" },
-        { role: "close" },
+        {
+          label: "Close",
+          accelerator: "Cmd+W",
+          click: (_item, focusedWindow) => {
+            if (!focusedWindow) return;
+            if (terminalFocused.has(focusedWindow.id)) {
+              const wc = (focusedWindow as BrowserWindow).webContents;
+              broadcast(navContract, "closeTab", undefined, wc);
+            } else {
+              focusedWindow.close();
+            }
+          },
+        },
         { type: "separator" },
         { role: "front" },
       ],
