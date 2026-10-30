@@ -1,11 +1,16 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useIsTruncated } from "@shigomori/ui/hooks/useIsTruncated.ts";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { commitMessageQueryOptions } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CommitRewrite } from "@shigomori/ui/lib/commitRewrite.ts";
 import type { CommitSummary, Worktree } from "@shigomori/contracts/schemas";
 import { useCommitActions } from "@/components/worktreeDetail/git/useCommitActions";
-import { CommitDetailsView } from "@shigomori/ui/views/diff/CommitDetailsView.tsx";
+import {
+  CommitDescriptionView,
+  CommitDetailsView,
+} from "@shigomori/ui/views/diff/CommitDetailsView.tsx";
 
 // Under a commit's title on its page: the rest of its message, and what
 // can be done with it, as buttons rather than a menu to find. The moves
@@ -51,7 +56,15 @@ export function CommitDetails({
   return (
     <CommitDetailsView
       hash={commit.hash}
-      description={message?.description}
+      description={
+        message?.description && (
+          // Folded again for another commit.
+          <CommitDescription
+            key={commit.hash}
+            description={message.description}
+          />
+        )
+      }
       onlyOn={onlyOn}
       busy={busy}
       canAmend={canAmend}
@@ -75,6 +88,25 @@ export function CommitDetails({
       onNewWorktree={() => actions.newWorktreeFrom(commit)}
       onHardReset={() => actions.hardResetTo(commit)}
       dialog={actions.dialog}
+    />
+  );
+}
+
+// The message, measured whether it is cut down.
+function CommitDescription({ description }: { description: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [ref, truncated] = useIsTruncated<HTMLParagraphElement>(description);
+  return (
+    <CommitDescriptionView
+      description={description}
+      expanded={expanded}
+      onToggle={() => {
+        // Folded, it shows its start, wherever it was scrolled to.
+        if (expanded && ref.current) ref.current.scrollTop = 0;
+        setExpanded(!expanded);
+      }}
+      truncated={truncated}
+      bodyRef={ref}
     />
   );
 }

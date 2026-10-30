@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 import {
   Check,
   Combine,
@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { useCopied } from "../../primitives/copy-button.tsx";
+import { FOLD_FADE, ShowMoreButton } from "../../primitives/show-more.tsx";
+import { cn } from "../../lib/utils.ts";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,8 +51,8 @@ export function CommitDetailsView({
   dialog,
 }: {
   hash: string;
-  // The message past its subject, once read.
-  description: string | undefined;
+  // The message past its subject (CommitDescriptionView), once read.
+  description: ReactNode;
   // The upstream, for a commit only it has.
   onlyOn: string | undefined;
   busy: boolean;
@@ -76,11 +78,7 @@ export function CommitDetailsView({
 }) {
   return (
     <div className="flex flex-col gap-2.5 pt-1">
-      {description && (
-        <p className="max-w-prose text-sm whitespace-pre-wrap text-muted-foreground select-text">
-          {description}
-        </p>
-      )}
+      {description}
       {onlyOn && (
         <p className="text-xs text-muted-foreground">
           Only on <span className="font-mono">{onlyOn}</span>, not on this
@@ -187,6 +185,49 @@ export function CommitDetailsView({
         <CopyHashButton hash={hash} />
       </div>
       {dialog}
+    </div>
+  );
+}
+
+// The rest of a commit's message. A long one starts cut down to a few
+// lines, faded out at the cut, like a PR's body. Open, it scrolls past a
+// share of the window, since the header it sits in stays put over the
+// diff. CommitDetails measures whether it is cut down.
+export function CommitDescriptionView({
+  description,
+  expanded,
+  onToggle,
+  truncated,
+  bodyRef,
+}: {
+  description: string;
+  expanded: boolean;
+  onToggle: () => void;
+  // The text runs past its few lines while folded.
+  truncated: boolean;
+  bodyRef?: Ref<HTMLParagraphElement>;
+}) {
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <p
+        ref={bodyRef}
+        className={cn(
+          "max-w-prose text-sm wrap-anywhere whitespace-pre-wrap text-muted-foreground select-text",
+          expanded
+            ? "max-h-[40vh] overflow-y-auto"
+            : "max-h-[3lh] overflow-hidden",
+          !expanded && truncated && FOLD_FADE,
+        )}
+      >
+        {description}
+      </p>
+      {(expanded || truncated) && (
+        <ShowMoreButton
+          expanded={expanded}
+          onToggle={onToggle}
+          className="-mx-2"
+        />
+      )}
     </div>
   );
 }
