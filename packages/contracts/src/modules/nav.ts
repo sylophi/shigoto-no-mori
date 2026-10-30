@@ -9,6 +9,7 @@ export const navContract = defineContract(
   push("openSettings", VoidSchema),
   push("addProject", VoidSchema),
   push("launchById", Schema.String),
+  push("closeTab", VoidSchema),
   // A Help menu item: the guide to open.
   push("showAround", GuideStartSchema),
   // A deep link arrived. Only a nudge: main holds the link until the

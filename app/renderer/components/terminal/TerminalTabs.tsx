@@ -5,6 +5,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useTerminals } from "@/hooks/terminals/useTerminals";
+import { useCloseKeyClosesTab } from "@/hooks/ui/useCloseKey";
 import { notifyError } from "@/lib/toast";
 import { scriptTabId, terminalTabLabel } from "@/store/terminalDrawer";
 import { slotLabel, type ScriptSlot } from "@/store/scriptSlot";
@@ -96,6 +97,22 @@ function AttachedTerminalTabs({
         notifyError("Couldn't open a terminal", error),
       );
 
+  const close = (id: string) => {
+    const slot = slots.find((each) => scriptTabId(each) === id);
+    if (slot !== undefined) {
+      onCloseScript(slot);
+      return;
+    }
+    void api
+      .run(api.terminals.close({ terminalId: id }))
+      .catch((error: unknown) =>
+        notifyError("Couldn't close the terminal", error),
+      );
+  };
+  useCloseKeyClosesTab(() => {
+    if (selectedId !== null) close(selectedId);
+  });
+
   // Once per mount: the first answer with no tab at all opens a
   // terminal, and no tab left after some were there is the last one
   // closing.
@@ -120,18 +137,7 @@ function AttachedTerminalTabs({
       tabs={tabs}
       selectedId={selectedId}
       onSelect={pick}
-      onClose={(id) => {
-        const slot = slots.find((each) => scriptTabId(each) === id);
-        if (slot !== undefined) {
-          onCloseScript(slot);
-          return;
-        }
-        void api
-          .run(api.terminals.close({ terminalId: id }))
-          .catch((error: unknown) =>
-            notifyError("Couldn't close the terminal", error),
-          );
-      }}
+      onClose={close}
       onNew={open}
       {...placement}
     >
