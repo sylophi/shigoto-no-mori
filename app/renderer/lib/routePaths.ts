@@ -33,6 +33,12 @@ export const WORKTREE_ROUTE_PATHS = {
   terminals: TERMINALS_WINDOW_PATH,
 } as const;
 
+// The layout a worktree's pages share (renderer/router.tsx), whose id
+// leads theirs: the detail page's id is what useMatch reads it by.
+export const WORKTREE_PAGES_ID = "worktree-pages";
+export const WORKTREE_DETAIL_ROUTE_ID =
+  `/${WORKTREE_PAGES_ID}${WORKTREE_ROUTE_PATHS.detail}` as const;
+
 export const PROJECT_ROUTE_PATHS = {
   new: "/devices/$deviceId/projects/$projectId/new",
   configure: "/devices/$deviceId/projects/$projectId/configure",

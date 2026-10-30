@@ -16,7 +16,11 @@ import { useResident } from "@/hooks/villagers/useResident";
 
 import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 
-import { routeDeviceId, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import {
+  routeDeviceId,
+  WORKTREE_DETAIL_ROUTE_ID,
+  WORKTREE_ROUTE_PATHS,
+} from "@/lib/routePaths";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // What the two sidebar rows share in behaviour (their shared look is
@@ -42,12 +46,11 @@ export function useWorktreeEntry(
     projectId: worktree.projectId,
     worktreeId: worktree.id,
   };
-  const route = WORKTREE_ROUTE_PATHS.detail;
   // The peer's copy sits in a project of its own id, so its page is
   // matched on device and worktree alone, and only for a mirrored row.
   const isSelected =
     useMatch({
-      from: route,
+      from: WORKTREE_DETAIL_ROUTE_ID,
       shouldThrow: false,
       select: ({ params: open }) =>
         (open.deviceId === params.deviceId &&
@@ -73,7 +76,7 @@ export function useWorktreeEntry(
   const forwardTip = useWorktreeForwardTip(deviceId ?? "", worktree);
   return {
     look: { isSelected, activity, isDeleting },
-    open: () => void navigate({ to: route, params }),
+    open: () => void navigate({ to: WORKTREE_ROUTE_PATHS.detail, params }),
     resident,
     // Only a peer's worktree is forwarded from here.
     forwardTip: device ? forwardTip : undefined,

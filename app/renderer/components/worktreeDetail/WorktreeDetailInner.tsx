@@ -48,13 +48,11 @@ import type {
 import { WorktreeDetailView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
 import { TerminalButton } from "./TerminalButton";
 import { NewWindowOption } from "./NewWindowOption";
-import { TerminalDrawer } from "@/components/terminal/TerminalDrawer";
 import { WorktreeHeader } from "./WorktreeHeader";
 import { WorktreeLocation } from "./WorktreeLocation";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { GitSection } from "./git/GitSection";
 import { DescriptionSection } from "./DescriptionSection";
-import { useDrawerSide } from "@/store/terminalDrawer";
 
 // A cleanup script still in flight.
 const live = (state: ScriptRunState) =>
@@ -84,7 +82,6 @@ export function WorktreeDetailInner({
   // itself) and adds the cross-device ones (mirror, transplant, the
   // device chip).
   const { remote } = useHostScope();
-  const drawerSide = useDrawerSide();
   // This device's worktree sends to a peer, a peer's brings here, and
   // either renders in two parts (the footer below) that share which
   // dialog is open.
@@ -305,8 +302,6 @@ export function WorktreeDetailInner({
           }
         />
       }
-      drawer={<TerminalDrawer worktree={worktree} />}
-      drawerSide={drawerSide}
     />
   );
 }

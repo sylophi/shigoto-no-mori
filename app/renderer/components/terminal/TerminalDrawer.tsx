@@ -1,5 +1,7 @@
 import { lazy, Suspense, useState } from "react";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useKeymapAction } from "@/hooks/ui/useKeymap";
 import { useHasLocalHost } from "@/lib/localHost";
 import { openTerminalsInNewWindow } from "@/lib/newWindow";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -28,23 +30,40 @@ const TerminalTabs = lazy(() =>
 );
 
 // A worktree's terminals and the script consoles opened in it, in the
-// drawer of its page, while it is open. Closing the last tab closes the
-// drawer.
+// drawer its pages share, while it is open. Closing the last tab closes
+// the drawer. The keymap's terminal (Ctrl+`) opens it and its terminal
+// takes focus as it attaches. Open, the keys focus it, or close it when
+// it has focus. Kept by the worktree's key: another worktree's drawer
+// is another mount.
 export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   const api = useApi();
   const hasLocalHost = useHasLocalHost();
-  const { deviceId } = useHostScope();
+  const { deviceId, hasHost } = useHostScope();
+  const { canCommand } = useCommandAccess();
   const state = useTerminalDrawer();
   const side = useDrawerSide();
   const key = drawerKey(deviceId, worktree.projectId, worktree.id);
   const drawer = drawerOf(state, key);
-  // Slides in when it opens on the page it was closed on (its toggle,
-  // a console), not when a page change shows it open.
-  const [seen, setSeen] = useState({ key, open: drawer.open });
+  useKeymapAction(
+    "terminal",
+    () => {
+      const section = document.querySelector('[data-slot="terminal-drawer"]');
+      if (!drawer.open || !section) {
+        setDrawerOpen(key, true);
+      } else if (section.contains(document.activeElement)) {
+        setDrawerOpen(key, false);
+      } else {
+        section.querySelector<HTMLElement>(".xterm-helper-textarea")?.focus();
+      }
+    },
+    { enabled: canCommand && hasHost },
+  );
+  // Slides in when it opens, not when a page shows it open.
+  const [wasOpen, setWasOpen] = useState(drawer.open);
   const [slideIn, setSlideIn] = useState(false);
-  if (seen.key !== key || seen.open !== drawer.open) {
-    setSeen({ key, open: drawer.open });
-    setSlideIn(seen.key === key && drawer.open);
+  if (wasOpen !== drawer.open) {
+    setWasOpen(drawer.open);
+    setSlideIn(drawer.open);
   }
   if (!drawer.open) return null;
   const close = () => setDrawerOpen(key, false);

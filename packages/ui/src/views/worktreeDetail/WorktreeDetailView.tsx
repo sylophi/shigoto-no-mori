@@ -34,8 +34,6 @@ export function WorktreeDetailView({
   ports,
   scripts,
   footer,
-  drawer,
-  drawerSide = false,
 }: {
   // The resident's birthday party (BirthdayPartyView), thrown in the header.
   party?: ReactNode;
@@ -65,95 +63,83 @@ export function WorktreeDetailView({
   ports: ReactNode;
   scripts: ReactNode;
   footer: ReactNode;
-  // The terminal drawer, over the footer while it is open, so the
-  // footer and its Terminal toggle keep their place. At the side it is
-  // beside the whole page instead.
-  drawer?: ReactNode;
-  drawerSide?: boolean;
 }) {
-  // One shape for both docks, so a switch keeps the page mounted. The
-  // outer box is `relative`: the side drawer measures it as its offset
-  // parent.
   return (
-    <div className="relative flex h-full">
-      <div className="relative flex h-full min-w-0 flex-1 flex-col">
-        <header
-          className={cn(
-            "flex flex-col gap-2 border-b border-border",
-            PAGE_HEADER_PADDING,
-            "pb-5 phone:pb-4",
-            copyTabs && PAGE_HEADER_TABS_PADDING,
-            party && PARTY_HOST,
-          )}
-        >
-          {party}
-          {copyTabs && (
-            <div className={cn("mb-1", PAGE_HEADER_TABS_ROW)}>{copyTabs}</div>
-          )}
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <SimpleTooltip tip={`Configure ${projectName}`}>
-              <button
-                type="button"
-                onClick={onConfigure}
-                className="-mx-1 shrink-0 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
-              >
-                {projectName}
-              </button>
-            </SimpleTooltip>
-            {/* A phone has no room for the path (it shortens to noise
-                at that width), so the breadcrumb stops at the project
-                and the trailing marks push themselves to the edge. */}
-            <span aria-hidden className="text-muted-foreground/40 phone:hidden">
-              /
-            </span>
-            {location}
-            {/* Held at the text line's height: the device chip overhangs
-                it, so a peer's header is as tall as a local one. */}
-            <span className="flex h-4 shrink-0 items-center gap-1.5 phone:ml-auto">
-              {marks}
-            </span>
-          </div>
-          {/* The face centered on the lines beside it. */}
-          <div className="flex min-w-0 items-center gap-3">
-            {face}
-            <div className="min-w-0 flex-1">{header}</div>
-          </div>
-        </header>
-
-        {banner && <LifecycleBannerView label={banner} />}
-
-        <div
-          className={cn(
-            PAGE_BODY,
-            "phone:py-5",
-            locked && "pointer-events-none opacity-50",
-          )}
-          aria-disabled={locked}
-        >
-          <div className="flex flex-col gap-10 phone:gap-8">
-            {/* What the work is leads the page, and under a PR's header
-                what to do about the PR. Hidden while neither has come,
-                so it takes no gap. */}
-            <div className="space-y-5 empty:hidden">
-              {description}
-              {prLead}
-            </div>
-
-            {launch}
-            {prSection}
-            {git}
-            {ports}
-            <section className="space-y-3">
-              <SectionHeading>Scripts</SectionHeading>
-              {scripts}
-            </section>
-          </div>
+    <div className="flex h-full flex-col">
+      <header
+        className={cn(
+          "flex flex-col gap-2 border-b border-border",
+          PAGE_HEADER_PADDING,
+          "pb-5 phone:pb-4",
+          copyTabs && PAGE_HEADER_TABS_PADDING,
+          party && PARTY_HOST,
+        )}
+      >
+        {party}
+        {copyTabs && (
+          <div className={cn("mb-1", PAGE_HEADER_TABS_ROW)}>{copyTabs}</div>
+        )}
+        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <SimpleTooltip tip={`Configure ${projectName}`}>
+            <button
+              type="button"
+              onClick={onConfigure}
+              className="-mx-1 shrink-0 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
+            >
+              {projectName}
+            </button>
+          </SimpleTooltip>
+          {/* A phone has no room for the path (it shortens to noise
+              at that width), so the breadcrumb stops at the project
+              and the trailing marks push themselves to the edge. */}
+          <span aria-hidden className="text-muted-foreground/40 phone:hidden">
+            /
+          </span>
+          {location}
+          {/* Held at the text line's height: the device chip overhangs
+              it, so a peer's header is as tall as a local one. */}
+          <span className="flex h-4 shrink-0 items-center gap-1.5 phone:ml-auto">
+            {marks}
+          </span>
         </div>
+        {/* The face centered on the lines beside it. */}
+        <div className="flex min-w-0 items-center gap-3">
+          {face}
+          <div className="min-w-0 flex-1">{header}</div>
+        </div>
+      </header>
 
-        {!drawerSide && drawer}
-        {footer}
+      {banner && <LifecycleBannerView label={banner} />}
+
+      <div
+        className={cn(
+          PAGE_BODY,
+          "phone:py-5",
+          locked && "pointer-events-none opacity-50",
+        )}
+        aria-disabled={locked}
+      >
+        <div className="flex flex-col gap-10 phone:gap-8">
+          {/* What the work is leads the page, and under a PR's header
+              what to do about the PR. Hidden while neither has come,
+              so it takes no gap. */}
+          <div className="space-y-5 empty:hidden">
+            {description}
+            {prLead}
+          </div>
+
+          {launch}
+          {prSection}
+          {git}
+          {ports}
+          <section className="space-y-3">
+            <SectionHeading>Scripts</SectionHeading>
+            {scripts}
+          </section>
+        </div>
       </div>
-      {drawerSide && drawer}
+
+      {footer}
     </div>
   );
 }

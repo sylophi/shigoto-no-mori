@@ -1,6 +1,6 @@
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { useMatch } from "@tanstack/react-router";
-import { rowDeviceId, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import { rowDeviceId, WORKTREE_DETAIL_ROUTE_ID } from "@/lib/routePaths";
 import {
   useEffect,
   useLayoutEffect,
@@ -133,7 +133,7 @@ export function SidebarList({
   // the user can still scroll away freely.
   // Any device's detail page, so a peer's worktree is revealed too.
   const open = useMatch({
-    from: WORKTREE_ROUTE_PATHS.detail,
+    from: WORKTREE_DETAIL_ROUTE_ID,
     shouldThrow: false,
     select: (match) => match.params,
   });

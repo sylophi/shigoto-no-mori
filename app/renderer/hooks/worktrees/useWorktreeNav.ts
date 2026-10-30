@@ -40,8 +40,8 @@ export function useScopedWorktreeParams() {
   };
 }
 
-// The worktree's pages, and a script's console, which is a tab of the
-// page's terminal drawer.
+// The worktree's pages, and a script's console, which is a tab of their
+// terminal drawer.
 type WorktreePage = keyof typeof WORKTREE_ROUTE_PATHS | "script";
 
 interface WorktreePageParams {

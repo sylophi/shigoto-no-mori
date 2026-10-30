@@ -1,11 +1,11 @@
-// The worktree page's terminal drawer, this window's. For each worktree
-// it keeps whether it is open (so a page comes back as it was left, and
-// visiting one opens no shell there), the script consoles opened in it
-// as tabs, and the tab picked. Every drawer shares its height at the
-// bottom and width at the side, each null until it is dragged and kept
-// across launches, and the edge it is docked to (a store of its own,
-// which the page reads). A tab is named by a terminal's id, or
-// `script:` and its slot's param.
+// The terminal drawer of a worktree's pages, this window's. For each
+// worktree it keeps whether it is open (so its pages come back as they
+// were left, and visiting one opens no shell there), the script
+// consoles opened in it as tabs, and the tab picked. Every drawer
+// shares its height at the bottom and width at the side, each null
+// until it is dragged and kept across launches, and the edge it is
+// docked to (a store of its own, which the pages read). A tab is named
+// by a terminal's id, or `script:` and its slot's param.
 import {
   createExternalStore,
   useExternalStore,
