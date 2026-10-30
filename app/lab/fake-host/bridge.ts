@@ -1132,6 +1132,7 @@ function hostHandlersFor(
       serving: fakeMirrors.serving
         .filter((stream) => stream.deviceId === forest.deviceId)
         .map(({ deviceId: _device, ...stream }) => stream),
+      starting: [],
     }),
     // The posed running scripts. A stop ends the run at once and says
     // so the way the host does, so the Live page's row goes.

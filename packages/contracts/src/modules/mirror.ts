@@ -315,6 +315,18 @@ const MirrorServingSchema = strict(
 );
 export type MirrorServing = typeof MirrorServingSchema.Type;
 
+// A mirror this device is starting, from the moment its copy exists on
+// deviceId until its session is in, so the pair reads as one worktree
+// through the copy's setup and first pass.
+const MirrorStartingSchema = strict(
+  Schema.Struct({
+    localWorktreeId: WorktreeIdSchema,
+    deviceId: Schema.String,
+    worktreeId: WorktreeIdSchema,
+  }),
+);
+export type MirrorStarting = typeof MirrorStartingSchema.Type;
+
 const MirrorDaemonStatusSchema = Schema.Literals([
   "stopped",
   "starting",
@@ -372,6 +384,7 @@ const MirrorListResultSchema = strict(
     daemonFailure: Schema.optional(Schema.String),
     sessions: Schema.Array(MirrorSessionSchema),
     serving: Schema.Array(MirrorServingSchema),
+    starting: Schema.Array(MirrorStartingSchema),
   }),
 );
 export type MirrorListResult = typeof MirrorListResultSchema.Type;

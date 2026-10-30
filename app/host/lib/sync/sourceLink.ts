@@ -330,6 +330,7 @@ const ProgressFrameSchema = strict(
     bytes: progressFields.bytes,
     totalBytes: progressFields.totalBytes,
     createPhase: progressFields.createPhase,
+    worktreeId: progressFields.worktreeId,
   }),
 );
 export type ProgressFrame = typeof ProgressFrameSchema.Type;
