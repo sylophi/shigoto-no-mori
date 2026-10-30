@@ -1832,7 +1832,8 @@ const BLOCK_MESSAGES = {
 // worktree or two in flight. With ?crowdShared=1 terrier lists them
 // all and most are cloned on the MacBook too, the way a registry kept
 // on every machine fills the list: nearly every project then carries a
-// paw and a device, which the open project's header shows.
+// paw and a device: every row shows the device, and the open
+// project's header the paw too.
 const CROWD_NAMES = [
   "lichen",
   "terrier",

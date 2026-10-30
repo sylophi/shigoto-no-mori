@@ -39,8 +39,8 @@ export function SidebarSectionView({
         label="Show device icons"
         description={
           signedIn
-            ? "Badges open projects and each worktree with the devices they live on. The device filter works either way."
-            : "Sign in to bring in your other devices. Open projects and each worktree are then badged with the devices they live on."
+            ? "Marks projects and worktrees with the other devices they're on."
+            : "Sign in to see which of your devices each project and worktree is on."
         }
       />
       <ToggleRowView

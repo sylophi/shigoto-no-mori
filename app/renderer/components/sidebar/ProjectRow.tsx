@@ -47,8 +47,8 @@ interface ProjectRowProps {
   // checkouts.
   branches: number | undefined;
   // Peer devices whose worktrees merged into this project's group, and
-  // their checkouts: the open header's badges, and the extra devices
-  // its actions can reach.
+  // their checkouts: the header's badges, and the extra devices its
+  // actions can reach.
   devices: readonly SidebarDeviceBadge[];
   members: readonly RemoteProjectMember[];
   onToggle: () => void;
