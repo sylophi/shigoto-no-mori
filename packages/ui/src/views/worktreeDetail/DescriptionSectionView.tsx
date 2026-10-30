@@ -1,9 +1,10 @@
 import type { Binding } from "../../lib/keymap.ts";
 import type { Ref } from "react";
-import { ChevronDown, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Button } from "../../primitives/button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { Markdown } from "../../primitives/markdown.tsx";
+import { FOLD_FADE, ShowMoreButton } from "../../primitives/show-more.tsx";
 import { Textarea } from "../../primitives/textarea.tsx";
 import { cn } from "../../lib/utils.ts";
 
@@ -66,9 +67,7 @@ export function DescriptionSectionView({
           ref={bodyRef}
           className={cn(
             !expanded && "max-h-28 overflow-hidden",
-            !expanded &&
-              truncated &&
-              "[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
+            !expanded && truncated && FOLD_FADE,
           )}
         >
           <Markdown source={description} remoteImage={remoteImage} />
@@ -79,21 +78,7 @@ export function DescriptionSectionView({
         <div className="max-w-3xl">
           <div className="-mx-2 flex items-center gap-1">
             {showToggle && (
-              <button
-                type="button"
-                onClick={onToggle}
-                aria-expanded={expanded}
-                className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-              >
-                {expanded ? "Show less" : "Show more"}
-                <ChevronDown
-                  aria-hidden
-                  className={cn(
-                    "size-3.5 opacity-60",
-                    expanded && "rotate-180",
-                  )}
-                />
-              </button>
+              <ShowMoreButton expanded={expanded} onToggle={onToggle} />
             )}
             {!pencilBeside && pencil}
           </div>

@@ -9,7 +9,10 @@ import { BranchComboboxView } from "../views/shared/BranchComboboxView.tsx";
 import type { DiffChangesControls } from "../views/diff/changesControls.ts";
 import { defaultBinding } from "../lib/keymap.ts";
 import { CommitComposerView } from "../views/diff/CommitComposerView.tsx";
-import { CommitDetailsView } from "../views/diff/CommitDetailsView.tsx";
+import {
+  CommitDescriptionView,
+  CommitDetailsView,
+} from "../views/diff/CommitDetailsView.tsx";
 import {
   DiffFileIndexView,
   DiscardConfirmView,
@@ -332,7 +335,14 @@ export function CommitPageScene() {
         details: (
           <CommitDetailsView
             hash={commit?.hash ?? ""}
-            description="The list keeps its order, so the filter is a plain substring match."
+            description={
+              <CommitDescriptionView
+                description="The list keeps its order, so the filter is a plain substring match."
+                expanded={false}
+                onToggle={noop}
+                truncated={false}
+              />
+            }
             onlyOn={undefined}
             busy={false}
             canAmend
