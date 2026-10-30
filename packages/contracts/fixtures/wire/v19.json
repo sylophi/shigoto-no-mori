@@ -1126,7 +1126,8 @@
           "peerDeviceId": "",
           "since": 4
         }
-      ]
+      ],
+      "starting": []
     }
   },
   "mirror:gitChanged": {
@@ -1290,7 +1291,14 @@
           }
         }
       ],
-      "serving": []
+      "serving": [],
+      "starting": [
+        {
+          "localWorktreeId": "5b2f0e8a9c41",
+          "deviceId": "D1",
+          "worktreeId": "8e1d7c3a2f60"
+        }
+      ]
     }
   },
   "mirror:openStream": {
@@ -1588,7 +1596,8 @@
           "peerDeviceId": "\u0000",
           "since": 3
         }
-      ]
+      ],
+      "starting": []
     }
   },
   "nav:addProject": {},

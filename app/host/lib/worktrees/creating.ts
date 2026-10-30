@@ -33,6 +33,7 @@ import { scriptEventOf } from "./documents";
 
 // What a create's run tells the calling window or peer as it goes.
 export type CreateNotifiers = {
+  readonly notifyCreated?: (worktree: Worktree) => void;
   readonly notifyPhase: (payload: WorktreeLifecyclePhase) => void;
   readonly notifyCarryOverComplete: (
     payload: WorktreeCarryOverComplete,
@@ -113,6 +114,7 @@ export const makeCreating = (removing: {
           case "created": {
             created = decodeWorktree(event.worktree);
             Deferred.doneUnsafe(made, Exit.succeed(created));
+            notify.notifyCreated?.(created);
             break;
           }
           case "phase": {

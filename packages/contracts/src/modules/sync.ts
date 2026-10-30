@@ -236,6 +236,8 @@ export const SyncPullProgressSchema = strict(
     bytes: Schema.optional(Schema.Natural),
     totalBytes: Schema.optional(Schema.Natural),
     createPhase: Schema.optional(CreatePhaseSchema),
+    // The copy's own id, on the create's frames once it exists.
+    worktreeId: Schema.optional(WorktreeIdSchema),
   }),
 );
 export type SyncPullProgress = typeof SyncPullProgressSchema.Type;

@@ -32,6 +32,7 @@ import {
   type MirrorIgnoreMode,
   type MirrorListResult,
   type MirrorSession,
+  type MirrorStarting,
   type MirrorStartFromPayload,
   type MirrorStartToPayload,
   MirrorStartToResultSchema,
@@ -76,6 +77,7 @@ import {
   STOPPED_WAITING_DETAIL,
 } from "./registry";
 import { MirrorEngine, MirrorError } from "./MirrorEngine";
+import { MirrorSignals } from "./MirrorSignals";
 import { ownMirrorHereBlocker } from "./MirrorGateway";
 import { announceServingChange, listMirrorServing } from "./serving";
 import { log } from "@shared/log";
@@ -99,6 +101,14 @@ const reopening = new Set<string>();
 // until it vanishes.
 const stopping = new Map<string, MirrorSession>();
 
+// The mirrors being started whose copy already exists, by the original's
+// worktree id: the copy lists from its create on, through its setup and
+// the first pass, and the session only opens after. Listed through that,
+// the pair reads as one worktree from the start too. A start that went
+// through gives its place up to the session once the engine lists it,
+// which is a state event after the create answers.
+const starting = new Map<string, MirrorStarting>();
+
 // A device's mirror picture: what mirror:list answers and what
 // mirror:changed carries. The same for every caller. A daemon that is
 // restarting lists the sessions it had, which come back with it, under
@@ -111,6 +121,7 @@ export const mirrorList = (given?: Daemon) =>
       annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
     );
     const live = new Set(sessions.map((session) => session.session));
+    for (const session of sessions) starting.delete(session.localWorktreeId);
     for (const [id, session] of stopping) {
       if (!live.has(id)) sessions.push(session);
     }
@@ -119,6 +130,7 @@ export const mirrorList = (given?: Daemon) =>
       daemonFailure: yield* daemon.failure,
       sessions,
       serving: listMirrorServing(),
+      starting: [...starting.values()],
     } satisfies MirrorListResult;
   });
 
@@ -175,16 +187,28 @@ export const startMirrorTo = (
     }
     const { ignoreMode, ignores, ...sendInput } = input;
     const moves = yield* Moves.Moves;
+    const signals = yield* MirrorSignals;
+    const noteCopy = (worktreeId: string) => {
+      if (starting.get(input.worktreeId)?.worktreeId === worktreeId) return;
+      starting.set(input.worktreeId, {
+        localWorktreeId: input.worktreeId,
+        deviceId: input.targetDeviceId,
+        worktreeId,
+      });
+      signals.servingChanged();
+    };
     return yield* moves.run(
       ctx,
       input.worktreeId,
       Effect.gen(function* () {
         const { source, result: sent } = yield* sendWorktree(sendInput, ctx, {
           mirror: true,
+          onCopy: noteCopy,
         });
         // The copy's root as the peer's landing answered it, re-parsed
         // by the send.
         const copy = sent.worktree;
+        noteCopy(copy.id);
         const session = yield* Effect.gen(function* () {
           // The copy's create ran its carry-over (and the setup script,
           // when asked), which wrote files of the peer's own into it.
@@ -244,7 +268,13 @@ export const startMirrorTo = (
           summarizeIgnores(ignoreMode, ignores),
         );
         return { ...sent, session };
-      }),
+      }).pipe(
+        Effect.onError(() =>
+          Effect.sync(() => {
+            if (starting.delete(input.worktreeId)) signals.servingChanged();
+          }),
+        ),
+      ),
     );
   });
 

@@ -274,10 +274,14 @@ export const sendWorktree = (
   // (it lands on the peer as mirror/<branch>, and the session then
   // keeps the pair in step). A plain send moves a worktree, and the
   // primary is the project itself. The mirror start runs it inside a
-  // move of its own.
-  { mirror = false }: { mirror?: boolean } = {},
+  // move of its own, and hears of the copy as soon as it exists
+  // (`onCopy`, its id).
+  {
+    mirror = false,
+    onCopy,
+  }: { mirror?: boolean; onCopy?: (worktreeId: string) => void } = {},
 ) => {
-  const send = sendWorktreeEffect(input, ctx, mirror).pipe(
+  const send = sendWorktreeEffect(input, ctx, mirror, onCopy).pipe(
     Effect.scoped,
     (sending) =>
       counted(
@@ -333,6 +337,7 @@ const sendWorktreeEffect = (
   }: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
   mirror: boolean,
+  onCopy: ((worktreeId: string) => void) | undefined,
 ) =>
   Effect.gen(function* () {
     const progress = progressTo(ctx, worktreeId);
@@ -384,7 +389,10 @@ const sendWorktreeEffect = (
                   channelId,
                 }),
               ),
-            progress,
+            (frame) => {
+              if (frame.worktreeId !== undefined) onCopy?.(frame.worktreeId);
+              progress(frame);
+            },
             // A landing that answered as the cancel came: the copy is real
             // and goes the way the finalizer below would take it.
             (answer) =>

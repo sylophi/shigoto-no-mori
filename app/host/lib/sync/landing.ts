@@ -391,7 +391,9 @@ const landIncoming = (
     capture: { sourceWorktreeId: string; commit: string } | undefined;
   },
   ctx: HandlerContext,
-  progress: (frame: Pick<SyncPullProgress, "step" | "createPhase">) => void,
+  progress: (
+    frame: Pick<SyncPullProgress, "step" | "createPhase" | "worktreeId">,
+  ) => void,
   move: Scope.Scope,
 ) =>
   // The create, the capture's ref and its apply, held as one change
@@ -437,6 +439,10 @@ const landWhole = (
         },
         {
           ...notify,
+          // The copy's id goes out as soon as it exists, ahead of its
+          // carry-over and setup: a mirror start folds the pair by it.
+          notifyCreated: (made) =>
+            progress({ step: "create", worktreeId: made.id }),
           notifyPhase: (payload) => {
             notify.notifyPhase(payload);
             if (payload.phase !== "idle") {

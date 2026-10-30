@@ -61,6 +61,7 @@ const EMPTY: MirrorListResult = {
   daemon: "stopped",
   sessions: [],
   serving: [],
+  starting: [],
 };
 
 // A device's mirror picture, as its host streams it.
@@ -147,12 +148,12 @@ export function useCopyOff(
 
 function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
   const links: MirrorLink[] = [];
-  for (const session of mirrors.sessions) {
-    if (session.localWorktreeId === "") continue;
+  for (const pair of [...mirrors.sessions, ...mirrors.starting]) {
+    if (pair.localWorktreeId === "") continue;
     links.push({
-      peerDeviceId: session.deviceId,
-      peerWorktreeId: session.worktreeId,
-      localWorktreeId: session.localWorktreeId,
+      peerDeviceId: pair.deviceId,
+      peerWorktreeId: pair.worktreeId,
+      localWorktreeId: pair.localWorktreeId,
     });
   }
   for (const stream of mirrors.serving) {
@@ -172,20 +173,21 @@ const linkKey = (link: MirrorLink) =>
   `${link.peerDeviceId}:${link.peerWorktreeId}:${link.localWorktreeId}`;
 
 // The pairs a peer's list adds for the scoped device: the sessions
-// that peer runs against the scoped device's worktrees. A paused or
-// disconnected session serves no stream here, so the served set alone
-// would unfold the pair exactly while it needs attention.
+// that peer runs against the scoped device's worktrees, and the ones it
+// is starting into them. A paused or disconnected session serves no
+// stream here, so the served set alone would unfold the pair exactly
+// while it needs attention.
 function peerMirrorLinksOf(
   peerDeviceId: string,
   scopedDeviceId: string,
   mirrors: MirrorListResult,
 ): MirrorLink[] {
-  return mirrors.sessions
-    .filter((session) => session.deviceId === scopedDeviceId)
-    .map((session) => ({
+  return [...mirrors.sessions, ...mirrors.starting]
+    .filter((pair) => pair.deviceId === scopedDeviceId)
+    .map((pair) => ({
       peerDeviceId,
-      peerWorktreeId: session.localWorktreeId,
-      localWorktreeId: session.worktreeId,
+      peerWorktreeId: pair.localWorktreeId,
+      localWorktreeId: pair.worktreeId,
     }));
 }
 
