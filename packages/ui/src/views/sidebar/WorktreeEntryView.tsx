@@ -24,6 +24,7 @@ import {
   RemoteSyncPillView,
 } from "./StatusIndicatorView.tsx";
 import { activityMark, type WorktreeRowLook } from "./rowLook.ts";
+import { TerminalMarkView } from "./TerminalMarkView.tsx";
 
 // The marks this window's sidebar rows wear (Settings, Appearance), in
 // one read, for the containers that hand them to the rows' views.
@@ -84,11 +85,12 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
 //   Name the work before the PR, at full width
 //   [kind] dirname [device]                    ±3  ↑2  #142
 //
-// Without a context line, a running script's mark leads the pills, and
-// a delete in flight takes their place: the worktree is going away, so
-// the trash standing alone reads as "destroying". Children lead the
-// button (the tree's stack rail). Props pass through to the
-// button, so a menu trigger can render it as its own element.
+// Without a context line, a running script's mark leads the pills, then
+// its terminals' mark, and a delete in flight takes their place: the
+// worktree is going away, so the trash standing alone reads as
+// "destroying". Children lead the button (the tree's stack rail). Props
+// pass through to the button, so a menu trigger can render it as its
+// own element.
 export function WorktreeEntryView({
   worktree,
   pr,
@@ -203,6 +205,9 @@ export function WorktreeEntryView({
           {mark && <ActivityIconView kind={mark} />}
           {!(inline && isDeleting) && (
             <>
+              {inline && look.terminal && (
+                <TerminalMarkView mark={look.terminal} />
+              )}
               <ChangedFilesPillView worktree={worktree} />
               <RemoteSyncPillView worktree={worktree} />
               <PullRequestPillView

@@ -13,11 +13,8 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Cause from "effect/Cause";
 import type { RunningScript } from "@shigomori/contracts/schemas";
 import { useDeviceRunningScripts } from "@/hooks/live/useLiveActivity";
-import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
-import { useHasLocalHost } from "@/lib/localHost";
+import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import type { ScriptKey } from "@/store/scriptSlot";
-import { useApi } from "@/lib/runtime/pageApi";
 import {
   activityOf,
   EMPTY_STATE,
@@ -47,29 +44,21 @@ export function useScriptRunState(key: ScriptKey): ScriptRunState {
   );
 }
 
-// The sidebar's activity glyph. Takes its device explicitly rather than
-// reading the scope: the rows render outside any provider, and a peer
-// row names the device it belongs to. A run this window holds says
-// most; one held elsewhere (another window, another device) shows off
-// the device's running scripts.
+// The sidebar's activity glyph. Takes its device and the api it is read
+// through (useRowHostApi) rather than reading the scope: the rows render
+// outside any provider, and a peer row names the device it belongs to.
+// A run this window holds says most; one held elsewhere (another
+// window, another device) shows off the device's running scripts.
 export function useWorktreeScriptActivity(
   worktreeId: string,
-  device?: string,
+  deviceId: string,
+  api: HostApi | undefined,
 ): ScriptActivityKind | null {
-  const api = useApi();
-  const localDeviceId = api.deviceId;
-  const deviceId = device ?? localDeviceId;
-  const hasLocalHost = useHasLocalHost();
   const runs = useDeviceScriptRuns(deviceId);
   const held = useAtomValue(runs.state, (state) =>
     activityOf(state, worktreeId),
   );
-  const local = deviceId === localDeviceId;
-  const peerApi = useRemoteDeviceApi(local ? undefined : deviceId);
-  const listed = useDeviceRunningScripts(
-    deviceId,
-    local ? (hasLocalHost ? api : undefined) : peerApi,
-  );
+  const listed = useDeviceRunningScripts(deviceId, api);
   useEffect(() => {
     if (listed) runs.settle(listed);
   }, [listed, runs]);

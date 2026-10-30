@@ -22,6 +22,9 @@ const TerminalSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   // Epoch ms.
   openedAt: Schema.Finite,
+  // Whether a command its shell started holds the terminal (a dev
+  // server, a build), as the host last looked.
+  busy: Schema.Boolean,
 });
 export type Terminal = typeof TerminalSchema.Type;
 

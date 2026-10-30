@@ -132,6 +132,8 @@ const SAVE_AT_MOST = Duration.minutes(1);
 // A shell is stopped with SIGHUP, as when its window closes, and
 // SIGKILL a moment later if it is still there.
 const STOPPING = { graceMs: 1_000, wait: true, signal: "SIGHUP" } as const;
+// How often the shells are asked whether a command holds them.
+const BUSY_EVERY = Duration.seconds(2);
 // A private mode set or reset (CSI in seven or eight bits), its modes as
 // they come (`1049;25`), a kitty keyboard set, push or pop (`=`, `>`,
 // `<`) with its numbers, or a full reset, which leaves the alternate
@@ -245,7 +247,8 @@ const followScreen = (before: Followed, data: string): Followed => {
 type Shown = Followed & { readonly seq: number };
 
 interface Session {
-  readonly terminal: Terminal;
+  // Replaced as its busy changes.
+  terminal: Terminal;
   // The folder its shell started in.
   readonly cwd: string;
   readonly pty: PtyHandle;
@@ -275,7 +278,7 @@ export class Terminals extends Context.Service<
   Terminals,
   {
     // Every open terminal, oldest first, and again on each open and
-    // close.
+    // close and as one's busy changes.
     readonly list: Stream.Stream<ReadonlyArray<Terminal>>;
     readonly open: (
       input: OpenInput,
@@ -423,6 +426,32 @@ const make = <R, E>(options: {
         Effect.orElseSucceed(() => Option.none<string>()),
       );
     };
+
+    // The shells among `among` that a command holds: one is held while
+    // its terminal's foreground process group is not its own. Fails
+    // when `ps` does.
+    const held = (among: readonly Session[]) =>
+      Effect.gen(function* () {
+        if (among.length === 0) return new Set<number>();
+        const { stdout } = yield* Processes.exec("ps", [
+          "-o",
+          "pid=,tpgid=",
+          "-p",
+          among.map((session) => session.pty.pid).join(","),
+        ]).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            spawner,
+          ),
+        );
+        return new Set(
+          stdout
+            .split("\n")
+            .map((line) => line.trim().split(/\s+/).map(Number))
+            .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid)
+            .map(([pid = 0]) => pid),
+        );
+      });
 
     const exists = (path: string) =>
       fs.exists(path).pipe(Effect.orElseSucceed(() => false));
@@ -672,6 +701,7 @@ const make = <R, E>(options: {
         projectId: input.projectId,
         worktreeId: input.worktreeId,
         openedAt: yield* Clock.currentTimeMillis,
+        busy: false,
       };
       yield* Effect.annotateCurrentSpan({ terminalId: terminal.terminalId });
       const session = yield* begin(terminal, start, input.size ?? DEFAULT_SIZE);
@@ -702,10 +732,15 @@ const make = <R, E>(options: {
           continue;
         }
         const folder = (yield* exists(cwd)) ? cwd : start.value.cwd;
-        yield* begin(terminal, { ...start.value, cwd: folder }, DEFAULT_SIZE, {
-          seq,
-          history,
-        }).pipe(
+        yield* begin(
+          { ...terminal, busy: false },
+          { ...start.value, cwd: folder },
+          DEFAULT_SIZE,
+          {
+            seq,
+            history,
+          },
+        ).pipe(
           Effect.onError(() => saved.forget(terminal.terminalId)),
           Effect.catchTags({
             PtySpawnError: (error) =>
@@ -724,6 +759,25 @@ const make = <R, E>(options: {
     );
     yield* Latch.open(back).pipe(
       Effect.delay(RESTORE_WAIT),
+      Effect.forkIn(layerScope),
+    );
+
+    // Whether each shell is busy, sent with the list when one changes. A
+    // look that fails leaves them as they were.
+    yield* Effect.gen(function* () {
+      const shells = living();
+      const pids = yield* held(shells);
+      let changed = false;
+      for (const session of shells) {
+        const busy = pids.has(session.pty.pid);
+        if (busy === session.terminal.busy) continue;
+        session.terminal = { ...session.terminal, busy };
+        changed = true;
+      }
+      if (changed) yield* announce;
+    }).pipe(
+      Effect.ignoreCause,
+      Effect.repeat(Schedule.spaced(BUSY_EVERY)),
       Effect.forkIn(layerScope),
     );
 
@@ -877,28 +931,11 @@ const make = <R, E>(options: {
         );
         yield* PubSub.publish(session.events, { kind: "size", ...size });
       }),
-      // A shell is busy while its terminal's foreground process group
-      // is not its own: a job it started holds the terminal.
-      busy: Effect.gen(function* () {
-        const pids = living().map((session) => session.pty.pid);
-        if (pids.length === 0) return 0;
-        const { stdout } = yield* Processes.exec("ps", [
-          "-o",
-          "pid=,tpgid=",
-          "-p",
-          pids.join(","),
-        ]).pipe(
-          Effect.provideService(
-            ChildProcessSpawner.ChildProcessSpawner,
-            spawner,
-          ),
-          Effect.orElseSucceed(() => ({ stdout: "" })),
-        );
-        return stdout
-          .split("\n")
-          .map((line) => line.trim().split(/\s+/).map(Number))
-          .filter(([pid, tpgid = 0]) => tpgid > 0 && tpgid !== pid).length;
-      }).pipe(Effect.withSpan("Terminals.busy")),
+      busy: Effect.suspend(() => held(living())).pipe(
+        Effect.map((pids) => pids.size),
+        Effect.orElseSucceed(() => 0),
+        Effect.withSpan("Terminals.busy"),
+      ),
       openIn: (worktreeId) =>
         living().filter(({ terminal }) => terminal.worktreeId === worktreeId)
           .length,

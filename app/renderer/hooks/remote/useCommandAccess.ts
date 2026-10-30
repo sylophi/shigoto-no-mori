@@ -7,6 +7,7 @@ import {
   type RemoteDeviceApi,
   remoteDevicesAtom,
 } from "@/lib/remote/devices";
+import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
 
 const GRANTED: CommandAccess = {
@@ -80,6 +81,17 @@ export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
       deviceId,
       registry.find((entry) => entry.deviceId === deviceId),
     );
+}
+
+// The api a sidebar row reads its device's runs and terminals through,
+// outside any host scope: this machine's while it has a host, a peer's
+// while this device may command it.
+export function useRowHostApi(deviceId: string): HostApi | undefined {
+  const api = useApi();
+  const hasLocalHost = useHasLocalHost();
+  const local = deviceId === api.deviceId;
+  const peerApi = useCommandableDeviceApi(local ? undefined : deviceId);
+  return local ? (hasLocalHost ? api : undefined) : peerApi;
 }
 
 // The same for one peer, as a selector (useRemoteDeviceApi's), so a row

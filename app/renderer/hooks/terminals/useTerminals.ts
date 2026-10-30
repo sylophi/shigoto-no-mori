@@ -1,9 +1,12 @@
 import { callOf } from "@shigomori/contracts/contract";
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import type { Terminal } from "@shigomori/contracts/schemas";
+import type { TerminalMark } from "@shigomori/ui/views/sidebar/TerminalMarkView.tsx";
+import { useAtomValue } from "@effect/atom-react";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
-import { useHostScope } from "@/hooks/remote/useHostScope";
-import { hostViewAtom } from "@/lib/runtime/atoms";
+import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
+import { hostViewAtom, noView } from "@/lib/runtime/atoms";
 import { useView } from "@/lib/runtime/viewHooks";
 
 // A device's open terminals, as its host streams them (terminals:list):
@@ -24,4 +27,23 @@ export function useTerminals(): readonly Terminal[] | null {
   return (
     useView(hasHost ? terminalsAtom(deviceId) : null).data?.terminals ?? null
   );
+}
+
+// The sidebar's terminal mark for a worktree: "busy" while a command
+// holds one of its shells, "open" while any is open, read through the
+// row's api (useRowHostApi). Only a row whose mark changes renders again.
+export function useWorktreeTerminalMark(
+  worktreeId: string,
+  deviceId: string,
+  api: HostApi | undefined,
+): TerminalMark | null {
+  const view = api === undefined ? noView : terminalsAtom(deviceId);
+  return useAtomValue(view, (result) => {
+    const terminals = AsyncResult.getOrElse(
+      result,
+      () => undefined,
+    )?.terminals.filter((terminal) => terminal.worktreeId === worktreeId);
+    if (terminals === undefined || terminals.length === 0) return null;
+    return terminals.some((terminal) => terminal.busy) ? "busy" : "open";
+  });
 }

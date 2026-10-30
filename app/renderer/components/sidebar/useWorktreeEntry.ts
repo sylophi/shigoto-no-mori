@@ -4,6 +4,10 @@ import { useMatch, useNavigate, useParams } from "@tanstack/react-router";
 
 import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
 
+import { useWorktreeTerminalMark } from "@/hooks/terminals/useTerminals";
+
+import { useRowHostApi } from "@/hooks/remote/useCommandAccess";
+
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 
 import type { Worktree } from "@shigomori/contracts/schemas";
@@ -38,11 +42,15 @@ export function useWorktreeEntry(
   mirror: { deviceId?: string; worktreeId?: string } = {},
 ): WorktreeEntry {
   const deviceId = device?.deviceId;
+  const localDeviceId = useApi().deviceId;
+  const rowDeviceId = deviceId ?? localDeviceId;
   const navigate = useNavigate();
-  const running = useWorktreeScriptActivity(worktree.id, deviceId);
+  const api = useRowHostApi(rowDeviceId);
+  const running = useWorktreeScriptActivity(worktree.id, rowDeviceId, api);
+  const terminal = useWorktreeTerminalMark(worktree.id, rowDeviceId, api);
   const isDeleting = useIsDeletingWorktree(worktree.id, deviceId);
   const params = {
-    deviceId: routeDeviceId(useApi().deviceId, deviceId),
+    deviceId: routeDeviceId(localDeviceId, deviceId),
     projectId: worktree.projectId,
     worktreeId: worktree.id,
   };
@@ -75,7 +83,7 @@ export function useWorktreeEntry(
   const resident = useResident(worktree);
   const forwardTip = useWorktreeForwardTip(deviceId ?? "", worktree);
   return {
-    look: { isSelected, activity, isDeleting },
+    look: { isSelected, activity, terminal, isDeleting },
     open: () => void navigate({ to: WORKTREE_ROUTE_PATHS.detail, params }),
     resident,
     // Only a peer's worktree is forwarded from here.
