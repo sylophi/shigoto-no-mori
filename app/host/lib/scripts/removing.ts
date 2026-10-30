@@ -38,14 +38,12 @@ export const makeRemoving = ({
     // them with what the mutation does to them, stop their scripts
     // before the mutation (a dev server would otherwise outlive its
     // worktree or keep running in the old path), deal with their mirrors
-    // after it, and always clear the marks. The mirrors go after, not
-    // before: the engine may refuse the mutation (a dirty tree without
-    // --force), and a mirror stopped ahead of a refusal cannot be started
-    // again while the branch is still checked out here. The engine is
-    // two-way safe, so the gap between the root vanishing and the stop
-    // propagates nothing. `mirrorsAfter` stops the mirrors of the
-    // worktrees the mutation took (a failed cleanup keeps its worktree,
-    // and its mirror with it), or carries them to a moved one's path.
+    // after it, and always clear the marks. A delete's mirrors stop
+    // right before its files go, once the engine has passed its checks
+    // (mirror/onDelete.ts), so a refused delete leaves them running.
+    // `mirrorsAfter` deals with the rest: the mirrors of a move's
+    // teardown or of a removal that must happen ended, or a moved
+    // worktree's carried to its path.
     const withDeletesInflight = Effect.fn("Scripts.withDeletesInflight")(
       function* <A, E, R, E2, R2>(
         worktreeIds: readonly string[],

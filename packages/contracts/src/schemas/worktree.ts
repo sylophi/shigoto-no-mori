@@ -304,6 +304,10 @@ export type WorktreeLifecyclePhase = typeof WorktreeLifecyclePhaseSchema.Type;
 export const WorktreeRemovalSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   state: Schema.Literals(["removing", "removed", "kept"]),
+  // A delete that takes both sides of a mirror: the device holding the
+  // original deletes it too. Not a move's teardown, a removal that must
+  // happen (a nuke), nor one the other device asked for.
+  bothSides: Schema.optional(Schema.Boolean),
 });
 export type WorktreeRemoval = typeof WorktreeRemovalSchema.Type;
 
@@ -379,6 +383,10 @@ export const DeleteWorktreePayloadSchema = Schema.Struct({
   // its cleanup and right before the delete, unless the source is still
   // what moved.
   expect: Schema.optional(MovedSourceSchema),
+  // The other device taking its copy (a mirror's stop, a cancelled
+  // start or send, the original's delete): that device deals with its
+  // own side, so this delete doesn't take it too.
+  oneSide: Schema.optional(Schema.Boolean),
 });
 
 export const RenameBranchPayloadSchema = Schema.Struct({

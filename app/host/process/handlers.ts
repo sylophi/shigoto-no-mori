@@ -69,6 +69,7 @@ import {
   endMirrorsWithPeers,
   LEFT_ACCOUNT_DETAIL,
 } from "@host/mirror/registry";
+import * as HostWorktrees from "@host/lib/Worktrees";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
 import * as MirrorEngineLayer from "@host/mirror/MirrorEngineLayer";
 import { MirrorSignals } from "@host/mirror/MirrorSignals";
@@ -237,6 +238,32 @@ export const mirrorEngineLayer = MirrorEngineLayer.layer({
   projectChanged: (projectId) =>
     broadcastAll(gitContract, "projectChanged", { projectId }),
 });
+
+// A mirror is one worktree on two devices: the originals here whose
+// copy was deleted on its device go too, forced, since that delete
+// stood for both. Only under the command switch, as the peer's own
+// delete call here would be.
+const deleteOriginals = (
+  originals: ReadonlyArray<{ projectId: string; worktreeId: string }>,
+) =>
+  Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
+    Effect.forEach(
+      originals,
+      (original) =>
+        Effect.ignoreCause(
+          worktrees.remove(
+            { ...original, force: true, oneSide: true },
+            () => {},
+          ),
+          {
+            log: "Warn",
+            message: "[mirror] the original of a deleted copy stayed",
+          },
+        ),
+      { discard: true },
+    ),
+  );
+
 // Every daemon snapshot and status change, to every window and to the
 // sweep of sessions the engine brings back for a device on no account.
 export const mirrorDaemonChangesLayer = Layer.effectDiscard(
@@ -506,7 +533,11 @@ export function registerHostHandlers(): void {
       }
     } else if (push.channel === "worktrees:removal") {
       void Graph.run(
-        endMirrorsOnPeerRemoval(push.deviceId, push.payload),
+        Effect.flatMap(
+          endMirrorsOnPeerRemoval(push.deviceId, push.payload),
+          (originals) =>
+            acceptsPeerCommands() ? deleteOriginals(originals) : Effect.void,
+        ),
       ).catch(() => {});
     }
   });

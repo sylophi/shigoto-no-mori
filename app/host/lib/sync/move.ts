@@ -312,7 +312,12 @@ export const rollBackSent = (
   copy: { projectId: string; id: string },
 ) =>
   peerWorktreesFor(targetDeviceId)
-    .delete({ projectId: copy.projectId, worktreeId: copy.id, force: true })
+    .delete({
+      projectId: copy.projectId,
+      worktreeId: copy.id,
+      force: true,
+      oneSide: true,
+    })
     .pipe(
       Effect.asVoid,
       Effect.catch((error) =>

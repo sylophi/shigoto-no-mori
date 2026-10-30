@@ -356,6 +356,13 @@
       ]
     }
   },
+  "control:mirrorDeleteDone": {
+    "payload": {
+      "projectId": "[M",
+      "worktreeId": "f73ef204853b",
+      "gone": true
+    }
+  },
   "control:mirrors": {
     "success": {
       "daemon": "\ud800",
@@ -459,6 +466,12 @@
       "share": false,
       "control": true,
       "keepReachable": false
+    }
+  },
+  "control:stopMirrorForDelete": {
+    "payload": {
+      "projectId": " ",
+      "worktreeId": "2071d510b47a"
     }
   },
   "dialog:pickFolder": {

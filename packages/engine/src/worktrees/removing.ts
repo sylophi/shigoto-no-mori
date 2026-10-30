@@ -24,6 +24,7 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Config from "../Config.ts";
 import * as Dirty from "../Dirty.ts";
 import * as Git from "../Git.ts";
+import { MirrorsOnDelete, type Stopped } from "../MirrorsOnDelete.ts";
 import * as Paths from "../Paths.ts";
 import { isNotFound } from "../platformErrors.ts";
 import { ownedLevels } from "../worktreeLayout.ts";
@@ -50,6 +51,26 @@ const notPrimary = (worktree: WorktreeIdentity) =>
         }),
       )
     : Effect.void;
+
+// The worktree's mirror stopped before its files go
+// (MirrorsOnDelete.ts). One that can't be is a delete refused.
+const stopMirrors = (projectId: string, worktree: WorktreeIdentity) =>
+  Effect.flatMap(
+    Effect.serviceOption(MirrorsOnDelete),
+    (mirrors): Effect.Effect<Stopped, WorktreeRefused> =>
+      Option.isNone(mirrors)
+        ? Effect.succeed(() => Effect.void)
+        : mirrors.value.stop({ projectId, worktreeId: worktree.id }).pipe(
+            Effect.mapError(
+              (cause) =>
+                new WorktreeRefused({
+                  reason: "mirror-not-stopped",
+                  subject: worktree.path,
+                  cause,
+                }),
+            ),
+          ),
+  );
 
 export const makeRemoving = ({
   listing,
@@ -394,8 +415,11 @@ export const makeRemoving = ({
       // side is done (an orphaned checkout's too), the rest goes before
       // anything can cut in: what is kept under the id, which a worktree
       // made at the same path later would take over, and the branch, which
-      // nothing would remove after an interrupt (a Ctrl-C, a quit).
-      const removed = yield* Effect.uninterruptible(
+      // nothing would remove after an interrupt (a Ctrl-C, a quit). The
+      // worktree's mirror stops first, and is told after whether git's
+      // side went: the files gone, whatever follows.
+      let filesWent = false;
+      const deleting = Effect.uninterruptible(
         Effect.gen(function* () {
           const checkout: Effect.Effect<
             void,
@@ -410,6 +434,7 @@ export const makeRemoving = ({
           ) {
             return outcome;
           }
+          filesWent = true;
           yield* kept.forget(project, worktree.id);
           if (!worktree.isExternal) {
             yield* pruneEmptyParents(worktree.path, project.path);
@@ -422,6 +447,11 @@ export const makeRemoving = ({
           }
           return outcome;
         }),
+      );
+      const removed = yield* Effect.acquireUseRelease(
+        stopMirrors(project.id, worktree),
+        () => deleting,
+        (stopped) => Effect.suspend(() => stopped(filesWent)),
       );
       if (
         Result.isFailure(removed) &&

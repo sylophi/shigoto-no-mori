@@ -18,12 +18,15 @@ import {
   send,
 } from "@host/lib/control/ops";
 import { access, setAccess } from "@host/lib/control/access";
+import { mirrorDeleteDone, stopMirrorForDelete } from "@host/mirror/onDelete";
 
 export const controlHandlers = {
   devices,
   peerWorktrees,
   mirrors,
   mirrorStop,
+  stopMirrorForDelete,
+  mirrorDeleteDone,
   access,
   setAccess,
 } satisfies EffectHandlers<

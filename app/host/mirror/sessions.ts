@@ -426,6 +426,7 @@ const stopAndRemoveCopy = Effect.fnUntraced(function* (
       projectId: raw.projectId,
       worktreeId: raw.worktreeId,
       force: true,
+      oneSide: true,
     })
     .pipe(
       Effect.map((removed) =>

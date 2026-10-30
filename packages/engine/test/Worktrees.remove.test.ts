@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Git from "../src/Git.ts";
+import { MirrorsOnDelete } from "../src/MirrorsOnDelete.ts";
 import * as Registry from "../src/Registry.ts";
 import * as Worktrees from "../src/Worktrees.ts";
 import { type Sandbox, sandbox } from "./lib/sandbox.ts";
@@ -98,5 +99,57 @@ it("git's own remove refuses an untracked file the user's git setting hides", as
     ),
   )) as Record<string, unknown> | undefined;
   assert.equal(refused?.["ok"], false);
+  assert.ok(existsSync(loose));
+});
+
+// The app's side of MirrorsOnDelete, noting whether the worktree's files
+// were there when its mirror stopped, and what it was told after.
+const removingMirrored = (
+  located: Worktrees.Located,
+  options: { readonly force: boolean },
+) => {
+  const told: string[] = [];
+  const at = () => (existsSync(located.worktree.path) ? "there" : "gone");
+  return box
+    .engine(
+      Effect.flatMap(Effect.service(Worktrees.Worktrees), (worktrees) =>
+        worktrees.remove(
+          located,
+          { ...options, keepBranch: false, skipCleanup: true },
+          silent,
+        ),
+      ).pipe(
+        Effect.provideService(
+          MirrorsOnDelete,
+          MirrorsOnDelete.of({
+            stop: () =>
+              Effect.sync(() => {
+                told.push(`stopped, files ${at()}`);
+                return (gone) =>
+                  Effect.sync(() => {
+                    told.push(gone ? "files went" : "files kept");
+                  });
+              }),
+          }),
+        ),
+      ),
+    )
+    .then(() => told);
+};
+
+// A mirror running while the files go one by one would carry each
+// delete to the other device.
+it("stops a worktree's mirror before its files go, and tells it they went", async () => {
+  const { located } = await withLooseFile();
+  assert.deepEqual(await removingMirrored(located, { force: true }), [
+    "stopped, files there",
+    "files went",
+  ]);
+  assert.ok(!existsSync(located.worktree.path));
+});
+
+it("a refused delete never stops the worktree's mirror", async () => {
+  const { located, loose } = await withLooseFile();
+  assert.deepEqual(await removingMirrored(located, { force: false }), []);
   assert.ok(existsSync(loose));
 });

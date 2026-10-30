@@ -287,6 +287,23 @@ export const controlContract = defineContract(
     ),
     { gated: true },
   ),
+  // A delete from the terminal: the worktree's mirror stops before its
+  // files go, and is told after whether they went (the engine's
+  // MirrorsOnDelete).
+  invoke("stopMirrorForDelete", strict(ControlMirrorTargetSchema), VoidSchema, {
+    gated: true,
+  }),
+  invoke(
+    "mirrorDeleteDone",
+    strict(
+      Schema.Struct({
+        ...ControlMirrorTargetSchema.fields,
+        gone: Schema.Boolean,
+      }),
+    ),
+    VoidSchema,
+    { gated: true },
+  ),
   invoke("access", VoidSchema, ControlAccessSchema),
   // The switches given, set. Command access is kept on the account's
   // record, so it is refused signed out.
