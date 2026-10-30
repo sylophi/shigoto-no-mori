@@ -27,11 +27,13 @@ import { DevicesPage } from "@/components/remote/DevicesPage";
 import type { TerminalsSearch } from "@/lib/newWindow";
 import { withDeviceScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
+import { WorktreePages } from "@/components/worktreeDetail/WorktreePages";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import {
   MIGRATION_PATH,
   PROJECT_ROUTE_PATHS,
   WORKTREE_DIALOGS,
+  WORKTREE_PAGES_ID,
   WORKTREE_ROUTE_PATHS,
   type WorktreeDialog,
 } from "@/lib/routePaths";
@@ -222,58 +224,67 @@ function validateDetailSearch(search: Record<string, unknown>): {
 // without this a route would keep showing the previous entity's data
 // until its queries happened to refetch. The router keys the match on
 // this value.
-const worktreeRoute = createRoute({
+//
+// A worktree's pages share a layout (WorktreePages), scoped once for
+// all of them, which keeps its terminal drawer across them.
+const worktreePagesRoute = createRoute({
   getParentRoute: () => rootRoute,
+  id: WORKTREE_PAGES_ID,
+  component: withDeviceScope(WorktreePages),
+});
+
+const worktreeRoute = createRoute({
+  getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.detail,
-  component: withDeviceScope(WorktreeDetail),
+  component: WorktreeDetail,
   validateSearch: validateDetailSearch,
   remountDeps: ({ params }) => params,
 });
 
 const worktreeDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.diff,
-  component: withDeviceScope(WorktreeDiff),
+  component: WorktreeDiff,
   validateSearch: validateDiffSearch,
 });
 
 const pullRequestDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.prDiff,
-  component: withDeviceScope(PullRequestDiff),
+  component: PullRequestDiff,
 });
 
 const branchDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.branchDiff,
-  component: withDeviceScope(BranchDiff),
+  component: BranchDiff,
   validateSearch: validateBranchDiffSearch,
 });
 
 const stashesRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.stashes,
-  component: withDeviceScope(StashDiff),
+  component: StashDiff,
 });
 
 const stashDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.stash,
-  component: withDeviceScope(StashDiff),
+  component: StashDiff,
 });
 
 const commitDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.commit,
-  component: withDeviceScope(CommitDiff),
+  component: CommitDiff,
 });
 
 // Params only: a new worktree is a fresh page (its folders), a new
 // pick within one is not.
 const worktreeFilesRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => worktreePagesRoute,
   path: WORKTREE_ROUTE_PATHS.files,
-  component: withDeviceScope(WorktreeFiles),
+  component: WorktreeFiles,
   validateSearch: validateFilesSearch,
   remountDeps: ({ params }) => params,
 });
@@ -384,14 +395,16 @@ function buildRouteTree(hasLocalHost: boolean) {
           accountRoute,
         ]),
     devicesRedirectRoute,
-    worktreeRoute,
-    worktreeDiffRoute,
-    pullRequestDiffRoute,
-    branchDiffRoute,
-    stashesRoute,
-    stashDiffRoute,
-    commitDiffRoute,
-    worktreeFilesRoute,
+    worktreePagesRoute.addChildren([
+      worktreeRoute,
+      worktreeDiffRoute,
+      pullRequestDiffRoute,
+      branchDiffRoute,
+      stashesRoute,
+      stashDiffRoute,
+      commitDiffRoute,
+      worktreeFilesRoute,
+    ]),
     terminalsRoute,
     ...projectRoutes,
   ]);

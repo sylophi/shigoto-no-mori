@@ -1,5 +1,5 @@
-// The drawer a page's terminals sit in, on its surface: docked at the
-// bottom, over the footer, or at the side, beside the whole page. A
+// The drawer a worktree's terminals sit in, on its pages' surface:
+// docked at the bottom, under the page, or at the side, beside it. A
 // handle along its inner edge drags its size, by pointer or touch.
 // Opened on the page, it slides out of the edge it is docked to. On a
 // phone it is a sheet over the whole page instead (the page is
