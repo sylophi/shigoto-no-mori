@@ -42,7 +42,7 @@ const fontWeightOf = (host: HTMLElement): number =>
 const fontSizeOf = (host: HTMLElement): number =>
   Number.parseFloat(
     host.ownerDocument.defaultView?.getComputedStyle(host).fontSize ?? "",
-  ) || 11;
+  ) || 12;
 
 // How long the box stays put before its new size goes to the shell. A
 // shell redraws its prompt at each size it is told, and a narrower grid
@@ -201,7 +201,7 @@ export function TerminalView({
     if (!host || !feed || !fontsIn) return;
     let theme = readTerminalTheme(host);
     const term = new Terminal({
-      // The host's `font-terminal text-2xs` and the theme's mono weight,
+      // The host's `font-terminal text-xs` and the theme's mono weight,
       // handed to xterm, which sizes its cell grid from them rather than
       // from CSS. No extra line height: the face's own line box has the
       // leading.
@@ -401,7 +401,7 @@ export function TerminalView({
       data-slot="terminal"
       data-keyboard-surface="raw"
       {...usersAlone("terminal")}
-      className="isolate h-full w-full overflow-hidden bg-card px-3 py-1 font-terminal text-2xs"
+      className="isolate h-full w-full overflow-hidden bg-card px-3 py-1 font-terminal text-xs"
     >
       {/* First, ahead of a script console's Run or Stop. */}
       <TerminalTabToolbar>

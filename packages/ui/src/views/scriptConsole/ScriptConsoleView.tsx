@@ -91,7 +91,7 @@ export function ScriptConsoleView({
           <>
             {terminal}
             {state.status === "starting" && !state.hasOutput && (
-              <div className="pointer-events-none absolute top-1 left-3 font-mono text-2xs text-muted-foreground">
+              <div className="pointer-events-none absolute top-1 left-3 font-mono text-xs text-muted-foreground">
                 Starting…
               </div>
             )}
