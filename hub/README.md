@@ -440,7 +440,10 @@ hold what its folder's `vercel.json` can't:
   (`packageManager`).
 
 Each `vercel.json` holds the install command, `pnpm install
---no-frozen-lockfile`, beside the build settings and the headers.
+--no-frozen-lockfile --ignore-scripts`, beside the build settings and
+the headers. Neither build needs an install script. With scripts on,
+the app's `postinstall` runs twice at once (its own and the root's),
+and the two node-pty builds clear each other's `build/` folder.
 
 ## Develop
 
