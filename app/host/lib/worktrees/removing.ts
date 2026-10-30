@@ -1,7 +1,11 @@
 // The Worktrees service's removals (../Worktrees.ts): one worktree, a
 // landed stack's, or one that must go (forced), which the engine commits
 // under the tombstone, each announced to every viewer while it goes and
-// with its outcome after, and the mirrors of what went stopped.
+// with its outcome after. The engine stops a worktree's mirror before
+// its files go (mirror/onDelete.ts). A mirror is one worktree on two
+// devices, so a delete takes the other side too. A move's teardown and
+// a removal that must happen end the mirror after instead, and a delete
+// the other side asked for (`oneSide`) leaves that side to it.
 import { isEntityGoneError } from "@shigomori/contracts/errors";
 import type { MovedSource } from "@shigomori/contracts/schemas";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
@@ -15,6 +19,8 @@ import {
   findProjectAndWorktree,
 } from "../projects";
 import * as Scripts from "../Scripts";
+import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
+import { mirrorsOnDelete } from "@host/mirror/onDelete";
 import { stopMirrorsForWorktree } from "@host/mirror/registry";
 import { bookingScripts, ScriptsRunningError } from "./documents";
 
@@ -39,6 +45,12 @@ const announce = (
     state,
   });
 
+// The other side of a worktree's mirror left alone.
+const thisSideOnly = Effect.provideServiceEffect(
+  MirrorsOnDelete,
+  mirrorsOnDelete("this"),
+);
+
 const stopMirrors = (worktreeIds: readonly string[]) =>
   Effect.forEach(worktreeIds, stopMirrorsForWorktree, {
     concurrency: "unbounded",
@@ -56,6 +68,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         // would stop it.
         readonly refuseRunningScripts?: boolean | undefined;
         readonly expect?: MovedSource | undefined;
+        readonly oneSide?: boolean | undefined;
       },
       notifyScript: Scripts.NotifyScriptEvent,
     ) {
@@ -75,6 +88,9 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       yield* scripts.assertWorktreeMutable(worktreeId, busy);
       yield* announce(project.id, worktreeId, "removing");
       let removed = false;
+      // A move's teardown: the worktree lives on on the device it went
+      // to, so the copy of its mirror stays.
+      const moved = input.expect !== undefined;
       return yield* scripts
         .withDeleteInflight(
           worktreeId,
@@ -89,6 +105,10 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                 expect: input.expect,
               },
               reporter,
+            ).pipe(
+              moved || input.oneSide === true
+                ? thisSideOnly
+                : (deleting) => deleting,
             ),
           ).pipe(
             Effect.tap((outcome) =>
@@ -97,7 +117,8 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
               }),
             ),
           ),
-          (outcome) => (outcome.ok ? stopMirrors([worktreeId]) : Effect.void),
+          (outcome) =>
+            outcome.ok && moved ? stopMirrors([worktreeId]) : Effect.void,
         )
         .pipe(
           Effect.ensuring(
@@ -148,7 +169,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
               }),
             ),
           ),
-          (outcome) => stopMirrors(outcome.removed),
+          () => Effect.void,
         )
         .pipe(
           Effect.ensuring(
@@ -202,7 +223,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                     }),
               },
               reporter,
-            ),
+            ).pipe(thisSideOnly),
         );
       return yield* scripts
         .withDeleteInflight(

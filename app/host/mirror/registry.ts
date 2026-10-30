@@ -8,6 +8,7 @@
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { randomUUID } from "node:crypto";
 import { access } from "node:fs/promises";
@@ -20,10 +21,11 @@ import {
   type MirrorSessionRaw,
   mirrorEngineBlocker,
 } from "@shigomori/contracts/modules/mirror";
+import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { ageOf, stamp, type Stamp } from "@host/lib/util/kept";
 import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
-import { PeerReach } from "@host/ipc/PeerReach";
+import { PeerReach, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";
 import { log } from "@shared/log";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
@@ -266,6 +268,118 @@ const endSessionsOnWorktree = (
     ),
   );
 
+// The running daemon's sessions mirroring worktrees here, handed to
+// `use`. A daemon that isn't running mirrors nothing.
+const withSessionsOn = <E, R>(
+  localWorktreeIds: readonly string[],
+  use: (
+    daemon: MirrorEngine["Service"],
+    sessions: readonly MirrorSessionRaw[],
+  ) => Effect.Effect<unknown, E, R>,
+) =>
+  Effect.gen(function* () {
+    const daemon = yield* engineOrNull;
+    if (daemon === null || (yield* daemon.status) !== "running") return;
+    yield* use(
+      daemon,
+      (yield* mirrorSessions(daemon)).filter((raw) =>
+        localWorktreeIds.includes(worktreeIdNow(raw)),
+      ),
+    );
+  });
+
+// A mirror is one worktree on two devices, so deleting either side
+// deletes both. The sessions on worktrees about to be deleted here are
+// paused first, so nothing crosses while their files go. One that
+// doesn't pause fails, so the delete doesn't go ahead under it.
+export const pauseMirrorsOn = (localWorktreeIds: readonly string[]) =>
+  withSessionsOn(localWorktreeIds, (daemon, sessions) =>
+    Effect.forEach(
+      sessions.filter((raw) => !raw.paused),
+      (raw) => daemon.pause(raw.session),
+      { concurrency: "unbounded", discard: true },
+    ),
+  );
+
+// A delete that didn't go through ends the mirrors of what it kept,
+// both sides left as worktrees of their own, so neither is held to the
+// other's delete.
+export const endMirrorsOfKept = (localWorktreeIds: readonly string[]) =>
+  withSessionsOn(localWorktreeIds, (daemon, sessions) =>
+    endSessions(daemon, sessions, "the mirror of a worktree kept", KEPT_DETAIL),
+  );
+
+const KEPT_DETAIL =
+  "This worktree wasn't deleted, so its mirror ended. The copy on the other device stays as a worktree.";
+
+// The other side of worktrees deleted here: each session's copy
+// deleted on its device, then the session ended. One whose copy can't
+// be deleted now stays, paused on a root that is gone, for the
+// bookkeeping to finish when the peer comes (settleMirrorBookkeeping),
+// and so do the sessions of a daemon that isn't running, read once it
+// is.
+export const deleteCopiesOf = (localWorktreeIds: readonly string[]) =>
+  Effect.gen(function* () {
+    const daemon = yield* engineOrNull;
+    if (daemon === null) return;
+    if ((yield* daemon.status) === "running") {
+      yield* Effect.forEach(
+        (yield* mirrorSessions(daemon)).filter((raw) =>
+          localWorktreeIds.includes(worktreeIdNow(raw)),
+        ),
+        (raw) =>
+          Effect.map(deleteCopyAndEnd(daemon, raw), (ended) => {
+            if (!ended) copiesToDelete.set(raw.session, raw.deviceId);
+          }),
+        { concurrency: "unbounded", discard: true },
+      );
+    } else {
+      for (const id of localWorktreeIds) copiesToDeleteOn.add(id);
+    }
+    for (const id of localWorktreeIds) daemon.forgetHistory(id);
+  });
+
+// True once the copy is gone (deleted now, or already) and the session
+// ended. The delete is forced: the copy holds what the original did,
+// and the person deleting it already had the original's checked. The
+// session counts as ending meanwhile, so the peer's announcement of the
+// copy's removal doesn't end it a second time.
+const deleteCopyAndEnd = (
+  daemon: MirrorEngine["Service"],
+  raw: MirrorSessionRaw,
+) =>
+  Effect.gen(function* () {
+    endingSessions.add(raw.session);
+    const removed = yield* peerWorktreesFor(raw.deviceId)
+      .delete({
+        projectId: raw.projectId,
+        worktreeId: raw.worktreeId,
+        force: true,
+        oneSide: true,
+      })
+      .pipe(Effect.result);
+    if (Result.isFailure(removed) && !isEntityGoneError(removed.failure)) {
+      log.warn(
+        `[mirror] the copy of a deleted worktree is left to delete later: ${errorWordsOf(removed.failure)}`,
+      );
+      return false;
+    }
+    if (Result.isSuccess(removed) && !removed.success.ok) {
+      log.warn(
+        `[mirror] the copy of a deleted worktree is left to delete later: its ${removed.success.cleanupError.phase} step failed`,
+      );
+      return false;
+    }
+    yield* Effect.ignoreCause(daemon.terminate(raw.session), {
+      log: "Warn",
+      message: "[mirror] the mirror of a deleted worktree didn't end",
+    });
+    daemon.forgetHistory(localWorktreeIdOf(raw));
+    return true;
+  }).pipe(
+    Effect.ensuring(Effect.sync(() => endingSessions.delete(raw.session))),
+  );
+
 // A session's end, noted on the original's thread. A moved original's
 // is the worktree it became (worktreeIdNow, read before the terminate:
 // the daemon's snapshot without the session can come before its
@@ -320,14 +434,16 @@ const MIRRORED_AGAIN_DETAIL =
 // The bookkeeping every snapshot of a running daemon is checked
 // against (the root wires it to the daemon's onChange):
 //   - the stops that came while the daemon was down, replayed,
-//   - a session whose original is gone (removed from a terminal, from
-//     Finder, or while the app was not running, none of which pass the
-//     delete that stops its mirror): every session's root is looked at
-//     on every snapshot, and one whose root is missing ends with its
-//     copy kept. One whose original moved (the move recorded) re-opens
-//     there instead, once its peer takes this device's calls, and ends
-//     if another worktree takes the old folder first, if the worktree
-//     it became is mirrored meanwhile, or if the peer comes too late.
+//   - a session whose original is gone (removed from Finder, or while
+//     the app was not running, neither of which passes the delete that
+//     stops its mirror): every session's root is looked at on every
+//     snapshot, and one whose root is missing ends with its copy kept.
+//     One a delete here left its copy to (copiesToDelete) deletes it
+//     once the peer takes this device's calls, then ends. One whose
+//     original moved (the move recorded) re-opens there instead, once
+//     its peer takes this device's calls, and ends if another worktree
+//     takes the old folder first, if the worktree it became is mirrored
+//     meanwhile, or if the peer comes too late.
 //     The engine has more than one word for a root that went (a halt
 //     when the copy stood still, a conflict at the root when the copy
 //     had changed too, a problem at the root when the parent folder
@@ -351,6 +467,24 @@ const endingSessions = new Set<string>();
 // can't read, or an end that fails, forgets the mark, so the next
 // snapshot looks again.
 const rootLooks = new Set<string>();
+// The sessions of an original deleted here whose copy is still to
+// delete (its peer away, or the delete failed there), each with its
+// peer, kept until the engine stops listing them. Their look waits for
+// the peer's next admission (lookAgainAt), rather than ask the peer
+// again on every snapshot. A quit forgets them, and their copies are
+// then kept as a root gone by hand keeps its.
+const copiesToDelete = new Map<string, string>();
+// The worktrees deleted here while the daemon wasn't running, whose
+// sessions join copiesToDelete once it is.
+const copiesToDeleteOn = new Set<string>();
+
+// A peer taking this device's calls again: the copies still to delete
+// there are looked at again.
+export const lookAgainAt = (deviceId: string) => {
+  for (const [session, peer] of copiesToDelete) {
+    if (peer === deviceId) rootLooks.delete(session);
+  }
+};
 
 // The sessions of a moved original whose re-open waits for the peer to
 // take this device's calls, each with the id of the worktree the
@@ -459,6 +593,15 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
   const reopening = new Set<string>();
   const live = new Set(sessions.map((raw) => raw.session));
   for (const id of rootLooks) if (!live.has(id)) rootLooks.delete(id);
+  for (const id of copiesToDelete.keys()) {
+    if (!live.has(id)) copiesToDelete.delete(id);
+  }
+  for (const raw of sessions) {
+    if (copiesToDeleteOn.has(worktreeIdNow(raw))) {
+      copiesToDelete.set(raw.session, raw.deviceId);
+    }
+  }
+  copiesToDeleteOn.clear();
   for (const id of waitingOnPeer.keys()) {
     if (!live.has(id)) waitingOnPeer.delete(id);
   }
@@ -578,7 +721,18 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
           });
           return;
         }
-        yield* end(ORIGINAL_GONE_DETAIL);
+        // A delete here that began since the look did deals with it.
+        if (holdingRoots.has(worktreeIdNow(raw))) {
+          rootLooks.delete(raw.session);
+          return;
+        }
+        if (!copiesToDelete.has(raw.session)) {
+          yield* end(ORIGINAL_GONE_DETAIL);
+          return;
+        }
+        // A peer away keeps the session, paused on the root that is
+        // gone, until it comes (MirrorEngineLayer's admissions).
+        if (reach.admits(raw.deviceId)) yield* deleteCopyAndEnd(daemon, raw);
       }),
     { concurrency: "unbounded", discard: true },
   );
@@ -741,18 +895,39 @@ const decodeRemoval = Schema.decodeUnknownOption(WorktreeRemovalSchema);
 // A peer's announcement that one of its worktrees is gone
 // (worktrees:removal). A mirror runs on the device holding the
 // original, so a copy deleted on its own device leaves its session
-// here, halted on a far root that no longer exists.
-export const endMirrorsOnPeerRemoval = (deviceId: string, payload: unknown) => {
-  const removal = decodeRemoval(payload);
-  if (Option.isNone(removal) || removal.value.state !== "removed") {
-    return Effect.void;
-  }
-  return endMirrorsIntoGoneCopy(
-    deviceId,
-    removal.value.projectId,
-    removal.value.worktreeId,
+// here, halted on a far root that no longer exists. Answers the
+// originals a delete of both sides takes too.
+export const endMirrorsOnPeerRemoval = (deviceId: string, payload: unknown) =>
+  Effect.gen(function* () {
+    const removal = decodeRemoval(payload);
+    if (Option.isNone(removal) || removal.value.state !== "removed") return [];
+    const { projectId, worktreeId, bothSides } = removal.value;
+    yield* endMirrorsIntoGoneCopy(deviceId, projectId, worktreeId);
+    if (bothSides !== true) return [];
+    const key = `${deviceId}:${projectId}:${worktreeId}`;
+    const gone = goneCopies.get(key);
+    goneCopies.delete(key);
+    if (gone === undefined) return [];
+    return ageOf(gone.at, yield* stamp) <= GONE_COPY_MS ? gone.originals : [];
+  });
+
+// The sessions into one of a peer's worktrees, but those a delete here
+// is ending.
+const sessionsInto = (
+  daemon: MirrorEngine["Service"],
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+) =>
+  Effect.map(mirrorSessions(daemon), (sessions) =>
+    sessions.filter(
+      (raw) =>
+        raw.deviceId === deviceId &&
+        raw.projectId === projectId &&
+        raw.worktreeId === worktreeId &&
+        !endingSessions.has(raw.session),
+    ),
   );
-};
 
 // The sessions into one of a peer's worktrees, known to be gone, end,
 // and each original's thread says why. Already ended (the stop and the
@@ -765,18 +940,43 @@ export const endMirrorsIntoGoneCopy = (
   Effect.gen(function* () {
     const daemon = yield* engineOrNull;
     if (daemon === null || (yield* daemon.status) !== "running") return;
+    const doomed = yield* sessionsInto(daemon, deviceId, projectId, worktreeId);
+    if (doomed.length > 0) {
+      const now = yield* stamp;
+      for (const [key, gone] of goneCopies) {
+        if (ageOf(gone.at, now) > GONE_COPY_MS) goneCopies.delete(key);
+      }
+      goneCopies.set(`${deviceId}:${projectId}:${worktreeId}`, {
+        at: now,
+        originals: doomed.map(originalOf),
+      });
+    }
     yield* endSessions(
       daemon,
-      (yield* mirrorSessions(daemon)).filter(
-        (raw) =>
-          raw.deviceId === deviceId &&
-          raw.projectId === projectId &&
-          raw.worktreeId === worktreeId,
-      ),
+      doomed,
       "a mirror whose copy is gone",
       COPY_GONE_DETAIL,
     );
   });
+
+// A mirror's original here, read before its session ends, as
+// noteEnded's id is.
+const originalOf = (raw: MirrorSessionRaw) => ({
+  projectId: raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
+  worktreeId: worktreeIdNow(raw),
+});
+
+// The originals of the mirrors that ended on a copy found gone, by that
+// copy, for its device's announcement to find: the git follower can
+// find the copy gone before the announcement that its delete took both
+// sides comes. Only a recent one counts, so a later worktree at the
+// copy's id isn't taken for it.
+const goneCopies = new Map<
+  string,
+  { readonly at: Stamp; readonly originals: readonly Original[] }
+>();
+const GONE_COPY_MS = 2 * 60_000;
+type Original = ReturnType<typeof originalOf>;
 
 // Each session ended, then noted "stopped" on its original's thread. A
 // session that refuses to end is logged, not thrown.

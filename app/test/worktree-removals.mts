@@ -8,23 +8,54 @@
 //     the tombstone,
 //   - a worktree its script dirtied as it stopped is refused, after the
 //     stop and before any teardown,
-//   - a refusal at the plan stops nothing and leaves no marks.
+//   - a refusal at the plan stops nothing and leaves no marks,
+//   - deleting a mirrored worktree pauses its mirror before any file
+//     goes, then deletes the copy on its device and ends the mirror,
+//   - a refused delete, here or of the copy on its device, leaves the
+//     mirror running,
+//   - a copy whose device is away is deleted once it comes,
+//   - a delete from the terminal stops the mirror through the app
+//     before its files go, and the copy goes after,
+//   - a worktree whose mirror doesn't pause is kept, a copy whose
+//     cleanup failed on its device is deleted again, and a copy found
+//     gone before its device says both sides went still takes the
+//     original,
+//   - only a copy's delete of both sides takes the original (not a
+//     move's teardown or a nuke's removal there, nor a delete the
+//     original's device asked for).
 //
 // Run: pnpm test worktree-removals.
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, it } from "vitest";
+import {
+  MIRROR_LABEL_MODE,
+  type MirrorSessionRaw,
+} from "@shigomori/contracts/modules/mirror";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
+import { controlHandlers } from "../host/ipc/modules/control.ts";
+import { MirrorError } from "../host/mirror/MirrorEngine.ts";
 import { worktreesHandlers } from "../host/ipc/modules/worktrees.ts";
 import * as Ops from "../host/lib/engineOps.ts";
+import * as HostPushes from "../host/lib/HostPushes.ts";
 import { addProject } from "../host/lib/projects/index.ts";
 import * as Scripts from "../host/lib/Scripts.ts";
 import * as HostWorktrees from "../host/lib/Worktrees.ts";
+import {
+  endMirrorsIntoGoneCopy,
+  endMirrorsOnPeerRemoval,
+  MIRROR_LABEL_LOCAL_PROJECT,
+  settleMirrorBookkeeping,
+} from "../host/mirror/registry.ts";
 import type { HandlerContext } from "../shared/ipc/transport.ts";
 import { initDataDirAt } from "../shared/paths.ts";
+import { standInMirror, standInPeers } from "./lib/hostStandIns.mts";
 import { engineDataDir, runHost } from "./lib/hostRuntime.mts";
+import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import {
   installFakeGh,
   makeTracker,
@@ -269,4 +300,288 @@ it("a refusal at the plan marks nothing and stops nothing", async () => {
   assert.ok(pid !== undefined, "bear's script wrote no pid");
   assert.doesNotThrow(() => process.kill(pid, 0), "bear's script still runs");
   assert.ok((await listed()).includes(bear.id));
+});
+
+// A worktree fox mirrored to a peer's copy, against a recording daemon
+// and a peer whose copy's delete `deleteCopy` answers. `calls` says, in
+// order, what the mirror was asked and whether fox's folder was still
+// there.
+const mirroredFox = async (
+  name: string,
+  deleteCopy: () => Promise<unknown>,
+  pauseFails = false,
+) => {
+  const { project } = await repoAt(name);
+  const fox = await create(project, { worktreeName: "fox" });
+  const calls: string[] = [];
+  const at = () => (existsSync(fox.path) ? "there" : "gone");
+  const live = new Map<string, MirrorSessionRaw>([
+    [
+      name,
+      rawMirrorSession({
+        session: name,
+        deviceId: "peer",
+        projectId: "far",
+        worktreeId: "copy",
+        localRoot: fox.path,
+        localWorktreeId: fox.id,
+        labels: {
+          [MIRROR_LABEL_MODE]: "mirror",
+          [MIRROR_LABEL_LOCAL_PROJECT]: project.id,
+        },
+      }),
+    ],
+  ]);
+  const paused = (id: string, value: boolean) => {
+    const raw = live.get(id);
+    if (raw !== undefined) live.set(id, { ...raw, paused: value });
+  };
+  standInMirror(
+    inertMirrorImpl({
+      status: Effect.succeed("running"),
+      sessions: Effect.sync(() => [...live.values()]),
+      pause: (id) =>
+        pauseFails
+          ? Effect.fail(new MirrorError({ reason: "the daemon didn't answer" }))
+          : Effect.sync(() => {
+              calls.push(`pause ${at()}`);
+              paused(id, true);
+            }),
+      resume: (id) =>
+        Effect.sync(() => {
+          calls.push("resume");
+          paused(id, false);
+        }),
+      terminate: (id) =>
+        Effect.sync(() => {
+          calls.push("terminate");
+          live.delete(id);
+        }),
+    }),
+  );
+  let peer = deleteCopy;
+  standInPeers({
+    transportFor: () => ({
+      invoke: async (channel) => {
+        if (channel !== "worktrees:delete") throw new Error("not here");
+        calls.push(`delete copy, fox ${at()}`);
+        return peer();
+      },
+      subscribe: () => () => {},
+    }),
+    channelsFor: () => () => Promise.reject(new Error("not here")),
+    admits: () => true,
+  });
+  const remove = (force: boolean) =>
+    runHost(
+      worktreesHandlers.delete(
+        { projectId: project.id, worktreeId: fox.id, force },
+        here,
+      ),
+    ).then(
+      () => "removed",
+      () => "refused",
+    );
+  return {
+    project,
+    fox,
+    calls,
+    remove,
+    peerAnswers: (next: () => Promise<unknown>) => {
+      peer = next;
+    },
+  };
+};
+
+it("deleting a mirrored worktree pauses its mirror first, then deletes the copy", async () => {
+  const { fox, calls, remove } = await mirroredFox("mirrored", async () => ({
+    ok: true,
+  }));
+  assert.equal(await remove(false), "removed");
+  await waitFor(() => calls.includes("terminate"), "the mirror ended");
+  assert.deepEqual(calls, [
+    "pause there",
+    "delete copy, fox gone",
+    "terminate",
+  ]);
+  assert.ok(!existsSync(fox.path));
+});
+
+it("a refused delete of a mirrored worktree leaves its mirror running", async () => {
+  const { fox, calls, remove } = await mirroredFox(
+    "mirrored-refused",
+    async () => ({ ok: true }),
+  );
+  writeFileSync(join(fox.path, "wip.txt"), "x\n");
+  assert.equal(await remove(false), "refused");
+  assert.deepEqual(calls, []);
+  assert.ok(existsSync(join(fox.path, "wip.txt")));
+});
+
+// The copy's device announcing its delete in `state`.
+const announced = (state: string, bothSides?: boolean) =>
+  runHost(
+    endMirrorsOnPeerRemoval("peer", {
+      projectId: "far",
+      worktreeId: "copy",
+      state,
+      ...(bothSides === undefined ? {} : { bothSides }),
+    }),
+  );
+
+it("a mirrored worktree whose mirror doesn't pause is kept", async () => {
+  const { fox, calls, remove } = await mirroredFox(
+    "mirrored-unpaused",
+    async () => ({ ok: true }),
+    true,
+  );
+  assert.equal(await remove(true), "refused");
+  assert.deepEqual(calls, []);
+  assert.ok(existsSync(fox.path));
+});
+
+it("a copy whose cleanup failed on its device is deleted again once the device comes back", async () => {
+  const { calls, remove, peerAnswers } = await mirroredFox(
+    "mirrored-copy-stayed",
+    async () => ({
+      ok: false,
+      cleanupError: { phase: "teardown", exitCode: 1, runId: "run" },
+    }),
+  );
+  assert.equal(await remove(true), "removed");
+  await waitFor(() => calls.length === 2, "the copy's delete was asked");
+  peerAnswers(async () => ({ ok: true }));
+  await waitFor(async () => {
+    await runHost(settleMirrorBookkeeping);
+    return calls.includes("terminate");
+  }, "the copy was deleted");
+  assert.deepEqual(calls, [
+    "pause there",
+    "delete copy, fox gone",
+    "delete copy, fox gone",
+    "terminate",
+  ]);
+});
+
+it("a copy whose delete was refused on its device keeps the original and its mirror", async () => {
+  const { fox, calls } = await mirroredFox("mirrored-copy-kept", async () => ({
+    ok: true,
+  }));
+  assert.deepEqual(await announced("removing"), []);
+  assert.deepEqual(await announced("kept"), []);
+  assert.deepEqual(calls, []);
+  assert.ok(existsSync(fox.path));
+});
+
+it("a mirrored worktree's copy on a device away is deleted once it comes", async () => {
+  const { calls, remove, peerAnswers } = await mirroredFox(
+    "mirrored-away",
+    () => Promise.reject(new Error("no direct connection to peer")),
+  );
+  assert.equal(await remove(true), "removed");
+  await waitFor(() => calls.length === 2, "the copy's delete was asked");
+  assert.deepEqual(calls, ["pause there", "delete copy, fox gone"]);
+  peerAnswers(async () => ({ ok: true }));
+  // Its look waits until the delete has given up on the copy.
+  await waitFor(async () => {
+    await runHost(settleMirrorBookkeeping);
+    return calls.includes("terminate");
+  }, "the copy was deleted");
+  assert.deepEqual(calls, [
+    "pause there",
+    "delete copy, fox gone",
+    "delete copy, fox gone",
+    "terminate",
+  ]);
+});
+
+// `sm rm` runs the engine in its own process, which asks the app
+// around the files going (packages/cli/src/mirrorsOnDelete.ts).
+it("a delete from the terminal stops the mirror through the app first, then deletes the copy", async () => {
+  const { project, fox, calls } = await mirroredFox(
+    "mirrored-terminal",
+    async () => ({ ok: true }),
+  );
+  const worktree = { projectId: project.id, worktreeId: fox.id };
+  await runHost(controlHandlers.stopMirrorForDelete(worktree));
+  git(project.path, "worktree", "remove", "--force", fox.path);
+  await runHost(controlHandlers.mirrorDeleteDone({ ...worktree, gone: true }));
+  await waitFor(() => calls.includes("terminate"), "the mirror ended");
+  assert.deepEqual(calls, [
+    "pause there",
+    "delete copy, fox gone",
+    "terminate",
+  ]);
+});
+
+// The git follower can find the copy gone before its device says so.
+it("a copy found gone before its device said both sides went still takes the original", async () => {
+  const { project, fox, calls } = await mirroredFox(
+    "mirrored-copy-found-gone",
+    async () => ({ ok: true }),
+  );
+  await runHost(endMirrorsIntoGoneCopy("peer", "far", "copy"));
+  assert.deepEqual(calls, ["terminate"]);
+  assert.deepEqual(await announced("removed", true), [
+    { projectId: project.id, worktreeId: fox.id },
+  ]);
+});
+
+it("only a copy's delete of both sides takes the original", async () => {
+  const moved = await mirroredFox("mirrored-copy-moved", async () => ({
+    ok: true,
+  }));
+  assert.deepEqual(await announced("removed"), []);
+  assert.deepEqual(moved.calls, ["terminate"]);
+  const deleted = await mirroredFox("mirrored-copy-deleted", async () => ({
+    ok: true,
+  }));
+  assert.deepEqual(await announced("removed", true), [
+    { projectId: deleted.project.id, worktreeId: deleted.fox.id },
+  ]);
+  assert.deepEqual(deleted.calls, ["terminate"]);
+});
+
+// What a delete's device announces once the delete is over.
+const removalAnnounced = (input: {
+  projectId: string;
+  worktreeId: string;
+  oneSide?: boolean;
+}) =>
+  runHost(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const pushes = yield* (yield* HostPushes.HostPushes).subscribe;
+        yield* worktreesHandlers.delete({ ...input, force: true }, here);
+        return yield* pushes.pipe(
+          Stream.filter(
+            ({ channel, payload }) =>
+              channel === "worktrees:removal" &&
+              (payload as { state: string }).state !== "removing",
+          ),
+          Stream.map(({ payload }) => payload),
+          Stream.runHead,
+        );
+      }),
+    ),
+  );
+
+// A mirror's stop, or the original's own delete, asks the copy's device
+// to delete the copy: that delete mustn't take the original back.
+it("a delete the other device asked for doesn't take that device's side too", async () => {
+  const { project } = await repoAt("one-side");
+  const asked = await create(project, { worktreeName: "asked" });
+  const own = await create(project, { worktreeName: "own" });
+  const of = (worktree: Worktree) => ({
+    projectId: project.id,
+    worktreeId: worktree.id,
+  });
+  assert.deepEqual(
+    await removalAnnounced({ ...of(asked), oneSide: true }),
+    Option.some({ ...of(asked), state: "removed" }),
+  );
+  assert.deepEqual(
+    await removalAnnounced(of(own)),
+    Option.some({ ...of(own), state: "removed", bothSides: true }),
+  );
 });

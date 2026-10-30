@@ -451,6 +451,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       "changed-during-cleanup",
       "changed-since-move",
       "uncommitted-at-remove",
+      "mirror-not-stopped",
       "invalid-branch",
       "invalid-base",
       "move-primary",
@@ -513,6 +514,10 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
         return `${this.subject} changed after it was moved to another device (its branch moved, or its uncommitted work isn't what moved), so it was kept.`;
       case "uncommitted-at-remove":
         return `Worktree ${this.subject} has uncommitted changes.`;
+      case "mirror-not-stopped": {
+        const said = errorMessageOf(this.cause);
+        return `Couldn't stop the mirror of ${this.subject}, so it was kept: ${said}`;
+      }
       case "invalid-branch":
         return `Invalid --branch: ${quoted} is not a valid git ref name.`;
       case "invalid-base":

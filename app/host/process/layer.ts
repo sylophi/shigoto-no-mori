@@ -23,7 +23,9 @@ import * as Scripts from "@host/lib/Scripts";
 import * as Engine from "@host/lib/Engine";
 import * as StoreChanges from "@host/lib/storeChanges";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
+import { MirrorsOnDelete } from "@shigomori/engine/MirrorsOnDelete";
 import * as Terrier from "@shigomori/engine/Terrier";
+import { mirrorsOnDelete } from "@host/mirror/onDelete";
 import { MIRROR_LABEL_LOCAL_PROJECT } from "@host/mirror/registry";
 import * as Shell from "@host/lib/Shell";
 import * as CliShell from "@host/lib/cli/shell";
@@ -228,6 +230,8 @@ const foundation = (
     // Every push the host makes and every store write, which the wires
     // and the views read, and the views' shared reads.
     Layer.provideMerge(Views.layer),
+    // The engine's deletes stop the mirrors of what they take first.
+    Layer.provideMerge(Layer.effect(MirrorsOnDelete, mirrorsOnDelete("both"))),
     Layer.provideMerge(pushesLayer),
     Layer.provideMerge(EngineStoreChanges.layer),
     // What the root provides from its own wiring: the peers' reach, the

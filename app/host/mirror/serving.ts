@@ -24,6 +24,7 @@ import { findProjectAndWorktree } from "@host/lib/projects";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { applyGitState, readGitState, watchIndexFile } from "./gitState";
 import { log } from "@shared/log";
+import { MirrorError } from "./MirrorEngine";
 import { MirrorSignals } from "./MirrorSignals";
 
 // The mirror streams this host currently serves, keyed by the calling
@@ -33,6 +34,35 @@ import { MirrorSignals } from "./MirrorSignals";
 // the machine it lives on. Entries live exactly as long as their
 // channel.
 const serving = new Map<string, MirrorServing>();
+// How each of those streams' child is ended, under the same key.
+const stops = new Map<string, () => void>();
+
+// Worktrees being deleted here: the streams into them end, and none
+// opens until the delete is done, so nothing crosses while their files
+// go (the mirror runs on the peer, which this device can't pause).
+// Counted, since a stack's delete holds several at once.
+const held = new Map<string, number>();
+
+export function holdServing(worktreeIds: readonly string[]): () => void {
+  for (const id of worktreeIds) held.set(id, (held.get(id) ?? 0) + 1);
+  for (const [key, entry] of serving) {
+    if (worktreeIds.includes(entry.worktreeId)) stops.get(key)?.();
+  }
+  return () => {
+    for (const id of worktreeIds) {
+      const left = (held.get(id) ?? 1) - 1;
+      if (left > 0) held.set(id, left);
+      else held.delete(id);
+    }
+  };
+}
+
+const refuseHeld = (worktreeId: string) =>
+  held.has(worktreeId)
+    ? Effect.fail(
+        new MirrorError({ reason: "This worktree is being deleted." }),
+      )
+    : Effect.void;
 
 export function listMirrorServing(): MirrorServing[] {
   return [...serving.values()];
@@ -49,6 +79,7 @@ function servingKey(ctx: HandlerContext, channelId: string): string {
 }
 
 function forgetServing(signals: MirrorSignals["Service"], key: string): void {
+  stops.delete(key);
   if (!serving.delete(key)) return;
   signals.servingChanged();
 }
@@ -74,6 +105,7 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
   requireChannels(ctx, channelId);
   const signals = yield* MirrorSignals;
   const { worktree } = yield* findProjectAndWorktree(projectId, worktreeId);
+  yield* refuseHeld(worktree.id);
   const worktreePath = worktree.path;
   // The child ends when its channel does.
   const closed = yield* Deferred.make<void>();
@@ -109,6 +141,12 @@ export const serveStream = Effect.fn("Mirror.serveStream")(function* (
       return callFailureOf(error);
     },
   });
+  // A delete that began while the child started found nothing to end.
+  if (held.has(worktree.id)) {
+    stopChild();
+    return yield* refuseHeld(worktree.id);
+  }
+  stops.set(key, stopChild);
   serving.set(key, {
     channelId,
     projectId,
@@ -171,6 +209,7 @@ export const applyServedGitState = ({
       projectId,
       worktreeId,
     );
+    yield* refuseHeld(worktree.id);
     const result = yield* applyGitState(
       project,
       { id: worktree.id, path: worktree.path },
