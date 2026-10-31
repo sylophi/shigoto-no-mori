@@ -32,17 +32,6 @@ const MirrorSessionIdSchema = Schema.String.check(
   Schema.isBetweenLength(1, 128),
 );
 
-export { type MirrorIgnoreMode, MirrorIgnoreModeSchema };
-export {
-  anchorIgnoredPath,
-  BRING_PATHS_LIMIT,
-  bringIgnores,
-  bringRulesRoom,
-  broughtPaths,
-  MIRROR_IGNORES_LIMIT,
-  unanchorIgnoredPath,
-} from "../mirrorIgnores.ts";
-
 // "mirror", "mirror-branch" (a primary's mirror, its copy on
 // mirror/<branch>) or "transfer-<token>" (a pull's one-shot, not a
 // mirror). A label, not a field: peers parse the session strictly.

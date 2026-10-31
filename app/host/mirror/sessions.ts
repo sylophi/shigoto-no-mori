@@ -29,7 +29,6 @@ import * as Schema from "effect/Schema";
 import {
   MIRROR_COPY_STAYED,
   mirrorFilesSettled,
-  type MirrorIgnoreMode,
   type MirrorListResult,
   type MirrorSession,
   type MirrorStarting,
@@ -41,6 +40,7 @@ import {
   summarizeIgnores,
 } from "@shigomori/contracts/modules/mirror";
 import {
+  type MirrorIgnoreMode,
   SyncPullProgressSchema,
   syncContract,
 } from "@shigomori/contracts/modules/sync";

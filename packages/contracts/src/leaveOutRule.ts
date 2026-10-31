@@ -8,9 +8,11 @@ import {
   anchorIgnoredPath,
   bringIgnores,
   MIRROR_IGNORES_LIMIT,
-  type MirrorIgnoreMode,
-} from "./modules/mirror.ts";
-import type { SyncIgnoredPathsResult } from "./modules/sync.ts";
+} from "./mirrorIgnores.ts";
+import type {
+  MirrorIgnoreMode,
+  SyncIgnoredPathsResult,
+} from "./modules/sync.ts";
 import type { LeaveOutPreset, LeaveOutPresetBase } from "./sharedSettings.ts";
 
 export type IgnoreBase = LeaveOutPresetBase;

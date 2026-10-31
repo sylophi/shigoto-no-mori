@@ -5,10 +5,10 @@ import * as Schema from "effect/Schema";
 import {
   MIRROR_LABEL_MODE,
   type MirrorGitStatus,
-  type MirrorIgnoreMode,
   type MirrorSession,
   MirrorSessionSchema,
 } from "@shigomori/contracts/modules/mirror";
+import type { MirrorIgnoreMode } from "@shigomori/contracts/modules/sync";
 import {
   carriedLabels,
   ignoreModeOf,

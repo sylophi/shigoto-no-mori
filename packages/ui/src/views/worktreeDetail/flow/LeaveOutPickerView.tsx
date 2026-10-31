@@ -17,7 +17,7 @@ import {
   BRING_PATHS_LIMIT,
   bringRulesRoom,
   MIRROR_IGNORES_LIMIT,
-} from "@shigomori/contracts/modules/mirror";
+} from "@shigomori/contracts/mirrorIgnores";
 import type { SyncIgnoredPathsResult } from "@shigomori/contracts/modules/sync";
 import { Button } from "../../../primitives/button.tsx";
 import { MaterialIcon } from "../../../primitives/material-icon.tsx";
