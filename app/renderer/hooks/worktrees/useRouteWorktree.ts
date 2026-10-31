@@ -1,6 +1,7 @@
 // What every worktree sub-page (the diffs, the script console) does
 // first: read the route's params, resolve its worktree out of the list
-// query, and know the way back. `worktree` is undefined while the list
+// query, and know the way back. The list comes along for the detail
+// page's siblings. `worktree` is undefined while the list
 // is pending, when it failed, and when the target is gone (or was
 // deleted while the page was open). `missing` carries what
 // WorktreeMissingView needs to tell those apart, so a page's guard is one
@@ -28,6 +29,7 @@ export function useRouteWorktree() {
     ...params,
     nav,
     worktree,
+    worktrees,
     goBack,
     missing: { isPending, isError, deleted, refetch, onBack: goBack },
   };

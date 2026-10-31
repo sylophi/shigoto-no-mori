@@ -1,3 +1,5 @@
+import type { CleanupError } from "@shigomori/contracts/schemas";
+
 // A script run's state, as a device's runs keep it (the app's
 // hooks/scripts/scriptRuns.ts) and the status badges and the console
 // draw it.
@@ -25,3 +27,10 @@ export interface ScriptRunState {
 // What the sidebar row shows for a worktree: the slot running there,
 // or "failed" for a run that ended badly while its page was not open.
 export type ScriptActivityKind = "setup" | "teardown" | "package" | "failed";
+
+// The sentence for a delete that kept its worktree because a cleanup
+// script failed, as the worktree page, its menu and Tidy say it.
+export function cleanupFailedNote(error: CleanupError): string {
+  const script = error.phase === "teardown" ? "Teardown" : "Port-pool release";
+  return `${script} didn't complete cleanly (exit ${error.exitCode ?? "errored"}).`;
+}

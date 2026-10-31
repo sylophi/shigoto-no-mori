@@ -1,26 +1,15 @@
 import { useState } from "react";
 import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import type { ScriptRunState } from "@shigomori/ui/lib/scriptRun.ts";
 import { DeviceChip } from "@/components/shared/DeviceChip";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import {
-  useScriptRuns,
-  useScriptRunState,
-} from "@/hooks/scripts/useScriptRuns";
-import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
-import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-import {
-  useTakeWorktreeDialog,
-  useWorktreeNav,
-} from "@/hooks/worktrees/useWorktreeNav";
+import { useWorktreeDeletionFooter } from "@/hooks/worktrees/useWorktreeDeletionFooter";
+import { useTakeWorktreeDialog } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktreeTitle } from "@/hooks/worktrees/useWorktreeTitle";
-import { scriptKey, type ScriptSlot } from "@/store/scriptSlot";
 import {
   CREATE_PHASE_LABEL,
   useWorktreeCreatePhase,
@@ -41,10 +30,6 @@ import { PullRequestLead } from "./pullRequests/PullRequestLead";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
 import { WorktreeDetailFooter } from "./WorktreeDetailFooter";
-import type {
-  WorktreeFooterActions,
-  WorktreeFooterState,
-} from "@shigomori/ui/views/worktreeDetail/WorktreeDetailFooterView.tsx";
 import { WorktreeDetailView } from "@shigomori/ui/views/worktreeDetail/WorktreeDetailView.tsx";
 import { TerminalButton } from "./TerminalButton";
 import { NewWindowOption } from "./NewWindowOption";
@@ -54,10 +39,6 @@ import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { githubPageOf } from "@shigomori/contracts/predicates/remoteUrl";
 import { GitSection } from "./git/GitSection";
 import { DescriptionSection } from "./DescriptionSection";
-
-// A cleanup script still in flight.
-const live = (state: ScriptRunState) =>
-  state.status === "running" || state.status === "starting";
 
 interface InnerProps {
   worktree: Worktree;
@@ -73,7 +54,6 @@ export function WorktreeDetailInner({
   project,
   siblings,
 }: InnerProps) {
-  const { toScript } = useWorktreeNav();
   // Configure exists for every device, so the breadcrumb links there
   // whichever device the page is scoped to.
   const { toProjectPage } = useProjectNav();
@@ -101,7 +81,6 @@ export function WorktreeDetailInner({
     open: transferDialog,
     setOpen: setTransferDialog,
   };
-  const scriptRuns = useScriptRuns();
   // Always true locally (the local device is granted by contract). The
   // footer's verbs give way to the read-only note on it, and each
   // section's controls read the same verdict themselves.
@@ -116,123 +95,30 @@ export function WorktreeDetailInner({
   const { title, description, pullRequestBody, pullRequest } =
     useWorktreeTitle(worktree);
   const {
-    deleteMutation,
-    needsForce,
-    cleanupError,
-    runDelete,
-    deleteBlockedReason,
-    cancelForce,
-    retryCleanup,
-    skipCleanup,
-    clearCleanupError,
-  } = useDeleteAndNavigate(worktree, siblings);
-  const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
-    useConfirmTwice(CONFIRM_QUICK_MS);
-
-  // Derive limbo state from script-runs. Any cleanup-tier script
-  // currently running means we're mid-cleanup. Otherwise, if the
-  // mutation is in flight, we're in the remove phase.
-  const teardownKey = scriptKey(worktree.projectId, worktree.id, {
-    kind: "teardown",
-  });
-  const releaseKey = scriptKey(worktree.projectId, worktree.id, {
-    kind: "portPool",
-    phase: "release",
-  });
-  const teardownState = useScriptRunState(teardownKey);
-  const releaseState = useScriptRunState(releaseKey);
+    state: footerState,
+    actions: footerActions,
+    limboLabel,
+  } = useWorktreeDeletionFooter(worktree, siblings);
   const home = runtime?.homedir ?? null;
-
-  const cleanupRunning = live(teardownState) || live(releaseState);
-  // This page's own delete, or a removal the host announced (a mirror
-  // stop takes the copy with it, a peer's transplant tears its source
-  // down here): the page goes into limbo either way, instead of
-  // standing as an ordinary worktree until the row vanishes.
-  const busy = useIsDeletingWorktree(worktree.id);
-  const inLimbo = cleanupRunning || busy;
 
   // Banner-only for setup / port-pool provision: those are user scripts
   // (`pnpm install` etc.) that can run alongside the user opening files
   // or kicking off launches. Carry-over moves real files into the new
-  // worktree, so we lock the page until it finishes. inLimbo wins, so a
+  // worktree, so we lock the page until it finishes. Limbo wins, so a
   // delete-during-setup race shows the destructive banner instead.
   // Scoped to this machine: the lifecycle broadcast is local, and a
   // pull can mint a local worktree with the SAME id as the peer's (ids
   // hash the managed path), so a peer's page must not lock for it.
   const createPhase = useWorktreeCreatePhase(remote ? null : worktree.id);
-  const createLabel =
-    !inLimbo && createPhase ? CREATE_PHASE_LABEL[createPhase] : null;
-  const locked = inLimbo || createPhase === "carryOver";
-
-  const handleDelete = () => confirmDeleteTrigger(() => runDelete());
-  const handleForceDelete = () => runDelete({ force: true });
-
-  const handleCancelCleanup = () => {
-    if (teardownState.runId) {
-      void scriptRuns.cancel(teardownKey);
-    }
-    if (releaseState.runId) {
-      void scriptRuns.cancel(releaseKey);
-    }
-  };
-
-  const openCleanupConsole = () => {
-    let slot: ScriptSlot;
-    if (cleanupError) {
-      slot =
-        cleanupError.phase === "teardown"
-          ? { kind: "teardown" }
-          : { kind: "portPool", phase: "release" };
-    } else if (releaseState.runId) {
-      slot = { kind: "portPool", phase: "release" };
-    } else if (teardownState.runId) {
-      slot = { kind: "teardown" };
-    } else {
-      return;
-    }
-    toScript(worktree.projectId, worktree.id, slot);
-  };
-
-  const limboLabel = computeLimboLabel(teardownState, releaseState);
-  const bannerLabel = inLimbo ? limboLabel : createLabel;
+  const bannerLabel =
+    limboLabel ?? (createPhase ? CREATE_PHASE_LABEL[createPhase] : null);
+  const locked = limboLabel !== null || createPhase === "carryOver";
   // The resident's birthday party, with their face to throw it, and
   // never over a create or a removal.
   const party =
     resident?.birthday && resident.face !== null && bannerLabel === null
       ? resident
       : null;
-  const cleanupCancelling = teardownState.cancelling || releaseState.cancelling;
-
-  // Collapse the loose deletion flags into the footer's discriminated
-  // state. Order is priority: a cleanup failure and a pending force-delete
-  // each override the running/normal views, matching how a delete attempt
-  // walks through these phases.
-  const footerState: WorktreeFooterState = cleanupError
-    ? { kind: "cleanupError", error: cleanupError }
-    : needsForce
-      ? {
-          kind: "needsForce",
-          errorMessage: deleteMutation.error?.message,
-          busy,
-        }
-      : cleanupRunning
-        ? { kind: "cleanupRunning", cancelling: cleanupCancelling }
-        : {
-            kind: "normal",
-            confirmDelete,
-            busy,
-            deleteBlockedReason,
-          };
-  const footerActions: WorktreeFooterActions = {
-    onCancelCleanupError: clearCleanupError,
-    onOpenCleanupConsole: openCleanupConsole,
-    onRetryCleanup: retryCleanup,
-    onSkipCleanup: skipCleanup,
-    onCancelForce: cancelForce,
-    onForceDelete: handleForceDelete,
-    onCancelCleanup: handleCancelCleanup,
-    onDelete: handleDelete,
-  };
 
   return (
     <WorktreeDetailView
@@ -310,23 +196,4 @@ export function WorktreeDetailInner({
       }
     />
   );
-}
-
-// Decide which limbo phase label to show. Release runs before
-// teardown, then the actual git remove.
-function computeLimboLabel(
-  teardownState: ScriptRunState,
-  releaseState: ScriptRunState,
-): string {
-  if (live(releaseState)) {
-    return releaseState.cancelling
-      ? "Stopping port-pool release..."
-      : "Releasing ports...";
-  }
-  if (live(teardownState)) {
-    return teardownState.cancelling
-      ? "Stopping teardown..."
-      : "Tearing down...";
-  }
-  return "Removing worktree...";
 }

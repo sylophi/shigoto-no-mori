@@ -40,6 +40,7 @@ import {
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { WorktreeDialog } from "@/lib/routePaths";
 import { notifyError } from "@/lib/toast";
+import { cleanupFailedNote } from "@shigomori/ui/lib/scriptRun.ts";
 import { useGoToProject } from "./openProject";
 
 type DeleteArm = ReturnType<typeof useConfirmTwice>;
@@ -185,12 +186,12 @@ function ManageItems({
   const runDelete = () =>
     deleteWorktree.mutateAsync(target).then(
       (data) => {
-        if (data.ok) return;
-        const { phase, exitCode } = data.cleanupError;
-        notifyError(
-          "Kept the worktree: its cleanup didn't complete cleanly",
-          `${phase === "teardown" ? "Teardown" : "Port-pool release"} exited with ${exitCode ?? "an error"}.`,
-        );
+        if (!data.ok) {
+          notifyError(
+            "Kept the worktree",
+            cleanupFailedNote(data.cleanupError),
+          );
+        }
       },
       (error: unknown) => {
         // A peer's refusal is toasted centrally.
