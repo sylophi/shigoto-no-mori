@@ -110,7 +110,7 @@ export const makeCommit = ({
           const restore = Effect.gen(function* () {
             const lock = `${indexFile}.lock`;
             // Taken empty, so a lock this made is never one a failed write
-            // half filled and left; one another git holds is left to it.
+            // half filled and left. One another git holds is left to it.
             const held = yield* fs
               .writeFile(lock, new Uint8Array(), { flag: "wx" })
               .pipe(

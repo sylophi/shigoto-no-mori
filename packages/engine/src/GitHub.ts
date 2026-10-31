@@ -144,7 +144,7 @@ export type Lookup<A> = {
 
 // The owning pull request's lookup. A gh that isn't signed in can't
 // show the PR anywhere, so that failure is certain there is none to
-// mind; one that timed out or errored may have missed it.
+// mind. One that timed out or errored may have missed it.
 export type OwningLookup = Lookup<OwningPullRequest> & {
   readonly uncertain?: true;
 };
@@ -445,9 +445,8 @@ const RepositoryAnswer = Schema.fromJsonString(
   }),
 );
 const repositoryOf = (stdout: string) =>
-  Option.flatMap(
-    Schema.decodeUnknownOption(RepositoryAnswer)(stdout),
-    ({ data }) => Option.fromNullishOr(data.repository),
+  Option.flatMap(Schema.decodeOption(RepositoryAnswer)(stdout), ({ data }) =>
+    Option.fromNullishOr(data.repository),
   );
 
 const MergeStateAnswer = Schema.fromJsonString(
@@ -877,7 +876,7 @@ const make = Effect.gen(function* () {
       "--json",
       "mergeStateStatus",
     ]);
-    return Option.match(Schema.decodeUnknownOption(MergeStateAnswer)(stdout), {
+    return Option.match(Schema.decodeOption(MergeStateAnswer)(stdout), {
       onNone: () => "",
       onSome: (answer) => answer.mergeStateStatus,
     });
@@ -895,7 +894,7 @@ const make = Effect.gen(function* () {
       if (hasNoStacksApi(answered.failure)) return Option.none<GitHubStack>();
       return yield* answered.failure;
     }
-    const stacks = Schema.decodeUnknownOption(StacksAnswer)(answered.success);
+    const stacks = Schema.decodeOption(StacksAnswer)(answered.success);
     if (Option.isNone(stacks)) {
       return yield* new GitHubOutputError({ command: "api stacks" });
     }
@@ -919,9 +918,7 @@ const make = Effect.gen(function* () {
       if (hasNoStacksApi(answered.failure)) return stackOf;
       return yield* answered.failure;
     }
-    const pages = Schema.decodeUnknownOption(StackPagesAnswer)(
-      answered.success,
-    );
+    const pages = Schema.decodeOption(StackPagesAnswer)(answered.success);
     if (Option.isNone(pages)) {
       return yield* new GitHubOutputError({ command: "api stacks" });
     }
@@ -934,7 +931,7 @@ const make = Effect.gen(function* () {
 
   const asyncTicket = (stdout: string) =>
     Option.map(
-      Schema.decodeUnknownOption(AsyncTicket)(stdout),
+      Schema.decodeOption(AsyncTicket)(stdout),
       ({ status, details }) => ({
         status,
         message: details.message,

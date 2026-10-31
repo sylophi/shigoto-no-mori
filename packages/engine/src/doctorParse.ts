@@ -1,6 +1,6 @@
 // The pure pieces of the doctor's checks: the parsers for what git, ps
-// and port-pool print, and just enough semver to tell an update file
-// this build already is.
+// and port-pool print, and the reading of a script's or a launcher's
+// command line.
 import * as Option from "effect/Option";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import { parseLstart } from "./processes.ts";

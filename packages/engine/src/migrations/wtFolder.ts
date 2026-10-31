@@ -8,7 +8,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 // still to be looked through, and each worktree found there is a row of
 // `wt_moves`.
 // `moved` stays set once it is done, so the host can re-open a mirror
-// whose root moved; `error` holds why a move couldn't be made, which
+// whose root moved. `error` holds why a move couldn't be made, which
 // the doctor reports and retries.
 export const wtFolder = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;

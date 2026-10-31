@@ -51,7 +51,7 @@ export const makeRelocating = ({
 
     // The linked worktrees that moved along with the repo: git lists them
     // at a path that is gone, and they sit at the same place relative to
-    // the repo's new path; or, once a repair ran (a relocate a crash cut
+    // the repo's new path. Or, once a repair ran (a relocate a crash cut
     // short, asked again), git lists them there already and the old place
     // is gone. Inside the repo, or beside it when a parent folder moved
     // whole, each ancestor pair that still shares a name tried, nearest

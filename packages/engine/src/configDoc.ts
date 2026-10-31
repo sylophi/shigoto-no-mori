@@ -156,8 +156,8 @@ export function docDelete(doc: ConfigDoc, name: string): void {
 }
 
 // What a whole-document save stores: the document as saved, a null
-// deleting its key. An object its nulls empty goes too; an empty object
-// saved stays.
+// deleting its key. An object its nulls empty goes too, but an empty
+// object saved stays.
 export function savedConfigDoc(saved: ConfigDoc): ConfigDoc {
   const doc: ConfigDoc = {};
   for (const [name, value] of Object.entries(saved)) {
@@ -176,7 +176,7 @@ export function savedConfigDoc(saved: ConfigDoc): ConfigDoc {
 }
 
 // What is wrong with a launcher, a hidden launcher id and a carry-over
-// entry, in the words a refused write uses; the rule is the setting's
+// entry, in the words a refused write uses. The rule is the setting's
 // schema's.
 export const launcherProblem = (entry: unknown) => {
   if (!isObject(entry)) return "entries must be objects";

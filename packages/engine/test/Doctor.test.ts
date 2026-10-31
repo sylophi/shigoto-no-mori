@@ -103,7 +103,7 @@ it("offers to delete a v2 file left as the import verified it, and leaves one wr
   box.write("config.json", { portPool: true });
   assert.deepEqual(findingsFor(await run(), "v2-files"), []);
   const side = box.side("engine");
-  // A deletion that failed leaves the registry as it was verified; a
+  // A deletion that failed leaves the registry as it was verified, and a
   // v2 build started since writes a config of its own.
   writeFileSync(join(side, "registry.json"), JSON.stringify({ projects: [] }));
   writeFileSync(join(side, "config.json"), JSON.stringify({ portPool: false }));

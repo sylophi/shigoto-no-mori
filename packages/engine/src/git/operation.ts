@@ -100,8 +100,8 @@ export const makeOperation = ({ running }: { readonly running: RunningArea }) =>
     // A command of the app's that git stopped part-way (a conflict, or
     // another program's git holding index.lock) is undone, the abort
     // waiting a held lock out as a one-step write does. One refused
-    // before it began has nothing to undo; one that can't be undone is
-    // left for the banner. Callers refuse an operation already under way
+    // before it began has nothing to undo, and one that can't be undone
+    // is left for the banner. Callers refuse an operation already under way
     // first (refuseMidOperation), so the stop is theirs.
     const undoStopped = Effect.fn("Git.undoStopped")(function* (
       worktree: string,

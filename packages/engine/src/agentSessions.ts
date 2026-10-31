@@ -5,8 +5,10 @@ import { createHash } from "node:crypto";
 import type { AgentSession as WireSession } from "@shigomori/contracts/schemas/worktree";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
+import { canonicalJson } from "./json.ts";
 
 // A session's states: working through a turn, waiting on the user
 // mid-turn (a permission prompt), or idle (the turn ended).
@@ -70,7 +72,7 @@ const HookEvent = Schema.fromJsonString(
 
 // An event as the hooks send it, or undefined when it names no session.
 export function parseAgentEvent(raw: string): AgentEvent | undefined {
-  const decoded = Schema.decodeUnknownOption(HookEvent)(raw);
+  const decoded = Schema.decodeOption(HookEvent)(raw);
   if (Option.isNone(decoded)) return undefined;
   const fields = decoded.value;
   const event = {
@@ -88,38 +90,14 @@ export function parseAgentEvent(raw: string): AgentEvent | undefined {
   return event.session === "" ? undefined : event;
 }
 
-// A value as JSON with every object's keys sorted, the one form two
-// spellings of the same input share.
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (typeof value === "object" && value !== null) {
-    const entries = Object.entries(value).toSorted(([a], [b]) =>
-      a < b ? -1 : a > b ? 1 : 0,
-    );
-    return `{${entries
-      .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value) ?? "null";
-}
-
 // One permission prompt, as the tool call it asks about. The prompt
 // carries no call id, so the call is its tool and input, which its
 // PostToolUse repeats. A question's PostToolUse adds the answers to
 // it, so those are left out.
 function toolWait(event: AgentEvent): string {
   let input = event.toolInput;
-  if (
-    event.toolName === "AskUserQuestion" &&
-    typeof input === "object" &&
-    input !== null &&
-    !Array.isArray(input)
-  ) {
-    const {
-      answers: _answers,
-      annotations: _annotations,
-      ...rest
-    } = input as Record<string, unknown>;
+  if (event.toolName === "AskUserQuestion" && Predicate.isObject(input)) {
+    const { answers: _answers, annotations: _annotations, ...rest } = input;
     input = rest;
   }
   return createHash("sha256")
@@ -153,17 +131,13 @@ const text = (value: unknown) => (typeof value === "string" ? value : "");
 // inside the session's cwd (the worktree) relative to it. Empty when
 // nothing says more than the tool (a plan to review).
 function waitNeed(event: AgentEvent): string {
-  const input =
-    typeof event.toolInput === "object" && event.toolInput !== null
-      ? (event.toolInput as Record<string, unknown>)
-      : {};
+  const input = Predicate.isObject(event.toolInput) ? event.toolInput : {};
   const questions = Array.isArray(input.questions) ? input.questions : [];
   if (questions.length > 0) {
     const first: unknown = questions[0];
-    const question =
-      typeof first === "object" && first !== null && "question" in first
-        ? text(first.question)
-        : "";
+    const question = Predicate.hasProperty(first, "question")
+      ? text(first.question)
+      : "";
     return clipLine(question, AGENT_LINE_MAX);
   }
   const cwd = event.cwd.replace(/\/$/, "");

@@ -45,7 +45,7 @@ export const makeCleanup = ({
 
     // The branch's commits `head` never had, as `<short> <subject>`
     // lines: what deleting the branch would lose. A head this clone
-    // lacks is fetched first; none when it still can't be read.
+    // lacks is fetched first, and none when it still can't be read.
     const commitsBeyond = (
       repo: string,
       branch: string,
@@ -201,7 +201,7 @@ export const makeCleanup = ({
     ) =>
       Effect.gen(function* () {
         // The checkout stays interruptible, since it runs the user's
-        // hooks; the delete follows uninterrupted, since a done again from
+        // hooks. The delete follows uninterrupted, since a done again from
         // the primary branch finds nothing to delete. git moves HEAD before
         // post-checkout runs, and the hook's failure is the checkout's, so
         // a checkout that failed or was cut short in its hook may have
@@ -240,7 +240,7 @@ export const makeCleanup = ({
                 )
               : Exit.void;
             // Both failures said, the checkout's first, as one error, since
-            // a report shows a cause's first; an interrupt stays one.
+            // a report shows a cause's first. An interrupt stays one.
             if (Exit.isFailure(checkedOut)) {
               if (Exit.isSuccess(removed)) {
                 return yield* Effect.failCause(checkedOut.cause);

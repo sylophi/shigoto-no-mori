@@ -303,7 +303,7 @@ export class Git extends Context.Service<
       cwd: string,
       rev: string,
     ) => Effect.Effect<string, GitError>;
-    // A ref's commit, none when it isn't there; a ref git can't open
+    // A ref's commit, none when it isn't there. A ref git can't open
     // fails, where refTip reads it as none.
     readonly readRef: (
       cwd: string,

@@ -131,8 +131,8 @@ export class Scripts extends Context.Service<
     // after it, the tool found on PATH: the manager its lockfile picks
     // for a package.json script, just or make for a recipe or target.
     // From a terminal a recipe can be named as two words (`just build`),
-    // which takes the first of `extra`; `script` is the name it resolved
-    // to.
+    // which takes the first of `extra`, and `script` is the name it
+    // resolved to.
     readonly command: (input: {
       readonly worktree: { readonly path: string; readonly name: string };
       readonly script: string;

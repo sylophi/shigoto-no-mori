@@ -176,7 +176,7 @@ export const makeProjectChecks = ({
           // Only a base that isn't there is empty: one it can't list
           // could hold a worktree moved by hand.
           const entries = yield* fs.readDirectory(base).pipe(
-            Effect.map(Option.some),
+            Effect.asSome,
             Effect.catchIf(isNotFound, () => Effect.succeedNone),
           );
           if (Option.isNone(entries)) continue;

@@ -113,7 +113,7 @@ export const rescueStrandedMove = (input: {
           : fs.rename(file, pointerFile)
       ).pipe(Effect.result);
       if (Result.isFailure(published)) {
-        // Another process may have made the same rescue first; otherwise
+        // Another process may have made the same rescue first. Otherwise
         // the data dir is where no pointer leads, which no fallback to the
         // folder that left may hide.
         const now = yield* fs.readFileString(pointerFile).pipe(

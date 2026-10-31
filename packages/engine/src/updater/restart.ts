@@ -33,8 +33,8 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
     // this request (`handoff`, by its id): a decline, nothing it could
     // install or an installer that didn't start fails at once. One no app
     // takes is withdrawn, and so is one this run leaves on its way out, so
-    // no app picks it up after the asker gave up; a withdraw that finds it
-    // gone was taken meanwhile, and the wait goes on.
+    // no app picks it up after the asker gave up. A withdraw that finds
+    // it gone was taken meanwhile, and the wait goes on.
     const waitForRestart = Effect.fn("Updater.waitForRestart")(function* (
       app: AppStatus,
       id: string,
@@ -44,7 +44,7 @@ export const makeRestart = ({ files }: { readonly files: FilesArea }) =>
       let sameVersion = false;
       let hinted = false;
       let claimed = false;
-      // Whether this took the request back; false when the app had taken
+      // Whether this took the request back, false when the app had taken
       // it. One that can't be renamed fails, since it may still be taken.
       const withdraw = fs.rename(requestPath, `${requestPath}.withdrawn`).pipe(
         Effect.andThen(

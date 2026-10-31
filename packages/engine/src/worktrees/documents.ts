@@ -541,7 +541,7 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
       case "adopt-managed":
         return "Worktree is already shigomori-managed";
       case "adopt-moved":
-        return `${this.subject} moved on to another commit, or couldn't be read, while it was being adopted. Both checkouts are kept; remove the one you don't need.`;
+        return `${this.subject} moved on to another commit, or couldn't be read, while it was being adopted. Both checkouts are kept, so remove the one you don't need.`;
       case "adopt-locked":
         return `${this.subject} is locked. Unlock it (git worktree unlock) to adopt it.`;
     }
@@ -557,8 +557,8 @@ export const cleanupFailureWords = (failure: {
 
 // A worktree's rows went to its new id but its dirty capture's ref
 // didn't follow: the capture is kept under the old id. A re-key asked
-// again carries one that failed; one `occupied`, by another capture
-// under the new id, stays until that one is restored or dropped; one
+// again carries one that failed. One `occupied`, by another capture
+// under the new id, stays until that one is restored or dropped. One
 // `changed` since the caller looked stays for the caller to look again.
 export class CaptureNotCarried extends Schema.TaggedError<CaptureNotCarried>()(
   "CaptureNotCarried",
@@ -571,11 +571,11 @@ export class CaptureNotCarried extends Schema.TaggedError<CaptureNotCarried>()(
   override get message(): string {
     switch (this.reason) {
       case "occupied":
-        return "A worktree's uncommitted changes didn't follow it to its new place, where other uncommitted changes are kept from before; both are kept";
+        return "A worktree's uncommitted changes didn't follow it to its new place, where other uncommitted changes are kept from before, so both are kept";
       case "changed":
-        return "A worktree's uncommitted changes were captured again while it moved; they are kept where they were";
+        return "A worktree's uncommitted changes were captured again while it moved, and are kept where they were";
       case "failed":
-        return "A worktree's uncommitted changes didn't follow it to its new place; they are kept, and the next try carries them";
+        return "A worktree's uncommitted changes didn't follow it to its new place. They are kept, and the next try carries them";
     }
   }
 }

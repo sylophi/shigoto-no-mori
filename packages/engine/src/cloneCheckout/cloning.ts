@@ -420,7 +420,7 @@ export const makeCloning = ({
         (unit) =>
           nativeFs.lstat({ root: path.join(worktree, unit) }).pipe(
             Stream.runCollect,
-            Effect.map((entries) => {
+            Effect.flatMap((entries) => {
               const keep: Array<{ rel: string; chmod: boolean }> = [];
               const gone: string[] = [];
               const goneSet = new Set<string>();
@@ -453,7 +453,6 @@ export const makeCloning = ({
               }
               return Effect.succeed({ keep, gone });
             }),
-            Effect.flatten,
           ),
         { concurrency: 4 },
       );

@@ -3,7 +3,7 @@
 //
 // A move is recorded in `moving` before anything moves
 // (migrations/moving.ts), and git's move is its commit point. From the
-// record to the carry nothing interrupts it; the record goes once the
+// record to the carry nothing interrupts it. The record goes once the
 // carry is whole, and a move a crash cut short is finished or undone by
 // `resume` (at the app's start and by the doctor's fix). Every move goes
 // through this module: `worktrees move`, a rename, the migration's into
@@ -12,6 +12,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -315,12 +316,11 @@ export const makeMoving = ({
       });
 
     const findMoved = (project: RegisteredProject, to: string) =>
-      Effect.flatMap(listedAt(project, to), (moved) =>
-        moved === undefined
-          ? Effect.fail(
-              new WorktreeRefused({ reason: "move-not-listed", subject: to }),
-            )
-          : Effect.succeed(moved),
+      listedAt(project, to).pipe(
+        Effect.filterOrFail(
+          Predicate.isNotUndefined,
+          () => new WorktreeRefused({ reason: "move-not-listed", subject: to }),
+        ),
       );
 
     const move = Effect.fn("Worktrees.move")(function* (
@@ -456,7 +456,7 @@ export const makeMoving = ({
     // is kept under the old id re-keyed and the move recorded as made, in
     // one transaction, then the capture's ref and the lease. Each step
     // finds its work done when it runs again, so a resume repeats them
-    // all; `captured` says whether the ref followed.
+    // all. `captured` says whether the ref followed.
     const carry = (
       project: RegisteredProject,
       fromPath: string,

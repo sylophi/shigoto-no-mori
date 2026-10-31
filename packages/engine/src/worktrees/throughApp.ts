@@ -1,6 +1,6 @@
 // A worktree's move or rename, made by the running app, which refuses
 // it while scripts or terminals it runs are open there and re-opens the
-// mirrors rooted there; with no app running nothing runs there, and
+// mirrors rooted there. With no app running nothing runs there, and
 // this process makes it. Either way the answer is this engine's row of
 // the moved worktree, read once the move is made.
 import * as Effect from "effect/Effect";

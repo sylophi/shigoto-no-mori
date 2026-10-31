@@ -215,7 +215,7 @@ export const makeStacks = ({
     // A merge just asked for, as GitHub reports it once it has taken it:
     // merged, or in the merge queue. GitHub can report the PR as it was
     // for a moment after `gh pr merge` returns, so it is read a second
-    // apart for twenty seconds at most; past that, the last answer.
+    // apart for twenty seconds at most. Past that, the last answer.
     const mergedOrQueued = (repo: string, number: number) =>
       Effect.gen(function* () {
         const deadline = (yield* elapsedMillis) + SETTLE_TIMEOUT_MS;

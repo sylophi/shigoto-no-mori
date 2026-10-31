@@ -455,7 +455,7 @@ export const makeListing = Effect.gen(function* () {
         sync: git.upstreamSync(worktree.path),
         relation:
           context.primaryRef === "" || worktree.isPrimary || worktree.detached
-            ? Effect.succeed(Option.some(NO_RELATION))
+            ? Effect.succeedSome(NO_RELATION)
             : git.primaryRelation({
                 worktree: worktree.path,
                 primaryRef: context.primaryFullRef,

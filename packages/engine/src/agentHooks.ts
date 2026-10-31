@@ -10,7 +10,8 @@
 import { knownHarness } from "@shigomori/contracts/harnesses";
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import { canonicalJson } from "./agentSessions.ts";
+import * as Predicate from "effect/Predicate";
+import { canonicalJson } from "./json.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -337,21 +338,15 @@ const groupsOf = (doc: HooksDoc, event: string) => {
   return raw === undefined ? [] : splitArray(raw);
 };
 
-type Handler = { readonly command?: unknown };
-
 const handlersOf = (group: unknown): ReadonlyArray<unknown> | undefined =>
-  typeof group === "object" &&
-  group !== null &&
-  "hooks" in group &&
-  Array.isArray(group.hooks)
+  Predicate.hasProperty(group, "hooks") && Array.isArray(group.hooks)
     ? group.hooks
     : undefined;
 
 const commandOf = (handler: unknown) =>
-  typeof handler === "object" &&
-  handler !== null &&
-  typeof (handler as Handler).command === "string"
-    ? ((handler as Handler).command as string)
+  Predicate.hasProperty(handler, "command") &&
+  typeof handler.command === "string"
+    ? handler.command
     : "";
 
 // Drops every handler of ours, then any group and event left empty.
@@ -444,10 +439,9 @@ export function ourEntries(
     groupsOf(doc, event).forEach((raw, index) => {
       const group: unknown = JSON.parse(raw);
       const handlers = handlersOf(group) ?? [];
-      const matcher =
-        typeof group === "object" && group !== null && "matcher" in group
-          ? group.matcher
-          : undefined;
+      const matcher = Predicate.hasProperty(group, "matcher")
+        ? group.matcher
+        : undefined;
       for (const handler of handlers) {
         if (!ours(commandOf(handler))) continue;
         total++;

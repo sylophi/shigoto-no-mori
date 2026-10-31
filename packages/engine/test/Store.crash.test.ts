@@ -1,10 +1,10 @@
 // The import of a 2.x data dir killed at every point of its run: a
 // process opening the store is killed just before one of its events (a
-// statement, a file removal), at a spread of them across a whole run, and the next open of each copy holds
-// exactly what an import that ran whole holds. The migrations commit
-// together, so a kill before the commit leaves nothing and the next
-// open imports; one after it leaves the import, and the v2 files go only
-// as one whole verified import's (any left are the ones `v2_import`
+// statement, a file removal), at a spread of them across a whole run,
+// and the next open of each copy holds exactly what an import that ran
+// whole holds. The migrations commit together, so a kill before the
+// commit leaves nothing and the next open imports. One after it leaves
+// the import, and the v2 files go only as one whole verified import's (any left are the ones `v2_import`
 // names, which the doctor deletes).
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -113,7 +113,7 @@ const contents = (dir: string) =>
 
 // The fixture's open of the store in a process of its own, which kills
 // itself just before its `killAt`th event, a statement or a file removal
-// (fixtures/killAt.ts; none: let it finish). Answers whether it finished,
+// (fixtures/killAt.ts), or none to let it finish. Answers whether it finished,
 // the signal that ended it, and how many events a finished run made.
 const openIn = (dir: string, killAt?: number) =>
   new Promise<{

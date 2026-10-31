@@ -7,7 +7,7 @@
 // ref the crash left behind. The removal's tail, git's remove,
 // the forget and the branch, runs whole too, and a removal whose git was
 // killed mid-delete is finished by a forced one. Each step is held by the
-// wrappers in lib/stopAt.ts; the same steps killed outright are the app's
+// wrappers in lib/stopAt.ts. The same steps killed outright are the app's
 // proof `interrupted-workflows`.
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -60,7 +60,7 @@ const held = (mark: string) =>
   );
 
 // A worktree marked and titled, its move to a sibling folder started with
-// the wrappers holding `stop`, interrupted there; answers where git lists
+// the wrappers holding `stop`, interrupted there. Answers where git lists
 // it after, and what its id holds.
 const interruptedMove = (
   stop: (to: string, from: string) => Stop,
@@ -233,7 +233,7 @@ it("an interrupt after git's remove waits for the forget and the branch", async 
 
 // git killed as it deletes a checkout (an agent's process tree stopped,
 // a logout) leaves the folder without its `.git` and git's entry, which
-// git's remove refuses, forced or not. An unforced remove says so; a
+// git's remove refuses, forced or not. An unforced remove says so. A
 // forced one finishes it, without the cleanup that ran before the
 // delete (a teardown in what is left would fail), and drops no other
 // entry git holds for a folder that is gone.
@@ -591,7 +591,7 @@ it("a resume never takes another checkout at the destination for the moved one",
       const data = yield* WorktreeData.WorktreeData;
       const to = join(dirname(worktree.path), "vixen");
       yield* data.describe(project.id, worktree.id, { title: "the fox" });
-      // Cut before git's move; another tool made a worktree there since.
+      // Cut before git's move, and another tool made a worktree there since.
       yield* deadRecord(project, worktree.path, to, linkOf(worktree.path));
       box.git(repo, "worktree", "add", "-q", "-b", "vixen", to);
       yield* worktrees.resumeMoves;

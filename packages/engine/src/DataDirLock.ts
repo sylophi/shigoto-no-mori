@@ -1,7 +1,7 @@
 // What makes a data-folder move the one change under way: a database of
 // its own beside the pointer file, where every process of the flavor
 // finds it wherever the data dir is. A change that writes holds it
-// shared for its run (`guard`), at the engine's entry points; a move,
+// shared for its run (`guard`), at the engine's entry points. A move,
 // and the recovery of one, holds it alone. SQLite's locks are the
 // kernel's, so a hold goes with its process, however that ends, and
 // nothing reads a pid to tell.
@@ -175,7 +175,7 @@ export const layer = (open: OpenDatabase) =>
 
       // Alone: the write reserved first, an attempt refused it dropping
       // its connection, so two takers never hold each other off with the
-      // reads their attempts took; the one reserved waits at its commit
+      // reads their attempts took. The one reserved waits at its commit
       // for the reads under way, and refuses new ones meanwhile.
       const holdAlone = (within: Duration.Input) =>
         Effect.gen(function* () {
@@ -273,7 +273,7 @@ export const layer = (open: OpenDatabase) =>
       let holders = 0;
       let opened: Scope.Closeable | undefined;
       let moving = 0;
-      // Takes are numbered as they start; the first a change queued for
+      // Takes are numbered as they start. The first a change queued for
       // is the one under way as it came, else the next.
       let takes = 0;
       let taking = false;
@@ -339,15 +339,7 @@ export const layer = (open: OpenDatabase) =>
                 Effect.fail(new ChangesRunning()),
               ),
               Effect.catchTag(
-                "SqlError",
-                (error) =>
-                  new DataDirLockUnavailable({
-                    file,
-                    reason: nativeOf(error).words,
-                  }),
-              ),
-              Effect.catchTag(
-                "PlatformError",
+                ["SqlError", "PlatformError"],
                 (error) =>
                   new DataDirLockUnavailable({
                     file,
