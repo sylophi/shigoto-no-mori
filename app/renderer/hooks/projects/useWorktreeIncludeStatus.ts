@@ -15,8 +15,8 @@ export function useWorktreeIncludeStatus(projectId: string | null) {
         : skipToken,
     // Each fetch spawns two `git ls-files` enumerations on the host. Dampen
     // the global refetch-on-focus/mount so Cmd-Tabbing around while
-    // Configure is open doesn't re-walk the ignored tree every time;
-    // reconciliation events invalidate this key explicitly.
+    // Configure is open doesn't re-walk the ignored tree every time.
+    // Reconciliation events invalidate this key explicitly.
     staleTime: 15_000,
     meta: { errorTitle: "Couldn't read .worktreeinclude" },
   });

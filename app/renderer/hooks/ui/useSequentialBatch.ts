@@ -4,8 +4,9 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import { holdVillagerMoves } from "@/lib/villagers/moves";
 
 // Drives the "run a mutation over a set of worktrees one at a time"
-// flows (convert-external, relocate, Tidy). Both seed a per-row running status,
-// process each item sequentially, and record done/error per row.
+// flows (convert-external, relocate, Tidy). Each seeds a per-row running
+// status, processes each item sequentially, and records done/error per
+// row.
 //
 // runBatch owns `batchRunning` (raised before `prepare`, cleared in a
 // finally) so no caller can leave the flow's inputs permanently disabled

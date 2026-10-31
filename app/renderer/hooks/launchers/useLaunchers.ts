@@ -40,7 +40,7 @@ export function useLauncherForProject(projectId: string | null) {
             api.run(api.launchers.forProject({ projectId }), { signal })
         : skipToken,
     // The order holds while the user works, and on window focus or
-    // reconnect; a visit after a few minutes reads it again, a tool
+    // reconnect. A visit after a few minutes reads it again, a tool
     // installed meanwhile included.
     staleTime: LAUNCHER_ROW_STALE_MS,
     refetchOnWindowFocus: false,

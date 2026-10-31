@@ -1,9 +1,9 @@
 // Every registered remote device's forest at once, for the sidebar's
-// merged tree -- the only place a peer's forest is read, since remote
+// merged tree. It is the only place a peer's forest is read, since remote
 // work is meant to look local rather than live on a page of its own.
 // Each peer's projects and each (device, project)'s worktrees are the
 // host views the device-scoped pages read (useProjects, useWorktrees),
-// streamed over the hub hop, so the two can never disagree; its pull
+// streamed over the hub hop, so the two can never disagree. Its pull
 // request map and project config are requests, a query per (device,
 // project), so the inbox can file a peer's worktree exactly as it files
 // a local one (its PR tells merged from live, its config says whether
@@ -36,7 +36,7 @@ import { useRemoteDevices } from "./useRemoteDevices";
 // The peers' projects, each as its host streams it. A peer that has had
 // a session on this page keeps its views while it has none, so its rows
 // stay as the sidebar last had them (faded, as unreachable) while its
-// views redial; one that never had one reads nothing.
+// views redial. One that never had one reads nothing.
 const peersProjectsAtom = viewsOf((deviceId) => projectsAtom(deviceId));
 
 // The devices among `joined` (ids, one separator apart) that had a

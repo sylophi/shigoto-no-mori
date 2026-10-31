@@ -9,7 +9,7 @@ import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 // written back. A refused save (the host revoked command access
 // mid-edit) surfaces through the central CommandRefusedError toast.
 //
-// The local device's save does NOT come through here -- it writes two
+// The local device's save does NOT come through here. It writes two
 // stores (device config plus this window's appearance) as one mutation
 // through useSettingsSave, whose device half is this same patch write
 // plus the launch catalog. This hook is for peers.

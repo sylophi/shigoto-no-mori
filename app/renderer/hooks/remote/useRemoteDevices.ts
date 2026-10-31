@@ -69,7 +69,7 @@ export function useEveryHost(): {
 // local device and for any id the registry doesn't know (a revoked peer,
 // or a stale link into a device that left the account).
 export function useRemoteDevice(deviceId: string): RemoteDevice | undefined {
-  return useRemoteDevices().find((entry) => entry.deviceId === deviceId);
+  return entryOf(useRemoteDevices(), deviceId);
 }
 
 // One device's api, or undefined when it has no session (or the id

@@ -44,7 +44,7 @@ import type { RemoteDeviceStatus } from "@shigomori/ui/lib/deviceStatus.ts";
 // The device list is the shared query entry, read with staleTime
 // Infinity so a reconcile reuses the cache. An account change, a socket
 // reconnect, and a roster naming an unknown device or dropping one ask
-// for a refetch; its landing reconciles (the cache subscription), and a
+// for a refetch. Its landing reconciles (the cache subscription), and a
 // failed one leaves the store as it was.
 
 // The last phase the hub socket reported, kept so a transition into
@@ -378,7 +378,7 @@ function buildEntry(
     // In the roster but no direct session yet: the direct plane's
     // keeper is dialing or backing off toward one. The api is present
     // anyway so a view can stand ready and the invoke that races the
-    // landing dial joins it -- and when the dial lands a beat later,
+    // landing dial joins it. When the dial lands a beat later,
     // noteSessions refetches whatever failed in the meantime.
     status = { phase: "online" };
     api = apiFor(info.deviceId);
@@ -528,14 +528,14 @@ export function startRemoteDeviceSync(
   boundQueryClient = queryClient;
   boundRegistry = atoms;
   watchPeer = watch;
-  // This process's own enroll, sign-out, rename or revoke. A change of
-  // account first drops everything built under the old one
-  // (leaveAccount), so the new account's list lands on empty, not on
-  // the old account's devices.
   // Unknown until the seed lands. A change to signed out is a
   // departure whatever came before, and the seed never overwrites a
   // change that beat it (null is a known value here).
   let syncedAccountId: string | null | undefined;
+  // This process's own enroll, sign-out, rename or revoke. A change of
+  // account first drops everything built under the old one
+  // (leaveAccount), so the new account's list lands on empty, not on
+  // the old account's devices.
   api.listen(api.pushes(accountContract, "changed"), ({ accountId }) => {
     const leaving =
       syncedAccountId === undefined

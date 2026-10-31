@@ -1,7 +1,7 @@
 // Central registry of TanStack Query keys. Every queryKey in the
 // renderer should come from here so renames and prefix-based
-// invalidations can be audited in one place. Keys are camelCase tuples;
-// shared prefixes (e.g. "githubCli") let one invalidateQueries call
+// invalidations can be audited in one place. Keys are camelCase tuples,
+// and shared prefixes (e.g. "githubCli") let one invalidateQueries call
 // knock out everything in that domain.
 //
 // Two scopes. Host-scoped keys describe a machine's git, fs,
@@ -187,9 +187,6 @@ function buildQueryKeys(deviceId: string) {
       host("packageScriptOrder", projectId),
 
     portPoolInstalled: () => host("portPoolInstalled"),
-    // The merged pool + custom port list with its liveness probe. Polled
-    // while a detail page shows it, so a dev server starting or
-    // stopping on the host shows up without a refetch trigger.
     terrierReadiness: () => host("terrierReadiness"),
     // The villager data (host/lib/VillagerData.ts): this device's own,
     // read by its own window only, so only the local registry's are
@@ -204,9 +201,6 @@ function buildQueryKeys(deviceId: string) {
     portPoolActive: (projectId: string, worktreeId: string) =>
       host("portPoolActive", projectId, worktreeId),
 
-    // Every "launchers" key: detected catalog plus the merged per-project
-    // list. Invalidating launchersAll() prefix-matches both.
-    launchersAll: () => host("launchers"),
     detectedLaunchers: () => host("launchers", "detected"),
     projectLaunchers: (projectId: string | null) =>
       host("launchers", projectId),

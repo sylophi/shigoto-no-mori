@@ -69,7 +69,8 @@ export function useMergePullRequest() {
       invalidatePullRequestsForProject(qc, keys, projectId);
       invalidateBranchState(qc, keys, projectId);
     },
-    // The section surfaces failures inline; a toast on top would be noise.
+    // The section surfaces failures inline, so a toast on top would be
+    // noise.
     meta: { silentError: true },
   });
 }

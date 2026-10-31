@@ -10,8 +10,8 @@ interface RenameBranchInput {
 export function useRenameBranch() {
   return useBranchMutation<RenameBranchInput, Worktree>(
     (api, input) => api.worktrees.renameBranch(input),
-    // The inline rename input surfaces the error next to the field; a
-    // global toast on top would be noise.
+    // The inline rename input surfaces the error next to the field, so
+    // a global toast on top would be noise.
     { silentError: true },
   );
 }

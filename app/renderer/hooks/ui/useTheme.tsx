@@ -22,7 +22,7 @@ interface ThemeState {
   // Equals `override ?? saved`.
   applied: Theme;
   resolved: "light" | "dark";
-  // Settings calls this to stage a preview; passing null clears the
+  // Settings calls this to stage a preview. Passing null clears the
   // override and snaps back to whatever is currently saved.
   setOverride: (theme: Theme | null) => void;
 }
@@ -63,8 +63,7 @@ export function ThemeProvider({
 }: {
   // The window's appearance is its root's, set by the page around it
   // (a frame on the marketing site), rather than the settings'. The
-  // settings still read and save as usual; they just don't reach the
-  // root.
+  // settings still read and save as usual, but don't reach the root.
   fromRoot: boolean;
   children: ReactNode;
 }) {
@@ -86,7 +85,7 @@ export function ThemeProvider({
   // Once a save lands and `saved` catches up to the staged override, drop the
   // override so future updates to `saved` flow through. Adjusted
   // during render (not in an effect) so no committed frame holds the stale
-  // pair; `applied` is identical either way, so nothing visibly changes.
+  // pair. `applied` is identical either way, so nothing visibly changes.
   if (override && saved === override) setOverride(null);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() =>

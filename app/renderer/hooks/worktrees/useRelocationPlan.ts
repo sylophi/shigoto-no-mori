@@ -8,8 +8,8 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 // Where the project's managed worktrees would go under a proposed
 // layout, and which are there already, as the host judges it: by the
 // folder, however its path is spelled. Asked again as the layout, the
-// custom path or the device's drive setting change; none while `ready`
-// is false (a custom layout with no folder yet). The worktrees come and
+// custom path or the device's drive setting change, and not at all
+// while `ready` is false (a custom layout with no folder yet). The worktrees come and
 // go between asks, so an apply asks again (`refetch`) and moves by that
 // answer.
 export function useRelocationPlan(

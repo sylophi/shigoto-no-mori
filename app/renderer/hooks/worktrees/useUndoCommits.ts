@@ -19,8 +19,8 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 // Changes tab where they are staged, or for a merge to the commit the
 // branch is back on.
 //
-// Undoing one commit puts its message back in an empty commit box, as
-// GitHub Desktop does, and committing again is the redo. Several
+// Undoing one commit puts its message back in an empty commit box,
+// and committing again is the redo. Several
 // commits or a merge can't be made again from the box, so those get a
 // toast whose Redo puts HEAD back. The backend refuses the redo if
 // anything was committed in between.

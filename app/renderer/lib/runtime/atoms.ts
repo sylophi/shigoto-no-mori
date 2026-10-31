@@ -99,7 +99,7 @@ const endsView = (error: unknown) =>
 // none): after a dropped link (a peer's session going, this machine's
 // host restarting), from 250 ms doubling to 2 s, so a session landing
 // shows within two seconds, each ask finding no session failing at once
-// on this machine; after a refusal, a call to a peer that said no, from
+// on this machine. After a refusal, a call to a peer that said no, from
 // 2 s doubling to 30 s.
 const REDIAL = Schedule.exponential("250 millis", 2).pipe(
   Schedule.modifyDelay(({ input, attempt, duration }) =>
@@ -334,7 +334,7 @@ export function valueNow<A>(
 // anything reads it, ended by the device's own failure (endsView). A
 // peer's that has never shown a value gives up after a few asks that
 // found no way to it, so a peer listed and never reached reads empty
-// and says so; a new session to it starts it again. One that has shown
+// and says so, and a new session to it starts it again. One that has shown
 // a value keeps it and redials. This machine's is asked for good.
 // `memory` lives as long as the atom: a new session starts its stream
 // again, not its history.
@@ -369,10 +369,10 @@ function redialing<A, R>(
 
 // A host view's values, decoded where they may come from another build
 // (a peer's), as an atom. The device's own failure (an unknown project)
-// is what the view ends with; a refusal and a dropped link are asked
-// again (REDIAL), and a peer's view starts again on a new session to it. Kept a
-// while after its last reader goes, so a page that comes back finds it
-// streaming.
+// is what the view ends with. A refusal and a dropped link are asked
+// again (REDIAL), and a peer's view starts again on a new session to
+// it. Kept a while after its last reader goes, so a page that comes
+// back finds it streaming.
 export function hostViewAtom<R extends ContractCall>(options: {
   readonly deviceId: string;
   // The view (contracts' callOf), whose values are decoded with its own
@@ -428,8 +428,8 @@ export function hostViewAtom<R extends ContractCall>(options: {
 // come), so an optimistic copy over a view would never update. This
 // restates each as settled. It is a readable of its own on purpose:
 // Atom.map hands the refresh Atom.optimistic asks for at a transition's
-// end on to the stream, which resubscribes the view; recomputing here
-// reads the value the stream already has.
+// end on to the stream, which resubscribes the view, while recomputing
+// here reads the value the stream already has.
 export function optimisticView<A, E>(
   view: Atom.Atom<AsyncResult.AsyncResult<A, E>>,
 ) {

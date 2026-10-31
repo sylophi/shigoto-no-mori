@@ -53,7 +53,7 @@ export function useBranchMutation<
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   const refreshTree = useRefreshTree();
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to two refreshQueries calls
   return useMutation<Result, Error, Input>({
     mutationFn: (input) => api.run(mutationFn(api, input)),
     onSuccess: (_data, vars) => {

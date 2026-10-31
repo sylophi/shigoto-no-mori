@@ -60,7 +60,7 @@ export function useWorktreeNav() {
 
   // `on` names the device whose page to open. The router can only
   // check params against ONE literal `to`, and this one is a union of
-  // the pages, hence the single cast -- the paths come from the same
+  // the pages, hence the single cast. The paths come from the same
   // constants the route tree is built from, so a path the tree doesn't
   // serve still can't slip through.
   const goOn = (
@@ -118,7 +118,7 @@ export function useWorktreeNav() {
     },
 
     // `amend` opens the changes page already set to rewrite the last
-    // commit; it lives in the route's search so the page and the row
+    // commit. It lives in the route's search so the page and the row
     // menu that opens it agree on one source of truth.
     toDiff(
       projectId: string,

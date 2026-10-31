@@ -90,7 +90,9 @@ export function useStackCleanup(
     (d): d is ReadyStackCleanupDevice =>
       d.api !== undefined && d.block === undefined,
   );
-  const blocked = devices.filter((d) => !ready.includes(d as never));
+  const blocked = devices.filter(
+    (d) => d.api === undefined || d.block !== undefined,
+  );
   return {
     ready,
     blocked,
