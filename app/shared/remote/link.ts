@@ -12,7 +12,7 @@ export const HELLO_TIMEOUT_MS = 10_000;
 
 // Liveness. A websocket over a NAT, a tunnel edge or a laptop that just
 // slept can die without either end seeing a close. The dialer pings on
-// this interval; a ping unanswered for the timeout is followed by a
+// this interval. A ping unanswered for the timeout is followed by a
 // fresh probe, and the link is given up when that goes unanswered for
 // PROBE_TIMEOUT_MS (packages/engine/src/liveness.ts), which hands the
 // keeper a drop to redial on. A wake from sleep or a tab coming back

@@ -259,7 +259,6 @@ function underWay(busy: BusyOperations, there = false) {
     runningOnly: running !== null && groups.size === 0,
     removingOnly: removing && running === null && groups.size === 1,
     removing,
-    others: groups.size > 0,
     running: running !== null,
   };
 }
@@ -284,7 +283,7 @@ export function busyDetail(
 // The same verdict worded for ANOTHER device's screen, for an action a
 // peer asked for: nobody here can answer a dialog, so it is refused
 // with this. The dialog's detail would read as if the restart had
-// happened once it crossed the wire; this says what was refused and
+// happened once it crossed the wire. This says what was refused and
 // what to do about it.
 export function busyRemoteRefusal(
   busy: BusyOperations,

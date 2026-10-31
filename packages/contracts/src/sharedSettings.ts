@@ -258,7 +258,9 @@ const LeaveOutPresetSchema = Schema.Struct({
   brought: PresetPathsSchema,
 });
 export type LeaveOutPreset = typeof LeaveOutPresetSchema.Type;
-const decodeLeaveOutPreset = Schema.decodeUnknownOption(LeaveOutPresetSchema);
+const decodeLeaveOutPreset = Schema.decodeUnknownOption(
+  Schema.fromJsonString(LeaveOutPresetSchema),
+);
 export type LeaveOutPresetBase = LeaveOutPreset["base"];
 
 const NO_LEAVE_OUT_PRESET: LeaveOutPreset = {
@@ -269,14 +271,10 @@ const NO_LEAVE_OUT_PRESET: LeaveOutPreset = {
 
 export function parseLeaveOutPreset(value: string | undefined): LeaveOutPreset {
   if (value === undefined) return NO_LEAVE_OUT_PRESET;
-  try {
-    return Option.getOrElse(
-      decodeLeaveOutPreset(JSON.parse(value)),
-      () => NO_LEAVE_OUT_PRESET,
-    );
-  } catch {
-    return NO_LEAVE_OUT_PRESET;
-  }
+  return Option.getOrElse(
+    decodeLeaveOutPreset(value),
+    () => NO_LEAVE_OUT_PRESET,
+  );
 }
 
 // Sorted, so re-picking the same rule isn't a write. The other base's

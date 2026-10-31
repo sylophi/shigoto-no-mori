@@ -107,11 +107,9 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
   if (layout === "custom") {
     const trimmed = customPath?.trim();
     if (trimmed) {
-      const stripped = trimmed.replace(/\/+$/, "");
-      // A bare root: an empty string would join as relative and
-      // prefix-match everything.
-      if (!stripped) return trimmed;
-      return stripped;
+      // A bare root stays itself: an empty string would join as
+      // relative and prefix-match everything.
+      return trimmed.replace(/\/+$/, "") || trimmed;
     }
   }
   if (layout === "managed-root") {

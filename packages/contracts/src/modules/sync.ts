@@ -71,7 +71,7 @@ export type SyncCapture = typeof SyncCaptureSchema.Type;
 
 // What a capture leaves behind (it has `git add -A` semantics), which a
 // teardown removes with the source. Nearly every worktree has ignored
-// content, so a teardown can't refuse over it; the dialog lists it
+// content, so a teardown can't refuse over it. The dialog lists it
 // instead.
 const SyncIgnoredPathsPayloadSchema = strict(
   Schema.Struct({
@@ -80,7 +80,7 @@ const SyncIgnoredPathsPayloadSchema = strict(
   }),
 );
 
-// A worktree with per-file ignores can hold thousands; past the cap,
+// A worktree with per-file ignores can hold thousands. Past the cap,
 // `total` counts the rest.
 export const SYNC_IGNORED_PATHS_LIMIT = 32;
 const SyncIgnoredPathsResultSchema = strict(
@@ -295,8 +295,8 @@ const SyncReceiptSchema = strict(
 export type SyncReceipt = typeof SyncReceiptSchema.Type;
 
 // `landBranch` is the branch the copy is created on when it isn't the
-// source's own (a primary's mirror lands on mirror/<branch>); the commits
-// still arrive under `branch`.
+// source's own (a primary's mirror lands on mirror/<branch>). The
+// commits still arrive under `branch`.
 const SyncReceiveWorktreePayloadSchema = strict(
   Schema.Struct({
     identity: Schema.NonEmptyString,
@@ -362,7 +362,7 @@ const SyncTeardownSourcePayloadSchema = strict(
 export type SyncMoveRef = typeof SyncTeardownSourcePayloadSchema.Type;
 
 // Keyed by the source worktree id. Remote, for a move the asking device
-// doesn't run; a host only finds the asking device's own moves.
+// doesn't run, since a host only finds the asking device's own moves.
 // `cancelled` false: nothing by that key in flight.
 const SyncCancelMovePayloadSchema = strict(
   Schema.Struct({

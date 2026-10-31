@@ -38,7 +38,7 @@ export const DirectConnectInfoInputSchema = Schema.Struct({
 export type DirectConnectInfoInput = typeof DirectConnectInfoInputSchema.Type;
 
 // Never an empty list: nothing dialable answers available:false.
-// acceptsCommands and sharesData inform the asker's UI only; the
+// acceptsCommands and sharesData inform the asker's UI only. The
 // listener's gate still decides every call.
 export const DirectConnectInfoSchema = Schema.Union([
   Schema.Struct({ available: Schema.Literal(false) }),

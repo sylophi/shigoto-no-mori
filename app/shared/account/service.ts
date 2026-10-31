@@ -58,17 +58,19 @@ export class TunnelProvisionDeniedError extends Error {
   }
 }
 
+// The hub's answer a client error carries, none when it never answered.
+function responseOf(error: unknown) {
+  return HttpClientError.isHttpClientError(error) && "response" in error.reason
+    ? error.reason.response
+    : undefined;
+}
+
 // A 429 as the one error every call fails with, its Retry-After kept,
 // in place of the "Decode error" the client reads it as.
 function rateLimitedOf(error: unknown): HubRateLimitedError | undefined {
-  if (
-    !HttpClientError.isHttpClientError(error) ||
-    !("response" in error.reason) ||
-    error.reason.response.status !== 429
-  ) {
-    return undefined;
-  }
-  const seconds = Number(error.reason.response.headers["retry-after"]);
+  const response = responseOf(error);
+  if (response?.status !== 429) return undefined;
+  const seconds = Number(response.headers["retry-after"]);
   return new HubRateLimitedError({
     retryAfterSeconds:
       Number.isFinite(seconds) && seconds > 0 ? seconds : undefined,
@@ -88,14 +90,8 @@ function unreachableOf(error: unknown): HubUnreachableError | undefined {
 // limiter's 429 is HubRateLimitedError by now): the same request will be
 // refused again.
 function isRefusedStatus(error: unknown): boolean {
-  if (
-    !HttpClientError.isHttpClientError(error) ||
-    !("response" in error.reason)
-  ) {
-    return false;
-  }
-  const status = error.reason.response.status;
-  return status >= 400 && status < 500;
+  const status = responseOf(error)?.status;
+  return status !== undefined && status >= 400 && status < 500;
 }
 
 type AccountServiceDeps = {

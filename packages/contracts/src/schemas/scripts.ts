@@ -215,7 +215,7 @@ export const RunningScriptsSchema = Schema.Struct({
   runs: Schema.Array(RunningScriptSchema),
 });
 
-// Killed because their worktree disappeared from disk; the renderer has
+// Killed because their worktree disappeared from disk. The renderer has
 // no other way to explain why a dev server went down.
 export const RemovedWorktreeScriptsSchema = Schema.Struct({
   worktreeId: Schema.String,

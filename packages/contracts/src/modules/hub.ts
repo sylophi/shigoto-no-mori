@@ -46,7 +46,7 @@ const TunnelStateSchema = Schema.Literals([
 ]);
 export type TunnelState = typeof TunnelStateSchema.Type;
 
-// The hub socket and roster plus the direct sessions it brokers; every
+// The hub socket and roster plus the direct sessions it brokers. Every
 // per-peer fact is about a direct session.
 const HubStatusSchema = Schema.Struct({
   socket: HubSocketStatusSchema,
@@ -54,7 +54,7 @@ const HubStatusSchema = Schema.Struct({
   onlineDeviceIds: Schema.Array(Schema.String),
   // A key is present exactly while a direct session is.
   peerAppVersions: Schema.Record(Schema.String, Schema.String),
-  // Each peer's command switch, for display; its CommandGate is what
+  // Each peer's command switch, for display. Its CommandGate is what
   // enforces it.
   peerAcceptsCommands: Schema.Record(Schema.String, Schema.Boolean),
   peerSharesData: Schema.Record(Schema.String, Schema.Boolean),
@@ -64,7 +64,7 @@ const HubStatusSchema = Schema.Struct({
 
 export type HubStatus = typeof HubStatusSchema.Type;
 
-// Forwarded wholesale; windows filter by device and channel.
+// Forwarded wholesale, and windows filter by device and channel.
 const HubPeerPushSchema = Schema.Struct({
   deviceId: Schema.String,
   channel: Schema.String,

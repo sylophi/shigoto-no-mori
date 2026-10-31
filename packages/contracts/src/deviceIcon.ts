@@ -8,7 +8,7 @@
 // node, no DOM.
 //
 // Two families. The shapes say what a device is: a Mac or a browser
-// detects its own (laptop, desktop or mini; phone, tablet or browser)
+// detects its own (a laptop, desktop or mini, or a phone, tablet or browser)
 // and reads as it until its owner picks, and a server is picked. The
 // marks are picked only: a leaf, a cat, a rocket, things that tell two
 // laptops apart at a glance, which a shape never can.
@@ -62,7 +62,6 @@ export type DeviceShape = (typeof DEVICE_SHAPES)[number];
 export type DeviceIcon = DeviceShape | (typeof DEVICE_MARKS)[number];
 
 export const DeviceIconSchema = Schema.Literals(DEVICE_ICONS);
-const ICON_SET: ReadonlySet<string> = new Set(DEVICE_ICONS);
 
 // The icon as the picker names it.
 export const DEVICE_ICON_LABELS: Record<DeviceIcon, string> = {
@@ -103,9 +102,7 @@ export const DEVICE_ICON_LABELS: Record<DeviceIcon, string> = {
   gamepad: "Gamepad",
 };
 
-export function isDeviceIcon(value: unknown): value is DeviceIcon {
-  return typeof value === "string" && ICON_SET.has(value);
-}
+export const isDeviceIcon = Schema.is(DeviceIconSchema);
 
 // The shape a machine is drawn as when nothing better is known: the one
 // that claims the least. The one literal, so every fallback (an id the

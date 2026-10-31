@@ -3,8 +3,8 @@
 // beside the specification: the objects are its CipherState,
 // SymmetricState and HandshakeState (section 5), the methods carry its
 // names, and the comments cite its sections. The primitives come from
-// the noble libraries; nothing below the handshake pattern is written
-// here.
+// the noble libraries, and nothing below the handshake pattern is
+// written here.
 //
 // IK (section 7.5): the initiator knows the responder's static key
 // before it starts, from the hub's roster, and sends its own, encrypted,
@@ -41,7 +41,7 @@ const EMPTY = new Uint8Array(0);
 
 // A handshake that cannot go on: a message that does not decrypt, has
 // the wrong length or comes out of turn. The caller drops the
-// connection; nothing about the failure is told to the far end.
+// connection, and nothing about the failure is told to the far end.
 export class NoiseError extends Error {
   constructor(message: string) {
     super(message);
@@ -265,7 +265,7 @@ export class HandshakeState {
   private e: KeyPair | null;
   private rs: Uint8Array | null;
   private re: Uint8Array | null = null;
-  // The index of the next message pattern; message i is written by the
+  // The index of the next message pattern. Message i is written by the
   // initiator when i is even.
   private next = 0;
 

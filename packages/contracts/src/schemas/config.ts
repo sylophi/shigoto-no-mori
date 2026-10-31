@@ -131,8 +131,8 @@ export type ShigomoriConfig = typeof ShigomoriConfigSchema.Type;
 // schema library.
 export { PROJECT_CONFIG_DEFAULTS } from "./projectConfigDefaults.ts";
 
-// Seen through an optional or nullable union; null for a node that isn't
-// a struct.
+// Seen through an optional or nullable union, or null for a node that
+// isn't a struct.
 function structFieldsOf(
   ast: SchemaAST.AST,
 ): ReadonlyArray<SchemaAST.PropertySignature> | null {
@@ -205,8 +205,8 @@ export const CarryOverListingPayloadSchema = Schema.Struct({
     ),
   ),
   // Also call a folder ignored when a rule names it though it holds a
-  // force-added file (what a mirror leaves out; carry-over wants git's
-  // own verdict).
+  // force-added file (what a mirror leaves out, where carry-over wants
+  // git's own verdict).
   ruleIgnored: Schema.optional(Schema.Boolean),
 });
 
@@ -257,7 +257,7 @@ export type ShigomoriWorktreeData = typeof ShigomoriWorktreeDataSchema.Type;
 // Stored variant: an imported v2 document can still carry client keys.
 const GlobalConfigSchema = Schema.Struct({
   launchers: Schema.optional(Schema.Array(LauncherCommandSchema)),
-  // Launcher ids (`app:cursor`, `custom:<uuid>`); one that no longer
+  // Launcher ids (`app:cursor`, `custom:<uuid>`). One that no longer
   // resolves never matches and is harmless to keep.
   hiddenLaunchers: Schema.optional(Schema.Array(Schema.String)),
   launchScripts: Schema.optional(Schema.Boolean),
@@ -275,7 +275,7 @@ const GlobalConfigSchema = Schema.Struct({
     Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   ),
   // Absent reads as off, so an install from before it defaulted on keeps
-  // its names; a fresh store is seeded with `true`.
+  // its names. A fresh store is seeded with `true`.
   doubutsuNames: Schema.optional(Schema.Boolean),
   // Names an external worktree laid out as <name>/<repo> (Codex) after its
   // parent folder. Off by default: a worktree that merely shares the
@@ -302,7 +302,7 @@ export type GlobalConfig = typeof GlobalConfigSchema.Type;
 export const StoredGlobalConfigSchema = loose(GlobalConfigSchema);
 
 // What the Settings form writes, a peer's included. Strict, so no
-// unmanaged key (directConnections, cloudflaredPath) can ride a write; a
+// unmanaged key (directConnections, cloudflaredPath) can ride a write. A
 // new managed setting must be named here and in DEVICE_SETTINGS_DEFAULTS
 // or it can't be written. A patch: only the keys given change.
 export const DeviceSettingsPatchSchema = strict(
@@ -413,7 +413,7 @@ export const DEVICE_CONFIG_DEFAULTS = {
   directConnections: true,
 };
 
-// How this app instance looks, owned by the main process; the CLI never
+// How this app instance looks, owned by the main process. The CLI never
 // reads it. Must not become strict: a newer build's key has to pass
 // through.
 export const ClientConfigSchema = Schema.Struct({
@@ -452,7 +452,7 @@ export const ClientConfigSchema = Schema.Struct({
   groupProjectsByOwner: Schema.optional(Schema.Boolean),
   // By group key (projectGroupKey).
   collapsedProjects: Schema.optional(Schema.Array(Schema.String)),
-  // By keymap action id, as "Mod+Shift+N"; only chords that differ from
+  // By keymap action id, as "Mod+Shift+N", only chords that differ from
   // the default. One that doesn't read, or an unknown id, is ignored.
   keybindings: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
@@ -542,7 +542,7 @@ export const RotatePalettePayloadSchema = Schema.Struct({
 // What a project's settings forms change, a peer's included: each key
 // given is set, or removed when null, and the rest stay, so what the
 // terminal or another device changed meanwhile survives the save. Keyed
-// by the settings' names (`projects config list`); strict, as the
+// by the settings' names (`projects config list`). Strict, as the
 // device's.
 const cleared = <S extends Schema.Top>(schema: S) =>
   Schema.optional(Schema.NullOr(schema));

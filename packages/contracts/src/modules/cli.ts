@@ -32,7 +32,7 @@ const ShellIntegrationStatusSchema = Schema.Struct({
 export type ShellIntegrationStatus = typeof ShellIntegrationStatusSchema.Type;
 
 // The engine's doctor owns every word (`sm doctor --json` prints the
-// same run with more fields); only the fields the app reads are
+// same run with more fields), and only the fields the app reads are
 // declared.
 const DoctorFindingSchema = Schema.Struct({
   group: Schema.String,

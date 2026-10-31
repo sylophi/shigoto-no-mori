@@ -1,5 +1,6 @@
 // Each crosses every wire as its tag and fields and decodes back into
 // the same class, so callers tell them apart by tag, never by text.
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 
 export function errorMessageOf(error: unknown): string {
@@ -8,10 +9,9 @@ export function errorMessageOf(error: unknown): string {
 
 // What a wire sends beside the message, so the far side keys on a code.
 export function errorCodeOf(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) {
-    return undefined;
-  }
-  return typeof error.code === "string" ? error.code : undefined;
+  return Predicate.hasProperty(error, "code") && typeof error.code === "string"
+    ? error.code
+    : undefined;
 }
 
 export class UnknownProjectError extends Schema.TaggedError<UnknownProjectError>()(
@@ -212,7 +212,7 @@ export class LinkUnauthenticatedError extends Schema.TaggedError<LinkUnauthentic
 
 // The hub's rate limiter turned a call away (a 429, which the hub's API
 // names no error for). `retryAfterSeconds` is the hub's Retry-After,
-// which the device list waits out before asking again; nothing retries
+// which the device list waits out before asking again. Nothing retries
 // it sooner, and a write is not replayed.
 // Raised by the account service, which no peer-served call reaches, so
 // it never crosses a device link to an older build: only the loopback,
@@ -223,8 +223,8 @@ export class HubRateLimitedError extends Schema.TaggedError<HubRateLimitedError>
 ) {
   override get message(): string {
     return this.retryAfterSeconds === undefined
-      ? "the hub is rate-limiting this device; try again shortly"
-      : `the hub is rate-limiting this device; try again in ${this.retryAfterSeconds} s`;
+      ? "the hub is rate-limiting this device: try again shortly"
+      : `the hub is rate-limiting this device: try again in ${this.retryAfterSeconds} s`;
   }
 }
 

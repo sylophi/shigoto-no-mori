@@ -1,8 +1,8 @@
 import { isValidWorktreeDirName } from "../predicates/worktreeDirName.ts";
 
 // For live input. A leading dash survives editing (stripping it would eat
-// an interior dash whose prefix was just deleted); the schemas refuse it
-// at submit.
+// an interior dash whose prefix was just deleted), and the schemas
+// refuse it at submit.
 const INVALID_BRANCH_INPUT_CHARS = /[^A-Za-z0-9._/-]/g;
 
 export function sanitizeBranchName(name: string): string {

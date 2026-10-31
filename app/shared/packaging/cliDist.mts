@@ -27,15 +27,15 @@ export function cliAliasName(flavor: Flavor): string {
 
 // The data dir: the directory under $HOME holding the flavor's on-disk
 // state (its store, projects/, managed worktrees). Short and
-// dot-hidden on purpose: every managed worktree
-// path starts with it, so it is in every prompt an agent sees.
+// dot-hidden on purpose: every managed worktree path starts with it, so
+// it is in every prompt an agent sees.
 export function cliDataDirName(flavor: Flavor): string {
   return flavorNames(flavor).dataDir;
 }
 
 // Where user-facing executables get linked. The XDG spec's location
-// for user executables is ~/.local/bin (it defines no env var for it);
-// honor the de-facto XDG_BIN_HOME override when set. Caveat: a
+// for user executables is ~/.local/bin (it defines no env var for it),
+// and the de-facto XDG_BIN_HOME override is honored when set. Caveat: a
 // packaged app launched from Finder inherits launchd's environment, so
 // a profile-exported XDG_BIN_HOME is only visible if set via
 // launchctl. The fallback covers the rest.

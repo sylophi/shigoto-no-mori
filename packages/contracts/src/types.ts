@@ -17,8 +17,8 @@ type ViewsOf<M> = Exclude<Extract<CallsOf<M>, Streaming>, Pushing>;
 
 type KeyOf<Tag> = Tag extends `${string}:${infer K}` ? K : never;
 
-// Producers give the wire shape (`Encoded`), consumers see `Decoded`;
-// they diverge for defaults and transforms.
+// Producers give the wire shape (`Encoded`), consumers see `Decoded`.
+// They diverge for defaults and transforms.
 
 type Args<I> = [I] extends [void]
   ? []

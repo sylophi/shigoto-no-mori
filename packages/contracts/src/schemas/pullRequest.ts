@@ -159,7 +159,7 @@ export function summarizeChecks(
   return summary;
 }
 
-// GraphQL's reviewDecision; null when the base has no required-review
+// GraphQL's reviewDecision, null when the base has no required-review
 // rule.
 export const PullRequestReviewDecisionSchema = Schema.Literals([
   "APPROVED",
@@ -198,7 +198,7 @@ export type MergeMethod = typeof MergeMethodSchema.Type;
 export const PullRequestDetailSchema = Schema.Struct({
   ...PullRequestSchema.fields,
   body: Schema.optional(Schema.String),
-  // `body` has its images swapped for expiring signed URLs; an edit
+  // `body` has its images swapped for expiring signed URLs. An edit
   // starts from this, so it doesn't write those back.
   bodySource: Schema.optional(Schema.String),
   mergeState: PullRequestMergeStateSchema,
@@ -242,7 +242,7 @@ export const GithubOwnerListSchema = Schema.Array(Schema.String);
 // `owner/repo`.
 export const GithubRepoListSchema = Schema.Array(Schema.String);
 
-// As `owner/<folder name>`; no owner is gh's signed-in user.
+// As `owner/<folder name>`. No owner is gh's signed-in user.
 export const PublishRepoPayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,
   owner: Schema.optional(

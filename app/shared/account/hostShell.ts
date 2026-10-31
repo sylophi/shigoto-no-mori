@@ -22,8 +22,8 @@ import type { AccountService } from "./service";
 // bundle when it was built, then real environment variables. The baked
 // layer is what configures a shipped build: a packaged .app launched
 // from Finder or the Dock inherits launchd's environment, not a
-// shell's, so runtime process.env carries none of these -- but the env
-// layer on top still lets an owner override a baked build.
+// shell's, so runtime process.env carries none of these. The env layer
+// on top still lets an owner override a baked build.
 //
 // The web shell reads the same .env.local through Vite, so the filename
 // is shared: changing it here strands vite.web.config.ts.
@@ -74,7 +74,7 @@ export function accountFactsOf(
 // A nuke's sign-out: this device revoked on the hub and its credential
 // dropped. Answers why the revoke didn't land when it stays parked for
 // later (offline, the hub down), since the parking goes with userData
-// at the next start; null when it landed, the hub had already let the
+// at the next start. Null when it landed, the hub had already let the
 // device go, or there was nothing to revoke. A device signed out
 // before, whose revoke is parked still, tries that one once more.
 export async function nukeSignOut(device: {

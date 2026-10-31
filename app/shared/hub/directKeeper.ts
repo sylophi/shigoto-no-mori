@@ -19,14 +19,13 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as Result from "effect/Result";
-import * as Duration from "effect/Duration";
-import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import {
   BACKOFF_LADDER_MS,
   makeWake,
   restartSchedule,
   type Wake,
+  wakeable,
 } from "@shared/remote/supervisor";
 import { NoDialableCandidateError } from "./directDial";
 import { errorMessageOf } from "@shigomori/contracts/errors";
@@ -65,9 +64,6 @@ type PeerState = {
   lastFailure: string | null;
   // Failed dials since the last session (or since the peer came online).
   failures: number;
-  // Since when the live session's uptime counts (monotonic), null
-  // while there is none.
-  upSince: number | null;
   // Cuts its wait on the shared ladder short.
   wake: Wake;
 };
@@ -128,7 +124,7 @@ export const make = (
           }
           return 0;
         }
-        state.upSince = elapsedMillisUnsafe(clock);
+        const upSince = elapsedMillisUnsafe(clock);
         if (state.failures > 0) {
           log.info(
             `[direct] session to ${deviceId} established after ${state.failures} failed attempts`,
@@ -137,12 +133,7 @@ export const make = (
         state.lastFailure = null;
         state.failures = 0;
         yield* Deferred.await(dropped);
-        const uptime =
-          state.upSince === null
-            ? 0
-            : elapsedMillisUnsafe(clock) - state.upSince;
-        state.upSince = null;
-        return uptime;
+        return elapsedMillisUnsafe(clock) - upSince;
       });
 
     const keep = (deviceId: string) => {
@@ -151,17 +142,12 @@ export const make = (
         dropped: null,
         lastFailure: null,
         failures: 0,
-        upSince: null,
         wake: makeWake(),
       };
       state.loop = run(
         attempt(deviceId, state).pipe(
           Effect.repeat(
-            restartSchedule(BACKOFF_LADDER_MS).pipe(
-              Schedule.modifyDelay(({ duration }) =>
-                Effect.as(state.wake.wait(duration), Duration.zero),
-              ),
-            ),
+            restartSchedule(BACKOFF_LADDER_MS).pipe(wakeable(state.wake)),
           ),
           Effect.andThen(Effect.never),
         ),

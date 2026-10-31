@@ -14,7 +14,7 @@ export const RuntimeInfoSchema = Schema.Struct({
 });
 export type RuntimeInfo = typeof RuntimeInfoSchema.Type;
 
-// The picked directory becomes the folder's new parent; none puts it
+// The picked directory becomes the folder's new parent, and none puts it
 // back at the default. The app relaunches right after.
 export const MoveDataDirPayloadSchema = Schema.Struct({
   parentDir: Schema.optional(Schema.NonEmptyString),
@@ -121,7 +121,7 @@ export type UpdateRequest = typeof UpdateRequestSchema.Type;
 export const InstallFailureSchema = Schema.Struct({ message: Schema.String });
 export type InstallFailure = typeof InstallFailureSchema.Type;
 
-// Beside a verified staged update; seeds "ready" at boot.
+// Beside a verified staged update. It seeds "ready" at boot.
 export const StagedManifestSchema = Schema.Struct({
   version: Schema.NonEmptyString,
   bundleName: Schema.NonEmptyString,

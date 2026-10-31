@@ -3,6 +3,7 @@
 // purpose: a copy must forward an entry its build has never heard of, or
 // an older device in the middle would strip a newer one's settings.
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
@@ -71,9 +72,8 @@ function readableEntries(raw: {
 export const SharedSettingsDocSchema = Schema.Struct({
   entries: Schema.Record(Schema.String, Schema.Unknown).pipe(
     Schema.decodeTo(
-      Schema.declare(
-        (value: unknown): value is SharedSettingEntries =>
-          typeof value === "object" && value !== null && !Array.isArray(value),
+      Schema.declare((value: unknown): value is SharedSettingEntries =>
+        Predicate.isObject(value),
       ),
       SchemaTransformation.transform<
         SharedSettingEntries,

@@ -350,7 +350,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
       if (!(await confirm.ask())) return "declined";
       // The dialog can sit open arbitrarily long. Re-check that another
       // path didn't start the install during it, and that the staged
-      // update still exists -- a terminal run whose feed answered 204
+      // update still exists: a terminal run whose feed answered 204
       // clears it, and quitting with nothing staged would be a quit the
       // installer can't follow with a relaunch.
       if (installing) return "installing";
@@ -398,7 +398,7 @@ export const makeUpdater = (seat: UpdaterSeat) => {
   // all and the update toast ask every device behind the newest release
   // they know of, and a device whose last check predates that release
   // has nothing staged. Such a device is armed, and the check that stages
-  // the update installs it (runCheck); a check already running is
+  // the update installs it (runCheck). A check already running is
   // followed by one more, since it may have asked before the release was
   // out. An unattended request is refused up front on a busy host, while
   // the caller still waits on the answer.
@@ -430,8 +430,8 @@ export const makeUpdater = (seat: UpdaterSeat) => {
 
   // Before a move or a reset of the data folder, which staging writes
   // under and an install restarts out of: the version an install under
-  // way restarts into ("" when not known), which the caller refuses on;
-  // otherwise no check or install starts from here on, and a check under
+  // way restarts into ("" when not known), which the caller refuses on.
+  // Otherwise no check or install starts from here on, and a check under
   // way is ended (its staging lock goes with it, and the next run prunes
   // what it left). The bridge keeps answering `sm update` (with these
   // words): a move stops it once nothing can fail before the folder moves

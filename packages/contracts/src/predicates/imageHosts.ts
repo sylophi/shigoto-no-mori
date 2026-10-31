@@ -1,12 +1,13 @@
 // Where an image in markdown from outside the app (a description, a
 // pull request's, release notes) may load from in a window: GitHub's own
 // hosts, each with its subdomains. An image from anywhere else would
-// tell its author who read the text and when; one on a project's
+// tell its author who read the text and when. One on a project's
 // remote's host is read by the project's device instead
 // (projects:remoteImage). GitHub serves attachments from github.com and
-// *.githubusercontent.com; GitHub Enterprise Server from its own host, or
-// with subdomain isolation from media., uploads., avatars. and raw. under
-// it; GHE.com from *.<tenant>.ghe.com and *.githubusercontent.com.
+// *.githubusercontent.com. GitHub Enterprise Server serves them from its
+// own host, or with subdomain isolation from media., uploads., avatars.
+// and raw. under it. GHE.com serves them from *.<tenant>.ghe.com and
+// *.githubusercontent.com.
 export const GITHUB_IMAGE_HOSTS: readonly string[] = [
   "github.com",
   "githubusercontent.com",

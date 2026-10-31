@@ -1,5 +1,5 @@
 // One script on or off a launch row list, for the renderer's optimistic
-// cache write; the stored write is the engine's (Scripts.setOnLaunchRow).
+// cache write. The stored write is the engine's (Scripts.setOnLaunchRow).
 // Returns the same array when nothing changes.
 export function withLaunchRowScript(
   launchRow: readonly string[],

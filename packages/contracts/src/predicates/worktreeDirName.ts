@@ -1,4 +1,4 @@
-// Unicode passes through; only what breaks a single path segment goes
+// Unicode passes through. Only what breaks a single path segment goes
 // (separators, `:` which Finder treats as one, control characters).
 // `root`/`primary` are the CLI's address keywords. An empty result means
 // fall back to a picked name.

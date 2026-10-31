@@ -68,8 +68,8 @@ export function applyDirectPresence(
   // its pending retries rather than let them burn against nothing, and
   // the post-reconnect roster then reads as all-new peers, whose eager
   // dials no-op through the cache for every session that survived the
-  // outage and redial the rest -- including parked ones, so our own
-  // link coming back is an unpark input.
+  // outage and redial the rest (parked ones included, so our own link
+  // coming back is an unpark input).
   if (rule === "outage") {
     deps.reconcilePeers([]);
     return;
