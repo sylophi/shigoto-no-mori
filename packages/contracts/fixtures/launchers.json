@@ -71,11 +71,6 @@
         "kind": "custom",
         "id": "claude",
         "label": "Claude Code"
-      },
-      {
-        "kind": "web",
-        "id": "web:github",
-        "label": "GitHub"
       }
     ],
     "normalizes": [
@@ -101,7 +96,8 @@
       },
       {
         "kind": "web",
-        "id": "web:github"
+        "id": "web:github",
+        "label": "GitHub"
       }
     ]
   },
@@ -162,10 +158,6 @@
           {
             "id": "custom:claude",
             "label": "Claude Code"
-          },
-          {
-            "id": "web:github",
-            "label": "GitHub"
           }
         ]
       },

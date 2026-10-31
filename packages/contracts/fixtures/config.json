@@ -537,7 +537,7 @@
             "command": "tmux new -A -s main"
           }
         ],
-        "hiddenLaunchers": ["app:cursor", "web:github"],
+        "hiddenLaunchers": ["app:cursor", "custom:deploy"],
         "launchScripts": false,
         "terminal": "ghostty",
         "editor": "zed",
@@ -590,7 +590,7 @@
             "command": "tmux new -A -s main"
           }
         ],
-        "hiddenLaunchers": ["app:cursor", "web:github"],
+        "hiddenLaunchers": ["app:cursor", "custom:deploy"],
         "launchScripts": false,
         "terminal": "ghostty",
         "deleteBranchOnRemove": false,
@@ -675,7 +675,7 @@
               "command": "tmux new -A -s main"
             }
           ],
-          "hiddenLaunchers": ["app:cursor", "web:github"],
+          "hiddenLaunchers": ["app:cursor", "custom:deploy"],
           "launchScripts": false,
           "deleteBranchOnRemove": false,
           "autoPopulateInstall": true,

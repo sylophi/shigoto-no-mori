@@ -272,9 +272,6 @@ export function MarksScene() {
           }}
         />
         <LauncherIconView
-          entry={{ kind: "web", id: "github", label: "GitHub" }}
-        />
-        <LauncherIconView
           entry={{ kind: "custom", id: "x", label: "lazygit" }}
         />
       </Strip>

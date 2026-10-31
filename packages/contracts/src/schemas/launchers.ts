@@ -20,15 +20,10 @@ const CustomLauncherSchema = Schema.Struct({
   label: Schema.String,
 });
 
-// URL-based launcher. The id encodes which provider it is so the host
-// can resolve the URL at launch time. Shared so both ends of
-// the IPC compare against the same string.
-export const WEB_GITHUB_ID = "web:github";
-
 // A launcher id is "<kind>:<id>". Builder and parser live together so
 // the prefixes exist once, rather than being decoded by hand-counted
 // slices at each call site.
-export type LauncherKind = "app" | "custom" | "web";
+export type LauncherKind = "app" | "custom";
 
 function launcherIdFor(kind: LauncherKind, id: string): string {
   return `${kind}:${id}`;
@@ -40,7 +35,7 @@ export function parseLauncherId(
   const separator = launcherId.indexOf(":");
   if (separator < 0) return null;
   const kind = launcherId.slice(0, separator);
-  if (kind !== "app" && kind !== "custom" && kind !== "web") return null;
+  if (kind !== "app" && kind !== "custom") return null;
   return { kind, id: launcherId.slice(separator + 1) };
 }
 
@@ -67,16 +62,9 @@ export const installedTerminals = (
     return entry === undefined ? [] : [{ id, entry }];
   });
 
-const WebLauncherSchema = Schema.Struct({
-  kind: Schema.Literal("web"),
-  id: Schema.String,
-  label: Schema.String,
-});
-
 export const LauncherEntrySchema = Schema.Union([
   DetectedLauncherSchema,
   CustomLauncherSchema,
-  WebLauncherSchema,
 ]);
 export type LauncherEntry = typeof LauncherEntrySchema.Type;
 

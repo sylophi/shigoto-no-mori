@@ -141,13 +141,7 @@ export const pickLauncher = (
       title: `Open ${worktreeName} in:`,
       cells: entries.map((entry) => [
         entry.label,
-        dim(
-          entry.kind === "custom"
-            ? "(custom)"
-            : entry.kind === "web"
-              ? "(web)"
-              : "",
-        ),
+        dim(entry.kind === "custom" ? "(custom)" : ""),
       ]),
       names: entries.map((entry) => entry.label),
     });

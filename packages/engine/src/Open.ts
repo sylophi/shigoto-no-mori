@@ -1,7 +1,7 @@
 // Opening a worktree in one of its launchers: an installed app (a
-// terminal tool through the chosen terminal), the repo's GitHub page, or
-// a custom command line. Each open counts toward the row's order. And
-// opening one of its files in the editor the device settings name.
+// terminal tool through the chosen terminal) or a custom command line.
+// Each open counts toward the row's order. And opening one of its files
+// in the editor the device settings name.
 import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";
 import type { TerminalId } from "@shigomori/contracts/schemas/launchers";
 import * as Context from "effect/Context";
@@ -364,8 +364,6 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const where = located.worktree.path;
       switch (entry.kind) {
-        case "web":
-          return yield* onScreen(entry.label, [entry.url]);
         case "custom": {
           // Started in its own session and left running, the worktree's
           // script variables set.

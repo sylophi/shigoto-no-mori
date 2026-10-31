@@ -5,11 +5,12 @@
 // work, the page names it once and the PR fills in the same two lines:
 // its number and state beside the title, and on the branch's line
 // where it lands, where it sits in a stack (its list in a popover),
-// and its diff. That line never wraps: the base gives way first, then
-// the branch. The title is edited in place (EditableTitleView), the
-// PR's while it is open. What the work is and what to do about its PR follow
-// under the header. The project map's slim PR draws all of it but the
-// diff at once, so the header doesn't grow when the lookup answers.
+// and its diff, with the repo's GitHub link before the diff. That line
+// never wraps: the base gives way first, then the branch. The title is
+// edited in place (EditableTitleView), the PR's while it is open. What
+// the work is and what to do about its PR follow under the header. The
+// project map's slim PR draws all of it but the diff at once, so the
+// header doesn't grow when the lookup answers.
 import type { ReactNode, Ref } from "react";
 import { ArrowLeft, Layers2 } from "lucide-react";
 import { IconButton } from "../../primitives/icon-button.tsx";
@@ -28,6 +29,7 @@ export function WorktreeHeaderView({
   titleEdit,
   pr,
   branchTitle,
+  github,
   stack,
   diff,
   lineRef,
@@ -47,6 +49,8 @@ export function WorktreeHeaderView({
   };
   // The branch's line (BranchTitle).
   branchTitle: ReactNode;
+  // The repo's page on GitHub (GithubLinkView).
+  github?: ReactNode;
   // Where the PR sits in a stack, and the stack's list (StackListView).
   stack?: { name: string; list: ReactNode };
   // The PR's diff, once its lookup answers.
@@ -132,6 +136,7 @@ export function WorktreeHeaderView({
               </PopoverContent>
             </Popover>
           )}
+          {github}
           {diff && diff.changedFiles > 0 && (
             <DiffButtonView {...diff} words={false} />
           )}
