@@ -27,8 +27,8 @@ export function FirstRunView({
           </h1>
         </div>
         <p className="mb-8 text-sm leading-relaxed text-muted-foreground">
-          Shigoto no Mori manages parallel git worktrees. One project is a repo;
-          one worktree is a branch checked out into its own folder, launchable
+          Shigoto no Mori manages parallel git worktrees. One project is a repo.
+          One worktree is a branch checked out into its own folder, launchable
           in your editor with one click.
         </p>
         <ol className="mb-8 space-y-4 text-sm">

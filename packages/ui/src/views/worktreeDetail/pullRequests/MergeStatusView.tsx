@@ -11,10 +11,10 @@ import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 // The merge box's one status (describeMergeVerdict): its words, with
 // the checks' spinner while they run and its tone's mark otherwise,
 // and the run list a click away (ChecksPopoverView). With no checks to
-// list it is the words alone. One line. `compact` keeps the icon alone, its words in
-// the tooltip and for screen readers only, for a row with no room
-// (MergeBox). Words that show carry data-status-label for that
-// measuring.
+// list it is the words alone. One line. `compact` keeps the icon
+// alone, its words in the tooltip and for screen readers only, for a
+// row with no room (MergeBox). Words that show carry
+// data-status-label for that measuring.
 export function MergeStatusView({
   pr,
   verdict,

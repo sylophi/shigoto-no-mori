@@ -12,7 +12,7 @@ import { PullRequestTitleLinkView } from "./PullRequestTitleLinkView.tsx";
 // below describes who's merging where and when it was last touched,
 // with the diff button as the row's right-hand affordance. A hidden
 // natural-width copy of the row measures whether the "last updated"
-// trailing clause fits; if not, the visible copy drops it.
+// trailing clause fits. If not, the visible copy drops it.
 export function PullRequestIdentityView({
   pr,
   now,
@@ -73,14 +73,14 @@ export function PullRequestIdentityView({
       >
         {metaRow(showUpdated ? updatedLabel : null)}
         {/* inert keeps the natural-width measurer out of the tab order
-            and the accessibility tree; pointer-events-none alone leaves
-            the duplicated button focusable. The wrapper is pinned to the
+            and the accessibility tree, since pointer-events-none alone
+            leaves the duplicated button focusable. The wrapper is pinned to the
             row's width and clips: a left-0 absolute nowrap box
             shrink-wraps to its full content width, so unclipped it widens
             the scroll pane's scrollable area (horizontal scrollbar). The
             observed inner div stays w-max so content-width changes (font
             swap, doubutsu weight remap) resize it and re-trigger
-            measurement; its scrollWidth reports the full natural width. */}
+            measurement. Its scrollWidth reports the full natural width. */}
         <div
           aria-hidden
           inert

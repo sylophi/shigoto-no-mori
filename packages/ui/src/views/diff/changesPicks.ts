@@ -9,13 +9,13 @@ import {
 import { changedFilePaths } from "./changesControls.ts";
 
 // What the changes page has ticked. The page holds it rather than
-// reading it off the index, the way GitHub Desktop does: every file
-// starts ticked, one that turns up later comes in ticked, and the index
-// is left alone until a commit sets it to exactly this
-// (the engine's git/commit.ts). So a file an agent staged (`git mv` does)
-// doesn't decide what goes in, and a tick here doesn't hand the user's
-// picks to an agent's `git commit`. Ticks are this window's own: another
-// device keeps its own (the app's useChangesPicks holds them).
+// reading it off the index: every file starts ticked, one that turns up
+// later comes in ticked, and the index is left alone until a commit
+// sets it to exactly this (the engine's git/commit.ts). So a file an
+// agent staged (`git mv` does) doesn't decide what goes in, and a tick
+// here doesn't hand the user's picks to an agent's `git commit`. Ticks
+// are this window's own: another device keeps its own (the app's
+// useChangesPicks holds them).
 //
 // By row (changeKey), the rows that aren't wholly ticked: the changes of
 // theirs that go in, none for a row left out. A picked change is known

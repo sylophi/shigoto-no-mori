@@ -30,7 +30,7 @@ export function BranchRowView({
   // That worktree's kind (WorktreeKindIcon), for a primary or external
   // one.
   kindIcon: ReactNode;
-  // null when not editing; otherwise the in-flight edit value.
+  // The in-flight edit value, null when not editing.
   draft: string | null;
   onDraft: (draft: string | null) => void;
   renamePending: boolean;

@@ -5,7 +5,7 @@ import { cn } from "../../lib/utils.ts";
 import type { DetectedLauncher } from "@shigomori/contracts/schemas";
 
 interface DetectedToolsSectionProps {
-  // Detected AND available; the not-installed remainder is its own section.
+  // Detected AND available. The not-installed remainder is its own section.
   tools: DetectedLauncher[];
   hidden: string[];
   onToggle: (id: string) => void;

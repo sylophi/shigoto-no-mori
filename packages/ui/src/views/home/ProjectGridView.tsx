@@ -1,5 +1,6 @@
-// The home page, drawn (ProjectGrid.tsx binds it): the sidebar's list of projects laid out as tiles, for
-// the main pane to show while nothing is open.
+// The home page, drawn (ProjectGrid.tsx binds it): the sidebar's list
+// of projects laid out as tiles, for the main pane to show while
+// nothing is open.
 // The same projects in the same order, narrowed by the same device
 // filter and split by owner the same way (forestSources.ts and the
 // tree's own builder), so the grid and the list beside it never

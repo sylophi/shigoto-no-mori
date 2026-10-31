@@ -20,7 +20,7 @@ type ThemeHeaderProps = DevAffordance & {
 // the corner slot beside the dev sticker (a dev web build carries both:
 // they answer different questions, "which shell" vs "which build").
 
-// Both headers always render; `doubutsu-only` / `v1-only` pick which
+// Both headers always render, and `doubutsu-only` / `v1-only` pick which
 // shows. A JS branch on the theme would fork this component per theme.
 // SidebarHeader binds the dev mark (a client fact off the preload
 // bridge) and its one-way reveal.

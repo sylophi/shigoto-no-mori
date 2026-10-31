@@ -4,8 +4,7 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 import { tildify } from "@shigomori/contracts/projectPaths";
 import type { WorktreeLayout } from "@shigomori/contracts/schemas";
-import type { DeviceLayout } from "./layoutOptions.ts";
-import type { LayoutOption } from "./layoutOptions.ts";
+import type { DeviceLayout, LayoutOption } from "./layoutOptions.ts";
 import {
   managedDriveBaseFor,
   worktreeBaseFor,

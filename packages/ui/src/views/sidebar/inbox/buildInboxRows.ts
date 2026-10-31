@@ -1,18 +1,22 @@
 import {
   pullRequestStackPosition,
+  type StackPosition,
   trunkOf,
 } from "@shigomori/contracts/pullRequestStack";
 import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
-import type { ProjectShigomoriConfigQueries } from "../../../lib/forest.ts";
+import type {
+  LocalSide,
+  MirrorLink,
+  ProjectPullRequestQueries,
+  ProjectShigomoriConfigQueries,
+  ProjectWorktreeQueries,
+  RemoteForestItem,
+} from "../../../lib/forest.ts";
 import { showPrimaryInInbox } from "../../../lib/showPrimaryInInbox.ts";
-import type { LocalSide, MirrorLink } from "../../../lib/forest.ts";
-import type { ProjectPullRequestQueries } from "../../../lib/forest.ts";
-import type { RemoteForestItem } from "../../../lib/forest.ts";
-import type { ProjectWorktreeQueries } from "../../../lib/forest.ts";
-import {
-  type Project,
-  type PullRequest,
-  type Worktree,
+import type {
+  Project,
+  PullRequest,
+  Worktree,
 } from "@shigomori/contracts/schemas";
 import {
   deviceBadgeOf,
@@ -23,7 +27,6 @@ import {
   worktreeShelfOf,
 } from "../buildSidebarRows.ts";
 import type { SidebarDeviceBadge } from "../DeviceBadgeView.tsx";
-import type { StackPosition } from "@shigomori/contracts/pullRequestStack";
 import {
   INBOX_SHELVES,
   type InboxShelf,
@@ -160,10 +163,9 @@ export function buildInboxRows({
     trunk = trunkOf(trees),
   ) => {
     for (const worktree of trees) {
+      const key = worktreeRowKey(device?.deviceId, worktree.id);
       if (worktree.isPrimary && showPrimary !== true) {
-        if (showPrimary === false) {
-          leftOut.add(worktreeRowKey(device?.deviceId, worktree.id));
-        }
+        if (showPrimary === false) leftOut.add(key);
         continue;
       }
       const pr = prs?.[worktree.branch];
@@ -187,12 +189,12 @@ export function buildInboxRows({
         shelf,
       };
       if (device === undefined) localShelf.set(worktree.id, shelf);
-      filed.add(worktreeRowKey(device?.deviceId, worktree.id));
+      filed.add(key);
       if (shelf === null) {
         live.push(entry);
       } else {
         shelves[shelf].push(entry);
-        shelfOf.set(worktreeRowKey(device?.deviceId, worktree.id), shelf);
+        shelfOf.set(key, shelf);
       }
     }
   };
@@ -200,7 +202,7 @@ export function buildInboxRows({
     if (project.pathExists === false) return;
     file(
       project,
-      (worktreeQueries[i]?.data ?? []) as readonly Worktree[],
+      worktreeQueries[i]?.data ?? [],
       pullRequestQueries[i]?.data,
       showPrimaryInInbox(configQueries[i]?.data),
       undefined,

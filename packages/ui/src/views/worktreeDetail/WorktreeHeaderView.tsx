@@ -79,7 +79,7 @@ export function WorktreeHeaderView({
         )}
       </div>
       {/* One line however narrow. The base gives way first, and goes
-          altogether before the branch would have to; then the branch.
+          altogether before the branch would have to, then the branch.
           The stack and the diff keep their place. */}
       <div className="flex min-w-0 items-center justify-between gap-3">
         <div

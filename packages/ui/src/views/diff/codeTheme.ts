@@ -19,7 +19,7 @@ export const CODE_THEME = {
 };
 
 // In pixels, and numbers rather than CSS because the diff pane's
-// virtualizer places undrawn rows by them too (DiffView's DIFF_METRICS).
+// virtualizer places undrawn rows by them too (DiffPageView's DIFF_METRICS).
 export const CODE_LINE_HEIGHT = 18;
 export const CODE_GAP_BLOCK = 4;
 

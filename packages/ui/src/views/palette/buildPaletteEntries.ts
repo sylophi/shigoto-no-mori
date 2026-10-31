@@ -3,31 +3,21 @@ import type {
   PalettePage,
   PaletteProject,
 } from "./paletteEntries.ts";
-
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
-
-import type { MirrorLink } from "../../lib/forest.ts";
-
-import type { RemoteForestItem } from "../../lib/forest.ts";
-
-import type { ProjectPullRequestQueries } from "../../lib/forest.ts";
-
-import type { ProjectWorktreeQueries } from "../../lib/forest.ts";
-
+import type {
+  MirrorLink,
+  ProjectPullRequestQueries,
+  ProjectWorktreeQueries,
+  RemoteForestItem,
+} from "../../lib/forest.ts";
 import { rankByScore, scoreFields } from "../../lib/fuzzyMatch.ts";
-
 import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
-
 import { isAnchoredPath } from "@shigomori/contracts/projectPaths";
-
 import { isHiddenByPrefix } from "@shigomori/contracts/sharedSettings";
-
 import {
   worktreeLastActivityAt,
   type Project,
-  type Worktree,
 } from "@shigomori/contracts/schemas";
-
 import {
   deviceBadgeOf,
   mirrorBadgeLookup,
@@ -37,9 +27,7 @@ import {
   worktreeShelfOf,
 } from "../sidebar/buildSidebarRows.ts";
 import { ownerOf } from "../sidebar/sidebarRow.ts";
-
 import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
-
 import { worktreeTitle } from "../../lib/worktreeTitle.ts";
 
 export interface PaletteList {
@@ -91,7 +79,7 @@ export function buildPaletteEntries({
   const folds = new Map<string, string>();
 
   projects.forEach((project, i) => {
-    const trees = (worktreeQueries[i]?.data ?? []) as readonly Worktree[];
+    const trees = worktreeQueries[i]?.data ?? [];
     const pullRequests = pullRequestQueries[i]?.data;
     for (const worktree of trees) {
       localIds.add(worktree.id);

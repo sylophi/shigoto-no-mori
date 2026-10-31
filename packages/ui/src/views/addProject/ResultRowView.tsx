@@ -28,8 +28,8 @@ export function ResultRowView({
   onToggle,
 }: ResultRowProps) {
   const relative = relativeFromRoot(path, scanRoot);
-  // Result == scanRoot leaves `relative` equal to the absolute path; let
-  // PathSpan tildify+shorten it. Nested results are already short.
+  // Result == scanRoot leaves `relative` equal to the absolute path, which
+  // PathSpan tildifies and shortens. Nested results are already short.
   const showAbsolute = relative === path;
   return (
     <Command.Item

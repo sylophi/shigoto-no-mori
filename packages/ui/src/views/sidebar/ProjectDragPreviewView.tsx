@@ -7,7 +7,7 @@ interface ProjectDragPreviewProps {
   chip?: boolean;
 }
 
-// Matches the arrange-mode ProjectHeader layout so the preview lines
+// Matches the arrange-mode ProjectHeaderView layout so the preview lines
 // up exactly with the row the cursor grabbed.
 export function ProjectDragPreviewView({
   project,

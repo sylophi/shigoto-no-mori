@@ -20,10 +20,6 @@ export function migrationEnded(
     migration.planned &&
     [migration.import, migration.worktrees].every(ended) &&
     (ended(signIn) || signIn?.asks === true);
-  return {
-    open:
-      settled && steps.every((step) => step === null || step.state === "done"),
-    canContinue:
-      settled && !steps.every((step) => step === null || step.state === "done"),
-  };
+  const done = steps.every((step) => step === null || step.state === "done");
+  return { open: settled && done, canContinue: settled && !done };
 }
