@@ -2,7 +2,7 @@
  * Doubutsu theme: the default Animal Crossing visual overlay. Opt out
  * via Settings -> Appearance, which restores the plain v1 look.
  * Activated by adding `.doubutsu` to the theme root (via usePalette).
- * Orthogonal to .dark;
+ * Orthogonal to .dark:
  * .doubutsu and .doubutsu.dark each remap the shadcn-style tokens every
  * component reads, so components take the palette, radii and font with
  * no rule of their own.
@@ -83,7 +83,7 @@
    *
    *   background  (0.974 c=0.011)  base canvas cream
    *   card        (0.992 c=0.008)  lifted: panels float ABOVE canvas
-   *   popover     (pure white)     floats above even card; with shadows
+   *   popover     (pure white)     floats above even card. With shadows
    *                                stripped the color step IS elevation
    *   muted       (0.945 c=0.025)  recessed warm cream for chips, code,
    *                                ghost-button hover, outline-button hover
@@ -91,9 +91,9 @@
    *
    *   primary    (saturated leaf)  the rare loud CTA: Save, Add, Confirm
    *   accent     (pastel mint)     the constant quiet pillow: selection
-   *   sidebar    (calm mint)       the rail; accent reads "one notch darker"
+   *   sidebar    (calm mint)       the rail, where accent reads "one notch darker"
    *
-   * Foreground text is the same warm brown across everything; AC uses
+   * Foreground text is the same warm brown across everything: AC uses
    * one text color, not a contrast cascade per surface.
    */
   --background: oklch(0.974 0.011 84.6);
@@ -194,7 +194,7 @@
   --color-amber-700: oklch(0.5 0.1 62);
   --color-sky-500: oklch(0.6 0.11 235);
   /* Violet is the merged-PR purple (a GitHub convention worth keeping
-     legible) and indigo the pull-and-push action; both calm toward the
+     legible) and indigo the pull-and-push action. Both calm toward the
      palette the way sky does rather than sitting at stock saturation. */
   --color-violet-500: oklch(0.58 0.13 300);
   --color-indigo-500: oklch(0.56 0.12 268);
@@ -639,7 +639,7 @@
   border-radius: var(--radius-lg);
 }
 
-/* Quiet action chips built on an inset ring alone in v1; the muted
+/* Quiet action chips built on an inset ring alone in v1. The muted
    pill fill makes them read as controls with the rings gone. */
 .doubutsu [data-slot="chip"] {
   background-color: var(--muted);
@@ -681,7 +681,7 @@
 /* --- Open popups keep their trigger lit ---
    v1 marks an open trigger with border-input + a ring, both stripped.
    The accent pillow is doubutsu's "active" signal everywhere else, so
-   use it here too. aria-haspopup scopes this to menu/combobox triggers;
+   use it here too. aria-haspopup scopes this to menu/combobox triggers:
    tooltip triggers also carry data-popup-open but no haspopup, and the
    combobox's search <input> carries both, so keep it a plain field. A
    destructive sub trigger (the project menu's Remove) keeps the red
@@ -709,7 +709,7 @@
 
    Alpha (--doubutsu-band-fill) is the whole knob here, and it trades
    against the lift. Light mode has only 0.018 of lightness between
-   --card and --background, so the band leans on that thin margin;
+   --card and --background, so the band leans on that thin margin:
    much below 70% and it stops reading as a panel at all. Dark has 0.09
    to spend and takes dilution far more happily.
 
@@ -787,8 +787,8 @@
 }
 /* The pierre diff viewer renders inside shadow DOM, where the class
    selectors above can't reach, but the body's 700 still gets in via
-   inheritance, so diff code would render at 700. Pin the mono
-   treatment on the wrapper; font-weight is inherited, so it carries
+   inheritance, so diff code would render at 700. The mono treatment is
+   pinned on the wrapper, and since font-weight is inherited, it carries
    across the shadow boundary. */
 .doubutsu :is([data-slot="diff-view"], [data-slot="file-view"]) {
   font-weight: 550;
@@ -826,8 +826,8 @@
    color shift is the boundary.
 
    The base-layer [data-sidebar] token overrides assume the translucent
-   vibrancy surface; doubutsu's rail is opaque mint, so restore the
-   doubutsu palette's own muted/accent pairings here. */
+   vibrancy surface. Doubutsu's rail is opaque mint, so the doubutsu
+   palette's own muted/accent pairings are restored here. */
 .doubutsu [data-doubutsu-zone="sidebar"] {
   background-color: var(--doubutsu-sidebar);
   --muted-foreground: var(--doubutsu-rail-muted-foreground);
@@ -873,7 +873,7 @@
 
 /* The device pill (the worktree header's chip, a project page's
    device tabs): the picked tab keeps the accent fill every selection
-   here wears; every other pill lost its hairline with the rest and
+   here wears. Every other pill lost its hairline with the rest and
    takes the chip's muted fill instead, so it reads as a pill on the
    band. */
 .doubutsu [data-slot="device-chip"]:not([aria-selected="true"]) {
@@ -1255,7 +1255,7 @@
 }
 
 /* The stripes stop too where nobody is looking, a pointer resting on an
-   unfocused window included; a 0.6 s loop starting over is invisible.
+   unfocused window included (a 0.6 s loop starting over is invisible).
    On battery they run: they only run under a pointer or a finger, and
    a highlight's are one control's worth. */
 .doubutsu.unfocused {

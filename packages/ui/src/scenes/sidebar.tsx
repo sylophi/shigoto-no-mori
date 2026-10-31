@@ -6,7 +6,7 @@
 import { defaultBinding } from "../lib/keymap.ts";
 import { buildGrid } from "../views/home/gridModel.ts";
 import type { ReactNode } from "react";
-import type { SidebarView } from "@shigomori/contracts/schemas";
+import type { Project, SidebarView } from "@shigomori/contracts/schemas";
 import { AddProjectButtonView } from "../views/sidebar/AddProjectButtonView.tsx";
 import {
   buildSidebarRows,
@@ -75,7 +75,7 @@ import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
 // Which app draws the forest: the desktop window on Studio Mac, whose
 // own projects are local there, or the web shell, a browser to which
 // every machine is a peer.
-export type SceneShell = "desktop" | "web";
+type SceneShell = "desktop" | "web";
 
 const noop = () => {};
 
@@ -208,6 +208,17 @@ function inboxModel(shell: SceneShell) {
   });
 }
 
+// The projects as stored, none pinned or in a folder.
+function manualOrder(projects: Project[], remote: RemoteForestItem[]) {
+  return projectGroupOrder({
+    projects,
+    remote,
+    sortMode: "manual",
+    pinned: new Set(),
+    folders: new Map(),
+  });
+}
+
 function treeModel(shell: SceneShell, openKey: string | null) {
   const local = localInputs(shell);
   const remote = remoteForests(shell);
@@ -216,13 +227,7 @@ function treeModel(shell: SceneShell, openKey: string | null) {
     openKey,
     inline: null,
     worktreeSort: () => "name",
-    order: projectGroupOrder({
-      projects: local.projects,
-      remote,
-      sortMode: "manual",
-      pinned: new Set(),
-      folders: new Map(),
-    }),
+    order: manualOrder(local.projects, remote),
     openShelves: {
       agentWorking: new Set(),
       shelved: new Set(),
@@ -255,13 +260,7 @@ export function sceneGrid() {
   const remote = remoteForests("desktop");
   return buildGrid({
     ...local,
-    order: projectGroupOrder({
-      projects: local.projects,
-      remote,
-      sortMode: "manual",
-      pinned: new Set(),
-      folders: new Map(),
-    }),
+    order: manualOrder(local.projects, remote),
     hiddenPrefixes: [],
     allowAgentWorking: MARKS.allowAgentWorking,
     byOwner: true,

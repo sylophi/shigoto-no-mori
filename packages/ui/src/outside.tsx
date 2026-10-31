@@ -1,7 +1,7 @@
 // How a view reaches outside the app: a web URL opens in the system
 // browser, a local path in the file manager. The app provides both at
-// its root (they go through the host, and report a failure as a toast);
-// a scene gets the defaults, which do nothing. A view takes them at
+// its root (they go through the host, and report a failure as a toast),
+// and a scene gets the defaults, which do nothing. A view takes them at
 // render and calls them at click time.
 import { createContext, useContext } from "react";
 

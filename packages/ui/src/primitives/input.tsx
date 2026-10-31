@@ -8,7 +8,7 @@ import { cn } from "../lib/utils.ts";
 import type { WithoutTitle } from "./tooltip.tsx";
 
 // Single source of truth for text-field chrome. Sizing, font, and layout
-// stay at the call site; this carries the surface + focus treatment so
+// stay at the call site. This carries the surface and focus treatment so
 // every field reads the same and theme overlays (doubutsu) have one
 // stable data-slot hook instead of a per-site class contract.
 export const fieldClass =

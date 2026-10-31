@@ -23,7 +23,7 @@ function measureCharWidth(font: string): number {
 function fontOf(el: Element): string {
   const style = getComputedStyle(el);
   // Some browsers leave the `font` shorthand blank when not all longhands
-  // were set together; rebuild from size + family in that case.
+  // were set together, so it is rebuilt from size and family then.
   return style.font || `${style.fontSize} ${style.fontFamily}`;
 }
 

@@ -6,8 +6,8 @@ import type { WithoutTitle } from "./tooltip.tsx";
 
 // Right-click flavour of ./dropdown-menu. Base UI's ContextMenu differs
 // from Menu only in its Root (anchors at the pointer) and Trigger (opens
-// on contextmenu / long press); every part below those is the same Menu
-// part. So this file stops at those two, and the popup, items,
+// on contextmenu or long press). Every part below those is the same Menu
+// part, so this file stops at those two, and the popup, items,
 // separators, groups and labels come from ./dropdown-menu: same
 // components, same data-slots, so doubutsu's menu hooks apply without a
 // second entry.

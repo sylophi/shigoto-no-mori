@@ -76,7 +76,7 @@ export function patchOf(
   } as const;
   return Object.fromEntries(
     Object.entries(fields)
-      .filter(([, [was, now]]) => JSON.stringify(was) !== JSON.stringify(now))
+      .filter(([, [was, now]]) => !same(was, now))
       .map(([key, [, now]]) => [key, now ?? null]),
   ) as ProjectSettingsPatch;
 }

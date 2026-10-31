@@ -73,10 +73,10 @@ function TooltipContent({
 }
 
 // The browser's own tooltip is banned (no-native-tooltip in
-// lint/rules/no-native-tooltip.mts). A wrapper that passes its props to the DOM drops
-// `title` from them with this, so `<Button title>` fails to type check
-// where the lint rule, which can't see through a component, would miss
-// it. Wrap the element in SimpleTooltip instead.
+// lint/rules/no-native-tooltip.mts). A wrapper that passes its props to
+// the DOM drops `title` from them with this, so `<Button title>` fails
+// to type check where the lint rule, which can't see through a
+// component, would miss it. Wrap the element in SimpleTooltip instead.
 type WithoutTitle<Props> = Omit<Props, "title">;
 
 type TooltipChild = ReactElement<
@@ -86,7 +86,7 @@ type TooltipChild = ReactElement<
 // Drop-in replacement for a native `title` hint: wraps one element
 // with a styled tooltip without adding DOM (TooltipTrigger merges onto
 // the child via the render prop, so the child needs to accept ref and
-// event props on its root; plain DOM elements always do). A falsy tip
+// event props on its root, as plain DOM elements always do). A falsy tip
 // shows nothing, mirroring `title={undefined}`, and keeps the same
 // tree, so a tip that comes and goes doesn't remount the child (and
 // take its focus). A disabled child still shows its tip (often the

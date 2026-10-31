@@ -69,7 +69,7 @@ import {
   PickSideView,
 } from "../views/worktreeDetail/WorktreeSyncPillView.tsx";
 import { NO_REWRITE } from "../lib/commitRewrite.ts";
-import type { ScriptRunState } from "../lib/scriptRun.ts";
+import { IDLE_RUN } from "./world.ts";
 import type {
   ChangedFile,
   StashEntry,
@@ -118,17 +118,6 @@ const STASHES: StashEntry[] = [
     date: ago(2880),
   },
 ];
-
-const IDLE: ScriptRunState = {
-  runId: null,
-  status: "idle",
-  hasOutput: false,
-  interactive: false,
-  exitCode: null,
-  startedAt: null,
-  endedAt: null,
-  cancelling: false,
-};
 
 const PORTS: WorktreePort[] = [
   { port: 5173, label: "vite", source: "pool", listening: true },
@@ -181,7 +170,7 @@ export function gitSection(worktree: Worktree, stashes = STASHES) {
   );
 }
 
-function scriptRow(name: string, state = IDLE, command = `pnpm ${name}`) {
+function scriptRow(name: string, state = IDLE_RUN, command = `pnpm ${name}`) {
   return (
     <ScriptRowView
       key={name}
@@ -235,8 +224,12 @@ export function scriptsSection() {
             scriptRow(
               label,
               entry.name === "dev"
-                ? { ...IDLE, status: "running", startedAt: NOW - 4 * MINUTE }
-                : IDLE,
+                ? {
+                    ...IDLE_RUN,
+                    status: "running",
+                    startedAt: NOW - 4 * MINUTE,
+                  }
+                : IDLE_RUN,
               entry.command,
             )
           }
@@ -244,7 +237,7 @@ export function scriptsSection() {
       }
       lifecycle={[
         scriptRow("Setup", {
-          ...IDLE,
+          ...IDLE_RUN,
           status: "exited",
           exitCode: 0,
           startedAt: NOW - 90 * MINUTE,

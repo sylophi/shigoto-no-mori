@@ -1,10 +1,10 @@
 import { assertNever } from "./utils.ts";
 import type { Project, ProjectSortMode } from "@shigomori/contracts/schemas";
 
-// Orders the sidebar project list for display. `manual` preserves the stored
-// (drag-arranged) order; the usage sorts read the `lastUsed` / `recentCount`
-// fields populated by the projects:list handler. Mirrors the package.json
-// scripts sort in sortPackageScripts.ts.
+// Orders the sidebar project list for display. `manual` preserves the
+// stored (drag-arranged) order, and the usage sorts read the `lastUsed`
+// and `recentCount` fields populated by the projects:list handler.
+// Mirrors the package.json scripts sort in sortPackageScripts.ts.
 export function sortProjects(
   projects: readonly Project[],
   mode: ProjectSortMode,

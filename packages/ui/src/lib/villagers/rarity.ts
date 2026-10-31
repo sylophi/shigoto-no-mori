@@ -7,7 +7,7 @@ import type { VillagerProfile } from "@shigomori/contracts/schemas";
 // profile's kind. Legendary is picked by hand and holds names only.
 export type VillagerRarity = "common" | "rare" | "legendary";
 
-const LEGENDARY_VILLAGERS: readonly string[] = [
+const LEGENDARY = new Set([
   "tom-nook",
   "isabelle",
   "kk-slider",
@@ -20,14 +20,12 @@ const LEGENDARY_VILLAGERS: readonly string[] = [
   "brewster",
   "kappn",
   "pascal",
-];
-
-const legendary = new Set(LEGENDARY_VILLAGERS);
+]);
 
 export function villagerRarity(
   slug: string,
   profile: Pick<VillagerProfile, "kind">,
 ): VillagerRarity {
-  if (legendary.has(slug)) return "legendary";
+  if (LEGENDARY.has(slug)) return "legendary";
   return profile.kind === "special" ? "rare" : "common";
 }

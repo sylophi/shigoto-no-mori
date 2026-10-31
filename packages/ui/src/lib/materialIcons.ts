@@ -107,8 +107,7 @@ const EXTENSION_TO_LANGUAGE: Record<string, string> = {
 // Strip a single trailing 'separator-suffix' and keep walking down to find
 // the most specific extension the manifest knows. For 'foo.test.ts' we try
 // 'test.ts' first, then 'ts'. Matches VS Code's resolution order.
-function* extensionsOf(name: string): Generator<string> {
-  const lower = name.toLowerCase();
+function* extensionsOf(lower: string): Generator<string> {
   for (let i = 0; i < lower.length; i++) {
     if (lower[i] === ".") {
       const ext = lower.slice(i + 1);

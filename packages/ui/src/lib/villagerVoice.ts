@@ -117,7 +117,7 @@ export function villagerLine(
   speaker: Pick<Speaker, "profile">,
   message: string,
 ): VillagerLine | null {
-  const phrase = sayable(speaker.profile.catchphrase);
+  const phrase = villagerCatchphrase(speaker.profile);
   if (phrase === null) return null;
   const lead = message.replace(TRAILING_PUNCTUATION, "");
   if (lead === "") return null;
