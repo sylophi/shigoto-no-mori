@@ -19,28 +19,44 @@ import { StackListView } from "@shigomori/ui/views/worktreeDetail/pullRequests/S
 import { PullRequestTitleLinkView } from "@shigomori/ui/views/worktreeDetail/pullRequests/PullRequestTitleLinkView.tsx";
 import { MERGE_VERB } from "@shigomori/ui/views/worktreeDetail/pullRequests/pullRequestShared.ts";
 import { WorktreeHeaderView } from "@shigomori/ui/views/worktreeDetail/WorktreeHeaderView.tsx";
+import { GithubLinkView } from "@shigomori/ui/views/worktreeDetail/GithubLinkView.tsx";
 
 export function WorktreeHeader({
   worktree,
   title,
   pr,
+  githubPage = null,
 }: {
   worktree: Worktree;
   title: string | null;
   pr: PullRequest | PullRequestDetail | null;
+  // The repo's page on GitHub, linked from the branch line.
+  githubPage?: string | null;
 }) {
-  if (title === null) return <BranchTitle worktree={worktree} />;
-  return <TitledHeader worktree={worktree} title={title} pr={pr} />;
+  const github = githubPage !== null && <GithubLinkView url={githubPage} />;
+  if (title === null) {
+    return (
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <BranchTitle worktree={worktree} />
+        {github}
+      </div>
+    );
+  }
+  return (
+    <TitledHeader worktree={worktree} title={title} pr={pr} github={github} />
+  );
 }
 
 function TitledHeader({
   worktree,
   title,
   pr,
+  github,
 }: {
   worktree: Worktree;
   title: string;
   pr: PullRequest | PullRequestDetail | null;
+  github: React.ReactNode;
 }) {
   const nav = useWorktreeNav();
   const { data } = useWorktreePullRequest(worktree.projectId, worktree.branch, {
@@ -91,6 +107,7 @@ function TitledHeader({
           : undefined
       }
       branchTitle={<BranchTitle worktree={worktree} subtitle />}
+      github={github}
       stack={
         stack
           ? {

@@ -1,4 +1,3 @@
-import { WEB_GITHUB_ID } from "@shigomori/contracts/schemas/launchers";
 import { findExecutable } from "./executables.ts";
 import { byPlatform } from "./platform.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -10,7 +9,6 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as EngineConfig from "./Config.ts";
-import * as Git from "./Git.ts";
 import * as Paths from "./Paths.ts";
 import * as Usage from "./Usage.ts";
 
@@ -40,10 +38,10 @@ export type CatalogEntry = {
   readonly editor?: true;
 };
 
-// One launcher on a project's row: an installed app, the repo's GitHub
-// page, or a custom command (the device's, then the project's).
+// One launcher on a project's row: an installed app or a custom command
+// (the device's, then the project's).
 export type RowEntry = {
-  readonly kind: "detected" | "web" | "custom";
+  readonly kind: "detected" | "custom";
   readonly id: string;
   readonly label: string;
   // Set on detected apps, which are installed by being listed.
@@ -51,8 +49,7 @@ export type RowEntry = {
 };
 
 // A launcher with what launching it takes: an installed app with the
-// bundle or tool it was found by, the repo's GitHub page, or a custom
-// command line.
+// bundle or tool it was found by, or a custom command line.
 export type Launchable =
   | (RowEntry & {
       readonly kind: "detected";
@@ -61,7 +58,6 @@ export type Launchable =
       readonly bundle: string | undefined;
       readonly cliOnPath: boolean;
     })
-  | (RowEntry & { readonly kind: "web"; readonly url: string })
   | (RowEntry & { readonly kind: "custom"; readonly command: string });
 
 export type LauncherRow = {
@@ -82,8 +78,8 @@ export class Launchers extends Context.Service<
       readonly path: string;
     }) => Effect.Effect<LauncherRow>;
     // Every launcher the project has, hidden ones included, in the row's
-    // order of assembly: installed apps, the GitHub page, the device's
-    // custom commands, then the project's.
+    // order of assembly: installed apps, the device's custom commands,
+    // then the project's.
     readonly launchable: (project: {
       readonly id: string;
       readonly path: string;
@@ -92,21 +88,6 @@ export class Launchers extends Context.Service<
     readonly installed: (id: string) => Effect.Effect<CatalogApp | undefined>;
   }
 >()("sm/engine/Launchers") {}
-
-// Whether a remote URL is a GitHub repo, which gets the web entry.
-const GITHUB_REMOTE =
-  /^(?:git@|ssh:\/\/git@|https:\/\/)([^:/]*github[^:/]*)[:/]([^/]+)\/(.+?)(?:\.git)?\/?$/;
-
-const isGithubRemote = (remoteUrl: string) =>
-  GITHUB_REMOTE.test(remoteUrl.trim());
-
-// The repo's page on GitHub, for a remote that is a GitHub repo.
-const githubPage = (remoteUrl: string) => {
-  const [, host, owner, repo] = GITHUB_REMOTE.exec(remoteUrl.trim()) ?? [];
-  return host === undefined || owner === undefined || repo === undefined
-    ? undefined
-    : `https://${host}/${owner}/${repo}`;
-};
 
 // A JSON field read as a string: absent, null or text.
 const text = (value: unknown) =>
@@ -196,7 +177,6 @@ const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const { home } = yield* Paths.Paths;
   const settings = yield* EngineConfig.Config;
-  const git = yield* Git.Git;
   const usage = yield* Usage.Usage;
   const appFolders = appFoldersOf(path, home);
   // The provider the engine was built with, not the caller's: a fiber
@@ -258,7 +238,7 @@ const make = Effect.gen(function* () {
     readonly id: string;
     readonly path: string;
   }) {
-    const [device, stored, installed, onGithub, stats] = yield* Effect.all(
+    const [device, stored, installed, stats] = yield* Effect.all(
       [
         settings.read({ kind: "device" }),
         settings.read({
@@ -267,10 +247,6 @@ const make = Effect.gen(function* () {
           path: project.path,
         }),
         Effect.filter(apps, available, { concurrency: "unbounded" }),
-        git.run(project.path, ["remote", "get-url", "origin"]).pipe(
-          Effect.map(isGithubRemote),
-          Effect.orElseSucceed(() => false),
-        ),
         usage.stats("launcher", ""),
       ],
       { concurrency: "unbounded" },
@@ -287,9 +263,6 @@ const make = Effect.gen(function* () {
         label: app.label,
         available: true as const,
       })),
-      ...(onGithub
-        ? [{ kind: "web" as const, id: WEB_GITHUB_ID, label: "GitHub" }]
-        : []),
       ...deviceLaunchers.custom,
       ...(configured ? launchersOf(stored).custom : []),
     ];
@@ -327,7 +300,7 @@ const make = Effect.gen(function* () {
     readonly id: string;
     readonly path: string;
   }) {
-    const [device, stored, installed, remote] = yield* Effect.all(
+    const [device, stored, installed] = yield* Effect.all(
       [
         settings.read({ kind: "device" }),
         settings.read({
@@ -339,9 +312,6 @@ const make = Effect.gen(function* () {
         Effect.forEach(apps, available, { concurrency: "unbounded" }).pipe(
           Effect.map((found) => apps.filter((_, index) => found[index])),
         ),
-        git
-          .run(project.path, ["remote", "get-url", "origin"])
-          .pipe(Effect.orElseSucceed(() => "")),
       ],
       { concurrency: "unbounded" },
     );
@@ -358,7 +328,6 @@ const make = Effect.gen(function* () {
         };
       }),
     );
-    const page = githubPage(remote);
     const configured =
       typeof stored?.defaultBranch === "string" &&
       stored.defaultBranch.trim() !== "";
@@ -371,20 +340,7 @@ const make = Effect.gen(function* () {
       label: label ?? "",
       command: command ?? "",
     }));
-    return [
-      ...detected,
-      ...(page === undefined
-        ? []
-        : [
-            {
-              kind: "web" as const,
-              id: WEB_GITHUB_ID,
-              label: "GitHub",
-              url: page,
-            },
-          ]),
-      ...custom,
-    ] satisfies ReadonlyArray<Launchable>;
+    return [...detected, ...custom] satisfies ReadonlyArray<Launchable>;
   });
 
   const installed = Effect.fn("Launchers.installed")(function* (id: string) {

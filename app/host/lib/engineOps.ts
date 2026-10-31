@@ -933,8 +933,8 @@ const decodeLauncherRow = Schema.decodeUnknownSync(
   }),
 );
 
-// The project's launcher row: installed tools, the GitHub entry and
-// custom commands, hidden ones left out, most used first.
+// The project's launcher row: installed tools and custom commands,
+// hidden ones left out, most used first.
 export const launcherRow = Effect.fnUntraced(function* (projectId: string) {
   const row = yield* asCall(
     Effect.gen(function* () {
@@ -1131,7 +1131,7 @@ export const bundleUnpack = Effect.fnUntraced(function* (
   return { fetched: [...fetched] };
 });
 
-// Launches a launcher-row entry (`app:…`, `custom:…`, `web:github`) in
+// Launches a launcher-row entry (`app:…`, `custom:…`) in
 // the worktree, which also counts the use.
 export const openLauncher = Effect.fnUntraced(function* (
   project: Project,

@@ -26,6 +26,13 @@ export function isCloneSource(source: string): boolean {
   return isCloneableRemote(cloneUrlOf(source));
 }
 
+// The repo's page, for a normalized remote on a GitHub host
+// (github.com or an Enterprise Server's).
+export function githubPageOf(remote: string | null | undefined): string | null {
+  const host = remote?.split("/")[0];
+  return host?.includes("github") ? `https://${remote}` : null;
+}
+
 // `host/owner/repo`, or null for anything machine-local. scp-style
 // without a user (`github.com:owner/repo`) is valid git syntax too.
 export function normalizeRemoteUrl(url: string): string | null {

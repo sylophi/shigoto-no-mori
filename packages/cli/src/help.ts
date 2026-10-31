@@ -253,7 +253,7 @@ const catalog = (names: Names) => {
       [
         "worktrees open [<tool>] [<name>]",
         "Launch a launcher-row tool in a worktree",
-        "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>, web:github), case-insensitive. With no tool, shows the row as a menu. " +
+        "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>), case-insensitive. With no tool, shows the row as a menu. " +
           "--project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher.",
       ],
       [

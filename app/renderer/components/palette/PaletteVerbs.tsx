@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
+import { GithubMark } from "@shigomori/ui/primitives/svgs/github-mark.tsx";
+import { githubPageOf } from "@shigomori/contracts/predicates/remoteUrl";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useBinding, useKeymap } from "@/hooks/ui/useKeymap";
 import { useHasLocalHost } from "@/lib/localHost";
@@ -163,6 +165,18 @@ function WorktreeVerbs({
       run: () => {
         actions.close();
         openUrl(pr.url, "Couldn't open pull request");
+      },
+    });
+  }
+  const githubPage = githubPageOf(entry.project.remote);
+  if (githubPage !== null) {
+    opens.push({
+      key: "github",
+      label: "Open on GitHub",
+      icon: iconOf(GithubMark),
+      run: () => {
+        actions.close();
+        openUrl(githubPage, "Couldn't open GitHub");
       },
     });
   }

@@ -5,7 +5,6 @@ import type { ComponentType } from "react";
 import { Sparkles } from "lucide-react";
 import { Copilot } from "../../primitives/svgs/copilot.tsx";
 import { Gemini } from "../../primitives/svgs/gemini.tsx";
-import { GithubMark } from "../../primitives/svgs/github-mark.tsx";
 import { Gitui } from "../../primitives/svgs/gitui.tsx";
 import { Helix } from "../../primitives/svgs/helix.tsx";
 import { Intellijidea } from "../../primitives/svgs/intellijidea.tsx";
@@ -20,7 +19,6 @@ import { Vim } from "../../primitives/svgs/vim.tsx";
 import { Webstorm } from "../../primitives/svgs/webstorm.tsx";
 import {
   parseLauncherId,
-  WEB_GITHUB_ID,
   type LauncherEntry,
 } from "@shigomori/contracts/schemas";
 
@@ -78,11 +76,6 @@ export function LauncherIconView({
   className = "size-4",
 }: LauncherIconProps) {
   if (entry.kind === "custom") {
-    return <Sparkles className={className} />;
-  }
-
-  if (entry.kind === "web") {
-    if (entry.id === WEB_GITHUB_ID) return <GithubMark className={className} />;
     return <Sparkles className={className} />;
   }
 

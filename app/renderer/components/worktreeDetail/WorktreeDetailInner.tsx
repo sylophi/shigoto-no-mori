@@ -51,6 +51,7 @@ import { NewWindowOption } from "./NewWindowOption";
 import { WorktreeHeader } from "./WorktreeHeader";
 import { WorktreeLocation } from "./WorktreeLocation";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
+import { githubPageOf } from "@shigomori/contracts/predicates/remoteUrl";
 import { GitSection } from "./git/GitSection";
 import { DescriptionSection } from "./DescriptionSection";
 
@@ -250,7 +251,12 @@ export function WorktreeDetailInner({
       }
       face={<ResidentFaceView resident={resident} party={party !== null} />}
       header={
-        <WorktreeHeader worktree={worktree} title={title} pr={pullRequest} />
+        <WorktreeHeader
+          worktree={worktree}
+          title={title}
+          pr={pullRequest}
+          githubPage={githubPageOf(project.remote)}
+        />
       }
       banner={bannerLabel}
       locked={locked}

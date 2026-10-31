@@ -59,11 +59,10 @@ export const FAKE_DETECTED = [
 ] as const;
 
 // A project's launch row: the tools found on the machine, a command of
-// its own and its repo on the web.
+// its own.
 export const FAKE_LAUNCHERS = [
   ...FAKE_DETECTED.filter((d) => d.available),
   { kind: "custom", id: "custom:deploy", label: "Deploy preview" },
-  { kind: "web", id: "web:github", label: "GitHub" },
 ] as const;
 
 // Claude Code's hooks in, Codex's waiting on a fresh install.
