@@ -49,7 +49,7 @@ export const dirty = Command.make(
             ? green(
                 `captured ${captured.changedFiles} change(s) from ${worktree.name}`,
               )
-            : `nothing to capture -- ${worktree.name} is clean`,
+            : `nothing to capture: ${worktree.name} is clean`,
         );
       }
       const applied = yield* service.apply(target, { force: input.force });

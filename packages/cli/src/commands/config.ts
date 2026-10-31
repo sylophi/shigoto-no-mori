@@ -1,6 +1,5 @@
 // The settings verbs: `sm config` over the device's settings, and the
 // same verbs under `sm projects config` over a project's.
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,9 +14,8 @@ import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
 import { UsageError } from "../errors.ts";
-import { childEnv } from "@shigomori/engine/processes";
 import { rest } from "../here.ts";
-import { interactive } from "../prompt.ts";
+import { interactive, runEditor, terminalEditor } from "../prompt.ts";
 import { launcherVerb } from "./configLists.ts";
 import { emit, out, Output, renderTable, styles } from "../output.ts";
 
@@ -182,7 +180,7 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
     Effect.gen(function* () {
       const settings = yield* resolve;
       const { json, binaryName } = yield* Effect.service(Output);
-      const editor = process.env["VISUAL"] || process.env["EDITOR"] || "";
+      const editor = terminalEditor();
       if (json || editor === "" || !(yield* interactive)) {
         const verbs = settings.listCommand.replace(/ list$/, "");
         return yield* new UsageError({
@@ -200,15 +198,10 @@ export function configVerbs<E, R>(resolve: Effect.Effect<Settings, E, R>) {
       writeFileSync(file, `${JSON.stringify(stored, null, 2)}\n`, {
         mode: 0o600,
       });
-      const ran = spawnSync("/bin/sh", ["-c", `${editor} "$0"`, file], {
-        stdio: "inherit",
-        env: childEnv(process.env),
-      });
-      if (ran.status !== 0) {
+      const failed = runEditor(editor, file);
+      if (failed !== undefined) {
         rmSync(dir, { recursive: true, force: true });
-        return yield* new EditFailed({
-          problem: `${editor} failed: ${ran.error?.message ?? `exit status ${String(ran.status)}`}`,
-        });
+        return yield* new EditFailed({ problem: failed });
       }
       // A bad edit stays where it was made, for another try.
       const kept = ` The edit is kept at ${file}.`;

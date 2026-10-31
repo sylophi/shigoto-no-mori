@@ -232,24 +232,15 @@ export const rm = Command.make(
   (input) =>
     Effect.gen(function* () {
       const { located } = yield* resolveWorktree(input, false);
-      if (input.stack) {
-        return yield* removeStack(located, {
-          force: input.force,
-          keepBranch: input.keepBranch,
-          skipCleanup: input.skipCleanup,
-        });
-      }
+      const options = {
+        force: input.force,
+        keepBranch: input.keepBranch,
+        skipCleanup: input.skipCleanup,
+      };
+      if (input.stack) return yield* removeStack(located, options);
       const { json, stdoutColor } = yield* Effect.service(Output);
       const removed = yield* (yield* Worktrees.Worktrees)
-        .remove(
-          located,
-          {
-            force: input.force,
-            keepBranch: input.keepBranch,
-            skipCleanup: input.skipCleanup,
-          },
-          yield* reporter(),
-        )
+        .remove(located, options, yield* reporter())
         .pipe(
           // The document names which cleanup step failed.
           Effect.catchTag(

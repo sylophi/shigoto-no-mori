@@ -2,7 +2,7 @@
 // the app runs on without its loopback and store watch, so it says what
 // failed and offers one way on, a restart, which finds everything where
 // it was. The dialog has no other way out on macOS (Esc answers no
-// one-button alert there); where it can be dismissed, the app quits,
+// one-button alert there). Where it can be dismissed, the app quits,
 // the hurried way, so no busy prompt can keep that app running.
 import { app, dialog } from "electron";
 import { relaunchApp } from "./relaunch";

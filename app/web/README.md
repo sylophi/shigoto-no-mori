@@ -15,15 +15,15 @@ page.
   `WebBridgeDeps`, so a check can run it headless.
   `ipc/localRegistrar.ts` serves what a tab serves itself (the account,
   the client config, the hub bridge, the shell, the releases, its copy
-  of the shared settings); `ipc/stubDefaults.ts` answers a local host
-  call it lacks with a schema-derived stub.
+  of the shared settings), and `ipc/stubDefaults.ts` answers a local
+  host call it lacks with a schema-derived stub.
 - `hub/`: the tab's hub socket (`connection.ts`), and its trace
   (`trace.ts`): a console line per phase change.
 - `account/`: the browser's credential store, device id, name and icon.
 - `lib/kvStorage.ts`: localStorage behind a schema.
 
-`pnpm web:dev` (from `app/`) serves it against the dev hub; signing in
-needs `.env.local` (`../lab/dev-app.md`). The fake host's web shell
+`pnpm web:dev` (from `app/`) serves it against the dev hub, and signing
+in needs `.env.local` (`../lab/dev-app.md`). The fake host's web shell
 (`../lab/fake-host`) draws it over the fixtures without a hub, and
 `pnpm reliability` (`../lab/reliability`) drives the real one through
 outages. Logging is `shared/log.ts`'s `log`, as everywhere in the app.

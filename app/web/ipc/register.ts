@@ -101,7 +101,7 @@ export type WebBridge = {
   // The tab's links, for the boot's atoms.
   links: ClientLinks["Service"];
   // Cross-tab correction: another tab changed the persisted account
-  // (a storage event); re-read and fan out exactly like a local
+  // (a storage event): re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so
   // the tab's own push and this never double-fire.
   notifyAccountChanged(): void;
@@ -136,7 +136,7 @@ const isDomError = (error: unknown, name: string): boolean =>
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 
 // The profile's device id. One already stored is read as it is (a tab
-// boots at once); a missing or mangled one is minted under the account
+// boots at once). A missing or mangled one is minted under the account
 // lock, so two fresh tabs can't mint two and enroll under one. A tab
 // that waits past ENROLL_WAIT_MS behind another's enrollment reads the
 // id that tab minted before it enrolled, as a sign-out goes ahead.
@@ -268,21 +268,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       // picks (withoutPeerState): in localStorage they would outlive
       // even the person, on a shared browser profile.
       sharedSettingsCopy.clear();
-      writeKey(
-        deps.localStorage,
-        CLIENT_CONFIG_KEY,
-        JSON.stringify(
-          withoutPeerState(
-            readJsonKey(
-              deps.localStorage,
-              CLIENT_CONFIG_KEY,
-              StoredClientConfigSchema,
-              {},
-            ),
-          ),
-        ),
-      );
-      clientConfigChanged();
+      writeClientConfig(withoutPeerState(readClientConfig()));
     }
     tab.push(accountContract, "changed", { accountId: after });
   }

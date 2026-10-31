@@ -19,7 +19,7 @@
         window.matchMedia("(prefers-color-scheme: dark)").matches);
     if (dark) root.classList.add("dark");
     root.style.colorScheme = dark ? "dark" : "light";
-    // Doubutsu is on by default; only a saved opt-out disables the
+    // Doubutsu is on by default, and only a saved opt-out disables the
     // first paint's overlay, mirroring readBootHint. Its palette is
     // the saved pick for the appearance being painted, else the
     // list's default.
@@ -31,7 +31,7 @@
         ) || (dark ? "charcoal" : "cream");
     }
   } catch {
-    // localStorage may be unavailable in some contexts; render light.
+    // localStorage may be unavailable in some contexts: render light.
   }
   // The page's canvas wears the root's background (the stylesheets
   // theme the root, not the page), or on a phone its card, where the

@@ -262,7 +262,7 @@ export const mirrors = Command.make("mirrors", { rest }, (input) =>
 const BLOCKS: Readonly<Record<NonNullable<ControlDevice["block"]>, string>> = {
   offline: "not connected",
   "not-sharing": "doesn't share with other devices",
-  "no-project": "no checkout yet; a send clones the repo there",
+  "no-project": "no checkout yet (a send clones the repo there)",
   "no-grant": "doesn't accept commands",
   refused: "turned the ask away",
 };

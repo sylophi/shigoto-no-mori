@@ -9,7 +9,7 @@ export const dialogHandlers: Handlers<typeof dialogContract> = {
       title: opts?.title ?? "Add a project",
       buttonLabel: opts?.buttonLabel ?? "Add project",
       message: opts?.message,
-      // Electron 43 defaults pickers to ~/Downloads; home is the
+      // Electron 43 defaults pickers to ~/Downloads. Home is the
       // sensible starting point when the caller has no better one.
       defaultPath: opts?.defaultPath ?? app.getPath("home"),
     });

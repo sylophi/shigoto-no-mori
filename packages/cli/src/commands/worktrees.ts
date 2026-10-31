@@ -218,7 +218,7 @@ const identityTable = (
   table: {
     readonly names: ReadonlyMap<string, string>;
     readonly multi: boolean;
-    readonly current?: string;
+    readonly current: string;
   },
 ) =>
   Effect.gen(function* () {

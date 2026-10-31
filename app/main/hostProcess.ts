@@ -3,7 +3,7 @@
 // over a port (packages/contracts/src/modules/shellCalls.ts), and talks
 // to over the loopback like any device, through the session
 // (modules/session.ts). A host that exits unasked is forked again, and
-// told again what the shell knows; the windows' links redial it. The
+// told again what the shell knows, and the windows' links redial it. The
 // hold is a layer of the shell's graph (shellLayer.ts): it forks the
 // host as it comes up, and its closing asks the host to quit and closes
 // the port server.
@@ -148,8 +148,8 @@ let reportedDeviceId: string | undefined;
 let onFailed: (failure: HostFailure) => void = () => {};
 // A host that couldn't start as the migration's page showed: left down,
 // the page saying why, until the page's Retry starts one again once it
-// has exited. `parkedExit` settles as it exits; `nextPark` as the next
-// host is parked, for a Retry that came first.
+// has exited. `parkedExit` settles as it exits, and `nextPark` as the
+// next host is parked, for a Retry that came first.
 let parkedExit: Promise<void> | null = null;
 let nextPark = deferred<void>();
 let restarting: Promise<void> | null = null;
@@ -425,8 +425,9 @@ export const hostBusy = (quitAfter: boolean) =>
   );
 // The same, asked again while the prompt it raised is up: none when the
 // host doesn't answer in time, and the first ask's kill left as it is.
-export const hostBusyAgain = () =>
-  Effect.suspend(() => busyWithin(host().busy(), BUSY_DEADLINE));
+export const hostBusyAgain = Effect.suspend(() =>
+  busyWithin(host().busy(), BUSY_DEADLINE),
+);
 
 // Whether the app is past its quit's ask: the host is being closed.
 export const isQuitting = (): boolean => quitting;
@@ -494,9 +495,9 @@ const stop = (hurried: boolean) =>
           ),
           Effect.forkChild,
         );
-      // Asked once; the wait for its exit again if its deadline came
-      // late (the shell stopped), so a host part-way through its quit
-      // isn't killed for time it didn't have.
+      // Asked once. The wait for its exit is asked again if its deadline
+      // came late (the shell stopped), so a host part-way through its
+      // quit isn't killed for time it didn't have.
       const exitedInTime = yield* answerWithin(
         Effect.promise(() => exited),
         QUIT_DEADLINE_MS,
@@ -507,7 +508,7 @@ const stop = (hurried: boolean) =>
 
 // The hold, for the length of the shell's graph: the port the host
 // calls the shell back on, and the host itself. `failed` hears a host
-// that could not start; `hurried` is asked at the quit (an update
+// that could not start, and `hurried` is asked at the quit (an update
 // install or a relaunch signals the host's scripts instead of waiting
 // them out).
 export const layer = (options: {

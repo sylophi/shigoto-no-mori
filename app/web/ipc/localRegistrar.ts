@@ -137,14 +137,16 @@ export function createLocalRegistrar(options: {
     return { stub };
   }
 
+  const push: LocalRegistrar["push"] = (module, key, payload) => {
+    const resolved = resolvePush(module, key, payload);
+    fanOut.emit(resolved.channel, resolved.payload);
+  };
+
   // One handler context for the page's lifetime. In-page the caller IS
   // the peer, so its connection never ends.
   const pageLifetime = new AbortController();
   const context: HandlerContext = {
-    notifier: (module, key) => (payload) => {
-      const push = resolvePush(module, key, payload);
-      fanOut.emit(push.channel, push.payload);
-    },
+    notifier: (module, key) => (payload) => push(module, key, payload),
     connection: pageLifetime.signal,
   };
 
@@ -206,12 +208,5 @@ export function createLocalRegistrar(options: {
     },
   };
 
-  return {
-    served,
-    link,
-    push: (module, key, payload) => {
-      const push = resolvePush(module, key, payload);
-      fanOut.emit(push.channel, push.payload);
-    },
-  };
+  return { served, link, push };
 }

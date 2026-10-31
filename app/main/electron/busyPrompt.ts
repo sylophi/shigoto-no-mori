@@ -31,7 +31,7 @@ export function confirmBusyAction(action: BusyAction): Promise<boolean> {
   return followBusy({
     detail: async () => words(await Effect.runPromise(hostBusy(true))),
     again: async () =>
-      Option.map(await Effect.runPromise(hostBusyAgain()), words),
+      Option.map(await Effect.runPromise(hostBusyAgain), words),
     show: async (detail, signal) => {
       const opts = {
         type: "warning" as const,

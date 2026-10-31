@@ -59,13 +59,12 @@ const readStoredDoc = Effect.suspend(() =>
   readJson(clientConfigPath(), StoredClientConfigSchema),
 ).pipe(
   Effect.map((doc): Record<string, unknown> => doc ?? {}),
-  Effect.catchTags({
-    JsonFileError: (error) =>
-      Effect.sync(() => {
-        noteCorruptStore(error.path, error.cause);
-        return {};
-      }),
-  }),
+  Effect.catchTag("JsonFileError", (error) =>
+    Effect.sync(() => {
+      noteCorruptStore(error.path, error.cause);
+      return {};
+    }),
+  ),
 );
 
 // The platform the reads and writes run on, once the shell's graph has

@@ -168,9 +168,9 @@ function relaunchMarkerPath(): string {
 
 // Whether one more relaunch is allowed since the last stable run, the
 // count kept before it says so. The write is the exit path's (this runs
-// right before app.exit). A marker that can't be read counts none; one
-// that can't be written vetoes the relaunch, so an unwritable userData
-// can never loop.
+// right before app.exit). A marker that can't be read counts none, and
+// one that can't be written vetoes the relaunch, so an unwritable
+// userData can never loop.
 const RelaunchMarkerSchema = Schema.Struct({ relaunches: Schema.Int });
 
 function consumeRelaunchBudget(): boolean {
