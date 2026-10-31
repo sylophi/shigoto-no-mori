@@ -4,7 +4,13 @@
 // box settles and whenever it takes focus, and draws at whatever size the
 // feed sets. A grid bigger than the box is cut off at its edges. Under a
 // tab row, it puts a button in the row that copies its output.
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  type DragEvent,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { UnicodeGraphemesAddon } from "@xterm/addon-unicode-graphemes";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -141,6 +147,14 @@ const scrollByLine = (
   return () => steps !== undefined;
 };
 
+// A dropped path as a shell word, escaped the way a Mac terminal drops
+// one, which a TUI that takes a dropped image (Claude Code) reads back.
+const escapedPath = (path: string): string =>
+  path.replace(/[\s\\'"`$!#&;|*?()[\]{}<>^]/g, "\\$&");
+
+const holdsFiles = (e: DragEvent): boolean =>
+  e.dataTransfer.types.includes("Files");
+
 const macEditKey = (e: KeyboardEvent): string | undefined =>
   e.ctrlKey || e.shiftKey || e.metaKey === e.altKey
     ? undefined
@@ -152,6 +166,7 @@ export function TerminalView({
   onInput,
   onFit,
   onLink,
+  pathOfFile,
 }: {
   // Null where nothing feeds it (a scene).
   feed: TerminalFeed | null;
@@ -161,6 +176,9 @@ export function TerminalView({
   // The grid the box has room for.
   onFit: (cols: number, rows: number) => void;
   onLink: (uri: string) => void;
+  // Where a dropped file is on the shell's machine, "" where it has
+  // none. Without it, a drop does nothing.
+  pathOfFile?: (file: File) => string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -392,6 +410,19 @@ export function TerminalView({
     wasLive.current = live;
   }, [live, fontsIn, feed]);
 
+  const dropPath = live ? pathOfFile : undefined;
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    const term = termRef.current;
+    if (!term || !dropPath || !holdsFiles(e)) return;
+    e.preventDefault();
+    const paths = [...e.dataTransfer.files]
+      .map(dropPath)
+      .filter((path) => path !== "");
+    if (paths.length === 0) return;
+    term.focus();
+    term.paste(`${paths.map(escapedPath).join(" ")} `);
+  };
+
   // Padding lives on the wrapper: the fit addon sizes the grid from the
   // host's box, so padding on the host itself would count as columns.
   // `isolate` keeps xterm's z-indexes from competing with the drawer's
@@ -402,6 +433,10 @@ export function TerminalView({
       data-keyboard-surface="raw"
       {...usersAlone("terminal")}
       className="isolate h-full w-full overflow-hidden bg-card px-3 py-1 font-terminal text-xs"
+      onDragOver={(e) => {
+        if (dropPath && holdsFiles(e)) e.preventDefault();
+      }}
+      onDrop={onDrop}
     >
       {/* First, ahead of a script console's Run or Stop. */}
       <TerminalTabToolbar>
