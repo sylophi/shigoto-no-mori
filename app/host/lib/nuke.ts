@@ -56,7 +56,7 @@ export function nukeTrap(
       "home folder. Point SHIGOMORI_DATA_DIR or the data folder elsewhere first."
     );
   }
-  const trapped = findProjectInsideDataDir(projects);
+  const trapped = findProjectInsideDataDir(projects, [root]);
   if (trapped !== undefined) {
     return (
       `Refusing to nuke: project "${trapped.name}" lives inside ${root}, ` +

@@ -1,10 +1,9 @@
 // The app's calls into the engine that owns the data model: every
 // worktree and project mutation (create, adopt, delete, done, merge,
 // move, the shelf and auto-pull marks, agent sessions and hooks, project
-// add, remove and reorder)
-// and every read of what the engine owns (worktree rows and identities,
-// the project list and icons, the stored config, the launcher row,
-// package scripts). The app and a terminal run the same services, and
+// add, remove and reorder) and every read of what the engine owns
+// (worktree rows and identities, the project list and icons, the stored
+// config, the launcher row, package scripts). The app and a terminal run the same services, and
 // each function answers in the shape `sm --json` prints, decoded
 // against the shared schemas, so drift fails loudly here instead of
 // surfacing as undefined-flavored breakage in the renderer.
@@ -21,7 +20,6 @@ import * as Bundle from "@shigomori/engine/Bundle";
 import * as Dirty from "@shigomori/engine/Dirty";
 import * as Doctor from "@shigomori/engine/Doctor";
 import { codeOf } from "@shigomori/engine/errorDocument";
-import type { MergeMethod } from "@shigomori/contracts/schemas";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Identity from "@shigomori/engine/Identity";
 import * as Landing from "@shigomori/engine/Landing";
@@ -44,6 +42,7 @@ import {
   DetectedLauncherSchema,
   type DeviceSettingsPatch,
   LauncherEntrySchema,
+  type MergeMethod,
   type MergeOutcome,
   MergeOutcomeSchema,
   PackageScriptsDocSchema,
@@ -361,11 +360,11 @@ export const addProject = Effect.fnUntraced(function* (
 });
 
 // The command that runs a worktree's script (package.json, justfile,
-// Makefile), and the SHIGOMORI_* values a run can't derive, for
-// the app's registry to spawn (it keeps owning streaming, cancel, and
-// quit-time reaping).
-// The engine picks the tool that runs it (the manager the lockfile
-// selects, just or make) and counts the run in the use log.
+// Makefile), and the SHIGOMORI_* values a run can't derive, for the
+// app's registry to spawn (it keeps owning streaming, cancel, and
+// quit-time reaping). The engine picks the tool that runs it (the
+// manager the lockfile selects, just or make) and counts the run in
+// the use log.
 export const packageScriptLaunch = Effect.fnUntraced(function* (args: {
   projectId: string;
   worktreeId: string;
@@ -522,8 +521,7 @@ export const relocateProject = Effect.fnUntraced(function* (
     }),
     { projectId },
   );
-  const project = yield* Schema.decodeEffect(ProjectSchema)(row);
-  return project;
+  return yield* Schema.decodeEffect(ProjectSchema)(row);
 });
 
 // ---- Worktree marks and moves ----
@@ -977,10 +975,9 @@ export const packageScripts = Effect.fnUntraced(function* (
           worktreePath: located.worktree.path,
         })
         .pipe(
-          Effect.catchTags({
-            NoScripts: () => Effect.succeed(null),
-            UnreadableScripts: () => Effect.succeed(null),
-          }),
+          Effect.catchTag(["NoScripts", "UnreadableScripts"], () =>
+            Effect.succeed(null),
+          ),
         );
     }),
     { projectId, worktreeId },

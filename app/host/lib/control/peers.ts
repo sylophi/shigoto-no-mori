@@ -31,6 +31,7 @@ import { isRealBranch, type Project } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import {
+  type PeerEffects,
   type PeerReach,
   peerEffects,
   peerWorktreesFor,
@@ -40,7 +41,6 @@ import * as AccountPeers from "./AccountPeers";
 import type { DirectPeer } from "./AccountPeers";
 import * as Ops from "@host/lib/engineOps";
 import { mirrorList } from "@host/mirror/sessions";
-import type { PeerEffects } from "@host/ipc/PeerReach";
 import {
   listed,
   matchDevices,
@@ -279,10 +279,9 @@ export const registryUnlessRateLimited = probe(
   Effect.flatMap(AccountPeers.AccountPeers, (account) => account.listDevices),
   () => [],
 ).pipe(
-  Effect.catch((error) =>
-    isHubRateLimitedError(error)
-      ? Effect.fail(error)
-      : Effect.succeed<DeviceInfo[]>([]),
+  Effect.catchIf(
+    (error) => !isHubRateLimitedError(error),
+    () => Effect.succeed<DeviceInfo[]>([]),
   ),
 );
 
@@ -411,8 +410,9 @@ export const worktreesOn = (standings: ControlDevice[]) =>
           peerWorktreesFor(device.deviceId).list({ projectId }),
           () => null,
         ).pipe(
-          Effect.flatMap((answer) =>
-            answer === null ? Effect.fail("no answer") : Effect.succeed(answer),
+          Effect.filterOrFail(
+            (answer) => answer !== null,
+            () => "no answer",
           ),
           Effect.map((answer) =>
             answer

@@ -16,6 +16,7 @@ import {
 import type {
   CarryOverCandidate,
   CarryOverStat,
+  WorktreeIdentity,
 } from "@shigomori/contracts/schemas";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
 import * as Git from "@shigomori/engine/Git";
@@ -27,7 +28,6 @@ import * as Schema from "effect/Schema";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "../Engine";
 import * as Ops from "../engineOps";
-import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import { keptAnswers } from "../util/kept";
 
 export type CarryOverCheckout = Pick<
@@ -66,10 +66,6 @@ function pathOf(relative: string, name: string): string {
   return relative ? `${relative}/${name}` : name;
 }
 
-// One checkout's entries in `relative`, with git's ignore verdict per
-// root-relative path: the ignored walk, plus (with `ruleIgnored`) the
-// folders a rule names that the walk passes over (ruleIgnoredFolders
-// below). Throws when the folder can't be read.
 export class FolderReadError extends Schema.TaggedError<FolderReadError>()(
   "FolderReadError",
   { reason: Schema.String },
@@ -79,6 +75,10 @@ export class FolderReadError extends Schema.TaggedError<FolderReadError>()(
   }
 }
 
+// One checkout's entries in `relative`, with git's ignore verdict per
+// root-relative path: the ignored walk, plus (with `ruleIgnored`) the
+// folders a rule names that the walk passes over (ruleIgnoredFolders
+// below). Fails when the folder can't be read.
 const readFolderVerdicts = Effect.fnUntraced(function* (
   ignoredPaths: IgnoredPaths,
   checkoutPath: string,
@@ -122,7 +122,7 @@ function foldersFirst(
 
 // Union of `relative` across checkouts. A checkout without the folder
 // (or one git can't read) contributes nothing. Only when none can list
-// it does this throw. A name is offered as ignored only when every
+// it does this fail. A name is offered as ignored only when every
 // checkout holding it ignores it: a file tracked in one checkout would
 // collide with git's own copy at creation, and a pull from a checkout
 // tracking it always copies it. `ruleIgnored` adds the verdict of

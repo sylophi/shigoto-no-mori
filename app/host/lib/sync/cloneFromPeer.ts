@@ -40,7 +40,6 @@ import * as Git from "@shigomori/engine/Git";
 import { errnoWords } from "@shigomori/engine/platformErrors";
 import { pidAlive } from "@shigomori/engine/processes";
 import { expandHome } from "@shared/paths";
-import { repoIdentity } from "@host/lib/engineOps";
 import * as Ops from "@host/lib/engineOps";
 import { errorWordsOf } from "@host/lib/errorWords";
 import {
@@ -142,7 +141,7 @@ const Pending = Schema.fromJsonString(
 const pendingIn = (dir: string) =>
   Effect.promise(() =>
     readFile(join(dir, ".git", PENDING), "utf8").then(
-      (text) => Option.getOrNull(Schema.decodeUnknownOption(Pending)(text)),
+      (text) => Option.getOrNull(Schema.decodeOption(Pending)(text)),
       () => null,
     ),
   );
@@ -194,7 +193,7 @@ export const cloneDestination = (
       ),
     );
     if (!there) return "free" as const;
-    return identity !== null && (yield* repoIdentity(dest)) === identity
+    return identity !== null && (yield* Ops.repoIdentity(dest)) === identity
       ? ("same-repo" as const)
       : ("taken" as const);
   });

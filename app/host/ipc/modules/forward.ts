@@ -6,8 +6,8 @@
 // on the bytes ride the channel (shared/remote/channels.ts), each side
 // pulled as fast as the other takes it, and the far end lives exactly
 // as long as the channel: a peer reset, a clean end from both sides,
-// or the link dropping tears it down. No
-// registry, no idle sweep, nothing to leak past the connection.
+// or the link dropping tears it down. No registry, no idle sweep,
+// nothing to leak past the connection.
 import type { Socket } from "node:net";
 import {
   callFailureOf,
@@ -36,11 +36,6 @@ export const forwardHandlers: EffectHandlers<
 };
 
 async function open(port: number, channelId: string, ctx: HandlerContext) {
-  // The schema already pinned the range. Re-check so this handler
-  // stays fail-closed even if it is ever reached off-contract.
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`port ${String(port)} is out of range`);
-  }
   requireChannels(ctx, channelId);
   // Loopback only, always: the feature is reaching the host's OWN
   // dev server, never using the host as a hop to its network. The

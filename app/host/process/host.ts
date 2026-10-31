@@ -40,7 +40,7 @@ const factsArg = process.argv.find((value) =>
 if (factsArg === undefined) {
   throw new Error("the host was started without facts");
 }
-const facts = Schema.decodeUnknownSync(Schema.fromJsonString(HostFactsSchema))(
+const facts = Schema.decodeSync(Schema.fromJsonString(HostFactsSchema))(
   factsArg.slice(HOST_FACTS_FLAG.length),
 );
 // Electron adds parentPort to a utility process, and its types are Electron's

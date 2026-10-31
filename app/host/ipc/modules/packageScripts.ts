@@ -1,6 +1,6 @@
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import type { EffectHandlers } from "@shigomori/contracts/types";
-import { findProject } from "@host/lib/projects";
+import { findProject, findWorktreeIdentity } from "@host/lib/projects";
 import * as Scripts from "@host/lib/Scripts";
 import {
   readLaunchRow,
@@ -10,7 +10,6 @@ import {
   writeScriptOrder,
   writeScriptSort,
 } from "@host/lib/scripts/packageScriptStats";
-import { findWorktreeIdentity } from "@host/lib/projects";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type {
   PackageScriptsDoc,

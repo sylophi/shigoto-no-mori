@@ -473,7 +473,12 @@ const make = (options: Options) =>
 
     // UNCONFIGURED_RETRY_MS, or a wake's recheck, whichever comes first.
     const untilAskedAgain = (asked: Queue.Queue<void>) =>
-      Effect.raceFirst(Effect.sleep(UNCONFIGURED_RETRY_MS), Queue.take(asked));
+      Queue.take(asked).pipe(
+        Effect.timeoutOrElse({
+          duration: UNCONFIGURED_RETRY_MS,
+          orElse: () => Effect.void,
+        }),
+      );
 
     // One start attempt for `port`, from the binary to the child's
     // end. Answers how long the child ran, which the restart ladder

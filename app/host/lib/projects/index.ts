@@ -20,7 +20,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Ops from "@host/lib/engineOps";
 import * as Git from "@shigomori/engine/Git";
 import { handedRemotes, pickCloneUrl } from "@shared/cloneUrl";
-import { dataDir, toAbsolute } from "@shared/paths";
+import { toAbsolute } from "@shared/paths";
 
 let snapshot: readonly Project[] = [];
 // The last read's rows, which the callers that asked before it began
@@ -182,10 +182,11 @@ class NoProjectOfIdentityError extends Schema.TaggedError<NoProjectOfIdentityErr
 }
 
 export const findProjectByIdentityOrFail = (identity: string) =>
-  Effect.flatMap(findProjectByIdentity(identity), (project) =>
-    project === undefined
-      ? Effect.fail(new NoProjectOfIdentityError())
-      : Effect.succeed(project),
+  findProjectByIdentity(identity).pipe(
+    Effect.filterOrFail(
+      (project) => project !== undefined,
+      () => new NoProjectOfIdentityError(),
+    ),
   );
 
 // A project repo registered from inside the data dir (nothing stops
@@ -195,7 +196,7 @@ export const findProjectByIdentityOrFail = (identity: string) =>
 // no extra read.
 export function findProjectInsideDataDir(
   projects: readonly Project[],
-  roots: readonly string[] = [dataDir()],
+  roots: readonly string[],
 ): Project | undefined {
   return projects.find((p) =>
     roots.some((root) => isSameOrInside(toAbsolute(p.path), root)),

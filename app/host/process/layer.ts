@@ -305,7 +305,7 @@ export const layer = (options: {
     // The loopback the terminal reaches the app on. It unpublishes its
     // address first as it stops, so a terminal run during the quit
     // reads "not running" instead of dialing a closing listener.
-    Layer.provideMerge(loopbackLayer()),
+    Layer.provideMerge(loopbackLayer),
     // The worktree moves and removals, around the scripts and terminals
     // they stop and refuse for and the mirrors they carry or end, and the
     // carry-over reads.
@@ -317,10 +317,10 @@ export const layer = (options: {
     Layer.provideMerge(remotePlanes),
     Layer.provideMerge(followDeviceSettings(Effect.promise(refreshDirectHost))),
     // The cloudflared child, fronting the device link's listener.
-    Layer.provideMerge(tunnelLayer()),
+    Layer.provideMerge(tunnelLayer),
     // The listener peers dial, which connected peers see go away
     // cleanly.
-    Layer.provideMerge(deviceLinkLayer()),
+    Layer.provideMerge(deviceLinkLayer),
     // The switch the listener's gate reads.
     Layer.provideMerge(sharingLayer),
     Layer.provideMerge(gitWatcher),

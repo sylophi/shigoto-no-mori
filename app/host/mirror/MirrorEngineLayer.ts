@@ -421,7 +421,7 @@ const unavailable = (cause: Cause.Cause<unknown>) => {
   });
   return MirrorEngine.of({
     status: Effect.succeed("unavailable"),
-    failure: Effect.succeed(undefined),
+    failure: Effect.undefined,
     sessions: Effect.succeed([]),
     fresh: Effect.succeed(false),
     create: () => Effect.fail(refused),
@@ -430,7 +430,7 @@ const unavailable = (cause: Cause.Cause<unknown>) => {
     pause: () => Effect.fail(refused),
     resume: () => Effect.fail(refused),
     gitStatus: () => undefined,
-    refreshGit: () => Effect.succeed(undefined),
+    refreshGit: () => Effect.undefined,
     history: () => [],
     noteEvent: () => {},
     forgetHistory: () => {},

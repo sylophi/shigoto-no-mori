@@ -1,6 +1,6 @@
 // Wires the host up as it starts, ahead of its graph: the handlers on
-// its wires, and the shell's session
-// (packages/contracts/src/modules/session.ts) on the loopback.
+// its wires, and the shell's session (packages/contracts/src/modules/
+// session.ts) on the loopback.
 import { sessionContract } from "@shigomori/contracts/modules/session";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import type { HandlerContext } from "@shared/ipc/transport";

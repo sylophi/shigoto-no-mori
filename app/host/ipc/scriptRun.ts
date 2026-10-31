@@ -13,9 +13,12 @@ import { hasWorktreeData } from "@shigomori/contracts/schemas";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { Project, ShigomoriConfig } from "@shigomori/contracts/schemas";
+import type {
+  Project,
+  ShigomoriConfig,
+  WorktreeIdentity,
+} from "@shigomori/contracts/schemas";
 import * as Ops from "@host/lib/engineOps";
-import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import { findProject } from "@host/lib/projects";
 import type { NotifyScriptEvent, ScriptEnvValues } from "@host/lib/Scripts";
 import { scriptEnvOf } from "@shigomori/contracts/scriptEnv";

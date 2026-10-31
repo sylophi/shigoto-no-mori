@@ -98,18 +98,18 @@ export const fetchRemoteImage = Effect.fn("Projects.remoteImage")(function* (
   const unreachable = new RemoteImageError({ host, reason: "unreachable" });
   const tooLarge = new RemoteImageError({ host, reason: "too-large" });
   const refused = new RemoteImageError({ host, reason: "not-a-remote-host" });
-  // One signal for every hop and its body, aborted however the read
-  // ends: a timeout stops a body still coming, and a body left unread
-  // (a redirect, a refusal) frees its connection.
-  const done = new AbortController();
   const read = Effect.gen(function* () {
+    // One signal for every hop and its body, aborted however the read
+    // ends: a timeout stops a body still coming, and a body left unread
+    // (a redirect, a refusal) frees its connection.
+    const signal = yield* Effect.abortSignal;
     for (let hop = 0; ; hop += 1) {
       if (!isRemoteImageUrl(url, remotes)) return yield* refused;
       const target = url;
       const response = yield* Effect.tryPromise({
         try: () =>
           fetchImpl(target, {
-            signal: done.signal,
+            signal,
             redirect: "manual",
             headers: { accept: "image/*" },
           }),
@@ -141,11 +141,11 @@ export const fetchRemoteImage = Effect.fn("Projects.remoteImage")(function* (
     }
   });
   return yield* read.pipe(
+    Effect.scoped,
     Effect.timeoutOrElse({
       duration: FETCH_TIMEOUT,
       orElse: () => Effect.fail(unreachable),
     }),
-    Effect.ensuring(Effect.sync(() => done.abort())),
   );
 });
 

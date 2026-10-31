@@ -41,16 +41,6 @@ const EXIT_POLL_MS = 100;
 
 type RecordedScript = RunningScripts.RunningScript;
 
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    // EPERM means the process exists and simply isn't ours to signal.
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
-
 interface LiveProcess {
   pid: number;
   pgid: number;
@@ -157,7 +147,7 @@ function isSameProcess(
 // Polls instead of waiting on an exit event: these processes are not
 // our children any more, so there is nothing to listen to.
 const waitForExit = (pid: number, ms: number) =>
-  Effect.sync(() => isProcessAlive(pid)).pipe(
+  Processes.pidAlive(pid).pipe(
     Effect.repeat({
       schedule: Schedule.spaced(Duration.millis(EXIT_POLL_MS)),
       while: (alive) => alive,
@@ -249,10 +239,12 @@ export const layer = Layer.effect(
     // Ours: a dead instance's, or this pid's from a session before. A
     // live instance's are running right now, with a window attached.
     const left = yield* recorded.list.pipe(
-      Effect.map((records) =>
-        records.filter(
-          (record) =>
-            record.ownerPid === ownerPid || !isProcessAlive(record.ownerPid),
+      Effect.flatMap((records) =>
+        Effect.filter(records, (record) =>
+          Effect.map(
+            Processes.pidAlive(record.ownerPid),
+            (alive) => record.ownerPid === ownerPid || !alive,
+          ),
         ),
       ),
       Effect.tap((records) => recorded.remove(records.map((r) => r.runId))),

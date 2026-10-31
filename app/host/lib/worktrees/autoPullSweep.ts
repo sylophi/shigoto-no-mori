@@ -1,8 +1,7 @@
 // The pull behind the auto-pull mark (`sm worktrees autopull`, which
 // the engine keeps in its registry and reports on every identity): after
-// the app's
-// background fetch, every marked worktree in the project that has
-// nothing of its own fast-forwards onto its upstream, so a checkout
+// the app's background fetch, every marked worktree in the project that
+// has nothing of its own fast-forwards onto its upstream, so a checkout
 // that only follows the remote never sits behind. "Nothing of its
 // own" is checked right before the merge, not read from a cached row:
 // the mark is a standing permission and the row can be a focus old.
