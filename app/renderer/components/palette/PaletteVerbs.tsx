@@ -7,7 +7,10 @@ import {
   Plus,
   SquarePen,
 } from "lucide-react";
-import { useScopedDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import {
+  useRemoteDeviceApi,
+  useScopedDeviceLabel,
+} from "@/hooks/remote/useRemoteDevices";
 import { LauncherIconView } from "@shigomori/ui/views/shared/LauncherIconView.tsx";
 import { GithubMark } from "@shigomori/ui/primitives/svgs/github-mark.tsx";
 import { githubPageOf } from "@shigomori/contracts/predicates/remoteUrl";
@@ -20,7 +23,6 @@ import { useLaunch } from "@/hooks/launchers/useLaunchers";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
-import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
@@ -36,10 +38,12 @@ import {
   VerbGroupView,
   type Verb,
 } from "@shigomori/ui/views/palette/PaletteVerbsView.tsx";
-import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
-import type { PaletteProject } from "@shigomori/ui/views/palette/paletteEntries.ts";
-import type { PalettePage } from "@shigomori/ui/views/palette/paletteEntries.ts";
-import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
+import type {
+  PaletteEntry,
+  PalettePage,
+  PaletteProject,
+  PaletteRow,
+} from "@shigomori/ui/views/palette/paletteEntries.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 import { useOutside } from "@shigomori/ui/outside.tsx";
 

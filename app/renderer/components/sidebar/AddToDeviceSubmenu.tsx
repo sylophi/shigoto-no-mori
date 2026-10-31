@@ -19,6 +19,7 @@ import {
 } from "@shigomori/ui/primitives/dropdown-menu.tsx";
 import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
 import { notifyError, toast } from "@/lib/toast";
+import { pluralize } from "@shigomori/contracts/words";
 import { useCloneFromDeviceProgress } from "@/hooks/projects/useCloneProgress";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import type { GroupMember } from "./ProjectGroupActions";
@@ -68,14 +69,15 @@ export function AddToDeviceSubmenu({
       )
       .then(
         ({ project, settings, files }) => {
+          const conflicts = files?.conflicts ?? 0;
           const missed = [
             ...(settings.copied ? [] : [`its settings: ${settings.error}`]),
             ...(files?.error === undefined
               ? []
               : [`its carry-over files: ${files.error}`]),
-            ...((files?.conflicts ?? 0) > 0
+            ...(conflicts > 0
               ? [
-                  `${files?.conflicts} carry-over ${files?.conflicts === 1 ? "path" : "paths"}, since the checkout there has its own`,
+                  `${pluralize(conflicts, "carry-over path")}, since the checkout there has its own`,
                 ]
               : []),
           ];
@@ -108,7 +110,7 @@ export function AddToDeviceSubmenu({
           <DropdownMenuItem
             key={tab.deviceId}
             disabled={tab.block !== undefined}
-            onClick={() => void addTo(tab)}
+            onClick={() => addTo(tab)}
           >
             <DeviceMenuRowView icon={tab.icon} label={tab.label} />
           </DropdownMenuItem>

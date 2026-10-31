@@ -34,11 +34,13 @@ import {
   useFolderDrag,
   useFolderDropTarget,
 } from "@/components/sidebar/ProjectFolder";
-import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
-import type { ProjectListRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import type {
+  ProjectListRow,
+  ProjectSection,
+} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { buildGrid } from "@shigomori/ui/views/home/gridModel.ts";
-import type { GroupWork } from "@shigomori/ui/views/home/ProjectGridView.tsx";
 import {
+  type GroupWork,
   FolderSectionTargetView,
   ProjectGridLayoutView,
   ProjectGridView,

@@ -25,7 +25,7 @@ export function FolderPickerModal({
   const api = useApi();
   const { hint, onPick, onClose } = props;
   const confirmKeys = useBinding("confirm");
-  // Seed the input value with the caller's path; otherwise drop into ~/.
+  // Seed the input value with the caller's path, otherwise drop into ~/.
   // When an initialPath is provided we append a separator (matching the
   // path's own style) so the listing fires immediately rather than
   // treating the basename as a leaf filter.
@@ -61,7 +61,7 @@ export function FolderPickerModal({
 
   return (
     // Escape is owned by the Command.Input handler so it can also exit
-    // typeahead state; let the input swallow it before the shell sees it.
+    // typeahead state. The input swallows it before the shell sees it.
     <ModalShell label={title} onClose={onClose} closeOnEscape={false}>
       <FolderPickerView
         {...props}

@@ -1,6 +1,6 @@
 // The account's device registry (DeviceRegistryView). This component
-// owns every query the rows read -- the account list, the host chips
-// and the per-peer command-access verdicts -- so a row is a pure
+// owns every query the rows read (the account list, the host chips
+// and the per-peer command-access verdicts), so a row is a pure
 // function of what it is handed and the page makes one fan-out instead
 // of one per row.
 //

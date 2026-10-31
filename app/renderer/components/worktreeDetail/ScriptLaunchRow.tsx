@@ -77,7 +77,7 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
 // A second row in the Launch section: the top scripts, in the
 // same order the Scripts section shows them (the project's sort mode,
 // most-used by default), trimmed to whatever fits on one line. Off-row
-// scripts stay reachable in the Scripts section; this row is a shortcut,
+// scripts stay reachable in the Scripts section. This row is a shortcut,
 // not a replacement, so it never wraps and never scrolls. Scripts pinned
 // under the manual order are the exception: the row is exactly those, so
 // it wraps rather than drop any.
@@ -119,10 +119,11 @@ function FittedScriptRow({
   // resizing anything the observer watches.
   const namesKey = candidates.map((entry) => entry.name).join("\n");
 
-  // The hidden measurer holds every candidate at its natural width; the
-  // visible row renders the prefix of them that fits. Observing the measurer
-  // too (not just the container) re-runs this when the mono font swaps in and
-  // every pill changes width. Same trick as PullRequestIdentity.
+  // The hidden measurer holds every candidate at its natural width, and
+  // the visible row renders the prefix of them that fits. Observing the
+  // measurer too (not just the container) re-runs this when the mono font
+  // swaps in and every pill changes width. Same trick as
+  // PullRequestIdentity.
   useLayoutEffect(() => {
     const container = containerRef.current;
     const measurer = measurerRef.current;

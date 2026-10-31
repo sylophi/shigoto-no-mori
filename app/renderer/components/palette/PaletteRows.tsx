@@ -1,19 +1,13 @@
-import type { PaletteRow } from "@shigomori/ui/views/palette/paletteEntries.ts";
-
+import type {
+  PaletteEntry,
+  PaletteProject,
+  PaletteRow,
+} from "@shigomori/ui/views/palette/paletteEntries.ts";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-
 import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
-
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-
 import { SHELF_LABELS } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
-
-import type { PaletteProject } from "@shigomori/ui/views/palette/paletteEntries.ts";
-
-import type { PaletteEntry } from "@shigomori/ui/views/palette/paletteEntries.ts";
-
 import {
   CreateRowView,
   PageRowView,

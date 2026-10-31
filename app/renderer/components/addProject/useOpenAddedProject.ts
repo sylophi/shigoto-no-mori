@@ -1,4 +1,3 @@
-import type { Worktree } from "@shigomori/contracts/schemas";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -15,8 +14,6 @@ import { firstValueOf, useRegistry } from "@/lib/runtime/viewHooks";
 export function useOpenAddedProject(): (projectId: string) => Promise<void> {
   const registry = useRegistry();
   const scope = useHostScope();
-  // Route choice made outside the try below: React Compiler can't
-  // lower a conditional inside one, and bails out the whole component.
   const worktreeNav = useWorktreeNav();
   const projectNav = useProjectNav();
   return async (projectId) => {
@@ -25,21 +22,11 @@ export function useOpenAddedProject(): (projectId: string) => Promise<void> {
       worktreesAtom(worktreeListKey(scope.deviceId, projectId)),
     );
     // With none, stay wherever we are. The add itself already succeeded.
-    if (worktrees !== undefined) {
-      openProject(worktreeNav, projectNav, projectId, worktrees);
-    }
+    if (worktrees === undefined) return;
+    // A bare repo registers fine but has no primary checkout, so offer
+    // worktree creation instead.
+    const primary = worktrees.find((w) => w.isPrimary);
+    if (primary) worktreeNav.toWorktree(projectId, primary.id);
+    else projectNav.toProjectPage("new", projectId);
   };
-}
-
-function openProject(
-  worktreeNav: ReturnType<typeof useWorktreeNav>,
-  projectNav: ReturnType<typeof useProjectNav>,
-  projectId: string,
-  worktrees: readonly Worktree[],
-) {
-  // A bare repo registers fine but has no primary checkout, so offer
-  // worktree creation instead.
-  const primary = worktrees.find((w) => w.isPrimary);
-  if (primary) worktreeNav.toWorktree(projectId, primary.id);
-  else projectNav.toProjectPage("new", projectId);
 }

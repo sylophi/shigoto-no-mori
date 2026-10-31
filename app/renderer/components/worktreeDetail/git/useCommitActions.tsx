@@ -27,10 +27,10 @@ import { HardResetDialog } from "./HardResetDialog";
 // Everything a commit's menu or buttons can do, as one object per
 // surface (the Git timeline, a commit's page) rather than a
 // subscription per row. `dialog` is the reword or hard reset dialog,
-// rendered by the surface. `onRewritten` hears a reword or squash land, after which the
-// commits from there up have new hashes. On a peer that takes no
-// commands from here, nothing is offered (`canCommand` for the moves
-// with no flag of their own), and only copying is left.
+// rendered by the surface. `onRewritten` hears a reword or squash land,
+// after which the commits from there up have new hashes. On a peer that
+// takes no commands from here, nothing is offered (`canCommand` for the
+// moves with no flag of their own), and only copying is left.
 export function useCommitActions(
   worktree: Worktree,
   onRewritten?: (worktree: Worktree) => void,

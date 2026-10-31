@@ -74,7 +74,7 @@ export function CarryOverSection({
             projectPath={projectPath}
             selectedPaths={selectedPaths}
             isCovered={isCovered}
-            onPick={(entry) => onAdd(entry)}
+            onPick={onAdd}
             onClose={() => setPicking(false)}
           />
         )

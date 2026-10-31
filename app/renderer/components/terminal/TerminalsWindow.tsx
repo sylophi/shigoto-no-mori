@@ -8,7 +8,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { WorktreeMissingView } from "@shigomori/ui/views/shared/WorktreeMissingView.tsx";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import type { TerminalsSearch } from "@/lib/newWindow";
-import { paramToSlot, slotToParam, type ScriptSlot } from "@/store/scriptSlot";
+import { paramToSlot, slotToParam } from "@/store/scriptSlot";
 import { TerminalScope } from "./TerminalScope";
 import { TerminalTabs } from "./TerminalTabs";
 
@@ -29,9 +29,9 @@ function WindowTabs({ worktree }: { worktree: Worktree }) {
       search: { ...search, ...change },
       replace: true,
     } as never);
-  const slots = (search.scripts ?? [])
-    .map(paramToSlot)
-    .filter((slot): slot is ScriptSlot => slot !== null);
+  const slots = (search.scripts ?? []).flatMap(
+    (param) => paramToSlot(param) ?? [],
+  );
   return (
     <TerminalScope>
       <div className="h-full bg-card">

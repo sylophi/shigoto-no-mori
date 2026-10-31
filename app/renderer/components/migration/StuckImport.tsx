@@ -12,28 +12,21 @@ import { AppShellView } from "@shigomori/ui/views/AppShellView.tsx";
 import { MigrationView } from "@shigomori/ui/views/steps/MigrationView.tsx";
 import type { ClientApi } from "@/lib/runtime/Api";
 
-const stuck = (progress: MigrationProgress | null) =>
-  progress?.import?.state === "stuck";
+const stuck = (
+  progress: MigrationProgress | null,
+): progress is MigrationProgress => progress?.import?.state === "stuck";
 
 // Settles with the shell's migration once its import reads stuck: as the
 // window asks, or as the shell next tells it.
 export function stuckImport(api: ClientApi): Promise<MigrationProgress> {
   return new Promise((resolve) => {
-    const stop = api.listen(
-      api.pushes(migrationContract, "changed"),
-      (progress) => {
-        if (progress !== null && stuck(progress)) {
-          stop();
-          resolve(progress);
-        }
-      },
-    );
-    void api.run(api.migration.read()).then((progress) => {
-      if (progress !== null && stuck(progress)) {
-        stop();
-        resolve(progress);
-      }
-    });
+    const settle = (progress: MigrationProgress | null) => {
+      if (!stuck(progress)) return;
+      stop();
+      resolve(progress);
+    };
+    const stop = api.listen(api.pushes(migrationContract, "changed"), settle);
+    void api.run(api.migration.read()).then(settle);
   });
 }
 

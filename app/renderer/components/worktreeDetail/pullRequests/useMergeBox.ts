@@ -102,7 +102,7 @@ export function useMergeBox({
   );
   const status =
     armedWith !== null ? describeArmedAutoMerge(armedWith) : mergeState;
-  // The dropdown swaps the active method; null means "stick with whatever
+  // The dropdown swaps the active method. Null means "stick with whatever
   // the repo + saved preference resolve to". Kept local so picking a
   // method on one worktree doesn't bleed into another.
   const [pickedMethod, setPickedMethod] = useState<MergeMethod | null>(null);
@@ -137,7 +137,7 @@ export function useMergeBox({
   };
 
   // Picking from the dropdown only swaps which method the main button
-  // would run; it must NOT merge directly, or the two-step confirm guard
+  // would run. It must NOT merge directly, or the two-step confirm guard
   // would only apply to one of the three methods. Same for the reach.
   const pickMethod = (method: MergeMethod) => {
     if (armed) reset();

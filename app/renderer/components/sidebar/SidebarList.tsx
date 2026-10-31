@@ -125,12 +125,12 @@ export function SidebarList({
   useSlideOnReorder(listRef, rows, items, handlers.arrangeMode);
 
   // Reveal the selection when navigation comes from outside the sidebar
-  // (a ⌘K jump, a deep link) by scrolling the virtualized
-  // list to whichever row the active view says stands for it. A row
-  // behind a shut shelf opens the shelf first. The row can
-  // lag the route (worktree queries still loading), so this retries every
-  // render until it exists; the ref stops repeat scrolls afterwards so
-  // the user can still scroll away freely.
+  // (a ⌘K jump, a deep link) by scrolling the virtualized list to
+  // whichever row the active view says stands for it. A row behind a
+  // shut shelf opens the shelf first. The row can lag the route
+  // (worktree queries still loading), so this retries every render
+  // until it exists. The ref stops repeat scrolls afterwards so the
+  // user can still scroll away freely.
   // Any device's detail page, so a peer's worktree is revealed too.
   const open = useMatch({
     from: WORKTREE_DETAIL_ROUTE_ID,

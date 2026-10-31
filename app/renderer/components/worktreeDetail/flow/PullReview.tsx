@@ -1,7 +1,7 @@
 // The review step the transplant and the mirror both wear: the source
 // card, the destination card (with the pick of a peer and the setup
-// switch), the collision check and the footer band. Each flow's own review composes
-// them around what only it shows. The destination is this machine
+// switch), the collision check and the footer band. Each flow's own
+// review composes them around what only it shows. The destination is this machine
 // unless the flow is a transplant to a peer (DestinationScope), so
 // `localProject` and `thisDeviceLabel` name the landing side, whichever
 // machine that is.
@@ -30,7 +30,6 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { worktreeTitle } from "@shigomori/ui/lib/worktreeTitle.ts";
-import type { LandingTarget } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 import { useCreatePlan } from "./createPlan";
 import type { PullChoiceState } from "./ignoreChoice";
 import { PullLeaveOut } from "./PullLeaveOut";
@@ -47,6 +46,7 @@ import {
 import {
   cloneRefusal,
   type Landing,
+  type LandingTarget,
   LANDS_HERE,
 } from "@shigomori/ui/views/worktreeDetail/flow/pullSteps.ts";
 

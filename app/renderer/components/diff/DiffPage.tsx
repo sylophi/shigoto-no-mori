@@ -3,7 +3,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 // parsePatchFiles lives in the root entry, not /react (the docs example
 // is slightly off: `@pierre/diffs/react` only re-exports the React
-// components and shared types). The two imports are friendly together.
+// components and shared types).
 import {
   parsePatchFiles,
   Virtualizer,
@@ -384,7 +384,7 @@ export function DiffPage({
               isLoading || changes?.loading || parsedFiles === undefined
                 ? "loading"
                 : // A pull request's patch asked again for its media keeps
-                  // showing when that ask fails; any other page says so.
+                  // showing when that ask fails. Any other page says so.
                   error && (patch === undefined || retryMedia === undefined)
                   ? "error"
                   : allFiles.length === 0

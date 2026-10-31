@@ -36,14 +36,14 @@ export function BranchSwitcher({
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- on opening only
   }, [open]);
 
-  // Exclude branches in use by *other* worktrees only; keeping this
+  // Exclude only branches in use by *other* worktrees. Keeping this
   // worktree's own branch lets the popup show it with a check mark.
   const occupied = new Set<string>();
   for (const w of peerWorktrees) {
     if (w.id !== worktree.id && isRealBranch(w.branch)) occupied.add(w.branch);
   }
-  // Local branches always shown; remotes only when no matching local
-  // exists. Picking a remote orphan creates a local tracking branch
+  // Local branches are always shown, remotes only when no matching
+  // local exists. Picking a remote orphan creates a local tracking branch
   // (the host's checkoutBranch resolves the qualified ref, so which remote
   // was picked survives when several carry the same name).
   const localSet = new Set(branches?.local ?? []);

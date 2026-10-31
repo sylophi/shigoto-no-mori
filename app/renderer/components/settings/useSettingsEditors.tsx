@@ -11,8 +11,7 @@ import {
 // mounted once visited (so switching tabs never drops an edit), and the
 // footer's Save and Discard act on all of them at once. Each device
 // form reports itself here. The page reads the flags to render the
-// footer, and calls the functions
-// from its Save and Discard.
+// footer, and calls the functions from its Save and Discard.
 export interface SettingsEditor {
   isDirty: boolean;
   isPending: boolean;

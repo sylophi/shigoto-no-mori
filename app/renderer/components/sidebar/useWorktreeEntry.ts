@@ -1,25 +1,14 @@
 import type { WorktreeEntry } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
-
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router";
-
 import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
-
 import { useWorktreeTerminalMark } from "@/hooks/terminals/useTerminals";
-
 import { useRowHostApi } from "@/hooks/remote/useCommandAccess";
-
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-
 import type { Worktree } from "@shigomori/contracts/schemas";
-
 import { useSidebarMarks } from "@/hooks/config/useSidebarMarks";
-
 import { useWorktreeForwardTip } from "@/hooks/remote/usePortForwards";
-
 import { useResident } from "@/hooks/villagers/useResident";
-
 import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
-
 import {
   routeDeviceId,
   WORKTREE_DETAIL_ROUTE_ID,

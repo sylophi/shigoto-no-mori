@@ -17,7 +17,7 @@ export function BranchTitle({
   worktree: Worktree;
   subtitle?: boolean;
 }) {
-  // null while idle; the in-flight edit value otherwise. Folds "editing"
+  // Null while idle, otherwise the in-flight edit value. Folds "editing"
   // and "draft" together so we don't seed state from a prop.
   const [draft, setDraft] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
@@ -29,7 +29,6 @@ export function BranchTitle({
   const canRename = canCommand && !worktree.detached;
 
   const begin = () => {
-    if (worktree.detached) return;
     rename.reset();
     setDraft(worktree.branch);
   };

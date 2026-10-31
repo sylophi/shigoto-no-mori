@@ -6,9 +6,9 @@ import {
 } from "@/hooks/config/useSettingsSave";
 import {
   fromConfig,
+  type SettingsFormState,
   withClientFields,
 } from "@shigomori/ui/lib/settingsForm.ts";
-import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import {
   pickHostDevice,
   useDeviceRoster,

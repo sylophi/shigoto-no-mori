@@ -24,8 +24,8 @@ export function PullRequestDiff() {
     return <WorktreeMissingView {...missing} />;
   }
   if (!pr) {
-    // Same story for the PR lookup: pending or failed both leave `pr`
-    // undefined, and neither means the branch has no pull request. The
+    // A pending or failed lookup leaves `pr` undefined too, and neither
+    // means the branch has no pull request. The
     // lookup shells out to `gh`, which can hang on a slow network, so
     // the pending state keeps the back button instead of a blank pane.
     return (

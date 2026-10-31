@@ -7,10 +7,10 @@ import {
 } from "@/hooks/git/useBranchCommits";
 import { useCommitRewrites } from "@/hooks/worktrees/useCommitRewrites";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { NO_REWRITE } from "@shigomori/ui/lib/commitRewrite.ts";
-import type {
-  CommitActions,
-  CommitRewrite,
+import {
+  type CommitActions,
+  type CommitRewrite,
+  NO_REWRITE,
 } from "@shigomori/ui/lib/commitRewrite.ts";
 import { pluralize } from "@shigomori/contracts/words";
 import {

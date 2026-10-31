@@ -3,7 +3,6 @@ import { useState } from "react";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { VillagerMovingIn } from "./VillagerMovingIn";
-
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useGoBack } from "@/hooks/ui/useGoBack";
@@ -45,7 +44,7 @@ const DEFAULT_MODE: NewWorktreeMode = "pull-request";
 // project page shares picks the device (a tab per device holding the
 // repo), and the form beneath is the same whichever device wins,
 // mounted under that device's host scope and handed THAT device's
-// project id -- every hook in it keys off project.id plus scope, so the
+// project id. Every hook in it keys off project.id plus scope, so the
 // branch list, the folder collision check and the create all follow
 // the pick with no remote-awareness of their own.
 export function NewWorktree() {
@@ -126,7 +125,7 @@ function NewWorktreeForm({
   const prMode = mode === "pull-request";
   // The branch name and base are seeded from async reads (the picked
   // animal name and the resolved default branch), so state holds only
-  // what the user typed; null means "not edited yet" and falls through
+  // what the user typed. Null means "not edited yet" and falls through
   // to the seed. This keeps the form interactive the moment it mounts
   // (the seeds fill in when they land) without a seed-once effect, and
   // an explicit edit is never clobbered by a late-arriving seed, nor
@@ -171,8 +170,8 @@ function NewWorktreeForm({
   // the mode stays offered. Never greyed while it's the selected mode,
   // so the user can't get stuck on a segment they can't click off of.
   const prUnavailable =
-    candidates.data?.status === "unavailable"
-      ? PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT[candidates.data.reason]
+    verdict?.status === "unavailable"
+      ? PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT[verdict.reason]
       : undefined;
   // Set when the pull request source can't be offered (no gh, no GitHub
   // remote). Greys that option out and doubles as its tooltip. The form

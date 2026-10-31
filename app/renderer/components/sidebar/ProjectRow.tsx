@@ -135,7 +135,7 @@ export function ProjectRow({
     // native menu is better than none.
     if (triggerRef.current === null) return;
     event.preventDefault();
-    triggerRef.current?.click();
+    triggerRef.current.click();
   };
 
   return (

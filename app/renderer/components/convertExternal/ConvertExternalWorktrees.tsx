@@ -49,7 +49,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
     if (!device) return "";
     // A branch whose name sanitizes to nothing (reserved words like
     // root/primary, DOS device names) gets a generated folder name at
-    // convert time; show that honestly instead of a path with an empty
+    // convert time. Show that honestly instead of a path with an empty
     // leaf.
     return tildify(
       worktreePathFor(

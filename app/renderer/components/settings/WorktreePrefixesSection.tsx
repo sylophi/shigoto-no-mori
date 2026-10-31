@@ -4,9 +4,11 @@ import {
   useSaveWorktreePrefixes,
   useWorktreePrefixes,
 } from "@/hooks/sharedSettings/useWorktreePrefixes";
-import type { WorktreePrefixList } from "@shigomori/ui/views/settings/WorktreePrefixesSectionView.tsx";
 import { useSharedSettingsSettled } from "@/hooks/sharedSettings/useSharedSettings";
-import { WorktreePrefixesSectionView } from "@shigomori/ui/views/settings/WorktreePrefixesSectionView.tsx";
+import {
+  type WorktreePrefixList,
+  WorktreePrefixesSectionView,
+} from "@shigomori/ui/views/settings/WorktreePrefixesSectionView.tsx";
 
 const sameList = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((prefix, i) => prefix === b[i]);

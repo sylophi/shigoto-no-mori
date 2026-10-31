@@ -2,8 +2,8 @@
 // three steps on one rail. Review shows the source, both devices, and
 // what stays out (the one choice a mirror has). Mirror is the move (a
 // send from the original's device) with its progress frames, plus the
-// session open on top. Live is
-// proof: the session's first verdict, and the way to the copy's page.
+// session open on top. Live is proof: the session's first verdict, and
+// the way to the copy's page.
 // The flow runs both ways: MirrorDialog copies a peer's worktree here,
 // MirrorToDialog copies one of this device's to a peer (under that
 // peer's DestinationProvider). Either way the session runs on the

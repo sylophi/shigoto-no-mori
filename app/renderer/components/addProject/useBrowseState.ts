@@ -27,8 +27,8 @@ export function useBrowseState(opts: UseBrowseStateOptions) {
   const { listing, leafFilter } = browse;
 
   // What the user is about to submit. When the query points at an
-  // existing git repo we offer "Add"; otherwise we offer "Scan for git
-  // repos" so the same primary slot doubles as the discovery path.
+  // existing git repo we offer "Add", otherwise "Scan for git repos",
+  // so the same primary slot doubles as the discovery path.
   const submitTarget = normalizeForSubmit(query);
   // Whether it is a repo. A name typed inside the listed folder is
   // often answered by the listing already in hand. Only a yes is taken

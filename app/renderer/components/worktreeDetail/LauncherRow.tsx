@@ -22,8 +22,8 @@ export function LauncherRow({ worktree }: { worktree: Worktree }) {
   const keymap = useKeymap();
 
   // The visible row is the single source of truth for the launch tools'
-  // order.
-  // The palette takes them for its highlighted worktree while it is up.
+  // order. The palette takes them for its highlighted worktree while it
+  // is up.
   const { paletteOpen } = useOverlays();
   useLaunchShortcuts(paletteOpen ? undefined : worktree, data?.entries);
 

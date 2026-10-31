@@ -25,7 +25,7 @@ export function BranchRow({
   const rename = useRenameAnyBranch();
   const del = useDeleteBranch();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  // null when not editing; otherwise holds the in-flight edit value.
+  // Null when not editing, otherwise the in-flight edit value.
   // Folding "editing" and "draft" together avoids initializing local
   // state from the `name` prop.
   const [draft, setDraft] = useState<string | null>(null);
@@ -52,10 +52,7 @@ export function BranchRow({
     }
     rename.mutate(
       { projectId, oldName: name, newName: next },
-      {
-        onSuccess: () => setDraft(null),
-        onError: () => setDraft(null),
-      },
+      { onSettled: () => setDraft(null) },
     );
   };
 
