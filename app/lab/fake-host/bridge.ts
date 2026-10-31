@@ -2329,6 +2329,7 @@ export function installFakeHostBridge(
     isDev: opts.dev ?? true,
     isElectron: !WEB_SHELL,
     platform: WEB_SHELL ? WEB_PLATFORM : "darwin",
+    pathOfFile: undefined,
     ...fixtureClient.api,
   };
 

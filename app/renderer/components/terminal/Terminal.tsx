@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { attachTerminal } from "@/lib/terminalFeed";
+import { useApi } from "@/lib/runtime/pageApi";
 import {
   TerminalView,
   type TerminalFeed,
@@ -10,7 +11,8 @@ import { useOutside } from "@shigomori/ui/outside.tsx";
 // One of the scoped device's terminals, attached for as long as it is
 // on screen.
 export function Terminal({ terminalId }: { terminalId: string }) {
-  const { api } = useHostScope();
+  const { api, remote } = useHostScope();
+  const page = useApi();
   const { openUrl } = useOutside();
   const [ended, setEnded] = useState(false);
   // Kept the same while the device and the terminal are (React
@@ -32,6 +34,9 @@ export function Terminal({ terminalId }: { terminalId: string }) {
           .catch(() => {})
       }
       onLink={openUrl}
+      // A file dropped here is on this machine, so another's shell
+      // could not open its path.
+      pathOfFile={remote ? undefined : page.pathOfFile}
     />
   );
 }

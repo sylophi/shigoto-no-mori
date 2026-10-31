@@ -3,7 +3,7 @@
 // the port the window's calls to its shell ride, which the renderer
 // builds its page api over (renderer/lib/runtime/desktop.ts).
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
-import { contextBridge } from "electron";
+import { contextBridge, webUtils } from "electron";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import {
   APP_VERSION_FLAG,
@@ -38,6 +38,11 @@ const bridge = {
   // What this machine enrolls under, so its own row draws without the
   // hub's copy. Widened like isElectron.
   platform: currentPlatform() as string,
+  // Where a dropped file is on disk, "" for one that is not. A browser
+  // can't tell, so the web bridge has none. Widened like isElectron.
+  pathOfFile: ((file: File) => webUtils.getPathForFile(file)) as
+    | ((file: File) => string)
+    | undefined,
   // Asks for the page's shell port, which arrives as a window message
   // (SHELL_PORT_CHANNEL): the renderer listens first, then asks.
   requestShellPort,

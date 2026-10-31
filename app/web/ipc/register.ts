@@ -538,6 +538,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // rejects the client-scoped portForward channels anyway.
     isElectron: false,
     platform: WEB_PLATFORM,
+    pathOfFile: undefined,
     ...client.api,
   };
 
