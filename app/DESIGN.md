@@ -12,7 +12,7 @@ overlay, class `doubutsu` on the theme root, orthogonal to light/dark) and
 **v1** (neutral shadcn-style, the opt-out via Settings → Appearance).
 There is ONE component tree: doubutsu is
 `packages/ui/src/styles/doubutsu.css` remapping tokens and hooking
-stable attributes on top of the v1 base. Keep it that way; never fork a
+stable attributes on top of the v1 base. Keep it that way, and never fork a
 component per theme. Components are still written in v1's vocabulary
 (tokens, borders, shadows), and the overlay handles translation, so
 build in v1 terms and verify in both.
@@ -134,7 +134,7 @@ Rules that keep both themes cheap to maintain:
 ## Views and containers: data in, markup out
 
 Every component is one of two things. A **view** takes data and
-callbacks as props and only draws; it imports nothing that needs the
+callbacks as props and only draws. It imports nothing that needs the
 running app (no queries, atoms, stores, router, the page's api). A
 **container** binds data to a view and has no markup of its own: it
 writes no element, only views and the primitives they are built from
@@ -146,14 +146,14 @@ through `useOutside`. Containers stay in `renderer/components`. The
 marketing site renders the views over fixture scenes at build time,
 with no `window`, so a view must not reach for the runtime.
 
-- Name the view `<Thing>View`; the container keeps the plain name and
+- Name the view `<Thing>View`. The container keeps the plain name and
   the public props the rest of the app already uses.
 - A view may take a slot (a ready-made element) for a part that has
   its own container, so both still render the same markup.
 - Measuring (how many pills fit, a fitted label) happens in the
   container, which hands the view the result.
 - Open menus and dialogs render through portals, which produce nothing
-  on a server; a scene uses the view's inline surface, which shares its
+  on a server, so a scene uses the view's inline surface, which shares its
   class constants with the live one.
 - The theme rides the theme root, not `<html>` (the theming section
   above), so a view keeps its look wherever it is mounted.

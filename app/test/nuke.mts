@@ -1,7 +1,7 @@
 // Durable proof for "Nuke everything" against REAL git repositories:
 // the host's half refuses for a trap and touches nothing, and removes
 // every worktree the app made (and only those) with a second run
-// finishing what an interrupted first left; the next start's half
+// finishing what an interrupted first left. The next start's half
 // deletes what the marker names and all of userData but the lock and
 // the dev profiles, and finishes after a start that died halfway
 // through.

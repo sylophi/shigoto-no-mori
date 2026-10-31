@@ -105,7 +105,7 @@ online or offline signal from the OS (the network is cut at the
 proxies, not the interface), and under SIGSTOP a process's monotonic
 and wall clocks both run on, where a real sleep stops the first. So
 after a long freeze the host's sweep can cut a peer's link for silence
-("heartbeat timeout" in its log), which a real sleep doesn't; the peer
+("heartbeat timeout" in its log), which a real sleep doesn't. The peer
 redials.
 
 ## The report

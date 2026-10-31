@@ -59,7 +59,7 @@ tab hosts nothing), so the web client is the desktop with no local
 projects: a hostless controller for the account's other devices. The
 renderer gates the few surfaces that only make sense with a machine of
 its own behind the window (launch tools, this device's settings, port
-forwarding) on `renderer/lib/localHost.ts`; everything else is the same
+forwarding) on `renderer/lib/localHost.ts`. Everything else is the same
 code in both shells. `shared/` is the code every side compiles, over
 the contracts in `packages/contracts`.
 

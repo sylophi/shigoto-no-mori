@@ -66,7 +66,7 @@ title and description, agent sessions, links into the app) and
 `sm-remote` (send a worktree to another of your machines, bring one
 over, or mirror it).
 Install with [Vercel skills](https://github.com/vercel-labs/skills)
-(skills.sh); the installer lets you pick which ones to include:
+(skills.sh). The installer lets you pick which ones to include:
 
 ```sh
 npx skills add https://github.com/sylophi/shigoto-no-mori

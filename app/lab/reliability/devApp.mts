@@ -8,6 +8,8 @@ import { existsSync, readFileSync, rmSync, type WriteStream } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright-core";
+import { signalIfAlive } from "../../../test/testProcesses.mts";
+import { descendantsIn } from "../../host/lib/scripts/descendants.ts";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { devProfilePaths } from "../../scripts/lib/devProfile.mts";
 import { pageApi, withPageApi } from "./pageApi.mts";
@@ -268,12 +270,12 @@ export class DevApp {
   // stands, its sockets open and silent.
   freeze(): number[] {
     const pids = this.appPids();
-    for (const pid of pids) signal(pid, "SIGSTOP");
+    for (const pid of pids) signalIfAlive(pid, "SIGSTOP");
     return pids;
   }
 
   thaw(pids: number[]): void {
-    for (const pid of pids) signal(pid, "SIGCONT");
+    for (const pid of pids) signalIfAlive(pid, "SIGCONT");
   }
 
   // The whole app, the launcher and everything under it.
@@ -286,13 +288,13 @@ export class DevApp {
     // Electron leaves the launcher's process group, so the whole tree
     // is signalled, found from the launcher down.
     const tree = processTree(launched.pid);
-    for (const pid of tree) signal(pid, "SIGTERM");
+    for (const pid of tree) signalIfAlive(pid, "SIGTERM");
     await waitFor(
       `${this.profile} to quit`,
-      async () => tree.every((pid) => !alive(pid)),
+      async () => tree.every((pid) => !signalIfAlive(pid, 0)),
       20_000,
     ).catch(() => {
-      for (const pid of tree) signal(pid, "SIGKILL");
+      for (const pid of tree) signalIfAlive(pid, "SIGKILL");
     });
     await waitFor(
       `${this.profile} to exit`,
@@ -309,7 +311,7 @@ export class DevApp {
     const launched = this.launched;
     this.launched = null;
     if (launched?.pid === undefined) return;
-    for (const pid of processTree(launched.pid)) signal(pid, "SIGKILL");
+    for (const pid of processTree(launched.pid)) signalIfAlive(pid, "SIGKILL");
   }
 
   // The app's helpers that outlive a killed app: its cloudflared and
@@ -322,7 +324,7 @@ export class DevApp {
         line.startsWith(join(appDir, "dist-cloudflared", "cloudflared")) ||
         (line.startsWith(join(appDir, "dist-file-sync", "file-sync")) &&
           line.includes(this.profileDir));
-      if (ours && ppid === "1") signal(Number(pid), "SIGTERM");
+      if (ours && ppid === "1") signalIfAlive(Number(pid), "SIGTERM");
     }
   }
 
@@ -410,32 +412,5 @@ function psTable(format: string): string[] {
 
 // The process and every descendant, from the process table.
 function processTree(root: number): number[] {
-  const children = new Map<number, number[]>();
-  for (const row of psTable("pid=,ppid=")) {
-    const [pid, ppid] = row.trim().split(/\s+/).map(Number);
-    if (pid === undefined || ppid === undefined || Number.isNaN(pid)) continue;
-    children.set(ppid, [...(children.get(ppid) ?? []), pid]);
-  }
-  const tree = [root];
-  for (let i = 0; i < tree.length; i++) {
-    tree.push(...(children.get(tree[i] ?? -1) ?? []));
-  }
-  return tree;
-}
-
-function signal(pid: number, name: NodeJS.Signals): void {
-  try {
-    process.kill(pid, name);
-  } catch {
-    // Already gone.
-  }
-}
-
-function alive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  return [root, ...descendantsIn(psTable("pid=,ppid=").join("\n"), root)];
 }

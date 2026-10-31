@@ -21,7 +21,7 @@ package main
 // Mutagen's endpoint reads whatever paths the client names and applies
 // whatever transitions it computed, so the .git rule is held at the
 // endpoint itself (guardedEndpoint), on every call that names a path,
-// not left to the configuration. A read of .git ends the stream; a
+// not left to the configuration. A read of .git ends the stream, and a
 // change that touches it is left undone and reported as a problem, so
 // the rest of its cycle (and every later one) still syncs.
 

@@ -211,21 +211,13 @@ export class DeviceHub extends DurableObject<Env> {
   // owner's, and the evicted device only has to sign in again.
   async enroll(request: EnrollRequest): Promise<EnrollOutcome> {
     const online = () => new Set(this.online());
-    const outcome = await this.runtime.runPromise(
+    return await this.runtime.runPromise(
       this.admission.withPermits(1)(
         admit(request, online, (deviceId, code, reason) =>
           this.closeDevice(deviceId, code, reason),
         ),
       ),
     );
-    if (outcome.status !== "enrolled") return outcome;
-    return {
-      status: "enrolled",
-      createdAt: outcome.createdAt,
-      lastSeenAt: outcome.lastSeenAt,
-      online: outcome.online,
-      evicted: outcome.evicted,
-    };
   }
 
   private closeDevice(deviceId: string, code: number, reason: string): void {

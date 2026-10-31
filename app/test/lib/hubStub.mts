@@ -65,7 +65,7 @@ export type StubHub = {
   pingsFrom(deviceId: string): number;
   setAnswerPings(value: boolean): void;
   // Answers every upgrade with the Worker's 429 and this Retry-After,
-  // as its 60 opens a minute does; null accepts them again.
+  // as its 60 opens a minute does. Null accepts them again.
   rateLimitConnects(retryAfterSeconds: number | null): void;
   dropSocket(deviceId: string, code?: number, reason?: string): void;
   close(): Promise<void>;

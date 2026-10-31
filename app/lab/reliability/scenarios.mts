@@ -569,7 +569,7 @@ const hubRedeploy: Scenario = {
       () => false,
     );
     if (dropped) return deployed;
-    lab.note("the hub sockets rode through the deploy; cutting them");
+    lab.note("the hub sockets rode through the deploy, cutting them");
     lab.network.down();
     lab.network.restore({ cut: true });
     return Date.now();
@@ -758,7 +758,7 @@ const reloadAndThirdWindow: Scenario = {
 
 const twoTabsRedial: Scenario = {
   name: "two-tabs-redial",
-  does: "A second tab of the profile is opened, and both tabs' flows are cut at once, three times, so both dial the host together each time; every tab has to recover each time. A host that mints a device's direct tickets as one set refuses one of two tabs dialing together, and that tab has to ask again.",
+  does: "A second tab of the profile is opened, and both tabs' flows are cut at once, three times, so both dial the host together each time. Every tab has to recover each time. A host that mints a device's direct tickets as one set refuses one of two tabs dialing together, and that tab has to ask again.",
   boundMs: 30_000,
   applies: (lab) => lab.has("web"),
   async run(lab) {

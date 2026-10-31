@@ -48,9 +48,9 @@ A device is made of two folders:
   device id is created per data dir, so one data dir is one device. A
   v2 data dir's `registry.json`, `state.json`, `config.json` and
   `projects/` are imported into the store once and deleted once the
-  store is verified to hold them; its `worktrees/` move to `wt/`. Prod
+  store is verified to hold them, and its `worktrees/` move to `wt/`. Prod
   adopts a pre-2.0 `~/shigomori` that still holds state in place until
-  `~/.sm` holds state; Settings > Data location offers to rename it,
+  `~/.sm` holds state. Settings > Data location offers to rename it,
   and `sm doctor` warns.
 - **userData.** The app instance: `account.json` (hub credential and
   the accept-commands switch), `clientConfig.json` (theme,
@@ -119,7 +119,7 @@ done
    `FAKE_HOST_PORT` and `FAKE_HOST_WEB_PORT` for `pnpm web:dev`,
    `pnpm fake-host` and `pnpm fake-host:web`, which run the same step.
    When the pool's port names change, a checkout's ports are
-   allocated afresh, which can move them; a line the pool doesn't
+   allocated afresh, which can move them. A line the pool doesn't
    write stays in `.env.ports`, unread.
 4. On macOS, clones Electron into a per-worktree bundle under
    `.electron-dev/` and launches from it, so GitHub sign-in can
@@ -151,7 +151,7 @@ screen, which an agent's session has no permission to capture.
 | `RENDERER_PORT`                    | Renderer port, from `.env.ports`. A real env var overrides it.                |
 | `WEB_PORT`                         | Web client port (`pnpm web:dev`). Same source and override rule.              |
 | `FAKE_HOST_PORT`, `FAKE_HOST_WEB_PORT` | Fake host ports (`pnpm fake-host`, `pnpm fake-host:web`). Same source and override rule. |
-| `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`; a real env var overrides it.      |
+| `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`, but a real env var overrides it.  |
 | `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule.                                                |
 | `SM_ACCOUNT_WEB_ORIGIN`            | Web client origin the desktop admits. Same override rule.                     |
 | `SHIGOMORI_UPDATE_FEED_URL`        | App only. Stand-in for the update server, the fallback for the release list. |
@@ -238,7 +238,7 @@ on another device instead (`devices.md`).
   invalidates those modules: the old file is served after a reload
   too. Stop the window, remove `node_modules/.vite` and start it again.
   `ui` is also prebundled (`optimizeDeps` excludes only `contracts`
-  and `effect`); excluding it serves it as source but changes nothing
+  and `effect`). Excluding it serves it as source but changes nothing
   else, and neither does un-ignoring the links in
   `server.watch.ignored`: the cause is in how vite resolves the links.
 - **The host is a process of its own** (`main/hostProcess.ts` forks
@@ -318,7 +318,7 @@ removed one the next time they read the registry. A relaunch after
   package`, `lab` by convention). A word that is no build's makes a
   test flavor: every name follows from it (`Shigoto no Mori (lab)`,
   `com.sylophi.shigomori.lab`, `shigomori-lab://`, `~/.smlab`,
-  `smlab`; `packages/engine/src/flavor.ts` `derive`), so it runs
+  `smlab`, from `packages/engine/src/flavor.ts` `derive`), so it runs
   beside the installed app and the dev app and shares nothing with
   them (`packages/engine/src/footprint.ts` lists what it puts on the
   machine). It has no updates and no login item, is never signed with

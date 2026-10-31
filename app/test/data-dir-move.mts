@@ -383,8 +383,8 @@ it("a finish that can't read the old tree's journal keeps its own, and finishes 
 });
 
 // An undo reverses by each entry's mark. A `planned` entry whose
-// re-key ran before a crash took its mark is reversed; a `returned`
-// one never again, whatever is under its new id since.
+// re-key ran before a crash took its mark is reversed. A `returned`
+// one never is again, whatever is under its new id since.
 it("an undo reverses a planned entry its re-key reached, and never a returned one", async () => {
   const identity = (
     await runHost(Ops.listWorktreeIdentities({ projectId }))
@@ -740,7 +740,7 @@ it.each([
 const ref = (id: string) => `refs/shigomori/dirty/${id}`;
 
 // A move undone before its folder moved carries back the dirty capture
-// its re-key carried; one kept under a new id from before refuses the
+// its re-key carried. One kept under a new id from before refuses the
 // move before anything moves.
 it.each([
   ["one kept under the new id refuses the move", false],

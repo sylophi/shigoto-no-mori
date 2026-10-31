@@ -6,7 +6,7 @@ rule per file in `rules/`.
 | Rule | What it holds |
 | --- | --- |
 | `no-double-cast` | No `x as unknown as T`. |
-| `no-native-tooltip` | No `title` on a DOM element and no SVG `<title>`; SimpleTooltip instead. |
+| `no-native-tooltip` | No `title` on a DOM element and no SVG `<title>` (SimpleTooltip instead). |
 | `disable-needs-reason` | Every suppression says why: `-- <reason>` after an oxlint or eslint directive, text after a `@ts-expect-error`, `@ts-ignore` or `@ts-nocheck`. |
 | `effect-namespace-imports` | Effect modules come in as namespaces from their subpath, `import * as Effect from "effect/Effect"`. |
 | `no-runtime-in-service` | A service module never builds a `ManagedRuntime` or calls `run*`. |

@@ -33,7 +33,7 @@ SS = 4  # supersample factor for crisper edges
 CORNER_RADIUS_RATIO = 0.225  # macOS Big Sur+ squircle approximation
 
 # --- geometry, unit-relative -------------------------------------------------
-# Three overlapping circles form the crown; the chin ellipse fills the
+# Three overlapping circles form the crown, and the chin ellipse fills the
 # gap where the lobes meet so the silhouette stays unbroken.
 CROWN = [
     ((0.50, 0.32), 0.20),
@@ -49,7 +49,7 @@ TRUNK_HALF_BOT = 0.06
 
 @dataclass(frozen=True)
 class Theme:
-    """Background is a vertical gradient; equal stops render flat."""
+    """Background is a vertical gradient. Equal stops render flat."""
 
     bg_top: tuple[int, int, int]
     bg_bottom: tuple[int, int, int]

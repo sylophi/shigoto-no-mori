@@ -4,31 +4,31 @@ How Effect is written in this repo. Every TypeScript package follows
 it: the engine, the host, the desktop and web shells, the contracts,
 the hub, and the renderer's data layer. A review holds the lines a
 PR changes to these rules, not older code. The shell's Electron-facing
-modules (the menu, windows, deep links) are plain Electron code;
+modules (the menu, windows, deep links) are plain Electron code, and
 `app/main/README.md` says which of the shell is Effect.
 
 Effect is pinned to one exact version, the latest stable release (the
 workspace catalog), and a bump is a PR of its own. Effect itself is
-never patched; a gap is wrapped on our side. Read Effect's own
+never patched. A gap is wrapped on our side. Read Effect's own
 guidance for that version before writing Effect code: `AGENTS.md` in
 the installed package (`node_modules/effect` in any package of the
 workspace, such as `app/node_modules/effect/AGENTS.md`), the `ai-docs/`
 examples beside it that it links, and for Schema, `SCHEMA.md` at the pinned tag
 (`https://github.com/Effect-TS/effect/blob/effect@4.0.2/packages/effect/SCHEMA.md`,
-a long guide to read in chunks; its tag moves with the catalog). This
+a long guide to read in chunks, whose tag moves with the catalog). This
 file adds what the repo decides beyond it, and says why wherever it
 departs from it. The source of that version, in the same folder, is
 the reference for any API question. All of it is read only, and it
 beats memory and any other copy of Effect's docs. `rpc`,
 `socket`, `process`, `cli`, `http` and `sql` are marked
 `@stability unstable` in that version. Never write a pattern on those
-modules from memory; read the source first.
+modules from memory. Read the source first.
 
 ## 1. Where a capability lives
 
 - A capability is a method on the service that owns its domain
   (`engine/worktrees`, `host/mirror`, ...). Extend the service that
-  owns the domain; add a new one only when none does.
+  owns the domain, and add a new one only when none does.
 - Transports stay thin: an RPC handler, a terminal command, a shell
   bridge method, an MCP tool (`sm guide mcp`). Each decodes its input,
   calls one service method, and maps the service's typed errors to
@@ -41,7 +41,7 @@ modules from memory; read the source first.
   mirrors) is owned by a host service, not pushed into the engine for
   uniformity.
 - Handlers add no spans or metrics of their own. Group middleware
-  authorizes and instruments every call; per-call context is
+  authorizes and instruments every call. Per-call context is
   `Effect.annotateCurrentSpan`.
 - Pure helpers (a slug, a label, layout math) are plain functions
   beside the service. The capability itself is the method.
@@ -90,14 +90,14 @@ export const layer = Layer.effect(Registry, make);
   module is consumed the same way: `import * as Registry from
   "./Registry.ts"`, then `yield* Registry.Registry` and
   `Registry.layer`. Named imports are fine for a pure helper, an
-  error, a schema or a type. Effect's guidance imports from `"effect"`;
-  the repo keeps the one form `effect-namespace-imports` holds.
+  error, a schema or a type. Effect's guidance imports from `"effect"`,
+  but the repo keeps the one form `effect-namespace-imports` holds.
 - **No standalone interface name.** The type is `Registry["Service"]`.
 - **Dependencies come from the environment** (`yield*
   FileSystem.FileSystem`), never as parameters to `make`, never from a
   module global or a closure over a singleton. Configuration,
-  immutable values and deliberate callbacks may be parameters; they
-  are not services.
+  immutable values and deliberate callbacks may be parameters, since
+  they are not services.
 - **`make` is private** unless another module needs it. Use the
   constructor that fits: `Layer.succeed` or `Layer.sync` for a
   service with no effects, `Layer.effect` for one built with effects,
@@ -105,7 +105,7 @@ export const layer = Layer.effect(Registry, make);
 - **The layer is the module's export**, not a `static layer` on the
   tag as in Effect's guidance: a service spread over sub-makers needs
   `make` apart from the tag, and every service reads the same way.
-- **Functions:** `Effect.gen` inline; a reusable function is
+- **Functions:** `Effect.gen` inline. A reusable function is
   `Effect.fn("name")` where a span helps (every service method) and
   `Effect.fnUntraced` otherwise (a helper, a hot path), and
   `Effect.fn.Return<A, E>` states a return type no tag gives.
@@ -129,7 +129,7 @@ export const layer = Layer.effect(Registry, make);
   from what they return. The tag, `make` and `layer` stay in the
   service module. The errors, documents and helpers the areas share go
   in the folder too (`worktrees/documents.ts`), so no area imports the
-  service module back; the service module re-exports what consumers
+  service module back. The service module re-exports what consumers
   use, so it stays the one place they import. A sub-maker has no tag
   and no layer, and nothing outside the service imports it.
 
@@ -191,8 +191,8 @@ export const layer = Layer.effect(Registry, make);
 - Fields stay safe and bounded: no raw payloads, command arguments or
   output, signed URLs, credentials. The exact value lives only in
   `cause`. Expose a category, a count, a path, a host.
-- Construct the error where the failure happens; translate only at a
-  transport. A translation passes domain errors through and wraps only
+- Construct the error where the failure happens, and translate only at
+  a transport. A translation passes domain errors through and wraps only
   unknown or lower-level failures.
 - One distinction, one encoding: a separate class when callers or the
   user-facing message branch on it, a field when it only helps
@@ -204,7 +204,7 @@ export const layer = Layer.effect(Registry, make);
   `export const isFoo = Schema.is(Foo)`.
 - Catch one known tag (or a list sharing a handler) with
   `Effect.catchTag`, several with `Effect.catchTags({ ... })`.
-  `Effect.catch` handles the whole channel; `catchIf` is for
+  `Effect.catch` handles the whole channel, and `catchIf` is for
   structural checks like a platform error code.
 - Errors cross every wire as their tag and fields and decode back into
   the same class on the other side. The renderer branches on `_tag`,
@@ -217,7 +217,7 @@ export const layer = Layer.effect(Registry, make);
   resource is built from a scoped effect, and the layer graph's
   shutdown is the quit sequence. No `stop()` methods, no "stopping"
   flags, no hand-ordered teardown, no exit backstop timers.
-- A child process is an `effect/process` resource; it ends when its
+- A child process is an `effect/process` resource. It ends when its
   scope closes, with SIGKILL 3 s after its SIGTERM unless its command
   sets a grace of its own (`childDefaults` in `engine/processes.ts`,
   which every graph that spawns provides). node-pty goes behind a
@@ -236,7 +236,7 @@ export const layer = Layer.effect(Registry, make);
   interrupt at each step leaves: what is undone, and what is finished
   after it, at the next start or by `sm doctor --fix`. Each operation
   takes the simplest of completion, rollback (the finalizers above) or
-  recovery; there is no general transaction framework.
+  recovery. There is no general transaction framework.
 
 ## 6. Concurrency
 
@@ -260,13 +260,13 @@ export const layer = Layer.effect(Registry, make);
   reads as merged. Nothing replays a create, merge, send, install or
   delete to cure a timeout.
 - A sequence of values over time is a `Stream`. A watcher is the
-  `FileSystem` service's `watch` plus `Stream.debounce`; a fan-out is a
-  `PubSub` read as a Stream; a bounded buffer is a `Queue`.
+  `FileSystem` service's `watch` plus `Stream.debounce`, a fan-out is a
+  `PubSub` read as a Stream, and a bounded buffer is a `Queue`.
   Backpressure comes from the consumer pulling, never from
   hand-counted credits.
-- Mutual exclusion is a `Semaphore`; a once-per-key computation is
-  `Effect.cached` or a `Cache`; shared mutable state is a `Ref` or
-  `SubscriptionRef`; one fiber waiting for another's result is a
+- Mutual exclusion is a `Semaphore`, a once-per-key computation is
+  `Effect.cached` or a `Cache`, shared mutable state is a `Ref` or
+  `SubscriptionRef`, and one fiber waiting for another's result is a
   `Deferred`.
 - An answer kept for a time in the host's memory is
   `app/host/lib/util/kept.ts`'s, not a `Cache` TTL or `cachedWithTTL`:
@@ -281,7 +281,7 @@ export const layer = Layer.effect(Registry, make);
   `node:os` or `node:path`, and never reads `process.env`. Nothing in
   a service, `app/shared`, the host, the shell, the engine, the
   contracts or the terminal `sm` reads `Date.now()` or `new Date()`
-  (`no-wall-clock`); code there that is not Effect takes `now` as a
+  (`no-wall-clock`). Code there that is not Effect takes `now` as a
   parameter, as `host/direct/tickets.ts` does, and measures with
   `performance.now()`.
 - Every time decision names its meaning, its owner and its clock. An
@@ -319,7 +319,7 @@ export const layer = Layer.effect(Registry, make);
 ## 8. Contracts and wires
 
 - Contracts are Schema. Every call is an `Rpc` definition in a
-  per-module `RpcGroup`; its payload, success and error schemas are
+  per-module `RpcGroup`. Its payload, success and error schemas are
   the single description of the call for every transport: the device
   socket, the loopback the shells use, the terminal's control client,
   the hub's relay. The hub's own routes are an `HttpApi`
@@ -330,9 +330,9 @@ export const layer = Layer.effect(Registry, make);
   (served to a peer only with the command switch on),
   `tracksProjectUsage`, `grant` (the consent text that covers the
   call), and `busy` (what a quit waits on the call for). A host-scoped
-  call classifies itself; middleware fails closed
+  call classifies itself, and middleware fails closed
   on a missing annotation.
-- Subscriptions are streaming RPCs; there are no broadcast channels. A
+- Subscriptions are streaming RPCs. There are no broadcast channels. A
   client that needs a view subscribes and stops asking what changed.
 - Cancellation is RPC interruption. No cancel registries, no
   `AbortSignal` threading.
@@ -354,12 +354,12 @@ export const layer = Layer.effect(Registry, make);
   only the message it can't read is dropped, its calls unanswered, and
   the port stays up.
 - One owner retries a link, and one authority reports its liveness. A
-  transport dials once (`quietProtocol` in `engine/rpcClient.ts`); a
+  transport dials once (`quietProtocol` in `engine/rpcClient.ts`), and a
   link that is dialed again has one owner that does it: the direct
   keeper (`shared/hub/directKeeper.ts`) for a peer's, the supervisor
   (`shared/remote/supervisor.ts`) for the hub socket's, and
   `shared/remote/hostLink.ts` for this machine's host's. The host's cut
-  of a silent peer frees its slot; it isn't a second verdict on the
+  of a silent peer frees its slot. It isn't a second verdict on the
   peer. A link is torn down once and tells its owner once.
 - No overdue timer is evidence that the other side had a chance to
   answer. A link to another machine (a device's, the hub socket) is
@@ -372,7 +372,7 @@ export const layer = Layer.effect(Registry, make);
   rather than give up. The host's cut of a silent remote peer counts
   silence in monotonic time (`host/socket/DeviceLink.ts`). Effect's RPC
   pinger judges a link by its last frame's age on the wall clock, so
-  `quietProtocol` gives it no timeout; its pings only keep the far end's
+  `quietProtocol` gives it no timeout. Its pings only keep the far end's
   slot.
 - An adapter keeps the transport's status and the peer's identity in
   what it raises, and a link logs its lifecycle transitions, inbound
@@ -385,7 +385,7 @@ export const layer = Layer.effect(Registry, make);
 ## 9. Tests
 
 - Tests go through the service. Test layers stand in only for
-  external dependencies (git, the hub, a peer, the clock); the logic
+  external dependencies (git, the hub, a peer, the clock). The logic
   under test is never mocked.
 - Time is `TestClock`. A test that needs a sleep or a wall-clock
   timeout to pass is wrong. A proof gets one from `testClock()`
@@ -394,8 +394,8 @@ export const layer = Layer.effect(Registry, make);
 - Tests are plain vitest cases that run their effects on the runtime
   of the thing under test: the engine sandbox's `box.engine(effect)`,
   the proofs' `runHost(effect)`. Effect's guidance uses `it.effect`
-  from `@effect/vitest`; the proofs already run on the host's and the
-  engine's own runtimes, and keep one way to. A test that spawns real
+  from `@effect/vitest`, but the proofs already run on the host's and
+  the engine's own runtimes, and keep one way to. A test that spawns real
   git or the real `sm` keeps the forks pool, each file in a process of
   its own. Files run one at a time only when they share something
   fixed, like a port.
@@ -403,17 +403,17 @@ export const layer = Layer.effect(Registry, make);
 ## 10. Views and containers
 
 The renderer's rule for views and containers lives in `app/DESIGN.md`
-("Views and containers"); where a container's data comes from is this
+("Views and containers"). Where a container's data comes from is this
 section's. Ongoing state is a view, a refresh is a request, and an
 action is a request. A host view (a streaming RPC) reaches a container
 as an atom on the client's runtime, and is live, so nothing
-invalidates it; its refresh is a call that reads the view now and
+invalidates it. Its refresh is a call that reads the view now and
 answers once that read landed (`Views.refresh` in
 `app/host/lib/Views.ts`), so a spinner bound to it ends on time. State
 kept from a push stream is an atom too. A request (a value computed
-when asked, or an action) is a React Query query or mutation; a push
-never feeds a reactivity key. A family becomes a view once the host
-holds it as state and serves a view of it; a one-off read stays a
+when asked, or an action) is a React Query query or mutation, and a
+push never feeds a reactivity key. A family becomes a view once the host
+holds it as state and serves a view of it, and a one-off read stays a
 query. Requests don't go through `effect/reactivity`'s AtomRpc: its
 reactivity keys would be the push-to-key mapping
 (`renderer/lib/hostWatch.ts`) under another name, and what React Query

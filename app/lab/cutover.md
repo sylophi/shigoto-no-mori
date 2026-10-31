@@ -13,7 +13,7 @@ order. The hub's commands run from `hub/`, `wrangler` as
    --persist-to <dir>`, where `<dir>` is an empty folder (a copy left
    by an earlier load already has the tables). It passes when every
    device row is kept with `public_key` NULL. The export prints a
-   presigned link to it, valid an hour; keep that line out of anything
+   presigned link to it, valid an hour. Keep that line out of anything
    shared.
 2. The release published from main's tip, flagged as a prerelease. A
    2.x updater passes over a prerelease, so no device runs 3.0 before
@@ -77,7 +77,7 @@ each repo's `.git/worktrees/<name>/gitdir`). With 3.0 quit:
    is recorded never imports again, so what 2.x writes after the
    restore would never reach a later 3.0.
 4. Install 2.37.4 from its release in place of 3.0. It offers 3.0
-   again; leave Restart to update alone.
+   again. Leave Restart to update alone.
 
 2.x then finds each worktree it knew where it kept it, with the work
 done since, and opens the folder as one that never saw 3.0.

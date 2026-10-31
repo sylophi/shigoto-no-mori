@@ -20,7 +20,7 @@ import { parseArgs } from "node:util";
 import { guideCommand } from "@shigomori/engine/agentGuide";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import type { Page } from "playwright-core";
-import { onRunEnd } from "../../../test/testProcesses.mts";
+import { onRunEnd, signalIfAlive } from "../../../test/testProcesses.mts";
 import { DevApp } from "../reliability/devApp.mts";
 import { pageApi, withPageApi } from "../reliability/pageApi.mts";
 import { isolateGit } from "../../../test/gitIsolation.ts";
@@ -255,11 +255,7 @@ function kill(text: string, signal: NodeJS.Signals): void {
   for (const row of table.split("\n")) {
     const [pid, ...command] = row.trim().split(/\s+/);
     if (pid !== undefined && command.join(" ").includes(text)) {
-      try {
-        process.kill(Number(pid), signal);
-      } catch {
-        // Already gone.
-      }
+      signalIfAlive(Number(pid), signal);
     }
   }
 }

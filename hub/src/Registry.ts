@@ -37,6 +37,17 @@ export interface DeviceRow {
   last_seen_at: number | null;
 }
 
+interface DeviceUpsert {
+  readonly deviceId: string;
+  readonly accountId: string;
+  readonly name: string;
+  readonly platform: string;
+  readonly icon: string;
+  readonly publicKey: string;
+  readonly credentialHash: string;
+  readonly createdAt: number;
+}
+
 const DEVICE_COLUMNS =
   "device_id, account_id, name, platform, icon, public_key, credential_hash, created_at, last_seen_at";
 
@@ -72,16 +83,9 @@ export class Registry extends Context.Service<
     // credential and key and refreshes name, platform and icon. False when the
     // device id is another account's: the guard in the statement holds
     // whatever a concurrent read saw.
-    readonly upsert: (row: {
-      readonly deviceId: string;
-      readonly accountId: string;
-      readonly name: string;
-      readonly platform: string;
-      readonly icon: string;
-      readonly publicKey: string;
-      readonly credentialHash: string;
-      readonly createdAt: number;
-    }) => Effect.Effect<boolean, RegistryError>;
+    readonly upsert: (
+      row: DeviceUpsert,
+    ) => Effect.Effect<boolean, RegistryError>;
     // Deletes the device row, scoped to the account, and tombstones its
     // credential in the same batch, so a device presenting it later is
     // told it was revoked. False when no row went.
@@ -166,16 +170,7 @@ const make = Effect.gen(function* () {
     return result.results.map((row) => row.device_id);
   });
 
-  const upsert = Effect.fn("Registry.upsert")(function* (row: {
-    readonly deviceId: string;
-    readonly accountId: string;
-    readonly name: string;
-    readonly platform: string;
-    readonly icon: string;
-    readonly publicKey: string;
-    readonly credentialHash: string;
-    readonly createdAt: number;
-  }) {
+  const upsert = Effect.fn("Registry.upsert")(function* (row: DeviceUpsert) {
     const result = yield* query("enroll a device", () =>
       db
         .prepare(

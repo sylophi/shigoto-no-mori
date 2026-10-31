@@ -1,6 +1,6 @@
 // Compiles the terminal sm (packages/cli) into a standalone Bun binary.
 // The packaged build's flavor (SM_FLAVOR, shared/packaging/buildFlavor.mts),
-// or dev; naming and data dir policy are the flavor table's
+// or dev. Naming and data dir policy are the flavor table's
 // (packages/engine/src/flavor.ts).
 //   default          -> dist-cli/sm       targets ~/.sm (bundled with the app)
 //   SM_FLAVOR=<word> -> dist-cli/sm<word> targets ~/.sm<word> (a test flavor's)

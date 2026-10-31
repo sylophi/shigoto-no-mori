@@ -188,7 +188,7 @@ func TestServeAppliesTheRestOfABatchThatTouchesGit(t *testing.T) {
 // credential and a linked worktree whose .git is a pointer file: a peer
 // that reads .git is refused before anything is read, and one that
 // stages into it has only the rest staged, while a worktree file still
-// comes; and a nested pointer stays out of the scan under the Docker
+// comes. A nested pointer stays out of the scan under the Docker
 // ignore syntax a client may ask for.
 func TestServeRefusesARealRepositorysGitByName(t *testing.T) {
 	t.Setenv("MUTAGEN_DATA_DIRECTORY", filepath.Join(t.TempDir(), "mutagen"))

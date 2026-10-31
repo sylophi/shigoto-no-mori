@@ -5,12 +5,12 @@
 // left its group included (`sm` runs git in a session of its own, as
 // the engine runs every command). What a proof spawns itself it hands
 // to `own`, which ends it with the case it started in
-// (testProcesses.setup.mts); what the code under test starts ends with
+// (testProcesses.setup.mts). What the code under test starts ends with
 // the file, and everything with the run.
 //
 // `onRunEnd(end)` runs `end` once, synchronously, on exit or on SIGINT,
 // SIGTERM or SIGHUP, which would otherwise end the process with no
-// teardown at all; then everything the process started is ended
+// teardown at all. Then everything the process started is ended
 // (`endAll`), and the signal ends the process as it would have. vitest
 // SIGTERMs its forks at the end of a run (SIGKILL 500 ms later), and
 // the terminal's Ctrl-C reaches them, so a fork ends its own there.

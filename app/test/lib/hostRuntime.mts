@@ -1,8 +1,8 @@
 // The host's services, up the way the app's graph (host/process/layer.ts)
 // brings them up, so host code a proof or a bench reaches answers
 // instead of waiting for a graph that never comes (EFFECT.md, runtime
-// boundaries). Every proof's file starts and disposes it (hostSetup.mts);
-// a bench under plain node disposes it itself.
+// boundaries). Every proof's file starts and disposes it (hostSetup.mts),
+// and a bench under plain node disposes it itself.
 import {
   mkdirSync,
   mkdtempSync,
@@ -68,7 +68,7 @@ process.env.GH_CONFIG_DIR = join(engineDataDir, "..", "gh-config");
 // is named from ZDOTDIR (macOS's /etc/zshrc), so the shells start in a
 // ZDOTDIR of the run's whose startup files read the developer's own under
 // the developer's ZDOTDIR, wherever their .zshenv moves it, and then name
-// the run's history; bash's is HISTFILE, which it takes from here.
+// the run's history. Bash's is HISTFILE, which it takes from here.
 const zdotdir = join(engineDataDir, "..", "zdotdir");
 mkdirSync(zdotdir, { recursive: true });
 const ownFile = (file: string) =>

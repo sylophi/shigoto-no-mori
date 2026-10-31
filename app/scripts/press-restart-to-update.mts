@@ -31,7 +31,7 @@ if (dataDir === undefined) {
   console.error("usage: press-restart-to-update.mts <data dir>");
   process.exit(2);
 }
-const { port, token } = Schema.decodeUnknownSync(LoopbackFile)(
+const { port, token } = Schema.decodeSync(LoopbackFile)(
   readFileSync(join(dataDir, LOOPBACK_FILE), "utf8"),
 );
 

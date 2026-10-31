@@ -154,7 +154,7 @@ const config: ForgeConfig = {
     // packaged build.
     protocols: [{ name: names.appName, schemes: [rendererSchemeName(flavor)] }],
     // The CLI binary is compiled by the prePackage hook below into
-    // dist-cli/ and shipped in Resources; Settings offers to link it
+    // dist-cli/ and shipped in Resources. Settings offers to link it
     // into the user's bin dir.
     extraResource: [
       "resources/licenses",

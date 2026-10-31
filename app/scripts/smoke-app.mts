@@ -18,8 +18,8 @@
 // the new bundle in and opens it again, on the same temporary data
 // folder.
 //
-// The release job runs it on the signed build; locally, on a test
-// flavor's (`SM_FLAVOR=lab pnpm package`, app/lab/dev-app.md):
+// The release job runs it on the signed build, and locally it runs on a
+// test flavor's (`SM_FLAVOR=lab pnpm package`, app/lab/dev-app.md):
 //
 //   node scripts/smoke-app.mts "out/<app name>-darwin-arm64/<app name>.app"
 //
@@ -57,7 +57,12 @@ import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isolateGit } from "../../test/gitIsolation.ts";
-import { endAll, onRunEnd, own } from "../../test/testProcesses.mts";
+import {
+  endAll,
+  onRunEnd,
+  own,
+  signalIfAlive,
+} from "../../test/testProcesses.mts";
 import { leaveTestTemp, ownTestTemp } from "../../test/testTemp.mts";
 
 const OPEN_WITHIN_MS = 60_000;
@@ -147,26 +152,10 @@ function printLogs(dataDir?: string): void {
   }
 }
 
-const pidAlive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-// A signal to a process gone already is no failure of the smoke's.
-const signal = (pid: number, name: NodeJS.Signals) => {
-  try {
-    process.kill(pid, name);
-  } catch {}
-};
-
 async function stop(pid: number, exited: () => boolean): Promise<void> {
   if (exited()) return;
-  signal(pid, "SIGTERM");
-  if (!(await until(exited, QUIT_WITHIN_MS))) signal(pid, "SIGKILL");
+  signalIfAlive(pid, "SIGTERM");
+  if (!(await until(exited, QUIT_WITHIN_MS))) signalIfAlive(pid, "SIGKILL");
   await until(exited, QUIT_WITHIN_MS);
 }
 
@@ -176,7 +165,7 @@ async function stop(pid: number, exited: () => boolean): Promise<void> {
 // can't wait on the event loop, which reaps an exited child, so ps
 // reads it gone or a zombie.
 function quitServed(pid: number): void {
-  signal(pid, "SIGTERM");
+  signalIfAlive(pid, "SIGTERM");
   const deadline = Date.now() + QUIT_WITHIN_MS;
   while (Date.now() < deadline) {
     const stat = spawnSync("/bin/ps", ["-o", "stat=", "-p", String(pid)], {
@@ -462,9 +451,9 @@ async function update(identity: string) {
     // The installer opened it with the data folder alone, so its first
     // check, a minute in, would ask the real feed and drop the staged
     // update. Started again on the local list before then, it has the
-    // update ready from the start; then Settings' button, the way the
-    // window presses it.
-    await stop(failed.pid, () => !pidAlive(failed.pid));
+    // update ready from the start. Then Settings' button is pressed, the
+    // way the window presses it.
+    await stop(failed.pid, () => !signalIfAlive(failed.pid, 0));
     // Gone, so the end has no pid of it to stop: another process may
     // take the number.
     opened.delete(failed.pid);
@@ -485,7 +474,8 @@ async function update(identity: string) {
     await until(() => {
       const status = statusIn(dataDir);
       return (
-        !pidAlive(pid) || (status?.pid === pid && status.state.kind === "ready")
+        !signalIfAlive(pid, 0) ||
+        (status?.pid === pid && status.state.kind === "ready")
       );
     }, OPEN_WITHIN_MS);
     const ready = statusIn(dataDir);
@@ -502,7 +492,7 @@ async function update(identity: string) {
     const pressedAt = Date.now();
     const refused = pressRestartToUpdate(dataDir);
     if (refused !== null) fail(`Restart to update failed: ${refused}`);
-    if (!(await until(() => !pidAlive(pid), RESTART_WITHIN_MS))) {
+    if (!(await until(() => !signalIfAlive(pid, 0), RESTART_WITHIN_MS))) {
       fail("the app answered Restart to update and didn't quit");
     }
     opened.delete(pid);
@@ -536,7 +526,7 @@ async function update(identity: string) {
     chmodSync(installedDir, 0o755);
     if (!exited && child.pid !== undefined) await stop(child.pid, () => exited);
     await Promise.all(
-      [...opened].map((pid) => stop(pid, () => !pidAlive(pid))),
+      [...opened].map((pid) => stop(pid, () => !signalIfAlive(pid, 0))),
     );
     server.close();
     rmSync(root, { recursive: true, force: true });
@@ -593,7 +583,7 @@ async function updateInstalled(
     throw new Error(`the installed app's update: ${message}`);
   };
   const before = statusIn(dataDir);
-  if (before === null || !pidAlive(before.pid)) {
+  if (before === null || !signalIfAlive(before.pid, 0)) {
     fail(`${installed} isn't running on ${dataDir}`);
   }
   if (!signedIn()) fail("the installed app isn't signed in");
@@ -616,7 +606,7 @@ async function updateInstalled(
       `tell application id "${bundleIdOf(installed)}" to quit`,
     ]);
     const quitting = before.pid;
-    if (!(await until(() => !pidAlive(quitting), STAGE_WITHIN_MS))) {
+    if (!(await until(() => !signalIfAlive(quitting, 0), STAGE_WITHIN_MS))) {
       fail("the installed app didn't quit");
     }
     owed = true;
@@ -648,7 +638,7 @@ async function updateInstalled(
       return (
         status !== null &&
         status.pid !== ready.pid &&
-        pidAlive(status.pid) &&
+        signalIfAlive(status.pid, 0) &&
         status.appVersion === next &&
         versionOf(installed) === next
       );
@@ -689,13 +679,13 @@ async function reopenOnRealFeed(installed: string, dataDir: string) {
     // By its executable: the status can still name the app before.
     const running =
       runningFrom(executableIn(installed)) ?? statusIn(dataDir)?.pid;
-    if (running !== undefined && pidAlive(running)) {
+    if (running !== undefined && signalIfAlive(running, 0)) {
       execFileSync("osascript", [
         "-e",
         `tell application id "${bundleIdOf(installed)}" to quit`,
       ]);
       // A busy app asks first.
-      if (!(await until(() => !pidAlive(running), STAGE_WITHIN_MS))) {
+      if (!(await until(() => !signalIfAlive(running, 0), STAGE_WITHIN_MS))) {
         console.error(`the installed app didn't quit: ${byHand}`);
         return;
       }
