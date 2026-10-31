@@ -15,7 +15,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shigomori-hub",
-  "main": "src/index.ts",
+  "main": "src/worker.ts",
   // Recent, and within the range the workerd of `wrangler dev`
   // supports.
   "compatibility_date": "2026-08-01",

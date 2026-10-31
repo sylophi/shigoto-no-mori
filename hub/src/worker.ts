@@ -1,8 +1,7 @@
 // The hub Worker's HTTP surface: the shared HubApi
 // (packages/contracts/src/hubApi.ts) served with its handlers, its two
-// auth tiers, the rate limiter and open CORS. createWorker(deps) is the
-// seam the tests stub Clerk and the Cloudflare API through, and
-// index.ts wires the real ones.
+// auth tiers, the rate limiter and open CORS. It also exports the
+// Durable Object class wrangler binds as DEVICE_HUB.
 //
 // Every route sits behind a per-IP rate limiter (rateLimit below). It
 // bounds what one caller can make the Worker do downstream (D1, the
@@ -50,6 +49,7 @@ import {
   type DeviceInfoWire,
   MAX_ACCOUNT_DEVICES,
 } from "@shigomori/contracts/hubProtocol";
+import { mintSignInToken, verifyLogin } from "./clerk.ts";
 import { randomBase64url, sha256Hex } from "./crypto.ts";
 import { type Env, WaitUntil, WorkerEnv } from "./env.ts";
 import { CONNECT_RANDOM_PARAM, type EnrollOutcome } from "./hubObject.ts";
@@ -61,39 +61,7 @@ import {
 } from "./ticket.ts";
 import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 
-export interface HubDeps {
-  // Resolves the enroll bearer (a Clerk session or OAuth access token)
-  // to the owning account, or null when it does not verify. Throws when
-  // it could not be checked.
-  verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
-  // A Clerk sign-in token for the account, redeemed once for a session.
-  mintSignInToken(accountId: string, env: Env): Promise<string>;
-  // The fetch the Cloudflare tunnel API is called through. Defaults to
-  // the global fetch.
-  cfFetch?: typeof fetch;
-}
-
-// Structurally compatible with ExportedHandler<Env>, with fetch and
-// the context required.
-export interface HubWorker {
-  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
-}
-
-// ---- Services ----
-
-class LoginVerifier extends Context.Service<
-  LoginVerifier,
-  (token: string) => Promise<{ accountId: string } | null>
->()("sm/hub/LoginVerifier") {}
-
-class SignInTokenMinter extends Context.Service<
-  SignInTokenMinter,
-  (accountId: string) => Promise<string>
->()("sm/hub/SignInTokenMinter") {}
-
-class CfFetch extends Context.Service<CfFetch, typeof fetch>()(
-  "sm/hub/CfFetch",
-) {}
+export { DeviceHub } from "./hubObject.ts";
 
 // The account's Durable Object.
 const accountHub = (env: Env, accountId: string) =>
@@ -112,7 +80,7 @@ const unavailable =
 const loginAuth = Layer.effect(
   LoginAuth,
   Effect.gen(function* () {
-    const verify = yield* LoginVerifier;
+    const env = yield* WorkerEnv;
     return LoginAuth.of({
       bearer: (effect, { credential }) =>
         Effect.gen(function* () {
@@ -120,7 +88,7 @@ const loginAuth = Layer.effect(
           const login =
             token === ""
               ? null
-              : yield* Effect.tryPromise(() => verify(token)).pipe(
+              : yield* Effect.tryPromise(() => verifyLogin(token, env)).pipe(
                   Effect.catchTags({ UnknownError: unavailable("enroll") }),
                 );
           if (login === null) return yield* new HubLoginRejectedError();
@@ -210,8 +178,6 @@ function toDeviceInfo(
 const handlers = Effect.gen(function* () {
   const env = yield* WorkerEnv;
   const registry = yield* Registry.Registry;
-  const cfFetch = yield* CfFetch;
-  const mintSignInToken = yield* SignInTokenMinter;
 
   // Who is online in the account, from its hub object. Presence is
   // advisory in a device list, so a hub object hiccup reads as every
@@ -235,7 +201,7 @@ const handlers = Effect.gen(function* () {
     const cf = tunnelEnvOf(env);
     if (cf === null) return;
     const waitUntil = yield* WaitUntil;
-    waitUntil(teardownTunnel(cf, cfFetch, accountId, deviceId));
+    waitUntil(teardownTunnel(cf, accountId, deviceId));
   });
 
   const enrollment = HttpApiBuilder.group(HubApi, "enrollment", (handle) =>
@@ -296,7 +262,9 @@ const handlers = Effect.gen(function* () {
         Effect.gen(function* () {
           const { accountId } = yield* HubLogin;
           return {
-            token: yield* Effect.tryPromise(() => mintSignInToken(accountId)),
+            token: yield* Effect.tryPromise(() =>
+              mintSignInToken(accountId, env),
+            ),
           };
         }).pipe(Effect.catchTags({ UnknownError: unavailable("enroll") })),
       ),
@@ -378,7 +346,6 @@ const handlers = Effect.gen(function* () {
           return yield* Effect.tryPromise(() =>
             provisionTunnel(
               cf,
-              cfFetch,
               device.accountId,
               device.deviceId,
               payload.port,
@@ -534,49 +501,33 @@ const cors = HttpRouter.middleware(
 
 // ---- The Worker ----
 
-export function createWorker(deps: HubDeps): HubWorker {
-  // The handler for each environment, built on its first request.
-  const built = new WeakMap<
-    Env,
-    (request: Request, context: Context.Context<WaitUntil>) => Promise<Response>
-  >();
-
-  function handlerFor(env: Env) {
-    const existing = built.get(env);
-    if (existing !== undefined) return existing;
-    const services = Layer.mergeAll(
-      Registry.layer,
-      Layer.succeed(LoginVerifier, (token: string) =>
-        deps.verifyLogin(token, env),
-      ),
-      Layer.succeed(SignInTokenMinter, (accountId: string) =>
-        deps.mintSignInToken(accountId, env),
-      ),
-      Layer.succeed(CfFetch, deps.cfFetch ?? fetch),
-    ).pipe(Layer.provideMerge(Layer.succeed(WorkerEnv, env)));
-    const api = HttpApiBuilder.layer(HubApi).pipe(
-      Layer.provide(Layer.unwrap(handlers)),
-      Layer.provide([loginAuth, deviceAuth, protocolFloor]),
-      Layer.provide(rateLimit.layer),
-      Layer.provide(logFailures.layer),
-      Layer.provide(cors),
-      // Merged, not provided: the router's own middleware runs on what
-      // the built layer outputs, outside the API's handlers.
-      Layer.provideMerge(leveledLogs),
-      Layer.provide(services),
-      Layer.provide(HttpServer.layerServices),
-    );
-    const { handler } = HttpRouter.toWebHandler(api, { disableLogger: true });
-    built.set(env, handler);
-    return handler;
-  }
-
-  return {
-    async fetch(request, env, ctx) {
-      return await handlerFor(env)(
-        request,
-        Context.make(WaitUntil, (promise) => ctx.waitUntil(promise)),
-      );
-    },
-  };
+function buildHandler(env: Env) {
+  const api = HttpApiBuilder.layer(HubApi).pipe(
+    Layer.provide(Layer.unwrap(handlers)),
+    Layer.provide([loginAuth, deviceAuth, protocolFloor]),
+    Layer.provide(rateLimit.layer),
+    Layer.provide(logFailures.layer),
+    Layer.provide(cors),
+    // Merged, not provided: the router's own middleware runs on what
+    // the built layer outputs, outside the API's handlers.
+    Layer.provideMerge(leveledLogs),
+    Layer.provide(
+      Registry.layer.pipe(Layer.provideMerge(Layer.succeed(WorkerEnv, env))),
+    ),
+    Layer.provide(HttpServer.layerServices),
+  );
+  return HttpRouter.toWebHandler(api, { disableLogger: true }).handler;
 }
+
+// Built on the isolate's first request, the first time env is at hand.
+let handler: ReturnType<typeof buildHandler> | undefined;
+
+export default {
+  async fetch(request, env, ctx) {
+    handler ??= buildHandler(env);
+    return await handler(
+      request,
+      Context.make(WaitUntil, (promise) => ctx.waitUntil(promise)),
+    );
+  },
+} satisfies ExportedHandler<Env>;

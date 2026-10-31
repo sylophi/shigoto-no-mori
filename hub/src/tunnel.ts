@@ -9,9 +9,6 @@
 // new D1 state: the name is the lookup key, re-provisioning with a new
 // port only rewrites the remotely managed ingress config, and revoke
 // can find the tunnel to tear down from the ids alone.
-//
-// Every Cloudflare API call goes through HubDeps.cfFetch, the global
-// fetch unless createWorker is handed another.
 import type { Env } from "./env.ts";
 import { sha256Hex } from "./crypto.ts";
 
@@ -64,9 +61,9 @@ interface CfEnvelope {
   result: unknown;
 }
 
-// The CF API bound to one tunnel env and fetch, so provisioning and
-// teardown do not thread both through every call.
-function cfApi(cf: TunnelEnv, cfFetch: typeof fetch) {
+// The CF API bound to one tunnel env, so provisioning and teardown do
+// not thread it through every call.
+function cfApi(cf: TunnelEnv) {
   // One CF API round trip: bearer auth, JSON in and out, throws on a
   // non-2xx status or success:false so a CF failure can never be read as
   // a valid result. The type parameter names the `result` slice the
@@ -77,7 +74,7 @@ function cfApi(cf: TunnelEnv, cfFetch: typeof fetch) {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const response = await cfFetch(`${CF_API_BASE}${path}`, {
+    const response = await fetch(`${CF_API_BASE}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${cf.apiToken}`,
@@ -213,12 +210,11 @@ async function writeIngress(
 // listener.
 export async function provisionTunnel(
   cf: TunnelEnv,
-  cfFetch: typeof fetch,
   accountId: string,
   deviceId: string,
   port: number,
 ): Promise<{ hostname: string; connectorToken: string; dnsCreated: boolean }> {
-  const api = cfApi(cf, cfFetch);
+  const api = cfApi(cf);
   const name = await tunnelNameFor(accountId, deviceId);
   const hostname = `${name}.${cf.domain}`;
 
@@ -259,11 +255,10 @@ export async function provisionTunnel(
 // of the account is sent to its hostname again.
 export async function teardownTunnel(
   cf: TunnelEnv,
-  cfFetch: typeof fetch,
   accountId: string,
   deviceId: string,
 ): Promise<void> {
-  const api = cfApi(cf, cfFetch);
+  const api = cfApi(cf);
   const name = await tunnelNameFor(accountId, deviceId);
   // Deletes what a finder found, if anything.
   const deleteFound = async (
