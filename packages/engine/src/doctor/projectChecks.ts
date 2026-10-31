@@ -131,7 +131,7 @@ export const makeProjectChecks = ({
         // git answers with a symlink-free path, and everything in sm
         // matches against it, so both ways this can differ are breakage.
         const detail = (yield* sameDirectory(project.path, primaryPath))
-          ? `registered through a symlinked path; git calls the same directory ${tildify(primaryPath, home)}, so nothing run from inside the repo matches it`
+          ? `registered through a symlinked path. Git calls the same directory ${tildify(primaryPath, home)}, so nothing run from inside the repo matches it`
           : `registered at ${tildify(project.path, home)}, which is a worktree of ${tildify(primaryPath, home)}, not the repo's primary checkout`;
         const readd = `\`${binaryName} projects add ${tildify(primaryPath, home)}\``;
         return Result.fail(

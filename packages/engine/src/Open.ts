@@ -87,7 +87,7 @@ export class AppNotOpened extends Schema.TaggedError<AppNotOpened>()(
 // The dev build has no installed app: it runs from a checkout.
 export class NoDevApp extends Schema.TaggedError<NoDevApp>()("NoDevApp", {}) {
   override get message(): string {
-    return "This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.";
+    return "This is the dev CLI, and the dev app isn't installed. Run `pnpm dev` in a checkout instead.";
   }
 }
 

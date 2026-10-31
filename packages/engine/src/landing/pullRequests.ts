@@ -119,7 +119,7 @@ export const makePullRequests = Effect.gen(function* () {
       if (outcome !== "enqueued") return false;
       if (reporter.waiting !== undefined) {
         yield* reporter.waiting(
-          "the stack is in the merge queue; it lands when the queue processes it",
+          "the stack is in the merge queue. It lands when the queue processes it",
         );
       }
       return true;

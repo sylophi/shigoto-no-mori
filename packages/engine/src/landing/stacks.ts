@@ -200,8 +200,8 @@ export const makeStacks = ({
             if (reporter.waiting !== undefined) {
               yield* reporter.waiting(
                 Option.isSome(after) && after.value.isInMergeQueue
-                  ? `PR #${pr.number} is in the merge queue; land again once it merges, for the rest of the stack`
-                  : `PR #${pr.number} hasn't merged yet; land again once it has, for the rest of the stack`,
+                  ? `PR #${pr.number} is in the merge queue. Land again once it merges, for the rest of the stack`
+                  : `PR #${pr.number} hasn't merged yet. Land again once it has, for the rest of the stack`,
               );
             }
             return true;

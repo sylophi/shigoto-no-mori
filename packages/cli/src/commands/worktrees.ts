@@ -136,7 +136,7 @@ const list = Command.make(
         if (!blank && input.identities) {
           return yield* new UsageError({
             problem:
-              "--identities lists this device's worktrees; it doesn't combine with --remote or --from.",
+              "--identities lists this device's worktrees, so it doesn't combine with --remote or --from.",
           });
         }
         if (!blank && input.all) {

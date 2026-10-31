@@ -130,7 +130,7 @@ export class StackMergeFailed extends Schema.TaggedError<StackMergeFailed>()(
 ) {
   override get message(): string {
     return this.reason === "timeout"
-      ? `GitHub is still merging the stack; check PR #${this.number}`
+      ? `GitHub is still merging the stack. Check PR #${this.number}`
       : `GitHub didn't merge the stack: ${this.detail}`;
   }
 }

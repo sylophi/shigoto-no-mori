@@ -276,7 +276,7 @@ export class TargetError extends Schema.TaggedError<TargetError>()(
     const quoted = JSON.stringify(this.ref);
     switch (this.reason) {
       case "not-in-project":
-        return `Not inside a registered project; pass -p <project>. ${hint}`;
+        return `Not inside a registered project. Pass -p <project>. ${hint}`;
       case "unregistered-project":
         return `This repo (${this.ref}) isn't registered as a project. Add it ${byPlatform({ darwin: "in the app", linux: "with `projects add`" })}, or target a project with -p. ${hint}`;
       case "unknown-project":
@@ -294,7 +294,7 @@ export class TargetError extends Schema.TaggedError<TargetError>()(
       case "unregistered-worktree":
         return `This repo (${this.ref}) isn't registered as a project, so there is no worktree to target here. Pass a worktree name (see \`${this.binary} list\`).`;
       case "not-in-worktree":
-        return `Not inside a worktree; pass a worktree name (see \`${this.binary} list\`).`;
+        return `Not inside a worktree. Pass a worktree name (see \`${this.binary} list\`).`;
       case "keyword-needs-project":
         return `${quoted} needs a project when outside one. Use <project>/${this.ref} or -p <project>.`;
       case "no-such-worktree":
@@ -553,7 +553,7 @@ export const cleanupFailureWords = (failure: {
   readonly phase: string;
   readonly exitCode: number | null;
 }) =>
-  `${failure.phase} ${failure.exitCode === null ? "failed to run" : `exited with code ${failure.exitCode}`}; worktree not removed`;
+  `${failure.phase} ${failure.exitCode === null ? "failed to run" : `exited with code ${failure.exitCode}`}, so the worktree was not removed`;
 
 // A worktree's rows went to its new id but its dirty capture's ref
 // didn't follow: the capture is kept under the old id. A re-key asked

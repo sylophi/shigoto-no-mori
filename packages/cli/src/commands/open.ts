@@ -48,7 +48,7 @@ const commandTarget = (
     if (Option.isNone(worktreeId) && Option.isSome(projectId)) {
       return yield* new UsageError({
         problem:
-          "--project-id scopes --worktree-id; pass both (or -p <project> with a name).",
+          "--project-id scopes --worktree-id. Pass both, or -p <project> with a name.",
       });
     }
     if (Option.isSome(worktreeId)) {
@@ -70,7 +70,7 @@ const commandTarget = (
     }
     if (!(yield* interactive)) {
       return yield* new UsageError({
-        problem: `Not inside a worktree; pass one: ${binaryName} ${usage} <name>.`,
+        problem: `Not inside a worktree. Pass one: ${binaryName} ${usage} <name>.`,
       });
     }
     const located = yield* pickWorktree(
