@@ -49,6 +49,7 @@ import {
 import { isTerminalsWindow } from "@shigomori/contracts/worktreePage";
 import { MIGRATION_PATH } from "@/lib/routePaths";
 import { useWindowRoot } from "@/lib/themeRoot";
+import { watchTheme } from "@shigomori/ui/root.tsx";
 import { useMigration } from "@/hooks/useMigration";
 import {
   migrationOwed,
@@ -206,8 +207,6 @@ function usePageCanvas(phone: boolean): void {
       document.body.style.backgroundColor = color;
     };
     paint();
-    const observer = new MutationObserver(paint);
-    observer.observe(root, { attributeFilter: ["class", "data-palette"] });
-    return () => observer.disconnect();
+    return watchTheme(root, paint);
   }, [root, phone]);
 }

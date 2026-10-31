@@ -22,6 +22,7 @@ import { useCopied } from "../../primitives/copy-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { isMac } from "../../lib/platform.ts";
 import { usersAlone } from "../../lib/usersAlone.ts";
+import { watchTheme } from "../../root.tsx";
 import { TerminalTabToolbar } from "./TerminalTabsView.tsx";
 import { readTerminalTheme, sameTheme } from "./terminalTheme.ts";
 
@@ -325,20 +326,19 @@ export function TerminalView({
     // root and flip after this component's own effects run, so watch the
     // DOM rather than the theme hooks. Only a changed palette is handed to xterm:
     // it repaints everything for any new theme object.
-    const themeObserver = new MutationObserver(() => {
-      const weight = fontWeightOf(host);
-      if (term.options.fontWeight !== weight) term.options.fontWeight = weight;
-      const next = readTerminalTheme(host);
-      if (sameTheme(theme, next)) return;
-      theme = next;
-      term.options.theme = next;
-    });
     const themeRoot = host.closest("[data-theme-scope]");
-    if (themeRoot)
-      themeObserver.observe(themeRoot, {
-        attributes: true,
-        attributeFilter: ["class", "data-palette"],
-      });
+    const unwatchTheme = themeRoot
+      ? watchTheme(themeRoot, () => {
+          const weight = fontWeightOf(host);
+          if (term.options.fontWeight !== weight) {
+            term.options.fontWeight = weight;
+          }
+          const next = readTerminalTheme(host);
+          if (sameTheme(theme, next)) return;
+          theme = next;
+          term.options.theme = next;
+        })
+      : undefined;
 
     // xterm parses a write at the size it has when the write comes in,
     // so the grid takes its box before the feed replays into it.
@@ -367,7 +367,7 @@ export function TerminalView({
 
     return () => {
       stop();
-      themeObserver.disconnect();
+      unwatchTheme?.();
       observer.disconnect();
       clearTimeout(settling);
       term.textarea?.removeEventListener("focus", onFocus);

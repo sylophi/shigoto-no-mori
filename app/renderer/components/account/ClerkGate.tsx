@@ -11,6 +11,7 @@ import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 import type { ClerkProviderProps } from "@clerk/react";
 import { clerkAppearance } from "@/lib/clerkAppearance";
 import { useWindowRoot } from "@/lib/themeRoot";
+import { watchTheme } from "@shigomori/ui/root.tsx";
 import { ClerkAccountSync } from "./ClerkAccountSync";
 import { CodeSignInDialog } from "./CodeSignInDialog";
 import { useApi } from "@/lib/runtime/pageApi";
@@ -55,13 +56,10 @@ export function ClerkGate({
 function useThemedAppearance(): ClerkProviderProps["appearance"] {
   const root = useWindowRoot();
   const [appearance, setAppearance] = useState(() => resolvedAppearance(root));
-  useEffect(() => {
-    const observer = new MutationObserver(() =>
-      setAppearance(resolvedAppearance(root)),
-    );
-    observer.observe(root, { attributeFilter: ["class", "data-palette"] });
-    return () => observer.disconnect();
-  }, [root]);
+  useEffect(
+    () => watchTheme(root, () => setAppearance(resolvedAppearance(root))),
+    [root],
+  );
   return appearance;
 }
 

@@ -11,6 +11,7 @@ import type { Theme } from "@shigomori/contracts/schemas";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { useClientConfig } from "../config/useClientConfig";
 import { useWindowRoot } from "@/lib/themeRoot";
+import { watchTheme } from "@shigomori/ui/root.tsx";
 import { useApi } from "@/lib/runtime/pageApi";
 
 interface ThemeState {
@@ -48,11 +49,7 @@ function readBootHint(): Theme {
 // it.
 function useRootTheme(root: HTMLElement): "light" | "dark" {
   return useSyncExternalStore(
-    (onChange) => {
-      const observer = new MutationObserver(onChange);
-      observer.observe(root, { attributeFilter: ["class"] });
-      return () => observer.disconnect();
-    },
+    (onChange) => watchTheme(root, onChange),
     () => (root.classList.contains("dark") ? "dark" : "light"),
   );
 }
