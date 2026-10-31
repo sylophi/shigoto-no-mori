@@ -15,7 +15,10 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { Project } from "@shigomori/contracts/schemas";
-import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
+import {
+  projectGroupKey,
+  type RemoteForestItem,
+} from "@shigomori/ui/lib/forest.ts";
 import { useSetSidebarView } from "@/hooks/projects/useSidebarView";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { rowDeviceId } from "@/lib/routePaths";
@@ -24,7 +27,6 @@ import {
   createExternalStore,
   useExternalStore,
 } from "@shigomori/ui/lib/externalStore.ts";
-import { projectGroupKey } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 
 const store = createExternalStore<{

@@ -19,7 +19,7 @@ import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes"
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { type LocalSide, localSidesWith } from "@shigomori/ui/lib/forest.ts";
 import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
-import { projectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import { projectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
 import { useDeviceBadges } from "./deviceBadges";
 import { useDeviceFilter } from "./deviceFilter";
 import { useApi } from "@/lib/runtime/pageApi";

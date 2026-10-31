@@ -31,9 +31,8 @@ import {
 import {
   buildSidebarRows,
   type GroupIdSet,
-  projectGroupKey,
-  remoteGroupKeyOf,
 } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import { projectGroupKey, remoteGroupKeyOf } from "@shigomori/ui/lib/forest.ts";
 import { useForestSources } from "./forestSources";
 import { DeviceFilterBar } from "./DeviceFilterBar";
 import { buildInboxRows } from "@shigomori/ui/views/sidebar/inbox/buildInboxRows.ts";

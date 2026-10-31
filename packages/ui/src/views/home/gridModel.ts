@@ -12,7 +12,7 @@ import {
   projectLead,
   type ProjectGroupEntries,
 } from "../palette/buildPaletteEntries.ts";
-import type { ProjectGroupOrder } from "../sidebar/buildSidebarRows.ts";
+import type { ProjectGroupOrder } from "../sidebar/projectGroupOrder.ts";
 import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
 import { projectListSections } from "../sidebar/projectListSections.ts";
 import type { ProjectSection } from "../sidebar/sidebarRow.ts";

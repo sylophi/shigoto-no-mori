@@ -1,6 +1,5 @@
 // The projects folded on the sidebar's inline list, by group key
-// (projectGroupKey in ui's views/sidebar/buildSidebarRows.ts), local
-// and peer-only alike.
+// (projectGroupKey in ui's lib/forest.ts), local and peer-only alike.
 // A preference of the window, kept in its client config like the
 // sidebar view: a peer has no say in how this machine's tree is
 // folded, and a hostless client folds the same way. Absence ==

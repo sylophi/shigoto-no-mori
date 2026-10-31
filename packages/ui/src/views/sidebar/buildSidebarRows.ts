@@ -1,42 +1,46 @@
-import { UNNAMED_DEVICE } from "../../lib/deviceRoster.ts";
 import {
   placeByStack,
   pullRequestStackFor,
   trunkOf,
 } from "@shigomori/contracts/pullRequestStack";
-import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
-import { isAgentWorking } from "@shigomori/contracts/schemas";
-import { peerProjectKey } from "@shigomori/contracts/schemas/config";
+import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
 import {
-  groupPrefixOf,
-  isHiddenByPrefix,
-} from "@shigomori/contracts/sharedSettings";
-import type {
-  LocalSide,
-  MirrorLink,
-  ProjectPullRequestQueries,
-  ProjectWorktreeQueries,
-  RemoteForestItem,
+  deviceBadgeOf,
+  groupShelfOf,
+  type LocalSide,
+  mirrorBadgeLookup,
+  mirrorPairsOf,
+  type MirrorLink,
+  type ProjectPullRequestQueries,
+  type ProjectWorktreeQueries,
+  projectGroupKey,
+  type RemoteForestItem,
+  remoteGroupId,
+  remoteWorktreeKey,
+  worktreeRowKey,
 } from "../../lib/forest.ts";
 import type {
   Project,
-  ProjectSortMode,
   PullRequest,
   Worktree,
   WorktreeSortMode,
 } from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView.tsx";
 import {
+  ALL_KEY,
+  claimRemote,
+  type Filed,
+  NO_OWNER_KEY,
+  ownerKeyOf,
+  type ProjectGroupOrder,
+} from "./projectGroupOrder.ts";
+import {
   GROUP_SHELVES,
   type GroupShelf,
-  type InboxShelf,
-  type Owner,
-  ownerOf,
   type RemoteProjectMember,
   type SidebarRow,
   type SidebarViewModel,
 } from "./sidebarRow.ts";
-import { sortByProject } from "../../lib/sortProjects.ts";
 import { sortWorktrees } from "../../lib/sortWorktrees.ts";
 
 // A set of group ids as the builder asks it: only whether one is in.
@@ -109,83 +113,6 @@ export interface BuildSidebarRowsArgs {
   // the rows, and a local row's mirror still names its peer while the
   // peer's own rows are hidden.
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
-}
-
-// The pairs as the builders look them up: the local worktree each
-// peer row (device, worktree) folds into, and the pair each local
-// worktree is in.
-export function mirrorPairsOf(mirrors: readonly MirrorLink[]): {
-  peerRowsFolded: Map<string, string>;
-  peerOfLocal: Map<string, MirrorLink>;
-} {
-  const peerRowsFolded = new Map<string, string>();
-  const peerOfLocal = new Map<string, MirrorLink>();
-  for (const link of mirrors) {
-    peerRowsFolded.set(
-      remoteWorktreeKey(link.peerDeviceId, link.peerWorktreeId),
-      link.localWorktreeId,
-    );
-    peerOfLocal.set(link.localWorktreeId, link);
-  }
-  return { peerRowsFolded, peerOfLocal };
-}
-
-// The badge a local row wears for the peer it is mirrored with: the
-// peer's own when the registry knows it (its label and tone), else
-// unnamed. Shared by both builders so a pair reads the same in each.
-export function mirrorBadgeLookup(
-  peerOfLocal: ReadonlyMap<string, MirrorLink>,
-  deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>,
-): (worktree: Worktree) => SidebarDeviceBadge | undefined {
-  return (worktree) => {
-    const peer = peerOfLocal.get(worktree.id)?.peerDeviceId;
-    if (peer === undefined) return undefined;
-    return (
-      deviceBadges.get(peer) ?? {
-        deviceId: peer,
-        label: UNNAMED_DEVICE,
-        icon: MACHINE_FALLBACK_ICON,
-        tone: "slate",
-        reachable: false,
-      }
-    );
-  };
-}
-
-// Which fold a worktree sits behind in its group, if any. An agent's
-// working mark comes first, when it counts (isAgentWorking): it says
-// the worktree isn't ready to look at yet, wherever it was filed.
-// Shelving is the user's own call, so it outranks the prefixes. The
-// inbox files by the same rule.
-function groupShelfOf(
-  worktree: Worktree,
-  prefixes: readonly string[],
-  allowAgentWorking: boolean,
-): GroupShelf | null {
-  if (isAgentWorking(worktree, allowAgentWorking)) return "agentWorking";
-  if (worktree.shelved) return "shelved";
-  return isHiddenByPrefix(worktree, prefixes) ? "hidden" : null;
-}
-
-// Which inbox shelf a worktree sits on, null for the live box. Its own
-// fold (groupShelfOf) outranks mergedness: a shelved branch that also
-// merged stays where the user filed it, and the hidden prefixes are a
-// filing made ahead of time. Merged is into the primary or by its pull
-// request (a squash leaves the branch unmerged). A primary is always
-// live: it can't be shelved, and a merged PR on whatever branch it
-// happens to have checked out doesn't make the project's root "done".
-// The palette sinks by it too.
-export function worktreeShelfOf(
-  worktree: Worktree,
-  pr: PullRequest | undefined,
-  prefixes: readonly string[],
-  allowAgentWorking: boolean,
-): InboxShelf | null {
-  if (worktree.isPrimary) return null;
-  const shelf = groupShelfOf(worktree, prefixes, allowAgentWorking);
-  if (shelf !== null) return shelf;
-  if (worktree.mergedIntoPrimary || pr?.state === "MERGED") return "merged";
-  return null;
 }
 
 // Flattens `projects` plus their per-project worktree queries into the
@@ -772,13 +699,6 @@ interface Folders {
   hide: HideRow;
 }
 
-// A section's folders by name, in name order, each with the group keys
-// filed in it. A section is an owner's (ownerOf), and the whole list is
-// one too (ALL_KEY), for when it isn't split by owner.
-type Filed = ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
-
-const ownerKeyOf = (project: Project) => ownerOf(project)?.key ?? NO_OWNER_KEY;
-
 const sectionOf = (
   project: Project,
   byOwner: BuildSidebarRowsArgs["byOwner"],
@@ -831,254 +751,6 @@ function folderRuns(
 
 // Files a row left out behind the row standing in for it (revealKey).
 type HideRow = (key: string, foldKey: string) => void;
-
-// The section of the projects with no owner, and the one section of a
-// list not split by owner. Not valid owner keys (those always hold a
-// slash), so no owner can take them.
-const NO_OWNER_KEY = "none";
-const ALL_KEY = "all";
-
-// Whether a local project takes the peers' checkouts of its repo.
-// Claimed by identity even while still loading, so the project's
-// remote worktrees stay under it instead of reappearing as a duplicate
-// peer-only group. A missing local project
-// claims nothing: its remote counterpart is alive and belongs under
-// its own header.
-const claimsPeers = (
-  project: Project,
-): project is Project & { identity: string } =>
-  project.pathExists !== false && project.identity != null;
-
-// The key a group goes by: what the peers' checkouts are grouped
-// under, and what the shell keeps the open project and the group's
-// shelf reveals by. The repo identity when the project has one, so
-// every checkout of a repo is one group. A
-// peer's project with no identity can only group with itself, so its
-// device names it (peerProjectKey). A local project that claims no
-// peers (no identity, or missing on disk) is its own group, by id.
-// `deviceId` is the peer holding the project, undefined for this
-// machine's.
-export function projectGroupKey(
-  project: Project,
-  deviceId: string | undefined,
-): string {
-  if (deviceId === undefined)
-    return claimsPeers(project) ? project.identity : project.id;
-  return project.identity ?? peerProjectKey(deviceId, project.id);
-}
-
-// The peers' checkouts split between the groups: each local project's
-// claim (aligned with `projects`), then the rest by group key. Remote
-// items are grouped up front by repo identity (an identity-less
-// project can only group with itself), and the local pass claims
-// groups by `get` + `delete`, so whatever remains IS the leftover set
-// and a group can never be claimed twice. A peer holding the repo with
-// no worktrees to show still joins its group: it is a device the
-// header's actions can create on, and a local project with nothing
-// under it keeps its header too.
-function claimRemote(
-  projects: readonly Project[],
-  remote: readonly RemoteForestItem[],
-): {
-  claimed: RemoteForestItem[][];
-  peerOnly: Map<string, RemoteForestItem[]>;
-} {
-  const peerOnly = new Map<string, RemoteForestItem[]>();
-  for (const item of remote) {
-    const groupKey = projectGroupKey(item.project, item.deviceId);
-    const group = peerOnly.get(groupKey);
-    if (group) group.push(item);
-    else peerOnly.set(groupKey, [item]);
-  }
-  const claimed = projects.map((project) => {
-    if (!claimsPeers(project)) return [];
-    const items = peerOnly.get(project.identity) ?? [];
-    peerOnly.delete(project.identity);
-    return items;
-  });
-  return { claimed, peerOnly };
-}
-
-// Group rank by group id. A repo this machine holds is also ranked
-// under the peer-only id it would have, so narrowed to a peer that
-// holds it too, the peer's group keeps the local project's place. And
-// owner rank and header label by owner key (ownerOf), for the list
-// split by owner. And the pinned groups' keys (projectGroupKey), which
-// lead the list wherever their rank puts them. And the folder each
-// group is filed in, by group key, which gathers the groups of one
-// owner filed in the same one under a header, and those headers.
-export interface ProjectGroupOrder {
-  groups: ReadonlyMap<string, number>;
-  owners: ReadonlyMap<string, { rank: number; label: string }>;
-  pinned: ReadonlySet<string>;
-  folders: ReadonlyMap<string, string>;
-  filed: Filed;
-}
-
-// Where each group sits in the tree, decided over every device's
-// projects before the device filter narrows them, so picking a device
-// only drops groups and never reshuffles the rest. A repo held on
-// several devices sorts as one project: its newest use on any of them,
-// and its uses on all of them summed. The manual sort has only this
-// machine's arranged order to go by, so the repos only peers hold
-// trail it in the order they were merged. An owner sits where its
-// best-ranked project does, so a usage sort puts the owner of the
-// project worked on most first, except under the alphabetical sort,
-// where the owners go by label. A label is the owner's name, with its
-// host only when the name is an owner on another host too, decided
-// over every device too so picking one never relabels a header.
-export function projectGroupOrder({
-  projects,
-  remote,
-  sortMode,
-  pinned,
-  folders,
-}: {
-  // This machine's projects as buildSidebarRows is handed them, so a
-  // repo registered twice here has its peers claimed by the same
-  // project in both passes.
-  projects: readonly Project[];
-  remote: readonly RemoteForestItem[];
-  sortMode: ProjectSortMode;
-  pinned: ReadonlySet<string>;
-  folders: ReadonlyMap<string, string>;
-}): ProjectGroupOrder {
-  const { claimed, peerOnly } = claimRemote(projects, remote);
-  const entries = projects.map((project, i) => ({
-    groupKey: projectGroupKey(project, undefined),
-    groupIds: claimsPeers(project)
-      ? [project.id, remoteGroupId(project.identity)]
-      : [project.id],
-    project: withMergedUsage(project, claimed[i] ?? []),
-  }));
-  for (const [groupKey, [first, ...rest]] of peerOnly) {
-    if (!first) continue;
-    entries.push({
-      groupKey,
-      groupIds: [remoteGroupId(groupKey)],
-      project: withMergedUsage(first.project, rest),
-    });
-  }
-  const groups = new Map<string, number>();
-  // Owners by key, in the order their projects lead them in.
-  const owners = new Map<string, Owner>();
-  sortByProject(entries, sortMode, (entry) => entry.project).forEach(
-    (entry, rank) => {
-      // A repo registered twice here keeps its first project's place.
-      for (const id of entry.groupIds)
-        if (!groups.has(id)) groups.set(id, rank);
-      const owner = ownerOf(entry.project);
-      if (owner && !owners.has(owner.key)) owners.set(owner.key, owner);
-    },
-  );
-  const seen = new Set<string>();
-  const onTwoHosts = new Set<string>();
-  for (const { name } of owners.values()) {
-    const folded = name.toLowerCase();
-    if (seen.has(folded)) onTwoHosts.add(folded);
-    seen.add(folded);
-  }
-  const labeled = [...owners].map(
-    ([key, { host, name }]) =>
-      [
-        key,
-        onTwoHosts.has(name.toLowerCase()) ? `${host}/${name}` : name,
-      ] as const,
-  );
-  const ranked =
-    sortMode === "alphabetical"
-      ? labeled.toSorted(([, a], [, b]) => a.localeCompare(b))
-      : labeled;
-  return {
-    groups,
-    owners: new Map(ranked.map(([key, label], rank) => [key, { rank, label }])),
-    pinned,
-    folders,
-    filed: filedFolders(entries, folders),
-  };
-}
-
-// Over every device's projects too, so a folder's rename reaches the
-// projects the device filter leaves out.
-function filedFolders(
-  entries: readonly { groupKey: string; project: Project }[],
-  folders: ReadonlyMap<string, string>,
-): Filed {
-  const filed = new Map<string, Map<string, string[]>>();
-  const named = entries.flatMap((entry) => {
-    const name = folders.get(entry.groupKey);
-    return name === undefined ? [] : [{ ...entry, name }];
-  });
-  for (const { groupKey, project, name } of named.toSorted((a, b) =>
-    a.name.localeCompare(b.name),
-  ))
-    for (const section of [ALL_KEY, ownerKeyOf(project)]) {
-      const byName = filed.get(section) ?? new Map<string, string[]>();
-      filed.set(section, byName);
-      const keys = byName.get(name) ?? [];
-      byName.set(name, keys);
-      // A repo registered twice here is two entries under one key.
-      if (!keys.includes(groupKey)) keys.push(groupKey);
-    }
-  return filed;
-}
-
-// One project's usage with every other checkout of it folded in: the
-// newest use anywhere, and the uses everywhere summed.
-function withMergedUsage(
-  project: Project,
-  others: readonly RemoteForestItem[],
-): Project {
-  return {
-    ...project,
-    lastUsed: Math.max(
-      project.lastUsed ?? 0,
-      ...others.map((item) => item.project.lastUsed ?? 0),
-    ),
-    recentCount: others.reduce(
-      (sum, item) => sum + (item.project.recentCount ?? 0),
-      project.recentCount ?? 0,
-    ),
-  };
-}
-
-// A peer-only group's id: its key (projectGroupKey) behind a prefix,
-// so it can never collide with a local project's id and the shell can
-// read the key back off a toggle.
-const REMOTE_GROUP_PREFIX = "rp:";
-const remoteGroupId = (groupKey: string) => `${REMOTE_GROUP_PREFIX}${groupKey}`;
-export const remoteGroupKeyOf = (groupId: string): string | undefined =>
-  groupId.startsWith(REMOTE_GROUP_PREFIX)
-    ? groupId.slice(REMOTE_GROUP_PREFIX.length)
-    : undefined;
-
-// Device-qualified: the same repo pulled to two machines can carry
-// the same worktree id on both. Shared with the inbox builder so a
-// peer's row has one key in both views.
-export const remoteWorktreeKey = (deviceId: string, worktreeId: string) =>
-  `rw:${deviceId}:${worktreeId}`;
-
-// A worktree's row key wherever it lives: this machine's (deviceId
-// undefined) or a peer's. One spelling for the tree, the inbox and the
-// ⌘K palette, so a worktree has one identity in all three.
-export const worktreeRowKey = (
-  deviceId: string | undefined,
-  worktreeId: string,
-) =>
-  deviceId === undefined
-    ? `w:${worktreeId}`
-    : remoteWorktreeKey(deviceId, worktreeId);
-
-// A peer's badge, as the rows and menus draw it.
-export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
-  return {
-    deviceId: item.deviceId,
-    label: item.deviceLabel,
-    icon: item.deviceIcon,
-    tone: item.tone,
-    reachable: item.reachable,
-  };
-}
 
 type LocalRow = Extract<SidebarRow, { kind: "worktree" }>;
 type RemoteRow = Extract<SidebarRow, { kind: "remote-worktree" }>;
