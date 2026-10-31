@@ -197,6 +197,7 @@
     "cli": "github"
   },
   { "id": "finder", "label": "Finder", "bundleNames": ["__finder__"] },
+  { "id": "mu", "label": "Mu", "bundleNames": ["Mu.app"] },
   { "id": "claude-code", "label": "Claude Code", "inTerminal": "claude" },
   { "id": "codex-cli", "label": "Codex CLI", "inTerminal": "codex" },
   { "id": "gemini", "label": "Gemini CLI", "inTerminal": "gemini" },
