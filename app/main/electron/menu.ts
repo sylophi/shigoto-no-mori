@@ -305,8 +305,8 @@ export function buildAppMenu(): void {
           accelerator: "Cmd+W",
           click: (_item, focusedWindow) => {
             if (!focusedWindow) return;
-            if (terminalFocused.has(focusedWindow.id)) {
-              const wc = (focusedWindow as BrowserWindow).webContents;
+            const wc = (focusedWindow as BrowserWindow).webContents;
+            if (terminalFocused.has(wc.id)) {
               broadcast(navContract, "closeTab", undefined, wc);
             } else {
               focusedWindow.close();
