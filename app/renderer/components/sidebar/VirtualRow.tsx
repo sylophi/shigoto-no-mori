@@ -74,7 +74,6 @@ export function VirtualRow({
 // sidebar on every row the cursor crosses.
 function projectIdForRow(row: SidebarRow): string | null {
   if (row.kind === "project") return row.groupId;
-  if (row.kind === "worktree") return row.worktree.projectId;
   if (
     row.kind === "inbox-worktree" ||
     row.kind === "inbox-shelf" ||
@@ -83,10 +82,10 @@ function projectIdForRow(row: SidebarRow): string | null {
     row.kind === "project-folder"
   )
     return null;
-  // Remote rows report the group they were merged into, so hovering a
-  // peer's worktree keeps its project header's actions alive.
+  // Rows inside a group report the group they render in, so hovering
+  // one keeps its header's actions alive, whichever device it is on.
   if (
-    row.kind === "remote-worktree" ||
+    row.kind === "worktree" ||
     row.kind === "group-shelf" ||
     row.kind === "worktree-group"
   ) {

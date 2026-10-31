@@ -189,7 +189,8 @@ export function buildSidebarRows({
     trees: readonly Worktree[],
     pullRequests: Record<string, PullRequest> | undefined,
     shelf: GroupShelf | null,
-  ): LocalRow[] =>
+    groupId: string,
+  ): WorktreeRow[] =>
     trees.map((worktree) => ({
       kind: "worktree",
       key: worktreeRowKey(undefined, worktree.id),
@@ -199,6 +200,7 @@ export function buildSidebarRows({
       pr: pullRequests?.[worktree.branch],
       stack: null,
       shelf,
+      groupId,
     }));
 
   if (arrangeMode) {
@@ -269,7 +271,7 @@ export function buildSidebarRows({
   const shutFoldRows = new Map<string, string>();
   const hide = (
     local: readonly Worktree[],
-    peers: readonly RemoteRow[],
+    peers: readonly WorktreeRow[],
     foldKey: string,
   ) => {
     for (const worktree of local)
@@ -309,8 +311,8 @@ export function buildSidebarRows({
     // Their shelved and hidden ones share the group's folds with the
     // local ones, so a device showing only peers' work (the web
     // client) can still reach them.
-    const remoteVisible: RemoteRow[] = [];
-    const remoteShelves = emptyShelves<RemoteRow>();
+    const remoteVisible: WorktreeRow[] = [];
+    const remoteShelves = emptyShelves<WorktreeRow>();
     const localVisible: Worktree[] = [];
     const localShelves = emptyShelves<Worktree>();
     const fileLocal = (worktree: Worktree) => {
@@ -415,12 +417,12 @@ export function buildSidebarRows({
     const trunk = trunkOf(query?.data) ?? trunkOf(group.remote[0]?.worktrees);
     const placed = (
       local: readonly Worktree[],
-      peers: RemoteRow[],
+      peers: WorktreeRow[],
       shelf: GroupShelf | null,
     ): SidebarRow[] =>
       placeByStack(
         sortWorktrees(
-          [...localRows(local, group.pullRequests, shelf), ...peers],
+          [...localRows(local, group.pullRequests, shelf, groupId), ...peers],
           worktreeSort(group.groupKey),
           (row) => row.worktree,
         ),
@@ -437,7 +439,7 @@ export function buildSidebarRows({
     // fold's header standing in for each.
     const foldRows = (
       local: Worktree[],
-      peers: RemoteRow[],
+      peers: WorktreeRow[],
       shelf: GroupShelf | null,
       shown: boolean,
       foldKey: string,
@@ -587,7 +589,7 @@ export function buildSidebarRows({
 // One fold's rows, before they are placed.
 interface Bucket {
   local: Worktree[];
-  peers: RemoteRow[];
+  peers: WorktreeRow[];
 }
 
 const NO_PREFIX_GROUPS: NonNullable<BuildSidebarRowsArgs["byPrefix"]> = {
@@ -752,8 +754,7 @@ function folderRuns(
 // Files a row left out behind the row standing in for it (revealKey).
 type HideRow = (key: string, foldKey: string) => void;
 
-type LocalRow = Extract<SidebarRow, { kind: "worktree" }>;
-type RemoteRow = Extract<SidebarRow, { kind: "remote-worktree" }>;
+type WorktreeRow = Extract<SidebarRow, { kind: "worktree" }>;
 
 function remoteWorktreeRows(
   item: RemoteForestItem,
@@ -761,15 +762,15 @@ function remoteWorktreeRows(
   hiddenPrefixes: readonly string[],
   allowAgentWorking: boolean,
   folded: (peerKey: string, shelf: GroupShelf | null) => boolean,
-): RemoteRow[] {
-  const rows: RemoteRow[] = [];
+): WorktreeRow[] {
+  const rows: WorktreeRow[] = [];
   for (const worktree of item.worktrees) {
     const key = remoteWorktreeKey(item.deviceId, worktree.id);
     const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
     // The local row of a mirrored pair stands for both copies.
     if (folded(key, shelf)) continue;
     rows.push({
-      kind: "remote-worktree",
+      kind: "worktree",
       key,
       worktree,
       device: deviceBadgeOf(item),

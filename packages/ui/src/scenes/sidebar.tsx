@@ -378,14 +378,13 @@ function SceneRow({
         />
       );
     case "worktree":
-    case "remote-worktree":
       return (
         <WorktreeMenuView
           row={
             <WorktreeRowView
               worktree={row.worktree}
-              device={row.kind === "remote-worktree" ? row.device : undefined}
-              mirror={row.kind === "worktree" ? row.mirror : undefined}
+              device={row.device}
+              mirror={row.mirror}
               pr={row.pr}
               stack={row.stack}
               stackRail={row.stackRail}
@@ -393,7 +392,7 @@ function SceneRow({
               entry={entryOf(
                 row.worktree.id,
                 selected,
-                row.kind === "remote-worktree",
+                row.device !== undefined,
               )}
             />
           }
