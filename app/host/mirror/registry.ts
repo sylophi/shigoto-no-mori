@@ -25,7 +25,7 @@ import {
 } from "@shigomori/contracts/modules/sync";
 import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
-import { ageOf, stamp, type Stamp } from "@host/lib/util/kept";
+import { ageOf, stamp, type Stamp } from "@shigomori/engine/keptAnswers";
 import { WorktreeRemovalSchema } from "@shigomori/contracts/schemas/worktree";
 import { PeerReach, peerWorktreesFor } from "@host/ipc/PeerReach";
 import { MirrorEngine, MirrorError } from "@host/mirror/MirrorEngine";

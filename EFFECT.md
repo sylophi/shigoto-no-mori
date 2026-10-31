@@ -268,10 +268,10 @@ export const layer = Layer.effect(Registry, make);
   `Effect.cached` or a `Cache`, shared mutable state is a `Ref` or
   `SubscriptionRef`, and one fiber waiting for another's result is a
   `Deferred`.
-- An answer kept for a time in the host's memory is
-  `app/host/lib/util/kept.ts`'s, not a `Cache` TTL or `cachedWithTTL`:
-  in this version those read the wall clock, which a sleep or a clock
-  step moves, and keep a failure unless told not to.
+- An answer kept for a time in memory is `engine/keptAnswers.ts`'s,
+  not a `Cache` TTL or `cachedWithTTL`: in this version those read the
+  wall clock, which a sleep or a clock step moves, and keep a failure
+  unless told not to.
 
 ## 7. Platform access
 
@@ -294,7 +294,7 @@ export const layer = Layer.effect(Registry, make);
   never the difference of two instants alone: a gap on the wall clock
   is read only beside the monotonic one, by whichever is longer, so a
   sleep the monotonic clock skips still counts (`ageOf` in
-  `host/lib/util/kept.ts`, a late turn in `engine/liveness.ts`). In
+  `engine/keptAnswers.ts`, a late turn in `engine/liveness.ts`). In
   this version `currentTimeMillis` and `currentTimeNanos` are both the
   wall clock, which a clock step moves, and so is what Effect's RPC
   pinger, `Schedule`'s elapsed limits and `Cache`'s TTLs read. The

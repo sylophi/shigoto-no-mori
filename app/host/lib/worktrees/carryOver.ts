@@ -28,7 +28,7 @@ import * as Schema from "effect/Schema";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Engine from "../Engine";
 import * as Ops from "../engineOps";
-import { keptAnswers } from "../util/kept";
+import { keptAnswers } from "@shigomori/engine/keptAnswers";
 
 export type CarryOverCheckout = Pick<
   WorktreeIdentity,

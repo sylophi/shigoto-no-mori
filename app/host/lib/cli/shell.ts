@@ -18,7 +18,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { keptAnswers } from "../util/kept";
+import { keptAnswers } from "@shigomori/engine/keptAnswers";
 
 // The engine resolves rc locations from ZDOTDIR / XDG_CONFIG_HOME, which
 // a Finder-launched app doesn't have (launchd sources no shell
