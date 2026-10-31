@@ -3,7 +3,7 @@
 // check. A pidfile rather than a lock with a timeout, since staging
 // holds it for a whole download, and a crashed holder is told by its
 // pid being dead, or alive in another process that started since. A v2
-// Go sm reads a file with a start in it as holding no pid; the two
+// Go sm reads a file with a start in it as holding no pid, but the two
 // never stage into one data dir.
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

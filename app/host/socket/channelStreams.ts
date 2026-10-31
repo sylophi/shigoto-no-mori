@@ -40,7 +40,6 @@ export function bridgeDuplexToChannel(
     closed = true;
     opts.onClosed?.();
   };
-  let handle: ChannelHandle;
   const endpoint: ChannelEndpoint = {
     onData(data, consumed) {
       if (duplex.destroyed || duplex.writableEnded) {
@@ -64,7 +63,7 @@ export function bridgeDuplexToChannel(
       duplex.resume();
     },
   };
-  handle = attach(endpoint);
+  const handle = attach(endpoint);
   duplex.on("data", (chunk: Buffer) => {
     if (!handle.open) return;
     if (!handle.write(chunk)) duplex.pause();

@@ -142,7 +142,8 @@ function useReplaceWorktree<
 >(
   call: (api: HostApi, input: Input) => Effect.Effect<Result, unknown>,
   rowOf: (result: Result) => Worktree,
-  // The page surfaces per-row errors inline; a toast on top would be noise.
+  // The page surfaces per-row errors inline, so a toast on top would be
+  // noise.
   meta: Record<string, unknown> = { silentError: true },
   // Whether the window follows the worktree to its new id. From the
   // hook's callbacks, which outlive the page, not a caller's mutate.
@@ -359,18 +360,6 @@ export function useDeleteWorktree() {
   });
 }
 
-// The merged layers' worktrees of a stack, removed on every device
-// holding one at once: each device's host removes its own (it runs
-// `sm rm --stack`), and its rows here are forgotten the way a single
-// delete's are. The devices are asked together and the outcome is
-// per device, so a refusal on one (a dirty worktree there) never
-// hides what the others did. The caller decides what to show, since
-// the page may have moved on by the time everything answers. Keyed
-// and named like a single delete of the page's device's worktrees,
-// so the host's removal broadcast for them is left to this mutation
-// (isOwnDeletePending), which forgets the rows and routes off the
-// page in one go.
-
 export interface StackCleanupOutcome {
   // By device id: the worktree ids that went.
   removed: Map<string, readonly string[]>;
@@ -385,6 +374,17 @@ export interface StackCleanupInput {
   skipCleanup?: boolean;
 }
 
+// The merged layers' worktrees of a stack, removed on every device
+// holding one at once: each device's host removes its own (it runs
+// `sm rm --stack`), and its rows here are forgotten the way a single
+// delete's are. The devices are asked together and the outcome is
+// per device, so a refusal on one (a dirty worktree there) never
+// hides what the others did. The caller decides what to show, since
+// the page may have moved on by the time everything answers. Keyed
+// and named like a single delete of the page's device's worktrees,
+// so the host's removal broadcast for them is left to this mutation
+// (isOwnDeletePending), which forgets the rows and routes off the
+// page in one go.
 export function useDeleteStackWorktrees() {
   const queryClient = useQueryClient();
   const registry = useRegistry();

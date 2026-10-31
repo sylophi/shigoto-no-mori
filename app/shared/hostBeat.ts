@@ -2,6 +2,7 @@
 // host.ts): a loop that stops beating is stuck, and the spans it had
 // open at its last beat are what main.log names when the shell starts
 // it again (main/hostProcess.ts).
+import * as Predicate from "effect/Predicate";
 import type { OpenSpans } from "@shared/observability";
 
 export type HostBeat = {
@@ -32,6 +33,4 @@ export function beatOf(open: OpenSpans, now: number): HostBeat {
 }
 
 export const isHostBeat = (message: unknown): message is HostBeat =>
-  typeof message === "object" &&
-  message !== null &&
-  Array.isArray((message as { open?: unknown }).open);
+  Predicate.hasProperty(message, "open") && Array.isArray(message.open);

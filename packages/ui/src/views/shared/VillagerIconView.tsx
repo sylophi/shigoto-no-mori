@@ -3,9 +3,9 @@ import { cn } from "../../lib/utils.ts";
 
 // A doubutsu character's bare face (VillagerIcon reads it by name slug
 // from this device's villager data, gated by useVillageLife). No face
-// renders nothing, never a stand-in. The fake host's contact sheet draws these. A
-// product surface shows a villager through VillagerFaceView (VillagerSaysView.tsx)
-// instead.
+// renders nothing, never a stand-in. The fake host's contact sheet
+// draws these. A product surface shows a villager through
+// VillagerFaceView (VillagerSaysView.tsx) instead.
 //
 // `size` is in desktop pixels on the spacing scale (24 draws like
 // size-6), so it grows on a phone like the size-* utilities. Leave it

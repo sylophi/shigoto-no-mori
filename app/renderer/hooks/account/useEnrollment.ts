@@ -140,7 +140,7 @@ function startSignIn(
     return;
   }
   // On the desktop the bridge's transport takes both URLs over and
-  // finishes in place; in a browser the provider sends the page back
+  // finishes in place. In a browser the provider sends the page back
   // here, marked.
   const back = new URL(location.href);
   back.searchParams.set(REDIRECT_RETURN_PARAM, "1");
@@ -186,9 +186,7 @@ export function useFinishRedirectSignIn(): void {
   }, [clerk, isLoaded, hasLocalHost]);
 }
 
-// Where this device's enrollment stands. `again` decides on the Clerk
-// session alone, for a device that reads enrolled and still needs one
-// of the two (useEnrollment).
+// Where this device's enrollment stands.
 function enrollmentStep(facts: {
   readonly enrolled: boolean;
   readonly enrolling: boolean;

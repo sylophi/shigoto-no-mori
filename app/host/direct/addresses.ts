@@ -12,16 +12,15 @@
 import { networkInterfaces } from "node:os";
 import { MAX_DIRECT_CANDIDATES } from "@shigomori/contracts/modules/direct";
 
-// The dialer races candidates on a fixed budget, so a host with many
-// virtual interfaces (Docker bridges, VPNs, VMs) must not fan out
-// junk. The advertised cap is MAX_DIRECT_CANDIDATES, IPv4 first so a
-// reachable LAN address makes the cut.
-
 function isLinkLocal(address: string, family: string): boolean {
   if (family === "IPv4") return address.startsWith("169.254.");
   return address.toLowerCase().startsWith("fe80:");
 }
 
+// The dialer races candidates on a fixed budget, so a host with many
+// virtual interfaces (Docker bridges, VPNs, VMs) must not fan out
+// junk. The advertised cap is MAX_DIRECT_CANDIDATES, IPv4 first so a
+// reachable LAN address makes the cut.
 export function candidateAddresses(): string[] {
   const v4: string[] = [];
   const v6: string[] = [];

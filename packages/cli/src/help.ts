@@ -1,7 +1,7 @@
 // The help: a catalog of usage lines, each with a one-line description
 // and a dim elaboration, laid out in one aligned column. Every worktree
 // command also takes -p <project>, said once in the prose instead of on
-// every usage line. Help is data; layout and color are computed.
+// every usage line. Help is data, and layout and color are computed.
 import type { flavorNames } from "@shigomori/engine/flavor";
 import { byPlatform } from "@shigomori/engine/platform";
 import { commandName, projectVerb } from "./aliases.ts";
@@ -25,7 +25,7 @@ const catalog = (names: Names) => {
       [
         "run [<script>] [<args>...]",
         "Run a package.json, justfile or Makefile script here",
-        "Works inside any registered project's checkout or worktree. The scripts are package.json's, then the justfile's recipes as `just <recipe>` and the Makefile's targets as `make <target>`. Detects the package manager from the lockfile (bun/pnpm/yarn/npm), sets the SHIGOMORI_* script env, counts the run in the shared use log, and execs `<manager> run <script>` (or `just <recipe>`, `make <target>`) at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them; with --json that list is {ok, packageManager, scripts: [{name, command, file, label}] in file order, usage: {<name>: {lastUsed, recentCount}}, sort, order}, where packageManager is null without a package.json, file and label are the file a script comes from and its name there (\"build\" for \"just build\"), and sort and order are the project's saved script sort and manual order.",
+        "Works inside any registered project's checkout or worktree. The scripts are package.json's, then the justfile's recipes as `just <recipe>` and the Makefile's targets as `make <target>`. Detects the package manager from the lockfile (bun/pnpm/yarn/npm), sets the SHIGOMORI_* script env, counts the run in the shared use log, and execs `<manager> run <script>` (or `just <recipe>`, `make <target>`) at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them. With --json that list is {ok, packageManager, scripts: [{name, command, file, label}] in file order, usage: {<name>: {lastUsed, recentCount}}, sort, order}, where packageManager is null without a package.json, file and label are the file a script comes from and its name there (\"build\" for \"just build\"), and sort and order are the project's saved script sort and manual order.",
       ],
       [
         "launchers [-p <project>] [--catalog]",
@@ -105,7 +105,7 @@ const catalog = (names: Names) => {
       [
         "doctor [--fix] [--yes]",
         "Check the installation and data dir",
-        `Checks the environment, the data dir, each project, and the processes a crashed ${byPlatform({ darwin: "app", linux: "host" })} left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts); anything else is reported. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.`,
+        `Checks the environment, the data dir, each project, and the processes a crashed ${byPlatform({ darwin: "app", linux: "host" })} left running. Exits non-zero when anything failed. --fix applies only the safe repairs, asking before each one that deletes something (--yes skips the prompts), and reports anything else. A v2 data dir the app hasn't moved to v3 yet is read as v2 left it, and --fix moves it, as the app's start does.`,
       ],
       [
         "data [move <folder> | reset]",
@@ -135,11 +135,11 @@ const catalog = (names: Names) => {
       [
         "worktrees list [--all] [--remote] [--from <device>] [--identities]",
         "List worktrees",
-        "All projects when outside one, or with --all; -p <project> picks one from anywhere. --remote lists this project's worktrees on your other devices (--from narrows it to one), and needs the app open. " +
+        "All projects when outside one, or with --all. -p <project> picks one from anywhere. --remote lists this project's worktrees on your other devices (--from narrows it to one), and needs the app open. " +
           "--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, createdAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull, agentWorking, and title and description when `describe` set them (the worktree's own, never a pull request's). --worktree-id <id> narrows the array to that one row. " +
-          "Listing full rows also takes a shelved worktree back off the shelf once it has been worked in since it was shelved (an edit, a new or deleted file, a commit; not the changes it was shelved with, nor an auto-pull fast-forward), and the row says shelved: false. " +
+          "Listing full rows also takes a shelved worktree back off the shelf once it has been worked in since it was shelved (an edit, a new or deleted file, a commit, but not the changes it was shelved with, nor an auto-pull fast-forward), and the row says shelved: false. " +
           "--identities is the cheap form, with no git probe per worktree (only git's worktree list and the registry marks): the same scope, order and array, each entry {id, projectId, name, branch, path, isPrimary, isExternal, detached, shelved, autoPull, agentWorking}. Add --primary-ref for each project's primaryRef and primaryBranch (left out when it has none), resolved once per project. " +
-          "A bare repository has no primary checkout; otherwise the checkout at the project path is the primary (the first one listed when none sits there).",
+          "A bare repository has no primary checkout. Otherwise the checkout at the project path is the primary (the first one listed when none sits there).",
       ],
       [
         "worktrees status [<name>] [--no-pr]",
@@ -196,10 +196,10 @@ const catalog = (names: Names) => {
       [
         "worktrees dirty <capture|apply> [<name>] [-f]",
         "Snapshot or restore uncommitted changes",
-        "The device-sync primitive. capture commits the worktree's dirty state -- untracked files " +
-          "included, ignored files excluded, what is staged kept apart -- to a hidden " +
-          "ref (refs/shigomori/dirty/<id>, one per worktree, overwritten each time) without touching " +
-          "the real index; on a clean worktree it just removes any stale capture. apply restores a " +
+        "The device-sync primitive. capture commits the worktree's dirty state (untracked files " +
+          "included, ignored files excluded, what is staged kept apart) to a hidden " +
+          "ref, refs/shigomori/dirty/<id> (one per worktree, overwritten each time), without touching " +
+          "the real index. On a clean worktree it just removes any stale capture. apply restores a " +
           "capture, staged and unstaged as they were, onto a clean worktree whose HEAD matches the capture's parent, then " +
           "deletes the ref. -f skips apply's clean check only. git still refuses where local changes " +
           "overlap the capture, and a HEAD mismatch always refuses (sync the branch first).",
@@ -207,7 +207,7 @@ const catalog = (names: Names) => {
       [
         "worktrees send [<name>] [--to <device>]",
         "Move a worktree to another device",
-        "The app's \"Transplant to…\". --to takes a device's name or id, or the start of either, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it; a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open, and finishes there even if interrupted. Exits 3 when the worktree landed but something after it didn't hold.",
+        "The app's \"Transplant to…\". --to takes a device's name or id, or the start of either, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it, and a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open, and finishes there even if interrupted. Exits 3 when the worktree landed but something after it didn't hold.",
       ],
       [
         "worktrees bring <worktree> [--from <device>]",
@@ -243,18 +243,18 @@ const catalog = (names: Names) => {
       [
         "worktrees move [<name>] <new-path>",
         "Move a worktree's checkout",
-        "git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, bound agent sessions, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination, and while the running app has scripts or terminals open there. Prints the new path; --json prints {ok, worktree: <row>, previousId}.",
+        "git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, bound agent sessions, its title, description and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination, and while the running app has scripts or terminals open there. Prints the new path, and --json prints {ok, worktree: <row>, previousId}.",
       ],
       [
         "worktrees rename [<name>] <new-name>",
         "Rename a worktree's folder",
-        "A move to the same parent under <new-name>, which is checked as create checks a custom name: a valid folder name, not a reserved one, not one another worktree of the project has. Everything a move carries comes along, and as with any move the worktree gets a new id and new port-pool ports, and a bound agent session's transcript stays with the old folder. Refuses the primary, and while the running app has scripts or terminals open there. Prints the new path; --json prints {ok, worktree: <row>, previousId}.",
+        "A move to the same parent under <new-name>, which is checked as create checks a custom name: a valid folder name, not a reserved one, not one another worktree of the project has. Everything a move carries comes along, and as with any move the worktree gets a new id and new port-pool ports, and a bound agent session's transcript stays with the old folder. Refuses the primary, and while the running app has scripts or terminals open there. Prints the new path, and --json prints {ok, worktree: <row>, previousId}.",
       ],
       [
         "worktrees open [<tool>] [<name>]",
         "Launch a launcher-row tool in a worktree",
         "Finder, editors, custom commands. <tool> is a label, a bare catalog id (finder) or a full launcher id (app:vscode, custom:<id>), case-insensitive. With no tool, shows the row as a menu. " +
-          "--project-id <id> --worktree-id <id> address the worktree exactly (the primary included); put the tool after --. --json prints {ok, launcher, worktree}; an unknown tool fails with code unknown-launcher.",
+          "--project-id <id> --worktree-id <id> address the worktree exactly (the primary included), with the tool after --. --json prints {ok, launcher, worktree}, and an unknown tool fails with code unknown-launcher.",
       ],
       [
         "worktrees edit <file> [<name>]",
@@ -275,7 +275,7 @@ const catalog = (names: Names) => {
       [
         "projects list [--refresh-icons]",
         "List registered projects",
-        "Registry entries and, when that integration is on, terrier-registered repos, in the sidebar's manual order. --json prints one array of rows: id, name, path, source (\"terrier\" or absent), pathExists, identity (the cross-device repo key, or null), lastUsed and recentCount (the app's project use log), icon ({path, mime}, or null) and hue (always null). Icons resolve through the shared icon cache; --refresh-icons re-scans projects it remembers as icon-less.",
+        "Registry entries and, when that integration is on, terrier-registered repos, in the sidebar's manual order. --json prints one array of rows: id, name, path, source (\"terrier\" or absent), pathExists, identity (the cross-device repo key, or null), lastUsed and recentCount (the app's project use log), icon ({path, mime}, or null) and hue (always null). Icons resolve through the shared icon cache, and --refresh-icons re-scans projects it remembers as icon-less.",
       ],
       [
         "projects icon [<name>]",

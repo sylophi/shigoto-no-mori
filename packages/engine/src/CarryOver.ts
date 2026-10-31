@@ -179,8 +179,8 @@ const make = Effect.gen(function* () {
 
   // What the Configure view shows of the file, every checkout's unioned
   // as a create resolves them: whether any has one, and what they match.
-  // A checkout whose file git can't read matches nothing here; a create
-  // reports why.
+  // A checkout whose file git can't read matches nothing here, and a
+  // create reports why.
   const includeStatus = Effect.fn("CarryOver.includeStatus")(function* (
     checkouts: ReadonlyArray<string>,
   ) {

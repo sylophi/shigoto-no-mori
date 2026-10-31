@@ -170,7 +170,7 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
     );
   };
   // The tables are typed per call and read here by key, which loses the
-  // link between a call and its input type; the group's decode of each
+  // link between a call and its input type. The group's decode of each
   // payload is the check.
   type ByKey = Record<
     string,
@@ -194,7 +194,7 @@ export function createServed<Ctx, Services = never, E = CallFailure>(
       mount(call, handler as (input: unknown, ctx: Ctx) => unknown);
     },
     view(module, handlers) {
-      // typed per view above; read here by key
+      // typed per view above, read here by key
       const byKey = handlers as Record<string, View<Services> | undefined>;
       for (const call of callsOf(module)) {
         if (isPush(call) || isInvoke(call)) continue;

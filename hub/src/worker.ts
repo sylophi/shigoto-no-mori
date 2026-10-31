@@ -63,7 +63,7 @@ import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 
 export interface HubDeps {
   // Resolves the enroll bearer (a Clerk session or OAuth access token)
-  // to the owning account, or null when it does not verify; throws when
+  // to the owning account, or null when it does not verify. Throws when
   // it could not be checked.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
   // A Clerk sign-in token for the account, redeemed once for a session.
@@ -455,7 +455,7 @@ const OPEN_ROUTES: ReadonlySet<string> = new Set(
 // `wrangler dev`), where there is nothing to protect. A limiter
 // failure fails open: throttling is a cost guard, and it must never be
 // the reason a device cannot reach its hub. It runs on a matched route,
-// before the route's auth; a preflight never reaches it (cors answers
+// before the route's auth. A preflight never reaches it (cors answers
 // it), and a path no route matches does no work.
 const rateLimit = HttpRouter.middleware(
   Effect.gen(function* () {

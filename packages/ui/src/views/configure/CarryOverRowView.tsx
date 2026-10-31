@@ -16,8 +16,8 @@ interface CarryOverRowProps {
   entry: CarryOverEntry;
   // Where the path currently exists. Undefined while still loading.
   stat: CarryOverStat | undefined;
-  // .worktreeinclude already covers this path; the entry will be
-  // auto-removed the next time a worktree is created.
+  // .worktreeinclude already covers this path, so the entry will
+  // be removed the next time a worktree is created.
   covered?: boolean;
   // "worktreeinclude" rows come from the repo's .worktreeinclude file:
   // always copy mode, edited in the file rather than removed here.
@@ -72,7 +72,7 @@ export function CarryOverRowView({
           />
         )}
         {covered && (
-          <SimpleTooltip tip=".worktreeinclude now covers this path; this entry will be removed the next time a worktree is created.">
+          <SimpleTooltip tip=".worktreeinclude now covers this path. This entry will be removed the next time a worktree is created.">
             <ToneTag tone="amber">covered</ToneTag>
           </SimpleTooltip>
         )}

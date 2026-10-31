@@ -4,10 +4,10 @@
 // button per mirror, its icon in the mirror's status tone and its label
 // the status itself once the mirror is anything but live or syncing,
 // opening the dialog with the running mirror's status, history and
-// controls. The
-// dialog mounts under the RUNNER's scope, so its reads and controls go
-// to the device running the session whichever page this is: the local
-// page, a peer's page viewed from here, or the far end's own page.
+// controls. The dialog mounts under the RUNNER's scope, so its reads
+// and controls go to the device running the session whichever page this
+// is: the local page, a peer's page viewed from here, or the far end's
+// own page.
 // Nothing rendered on a worktree that is not mirrored, or for a mirror
 // whose session is not in hand. A runner with no session up leaves the
 // button disabled, saying so: nothing to drive the mirror through, but

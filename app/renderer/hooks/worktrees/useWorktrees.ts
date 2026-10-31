@@ -96,8 +96,8 @@ export function spliceWorktreeRow(
 }
 
 // A row changed by a call, shown changed while the call runs, then as
-// the host answered until the list's next value; as it was if the call
-// failed.
+// the host answered until the list's next value, or as it was if the
+// call failed.
 export function changeWorktreeRow(
   registry: AtomRegistry.AtomRegistry,
   deviceId: string,

@@ -170,7 +170,7 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // A peer's account:commandAccessChanged or sharing:changed push:
   // recorded on its established session, with a fresh status fanned out
   // when it moved. A push for a peer with no established session is
-  // dropped; its next dial's answer carries it.
+  // dropped, since its next dial's answer carries it.
   setPeerFact(deviceId: string, fact: PeerFact, value: boolean): void;
   // Close and drop the cached direct sessions for peers no longer in
   // the live roster: the client half of "presence scopes the data

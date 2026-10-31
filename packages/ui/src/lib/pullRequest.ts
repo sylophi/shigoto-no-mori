@@ -32,10 +32,13 @@ import {
 
 export type PullRequestTone = "emerald" | "violet" | "rose" | "slate" | "amber";
 
-export interface PullRequestDescriptor {
-  Icon: ComponentType<SVGProps<SVGSVGElement>>;
-  tone: PullRequestTone;
+interface ToneLabel {
   label: string;
+  tone: PullRequestTone;
+}
+
+export interface PullRequestDescriptor extends ToneLabel {
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
 }
 
 export function describePullRequest(pr: PullRequest): PullRequestDescriptor {
@@ -122,9 +125,7 @@ export function pullRequestBlockedBy(
     : undefined;
 }
 
-export interface MergeStateDescriptor {
-  label: string;
-  tone: PullRequestTone;
+export interface MergeStateDescriptor extends ToneLabel {
   canMerge: boolean;
 }
 
@@ -212,20 +213,18 @@ export function describeMergeState(
 // its own words past all but conflicts and failing checks. `by`
 // says where the words came from, so the checks chip draws their
 // icon and the reviews chip can drop words it would repeat.
-export interface MergeVerdict {
-  label: string;
-  tone: PullRequestTone;
+export interface MergeVerdict extends ToneLabel {
   by: "merge" | "checks" | "reviews";
 }
 
 const said = (
-  { label, tone }: { label: string; tone: PullRequestTone },
+  { label, tone }: ToneLabel,
   by: MergeVerdict["by"],
 ): MergeVerdict => ({ label, tone, by });
 
 export function describeMergeVerdict(
   pr: PullRequestDetail,
-  status: { label: string; tone: PullRequestTone },
+  status: ToneLabel,
   armed: boolean,
 ): MergeVerdict {
   if (pr.isDraft || pr.mergeState === "DIRTY") return said(status, "merge");
@@ -277,18 +276,13 @@ export function mergeStateSettling(pr: PullRequestDetail): boolean {
   );
 }
 
-export interface ChecksDescriptor {
-  label: string;
-  tone: PullRequestTone;
-}
-
 // Returns null when the PR has no checks at all. Callers should skip
 // the checks control entirely rather than show "0 checks". The label
 // leads with the worst news, and a failing run still says what's
 // pending, since either is a reason the PR isn't green yet.
 export function describeChecks(
   summary: PullRequestChecksSummary,
-): ChecksDescriptor | null {
+): ToneLabel | null {
   if (summary.total === 0) return null;
   if (summary.failing > 0) {
     const failing = `${pluralize(summary.failing, "check")} failing`;
@@ -320,11 +314,6 @@ export function describeChecks(
   };
 }
 
-export interface ReviewsDescriptor {
-  label: string;
-  tone: PullRequestTone;
-}
-
 // Returns null when nobody has reviewed or been asked to and the base
 // branch requires no review: callers skip the reviews control then.
 // A request for changes leads unless GitHub already calls the PR
@@ -334,7 +323,7 @@ export interface ReviewsDescriptor {
 export function describeReviews({
   decision,
   reviewers,
-}: PullRequestReviews): ReviewsDescriptor | null {
+}: PullRequestReviews): ToneLabel | null {
   const approvals = reviewers.filter((r) => r.state === "APPROVED").length;
   if (
     decision === "CHANGES_REQUESTED" ||
@@ -429,10 +418,7 @@ export function autoMergeButtonLabel(method: MergeMethod): string {
 // The status line while auto-merge is armed: GitHub merges the PR
 // with the method the moment its requirements are met, so the merge
 // button gives way to "Disable auto-merge".
-export function describeArmedAutoMerge(method: MergeMethod): {
-  label: string;
-  tone: PullRequestTone;
-} {
+export function describeArmedAutoMerge(method: MergeMethod): ToneLabel {
   return {
     label: `Will ${MERGE_METHOD_LABEL[method].toLowerCase()} when ready`,
     tone: "amber",

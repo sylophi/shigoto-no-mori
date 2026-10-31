@@ -109,9 +109,7 @@ const decodeLine = Schema.decodeUnknownResult(LineSchema);
 const LineEnvelopeSchema = Schema.Struct({
   event: Schema.optional(Schema.Unknown),
   id: Schema.optional(
-    Schema.String.pipe(
-      Schema.catchDecoding(() => Effect.succeed(Option.none())),
-    ),
+    Schema.String.pipe(Schema.catchDecoding(() => Effect.succeedNone)),
   ),
 });
 const decodeEnvelope = Schema.decodeUnknownResult(LineEnvelopeSchema);
@@ -576,7 +574,7 @@ const make = (options: Options) =>
       status: Ref.get(status),
       failure: Ref.get(status).pipe(
         Effect.flatMap((current) =>
-          current === "failing" ? Ref.get(failure) : Effect.succeed(undefined),
+          current === "failing" ? Ref.get(failure) : Effect.undefined,
         ),
       ),
       sessions: Ref.get(sessions),

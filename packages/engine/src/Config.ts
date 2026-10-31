@@ -43,6 +43,7 @@ import {
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as Git from "./Git.ts";
 import * as Identity from "./Identity.ts";
+import { canonicalJson } from "./json.ts";
 import * as Paths from "./Paths.ts";
 import * as SharedSettings from "./SharedSettings.ts";
 
@@ -163,19 +164,10 @@ export class ConfigChangedMeanwhile extends Schema.TaggedError<ConfigChangedMean
   }
 }
 
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_, inner: unknown) =>
-    inner !== null && typeof inner === "object" && !Array.isArray(inner)
-      ? Object.fromEntries(
-          Object.entries(inner).toSorted(([x], [y]) => (x < y ? -1 : 1)),
-        )
-      : inner,
-  );
-
 // Whether two documents hold the same settings, whatever their keys'
 // order.
 export const sameConfigDoc = (a: unknown, b: unknown): boolean =>
-  canonical(a) === canonical(b);
+  canonicalJson(a) === canonicalJson(b);
 
 // A project's settings must name its default branch, which a write
 // would leave out and git couldn't name. `project` is its name, or its

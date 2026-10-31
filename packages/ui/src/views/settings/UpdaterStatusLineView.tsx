@@ -8,7 +8,7 @@ const STATUS_TEXT: Record<
   string | null
 > = {
   unsupported:
-    "Updates aren't automatic in this build; download new releases from GitHub.",
+    "Updates aren't automatic in this build. Download new releases from GitHub.",
   idle: "You're up to date.",
   downloading: "Downloading update…",
   checking: null,

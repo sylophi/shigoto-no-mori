@@ -47,8 +47,9 @@ const LOCAL_SRC = "data-local-src";
 // which page asked. An image GitHub signed for a few minutes (the
 // host's withSignedImages) loads at once: lazily, one under a
 // description's fold would wait past its signature. Any signature is in
-// the query, so an image with one loads at once, a badge's too. On a purifier of
-// the module's own, so no other sanitize in the app picks the rule up.
+// the query, so an image with one loads at once, a badge's too. On a
+// purifier of the module's own, so no other sanitize in the app picks
+// the rule up.
 // A server (a scene rendered in Node or at build time) has no DOM to
 // sanitize with, and draws the source as text instead (Markdown).
 const purify = DOMPurify(typeof window === "undefined" ? undefined : window);
@@ -155,9 +156,9 @@ function htmlOf(source: string, breaks: boolean): string {
 // GitHub-flavored markdown from outside the app (release notes, a
 // worktree's description or its pull request's, a file in a worktree),
 // rendered the way GitHub shows it, and sanitized before it reaches
-// the DOM. Renderer windows never
-// navigate, so a click on a link opens it in the browser instead,
-// through the same web-URL-only door as every other link.
+// the DOM. Renderer windows never navigate, so a click on a link opens
+// it in the browser instead, through the same web-URL-only door as
+// every other link.
 export function Markdown({
   source,
   remoteImage,

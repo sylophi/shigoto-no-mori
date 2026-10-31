@@ -118,8 +118,8 @@ const OPTIONAL_LOCKS_OFF = { GIT_OPTIONAL_LOCKS: "0" };
 
 // git's own refusal, its first line, "fatal:" or (a stash's first
 // step) "error:". A post-checkout hook that prints the same comes after
-// the switch's "Switched to branch"; a pre-commit hook's run again with
-// its commit, which nothing recorded yet.
+// the switch's "Switched to branch", and a pre-commit hook's runs again
+// with its commit, which nothing recorded yet.
 export const indexHeld = (error: unknown): boolean => {
   if (!(error instanceof GitCommandError) || error.exitCode === null) {
     return false;

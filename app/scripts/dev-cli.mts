@@ -1,7 +1,7 @@
 // Runs before `pnpm dev`: compiles the dev-flavor terminal binary into
 // dist-cli/, the file-sync engine into dist-file-sync/ and the
 // filesystem helper into dist-nativefs/. Installing the `smd` PATH link is NOT done
-// here; the app prompts for that on launch, same as the packaged app
+// here: the app prompts for that on launch, same as the packaged app
 // does for `sm` (host/lib/cli/install.ts). A failed build (a missing
 // Go or Bun toolchain) aborts the dev run. The terminal binary takes a
 // copy of the filesystem helper, so it builds once that is in.

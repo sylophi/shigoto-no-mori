@@ -3,8 +3,10 @@
 // peer's copy that moved is merged here, and a peer whose session lands
 // is read and offered what it lacks. Without it the copy here moves
 // only when a peer offers, which takes the command grant.
-import { SharedSettingsDocSchema } from "@shigomori/contracts/schemas";
-import type { SharedSettingsDoc } from "@shigomori/contracts/schemas";
+import {
+  type SharedSettingsDoc,
+  SharedSettingsDocSchema,
+} from "@shigomori/contracts/schemas";
 import { exchangeSharedSettings } from "@shigomori/contracts/sharedSettings";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";

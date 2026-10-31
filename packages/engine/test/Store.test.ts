@@ -127,7 +127,7 @@ it("refuses a store a newer version of the app migrated, and writes nothing to i
       assert.ok(error instanceof Store.StoreOpenError);
       assert.match(
         error.message,
-        /made by a newer version of the app; update the app/,
+        /made by a newer version of the app\. Update the app/,
       );
       return true;
     },

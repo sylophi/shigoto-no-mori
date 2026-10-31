@@ -156,15 +156,16 @@ export function useWatchAccountChanges(): void {
 // broadcast, and useWatchAccountChanges invalidates the whole "account"
 // prefix off that reliable local IPC, so a per-mutation invalidation
 // would only duplicate it.
+
+// Every enrollment's key, so a reader can see one running anywhere
+// (useDeviceKeyStep).
+export const ENROLL_MUTATION_KEY = ["account", "enroll"];
+
 // Exchanges a fresh Clerk session token for the hub device
 // credential. Driven by ClerkAccountSync after Clerk reports a
 // session. The Clerk sign-in UI itself never touches this layer.
 // Takes the token mint as a callback so a failed mint lands in the
 // same error path (and toast) as a failed enrollment.
-// Every enrollment's key, so a reader can see one running anywhere
-// (useDeviceKeyStep).
-export const ENROLL_MUTATION_KEY = ["account", "enroll"];
-
 export function useEnroll() {
   const api = useApi();
   return useMutation<AccountStatus, Error, () => Promise<string | null>>({
@@ -192,8 +193,8 @@ export function useAccountSignOut() {
 
 // Removes another device from the account on the device hub. It does not
 // invalidate itself: main broadcasts account:changed after the revoke, and
-// the watcher above turns it into the invalidation. Self-revoke is not
-// offered by the account page -- this device signs out instead, so the
+// the watcher above turns it into the invalidation. The account page
+// offers no self-revoke. This device signs out instead, so the
 // Clerk session ends first and ClerkAccountSync cannot re-enroll it back
 // onto the account.
 export function useRevokeDevice() {

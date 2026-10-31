@@ -103,7 +103,7 @@ export const clonablePaths = ({
 // A directory is cloned whole when everything in it on the source side
 // is a file being cloned. Each other path marks its folders as needing
 // a walk. Each cloned path's unit is its outermost folder that can go
-// whole, else the file itself; the parents are the folders the units
+// whole, else the file itself. The parents are the folders the units
 // are cloned into.
 export const planUnits = ({
   targets,

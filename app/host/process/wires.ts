@@ -110,37 +110,34 @@ const linkRegistrar: DeviceLink.LinkRegistrar = createServed({
   serves: (call) => annotation(call, Remote) === true,
   onUsageTracked,
 });
-export const deviceLinkLayer = () =>
-  DeviceLink.layer({
-    registrar: linkRegistrar,
-    auth: {
-      opens: {
-        check: (ticket, arrivedAs) => {
-          const deviceId = directTickets.check(ticket, arrivedAs);
-          if (deviceId === null || deviceId === STALE_TICKET) return deviceId;
-          const hub = remote.now()?.hub;
-          if (hub === undefined || !hub.rosterKnown()) {
-            return ROSTER_UNAVAILABLE;
-          }
-          const publicKey = hub.peerKey(deviceId);
-          return publicKey === undefined
-            ? STALE_TICKET
-            : { deviceId, publicKey };
-        },
-        spend: (ticket, arrivedAs) => directTickets.consume(ticket, arrivedAs),
-        keepDevices: (deviceIds) => directTickets.keepDevices(deviceIds),
-        keyOf: (deviceId) => {
-          const hub = remote.now()?.hub;
-          return hub?.rosterKnown() === true
-            ? hub.peerKey(deviceId)
-            : ROSTER_UNAVAILABLE;
-        },
-        localKey: () => remote.now()?.hub.localKey() ?? null,
+export const deviceLinkLayer = DeviceLink.layer({
+  registrar: linkRegistrar,
+  auth: {
+    opens: {
+      check: (ticket, arrivedAs) => {
+        const deviceId = directTickets.check(ticket, arrivedAs);
+        if (deviceId === null || deviceId === STALE_TICKET) return deviceId;
+        const hub = remote.now()?.hub;
+        if (hub === undefined || !hub.rosterKnown()) {
+          return ROSTER_UNAVAILABLE;
+        }
+        const publicKey = hub.peerKey(deviceId);
+        return publicKey === undefined ? STALE_TICKET : { deviceId, publicKey };
       },
-      isCommandGranted: acceptsPeerCommands,
+      spend: (ticket, arrivedAs) => directTickets.consume(ticket, arrivedAs),
+      keepDevices: (deviceIds) => directTickets.keepDevices(deviceIds),
+      keyOf: (deviceId) => {
+        const hub = remote.now()?.hub;
+        return hub?.rosterKnown() === true
+          ? hub.peerKey(deviceId)
+          : ROSTER_UNAVAILABLE;
+      },
+      localKey: () => remote.now()?.hub.localKey() ?? null,
     },
-    services: Graph.services,
-  });
+    isCommandGranted: acceptsPeerCommands,
+  },
+  services: Graph.services,
+});
 
 // The sharing switch the link's gate reads. Its changes go to this
 // device's windows and, the push being remote, to every peer.
@@ -167,30 +164,29 @@ const onTunnel = <A, E>(
 // and sign-out, an account switch and directConnections off land here
 // as reconcile(null) through the same path. The connector token stays
 // inside the Tunnel.
-export const tunnelLayer = () =>
-  TunnelService.layer({
-    // Resolved fresh per start attempt: the probe is one bounded
-    // spawn, and any memo here would leave the install-cloudflared
-    // recovery path (any config write re-probes) dead for the PATH
-    // case.
-    resolveBinary: Effect.promise(() => Graph.run(Ops.readGlobalConfig())).pipe(
-      Effect.flatMap((config) =>
-        TunnelService.resolveCloudflaredBinary(
-          config.cloudflaredPath,
-          hostBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
-        ),
+export const tunnelLayer = TunnelService.layer({
+  // Resolved fresh per start attempt: the probe is one bounded
+  // spawn, and any memo here would leave the install-cloudflared
+  // recovery path (any config write re-probes) dead for the PATH
+  // case.
+  resolveBinary: Effect.promise(() => Graph.run(Ops.readGlobalConfig())).pipe(
+    Effect.flatMap((config) =>
+      TunnelService.resolveCloudflaredBinary(
+        config.cloudflaredPath,
+        hostBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
       ),
     ),
-    provision: (port) =>
-      Effect.tryPromise({
-        try: () => provisionDeviceTunnel(port),
-        catch: (cause) => new TunnelService.TunnelProvisionError({ cause }),
-      }),
-    pidFilePath: tunnelPidFile,
-    // Tunnel state rides the hub status snapshot, so the account
-    // page updates live.
-    onChange: () => remote.now()?.plane.notifyStatusChanged(),
-  });
+  ),
+  provision: (port) =>
+    Effect.tryPromise({
+      try: () => provisionDeviceTunnel(port),
+      catch: (cause) => new TunnelService.TunnelProvisionError({ cause }),
+    }),
+  pidFilePath: tunnelPidFile,
+  // Tunnel state rides the hub status snapshot, so the account
+  // page updates live.
+  onChange: () => remote.now()?.plane.notifyStatusChanged(),
+});
 
 // The device link again, on loopback, for the processes on this
 // machine: the windows, the shell, and the terminal's control ops.
@@ -198,20 +194,19 @@ const loopbackRegistrar: DeviceLink.LinkRegistrar = createServed({
   failure: Engine.hostCallFailure,
   onUsageTracked,
 });
-export const loopbackLayer = () =>
-  Layer.unwrap(
-    Effect.map(DeviceId.current, (deviceId) =>
-      Loopback.layer({
-        registrar: loopbackRegistrar,
-        deviceId: () => deviceId,
-        appVersion: hostFacts().appVersion,
-        file: () => join(dataDir(), LOOPBACK_FILE),
-        // The window's own page dials it, from the renderer scheme.
-        allowedOrigin: hostFacts().rendererOrigin,
-        services: Graph.services,
-      }),
-    ),
-  );
+export const loopbackLayer = Layer.unwrap(
+  Effect.map(DeviceId.current, (deviceId) =>
+    Loopback.layer({
+      registrar: loopbackRegistrar,
+      deviceId: () => deviceId,
+      appVersion: hostFacts().appVersion,
+      file: () => join(dataDir(), LOOPBACK_FILE),
+      // The window's own page dials it, from the renderer scheme.
+      allowedOrigin: hostFacts().rendererOrigin,
+      services: Graph.services,
+    }),
+  ),
+);
 
 // This device's id, for the root's synchronous callbacks, which run
 // once the graph is up.

@@ -7,12 +7,12 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { type VillagerRarity, villagerRarity } from "./rarity.ts";
 
-// A villager's visits: how many, and the first and last (epoch ms).
 // A visit: who, and when (epoch ms). Null for a copy. The app keeps the
 // log (lib/villagers/visitLog.ts).
 export type VisitEntry = { slug: string; at: number } | null;
 export type VisitLog = Readonly<Record<string, VisitEntry>>;
 
+// A villager's visits: how many, and the first and last (epoch ms).
 export interface Visits {
   count: number;
   first: number;

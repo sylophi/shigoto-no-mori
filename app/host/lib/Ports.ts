@@ -83,7 +83,7 @@ const make = Effect.gen(function* () {
   }, IDENTITY_TTL);
   const identityOf = (worktree: Worktree) =>
     identities.get(worktreeKey(worktree.projectId, worktree.worktreeId)).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchTag("UnknownWorktreeError", () => Effect.succeedNone),
       Effect.orDie,
     );

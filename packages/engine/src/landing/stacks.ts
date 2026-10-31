@@ -200,8 +200,8 @@ export const makeStacks = ({
             if (reporter.waiting !== undefined) {
               yield* reporter.waiting(
                 Option.isSome(after) && after.value.isInMergeQueue
-                  ? `PR #${pr.number} is in the merge queue; land again once it merges, for the rest of the stack`
-                  : `PR #${pr.number} hasn't merged yet; land again once it has, for the rest of the stack`,
+                  ? `PR #${pr.number} is in the merge queue. Land again once it merges, for the rest of the stack`
+                  : `PR #${pr.number} hasn't merged yet. Land again once it has, for the rest of the stack`,
               );
             }
             return true;
@@ -215,7 +215,7 @@ export const makeStacks = ({
     // A merge just asked for, as GitHub reports it once it has taken it:
     // merged, or in the merge queue. GitHub can report the PR as it was
     // for a moment after `gh pr merge` returns, so it is read a second
-    // apart for twenty seconds at most; past that, the last answer.
+    // apart for twenty seconds at most. Past that, the last answer.
     const mergedOrQueued = (repo: string, number: number) =>
       Effect.gen(function* () {
         const deadline = (yield* elapsedMillis) + SETTLE_TIMEOUT_MS;

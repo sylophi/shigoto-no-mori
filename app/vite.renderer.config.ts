@@ -64,7 +64,7 @@ export default defineConfig(({ mode }) => {
       ...(port ? { port, strictPort: true } : {}),
       ws: { host: "localhost", protocol: "ws" },
     },
-    // Scope the dep scanner to the real entry; its default **/*.html
+    // Scope the dep scanner to the real entry. Its default **/*.html
     // glob picks up LICENSES.chromium.html inside out/ packaged builds
     // and fails the scan with noisy (harmless) errors at dev boot.
     // The contracts package is served as source, and effect with it, as

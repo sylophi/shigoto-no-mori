@@ -1,7 +1,7 @@
 // How a failed command reports and exits: a usage error exits 2, an
 // `ExitCode` its own code, a program handed the terminal that a signal
 // killed 128+n, and anything else 1. `ExitCode` and a killed program
-// say nothing more; any other failure is, under --json, the engine's
+// say nothing more. Any other failure is, under --json, the engine's
 // error document with `ok: false`, and to a person `sm: <message>` on
 // stderr.
 import { constants } from "node:os";

@@ -1,7 +1,7 @@
 // land's removal guard: the branch goes with the land, so commits the
 // PR's head never had (made after its last push, or under a name an
 // older PR merged with) are refused, named, before anything is merged or
-// removed, and again after a merge GitHub answered at once; and done's
+// removed, and again after a merge GitHub answered at once. Also done's
 // delete of a branch, refused unless a merged PR holds it whole. Against
 // real git and a scripted gh.
 import assert from "node:assert/strict";

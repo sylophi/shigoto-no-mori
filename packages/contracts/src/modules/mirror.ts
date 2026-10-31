@@ -32,17 +32,6 @@ const MirrorSessionIdSchema = Schema.String.check(
   Schema.isBetweenLength(1, 128),
 );
 
-export { type MirrorIgnoreMode, MirrorIgnoreModeSchema };
-export {
-  anchorIgnoredPath,
-  BRING_PATHS_LIMIT,
-  bringIgnores,
-  bringRulesRoom,
-  broughtPaths,
-  MIRROR_IGNORES_LIMIT,
-  unanchorIgnoredPath,
-} from "../mirrorIgnores.ts";
-
 // "mirror", "mirror-branch" (a primary's mirror, its copy on
 // mirror/<branch>) or "transfer-<token>" (a pull's one-shot, not a
 // mirror). A label, not a field: peers parse the session strictly.
@@ -250,8 +239,8 @@ const MirrorGitStatusSchema = strict(
 );
 export type MirrorGitStatus = typeof MirrorGitStatusSchema.Type;
 
-// The local side (Mutagen's alpha) holds the original; the copy is on
-// deviceId's projectId/worktreeId.
+// The local side (Mutagen's alpha) holds the original, and the copy is
+// on deviceId's projectId/worktreeId.
 export const MirrorSessionSchema = strict(
   Schema.Struct({
     session: MirrorSessionIdSchema,
@@ -288,7 +277,7 @@ export type MirrorSession = typeof MirrorSessionSchema.Type;
 // As the daemon's state line carries it, without what the host adds
 // (its project, its ignore mode, git's status, a stop under way). An
 // unknown top-level key is stripped rather than refused, so a newer
-// engine's field can't freeze the stream; the nested shapes stay
+// engine's field can't freeze the stream. The nested shapes stay
 // strict.
 const {
   localProjectId: _localProjectId,
@@ -538,8 +527,8 @@ export function isMirrorCopyStayed(error: unknown): boolean {
   return message.includes(MIRROR_COPY_STAYED);
 }
 
-// The caller has attached its end of the channel; the host attaches a
-// fresh `file-sync serve` as the far end before answering.
+// The caller has attached its end of the channel, and the host attaches
+// a fresh `file-sync serve` as the far end before answering.
 const MirrorOpenStreamPayloadSchema = strict(
   Schema.Struct({
     ...MirrorWorktreePayloadSchema.struct.fields,
@@ -671,8 +660,8 @@ export const mirrorContract = defineContract(
     MirrorApplyGitStateResultSchema,
     { remote: true, gated: true, grant: "changeCode" },
   ),
-  // Carries the list, since a busy mirror fires several times a second;
-  // bare when the host has none to send, and a reader re-asks.
+  // Carries the list, since a busy mirror fires several times a second.
+  // Bare when the host has none to send, and a reader re-asks.
   push("changed", Schema.UndefinedOr(MirrorListResultSchema), {
     remote: true,
   }),

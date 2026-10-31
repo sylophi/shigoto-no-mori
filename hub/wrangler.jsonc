@@ -48,7 +48,7 @@
     },
   ],
   // Per-IP request budgets, counted per Cloudflare location (see
-  // rateLimit in src/worker.ts; its Retry-After is this period).
+  // rateLimit in src/worker.ts, whose Retry-After is this period).
   // RATE_LIMIT_OPEN guards enroll and connect, the two routes that do
   // real work for a caller with no credential. Sized so a full account
   // behind one NAT (16 devices all redialing after a network blip)

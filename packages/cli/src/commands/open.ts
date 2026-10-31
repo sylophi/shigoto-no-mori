@@ -1,12 +1,10 @@
 // sm [worktrees] open <tool> [<worktree>]: a worktree opened in one of
 // its launchers, and sm [worktrees] edit <file> [<worktree>]: one of its
 // files in the editor.
-import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { flavorNames } from "@shigomori/engine/flavor";
 import * as Open from "@shigomori/engine/Open";
 import * as Paths from "@shigomori/engine/Paths";
-import { childEnv } from "@shigomori/engine/processes";
 import { NO_SCREEN } from "@shigomori/engine/screen";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
@@ -16,7 +14,7 @@ import * as Command from "effect/cli/Command";
 import { UsageError } from "../errors.ts";
 import { cwd, given, here, projectAt, rest, worktreeFlags } from "../here.ts";
 import { pickLauncher, pickWorktree } from "../pickers.ts";
-import { interactive } from "../prompt.ts";
+import { interactive, runEditor, terminalEditor } from "../prompt.ts";
 import { emit, out, Output } from "../output.ts";
 
 // The worktree `open` and `edit` act on, from their shared addressing:
@@ -50,7 +48,7 @@ const commandTarget = (
     if (Option.isNone(worktreeId) && Option.isSome(projectId)) {
       return yield* new UsageError({
         problem:
-          "--project-id scopes --worktree-id; pass both (or -p <project> with a name).",
+          "--project-id scopes --worktree-id. Pass both, or -p <project> with a name.",
       });
     }
     if (Option.isSome(worktreeId)) {
@@ -72,7 +70,7 @@ const commandTarget = (
     }
     if (!(yield* interactive)) {
       return yield* new UsageError({
-        problem: `Not inside a worktree; pass one: ${binaryName} ${usage} <name>.`,
+        problem: `Not inside a worktree. Pass one: ${binaryName} ${usage} <name>.`,
       });
     }
     const located = yield* pickWorktree(
@@ -130,13 +128,13 @@ export const edit = Command.make(
       const { located, fromCwd } = yield* commandTarget(input, "edit <file>");
       const target = fromCwd ? resolve(yield* cwd, file) : file;
       const opened = yield* (yield* Open.Open).edit(located, target).pipe(
-        Effect.map(Option.some),
+        Effect.asSome,
         // With no screen to open it on (a Linux server over SSH), it
         // opens in $VISUAL or $EDITOR at this terminal, as `config edit`
         // opens the settings.
         Effect.catchTag("LaunchFailed", (error) =>
           Effect.gen(function* () {
-            const editor = process.env["VISUAL"] || process.env["EDITOR"] || "";
+            const editor = terminalEditor();
             if (error.said !== NO_SCREEN || json || !(yield* interactive)) {
               return yield* error;
             }
@@ -146,15 +144,14 @@ export const edit = Command.make(
                 said: `${NO_SCREEN}. Set $EDITOR to edit it at this terminal.`,
               });
             }
-            const ran = spawnSync(
-              "/bin/sh",
-              ["-c", `${editor} "$0"`, resolve(located.worktree.path, target)],
-              { stdio: "inherit", env: childEnv(process.env) },
+            const failed = runEditor(
+              editor,
+              resolve(located.worktree.path, target),
             );
-            if (ran.status !== 0) {
+            if (failed !== undefined) {
               return yield* new Open.LaunchFailed({
                 label: error.label,
-                said: `${editor} failed: ${ran.error?.message ?? `exit status ${String(ran.status)}`}`,
+                said: failed,
               });
             }
             return Option.none<string>();

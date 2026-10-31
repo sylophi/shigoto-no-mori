@@ -85,7 +85,7 @@ const MONTHS = [
 ];
 
 // ps's `lstart` ("Sat Oct 17 03:21:24 2026"), as ps prints it under
-// PS_BIRTH_ENV, in epoch milliseconds; none for anything else.
+// PS_BIRTH_ENV, in epoch milliseconds, and none for anything else.
 export const parseLstart = (text: string): Option.Option<number> => {
   const match =
     /^\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(\d{4})$/.exec(
@@ -216,8 +216,8 @@ export const FILES_SCRIPT = 'err=$1; shift; "$@" >>"$0" 2>>"$err"; echo $?';
 // the size each had then: for one that runs the person's hooks. What a
 // hook leaves in the background (a post-checkout `pnpm install &`)
 // holds nothing of this process's, writes on into them unread, and runs
-// on after the command's exit, whatever its status, as in a terminal;
-// an interrupt or a timeout still ends the command's group. `all` takes
+// on after the command's exit, whatever its status, as in a terminal.
+// An interrupt or a timeout still ends the command's group. `all` takes
 // both streams as one, in the order written, as `stdout`.
 export const captureToFiles = (
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
@@ -338,7 +338,7 @@ export const fileUntilExit = <A, E, R>(
 
 // A command in a process group of its own (the spawner's default),
 // `read` (its pipes, read to their end) and its exit code. Its exit ends
-// the group: a child it left running (a hook's, under git; an app an
+// the group: a child it left running (a hook's under git, or an app an
 // editor's command started) would otherwise hold the pipes open for
 // good. What the command wrote before it exited is all still read.
 export const readToExit = <A, E, R>(

@@ -16,11 +16,13 @@ import { unmountedVolume } from "@shared/unmountedVolume";
 import {
   MIRROR_LABEL_MODE,
   MIRROR_LABEL_REPLACES,
-  type MirrorIgnoreMode,
-  MirrorIgnoreModeSchema,
   type MirrorSessionRaw,
   mirrorEngineBlocker,
 } from "@shigomori/contracts/modules/mirror";
+import {
+  type MirrorIgnoreMode,
+  MirrorIgnoreModeSchema,
+} from "@shigomori/contracts/modules/sync";
 import { isEntityGoneError } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { ageOf, stamp, type Stamp } from "@host/lib/util/kept";

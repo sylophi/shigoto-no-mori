@@ -54,7 +54,8 @@ try {
 }
 
 // A stale override (a leftover export, a nested dev shell) would both
-// poison srcApp resolution above and leak into the child. Ours is set
+// poison the bundle's srcApp resolution (lib/devBundle.mts) and leak
+// into the child. Ours is set
 // fresh below when the bundle builds.
 delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
 

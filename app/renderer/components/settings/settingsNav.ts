@@ -37,17 +37,12 @@ export function selectSettingsTab(tab: string): void {
   selectedTab.publish(tab);
 }
 
-// The raw selection. The resolved tab is the hook below.
-function useSelectedSettingsTab(): string {
-  return useExternalStore(selectedTab);
-}
-
 // The selection, minus a section this window doesn't offer (Visitors
 // with Village life off), for the sidebar's highlight and the form's
 // panel alike.
 export function useActiveSettingsTab(): SettingsTab {
   const hasLocalHost = useHasLocalHost();
-  const selected = useSelectedSettingsTab();
+  const selected = useExternalStore(selectedTab);
   const villageLife = useVillageLife();
   if (
     selected === APPEARANCE_TAB ||

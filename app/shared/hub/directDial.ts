@@ -108,7 +108,7 @@ export class NoDialableCandidateError extends Data.TaggedError(
 
 // A dial that failed short of a refusal: the ask went unanswered, its
 // answer offered nothing to dial, or the race ran out of budget.
-// Transient, so the keeper keeps it on the ladder; the message is what
+// Transient, so the keeper keeps it on the ladder. The message is what
 // it logs and the bridge's no-session rejection says.
 class DirectDialError extends Data.TaggedError("DirectDialError")<{
   readonly message: string;
@@ -250,7 +250,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
   // Open every candidate's socket at once, then hello them one at a
   // time in socket-open order (see the file header for why hellos are
   // serialized). The first successful handshake wins and stays up in
-  // the caller's scope; every other socket is closed pre-auth. Out of
+  // the caller's scope, and every other socket is closed pre-auth. Out of
   // budget, the race fails with the remembered refusal, or the deadline.
   const raceCandidates = (
     deviceId: string,
@@ -425,14 +425,17 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
                 cause: error,
               }),
       });
-      const info = yield* Effect.try({
-        try: () => Schema.decodeUnknownSync(DirectConnectInfoSchema)(answer),
-        catch: (error) =>
-          new DirectDialError({
-            message: `peer ${deviceId} answered no connect info this build reads`,
-            cause: error,
-          }),
-      });
+      const info = yield* Schema.decodeUnknownEffect(DirectConnectInfoSchema)(
+        answer,
+      ).pipe(
+        Effect.mapError(
+          (error) =>
+            new DirectDialError({
+              message: `peer ${deviceId} answered no connect info this build reads`,
+              cause: error,
+            }),
+        ),
+      );
       if (!info.available) {
         // The peer's listener is down, or it has nothing this caller
         // can dial. Unreachable for data right now, which is not the

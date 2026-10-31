@@ -4,7 +4,7 @@
 // Opened on the page, it slides out of the edge it is docked to. On a
 // phone it is a sheet over the whole page instead (the page is
 // `relative` for it), where a console has the room a script's output
-// needs; its tabs' hide button closes it.
+// needs, and its tabs' hide button closes it.
 import { useRef, type ReactNode } from "react";
 import { cn, dragRegion } from "../../lib/utils.ts";
 

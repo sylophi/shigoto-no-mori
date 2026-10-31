@@ -10,8 +10,8 @@ interface WorktreeMoveDetailsProps {
   branch: string;
   detached: boolean;
   rebasing?: string | undefined;
-  // Paths are pre-tildified for display; the tip carries the full path
-  // for hover, which the two flows compute differently.
+  // Paths are pre-tildified for display, and the tip carries the full
+  // path for hover, which the two flows compute differently.
   fromPath: string;
   fromTip: string;
   toPath: string;

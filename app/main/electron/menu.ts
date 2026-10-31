@@ -24,7 +24,7 @@ import type { LaunchToolMenuEntry } from "@shigomori/contracts/schemas";
 import { broadcast } from "../ipc/register";
 import { openWindow, raisePageWindow } from "./windows";
 
-// The keymap's launch tools are nine; anything beyond is unreachable.
+// The keymap has nine launch tools, so anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
 
 // The File menu's launch tools, each window's own. The renderer owns
@@ -185,7 +185,7 @@ function guideItems({
 }
 
 // Click handler that broadcasts to the focused window. Electron types
-// the callback's window as BaseWindow (no webContents); every window
+// the callback's window as BaseWindow (no webContents), but every window
 // this app creates is a BrowserWindow, so narrow once here. No-op when
 // no window has focus.
 function clickBroadcast<M extends ContractModule, K extends PushKeys<M>>(

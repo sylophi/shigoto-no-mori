@@ -29,7 +29,6 @@ import * as Schema from "effect/Schema";
 import {
   MIRROR_COPY_STAYED,
   mirrorFilesSettled,
-  type MirrorIgnoreMode,
   type MirrorListResult,
   type MirrorSession,
   type MirrorStarting,
@@ -41,6 +40,7 @@ import {
   summarizeIgnores,
 } from "@shigomori/contracts/modules/mirror";
 import {
+  type MirrorIgnoreMode,
   SyncPullProgressSchema,
   syncContract,
 } from "@shigomori/contracts/modules/sync";
@@ -138,7 +138,7 @@ export const mirrorList = (given?: Daemon) =>
 // answers by asking. Before the daemon is wired there is none to send.
 // A list that fails to build is said so.
 export const currentMirrorList = Effect.flatMap(engineOrNull, (daemon) => {
-  if (daemon === null) return Effect.succeed(undefined);
+  if (daemon === null) return Effect.undefined;
   return mirrorList(daemon).pipe(
     Effect.catchCause((cause) =>
       Effect.sync(() => {

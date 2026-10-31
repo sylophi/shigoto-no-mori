@@ -2,7 +2,7 @@
 // once either says so, so neither a sleep (the monotonic clock stands
 // still while the wall one runs on) nor a clock step (the wall one
 // jumps, backwards included) stretches it. A timer that only redraws
-// can fire late; whatever the deadline decides is checked here.
+// can fire late, but whatever the deadline decides is checked here.
 export interface Deadline {
   readonly monotonic: number;
   readonly wall: number;

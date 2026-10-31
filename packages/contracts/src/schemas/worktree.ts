@@ -96,7 +96,7 @@ export const WorktreeSchema = Schema.Struct({
   autoPull: Schema.Boolean,
   agentWorking: Schema.optional(Schema.Boolean),
   agentSessions: Schema.optional(Schema.Array(AgentSessionSchema)),
-  // What `sm describe` set; a pull request's take their place.
+  // What `sm describe` set. A pull request's take their place.
   title: Schema.optional(Schema.String),
   description: Schema.optional(Schema.String),
 });
@@ -284,7 +284,7 @@ export const CreateWorktreeResultSchema = Schema.Struct({
 });
 export type CreateWorktreeResult = typeof CreateWorktreeResultSchema.Type;
 
-// In order; a phase with no work is skipped.
+// In order. A phase with no work is skipped.
 export const CreatePhaseSchema = Schema.Literals([
   "carryOver",
   "setup",
@@ -394,7 +394,7 @@ export const RenameBranchPayloadSchema = Schema.Struct({
   newBranch: GitRefNameSchema,
 });
 
-// One left out stays as it is; an empty one clears it.
+// One left out stays as it is, and an empty one clears it.
 export const DescribeWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   title: Schema.optional(Schema.String),

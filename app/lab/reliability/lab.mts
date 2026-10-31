@@ -32,6 +32,7 @@ import {
 } from "playwright-core";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { createAccountService } from "../../shared/account/service.ts";
+import { signalIfAlive } from "../../../test/testProcesses.mts";
 import { DevApp } from "./devApp.mts";
 import { withPageApi } from "./pageApi.mts";
 import {
@@ -46,7 +47,6 @@ import {
   envFile,
   freePort,
   git,
-  killGroup,
   repoDir,
   waitFor,
   within,
@@ -672,9 +672,9 @@ export class Lab {
     }
     await step("the network", () => this.network.restore({ cut: true }));
     // B is kept, unless asked or it read signed out, which the next run
-    // would only wait on again; and only once it is up to sign itself
-    // out, or its device would stay enrolled with no profile to revoke
-    // it from.
+    // would only wait on again. It goes only once it is up to sign
+    // itself out, or its device would stay enrolled with no profile to
+    // revoke it from.
     const hostUp = this.hostApp.windows().length > 0;
     if (this.options.revokeHost && !this.options.keep && !hostUp) {
       this.note(
@@ -710,7 +710,7 @@ export class Lab {
     await step("the browser", () => this.context?.close());
     await step("the switches", () => this.network.stop());
     if (this.webServer?.pid !== undefined) {
-      killGroup(this.webServer.pid, "SIGTERM");
+      signalIfAlive(-this.webServer.pid, "SIGTERM");
     }
     for (const app of dropped) app.removeProfile();
     this.logs.end();

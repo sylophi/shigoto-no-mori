@@ -138,9 +138,9 @@ export class LandingRefused extends Schema.TaggedError<LandingRefused>()(
       case "method-not-allowed":
         return `The repo's settings don't allow ${a} merges (allowed: ${b})`;
       case "stack-closed":
-        return `PR #${n0} (${a}) under the stack is closed without merging; reopen or rebase past it first`;
+        return `PR #${n0} (${a}) under the stack is closed without merging. Reopen or rebase past it first`;
       case "stack-draft":
-        return `PR #${n0} (${a}) in the stack is a draft; mark it ready first`;
+        return `PR #${n0} (${a}) in the stack is a draft. Mark it ready first`;
       case "stack-all-merged":
         return "Every PR in the stack is already merged";
       case "stack-above":

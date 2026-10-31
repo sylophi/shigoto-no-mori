@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 
 // Building blocks for IPC payload schemas. A call whose payload is
-// exactly one of these shapes uses it directly in its contract; calls
+// exactly one of these shapes uses it directly in its contract. Calls
 // with extra fields spread its `fields` so the scoping fields stay
 // uniform across the whole surface.
 

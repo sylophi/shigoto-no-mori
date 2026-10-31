@@ -51,23 +51,17 @@ export function assertDevProfileName(name: string): void {
   }
 }
 
-// The profile named in an environment, or null when unset or empty.
-function devProfileFromEnv(
-  env: Record<string, string | undefined>,
-): string | null {
-  const raw = env[DEV_PROFILE_ENV]?.trim() ?? "";
-  if (raw === "") return null;
-  assertDevProfileName(raw);
-  return raw;
-}
-
-// The profile a dev run runs as, or null. A packaged build never runs
-// as one, whatever its environment says.
+// The profile a dev run runs as, or null when unset or empty. A
+// packaged build never runs as one, whatever its environment says.
 export function profileFromEnv(
   packaged: boolean,
   env: Record<string, string | undefined>,
 ): string | null {
-  return packaged ? null : devProfileFromEnv(env);
+  if (packaged) return null;
+  const raw = env[DEV_PROFILE_ENV]?.trim() ?? "";
+  if (raw === "") return null;
+  assertDevProfileName(raw);
+  return raw;
 }
 
 // The folder in the plain dev userData that holds the profiles'.

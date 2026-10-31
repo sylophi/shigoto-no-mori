@@ -217,7 +217,7 @@ export function AddExistingForm({
         // bails out the whole component.
         if (firstAddedId === null) firstAddedId = project.id;
       } catch {
-        // Skip individual failures; user can retry by re-scanning.
+        // Skip individual failures. The user can retry by re-scanning.
       }
     }
     setBulkAdding(false);
@@ -250,13 +250,7 @@ export function AddExistingForm({
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (confirmKeys.matches(e)) {
-      e.preventDefault();
-      e.stopPropagation();
-      void primaryAction();
-      return;
-    }
-    if (e.key === "Enter" && !hasHighlighted) {
+    if (confirmKeys.matches(e) || (e.key === "Enter" && !hasHighlighted)) {
       e.preventDefault();
       e.stopPropagation();
       void primaryAction();

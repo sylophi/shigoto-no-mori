@@ -50,7 +50,7 @@ export interface DeviceTab extends DeviceRosterEntry {
 // reachable peers, then the rest, so the machines that can answer sit
 // where the eye starts. A browser on the account is a device too, but
 // hosts no forest, so no pick offers it. The tabs below layer the
-// command grant on it; the sidebar's device filter reads it as is.
+// command grant on it, and the sidebar's device filter reads it as is.
 export function useDeviceRoster(): DeviceRosterEntry[] {
   const page = useApi();
   const localDeviceId = page.deviceId;

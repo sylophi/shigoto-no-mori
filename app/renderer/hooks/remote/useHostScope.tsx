@@ -1,7 +1,7 @@
 // The device-scope seam for the host-scoped data layer. Every
-// host-scoped hook reads WHICH device it talks to — the api its
+// host-scoped hook reads WHICH device it talks to (the api its
 // queryFns and mutationFns call, and the key registry its queries
-// cache under — from this context instead of hard-wiring the page's api.
+// cache under) from this context instead of hard-wiring the page's api.
 // With no provider mounted the context resolves to the local device,
 // so the hooks behave identically outside a provider.
 //

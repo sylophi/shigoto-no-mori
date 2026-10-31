@@ -20,7 +20,7 @@ export interface SegmentedOption<T extends string> {
 
 // The house few-way toggle: pill options on an inset track (new-worktree
 // mode, carry-over mode, diff layout). One source of truth for the
-// track + selection treatment; call sites only pass sizing. The
+// track and selection treatment, and call sites only pass sizing. The
 // data-slot doubles as the doubutsu hook. The overlay fills the track
 // with the --input tray tint once borders are stripped. A radio group
 // (Base UI's): Tab reaches the picked option, and the arrows move the
@@ -39,7 +39,7 @@ export function SegmentedControl<T extends string>({
   options: readonly SegmentedOption<T>[];
   disabled?: boolean;
   className?: string;
-  // Sizing knobs only; color/selection stays uniform across call sites.
+  // Sizing knobs only: color and selection stay uniform across call sites.
   optionClassName?: string;
   "aria-label"?: string;
 }) {

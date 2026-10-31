@@ -1,8 +1,7 @@
 import { lifecycleSlot } from "@shigomori/contracts/schemas";
 import { lifecycleCommand } from "@shigomori/contracts/lifecycleScripts";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
-import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
 import { findProject } from "@host/lib/projects";
 import * as Scripts from "@host/lib/Scripts";

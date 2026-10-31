@@ -111,8 +111,8 @@ export function writeNukeMarker(
   renameSync(staged, marker);
 }
 
-// What a start that found a marker couldn't delete, and why; null for
-// no marker. The lock's own files stay, since this process holds the
+// What a start that found a marker couldn't delete, and why, or null
+// for no marker. The lock's own files stay, since this process holds the
 // lock through them, and so do the plain dev instance's profiles, other
 // devices whose userData nests in its own. A marker that can't be read
 // deletes nothing and stays: half a nuke (userData gone, the data dir
@@ -125,7 +125,7 @@ export function finishPendingNuke(userData: string): {
   if (!existsSync(marker)) return null;
   const decoded = decodeMarker(readFileSync(marker, "utf8"));
   if (Option.isNone(decoded)) {
-    console.warn(`[nuke] ${marker} can't be read; nothing deleted`);
+    console.warn(`[nuke] ${marker} can't be read, so nothing was deleted`);
     return null;
   }
   const left: { path: string; why: string }[] = [];

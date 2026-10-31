@@ -7,7 +7,7 @@ interface BranchLabelProps {
   // the hash's place.
   rebasing?: string | undefined;
   // Override the suffix size when the parent text is much larger or
-  // smaller than the default; otherwise the "(detached)" suffix inherits
+  // smaller than the default. Otherwise the "(detached)" suffix inherits
   // the parent's font size.
   suffixClassName?: string;
 }

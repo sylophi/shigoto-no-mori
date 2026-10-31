@@ -161,10 +161,8 @@ function worktreeIdOf(seed: string): string {
 }
 
 // A fixture table: a handler for each channel it answers, typed by the
-// contract. A channel the table leaves out falls back to a
+// contracts. A channel the table leaves out falls back to a
 // schema-derived stub.
-// A table answering any channel of any contract module, typed by the
-// contracts: the fixtures' handlers.
 export type FixtureHandlers = Partial<ChannelHandlers<AllContractModule>>;
 
 // The posing controls on window.fakeHost.
@@ -520,10 +518,7 @@ function hostHandlersFor(
         });
       }
     },
-    // A copy, as a wire would hand over: projects:add and projects:clone
-    // push onto the list, and the same array back would read as "nothing
-    // changed" to the query cache's structural sharing.
-    "projects:list": () => [...forest.projects],
+    "projects:list": () => forest.projects,
     "projects:add": ({ path }) =>
       registerProject(disk, forest, resolveOnDisk(disk, path)),
     // Takes a moment, as a clone of a large repo does, reporting each
@@ -689,7 +684,7 @@ function hostHandlersFor(
     },
     "fs:isGitRepo": ({ path }) => isRepoOnDisk(disk, resolveOnDisk(disk, path)),
     "fs:scanForGitRepos": async ({ path }) => {
-      await new Promise((resolve) => setTimeout(resolve, 900));
+      await sleep(900);
       const root = resolveOnDisk(disk, path);
       return Object.entries(disk.dirs).flatMap(([folder, entries]) =>
         folder === root || folder.startsWith(`${root}/`)
@@ -709,7 +704,7 @@ function hostHandlersFor(
     // letter tile, as the scenes draw it.
     "projects:icon": () => null,
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
-    // The host plans by the folders on disk; the lab by the preview's
+    // The host plans by the folders on disk, the lab by the preview's
     // path math over its fixture data dir, a path in place when it reads
     // the same.
     "worktrees:relocationPlan": ({ projectId, layout, customPath }) => {
@@ -837,11 +832,8 @@ function hostHandlersFor(
       }
       const renamed = {
         ...row,
-        // A 12-hex id of the new path, as the host's is.
-        id: [...`${worktreeId}/${name}`]
-          .reduce((hash, c) => (hash * 31 + c.charCodeAt(0)) >>> 0, 7)
-          .toString(16)
-          .padStart(12, "0"),
+        // An id of the new path, as the host's is.
+        id: worktreeIdOf(`${worktreeId}/${name}`),
         name,
         path: `${row.path.slice(0, row.path.lastIndexOf("/"))}/${name}`,
       };
@@ -1122,13 +1114,12 @@ function hostHandlersFor(
     }),
     // The mirror picture is host-scoped: the forest holding the
     // original reports the session it runs, and the copy's forest the
-    // stream it serves. Both refresh off mirror:changed. Copies, since
-    // the posed cycle mutates the session in place.
+    // stream it serves. Both refresh off mirror:changed.
     "mirror:list": () => ({
       daemon: posedMirrorEngine(),
-      sessions: fakeMirrors.sessions
-        .filter((session) => fakeRunners.get(session) === forest.deviceId)
-        .map((session) => structuredClone(session)),
+      sessions: fakeMirrors.sessions.filter(
+        (session) => fakeRunners.get(session) === forest.deviceId,
+      ),
       serving: fakeMirrors.serving
         .filter((stream) => stream.deviceId === forest.deviceId)
         .map(({ deviceId: _device, ...stream }) => stream),
@@ -2171,7 +2162,7 @@ export function installFakeHostBridge(
     // A pose holds still, so a retry leaves a stuck move stuck.
     "migration:retry": () => {},
     "account:enroll": async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      await sleep(1_500);
       keyDue = false;
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();

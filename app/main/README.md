@@ -4,7 +4,7 @@ The shell: Electron's main process. It keeps what needs Electron (the
 windows, the menu, dialogs, the keychain, the updater) and runs the
 host as a utility process of its own (`host/README.md`, "A process
 of its own"). A window reaches its host over the loopback like any
-other device; its shell serves only the calls that belong to the
+other device, and its shell serves only the calls that belong to the
 machine the window runs on.
 
 - `index.ts`: the shell's start, the composition root. It builds the
@@ -32,7 +32,7 @@ machine the window runs on.
 - Adding a menu item (`electron/menu.ts`): one a window handles is a
   push to the focused window, `clickBroadcast(<contract>, "<push>",
   <payload>)`, with the push declared in the client module (`nav`,
-  `window`) and heard in the renderer; one the shell handles itself is
+  `window`) and heard in the renderer. One the shell handles itself is
   a plain `click`. Labels are title case, as macOS's own are ("Add
   Project…", "New Window"), with an ellipsis when the item asks for
   more first.
@@ -48,6 +48,6 @@ The shell reads the data dir: `index.ts` finds it (`initDataDir`)
 before it builds the menu or forks the host, and modules here read it
 through `@shared/paths`, which both processes compile.
 Most of the shell is plain Electron code (the menu, windows, deep
-links); EFFECT.md holds what is Effect here: the layer graph
+links). EFFECT.md holds what is Effect here: the layer graph
 (`shellLayer.ts`), the services (`ClerkTokens`, `ShellLink`) and the
 handlers.

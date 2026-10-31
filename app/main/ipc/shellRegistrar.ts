@@ -1,7 +1,7 @@
 // What the shell registers to serve (shared/ipc/served.ts), and the
 // pushes it fans out to every window, for its link (ShellLink.ts).
-// Registration comes first, at boot; the server reads it once each port
-// is attached.
+// Registration comes first, at boot, and the server reads it once each
+// port is attached.
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import { createServed } from "@shared/ipc/served";

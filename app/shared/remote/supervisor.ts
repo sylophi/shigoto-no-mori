@@ -1,11 +1,11 @@
 // Reconnect supervisor for one remote connection (in shared/ so the
 // host's hub socket and the web client's reuse it). It is the SINGLE
-// owner of retry for a connection: nothing else
-// drives the connect function for it, so there is exactly one fiber
-// and one restart schedule per connection, never a fan of overlapping
-// reconnect loops. It runs for the length of the scope it is made in.
+// owner of retry for a connection: nothing else drives the connect
+// function for it, so there is exactly one fiber and one restart
+// schedule per connection, never a fan of overlapping reconnect loops.
+// It runs for the length of the scope it is made in.
 //
-// State machine, copying t3's discipline:
+// State machine:
 //   idle -> connecting -> connected -> backoff -> connecting -> ...
 //                              \-> blocked (terminal until inputs change)
 // A connection that STAYS OPEN past the stable threshold resets the
@@ -129,7 +129,8 @@ export function makeWake(): Wake {
       Effect.suspend(() => {
         const cut = Deferred.makeUnsafe<void>();
         waiting = cut;
-        return Effect.raceFirst(Effect.sleep(delay), Deferred.await(cut)).pipe(
+        return Deferred.await(cut).pipe(
+          Effect.timeoutOrElse({ duration: delay, orElse: () => Effect.void }),
           Effect.ensuring(
             Effect.sync(() => {
               if (waiting === cut) waiting = null;
@@ -146,7 +147,7 @@ export function makeWake(): Wake {
 // A schedule whose waits are `wake` waits: the wait runs in the step,
 // which answers no delay of its own. Last in a pipe, so what comes
 // before it (a status tap, another ladder) sees the delay it waits.
-const wakeable =
+export const wakeable =
   (wake: Wake) =>
   <Out, In, E, R>(
     schedule: Schedule.Schedule<Out, In, E, R>,
@@ -197,8 +198,6 @@ export const supervise = (
   Effect.gen(function* () {
     const { classifyClose } = options;
     const clock = yield* Clock.Clock;
-    // Since when the live connection's uptime counts, null while none is.
-    let upSince: number | null = null;
     // The least wait before the next dial: the Retry-After of a dial the
     // hub rate-limited, which a dial sooner only draws again.
     let waitAtLeastMs = 0;
@@ -262,15 +261,13 @@ export const supervise = (
         return 0;
       }
       const connection = connected.success;
-      upSince = elapsedMillisUnsafe(clock);
+      const upSince = elapsedMillisUnsafe(clock);
       yield* setStatus({ phase: "connected" });
       options.onConnection?.(connection);
       const code = yield* Deferred.await(closed).pipe(
         Effect.ensuring(Effect.sync(() => options.onConnection?.(null))),
       );
-      const uptime =
-        upSince === null ? 0 : elapsedMillisUnsafe(clock) - upSince;
-      upSince = null;
+      const uptime = elapsedMillisUnsafe(clock) - upSince;
       const verdict = classifyClose(code);
       if (verdict !== null)
         return yield* block(verdict.reason, verdict.message);

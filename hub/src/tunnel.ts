@@ -70,7 +70,7 @@ function cfApi(cf: TunnelEnv, cfFetch: typeof fetch) {
   // One CF API round trip: bearer auth, JSON in and out, throws on a
   // non-2xx status or success:false so a CF failure can never be read as
   // a valid result. The type parameter names the `result` slice the
-  // caller reads; CF envelopes are not schema-validated here, so it is
+  // caller reads. CF envelopes are not schema-validated here, so it is
   // an assertion, kept in this one place.
   async function call<T>(
     method: string,

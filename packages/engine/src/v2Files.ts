@@ -18,7 +18,7 @@ const AT_THE_TOP = [
   "state.json",
   "file-sync/git-follow.json",
   "file-sync/mirror-history.json",
-  // Not imported; deleted with the rest.
+  // Not imported, but deleted with the rest.
   "running-scripts.json",
   "file-sync/mirror-invites.json",
 ];
@@ -100,7 +100,7 @@ export const heldV2Files = Effect.fnUntraced(function* (
     row === undefined
       ? {}
       : Option.getOrElse(
-          Schema.decodeUnknownOption(VerifiedFiles)(row.files),
+          Schema.decodeOption(VerifiedFiles)(row.files),
           () => ({}),
         );
   const now = yield* hashesOf(files);

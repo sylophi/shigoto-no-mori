@@ -6,15 +6,14 @@
 // scheme only to an app bundle whose Info.plist claims it. The bare
 // Electron binary forge would normally spawn belongs to node_modules'
 // Electron.app (bundle id com.github.Electron), so the callback never
-// reaches the dev app and social sign-in dies half-finished. The fix
-// (same shape t3 code ships): clone Electron.app into a gitignored
-// per-worktree bundle, rewrite its Info.plist to claim the dev scheme
-// under a worktree-unique bundle id, register it with LaunchServices,
-// and make forge launch THAT copy. The running dev process then lives
-// inside the registered bundle, so the OS delivers open-url events
-// straight to it, and the Clerk bridge's setAsDefaultProtocolClient
-// call works because the process finally has a registrable bundle
-// identity.
+// reaches the dev app and social sign-in dies half-finished. The fix:
+// clone Electron.app into a gitignored per-worktree bundle, rewrite its
+// Info.plist to claim the dev scheme under a worktree-unique bundle id,
+// register it with LaunchServices, and make forge launch THAT copy. The
+// running dev process then lives inside the registered bundle, so the
+// OS delivers open-url events straight to it, and the Clerk bridge's
+// setAsDefaultProtocolClient call works because the process finally has
+// a registrable bundle identity.
 //
 // The bundle id is per worktree, but the scheme is one spelling
 // (shared/packaging/rendererScheme.mts), so across several dev
@@ -176,30 +175,14 @@ export function ensureDevBundle(): string {
       // Same entries forge writes into the packaged app, so a dev
       // build's first LAN dial and first terminal tool get their
       // prompts too.
-      plutilReplace(
-        plist,
-        "NSLocalNetworkUsageDescription",
-        "string",
-        LOCAL_NETWORK_USAGE_DESCRIPTION,
-      );
-      plutilReplace(
-        plist,
-        "NSAppleEventsUsageDescription",
-        "string",
-        APPLE_EVENTS_USAGE_DESCRIPTION,
-      );
-      plutilReplace(
-        plist,
-        "NSRemovableVolumesUsageDescription",
-        "string",
-        REMOVABLE_VOLUMES_USAGE_DESCRIPTION,
-      );
-      plutilReplace(
-        plist,
-        "NSNetworkVolumesUsageDescription",
-        "string",
-        NETWORK_VOLUMES_USAGE_DESCRIPTION,
-      );
+      for (const [key, description] of Object.entries({
+        NSLocalNetworkUsageDescription: LOCAL_NETWORK_USAGE_DESCRIPTION,
+        NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
+        NSRemovableVolumesUsageDescription: REMOVABLE_VOLUMES_USAGE_DESCRIPTION,
+        NSNetworkVolumesUsageDescription: NETWORK_VOLUMES_USAGE_DESCRIPTION,
+      })) {
+        plutilReplace(plist, key, "string", description);
+      }
       plutilReplace(
         plist,
         "CFBundleURLTypes",

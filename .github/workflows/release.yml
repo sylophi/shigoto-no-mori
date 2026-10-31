@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release-mac:
-    # Apple Silicon runner; matches the one arch we ship.
+    # Apple Silicon runner, the one arch we ship.
     runs-on: macos-latest
     # The Electron app lives in app/, so every shell step runs from there.
     defaults:
@@ -94,7 +94,7 @@ jobs:
         run: |
           VERSION="${TAG#v}"
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0); refusing to build with the placeholder 0.0.0 version."
+            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0). Refusing to build with the placeholder 0.0.0 version."
             exit 1
           fi
           npm pkg set version="$VERSION"
@@ -176,7 +176,7 @@ jobs:
       # this release. Each verb runs on an empty data dir: the version,
       # the store opened and read, and the feed asked. The check needs
       # the network, so only a start that failed (a signal, a refused
-      # exec, no word at all) fails it; its answer goes to the log.
+      # exec, no word at all) fails it. Its answer goes to the log.
       - name: Run the signed terminal command
         env:
           TAG: ${{ github.event.release.tag_name }}

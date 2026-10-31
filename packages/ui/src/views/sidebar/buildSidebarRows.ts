@@ -1,5 +1,4 @@
 import { UNNAMED_DEVICE } from "../../lib/deviceRoster.ts";
-import { type Owner, ownerOf } from "./sidebarRow.ts";
 import {
   placeByStack,
   pullRequestStackFor,
@@ -12,10 +11,13 @@ import {
   groupPrefixOf,
   isHiddenByPrefix,
 } from "@shigomori/contracts/sharedSettings";
-import type { RemoteForestItem } from "../../lib/forest.ts";
-import type { LocalSide, MirrorLink } from "../../lib/forest.ts";
-import type { ProjectWorktreeQueries } from "../../lib/forest.ts";
-import type { ProjectPullRequestQueries } from "../../lib/forest.ts";
+import type {
+  LocalSide,
+  MirrorLink,
+  ProjectPullRequestQueries,
+  ProjectWorktreeQueries,
+  RemoteForestItem,
+} from "../../lib/forest.ts";
 import type {
   Project,
   ProjectSortMode,
@@ -28,6 +30,8 @@ import {
   GROUP_SHELVES,
   type GroupShelf,
   type InboxShelf,
+  type Owner,
+  ownerOf,
   type RemoteProjectMember,
   type SidebarRow,
   type SidebarViewModel,
@@ -150,8 +154,9 @@ export function mirrorBadgeLookup(
 
 // Which fold a worktree sits behind in its group, if any. An agent's
 // working mark comes first, when it counts (isAgentWorking): it says
-// the worktree isn't ready to look at yet, wherever it was filed. Shelving is the user's own call, so it outranks the prefixes.
-// The inbox files by the same rule.
+// the worktree isn't ready to look at yet, wherever it was filed.
+// Shelving is the user's own call, so it outranks the prefixes. The
+// inbox files by the same rule.
 function groupShelfOf(
   worktree: Worktree,
   prefixes: readonly string[],
@@ -231,7 +236,7 @@ export function buildSidebarRows({
     // A failed refetch keeps its last data, but the group draws the
     // error row instead of it.
     if (!query || query.error) return;
-    for (const worktree of (query.data ?? []) as readonly Worktree[]) {
+    for (const worktree of query.data ?? []) {
       const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
       listedLocal.set(worktree.id, {
         groupId: project.id,
@@ -422,7 +427,7 @@ export function buildSidebarRows({
         ? "worktree-error"
         : null;
     if (query && unlisted === null) {
-      for (const worktree of (query.data ?? []) as readonly Worktree[]) {
+      for (const worktree of query.data ?? []) {
         fileLocal(worktree);
       }
     }
@@ -480,9 +485,7 @@ export function buildSidebarRows({
     // rail, top layer first, wherever its layers are checked out:
     // gathered at its first layer's place. The trunk comes off
     // whichever listing the group has.
-    const trunk =
-      trunkOf(query?.data as readonly Worktree[] | undefined) ??
-      trunkOf(group.remote[0]?.worktrees);
+    const trunk = trunkOf(query?.data) ?? trunkOf(group.remote[0]?.worktrees);
     const placed = (
       local: readonly Worktree[],
       peers: RemoteRow[],

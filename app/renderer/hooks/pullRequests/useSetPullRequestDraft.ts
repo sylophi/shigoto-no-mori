@@ -26,7 +26,7 @@ export function useSetPullRequestDraft() {
       (prev, { draft }) => ({
         ...prev,
         isDraft: draft,
-        // gh recomputes mergeable state after the flip; we can't
+        // gh recomputes mergeable state after the flip. We can't
         // predict it (depends on conflicts, checks, protections), so
         // mark it UNKNOWN until the refetch settles. The button
         // becomes inert for the brief window, which is honest.

@@ -28,8 +28,7 @@ import {
   isMirrorStopUnconfirmed,
 } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {
@@ -182,9 +181,6 @@ const choiceFor = <E, R>(
     } as MirrorIgnoreChoice & { runSetup: boolean };
   });
 
-// What became of the source, in the finish step's terms. A fate that
-// could not be carried out is an answer, never a throw: the transfer
-// already stands.
 // A transfer done, with how to settle its source.
 type Settle = {
   readonly shelve: Effect.Effect<unknown, unknown, HostServices>;
@@ -195,6 +191,9 @@ type Settle = {
   >;
 };
 
+// What became of the source, in the finish step's terms. A fate that
+// could not be carried out is an answer, never a throw: the transfer
+// already stands.
 const settleSource = (
   fate: "keep" | "shelve" | "teardown",
   run: Settle,

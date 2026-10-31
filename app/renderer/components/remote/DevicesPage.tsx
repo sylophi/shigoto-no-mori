@@ -5,7 +5,7 @@ import { AccountSection } from "./AccountSection";
 // "/account": the account and its machines, on their own page. The
 // account (sign in, the device registry and its removals) is a fact
 // about the account, not a preference of this machine, so it is a page
-// of its own rather than a form under Settings -- along with the two
+// of its own rather than a form under Settings, along with the two
 // device facts the other machines depend on, whether this one lets them
 // control it and whether it stays reachable to them, which sit inside
 // this device's own row instead of in a section of their own.

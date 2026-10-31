@@ -29,7 +29,6 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
@@ -123,9 +122,7 @@ async function harness(answer: (request: Request) => Answer) {
   const gateway = Layer.succeed(
     MirrorGateway.MirrorGateway,
     MirrorGateway.MirrorGateway.of({
-      listening: Effect.succeed(
-        Option.some({ address: "127.0.0.1:1", token: "token" }),
-      ),
+      listening: Effect.succeedSome({ address: "127.0.0.1:1", token: "token" }),
       streamCount: Effect.succeed(0),
     }),
   );
@@ -211,7 +208,7 @@ it("a stop's fresh git check that doesn't finish in its limit times out, never a
     },
   });
   const clock = testClock();
-  const scope = Effect.runSync(Scope.make());
+  const scope = Scope.makeUnsafe();
   trackTest(() => Effect.runPromise(Scope.close(scope, Exit.void)));
   const follower = await Effect.runPromiseWith(await hostContext())(
     makeGitFollower({

@@ -3,7 +3,7 @@
 // and the worktree on the move, and this device's sign-in for its key,
 // a button only once its session has lapsed. A stuck move can be tried
 // again once what held it is closed, and says when a retry left it
-// stuck. With every step done the app opens by itself; past a stuck
+// stuck. With every step done the app opens by itself. Past a stuck
 // step or a sign-in left for later, Continue opens it.
 import type { MigrationProgress } from "@shigomori/contracts/schemas/migration";
 import { migrationEnded, type SignInStep } from "./migrationEnded.ts";

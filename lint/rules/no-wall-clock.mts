@@ -29,7 +29,7 @@ export default {
   create(context) {
     if (!readsClockThroughEffect(context.filename)) return {};
     return {
-      // The current time; `new Date(at)` only formats one.
+      // The current time. `new Date(at)` only formats one.
       NewExpression(node) {
         if (
           node.callee.type === "Identifier" &&

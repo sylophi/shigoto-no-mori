@@ -176,7 +176,7 @@ func (h mirrorGatewayHandler) Connect(
 		return nil, fmt.Errorf("mirror gateway unreachable: %w", err)
 	}
 	// The handshake below (our preface exchange, then Mutagen's) is a
-	// series of blocking reads. The preface's have a deadline; Mutagen's
+	// series of blocking reads. The preface's have a deadline, but Mutagen's
 	// after it have none of ours (the conn is cleared for it), only
 	// cancellation and the device link's own liveness cut, which closes
 	// the bridged socket. Cancellation must cut either short: a daemon
@@ -474,7 +474,7 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 }
 
 // A v2 session names its kind in three labels (copySide, mirrorBranch,
-// transfer); this daemon reads one, mode (the host's mirror registry).
+// transfer), and this daemon reads one, mode (the host's mirror registry).
 // Mutagen keeps a session's labels for its life, so the persisted
 // sessions are rewritten once, before the manager loads them: a mirror
 // takes its mode, and a transfer takes a token no transfer holds, so

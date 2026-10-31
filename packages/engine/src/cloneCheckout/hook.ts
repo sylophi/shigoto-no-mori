@@ -88,7 +88,7 @@ export const makeHook = Effect.gen(function* () {
               ),
         ),
         Effect.catch((error) =>
-          Effect.succeed(Option.some(new HookFailed({ cause: error }))),
+          Effect.succeedSome(new HookFailed({ cause: error })),
         ),
       );
     // Like git, every hook runs even after one fails, and the first

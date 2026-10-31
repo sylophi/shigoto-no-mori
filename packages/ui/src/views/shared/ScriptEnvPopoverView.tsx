@@ -11,9 +11,9 @@ import { SCRIPT_ENV_DOCS } from "@shigomori/contracts/scriptEnv";
 // (setup, teardown, `sm run`, custom tools), a click away from the
 // heading of each section that takes one (SectionIntro's action)
 // rather than spelled out on the page. A plain button, not a chip with
-// a chevron, since it shows a reference and picks nothing. Copying a row copies it as a quoted shell reference,
-// since every one of those fields is a shell command and the values
-// are paths and free text.
+// a chevron, since it shows a reference and picks nothing. Copying a
+// row copies it as a quoted shell reference, since every one of those
+// fields is a shell command and the values are paths and free text.
 export function ScriptEnvPopoverView() {
   return (
     <Popover>

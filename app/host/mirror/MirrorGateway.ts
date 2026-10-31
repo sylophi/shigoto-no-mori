@@ -67,9 +67,7 @@ export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
 const PrefaceSchema = Schema.fromJsonString(
   Schema.Struct({
     token: Schema.optional(
-      Schema.String.pipe(
-        Schema.catchDecoding(() => Effect.succeed(Option.some(""))),
-      ),
+      Schema.String.pipe(Schema.catchDecoding(() => Effect.succeedSome(""))),
     ),
     deviceId: Schema.NonEmptyString,
     projectId: Schema.NonEmptyString,
@@ -79,9 +77,7 @@ const PrefaceSchema = Schema.fromJsonString(
     // peer's serving list can name the local copy. One that is not a
     // worktree id is left out, not refused.
     localWorktreeId: Schema.optional(
-      WorktreeIdSchema.pipe(
-        Schema.catchDecoding(() => Effect.succeed(Option.none())),
-      ),
+      WorktreeIdSchema.pipe(Schema.catchDecoding(() => Effect.succeedNone)),
     ),
   }),
 );

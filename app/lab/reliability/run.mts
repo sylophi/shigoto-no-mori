@@ -351,6 +351,6 @@ try {
 }
 const failed = outcomes.filter((outcome) => outcome.failure !== null).length;
 console.log(
-  `[reliability] ${outcomes.length} scenarios, ${failed} failed; report at ${join(out, "report.md")}`,
+  `[reliability] ${outcomes.length} scenarios, ${failed} failed, report at ${join(out, "report.md")}`,
 );
 process.exit(failed === 0 ? 0 : 1);

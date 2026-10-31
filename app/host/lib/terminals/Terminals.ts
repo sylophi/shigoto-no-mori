@@ -417,9 +417,7 @@ const make = <R, E>(options: {
             spawner,
           ),
         ),
-        linux: fs
-          .readLink(`/proc/${session.pty.pid}/cwd`)
-          .pipe(Effect.map(Option.some)),
+        linux: fs.readLink(`/proc/${session.pty.pid}/cwd`).pipe(Effect.asSome),
       });
       return read.pipe(
         Effect.timeout(Duration.seconds(2)),
@@ -736,19 +734,15 @@ const make = <R, E>(options: {
           { ...terminal, busy: false },
           { ...start.value, cwd: folder },
           DEFAULT_SIZE,
-          {
-            seq,
-            history,
-          },
+          { seq, history },
         ).pipe(
           Effect.onError(() => saved.forget(terminal.terminalId)),
-          Effect.catchTags({
-            PtySpawnError: (error) =>
-              Effect.logWarning(
-                "[terminals] a saved terminal did not start",
-                error,
-              ),
-          }),
+          Effect.catchTag("PtySpawnError", (error) =>
+            Effect.logWarning(
+              "[terminals] a saved terminal did not start",
+              error,
+            ),
+          ),
         );
       }
     });

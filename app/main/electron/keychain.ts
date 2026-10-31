@@ -43,6 +43,6 @@ export function resetSafeStorageItemOnce(): void {
     outcome === "deleted"
       ? `[keychain] replaced the "${service}" item so this signed build ` +
           "owns it. Any earlier sign-in needs redoing once."
-      : `[keychain] no "${service}" item to reset; this build creates it.`,
+      : `[keychain] no "${service}" item to reset, so this build creates it.`,
   );
 }

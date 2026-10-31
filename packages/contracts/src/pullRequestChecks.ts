@@ -2,8 +2,8 @@
 // request panel and by the engine's wait for a merge.
 import type { PullRequestCheckBucket } from "./schemas/pullRequest.ts";
 
-// A CheckRun carries a status, then a conclusion; a StatusContext only
-// a state. gh leaves out what a node lacks, or sends it empty.
+// A CheckRun carries a status, then a conclusion. A StatusContext only
+// carries a state. gh leaves out what a node lacks, or sends it empty.
 export type CheckState = {
   readonly state?: string | undefined;
   readonly status?: string | undefined;

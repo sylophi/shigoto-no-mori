@@ -136,12 +136,12 @@ export const makeStash = ({
           }),
         ).pipe(
           Effect.catchIf(indexHeld, () =>
-            Effect.gen(function* () {
-              return yield* new GitRefusedError({
+            Effect.fail(
+              new GitRefusedError({
                 reason:
                   "It was saved to the stash list, with its new files, but another program's git held the worktree's index, so its other changes are also still here. Discard all changes, in the changes list's ⋯ menu, finishes it.",
-              });
-            }),
+              }),
+            ),
           ),
         );
       const attempt = Effect.gen(function* () {

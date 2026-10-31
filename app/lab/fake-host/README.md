@@ -61,7 +61,7 @@ Open one with weblab's `new`, the worktree's port as the address.
 `grep FAKE_HOST_ .env.ports` prints both ports. A fresh checkout has no
 `.env.ports` until the first `pnpm fake-host` (or any dev server) runs
 `scripts/ensure-ports.mts`, which asks port-pool for this checkout's
-ports; `port-pool release <checkout>` gives them back when a throwaway
+ports, and `port-pool release <checkout>` gives them back when a throwaway
 checkout goes. A server's first load compiles the app through the
 React Compiler, which can outlast weblab's default timeout, so give
 the first `goto` a longer one. Below, 4752 and 4753 stand for them:

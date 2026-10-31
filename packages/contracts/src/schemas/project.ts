@@ -4,13 +4,13 @@ import { PathPayloadSchema, ProjectScopedPayloadSchema } from "./payloads.ts";
 import { strict } from "./strict.ts";
 
 // What `deriveBranch` returns with no branch and no readable detached
-// HEAD; not a real branch.
+// HEAD, which is not a real branch.
 const UNKNOWN_BRANCH = "(unknown)";
 
 export const isRealBranch = (branch: string): boolean =>
   branch !== UNKNOWN_BRANCH;
 
-// Refs go into git argv; git rejects a leading "-" anyway, so refusing
+// Refs go into git argv. Git rejects a leading "-" anyway, so refusing
 // it here keeps input out of a flag position.
 export const GitRefNameSchema = Schema.NonEmptyString.check(
   Schema.makeFilter(
@@ -28,7 +28,7 @@ export const ProjectSchema = Schema.Struct({
   pathExists: Schema.optional(Schema.Boolean),
   // null never matches across devices.
   identity: Schema.optional(Schema.NullOr(Schema.String)),
-  // `host/owner/repo`; null without a network remote.
+  // `host/owner/repo`, or null without a network remote.
   remote: Schema.optional(Schema.NullOr(Schema.String)),
   lastUsed: Schema.optional(Schema.Natural),
   recentCount: Schema.optional(Schema.Natural),

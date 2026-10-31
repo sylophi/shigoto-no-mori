@@ -11,6 +11,7 @@ import type { ConfigDoc } from "@shigomori/engine/configDoc";
 import type * as Registry from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
@@ -18,8 +19,6 @@ import * as Flag from "effect/cli/Flag";
 import { UsageError } from "../errors.ts";
 import { note, out, Output, renderTable, styles } from "../output.ts";
 import { document, type Settings, suffix, usage } from "./config.ts";
-
-type Entry = Readonly<Record<string, unknown>>;
 
 // A refusal of an entry the list doesn't hold, or holds twice.
 class NoSuchEntry extends Schema.TaggedError<NoSuchEntry>()("NoSuchEntry", {
@@ -36,9 +35,6 @@ const entries = (doc: ConfigDoc | null, key: string) => {
   const list = doc?.[key];
   return Array.isArray(list) ? (list as ReadonlyArray<unknown>) : [];
 };
-
-const isEntry = (value: unknown): value is Entry =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 // The list `key` changed by `change`, written back with the rest of the
 // settings as they were, in one transaction: a verb decides what to do
@@ -75,7 +71,7 @@ const launcherMatches = (list: ReadonlyArray<unknown>, ref: string) => {
   const wanted = ref.toLowerCase();
   const byLabel: number[] = [];
   for (const [index, entry] of list.entries()) {
-    if (!isEntry(entry)) continue;
+    if (!Predicate.isReadonlyObject(entry)) continue;
     const id = text(entry["id"]).toLowerCase();
     if (id !== "" && (id === wanted || `custom:${id}` === wanted)) {
       return [index];
@@ -110,7 +106,7 @@ export const launcherVerb = <E, R>(resolve: Effect.Effect<Settings, E, R>) =>
               renderTable(
                 ["LABEL", "COMMAND", "ID"],
                 list
-                  .filter(isEntry)
+                  .filter(Predicate.isReadonlyObject)
                   .map((entry) => [
                     text(entry["label"]),
                     text(entry["command"]),
@@ -170,7 +166,9 @@ export const launcherVerb = <E, R>(resolve: Effect.Effect<Settings, E, R>) =>
               if (matches.length > 1) {
                 const ids = matches.map((at) => {
                   const entry = list[at];
-                  const id = isEntry(entry) ? text(entry["id"]) : "";
+                  const id = Predicate.isReadonlyObject(entry)
+                    ? text(entry["id"])
+                    : "";
                   return id === "" ? "(no id, use `edit`)" : id;
                 });
                 outcome = {
@@ -188,7 +186,7 @@ export const launcherVerb = <E, R>(resolve: Effect.Effect<Settings, E, R>) =>
             return yield* report(
               settings,
               { removed },
-              `removed launcher ${isEntry(removed) ? text(removed["label"]) : ""}${suffix(settings)}`,
+              `removed launcher ${Predicate.isReadonlyObject(removed) ? text(removed["label"]) : ""}${suffix(settings)}`,
             );
           }
           default:
@@ -230,6 +228,12 @@ const carryOverPath = (project: Registry.ListedProject, raw: string) =>
     return kept.join("/");
   });
 
+// Whether a carry-over entry is the one for `path`.
+const same =
+  (path: string) =>
+  (entry: unknown): entry is Readonly<Record<string, unknown>> =>
+    Predicate.isReadonlyObject(entry) && entry["path"] === path;
+
 export const carryOverVerb = <E, R>(
   resolve: Effect.Effect<
     { readonly settings: Settings; readonly project: Registry.ListedProject },
@@ -249,8 +253,6 @@ export const carryOverVerb = <E, R>(
         const { settings, project } = yield* resolve;
         const config = yield* Config.Config;
         const [verb = "list", ...rest] = input.args;
-        const same = (path: string) => (entry: unknown) =>
-          isEntry(entry) && entry["path"] === path;
         switch (verb) {
           case "list": {
             const list = entries(
@@ -266,7 +268,7 @@ export const carryOverVerb = <E, R>(
               renderTable(
                 ["PATH", "MODE"],
                 list
-                  .filter(isEntry)
+                  .filter(Predicate.isReadonlyObject)
                   .map((entry) => [text(entry["path"]), text(entry["mode"])]),
                 stdoutColor,
               ),
@@ -305,7 +307,7 @@ export const carryOverVerb = <E, R>(
               updated = all.some(same(path));
               return updated
                 ? all.map((entry) =>
-                    same(path)(entry) ? { ...(entry as Entry), mode } : entry,
+                    same(path)(entry) ? { ...entry, mode } : entry,
                   )
                 : [...all, { path, mode }];
             });

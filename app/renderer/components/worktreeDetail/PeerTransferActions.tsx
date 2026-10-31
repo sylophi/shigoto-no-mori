@@ -5,10 +5,10 @@
 // remote pair waits on (a real branch of its own, a repo identity) and
 // on another device that hosts projects (one without the repo clones
 // it first). Which peer is the dialog's question (flow/peerTargets.ts),
-// so the buttons only open it. The primary
-// checkout can be mirrored but not transplanted: it is the project
-// itself and cannot be torn down. TransferActionsView draws them, and
-// a peer's (RemoteWorktreeActions.tsx).
+// so the buttons only open it. The primary checkout can be mirrored but
+// not transplanted: it is the project itself and cannot be torn down.
+// TransferActionsView draws them, and a peer's
+// (RemoteWorktreeActions.tsx).
 import {
   isRealBranch,
   type Project,

@@ -358,8 +358,9 @@ export function SourceCardView({
 
 // The destination's card, the source card's twin: the landing device
 // and the project there in the header band (the pick of it, for a
-// flow to a peer), and the worktree it becomes in the body. With no checkout of the repo there the body is the clone that
-// makes one, its folder changeable.
+// flow to a peer), and the worktree it becomes in the body. With no
+// checkout of the repo there the body is the clone that makes one, its
+// folder changeable.
 export function DestinationCardView({
   heading,
   icon,

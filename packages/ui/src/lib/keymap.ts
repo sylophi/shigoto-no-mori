@@ -19,11 +19,11 @@
 // names the key left of 1, which many layouts type no backtick on. A ⌘
 // chord also answers extra modifiers (bindingOf). On macOS the
 // palette's, the commit's, the palette's changes' and an edit's save
-// also answer Ctrl in place of ⌘ (⌃K is ⌘K, ⌃↩ is ⌘↩); no other chord
+// also answer Ctrl in place of ⌘ (⌃K is ⌘K, ⌃↩ is ⌘↩). No other chord
 // has a Ctrl twin.
 
-// Where an action acts. The window is every page; a page or a dialog
-// is only itself, so two of them can share a chord.
+// Where an action acts. The window is every page, and a page or a
+// dialog is only itself, so two of them can share a chord.
 type KeymapScope =
   | "window"
   | "worktree"
@@ -216,7 +216,7 @@ function keyOfPress(e: KeyPress): string | null {
   // a layout typing another script there, the key is itself.
   if (e.altKey || typed === "" || e.code.startsWith("Digit")) return physical;
   // A letter key typing ASCII punctuation (Dvorak's ' where QWERTY has
-  // Q) names no letter; one typing another script is the key itself.
+  // Q) names no letter. One typing another script is the key itself.
   return typed.charCodeAt(0) < 128 ? null : physical;
 }
 
@@ -229,7 +229,7 @@ const KEYS = new Set([
 // "Mod+Shift+N" to a chord, or null for one that isn't.
 function parseChord(text: string): Chord | null {
   const parts = text.split("+");
-  // "Mod++" would be a plus key, which no chord ends in; "+" splits a
+  // "Mod++" would be a plus key, which no chord ends in. "+" splits a
   // trailing empty part off instead.
   const key = parts.pop();
   if (key === undefined || !KEYS.has(key)) return null;

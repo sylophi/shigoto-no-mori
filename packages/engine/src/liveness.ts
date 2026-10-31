@@ -51,8 +51,8 @@ export const answerWithin = Effect.fnUntraced(function* <A, E, R>(
 // answers it, or any frame heard after it went (`heard` counts them: a
 // link busy carrying a transfer may queue the answer behind it, and the
 // hub's answer is any frame). One out past `timeoutMs` is only the cue
-// for a fresh probe, as is a `probe()` at a wake or a tab coming back;
-// a fresh probe unanswered for `probeTimeoutMs` of turns that came on
+// for a fresh probe, as is a `probe()` at a wake or a tab coming back.
+// A fresh probe unanswered for `probeTimeoutMs` of turns that came on
 // time is the far end's silence, and `dead` runs. A late turn (this end
 // stopped, asleep, or a hidden page's throttled timers) interrupts the
 // probe out and asks a fresh one, so the far end is judged on a window

@@ -42,8 +42,8 @@ import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 // this only draws the findings: problems first, in the doctor's groups,
 // with a project's several problems gathered under its name, and the
 // passing checks folded away behind a toggle. Repair runs `--fix --yes`,
-// which only ever applies the repairs the doctor calls unambiguous (the rows
-// tagged repairable), behind a click-again confirm.
+// which only ever applies the repairs the doctor calls unambiguous (the
+// rows tagged repairable), behind a click-again confirm.
 // The dialog's content (DoctorDialog puts it in a ModalShell).
 export function DoctorDialogView({
   title,

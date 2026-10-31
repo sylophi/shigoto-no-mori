@@ -42,8 +42,8 @@ const BRAND_LABELS: Record<string, string> = {
 };
 
 // Every Chromium build pads its brand list with a GREASE entry ("Not
-// A;Brand", "Not/A)Brand", ...) and names Chromium itself; neither is
-// the product. A list with nothing else says no more than the user
+// A;Brand", "Not/A)Brand", ...) and names Chromium itself, and neither
+// is the product. A list with nothing else says no more than the user
 // agent does, so the caller falls through to it.
 const GREASE = /not.?a.?brand/i;
 

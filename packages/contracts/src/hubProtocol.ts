@@ -40,7 +40,7 @@ export const MAX_ACCOUNT_DEVICES = 16;
 // Disjoint from the device link's codes, so a log line's code names its
 // transport. TICKET_REJECTED covers unknown, expired and replayed alike,
 // so an attacker can't tell which guesses were close. DEVICE_REVOKED is
-// terminal. SUPERSEDED: a newer socket took over; don't fight it.
+// terminal. SUPERSEDED: a newer socket took over, so don't fight it.
 export const CLOSE_TICKET_REJECTED = 4101;
 export const CLOSE_DEVICE_REVOKED = 4102;
 export const CLOSE_SUPERSEDED = 4103;

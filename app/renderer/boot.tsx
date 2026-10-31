@@ -195,7 +195,7 @@ export function startApp({
 
 // A window over the page's client, drawn into `element`, its theme
 // root. With `themeFromRoot` the root's theme is the page's around it
-// (a frame on the marketing site); otherwise the window wears its
+// (a frame on the marketing site). Otherwise the window wears its
 // settings'.
 export function mountWindow(
   { api, registry, queryClient, paletteTurned, page }: AppClient,

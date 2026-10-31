@@ -36,10 +36,10 @@
 // this side's with it put on, and everything else here (agreement,
 // divergence, the apply) works on one name per side.
 import { incomingRef } from "@shigomori/engine/Bundle";
-import type { MirrorStatus } from "@shigomori/contracts/modules/mirror";
 import type {
   GitApplyRefusal,
   MirrorApplyGitStateResult,
+  MirrorStatus,
 } from "@shigomori/contracts/modules/mirror";
 import {
   mirrorBranchFor,

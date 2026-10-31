@@ -1,6 +1,6 @@
 // The web build's account service configuration. The desktop reads the
 // account service variables (ACCOUNT_ENV_KEYS) from the process
-// environment at launch; a static web build has no process, so the same
+// environment at launch. A static web build has no process, so the same
 // variables are baked in at build time through Vite's import.meta.env
 // (vite.web.config.ts passes their names to envPrefix). Everything
 // here is a public endpoint or a public Clerk publishable key, never a

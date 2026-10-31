@@ -84,7 +84,7 @@ export const githubCliContract = defineContract(
     PullRequestCheckoutRefSchema,
     { remote: true, gated: true, grant: "changeCode", busy: "fetch" },
   ),
-  // Null when gh is not ready or the repo is not on GitHub; a failed
+  // Null when gh is not ready or the repo is not on GitHub. A failed
   // read rejects.
   invoke(
     "repoMergeConfig",
@@ -92,7 +92,7 @@ export const githubCliContract = defineContract(
     Schema.NullOr(RepoMergeConfigSchema),
     { remote: true, gated: false },
   ),
-  // Null when there is none, off GitHub, or the integration is off; a
+  // Null when there is none, off GitHub, or the integration is off. A
   // failed read rejects.
   invoke(
     "repoDescription",

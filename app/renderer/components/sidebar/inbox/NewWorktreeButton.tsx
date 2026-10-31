@@ -18,8 +18,10 @@ import {
   type LiveMember,
   type ProjectGroupIcon,
 } from "../ProjectGroupActions";
-import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
-import type { ProjectListRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import type {
+  ProjectListRow,
+  ProjectSection,
+} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { buildCreateSections } from "./createTargets";
 import {
   CreateMenuListView,

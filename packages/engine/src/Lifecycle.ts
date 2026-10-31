@@ -12,7 +12,6 @@ import {
   type LifecycleSlot,
   type ScriptEvent,
 } from "@shigomori/contracts/schemas/scripts";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -22,6 +21,7 @@ import * as Result from "effect/Result";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorMessageOf } from "@shigomori/contracts/errors";
+import { envVar } from "./environment.ts";
 import { fileUntilExit } from "./processes.ts";
 import * as Paths from "./Paths.ts";
 import { scriptOutputDir, scriptOutputPath } from "./scriptOutput.ts";
@@ -85,10 +85,10 @@ export class Lifecycle extends Context.Service<
       readonly code: number | null;
       readonly runId: string;
     }>;
-    // The user's login shell, and what makes it one (`-l`; none for
+    // The user's login shell, and what makes it one (`-l`, or none for
     // /bin/sh, when no shell is named). A command line runs in it with
-    // `-c` after; without one it is a terminal's. The app's scripts and
-    // terminals start in it too.
+    // `-c` after, and without one it is a terminal's. The app's scripts
+    // and terminals start in it too.
     readonly loginShell: Effect.Effect<{
       readonly shell: string;
       readonly args: ReadonlyArray<string>;
@@ -124,9 +124,7 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const found = yield* loginShellOf({
         environment: "own",
-        shellVar: yield* Config.String("SHELL").pipe(
-          Effect.orElseSucceed(() => ""),
-        ),
+        shellVar: yield* envVar("SHELL"),
         account: accountShell,
       });
       return found === ""

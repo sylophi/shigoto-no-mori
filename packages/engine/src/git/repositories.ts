@@ -91,7 +91,7 @@ export const makeRepositories = ({
     ) {
       const parent = yield* fs
         .stat(parentDir)
-        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+        .pipe(Effect.catchIf(isNotFound, () => Effect.void));
       if (parent?.type !== "Directory") {
         return yield* new CloneDestinationError({
           path: parentDir,

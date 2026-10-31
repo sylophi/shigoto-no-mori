@@ -491,7 +491,7 @@ export const makeDataDirChecks = ({ reads }: { readonly reads: ReadsArea }) =>
       return [
         repairable(
           line.warn(
-            `left behind by an update that stopped${pid !== 0 ? ` (pid ${pid} is gone)` : ""}; the next update takes it over`,
+            `left behind by an update that stopped${pid !== 0 ? ` (pid ${pid} is gone)` : ""}, and the next update takes it over`,
             `Delete ${tildify(updater.stagingLock, home)}.`,
           ),
           {

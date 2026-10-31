@@ -193,36 +193,34 @@ const make = Effect.gen(function* () {
     );
 
   // What `terrier ls --json` answered, toggle or not.
-  const probe = Effect.gen(function* () {
-    return yield* output(["ls", "--json"]).pipe(
-      Effect.flatMap(parseListing),
-      Effect.map((paths) => ({ kind: "listed" as const, paths })),
-      Effect.catchIf(
-        (error) =>
-          Predicate.isTagged(error, "PlatformError") && isNotFound(error),
-        () => Effect.succeed({ kind: "missing" as const }),
-      ),
-      Effect.catchTags({
-        TerrierCommandFailed: ({ code }) =>
-          Effect.succeed({
-            kind: "unreadable" as const,
-            reason: `exit status ${code}`,
-          }),
-        TerrierUnreadable: ({ reason }) =>
-          Effect.succeed({ kind: "unreadable" as const, reason }),
-        CommandTimedOut: () =>
-          Effect.succeed({
-            kind: "unreadable" as const,
-            reason: "signal: killed",
-          }),
-        PlatformError: (error) =>
-          Effect.succeed({
-            kind: "unreadable" as const,
-            reason: error.message,
-          }),
-      }),
-    );
-  });
+  const probe = output(["ls", "--json"]).pipe(
+    Effect.flatMap(parseListing),
+    Effect.map((paths) => ({ kind: "listed" as const, paths })),
+    Effect.catchIf(
+      (error) =>
+        Predicate.isTagged(error, "PlatformError") && isNotFound(error),
+      () => Effect.succeed({ kind: "missing" as const }),
+    ),
+    Effect.catchTags({
+      TerrierCommandFailed: ({ code }) =>
+        Effect.succeed({
+          kind: "unreadable" as const,
+          reason: `exit status ${code}`,
+        }),
+      TerrierUnreadable: ({ reason }) =>
+        Effect.succeed({ kind: "unreadable" as const, reason }),
+      CommandTimedOut: () =>
+        Effect.succeed({
+          kind: "unreadable" as const,
+          reason: "signal: killed",
+        }),
+      PlatformError: (error) =>
+        Effect.succeed({
+          kind: "unreadable" as const,
+          reason: error.message,
+        }),
+    }),
+  );
 
   const listingOf = (listed: Effect.Success<typeof probe>): TerrierListing => {
     if (listed.kind === "missing") {

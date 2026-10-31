@@ -1,6 +1,5 @@
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
-import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { Terminals } from "@host/lib/terminals/Terminals";

@@ -5,10 +5,10 @@ import * as Schema from "effect/Schema";
 import {
   MIRROR_LABEL_MODE,
   type MirrorGitStatus,
-  type MirrorIgnoreMode,
   type MirrorSession,
   MirrorSessionSchema,
 } from "@shigomori/contracts/modules/mirror";
+import type { MirrorIgnoreMode } from "@shigomori/contracts/modules/sync";
 import {
   carriedLabels,
   ignoreModeOf,
@@ -76,11 +76,10 @@ export function reopenInput(
 }
 
 // The daemon's document with the project's label-borne id lifted to a
-// field.
-// The daemon validates each line on arrival (host/mirror/
-// MirrorDaemon.ts). This checks the annotated whole against the contract, a
-// backstop for what the host attaches and for an impl that is not the
-// daemon (the proofs' fakes).
+// field. The daemon validates each line on arrival (host/mirror/
+// MirrorDaemon.ts). This checks the annotated whole against the
+// contract, a backstop for what the host attaches and for an impl that
+// is not the daemon (the proofs' fakes).
 export function annotateMirrorSession(
   raw: MirrorSessionRaw,
   git?: MirrorGitStatus,

@@ -87,7 +87,7 @@ export class AppNotOpened extends Schema.TaggedError<AppNotOpened>()(
 // The dev build has no installed app: it runs from a checkout.
 export class NoDevApp extends Schema.TaggedError<NoDevApp>()("NoDevApp", {}) {
   override get message(): string {
-    return "This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.";
+    return "This is the dev CLI, and the dev app isn't installed. Run `pnpm dev` in a checkout instead.";
   }
 }
 
@@ -171,22 +171,15 @@ const queryEscape = (text: string) =>
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-// A launcher the tool names: its id first, then its label, its id, or
-// the part of its id after the colon, letter case aside.
-const matching = (
-  entries: ReadonlyArray<Launchers.Launchable>,
-  tool: string,
-) => {
-  return (
-    entries.find(({ id }) => same(id, tool)) ??
-    entries.find(
-      ({ id, label }) =>
-        same(label, tool) ||
-        same(id, tool) ||
-        (id.includes(":") && same(id.slice(id.indexOf(":") + 1), tool)),
-    )
+// A launcher the tool names: its id first, then its label or the part
+// of its id after the colon, letter case aside.
+const matching = (entries: ReadonlyArray<Launchers.Launchable>, tool: string) =>
+  entries.find(({ id }) => same(id, tool)) ??
+  entries.find(
+    ({ id, label }) =>
+      same(label, tool) ||
+      (id.includes(":") && same(id.slice(id.indexOf(":") + 1), tool)),
   );
-};
 
 // The worktree's terminal in the app, where a terminal tool's command
 // line runs when the `terminal` setting is "app". The app's host
@@ -446,10 +439,11 @@ const make = Effect.gen(function* () {
               ...app.openArgs.map((arg) => arg.replaceAll("{path}", where)),
             ]);
           }
-          const name = bundle
-            .slice(bundle.lastIndexOf("/") + 1)
-            .replace(/\.app$/, "");
-          return yield* run(entry.label, "open", ["-a", name, where]);
+          return yield* run(entry.label, "open", [
+            "-a",
+            path.basename(bundle, ".app"),
+            where,
+          ]);
         }
       }
     });
@@ -545,10 +539,7 @@ const make = Effect.gen(function* () {
         said: `No installed app found for ${app.label}.`,
       });
     }
-    const name = bundle
-      .slice(bundle.lastIndexOf("/") + 1)
-      .replace(/\.app$/, "");
-    yield* run(label, "open", ["-a", name, absolute]);
+    yield* run(label, "open", ["-a", path.basename(bundle, ".app"), absolute]);
     return absolute;
   });
 

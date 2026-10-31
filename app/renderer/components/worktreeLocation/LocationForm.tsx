@@ -89,8 +89,8 @@ export function LocationForm({
     !plan.isFetching;
 
   const handleApply = async () => {
-    // The plan asked again under the batch's flag, so the form holds
-    // still from the click; and moved by the plan alone, so a worktree
+    // The plan is asked again under the batch's flag, so the form holds
+    // still from the click. Moves come from the plan alone, so a worktree
     // made since the list was last pushed moves too.
     const moves = async () => {
       const fresh = await plan.refetch();

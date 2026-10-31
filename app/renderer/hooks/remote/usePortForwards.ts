@@ -7,7 +7,7 @@
 // rows render off the same query and the same error wording.
 //
 // The device is a plain argument, not a read off the surrounding host
-// scope, because nothing here needs that device to be REACHABLE -- a
+// scope, because nothing here needs that device to be REACHABLE: a
 // forward outlives the peer going to sleep, and stopping one is a purely
 // local act. Taking it from a scope would have tied the stop control to
 // an api the caller does not need.
@@ -33,9 +33,10 @@ import { useHasLocalHost } from "@/lib/localHost";
 import { onHostReturn } from "@/lib/runtime/hostAnswering";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
 
-// Forwarding binds a real local TCP listener, which only the app can do
-// -- the capability gate for every surface that offers a forward, kept
-// here so the mechanism and its precondition travel together.
+// Forwarding binds a real local TCP listener, which only the app can
+// do. This is the capability gate for every surface that offers a
+// forward, kept here so the mechanism and its precondition travel
+// together.
 export function useCanForwardPorts(): boolean {
   return useHasLocalHost();
 }

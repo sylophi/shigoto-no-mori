@@ -115,7 +115,6 @@ export function sortTidyEntries(
         a.project.name.localeCompare(b.project.name) ||
         a.project.id.localeCompare(b.project.id);
       if (byProject !== 0) return byProject;
-      return rank(a) - rank(b) || bytes(b) - bytes(a);
     }
     return rank(a) - rank(b) || bytes(b) - bytes(a);
   });

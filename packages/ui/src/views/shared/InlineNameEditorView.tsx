@@ -31,7 +31,7 @@ export function InlineNameEditorView({
 
   // Keep an untouched draft in step when the stored name changes
   // underneath us (a broadcast from another window or tab, or the
-  // mutation settling); one being typed in stays the person's.
+  // mutation settling). One being typed in stays the person's.
   if (name !== seededFrom) {
     setSeededFrom(name);
     if (draft === seededFrom) setDraft(name);

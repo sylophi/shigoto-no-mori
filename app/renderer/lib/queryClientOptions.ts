@@ -40,7 +40,7 @@ declare module "@tanstack/react-query" {
 // A read outside React (fetchQuery, ensureQueryData) of a query a page
 // may be fetching too. Each query hands its call React Query's signal,
 // so when the last page reading it goes, the fetch is cancelled and its
-// call with it; a caller that joined that fetch asks again, up to
+// call with it. A caller that joined that fetch asks again, up to
 // `rejoins` times, after which the cancellation is its answer.
 export function throughCancel<A>(
   read: () => Promise<A>,
@@ -68,8 +68,8 @@ export function createAppQueryClient(
   return new QueryClient({
     defaultOptions: {
       queries: {
-        // Local git/fs state can change at any moment via another tool;
-        // there's no "TTL" that's meaningful. Refetch whenever an observer
+        // Local git/fs state can change at any moment via another tool,
+        // so no "TTL" is meaningful. Refetch whenever an observer
         // mounts, the window regains focus, or a mutation invalidates us.
         // Hooks for genuinely-static data (runtime info, detected launchers,
         // project icons) opt out via their own staleTime. `true` rather than

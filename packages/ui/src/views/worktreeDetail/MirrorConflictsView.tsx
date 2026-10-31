@@ -4,7 +4,7 @@
 // Those paths sit in a menu the chip opens, with what each side did to
 // them and the one sentence that clears them, not in the chip's
 // `title`, which a keyboard or a touch screen can't reach.
-import { capitalized } from "@shigomori/contracts/words";
+import { capitalized, pluralize } from "@shigomori/contracts/words";
 import { FolderOpen, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shigomori/contracts/modules/mirror";
 import { ChipButton } from "../../primitives/chip-button.tsx";
@@ -18,7 +18,6 @@ import {
   DropdownMenuTrigger,
 } from "../../primitives/dropdown-menu.tsx";
 import { type StatusTone, TONE_TEXT } from "../../primitives/status-dot.tsx";
-import { pluralize } from "@shigomori/contracts/words";
 import { useOutside } from "../../outside.tsx";
 import { cn } from "../../lib/utils.ts";
 

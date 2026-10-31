@@ -48,7 +48,7 @@ export const CHANNEL_MAX_WRITE_BYTES = 32 * 1024;
 export const CHANNEL_MAX_READ_BYTES = 32 * 1024;
 
 // Calls are numbered per channel and direction, at most this many in
-// flight (a 2 MiB window), answered in order; one further ahead is
+// flight (a 2 MiB window), answered in order. One further ahead is
 // refused. A peer holds a bounded number per channel, so these hold no
 // place in the link's gate (rpcTransport.ts).
 export const CHANNEL_CALLS_IN_FLIGHT = 64;

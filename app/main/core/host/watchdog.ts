@@ -3,7 +3,7 @@
 // and never exits, so nothing else would notice it: the shell asks it
 // something cheap now and then, and one silent past the limit is
 // killed, which forks it again like any exit. A quit or an update asks
-// whether the host is busy and gives it a moment; a host that cannot
+// whether the host is busy and gives it a moment. A host that cannot
 // say has nothing to lose to the quit.
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

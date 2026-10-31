@@ -41,7 +41,6 @@ import {
 import { WorktreeKindIconView } from "../views/shared/WorktreeKindIconView.tsx";
 import { WorktreeMissingView } from "../views/shared/WorktreeMissingView.tsx";
 import { WorktreeMoveDetailsView } from "../views/shared/WorktreeMoveDetailsView.tsx";
-import type { ScriptRunState } from "../lib/scriptRun.ts";
 import { THIS_DEVICE_NOT_RESPONDING_VIEW } from "../lib/deviceStatus.ts";
 import { LOCAL_DEVICE_ID, MINI_ID, MACBOOK_ID } from "../fixtures/fixtures.ts";
 import { SceneDialog, SceneWindowFrame } from "./frame.tsx";
@@ -50,6 +49,7 @@ import {
   deviceById,
   deviceTabs,
   FACE,
+  IDLE_RUN,
   projectNamed,
   worktreeNamed,
 } from "./world.ts";
@@ -57,18 +57,6 @@ import {
 const noop = () => {};
 const NOW = Date.now();
 const MINUTE = 60_000;
-
-// A script that has run nothing yet (the store's empty state).
-const IDLE_RUN: ScriptRunState = {
-  runId: null,
-  status: "idle",
-  hasOutput: false,
-  interactive: false,
-  exitCode: null,
-  startedAt: null,
-  endedAt: null,
-  cancelling: false,
-};
 
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 

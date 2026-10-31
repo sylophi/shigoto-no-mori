@@ -132,7 +132,7 @@ export const RestoreDiscardPayloadSchema = Schema.Struct({
   snapshot: CommitHashSchema,
 });
 
-// `expectHead`: what the list showed on top; refused once HEAD moved.
+// `expectHead`: what the list showed on top, refused once HEAD moved.
 export const RewordCommitPayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   hash: CommitHashSchema,
@@ -247,7 +247,7 @@ const LineChangeSchema = Schema.Struct({
 });
 export type LineChange = typeof LineChangeSchema.Type;
 
-// By its place in HEAD, which an edit elsewhere leaves where it was; its
+// By its place in HEAD, which an edit elsewhere leaves where it was. Its
 // place in the working tree moves with every line added above.
 export const sameRange = (a: LineChange, b: LineChange) =>
   a.oldStart === b.oldStart && a.oldCount === b.oldCount;

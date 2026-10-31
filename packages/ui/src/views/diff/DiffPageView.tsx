@@ -17,9 +17,8 @@ import { IconButton } from "../../primitives/icon-button.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { Sheet, SheetContent, SheetTitle } from "../../primitives/sheet.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { isBinaryChange } from "../../lib/patchFiles.ts";
+import { isBinaryChange, isMediaBinary } from "../../lib/patchFiles.ts";
 import { cn } from "../../lib/utils.ts";
-import { isMediaBinary } from "../../lib/patchFiles.ts";
 import {
   CODE_GAP_BLOCK,
   CODE_LINE_HEIGHT,

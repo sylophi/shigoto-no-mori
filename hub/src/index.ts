@@ -23,7 +23,7 @@ const OAUTH_JWT_TYPES = ["at+jwt", "application/at+jwt"];
 // application counts (CLERK_OAUTH_CLIENT_ID): a token Clerk issued to
 // any other application on the instance enrolls nothing. A token that
 // does not verify (expired, foreign instance, malformed) is null, which
-// the worker refuses; a check that could not run (the JWKS unreachable,
+// the worker refuses. A check that could not run (the JWKS unreachable,
 // the key misconfigured) throws, which it answers as unavailable.
 async function verifyLogin(
   token: string,

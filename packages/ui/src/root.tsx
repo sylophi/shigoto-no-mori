@@ -14,3 +14,11 @@ export const ThemeRootProvider = ThemeRootContext.Provider;
 export function useThemeRoot(): HTMLElement | undefined {
   return useContext(ThemeRootContext);
 }
+
+// Calls onChange whenever the root switches theme or palette, until the
+// returned function stops it.
+export function watchTheme(root: Element, onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(root, { attributeFilter: ["class", "data-palette"] });
+  return () => observer.disconnect();
+}

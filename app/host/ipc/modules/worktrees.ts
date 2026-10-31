@@ -8,14 +8,12 @@ import type { PeerReach } from "@host/ipc/PeerReach";
 import * as Schedule from "effect/Schedule";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type { HandlerContext } from "@shared/ipc/transport";
-import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
-import type { Project } from "@shigomori/contracts/schemas";
+import type { Project, WorktreeIdentity } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
-import type { WorktreeIdentity } from "@shigomori/contracts/schemas";
 import {
   findProject,
   findProjectAndWorktree,

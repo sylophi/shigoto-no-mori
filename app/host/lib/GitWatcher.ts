@@ -4,11 +4,10 @@
 // the app within a debounce, on this machine and on every device
 // viewing it, instead of on the next focus or the minute sweep. The
 // store's changes (engine StoreChanges) cover sm's own bookkeeping.
-// The git facts a worktree row shows
-// (branch, tip, ahead/behind) live in the project's git directory, and
-// a linked worktree's metadata lives under its `worktrees/<name>/`
-// there too, so one recursive watch per project covers every worktree
-// of it. On a machine that watches a folder at a time (watchTree.ts),
+// The git facts a worktree row shows (branch, tip, ahead/behind) live
+// in the project's git directory, and a linked worktree's metadata
+// lives under its `worktrees/<name>/` there too, so one recursive watch
+// per project covers every worktree of it. On a machine that watches a folder at a time (watchTree.ts),
 // that watch is of the folders those paths are in.
 //
 // What counts as a change is an allowlist of git-dir paths (`RELEVANT`,
@@ -84,6 +83,21 @@ const BACKSTOP = Duration.seconds(10);
 // A project's reconcile that takes longer is a volume that stalls.
 const STEP_TIMEOUT = Duration.seconds(5);
 
+// A merge, rebase, cherry-pick, revert, squash or bisect starting or
+// ending, in the main checkout or a worktree's own git dir, for the
+// banner that offers to continue or abort it. The rebase dirs count by
+// their own appearing and going, not their contents' churn.
+const OPERATION_MARKERS = [
+  "MERGE_HEAD",
+  "CHERRY_PICK_HEAD",
+  "REVERT_HEAD",
+  "SQUASH_MSG",
+  "BISECT_LOG",
+  "sequencer",
+  "rebase-merge",
+  "rebase-apply",
+];
+
 // Git-dir relative paths whose change means the project's git state
 // moved. Paths arrive with the platform separator and are normalized
 // to `/` before matching.
@@ -91,11 +105,9 @@ const RELEVANT = [
   /^(HEAD|ORIG_HEAD|packed-refs)$/,
   /^refs(\/|$)/,
   /^worktrees\/[^/]+(\/(HEAD|ORIG_HEAD))?$/,
-  // A merge, rebase, cherry-pick, revert, squash or bisect starting or
-  // ending, in the main checkout or a worktree's own git dir, for the
-  // banner that offers to continue or abort it. The rebase dirs count by their
-  // own appearing and going, not their contents' churn.
-  /^(worktrees\/[^/]+\/)?(MERGE_HEAD|CHERRY_PICK_HEAD|REVERT_HEAD|SQUASH_MSG|BISECT_LOG|sequencer|rebase-merge|rebase-apply)$/,
+  new RegExp(
+    String.raw`^(worktrees\/[^/]+\/)?(${OPERATION_MARKERS.join("|")})$`,
+  ),
 ];
 // The folders of a git directory the allowlist's paths are in: refs/
 // and all below it, and each linked worktree's own.
@@ -114,9 +126,11 @@ const INDEX = /^(worktrees\/[^/]+\/)?index$/;
 // app runs, its own reads of the rows included.
 const GIT_SEGMENT = /(^|\/)\.git(\/|$)/;
 
+// A watched path, `/`-separated whatever the platform's separator.
+const slashed = (file: string) => file.replaceAll("\\", "/");
+
 function isWorkingTreeChange(file: string): boolean {
-  const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
-  return !GIT_SEGMENT.test(normalized);
+  return !GIT_SEGMENT.test(slashed(file));
 }
 
 const isGitignore = (file: string) =>
@@ -128,14 +142,13 @@ function isRelevantGitPath(file: string): boolean {
   // into place. The rename lands as an event for the final name, so
   // the lock itself is noise.
   if (file.endsWith(".lock")) return false;
-  const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
+  const normalized = slashed(file);
   if (OWN_REFS.test(normalized)) return false;
   return RELEVANT.some((pattern) => pattern.test(normalized));
 }
 
 function isIndexPath(file: string): boolean {
-  const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
-  return INDEX.test(normalized);
+  return INDEX.test(slashed(file));
 }
 
 // The working trees of a project: its own folder when it is a checkout,
@@ -214,7 +227,7 @@ const gitStateOf = (gitDir: string) =>
           });
           return `${relative}@${ino}:${mtime}:${info.size}`;
         }),
-        Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+        Effect.catchIf(isNotFound, () => Effect.undefined),
       );
     const stamp = (relative: string) =>
       Effect.map(stampIfThere(relative), (seen) => seen ?? `${relative}@-`);
@@ -263,17 +276,6 @@ const gitStateOf = (gitDir: string) =>
       indexes: indexes.join("\n"),
     } satisfies GitState;
   });
-
-const OPERATION_MARKERS = [
-  "MERGE_HEAD",
-  "CHERRY_PICK_HEAD",
-  "REVERT_HEAD",
-  "SQUASH_MSG",
-  "BISECT_LOG",
-  "sequencer",
-  "rebase-merge",
-  "rebase-apply",
-];
 
 const treeKey = (projectId: string, tree: string) => `${projectId}\0${tree}`;
 

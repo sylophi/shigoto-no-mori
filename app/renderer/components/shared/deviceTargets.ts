@@ -2,15 +2,15 @@
 // with each device's checkout of the repo laid on top, for the pages
 // whose tabs are the devices holding a project and for the header's
 // "Create on" pick. Identity (the engine's Identity.ts) is what "has
-// this repo" means -- the same match the merged sidebar and the
-// pull-here control use -- so a peer with a differently-named clone
+// this repo" means (the same match the merged sidebar and the
+// pull-here control use), so a peer with a differently-named clone
 // still counts and a same-named unrelated repo never does.
 //
 // The pages serve every device: under this machine's route the
 // project is this machine's, under a peer's it is the peer's. The
-// scope says which, and the list reads the same either way -- the scoped device's
-// own checkout is the project in hand, every other device's is its
-// identity match.
+// scope says which, and the list reads the same either way: the
+// scoped device's own checkout is the project in hand, every other
+// device's is its identity match.
 import type { Project } from "@shigomori/contracts/schemas";
 import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
 import { useHostScope } from "@/hooks/remote/useHostScope";

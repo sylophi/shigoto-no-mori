@@ -49,7 +49,7 @@ export function changelogFor(
     .toSorted((a, b) => compareVersions(b.version, a.version));
 }
 
-// After `from`, up to and including `to`; from "" (not a release), only
+// After `from`, up to and including `to`. From "" (not a release), only
 // `to` itself.
 export function isBetween(version: string, from: string, to: string): boolean {
   if (compareVersions(version, to) > 0) return false;

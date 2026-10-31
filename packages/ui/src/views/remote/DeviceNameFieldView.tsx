@@ -53,7 +53,7 @@ export function DeviceNameFieldView({
   // "This device" / "This browser", or the peer's name. The control's
   // accessible name derives from it, so the two can't drift apart.
   label: string;
-  // Open/closed, held by the caller alongside its DeviceRenameButton.
+  // Open/closed, held by the caller alongside its DeviceRenameButtonView.
   editing: boolean;
   onEditingChange: (next: boolean) => void;
   pending: boolean;

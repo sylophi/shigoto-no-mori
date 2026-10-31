@@ -5,10 +5,10 @@
 // buttons follow, SidebarNavActionsView), and for everything else the
 // forest tab the layout preference names lights, since every other page
 // (Live aside) is reached from one of them (the forest page keeps that
-// preference in step with its route). v1 draws a card band with an accent pill on
-// the current tab. The data-slot hooks let doubutsu restyle the bar as
-// a cream tray with a leaf-green sticker on the current tab
-// (doubutsu.css).
+// preference in step with its route). v1 draws a card band with an
+// accent pill on the current tab. The data-slot hooks let doubutsu
+// restyle the bar as a cream tray with a leaf-green sticker on the
+// current tab (doubutsu.css).
 import {
   Inbox,
   MonitorSmartphone,

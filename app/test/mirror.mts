@@ -174,7 +174,7 @@ const onDaemon = <A,>(
         Effect.mapError((error) => new MirrorError({ reason: error.message })),
       ),
   );
-// The impl over the dialer's daemon, the rest of it inert; each check
+// The impl over the dialer's daemon, the rest of it inert. Each check
 // below replaces what it is about.
 const inertImpl = () =>
   inertMirrorImpl({
@@ -424,7 +424,7 @@ it("the create's ignores hold: /dist stays on the listener while its sibling cro
 
 it("git: commits on both sides report diverged and move nothing", async () => {
   // ---- The git follower, against the same wire ----
-  followerScope = Effect.runSync(Scope.make());
+  followerScope = Scope.makeUnsafe();
   track(stopFollower);
   follower = await runHost(
     makeGitFollower({
@@ -577,7 +577,7 @@ it("git: a primary mirrored to a mirror/main worktree carries commits both ways 
     ignores: [],
   });
   // The daemon's snapshot names the session a moment after the
-  // create answers. In the app every snapshot pokes the follower;
+  // create answers. In the app every snapshot pokes the follower, but
   // here the poke is by hand once the session is on the list.
   await waitFor(
     () => daemon.sessions().some((s) => s.session === session2),
@@ -832,7 +832,7 @@ it("a moved worktree re-opens only its own mirrors, on the new path under the ne
   standInMirror({
     ...inertImpl(),
     status: Effect.succeed("running"),
-    sessions: Effect.sync(() => live),
+    sessions: Effect.succeed(live),
     recreate: (id, input) =>
       Effect.sync(() => {
         reopened.push([id, input]);

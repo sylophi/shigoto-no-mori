@@ -7,6 +7,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import catalog from "./data/launcher-catalog.json" with { type: "json" };
 import * as EngineConfig from "./Config.ts";
 import * as Paths from "./Paths.ts";
@@ -116,11 +117,8 @@ export const decodedLaunchers = (
     entries.every(
       (entry) =>
         entry === null ||
-        (typeof entry === "object" &&
-          !Array.isArray(entry) &&
-          ["id", "label", "command"].every((field) =>
-            text((entry as Record<string, unknown>)[field]),
-          )),
+        (Predicate.isObject(entry) &&
+          ["id", "label", "command"].every((field) => text(entry[field]))),
     ) && hidden.every((id) => typeof id === "string");
   if (!wellTyped) return none;
   return {

@@ -1,9 +1,8 @@
 // What the transplant and the mirror dialogs have in common, which is
 // everything but their words and the bodies of their first and last
-// steps. Both are a
-// pull-shaped mutation walked through the same three-step frame:
-// review, the pull with its progress frames, and a last step that
-// reports. The mutation's own status is the stage, with one reading
+// steps. Both are a pull-shaped mutation walked through the same
+// three-step frame: review, the pull with its progress frames, and a
+// last step that reports. The mutation's own status is the stage, with one reading
 // on top: a mutation that failed because the user cancelled it is the
 // cancelled stage, not a failure.
 import { useEffect, useState, type ReactNode } from "react";

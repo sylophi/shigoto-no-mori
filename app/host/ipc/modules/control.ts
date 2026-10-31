@@ -52,10 +52,8 @@ const followTransfer =
   (input: unknown): Stream.Stream<Followed<A>, unknown, HostServices> =>
     Stream.callback<Followed<A>, unknown, HostServices>((queue) =>
       Effect.gen(function* () {
-        const abort = new AbortController();
-        yield* Effect.addFinalizer(() => Effect.sync(() => abort.abort()));
         const ctx: HandlerContext = {
-          connection: abort.signal,
+          connection: yield* Effect.abortSignal,
           notifier: () => (progress) =>
             Queue.offerUnsafe(queue, {
               _tag: "progress",

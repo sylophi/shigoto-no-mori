@@ -5,7 +5,7 @@
 // configure per peer: every device on the account is the same
 // person's, so the only question is whether this one takes orders at
 // all. Off, its projects, worktrees, changes and pull requests still
-// show everywhere; only the reads a grant line covers (GRANTS) wait
+// show everywhere. Only the reads a grant line covers (GRANTS) wait
 // for it.
 //
 // It is the loudest switch in the app (a peer holding it can edit the

@@ -51,7 +51,6 @@ export type CommitActions = {
 // a merge on top is undone whole, back to its first parent. `below` is
 // the commit under the list's oldest, when known (where a branch's own
 // commits began), which a lone commit is undone back to.
-
 export function commitRewriteAt(
   worktree: Worktree,
   commits: readonly CommitSummary[],

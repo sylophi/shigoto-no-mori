@@ -1,6 +1,5 @@
 // The enrollment and sign-out orchestration both shells share: the
-// desktop handler
-// (main/electron/account.ts) and the web bridge
+// desktop handler (main/electron/account.ts) and the web bridge
 // (web/ipc/register.ts) differ only in their platform label,
 // device-name default and store backing. Pure like the rest of
 // shared/account/ (every dependency is an injected seam:
@@ -55,7 +54,7 @@ export function effectiveDeviceIcon(
 // How long an enrollment waits on the hub, both its asks together. The
 // account's other changes (a sign-out above all) wait behind it
 // (AccountShell.transitions), so a hub that takes the enroll and never
-// answers must not hold them; with a parked revoke delivered between
+// answers must not hold them. With a parked revoke delivered between
 // the asks it stays inside the 30 s another tab's sign-out waits for
 // its turn (web/ipc/register.ts).
 const ENROLL_TIMEOUT_MS = 15_000;
@@ -191,7 +190,7 @@ export async function signOutDevice(deps: {
 // shells) and on an enrollment the hub refused for it. A delivered or
 // refused revoke clears the parking, anything else keeps it for the
 // next try. Resolves to whether there was one, and whether it was
-// cleared or why not; only clearing the parking can throw.
+// cleared or why not. Only clearing the parking can throw.
 export async function retryParkedRevoke(deps: {
   config: AccountServiceConfig;
   service: AccountService;

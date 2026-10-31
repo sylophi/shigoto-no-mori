@@ -1,6 +1,5 @@
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
-import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Views from "@host/lib/Views";
 import * as Terrier from "@shigomori/engine/Terrier";
 import * as Effect from "effect/Effect";

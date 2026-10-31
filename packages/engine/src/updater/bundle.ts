@@ -41,7 +41,7 @@ export const makeBundle = ({
     const { removeAll, prune, run, makeDirectory } = files;
     const { signerOf, anchorOf, verify } = signatures;
     // The filesystem helper, where the process has it (the terminal does,
-    // beside its binary; the app's own updater graph never swaps).
+    // beside its binary, and the app's own updater graph never swaps).
     const nativeFs = yield* Effect.serviceOption(NativeFs.NativeFs);
 
     // The installed bundle: two folders above the terminal's binary, which
@@ -205,7 +205,7 @@ export const makeBundle = ({
     //  2. Verify the signature again where it now sits, closing the gap
     //     since staging.
     //  3. Exchange the two in one step where the filesystem helper can,
-    //     so the target always holds an app; else rename the target aside
+    //     so the target always holds an app. Else rename the target aside
     //     and the new bundle in, two renames in one directory, each
     //     atomic, the first rolled back when the second fails, the aside
     //     holding the app between them.

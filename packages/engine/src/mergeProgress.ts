@@ -99,7 +99,7 @@ const MergeProgressAnswer = Schema.fromJsonString(
 
 // The query's answer, or undefined when it isn't one.
 export function parseMergeProgress(stdout: string): MergeProgress | undefined {
-  const answer = Schema.decodeUnknownOption(MergeProgressAnswer)(stdout);
+  const answer = Schema.decodeOption(MergeProgressAnswer)(stdout);
   const pr = Option.isSome(answer)
     ? answer.value.data.repository.pullRequest
     : null;

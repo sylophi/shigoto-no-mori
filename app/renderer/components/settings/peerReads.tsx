@@ -8,7 +8,7 @@ import { PeerReadErrorView } from "@shigomori/ui/views/settings/PeerReadErrorVie
 
 // The sections that read a device's disk (the CLI, the agent hooks). Each
 // read on a peer is a round trip for state that only the section's
-// buttons and that machine's own terminal change; the mutations seed the
+// buttons and that machine's own terminal change. The mutations seed the
 // cache from their replies and a landed session re-asks, so a peer's
 // answer needs no focus refetch. This machine keeps the default: a
 // terminal install shows on return.

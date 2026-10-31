@@ -77,8 +77,8 @@ export function tildify(path: string, home: string | null | undefined): string {
 // prompt does: `.` alone would read as the current folder. The
 // anchor ("~" or the leading "/...") and the leaf (basename) stay
 // intact so the identity at both ends is preserved. Returns the
-// fully-abbreviated form when even that exceeds maxChars; callers can
-// pair this with CSS truncate as a final floor.
+// fully-abbreviated form when even that exceeds maxChars, which callers
+// can pair with CSS truncate as a final floor.
 export function tildifyAndShorten(
   path: string,
   home: string | null | undefined,
@@ -93,7 +93,6 @@ export function tildifyAndShorten(
   const anchor = parts[0];
   const leaf = parts[parts.length - 1];
   const middle = parts.slice(1, -1);
-  if (middle.length === 0) return tildified;
 
   for (let i = 0; i < middle.length; i++) {
     const seg = middle[i];

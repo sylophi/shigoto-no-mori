@@ -27,7 +27,7 @@ export const makeReads = Effect.gen(function* () {
     );
 
   // lstat(2) of names in a folder, by name: a symlink's own, as Go's
-  // directory entries tell them. A name it can't answer is absent; the
+  // directory entries tell them. A name it can't answer is absent. The
   // helper failing fails the read, so a check says it couldn't look
   // rather than that nothing was there.
   const lstatIn = (dir: string, entries: ReadonlyArray<string>) =>

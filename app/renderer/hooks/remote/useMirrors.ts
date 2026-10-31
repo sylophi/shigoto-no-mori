@@ -11,12 +11,16 @@
 // own page, or the far end's page re-scoped to it
 // (useWorktreeMirrorLinks).
 import type { MirrorLink } from "@shigomori/ui/lib/forest.ts";
-import { useRegistry } from "@/lib/runtime/viewHooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { callOf } from "@shigomori/contracts/contract";
 import { hostViewAtom } from "@/lib/runtime/atoms";
-import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
+import {
+  useRegistry,
+  useView,
+  useViews,
+  viewsOf,
+} from "@/lib/runtime/viewHooks";
 import {
   isMirrorCopyStayed,
   isMirrorStopUnconfirmed,
@@ -231,6 +235,8 @@ function useWorktreeMirror(worktree: Worktree): {
   };
 }
 
+const hostsMirrorsAtom = viewsOf((deviceId) => mirrorsAtom(deviceId));
+
 // Every other host's mirror picture, projected by `select`: this
 // machine's (when the scope is a peer's) and every peer that hosts
 // projects. The scoped device's own list is useMirrors. A peer with no
@@ -240,8 +246,6 @@ function useWorktreeMirror(worktree: Worktree): {
 // as unmirrored exactly while its runner is away (the pair unfolded,
 // the start buttons back, no way to see the mirror). The session's own
 // state is the runner's last word, which the surfaces say is stale.
-const hostsMirrorsAtom = viewsOf((deviceId) => mirrorsAtom(deviceId));
-
 function useOtherHostMirrors<T>(
   exceptDeviceId: string | undefined,
   select: (list: MirrorListResult, deviceId: string) => T,
@@ -281,15 +285,15 @@ export function useEveryHostMirrors(): {
   return useOtherHostMirrors(undefined, (list) => list);
 }
 
+// Where a side of a mirror is: its worktree, in its project.
+export type MirrorCopyAt = { projectId: string; worktreeId: string };
+
 // A mirror the worktree is part of, seen from its page: the device
 // that RUNS it (where the controls go), the other party as this page
 // sees it, and the session document, which is the runner's. The
 // session is absent while only the stream this device serves says a
 // peer mirrors the worktree (the runner's list not yet read, or an
 // older runner whose list a peer cannot read).
-// Where a side of a mirror is: its worktree, in its project.
-export type MirrorCopyAt = { projectId: string; worktreeId: string };
-
 export type WorktreeMirrorLink = {
   runnerDeviceId: string;
   // Undefined while the runner is a peer with no session up: nothing

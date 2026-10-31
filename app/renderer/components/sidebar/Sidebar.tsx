@@ -74,12 +74,13 @@ import { withMember, withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 // SidebarTakeover), and the footer. The forest is this machine's
 // project tree with every peer's forest merged in, in either of its
 // two views. A hostless client (the web shell) has no projects of its
-// own, so its forest is the peers' alone -- through the very same
+// own, so its forest is the peers' alone, through the very same
 // component, builders and list, so a peer's worktree row looks the
-// same wherever it is drawn and the inbox files it beside a local one. The phone layout draws it as a
-// page (ForestPage) and drops the footer, whose cluster the tab bar
-// carries there -- the two views included, each as a tab of its own,
-// so the page pins the view instead of reading the preference.
+// same wherever it is drawn and the inbox files it beside a local one.
+// The phone layout draws it as a page (ForestPage) and drops the
+// footer, whose cluster the tab bar carries there (the two views
+// included, each as a tab of its own), so the page pins the view
+// instead of reading the preference.
 export function Sidebar({
   footer = true,
   view,
@@ -340,7 +341,7 @@ function Forest({
   useShareInboxOrder(rows, pageInbox);
   const inProject = typeof level === "string";
   // Failed listings, local or remote, surface here whether or not the
-  // filter shows their rows -- without it a peer's project would
+  // filter shows their rows. Without it a peer's project would
   // silently vanish from the tree, and a narrowed forest must not also
   // mute a failure behind it.
   useFanOutErrorToast(
@@ -453,8 +454,8 @@ function Forest({
       {!arrangeMode && <DeviceFilterBar {...filter} />}
       <ViewPaneView inbox={inbox} settled={viewSettled}>
         {/* Each view puts what it actually needs above its list. The inbox
-            has no project headers to hang a + off, so creating lives here;
-            the tree instead gets the controls that only apply to it: the
+            has no project headers to hang a + off, so creating lives here.
+            The tree instead gets the controls that only apply to it: the
             way back out of a project and sorting its worktrees, or, on
             the list, sorting this machine's own projects, which a
             hostless client's tree skips.

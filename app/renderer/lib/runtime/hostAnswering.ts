@@ -1,7 +1,7 @@
 // Whether this machine's host answers this window: false from its link
 // dropping (the host stopped, or the shell's watchdog stopped a host
 // that went silent) until a dial lands on the host that replaces it.
-// Desktop only; a hostless client has no host of its own.
+// Desktop only, since a hostless client has no host of its own.
 import type { HostRestartReason } from "@shigomori/ui/views/hostBand/HostBandView.tsx";
 import type { QueryClient } from "@tanstack/react-query";
 import * as Effect from "effect/Effect";

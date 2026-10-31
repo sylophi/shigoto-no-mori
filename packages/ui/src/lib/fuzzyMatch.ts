@@ -16,7 +16,7 @@ function scoreMatch(query: string, target: string): number {
   let gaps = 0;
   for (const c of q) {
     if (c === " ") continue;
-    // react-doctor-disable-next-line react-doctor/js-set-map-lookups -- target strings are short (branch/script names); precomputing a position map per call is more allocation than the linear scan it replaces
+    // react-doctor-disable-next-line react-doctor/js-set-map-lookups -- target strings are short (branch/script names), and precomputing a position map per call is more allocation than the linear scan it replaces
     const next = t.indexOf(c, pos);
     if (next < 0) return 0;
     gaps += next - pos;

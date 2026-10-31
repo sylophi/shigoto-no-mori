@@ -472,7 +472,7 @@ function quit(): void {
   const hurried = isHurriedQuit();
   rememberWindows();
   if (hurried) rememberVisibilityForRestart();
-  // The host is given its own deadline to close (hostProcess.ts); the
+  // The host is given its own deadline to close (hostProcess.ts). The
   // rest of the graph closes beside it, and a finalizer that hangs past
   // both does not keep the app, or a logout, waiting.
   // The close runs on a fiber of its own, since a scope closes

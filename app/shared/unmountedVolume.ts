@@ -21,7 +21,7 @@ const linkAt = (path: string): string | undefined => {
 };
 
 export function unmountedVolume(path: string): string | null {
-  let volumes = VOLUMES;
+  let volumes: string;
   try {
     volumes = realpathSync(VOLUMES);
   } catch {

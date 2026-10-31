@@ -26,4 +26,4 @@ export const list = <S extends Schema.Top>(item: S) =>
   orZero(Schema.Array(item), []);
 // An object, absent or null read as one with every field at its zero.
 export const struct = <S extends Schema.Codec<unknown, unknown>>(schema: S) =>
-  orZero(schema, Schema.decodeUnknownSync(schema)({}));
+  orZero(schema, Schema.decodeSync(schema)({}));

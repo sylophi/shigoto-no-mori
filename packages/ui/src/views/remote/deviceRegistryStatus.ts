@@ -35,8 +35,8 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
 }
 
 // This machine is never in the hub store: its row reads its own socket,
-// "Online" when connected (the roster word; "Connected" is a peer's
-// session). No snapshot yet (null) reads as online, the common case.
+// "Online" when connected (the roster word, where "Connected" is a
+// peer's session). No snapshot yet (null) reads as online, the common case.
 export function thisDeviceRowStatus(
   socket: HubStatus["socket"] | null,
 ): DeviceRowStatus {

@@ -24,8 +24,10 @@ import {
   attachmentRefusal,
   attachmentTypeOfName,
 } from "@shigomori/contracts/attachments";
-import { orderRemotesByPrecedence } from "@shigomori/engine/gitParse";
-import { parseNumstat } from "@shigomori/engine/gitParse";
+import {
+  orderRemotesByPrecedence,
+  parseNumstat,
+} from "@shigomori/engine/gitParse";
 import * as Git from "@shigomori/engine/Git";
 import * as Paths from "@shigomori/engine/Paths";
 import { GhActionError, ghReady, ghStream, runGh } from "./actions";

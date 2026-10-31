@@ -2,7 +2,7 @@
 // cipher over userData), the service's config, this device's default
 // name and icon, the command switch, and what follows a change. Sign-in
 // itself is the renderer's (Clerk's components over the @clerk/electron
-// bridge); this only exchanges its session token for the hub device
+// bridge). This only exchanges its session token for the hub device
 // credential. The calls are the web's too (shared/account/handlers.ts),
 // served by ipc/modules/account.ts.
 import { existsSync } from "node:fs";
@@ -251,9 +251,9 @@ async function accountChanged({
     "[account] the host's account change failed",
     () => applied,
   );
-  // A departure answers once the host has let the account go; any other
-  // change once the windows are told, since a host that isn't up hears
-  // the account as it starts.
+  // A departure answers once the host has let the account go, and any
+  // other change once the windows are told, since a host that isn't up
+  // hears the account as it starts.
   if (departed({ before, after })) await told;
   else void told;
   if (before !== after) PubSub.publishUnsafe(idChanges, undefined);

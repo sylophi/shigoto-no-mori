@@ -4,6 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type AddressInfo } from "node:net";
 import { join, resolve } from "node:path";
+import { parseEnv } from "node:util";
 import { GIT_IDENTITY, isolatedGitEnv } from "../../../test/gitIsolation.ts";
 
 export const appDir = resolve(import.meta.dirname, "../..");
@@ -89,30 +90,15 @@ export async function answers(url: string): Promise<boolean> {
   }
 }
 
-export function killGroup(pid: number, name: NodeJS.Signals): void {
-  try {
-    process.kill(-pid, name);
-  } catch {
-    // Already gone.
-  }
-}
-
 // This worktree's .env.ports, and a .env.local value the app reads.
 export function envFile(
   name: ".env.ports" | ".env.local",
-): Record<string, string> {
+): NodeJS.Dict<string> {
   if (name === ".env.ports") {
     spawnSync(process.execPath, [join(appDir, "scripts", "ensure-ports.mts")], {
       cwd: appDir,
       stdio: "ignore",
     });
   }
-  const text = readFileSync(join(appDir, name), "utf8");
-  return Object.fromEntries(
-    text
-      .split("\n")
-      .map((line) => /^([A-Z0-9_]+)=(.*)$/.exec(line.trim()))
-      .filter((match) => match !== null)
-      .map((match) => [match[1] ?? "", match[2] ?? ""]),
-  );
+  return parseEnv(readFileSync(join(appDir, name), "utf8"));
 }

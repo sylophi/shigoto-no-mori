@@ -11,7 +11,6 @@ import type { Project } from "@shigomori/contracts/schemas";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-
 import type { HostChip } from "@shigomori/ui/views/remote/DeviceHostsView.tsx";
 
 export type HostChipIndex = {

@@ -169,7 +169,7 @@ export function ModalShell({
     <Dialog.Root
       open
       onOpenChange={(open, details) => {
-        // Escape is the listener's above; Base UI's own would close a
+        // Escape is the listener's above. Base UI's own would close a
         // shell under a picker, or one that owns its Escape.
         if (!open && dismissable && details.reason === "outside-press") {
           onClose();

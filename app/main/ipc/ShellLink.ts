@@ -198,7 +198,7 @@ export const makePortServer = (registrar: ShellRegistrar, group: Group) =>
             const messages = decodeMessage(frame);
             if (Result.isFailure(messages)) {
               // A port keeps its messages whole, so the next one reads
-              // alone; the calls in this one go unanswered.
+              // alone, and the calls in this one go unanswered.
               log.warn(
                 `[shell] dropped an unreadable frame on a ${connection.webContents === null ? "host" : "window"} port (${frameWords(frame, messages.failure)})`,
               );

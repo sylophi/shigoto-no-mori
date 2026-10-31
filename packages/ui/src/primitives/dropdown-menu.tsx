@@ -312,9 +312,10 @@ function DropdownMenuCheckboxItem({
   children,
   ...props
 }: WithoutTitle<MenuPrimitive.CheckboxItem.Props>) {
+  const isStatic = use(StaticMenuContext);
   const check = (
     <span className="pointer-events-none absolute right-2 flex items-center justify-center">
-      {use(StaticMenuContext) ? (
+      {isStatic ? (
         props.checked && <CheckIcon />
       ) : (
         <MenuPrimitive.CheckboxItemIndicator>
@@ -323,7 +324,7 @@ function DropdownMenuCheckboxItem({
       )}
     </span>
   );
-  if (use(StaticMenuContext)) {
+  if (isStatic) {
     return (
       <div
         role="menuitemcheckbox"

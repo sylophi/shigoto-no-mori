@@ -420,7 +420,7 @@ esac`,
     assert.equal(landed.code, 0, landed.stderr);
     assert.match(
       landed.stderr,
-      /PR #4 is in the merge queue; land again once it merges, for the rest of the stack/,
+      /PR #4 is in the merge queue. Land again once it merges, for the rest of the stack/,
     );
     const calls = readFileSync(log, "utf8");
     assert.ok(!calls.includes("pr edit 5"), calls);

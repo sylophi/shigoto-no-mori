@@ -264,7 +264,7 @@ function WorktreeChanges({
     failed,
     busy,
     readOnly: !canCommand,
-    selectedKey: picked ? changeKey(picked) : null,
+    selectedKey: paneKey,
     onSelect: setPickedKey,
     picks,
     onSetTicked: (rows, ticked) =>

@@ -5,7 +5,7 @@ import { useKeymapAction } from "@/hooks/ui/useKeymap";
 import { useHasLocalHost } from "@/lib/localHost";
 import { openTerminalsInNewWindow } from "@/lib/newWindow";
 import { useApi } from "@/lib/runtime/pageApi";
-import { paramToSlot, type ScriptSlot } from "@/store/scriptSlot";
+import { paramToSlot } from "@/store/scriptSlot";
 import {
   closeScriptTab,
   drawerKey,
@@ -67,9 +67,7 @@ export function TerminalDrawer({ worktree }: { worktree: Worktree }) {
   }
   if (!drawer.open) return null;
   const close = () => setDrawerOpen(key, false);
-  const slots = drawer.scripts
-    .map(paramToSlot)
-    .filter((slot): slot is ScriptSlot => slot !== null);
+  const slots = drawer.scripts.flatMap((param) => paramToSlot(param) ?? []);
   return (
     <TerminalScope>
       <TerminalDrawerView

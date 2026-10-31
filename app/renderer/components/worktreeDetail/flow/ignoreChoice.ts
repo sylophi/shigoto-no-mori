@@ -12,12 +12,14 @@
 // with the picked paths taken back out (bringIgnores).
 import { useState } from "react";
 import {
-  broughtPaths,
   describeIgnores,
-  type MirrorIgnoreMode,
   summarizeIgnores,
-  unanchorIgnoredPath,
 } from "@shigomori/contracts/modules/mirror";
+import {
+  broughtPaths,
+  unanchorIgnoredPath,
+} from "@shigomori/contracts/mirrorIgnores";
+import type { MirrorIgnoreMode } from "@shigomori/contracts/modules/sync";
 import {
   exceptionsOf,
   type IgnoreSelection,

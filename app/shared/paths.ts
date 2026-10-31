@@ -93,7 +93,7 @@ export function initDataDirAt(
 
 function current(): Found {
   if (found === null) {
-    throw new Error("dataDir not initialized; call initDataDir at launch");
+    throw new Error("dataDir not initialized: call initDataDir at launch");
   }
   return found;
 }
@@ -153,8 +153,6 @@ export function toAbsolute(path: string): string {
 
 export function isENOENT(error: unknown): boolean {
   return (
-    error instanceof Error &&
-    "code" in error &&
-    (error as NodeJS.ErrnoException).code === "ENOENT"
+    error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT"
   );
 }

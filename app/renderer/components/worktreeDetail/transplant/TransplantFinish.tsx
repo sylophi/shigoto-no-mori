@@ -74,8 +74,8 @@ export function TransplantFinish({
     reset: disarm,
   } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
   // An unapplied capture means the uncommitted work exists only on the
-  // source, so tearing it down is off the table (the handler refuses
-  // it too. This is the reason, spelled out).
+  // source, so tearing it down is off the table. The handler refuses it
+  // too, and this spells out why.
   const stranded = result.captured && !result.dirtyApplied;
   // Ignored files the files step meant to bring and could not are only
   // on the source too: tear down stays on offer, but is not the default.

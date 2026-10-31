@@ -11,8 +11,8 @@
    fighting its specificity. */
 @import "@xterm/xterm/css/xterm.css" layer(base);
 /* Default-on Animal Crossing overlay (opt-out in Settings). Self-
-   contained; see the CONTRACT
-   header in the file for the hooks it depends on (token blocks in it
+   contained: the CONTRACT header in the file lists the hooks it
+   depends on (token blocks in it
    use [data-theme-scope].doubutsu so this early import position can't
    lose to the [data-theme-scope]/.dark blocks below). */
 @import "./doubutsu.css";
@@ -42,7 +42,7 @@
 /* Disabled controls keep pointer events so the not-allowed cursor and
    title tooltips work (see the base-layer cursor rule below). In turn,
    `hover:` must never style a disabled element, or dead controls light
-   up on hover; guarding it here covers every call site instead of
+   up on hover. Guarding it here covers every call site instead of
    requiring `not-disabled:` prefixes everywhere. */
 @custom-variant hover {
   @media (hover: hover) {
@@ -245,7 +245,7 @@
    * with `data-sidebar` on the <aside>). The global muted/accent
    * shades are tuned for an opaque card surface and read as washed-out
    * icons + sticker-like selection on top of the NSVisualEffectView
-   * material. Both themes get tuned values; the rest of the app's
+   * material. Both themes get tuned values, and the rest of the app's
    * palette is untouched because nothing else carries `data-sidebar`.
    */
   [data-sidebar] {

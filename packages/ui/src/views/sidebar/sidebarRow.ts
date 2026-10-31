@@ -249,7 +249,7 @@ export interface SidebarViewModel {
   // null when the view can't place it at all, or not yet: the tree
   // opens the project of the page on screen itself (Sidebar), and the
   // row is revealed once it draws.
-  // A deviceId names a peer's worktree; absent, the worktree is this
+  // A deviceId names a peer's worktree. Absent, the worktree is this
   // machine's.
   revealKey: (
     projectId: string,

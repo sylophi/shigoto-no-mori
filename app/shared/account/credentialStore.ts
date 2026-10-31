@@ -198,8 +198,8 @@ export function createAccountStore(opts: {
   const { storage, cipher } = opts;
 
   // The document as stored, or null for nothing, unreadable or
-  // corrupt (all of which read as signed out with nothing remembered;
-  // the next write overwrites).
+  // corrupt (all of which read as signed out with nothing remembered,
+  // and the next write overwrites).
   function readDoc(): ReadDoc | null {
     const raw = storage.readRaw();
     return raw === null ? null : Option.getOrNull(decodeDoc(raw));

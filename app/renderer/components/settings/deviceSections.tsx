@@ -13,7 +13,7 @@ import type { HostSections } from "./SettingsPanel";
 // peer's: the same sections over that device's form, differing only in
 // what the device lets this window do. The sections that read its disk
 // (the health check, the CLI, the agents), and the data location, whose
-// one action is a move, show once it takes commands from here; until
+// one action is a move, show once it takes commands from here. Until
 // then `note` says why. The danger zone is for whoever sits at the
 // machine, so only this one's General has it.
 export function deviceSections({

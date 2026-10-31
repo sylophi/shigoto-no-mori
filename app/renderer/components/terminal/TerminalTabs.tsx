@@ -15,7 +15,7 @@ import { peerTerminalsHiddenNote } from "@shigomori/ui/lib/commandAccessCopy.ts"
 
 type TerminalTabsProps = Parameters<typeof AttachedTerminalTabs>[0];
 
-// The tabs while this device may command the scoped one; while it may
+// The tabs while this device may command the scoped one. While it may
 // not (its control turned off, with a terminal open here), the words
 // that say so in their place, and the attached terminal ends with
 // them. The pick is kept by the drawer, so control coming back opens

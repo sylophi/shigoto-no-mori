@@ -26,10 +26,11 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   if (!defaultBranch || !isRealBranch(worktree.branch)) return null;
 
   // The default branch can resolve to a remote-tracking ref (e.g.
-  // "origin/main"); strip the remote prefix for the local branch name we
-  // show in the label and compare against. The actual switch (land on the
-  // local tracking branch + fast-forward onto the remote tip) and the delete
-  // of the merged branch are done server-side in one atomic operation.
+  // "origin/main"). The local branch name we show in the label and
+  // compare against has the remote prefix stripped. The actual switch
+  // (land on the local tracking branch + fast-forward onto the remote tip)
+  // and the delete of the merged branch are done server-side in one atomic
+  // operation.
   const target = localBranchOf(defaultBranch, new Set(branches?.remote ?? []));
   // Already on the primary branch, so nothing to switch to or delete.
   if (target === worktree.branch) return null;

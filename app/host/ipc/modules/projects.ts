@@ -1,8 +1,7 @@
 import { expandHome } from "@shared/paths";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { fetchRemoteImage } from "@host/lib/projects/remoteImage";
-import type { ViewHandlers } from "@shigomori/contracts/types";
-import type { EffectHandlers } from "@shigomori/contracts/types";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import * as Views from "@host/lib/Views";
 import { gitContract } from "@shigomori/contracts/modules/git";

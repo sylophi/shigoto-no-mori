@@ -59,7 +59,7 @@ export const makeAdopting = ({
       const name = adoptedDirName(worktree);
       // The replacement first, then the checkout it replaces. A removal
       // that fails takes the replacement back only while the original
-      // still holds the commits; otherwise the replacement stays, holding
+      // still holds the commits. Otherwise the replacement stays, holding
       // them. A crash between leaves both on the branch, never neither,
       // and the add claims its place as git makes it. A detached one's tip
       // is the new checkout's HEAD from the add on.
@@ -117,7 +117,7 @@ export const makeAdopting = ({
           yield* registry.setMark("shelved", worktree.id, false);
           // The checkout moved, so its id did too, like after a move.
           // An adopt takes only a clean checkout, so there is no capture
-          // to carry; one that failed to follow is said, not fatal.
+          // to carry. One that failed to follow is said, not fatal.
           if (added.made.id !== worktree.id) {
             yield* kept
               .rekey(project, worktree.id, added.made.id, {

@@ -9,7 +9,7 @@ interface ScriptStatusBadgeProps {
   state: ScriptRunState;
   // "row" = compact label rendered in the worktree's script list.
   // "header" = inline status sentence under the command on the
-  // full-page console. Both are plain text; neither uses a chip.
+  // full-page console. Both are plain text, neither a chip.
   variant?: "row" | "header";
 }
 

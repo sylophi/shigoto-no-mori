@@ -44,7 +44,7 @@ export function VisitorsSection() {
   const visits = useVisitors();
   const [sort, setSort] = useState<VisitorSort>("visits");
   // The sections showing who hasn't visited too. Each opens and folds
-  // on its own, the chip above does all of them.
+  // on its own, and the chip above does all of them.
   const [open, setOpen] = useState<ReadonlySet<VillagerRarity>>(new Set());
 
   if (profiles === undefined) return <AlbumSkeletonView />;

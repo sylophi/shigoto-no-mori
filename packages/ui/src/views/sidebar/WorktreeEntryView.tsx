@@ -225,11 +225,11 @@ export function WorktreeEntryView({
 
 // The worktree's own name, led by its kind glyph when it's the primary
 // or external. A shelf kind (agent working, shelved) would restate the
-// shelf the row already sits under. The primary's house glyph stays, since it's what tells the
-// root apart from a worktree named after the project. Under Village
-// life, the villager whose home this is sits beside the name, as their
-// face sits beside the title on the worktree page. It's decoration
-// here, so it stays out of the row's label.
+// shelf the row already sits under. The primary's house glyph stays,
+// since it's what tells the root apart from a worktree named after the
+// project. Under Village life, the villager whose home this is sits
+// beside the name, as their face sits beside the title on the worktree
+// page. It's decoration here, so it stays out of the row's label.
 function EntryName({
   worktree,
   resident,

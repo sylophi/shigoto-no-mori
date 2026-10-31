@@ -54,8 +54,8 @@ the repo root, and run its scripts from `hub/`.
 
 Two zones on the one Cloudflare account, both required in production.
 Dev needs only the `shigomori.com` zone for its own Worker and web
-hosts (`hub-dev` and `app-dev`, below); dev tunnels share the tunnel
-zone below.
+hosts (`hub-dev` and `app-dev`, below), and dev tunnels share the
+tunnel zone below.
 
 | Host | Serves | Pinned where |
 |---|---|---|
@@ -168,7 +168,7 @@ A laptop that sleeps leaves its socket open, and Cloudflare reports no
 close for it. It is judged when the object runs anyway (an ask relayed
 to the socket's device, a read or an announce of the roster), never on
 an alarm, which would bill a request and wake the object each time.
-Every build the floor admits pings; one that did not would be closed
+Every build the floor admits pings. One that did not would be closed
 every 90 s.
 
 The Worker serves any browser origin (`Access-Control-Allow-Origin:
@@ -211,13 +211,13 @@ authenticates), it only bounds what that traffic can cost.
   a name of the caller's choosing. A forged ticket is a `403` from the
   Worker. A ticket is bound to the credential it was minted with:
   enrolling a device again rotates its credential and closes its
-  sockets (`4104`), and each dials again with the new credential; its
+  sockets (`4104`), and each dials again with the new credential. Its
   unspent tickets carry the old one, which admission refuses.
 - A device holds at most `MAX_DEVICE_CONNECTIONS` (32) sockets,
   whatever its kind. A desktop holds one and a browser profile one per
-  tab; past the cap the device's oldest socket gives way.
+  tab. Past the cap the device's oldest socket gives way.
 - A socket may send a burst of 300 messages, refilled at 30 a second,
-  and nothing longer than `MAX_HUB_MESSAGE_BYTES`; past either it is
+  and nothing longer than `MAX_HUB_MESSAGE_BYTES`. Past either it is
   closed (`4105`, `1009`) and its device dials again. Measured on the
   dev hub, a socket sends two messages a second at most (a dial's
   connectInfo ask and answer, per peer), so an account at its device
@@ -316,8 +316,8 @@ commit real values.
   sign-in with it.
 - `SM_ACCOUNT_WEB_ORIGIN` - optional, the exact origin of the deployed
   web client. The desktop app's direct listener admits browser dials
-  from exactly this origin so the web client can dial wss tunnel URLs;
-  without it those dials die at the desktop's Origin gate (the host
+  from exactly this origin so the web client can dial wss tunnel URLs.
+  Without it those dials die at the desktop's Origin gate (the host
   logs the refused origin, throttled). Unset, only Origin-less and
   app-local clients are admitted. Unlike the device hub, this
   gate stays strict on purpose: it guards a loopback listener on the
@@ -359,7 +359,7 @@ the instance's `allowed_origins` once per instance (prod's and dev's):
 
 The PATCH replaces the whole list, so read it first and send it back
 with the origin added. The dashboard's Native applications page does
-not show the list; `GET /v1/instance` does:
+not show the list, but `GET /v1/instance` does:
 
 ```sh
 curl -s https://api.clerk.com/v1/instance \
@@ -371,8 +371,8 @@ curl -X PATCH https://api.clerk.com/v1/instance \
   -d '{"allowed_origins": ["shigomori-dev://app"]}'
 ```
 
-The second call's list is the first call's answer plus the new origin;
-the one above is the dev instance's. Read it back the same way
+The second call's list is the first call's answer plus the new origin,
+and the one above is the dev instance's. Read it back the same way
 afterwards. Without it, desktop sign-in fails on every Frontend API
 call after the first (the web client is unaffected: a browser origin
 authenticates the browser way).

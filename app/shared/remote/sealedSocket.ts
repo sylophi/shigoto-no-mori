@@ -6,12 +6,12 @@
 // client and server above it never see a clear byte on the wire.
 //
 // The dialer's first frame carries the connect ticket in clear and the
-// handshake's first message; the ticket is the prologue too, so a
+// handshake's first message. The ticket is the prologue too, so a
 // handshake replayed under another ticket does not open. The listener
 // checks the ticket before any crypto runs (`admit`), which names the
 // device it was minted for and the key the hub's roster holds for it,
-// and spends it only on the hello the open socket then sends;
-// the handshake then proves the dialer holds that key, and the dialer
+// and spends it only on the hello the open socket then sends. The
+// handshake then proves the dialer holds that key, and the dialer
 // sealed to the listener's own key, which it took from the same roster.
 // Until the handshake is done the socket reads as connecting, and any
 // failure closes it.
@@ -233,7 +233,7 @@ export function sealDialer(
 // for a ticket the listener never issued, or STALE_TICKET, spending
 // nothing: the listener spends the ticket on the hello this socket then
 // sends, and `opened` hears the ticket and the key the handshake proved
-// once it has; `refused` hears every failure, for the listener's log,
+// once it has, and `refused` hears every failure, for the listener's log,
 // and whether it was a guess (a ticket never issued, a key that did not
 // hold), which alone counts toward the listener's lockout: a dial that
 // came after its ticket lapsed is refused, not suspected.

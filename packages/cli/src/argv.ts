@@ -39,7 +39,7 @@ const flagOf = (param: Param.Any, list = false): Flag => {
 
 // The flags a command declares: its own (`config`), and the shared ones
 // its subcommands inherit (`contextConfig`). effect/cli keeps them on the
-// command without a public accessor; effect is pinned, and every run
+// command without a public accessor. Effect is pinned, and every run
 // reads them, so a change there fails every test.
 const declared = (
   command: Command.Command.Any,

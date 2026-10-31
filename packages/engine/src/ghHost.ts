@@ -22,7 +22,7 @@ export function ghKnownHosts(content: string): Set<string> {
 
 // The host of the remote gh resolves the repo from, among those on a
 // host gh is signed in to, or null for none. `remotes` as git lists
-// them; a remote's first URL is its fetch URL. Pinning gh to it keeps
+// them, where a remote's first URL is its fetch URL. Pinning gh to it keeps
 // gh on the repo it would pick anyway when a checkout has remotes on
 // two hosts.
 export function ghHostFor(

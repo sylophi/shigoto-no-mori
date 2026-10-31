@@ -11,11 +11,11 @@
 // What follows from the table rather than sitting in it: the userData
 // folder holds the single-instance lock, the Clerk tokens and the hub
 // credential, and it and the logs are where each OS keeps an app's
-// (footprint.ts appFolders); the keychain item
-// safeStorage keeps its key in is "<appName> Safe Storage"; the
-// file-sync daemon's state is <dataDir>/file-sync; a managed root on a
-// project's own drive is /Volumes/<drive>/<dataDir>/wt.
-// A test flavor is its word (testFlavorWord).
+// (footprint.ts appFolders). The keychain item safeStorage keeps its key
+// in is "<appName> Safe Storage". The file-sync daemon's state is
+// <dataDir>/file-sync. A managed root on a project's own drive is
+// /Volumes/<drive>/<dataDir>/wt. A test flavor is its word
+// (testFlavorWord).
 export type Flavor = "prod" | "dev" | (string & {});
 
 export type FlavorNames = {

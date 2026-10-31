@@ -4,17 +4,13 @@
 // and the project list reads them back as lastUsed and recentCount,
 // which feed the sidebar's recency and frequency sorts.
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Ops from "../engineOps";
 import { log } from "@shared/log";
 
-function hasStringProjectId(input: unknown): input is { projectId: string } {
-  return (
-    typeof input === "object" &&
-    input !== null &&
-    typeof (input as { projectId?: unknown }).projectId === "string" &&
-    (input as { projectId: string }).projectId.length > 0
-  );
-}
+const hasProjectId = Schema.is(
+  Schema.Struct({ projectId: Schema.NonEmptyString }),
+);
 
 // This runs after roughly every action, so a failing store would log
 // on every click. One line per app run is enough to point at the cause.
@@ -27,7 +23,7 @@ let usageFailureLogged = false;
 // payload had no project to attribute or the use wasn't recorded.
 // Best-effort: never let a stats write break the handler.
 export const recordProjectActionUsage = (input: unknown) => {
-  if (!hasStringProjectId(input)) return Effect.succeed(null);
+  if (!hasProjectId(input)) return Effect.succeed(null);
   return Ops.recordProjectUse(input.projectId).pipe(
     Effect.as(input.projectId),
     Effect.catchCause((cause) =>

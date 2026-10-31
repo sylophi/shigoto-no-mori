@@ -7,9 +7,9 @@
 // killed.
 //
 // It asks and looks from outside the page: started with --sm-lab, a
-// test flavor's app relaunches on SIGUSR2 (main/index.ts); the window
+// test flavor's app relaunches on SIGUSR2 (main/index.ts). The window
 // is read through macOS accessibility, which a page whose renderer
-// died has nothing in; and main.log says which child process was
+// died has nothing in, and main.log says which child process was
 // killed. Accessibility needs the terminal running this to be allowed
 // in System Settings > Privacy & Security > Accessibility.
 //

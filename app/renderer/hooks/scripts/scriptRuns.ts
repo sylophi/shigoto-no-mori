@@ -396,9 +396,9 @@ export class ScriptRuns {
     return this.outputSubs.subscribe(key, cb);
   }
 
-  // Called when a worktree is removed (delete / relocate / convert);
-  // otherwise per-worktree state and runId mappings would leak across
-  // worktrees that no longer exist on disk. Returns whether these runs
+  // Called when a worktree is removed (delete / relocate / convert), so
+  // per-worktree state and runId mappings don't leak across worktrees
+  // that no longer exist on disk. Returns whether these runs
   // held any run there.
   clearForWorktree(worktreeId: string): boolean {
     const { seenThrough } = this.current;
@@ -537,8 +537,8 @@ export class ScriptRuns {
   // Setup and port-pool-provision run in the background after worktree
   // create returns, so the mutation can't surface a failed exit anymore.
   // Teardown / port-pool-release have their own retry UI and don't need
-  // a toast on top. Package scripts are user-initiated; their console is
-  // already visible.
+  // a toast on top. Package scripts are user-initiated, and their console
+  // is already visible.
   private toastLifecycleFailure(
     slotKind: SlotKind,
     exitCode: number | null,

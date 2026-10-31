@@ -2,11 +2,11 @@
 // under one of PATH's directories this process may execute.
 import { constants } from "node:fs";
 import { access } from "node:fs/promises";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { envVar } from "./environment.ts";
 
 // The program's full path, none when PATH has no such program.
 export const findExecutable = Effect.fn("findExecutable")(function* (
@@ -14,9 +14,7 @@ export const findExecutable = Effect.fn("findExecutable")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const searched = yield* Config.String("PATH").pipe(
-    Effect.orElseSucceed(() => ""),
-  );
+  const searched = yield* envVar("PATH");
   for (const dir of searched.split(":")) {
     // An empty entry is the working directory.
     const candidate = path.join(dir === "" ? "." : dir, name);

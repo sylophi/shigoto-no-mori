@@ -60,7 +60,7 @@ export function atomicWriteJsonSync(
     try {
       unlinkSync(temp);
     } catch {
-      // Best effort; the stray temp file is harmless.
+      // Best effort: the stray temp file is harmless.
     }
     throw error;
   }

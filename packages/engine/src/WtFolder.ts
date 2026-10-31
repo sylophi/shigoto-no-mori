@@ -184,7 +184,7 @@ const make = Effect.gen(function* () {
         if ((yield* at(row.to_path)) !== undefined) {
           return yield* failed(
             fromPath,
-            "git lists it in wt/ already, moved before a crash; what sm kept under its old id wasn't carried",
+            "git lists it in wt/ already, moved before a crash, but what sm kept under its old id wasn't carried",
           );
         }
         return yield* sql`DELETE FROM wt_moves

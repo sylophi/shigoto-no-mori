@@ -69,7 +69,5 @@ export const push = <M extends ContractModule, K extends PushKeys<M>>(
   payload: PushProducerPayload<M, K>,
 ) =>
   Effect.flatMap(HostPushes, (pushes) =>
-    Effect.suspend(() => {
-      return pushes.publish(resolvePush(module, key, payload));
-    }),
+    Effect.suspend(() => pushes.publish(resolvePush(module, key, payload))),
   );

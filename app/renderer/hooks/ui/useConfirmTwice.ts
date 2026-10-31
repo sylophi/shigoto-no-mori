@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { type Deadline, deadlineIn, deadlinePassed } from "@/lib/deadline";
 
 // Two-step confirm sentinels. Lower for reversible-ish ops (removing a
-// project from the list); higher for destructive ones (delete worktree,
+// project from the list), higher for destructive ones (delete worktree,
 // nuke shigomori state) so a stray double-click can't trigger them.
 export const CONFIRM_QUICK_MS = 3_000;
 export const CONFIRM_DESTRUCTIVE_MS = 5_000;

@@ -71,7 +71,7 @@ export function useSharedSettingsView<T>(
 
 // Whether the local copy has been read. Until then an unset setting and
 // an unread one look alike, and a surface that acts on the difference
-// holds off; a read that failed says so and keeps it off, since a write
+// holds off. A read that failed says so and keeps it off, since a write
 // over a document never read would replace what is stored.
 export function useSharedSettingsSettled(): boolean {
   const result = useAtomValue(sharedSettingsAtom(useApi().deviceId));

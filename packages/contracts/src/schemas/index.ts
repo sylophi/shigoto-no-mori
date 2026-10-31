@@ -1,4 +1,4 @@
-// Barrel: each domain owns its schemas in a sibling file; this index
+// Barrel: each domain owns its schemas in a sibling file, and this index
 // re-exports them so consumers import @shigomori/contracts/schemas
 // without caring about the split.
 //

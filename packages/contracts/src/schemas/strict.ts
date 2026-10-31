@@ -1,12 +1,13 @@
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as SchemaParser from "effect/SchemaParser";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 
 // A struct that refuses a key it does not declare. Only at its own
-// level: a struct nested in it still
-// drops unknown keys. Extend one through the struct it wraps (`.struct`).
+// level: a struct nested in it still drops unknown keys. Extend one
+// through the struct it wraps (`.struct`).
 export function strict<const Fields extends Schema.Struct.Fields>(
   struct: Schema.Struct<Fields>,
 ) {
@@ -19,11 +20,7 @@ export function strict<const Fields extends Schema.Struct.Fields>(
       [struct],
       ([codec]) =>
         (input, ast, options) => {
-          if (
-            typeof input === "object" &&
-            input !== null &&
-            !Array.isArray(input)
-          ) {
+          if (Predicate.isObject(input)) {
             for (const [key, value] of Object.entries(input)) {
               if (!declared.has(key)) {
                 return Effect.fail(

@@ -58,8 +58,8 @@ export function useDeviceProjects(
   );
 }
 
-// This machine's failure is a toast; a peer's list reads empty with its
-// device's status beside it.
+// This machine's failure is a toast, while a peer's list reads empty
+// with its device's status beside it.
 export function useProjects(): LiveViewState<readonly Project[]> {
   const { deviceId, hasHost } = useHostScope();
   const state = useDeviceProjects(deviceId, hasHost);
@@ -163,8 +163,8 @@ export function useRemoveProject(deleteFiles = false) {
         await router.navigate({ to: "/" });
       }
       // With the route and sidebar row gone nothing observes the
-      // removed project's queries; drop the leftovers so nothing can
-      // replay them. Only inactive ones: removing a query that still
+      // removed project's queries, so the leftovers are dropped and
+      // nothing can replay them. Only inactive ones: removing a query that still
       // has an observer (a row mid-unmount) would refetch it instead.
       queryClient.removeQueries({
         type: "inactive",

@@ -10,8 +10,6 @@ import { note, Output, styles, toStderr, toStderrNow } from "./output.ts";
 
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-const write = toStderr;
-
 export const spinner = Effect.gen(function* () {
   const { json, stderrColor } = yield* Effect.service(Output);
   const label = yield* Ref.make("");
@@ -26,7 +24,7 @@ export const spinner = Effect.gen(function* () {
     yield* Effect.sleep("80 millis");
     const at = yield* Ref.getAndUpdate(frame, (n) => n + 1);
     const text = yield* Ref.get(label);
-    yield* write(
+    yield* toStderr(
       `\r\u001b[2K${cyan(FRAMES[at % FRAMES.length] ?? "")} ${text}`,
     );
   });

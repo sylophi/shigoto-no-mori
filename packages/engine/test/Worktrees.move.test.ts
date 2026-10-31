@@ -26,7 +26,7 @@ beforeEach(() => {
 afterEach(() => box.remove());
 
 // A dirty capture whose ref can't follow (a lock git left on it) fails
-// the re-key; asked again, the re-key carries it.
+// the re-key. Asked again, the re-key carries it.
 it("fails a re-key whose dirty capture can't follow, and carries it when asked again", async () => {
   const repo = box.repo("proj", { "README.md": "hi\n" });
   const result = (await box.engine(

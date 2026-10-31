@@ -113,7 +113,7 @@ export const ControlTransferResultSchema = strict(
   Schema.Struct({
     ...SyncPullWorktreeResultSchema.struct.fields,
     device: ControlDeviceRefSchema,
-    // Where `worktree` (the copy) is; its path means something only when
+    // Where `worktree` (the copy) is. Its path means something only when
     // local.
     copySide: CopySideSchema,
     session: Schema.optional(Schema.String),

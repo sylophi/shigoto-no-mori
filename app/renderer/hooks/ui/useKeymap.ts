@@ -114,7 +114,7 @@ const CTRL_TWIN_ACTIONS = new Set(
 // meanings are the field's), and a focused terminal every key a shell
 // can be sent: it gives up a ⌘ chord bound here and the terminal's own
 // toggle. Those two are claimed in the capture phase,
-// before the terminal sees them; the rest wait for the bubble, so a
+// before the terminal sees them. The rest wait for the bubble, so a
 // control that spent the key (an editor's Escape) keeps it.
 export function useKeymapListener(): void {
   const keymap = useKeymap();

@@ -10,6 +10,7 @@ import {
   deviceStatusView,
   type DeviceStatusView,
 } from "../lib/deviceStatus.ts";
+import type { ScriptRunState } from "../lib/scriptRun.ts";
 import {
   accountDevices,
   forests,
@@ -72,3 +73,15 @@ export function worktreeNamed(project: Project, name: string): Worktree {
 export const FACE = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="17" r="12" fill="#e8c27a"/><circle cx="11.5" cy="15" r="1.6" fill="#4a3b2a"/><circle cx="20.5" cy="15" r="1.6" fill="#4a3b2a"/><path d="M12 21q4 3 8 0" stroke="#4a3b2a" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M6 9l4 4M26 9l-4 4" stroke="#b98a3e" stroke-width="3" stroke-linecap="round"/></svg>',
 )}`;
+
+// A script that has run nothing yet (the store's empty state).
+export const IDLE_RUN: ScriptRunState = {
+  runId: null,
+  status: "idle",
+  hasOutput: false,
+  interactive: false,
+  exitCode: null,
+  startedAt: null,
+  endedAt: null,
+  cancelling: false,
+};

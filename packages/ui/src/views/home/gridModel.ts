@@ -16,10 +16,13 @@ import type { ProjectGroupOrder } from "../sidebar/buildSidebarRows.ts";
 import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
 import { projectListSections } from "../sidebar/projectListSections.ts";
 import type { ProjectSection } from "../sidebar/sidebarRow.ts";
-import type { ProjectPullRequestQueries } from "../../lib/forest.ts";
-import type { LocalSide, MirrorLink } from "../../lib/forest.ts";
-import type { RemoteForestItem } from "../../lib/forest.ts";
-import type { ProjectWorktreeQueries } from "../../lib/forest.ts";
+import type {
+  LocalSide,
+  MirrorLink,
+  ProjectPullRequestQueries,
+  ProjectWorktreeQueries,
+  RemoteForestItem,
+} from "../../lib/forest.ts";
 
 export interface GridInput {
   // This machine's projects and their listings, positionally aligned,

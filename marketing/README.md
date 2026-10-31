@@ -20,7 +20,7 @@ Lint and format are the repo's (`pnpm lint`, `pnpm format` at the
 root), and `pnpm typecheck` at the root runs this package's with
 every other package's, as CI does. The page
 follows the system's light or dark until its toggle is used
-(`theme.js`); a browser's emulated color scheme, or the toggle, shows
+(`theme.js`). A browser's emulated color scheme, or the toggle, shows
 the other.
 
 This package pins TypeScript 6: `astro check` needs its programmatic
@@ -71,7 +71,7 @@ A frame draws a window or a part of the app with the app's views over
 the fixture world (`@shigomori/ui`'s scenes), rendered to HTML at build
 time through Astro's React integration. It lays out at the size the
 window has in the app and is scaled to the frame in CSS, with no
-script; a frame can show a crop of it. Its root carries the theme the
+script, and a frame can show a crop of it. Its root carries the theme the
 way the app's root does (the theme classes, `data-palette`,
 `data-shell`), and `theme.js` sets the page's light or dark on it before
 it paints, so the toggle switches the frames too. The Looks frames wear
@@ -83,7 +83,7 @@ app and the fixture world (`app/lab/fake-host/frames.tsx`, the lab's
 fake host in-process) in chunks of their own, and mounts a window of
 the app into the frame's root, all the live frames on one client. Its
 scene is what the app shows first on that route, so the frame keeps
-its picture as it goes live. Only windows go live; parts, the phone
+its picture as it goes live. Only windows go live. Parts, the phone
 (the web app needs a client of its own) and Devices (Settings holds it
 in the app) stay as drawn at build time. So a part shows only what
 React renders on a server: one whose view draws in a client effect,
@@ -95,7 +95,7 @@ build time, and the app's boot takes it from the page rather than
 loading its own (`astro.config.ts`). The app's stylesheet stops at a
 frame's root (`@shigomori/ui`'s `insideTheRoot`), and the page's stops
 there too, so neither styles the other. A frame's fonts are the page's
-Zen Maru Gothic; kanji fall back to the system's, as the page's text
+Zen Maru Gothic, and kanji fall back to the system's, as the page's text
 does. The file icons the live windows' file lists draw are copied into
 the build under `/material-icons/`.
 
@@ -124,7 +124,7 @@ with its image, so the first run after an update to it can bring an
 image with no visible change, which merging settles once every runner
 has the update. The branch is named for the image, so runs that shoot
 the same one push it once. Opening the pull request needs the
-repository to let Actions create them; without that, the run's summary
+repository to let Actions create them. Without that, the run's summary
 links the pushed branch.
 
 ## Where the pieces come from

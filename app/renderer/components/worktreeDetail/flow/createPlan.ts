@@ -25,15 +25,15 @@ function useSetupScript(localProject: Project | undefined): string {
   return config?.scripts?.setup?.trim() ?? "";
 }
 
+// Read outside the hook: the compiler takes a `use…` member for a hook.
+const includesOn = (config: ShigomoriConfig | null | undefined) =>
+  config?.useWorktreeInclude ?? PROJECT_CONFIG_DEFAULTS.useWorktreeInclude;
+
 // The local project's carry-over: manual entries plus the repo's
 // .worktreeinclude matches, merged by the same rule the Configure page
 // uses. The include status is read unconditionally (like Configure
 // does) so the two requests run side by side instead of the second
 // waiting on the config.
-// Read outside the hook: the compiler takes a `use…` member for a hook.
-const includesOn = (config: ShigomoriConfig | null | undefined) =>
-  config?.useWorktreeInclude ?? PROJECT_CONFIG_DEFAULTS.useWorktreeInclude;
-
 export function useCarryOverRows(localProject: Project | undefined): {
   rows: { path: string; tag: string }[];
   isPending: boolean;

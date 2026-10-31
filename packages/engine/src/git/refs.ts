@@ -128,7 +128,7 @@ export const makeRefs = ({ running }: { readonly running: RunningArea }) =>
       const [head, expected] = yield* Effect.all(
         [
           verifyRev(cwd, "HEAD"),
-          expectHead ? verifyRev(cwd, expectHead) : Effect.succeed(undefined),
+          expectHead ? verifyRev(cwd, expectHead) : Effect.void,
         ],
         { concurrency: 2 },
       );

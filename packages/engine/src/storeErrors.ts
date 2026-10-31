@@ -46,8 +46,8 @@ const storeWords: Record<Category, string> = {
   damaged: "The store looks damaged. The doctor says what it can repair.",
   unmigrated:
     "This data folder is still v2's, and is only read until it moves to v3. Open the app to move it, or run the doctor with --fix.",
-  moved: "The data folder moved while this ran; run it again.",
-  newer: "It was made by a newer version of the app; update the app.",
+  moved: "The data folder moved while this ran. Run it again.",
+  newer: "It was made by a newer version of the app. Update the app.",
   failed: "Couldn't read or write the store.",
 };
 
@@ -89,7 +89,8 @@ const categoryOf = (error: unknown): Category => {
   return "failed";
 };
 
-// A failure the store's SQL raised, in words; none for anything else.
+// A failure the store's SQL raised, in words, and none for anything
+// else.
 export const storeErrorOf = (error: unknown): StoreError | undefined => {
   if (error instanceof StoreError) return error;
   if (Predicate.isTagged(error, "SqlError")) {

@@ -2,7 +2,7 @@
 
 The app's code that more than one of its sides compiles: the host, the
 shell (`main/`), the renderer and the web client. What crosses a wire
-or every package needs is the contracts' (`packages/contracts`); what
+or every package needs is the contracts' (`packages/contracts`). What
 is here is the app's own.
 
 - `remote/`, `hub/`, `crypto/`: reaching a device. The device link's

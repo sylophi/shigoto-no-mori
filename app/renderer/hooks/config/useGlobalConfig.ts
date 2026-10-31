@@ -26,8 +26,8 @@ const globalConfigAtom = Atom.family((deviceId: string) =>
 
 // The scoped device's config. A hostless client has no local device
 // config at all, so the local scope reads none there (a peer's does).
-// This machine's failure is a toast; a peer's the remote settings pane
-// says inline.
+// This machine's failure is a toast, and a peer's is said inline by
+// the remote settings pane.
 export function useGlobalConfig() {
   const { deviceId, hasHost } = useHostScope();
   const state = useView(hasHost ? globalConfigAtom(deviceId) : null);

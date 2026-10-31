@@ -157,7 +157,7 @@ const importVerified = (open: OpenDatabase, platform: Platform) =>
   }).pipe(Effect.scoped);
 
 // After an import, the 2.x files it read deleted, once the store is
-// verified to hold what they said; on any doubt every one stays, and the
+// verified to hold what they said. On any doubt every one stays, and the
 // doctor reports them.
 const removeImported = (open: OpenDatabase, platform: Platform) =>
   Effect.gen(function* () {

@@ -38,7 +38,7 @@ for (const name of [cliBinaryName("prod"), cliAliasName("prod")]) {
   })();
   if (existing && !existing.isSymbolicLink()) {
     console.error(
-      `${link} exists and isn't a symlink; refusing to replace it.`,
+      `${link} exists and isn't a symlink. Refusing to replace it.`,
     );
     continue;
   }
@@ -58,6 +58,6 @@ const binDir = cliUserBinDir();
 const onPath = (process.env.PATH ?? "").split(":").includes(binDir);
 if (!onPath) {
   console.warn(
-    `note: ${binDir} isn't on your PATH; add it to your shell profile.`,
+    `note: ${binDir} isn't on your PATH. Add it to your shell profile.`,
   );
 }

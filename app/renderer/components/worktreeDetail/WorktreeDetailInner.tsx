@@ -129,9 +129,9 @@ export function WorktreeDetailInner({
   const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
     useConfirmTwice(CONFIRM_QUICK_MS);
 
-  // Derive limbo state from script-runs: any cleanup-tier script
-  // currently running indicates we're mid-cleanup; otherwise if the
-  // mutation is in flight we're in the remove phase.
+  // Derive limbo state from script-runs. Any cleanup-tier script
+  // currently running means we're mid-cleanup. Otherwise, if the
+  // mutation is in flight, we're in the remove phase.
   const teardownKey = scriptKey(worktree.projectId, worktree.id, {
     kind: "teardown",
   });
