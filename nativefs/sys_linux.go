@@ -177,12 +177,11 @@ func xfsReflink(p string) (bool, error) {
 // immutable and append-only only root may set), so none are reported.
 func statFlags(*unix.Stat_t) uint32 { return 0 }
 
-func fileFlags(p string) (uint32, error) {
+// Nothing to clear, so this only answers whether p is there.
+func clearFlags(p string) error {
 	var st unix.Stat_t
-	return 0, unix.Lstat(p, &st)
+	return unix.Lstat(p, &st)
 }
-
-func clearFlags(string) error { return nil }
 
 // The attribute SELinux labels whatever this process writes with, so
 // reads leave it out and stripping leaves it.
