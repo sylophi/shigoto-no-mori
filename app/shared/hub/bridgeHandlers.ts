@@ -46,12 +46,16 @@ const noSession = (deviceId: string, error: unknown) =>
 
 // How a call or a view on a session ended short of its caller stopping
 // it. Interrupted, it went with its link's scope (a sweep, the quit),
-// which is the link gone. A defect (the peer's handler died) is the
+// which is the session gone. A defect (the peer's handler died) is the
 // failure it is.
-const linkFailureOf = (cause: Cause.Cause<unknown>): unknown =>
-  Cause.hasInterruptsOnly(cause)
+const sessionFailure = (deviceId: string, cause: Cause.Cause<unknown>) => {
+  const error = Cause.hasInterruptsOnly(cause)
     ? new RemoteDisconnectedError()
     : Cause.squash(cause);
+  return error instanceof RemoteDisconnectedError
+    ? noSession(deviceId, error)
+    : error;
+};
 
 // Values of a peer's view this host holds for a window that has not
 // taken them, as many as a terminal's client may fall behind its shell
@@ -73,12 +77,15 @@ export const servedHub = (hub: () => HubHandlers) => ({
   handlers: {
     status: () =>
       Effect.try({ try: () => hub().status(), catch: callFailureOf }),
-    invokePeer: ({ deviceId, channel, input }) =>
-      Effect.flatMap(Effect.try({ try: hub, catch: callFailureOf }), (bridge) =>
-        bridge
+    invokePeer: ({ deviceId, channel, input }) => {
+      // hubHandlers() throws LayerDownError before the hub is up.
+      const bridge = Effect.try({ try: hub, catch: callFailureOf });
+      return Effect.flatMap(bridge, (peers) =>
+        peers
           .invokeOnPeer(deviceId, channel, input)
           .pipe(Effect.mapError(callFailureOf)),
-      ),
+      );
+    },
   } satisfies EffectHandlers<typeof hubContract>,
   views: {
     watchPeer: (input) =>
@@ -111,17 +118,17 @@ type HubHandlerDeps = {
   // Fired whenever a direct session is cached or a cached one drops,
   // so the owner can fan a fresh status snapshot out exactly like the
   // hub's own transitions.
-  onDirectChange?: () => void;
+  onDirectChange: () => void;
   // Fired when an established session dies on its own (the transport's
   // self-close): the keeper's redial signal. Owner-initiated closes
   // (roster sweep, quit) never fire it, or quit would schedule dials
   // against a host being torn down and a sweep would redial a peer the
   // control plane just disowned.
-  onPeerDropped?: (deviceId: string) => void;
+  onPeerDropped: (deviceId: string) => void;
   // The keeper's explanation for a rostered peer with no session (its
   // last dial failure, cleared the moment a dial succeeds), folded
   // into the no-session rejection.
-  peerUnavailableReason?: (deviceId: string) => string | null;
+  peerUnavailableReason: (deviceId: string) => string | null;
 };
 
 export type HubHandlers = {
@@ -241,8 +248,8 @@ function hubHandlers(
     // keeper hears about self-closes only (see onPeerDropped above),
     // and after the delete, so its redial finds an empty slot.
     if (cached.version !== null) {
-      deps.onDirectChange?.();
-      if (selfClosed) deps.onPeerDropped?.(deviceId);
+      deps.onDirectChange();
+      if (selfClosed) deps.onPeerDropped(deviceId);
     }
   }
 
@@ -276,7 +283,7 @@ function hubHandlers(
         entry.sharesData = connection.sharesData;
         entry.probe = connection.probe;
         yield* Deferred.succeed(entry.connection, connection);
-        if (peers.get(deviceId) === entry) deps.onDirectChange?.();
+        if (peers.get(deviceId) === entry) deps.onDirectChange();
         yield* connection.dropped;
         // The established link ended on its own: the keeper's redial
         // signal.
@@ -321,7 +328,7 @@ function hubHandlers(
     Effect.suspend(() => {
       const entry = peers.get(deviceId);
       if (entry === undefined) {
-        const reason = deps.peerUnavailableReason?.(deviceId);
+        const reason = deps.peerUnavailableReason(deviceId);
         return Effect.fail(
           new NoDirectConnectionError(
             reason == null ? { deviceId } : { deviceId, reason },
@@ -341,31 +348,25 @@ function hubHandlers(
 
     invokeOnPeer: (deviceId, channel, input) =>
       Effect.flatMap(requirePeer(deviceId), (peer) =>
-        peer.link.call(channel, input).pipe(
-          Effect.catchCause((cause) => {
-            const error = linkFailureOf(cause);
-            return Effect.fail(
-              error instanceof RemoteDisconnectedError
-                ? noSession(deviceId, error)
-                : error,
-            );
-          }),
-        ),
+        peer.link
+          .call(channel, input)
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.fail(sessionFailure(deviceId, cause)),
+            ),
+          ),
       ),
 
     watchPeer: ({ deviceId, channel, input }) =>
       Stream.unwrap(
         Effect.map(requirePeer(deviceId), (peer) =>
-          peer.link.view(channel, input).pipe(
-            Stream.catchCause((cause) => {
-              const error = linkFailureOf(cause);
-              return Stream.fail(
-                error instanceof RemoteDisconnectedError
-                  ? new NoDirectConnectionError({ deviceId })
-                  : error,
-              );
-            }),
-          ),
+          peer.link
+            .view(channel, input)
+            .pipe(
+              Stream.catchCause((cause) =>
+                Stream.fail(sessionFailure(deviceId, cause)),
+              ),
+            ),
         ),
       ),
 
@@ -390,7 +391,7 @@ function hubHandlers(
       if (entry === undefined || entry.version === null) return;
       if (entry[fact] === value) return;
       entry[fact] = value;
-      deps.onDirectChange?.();
+      deps.onDirectChange();
     },
 
     probeDirectPeers: () => {

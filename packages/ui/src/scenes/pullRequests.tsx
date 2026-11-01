@@ -2,7 +2,6 @@
 // one, the merge box in the states its PR goes through, the section a PR
 // gets on a page not named by it, with the stack it sits in, and the
 // boxes that clean up after a PR closed or merged.
-import type { ReactNode } from "react";
 import { ModalBox } from "../primitives/modal-shell.tsx";
 import { StaticPopover } from "../primitives/popover.tsx";
 import { CreatePullRequestDialogView } from "../views/newPullRequest/CreatePullRequestDialogView.tsx";
@@ -38,9 +37,9 @@ import {
   posedPullRequestDetail,
   unposedPullRequests,
 } from "../fixtures/pullRequestFixtures.ts";
-import { projectNamed, worktreeNamed } from "./world.ts";
+import { noop, projectNamed, worktreeNamed } from "./world.ts";
+import { ScenePart } from "./frame.tsx";
 
-const noop = () => {};
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 const GECKO = worktreeNamed(
   projectNamed(MACBOOK_ID, "shigoto-no-mori"),
@@ -137,15 +136,6 @@ function closedBox(
   );
 }
 
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
-}
-
 export function PullRequestPartsScene() {
   const gecko = detail(GECKO.branch);
   const stack = pullRequestStackFor(PRS, GECKO.branch, "main");
@@ -153,7 +143,7 @@ export function PullRequestPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-5">
-        <Part label="A stacked PR, on a page not named by it">
+        <ScenePart label="A stacked PR, on a page not named by it">
           <PullRequestSectionView
             identity={
               <PullRequestIdentityView
@@ -177,28 +167,28 @@ export function PullRequestPartsScene() {
               />
             }
           />
-        </Part>
-        <Part label="Waiting on checks">
+        </ScenePart>
+        <ScenePart label="Waiting on checks">
           {mergeBox(detail(OWN_BRANCH, "checks=pending"))}
-        </Part>
-        <Part label="Failing, with reviews asked for">
+        </ScenePart>
+        <ScenePart label="Failing, with reviews asked for">
           {mergeBox(detail(OWN_BRANCH, "checks=failing&reviews=required"))}
-        </Part>
-        <Part label="A draft, confirming, failed">
+        </ScenePart>
+        <ScenePart label="A draft, confirming, failed">
           {mergeBox(detail(OWN_BRANCH, "prState=draft"), {
             armed: true,
             error: "GraphQL: Pull request is still a draft (mergePullRequest)",
           })}
-        </Part>
-        <Part label="Conflicting, read-only">
+        </ScenePart>
+        <ScenePart label="Conflicting, read-only">
           {mergeBox(detail(OWN_BRANCH, "prState=conflicts"), null)}
-        </Part>
-        <Part label="No merge methods">
+        </ScenePart>
+        <ScenePart label="No merge methods">
           {mergeBox(detail(OWN_BRANCH, "reviews=approved"), null, false)}
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-5">
-        <Part label="Closed">
+        <ScenePart label="Closed">
           {closedBox({})}
           {closedBox({
             count: 3,
@@ -221,16 +211,16 @@ export function PullRequestPartsScene() {
             },
             deleteError: "The worktree is locked by a running create.",
           })}
-        </Part>
-        <Part label="Merged, on the main checkout">
+        </ScenePart>
+        <ScenePart label="Merged, on the main checkout">
           <MergedPrimaryBranchBoxView
             target="main"
             armed={false}
             pending={false}
             onClick={noop}
           />
-        </Part>
-        <Part label="Checks">
+        </ScenePart>
+        <ScenePart label="Checks">
           <StaticPopover className="w-80">
             <ul className="max-h-80 space-y-0.5 overflow-y-auto">
               {sortChecksWorstFirst(many.checkList).map((check) => (
@@ -240,7 +230,7 @@ export function PullRequestPartsScene() {
               ))}
             </ul>
           </StaticPopover>
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );

@@ -28,18 +28,27 @@ export function sortByProject<T>(
     case "alphabetical":
       return items.toSorted(byName);
     case "recent":
-      return items.toSorted((a, b) => {
-        const diff =
-          (projectOf(b).lastUsed ?? 0) - (projectOf(a).lastUsed ?? 0);
-        return diff !== 0 ? diff : byName(a, b);
-      });
+      return items.toSorted(byUsage("lastUsed", projectOf, byName));
     case "frequent":
-      return items.toSorted((a, b) => {
-        const diff =
-          (projectOf(b).recentCount ?? 0) - (projectOf(a).recentCount ?? 0);
-        return diff !== 0 ? diff : byName(a, b);
-      });
+      return items.toSorted(byUsage("recentCount", projectOf, byName));
     default:
       return assertNever(mode);
   }
+}
+
+// Most-used first by one usage figure, ties by name: the order projects
+// and package.json scripts share.
+export function byUsage<T>(
+  field: "lastUsed" | "recentCount",
+  usageOf: (
+    item: T,
+  ) =>
+    | { readonly lastUsed?: number; readonly recentCount?: number }
+    | undefined,
+  byName: (a: T, b: T) => number,
+): (a: T, b: T) => number {
+  return (a, b) => {
+    const diff = (usageOf(b)?.[field] ?? 0) - (usageOf(a)?.[field] ?? 0);
+    return diff !== 0 ? diff : byName(a, b);
+  };
 }

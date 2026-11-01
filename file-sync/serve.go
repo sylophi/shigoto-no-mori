@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"slices"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -163,8 +164,8 @@ type guardedEndpoint struct {
 }
 
 func (e guardedEndpoint) Supply(paths []string, signatures []*rsync.Signature, receiver rsync.Receiver) error {
-	if err := refuseGitReads(paths); err != nil {
-		return err
+	if i := slices.IndexFunc(paths, touchesGit); i >= 0 {
+		return fmt.Errorf("refused to read %q: .git is not synchronized", paths[i])
 	}
 	return e.Endpoint.Supply(paths, signatures, receiver)
 }
@@ -210,10 +211,7 @@ func (h guardedLocalHandler) Connect(
 	configuration *synchronization.Configuration,
 	alpha bool,
 ) (synchronization.Endpoint, error) {
-	made := &synchronization.Configuration{}
-	if configuration != nil {
-		made = proto.Clone(configuration).(*synchronization.Configuration)
-	}
+	made := proto.Clone(configuration).(*synchronization.Configuration)
 	made.DefaultFileMode = madeFileMode
 	made.DefaultDirectoryMode = madeDirectoryMode
 	endpoint, err := h.ProtocolHandler.Connect(ctx, logger, url, prompter, session, version, made, alpha)
@@ -229,15 +227,6 @@ func holdGitOnLocalEndpoints() {
 	if _, held := local.(guardedLocalHandler); !held {
 		synchronization.ProtocolHandlers[urlpkg.Protocol_Local] = guardedLocalHandler{local}
 	}
-}
-
-func refuseGitReads(paths []string) error {
-	for _, p := range paths {
-		if touchesGit(p) {
-			return fmt.Errorf("refused to read %q: .git is not synchronized", p)
-		}
-	}
-	return nil
 }
 
 // The inner endpoint is called at most once: the local one refuses a
@@ -270,7 +259,7 @@ func (e guardedEndpoint) Transition(ctx context.Context, transitions []*core.Cha
 }
 
 func touchesGit(p string) bool {
-	return p != "" && slicesContainsGit(strings.Split(path.Clean(p), "/"))
+	return p != "" && slices.ContainsFunc(strings.Split(path.Clean(p), "/"), isGitName)
 }
 
 // A name the volume reads as .git: APFS and HFS+ fold case by default,
@@ -287,15 +276,6 @@ func hfsVisible(r rune) rune {
 		return -1
 	}
 	return r
-}
-
-func slicesContainsGit(components []string) bool {
-	for _, component := range components {
-		if isGitName(component) {
-			return true
-		}
-	}
-	return false
 }
 
 // A link this side would make that points into .git: Mutagen never

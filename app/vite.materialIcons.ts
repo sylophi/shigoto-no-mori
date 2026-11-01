@@ -35,7 +35,8 @@ function iconFiles(): Map<string, string> {
 export function serveMaterialIcons(middlewares: Connect.Server): void {
   const files = iconFiles();
   middlewares.use("/material-icons", (req, res, next) => {
-    const file = files.get(basename((req.url ?? "").split("?")[0] ?? ""));
+    const [path = ""] = (req.url ?? "").split("?");
+    const file = files.get(basename(path));
     if (file === undefined) {
       next();
       return;

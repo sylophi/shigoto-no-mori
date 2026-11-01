@@ -50,6 +50,7 @@ import {
   primaryFirst,
   sessionsOf,
 } from "./documents.ts";
+import { mtimeOf } from "../entries.ts";
 
 const NO_RELATION = { behindPrimary: 0, mergedIntoPrimary: false };
 
@@ -409,22 +410,26 @@ export const makeListing = Effect.gen(function* () {
   });
   type RowContext = Effect.Success<ReturnType<typeof contextOf>>;
 
-  // When the linked worktree was added, epoch ms: the mtime of its admin
-  // dir's commondir file, which `git worktree add` writes once. Zero for
-  // the primary checkout, whose .git is a directory.
-  const createdAtOf = (worktreePath: string) =>
+  // The mtime of a file in a linked worktree's admin dir, epoch ms. 0
+  // for the primary checkout, whose .git is a directory, and when there
+  // is none to read.
+  const adminMtime = (worktreePath: string, ...file: ReadonlyArray<string>) =>
     Effect.gen(function* () {
       const admin = yield* git.adminDirOf(worktreePath);
       if (Option.isNone(admin)) return 0;
-      const info = yield* fs.stat(path.join(admin.value, "commondir"));
-      return Math.max(
-        Option.match(info.mtime, {
-          onNone: () => 0,
-          onSome: (date) => date.getTime(),
-        }),
-        0,
-      );
+      const info = yield* fs.stat(path.join(admin.value, ...file));
+      return Math.max(mtimeOf(info), 0);
     }).pipe(Effect.orElseSucceed(() => 0));
+
+  // When the linked worktree was added: its commondir file, which `git
+  // worktree add` writes once.
+  const createdAtOf = (worktreePath: string) =>
+    adminMtime(worktreePath, "commondir");
+
+  // When HEAD last moved: its HEAD reflog, which every commit, checkout,
+  // rebase and reset appends to.
+  const headMovedAt = (worktreePath: string) =>
+    adminMtime(worktreePath, "logs", "HEAD");
 
   // The branch a rebase replays in a detached checkout, read off its
   // files with no git: the primary's git dir is its .git, a linked
@@ -536,23 +541,6 @@ export const makeListing = Effect.gen(function* () {
       return { row, at, counts: probes.counts };
     });
   type Probed = Effect.Success<ReturnType<typeof probe>>;
-
-  // When HEAD last moved in a linked worktree, epoch ms: the mtime of
-  // its admin dir's HEAD reflog, which every commit, checkout, rebase and
-  // reset appends to. 0 when there is none to read.
-  const headMovedAt = (worktreePath: string) =>
-    Effect.gen(function* () {
-      const admin = yield* git.adminDirOf(worktreePath);
-      if (Option.isNone(admin)) return 0;
-      const info = yield* fs.stat(path.join(admin.value, "logs", "HEAD"));
-      return Math.max(
-        Option.match(info.mtime, {
-          onNone: () => 0,
-          onSome: (date) => date.getTime(),
-        }),
-        0,
-      );
-    }).pipe(Effect.orElseSucceed(() => 0));
 
   // Settles every row of one listing against the shelf its marks read,
   // in one transaction: a shelved row without a snapshot gets one, a

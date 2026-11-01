@@ -1,6 +1,13 @@
 import { pluralize } from "../words.ts";
 import * as Schema from "effect/Schema";
-import { push, defineContract, invoke, view } from "../contract.ts";
+import {
+  push,
+  defineContract,
+  invoke,
+  view,
+  gatedBy,
+  ungated,
+} from "../contract.ts";
 import { broughtPaths } from "../mirrorIgnores.ts";
 import {
   type MirrorIgnoreMode,
@@ -597,68 +604,70 @@ const MirrorHistoryResultSchema = strict(
 export const mirrorContract = defineContract(
   "mirror",
   "host",
-  invoke("list", VoidSchema, MirrorListResultSchema, {
-    remote: true,
-    gated: false,
-  }),
-  view("watch", VoidSchema, MirrorListResultSchema, {
-    remote: true,
-    gated: false,
-  }),
-  invoke("startTo", MirrorStartToPayloadSchema, MirrorStartToResultSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke("list", VoidSchema, MirrorListResultSchema, ungated),
+  view("watch", VoidSchema, MirrorListResultSchema, ungated),
+  invoke(
+    "startTo",
+    MirrorStartToPayloadSchema,
+    MirrorStartToResultSchema,
+    gatedBy("changeCode"),
+  ),
   invoke("startFrom", MirrorStartFromPayloadSchema, MirrorStartToResultSchema, {
     remote: false,
     gated: true,
   }),
   // The controls are remote: the far end drives the session through the
   // device running it.
-  invoke("stop", MirrorStopPayloadSchema, MirrorStopResultSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("pause", MirrorSessionPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("resume", MirrorSessionPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "stop",
+    MirrorStopPayloadSchema,
+    MirrorStopResultSchema,
+    gatedBy("changeCode"),
+  ),
+  invoke(
+    "pause",
+    MirrorSessionPayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
+  invoke(
+    "resume",
+    MirrorSessionPayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
   invoke(
     "setIgnores",
     MirrorSetIgnoresPayloadSchema,
     strict(Schema.Struct({ session: MirrorSessionIdSchema })),
-    { remote: true, gated: true, grant: "changeCode" },
+    gatedBy("changeCode"),
   ),
-  invoke("history", MirrorHistoryPayloadSchema, MirrorHistoryResultSchema, {
-    remote: true,
-    gated: false,
-  }),
+  invoke(
+    "history",
+    MirrorHistoryPayloadSchema,
+    MirrorHistoryResultSchema,
+    ungated,
+  ),
   // The far end of a mirror, two-way so it writes the copy's files too,
   // or of a move's files step (`transfer`).
-  invoke("openStream", MirrorOpenStreamPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "openStream",
+    MirrorOpenStreamPayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
   // Gated: reading mints the index carrier ref.
-  invoke("gitState", MirrorWorktreePayloadSchema, GitStateSchema, {
-    remote: true,
-    gated: true,
-    grant: "browseFiles",
-  }),
+  invoke(
+    "gitState",
+    MirrorWorktreePayloadSchema,
+    GitStateSchema,
+    gatedBy("browseFiles"),
+  ),
   invoke(
     "applyGitState",
     MirrorApplyGitStatePayloadSchema,
     MirrorApplyGitStateResultSchema,
-    { remote: true, gated: true, grant: "changeCode" },
+    gatedBy("changeCode"),
   ),
   // Carries the list, since a busy mirror fires several times a second.
   // Bare when the host has none to send, and a reader re-asks.

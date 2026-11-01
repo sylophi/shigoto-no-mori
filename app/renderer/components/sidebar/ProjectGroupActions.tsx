@@ -48,7 +48,6 @@ import { QuickCreateButton } from "./QuickCreateButton";
 import { ProjectActionsView } from "@shigomori/ui/views/sidebar/ProjectActionsView.tsx";
 import type { RemoteProjectMember } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import { useApi } from "@/lib/runtime/pageApi";
-import { quickCreateTarget } from "@/components/shared/deviceTargets";
 
 export interface GroupMember {
   deviceId: string;
@@ -154,32 +153,22 @@ export function useProjectGroup({
   };
 }
 
-// Where the group's quick create lands (quickCreateTarget): the pick
-// (useQuickCreateDeviceId) or the first live member whose checkout's
-// folder is there (this machine leads the list when it is one). Shared
-// by the `+` and the inbox's New worktree menu, so the two land on the
-// same device.
+// Where the group's quick create lands, as quickCreateTarget lands
+// one: the pick (useQuickCreateDeviceId) or the first live member
+// whose checkout's folder is there (this machine leads the list when
+// it is one). Shared by the `+` and the inbox's New worktree menu, so
+// the two land on the same device.
 export function useGroupCreator(
   members: readonly GroupMember[],
   identity: string | null | undefined,
 ): LiveMember | undefined {
   const designatedId = useQuickCreateDeviceId(identity);
-  return quickCreateTarget(
-    members.flatMap((member) =>
-      member.api === undefined
-        ? []
-        : [
-            {
-              ...member,
-              api: member.api,
-              block:
-                member.project.pathExists === false
-                  ? ("no-project" as const)
-                  : undefined,
-            },
-          ],
-    ),
-    designatedId,
+  const canCreate = members.filter(
+    (member): member is LiveMember =>
+      member.api !== undefined && member.project.pathExists !== false,
+  );
+  return (
+    canCreate.find((member) => member.deviceId === designatedId) ?? canCreate[0]
   );
 }
 

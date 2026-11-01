@@ -36,9 +36,8 @@ import {
 } from "../fixtures/fixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { deviceById, projectNamed, worktreeNamed } from "./world.ts";
+import { deviceById, noop, projectNamed, worktreeNamed } from "./world.ts";
 
-const noop = () => {};
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 const QUAIL = worktreeNamed(SM, "quiet-quail");
 const BADGER = worktreeNamed(SM, "brave-badger");

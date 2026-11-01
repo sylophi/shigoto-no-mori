@@ -2,16 +2,9 @@ import { packageScriptsContract } from "@shigomori/contracts/modules/packageScri
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import { findProject, findWorktreeIdentity } from "@host/lib/projects";
 import * as Scripts from "@host/lib/Scripts";
-import {
-  readLaunchRow,
-  readScriptOrder,
-  readScriptSort,
-  writeLaunchRowScript,
-  writeScriptOrder,
-  writeScriptSort,
-} from "@host/lib/scripts/packageScriptStats";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type {
+  PackageScriptSortMode,
   PackageScriptsDoc,
   ScriptGroup,
 } from "@shigomori/contracts/schemas";
@@ -46,35 +39,56 @@ export const packageScriptsHandlers = {
         packageManager: doc.packageManager,
         groups: groupByFile(doc.scripts),
         usage: doc.usage,
-        launchRow: yield* readLaunchRow(projectId),
+        // The scripts put on the launch row by hand, which the row limits
+        // itself to under the "manual" sort. Project-wide like the order,
+        // so it can name scripts a given worktree lacks.
+        launchRow: yield* Ops.onScripts((scripts) =>
+          scripts.launchRow(projectId),
+        ),
       };
     }),
 
   getSort: ({ projectId, knowsManual }) =>
     Effect.gen(function* () {
       const project = yield* findProject(projectId);
-      const mode = yield* readScriptSort(project.id);
+      const { sort } = yield* Ops.onScripts((scripts) =>
+        scripts.arrangement(project.id),
+      );
+      const mode = sort as PackageScriptSortMode;
       return mode === "manual" && !knowsManual ? "manifest" : mode;
     }),
 
+  // "frequent" is the implicit default: switching back to it deletes
+  // the stored entry instead of writing it.
   setSort: ({ projectId, mode }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      writeScriptSort(project.id, mode),
+      Ops.onScripts((scripts) => scripts.setSort(project.id, mode), true),
     ).pipe(Effect.asVoid),
 
   getOrder: ({ projectId }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      readScriptOrder(project.id),
+      Ops.onScripts((scripts) =>
+        Effect.map(scripts.arrangement(project.id), ({ order }) => [...order]),
+      ),
     ),
 
+  // `arranged` is one worktree's scripts in their new order, merged
+  // against the stored order rather than by the client against its
+  // cached copy, which another window may have written past.
   setOrder: ({ projectId, arranged }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      writeScriptOrder(project.id, arranged),
+      Ops.onScripts((scripts) => scripts.arrange(project.id, arranged), true),
     ).pipe(Effect.asVoid),
 
+  // One script on or off the row, applied against the stored row rather
+  // than as a whole list from the client, so two windows picking
+  // different scripts both land.
   setLaunchRow: ({ projectId, scriptName, onRow }) =>
     Effect.flatMap(findProject(projectId), (project) =>
-      writeLaunchRowScript(project.id, scriptName, onRow),
+      Ops.onScripts(
+        (scripts) => scripts.setOnLaunchRow(project.id, scriptName, onRow),
+        true,
+      ),
     ).pipe(Effect.asVoid),
 
   run: ({ projectId, worktreeId, scriptName }, handlerCtx) =>

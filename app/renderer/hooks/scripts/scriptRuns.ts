@@ -167,7 +167,7 @@ export class ScriptRuns {
   private registry: AtomRegistry.AtomRegistry;
   // The device's script calls, and what runs each as a Promise.
   private scripts: HostApi["scripts"];
-  private call: <A, E>(call: Effect.Effect<A, E>) => Promise<A>;
+  private runPromise: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
   // Whether a removed-worktree notice is worth a toast even for a
   // worktree these runs never saw a run in. True for this machine's (a
   // renderer reload forgets runs the host still reaps), false for a
@@ -179,12 +179,12 @@ export class ScriptRuns {
   constructor(
     registry: AtomRegistry.AtomRegistry,
     scripts: HostApi["scripts"],
-    call: <A, E>(call: Effect.Effect<A, E>) => Promise<A>,
+    runPromise: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>,
     warnOnUnseenRemoval: boolean,
   ) {
     this.registry = registry;
     this.scripts = scripts;
-    this.call = call;
+    this.runPromise = runPromise;
     this.warnOnUnseenRemoval = warnOnUnseenRemoval;
   }
 
@@ -247,7 +247,9 @@ export class ScriptRuns {
     if (held?.status === "starting") return true;
     this.attaching.add(run.runId);
     try {
-      const joined = await this.call(this.scripts.attach({ runId: run.runId }));
+      const joined = await this.runPromise(
+        this.scripts.attach({ runId: run.runId }),
+      );
       if (joined === null) return true;
       // This connection heard the run already (another window on it
       // attached, or this one started it before a reload), so what it
@@ -289,7 +291,7 @@ export class ScriptRuns {
     if (this.current.states.get(key)?.runId === run.runId) {
       return this.cancel(key);
     }
-    return (await this.call(this.scripts.cancel({ runId: run.runId })))
+    return (await this.runPromise(this.scripts.cancel({ runId: run.runId })))
       .cancelled;
   }
 
@@ -305,7 +307,7 @@ export class ScriptRuns {
     );
     let cancelled: boolean;
     try {
-      ({ cancelled } = await this.call(
+      ({ cancelled } = await this.runPromise(
         this.scripts.cancel({ runId: state.runId }),
       ));
     } catch {
@@ -353,13 +355,15 @@ export class ScriptRuns {
   write(key: ScriptKey, data: string): void {
     const runId = this.liveInteractiveRunId(key);
     if (!runId) return;
-    void this.call(this.scripts.write({ runId, data })).catch(() => {});
+    void this.runPromise(this.scripts.write({ runId, data })).catch(() => {});
   }
 
   resize(key: ScriptKey, cols: number, rows: number): void {
     const runId = this.liveInteractiveRunId(key);
     if (!runId) return;
-    void this.call(this.scripts.resize({ runId, cols, rows })).catch(() => {});
+    void this.runPromise(this.scripts.resize({ runId, cols, rows })).catch(
+      () => {},
+    );
   }
 
   private liveInteractiveRunId(key: ScriptKey): string | null {

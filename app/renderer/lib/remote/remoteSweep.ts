@@ -4,12 +4,14 @@
 // when the host also reads its worktree rows again (a landed session's
 // first reads come from its caches, as old as the last time anyone
 // looked), then renewed within the lease the host hands back, for as
-// long as this window stays focused. Boot-scoped like the device sync.
+// long as this window stays focused. It follows the device sync
+// (remoteDeviceSync.ts) from session to session.
 import { isPeerRefusal } from "@shigomori/contracts/errors";
 import { documentFocused, onWindowFocus } from "@/lib/focus";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import type { RendererApi } from "@/lib/runtime/pageApi";
 import { remoteDevicesAtom } from "./devices";
-import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
+import type { PeerFollower } from "./remoteDeviceSync";
 
 type Deps = {
   sweep: (deviceId: string, renewal: boolean) => Promise<{ leaseMs: number }>;
@@ -89,9 +91,10 @@ function makeSweepRenewals(deps: Deps, attendedAtStart: boolean) {
 }
 
 export function startRemoteSweepRequests(
+  api: RendererApi,
   registry: AtomRegistry.AtomRegistry,
   signal: AbortSignal,
-): void {
+): PeerFollower {
   const connectedDevices = () =>
     registry
       .get(remoteDevicesAtom)
@@ -100,8 +103,8 @@ export function startRemoteSweepRequests(
   const renewals = makeSweepRenewals(
     {
       sweep: (deviceId, renewal) => {
-        const api = apiFor(deviceId);
-        return api.run(api.git.sweep({ renewal }));
+        const peer = api.peerApi(deviceId);
+        return peer.run(peer.git.sweep({ renewal }));
       },
       connected: (deviceId) => connectedDevices().includes(deviceId),
     },
@@ -118,10 +121,11 @@ export function startRemoteSweepRequests(
     },
     { once: true },
   );
-  // Signing out drops every peer api. A renewal firing after that
-  // would rebuild one just to be refused.
-  onAccountLeft(renewals.stop);
-  // Hears the sessions already up at boot as landings too, so this is
-  // the boot-time ask as well.
-  onSessionLanded(renewals.landed);
+  return {
+    // A session landing, the ones up at boot included, is the first ask.
+    sessionLanded: renewals.landed,
+    // Signing out drops every peer. A renewal firing after that would
+    // only be refused.
+    accountLeft: renewals.stop,
+  };
 }

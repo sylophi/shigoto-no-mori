@@ -18,6 +18,7 @@ import {
   looksLikePath,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
+import { isDirectory } from "../entries.ts";
 
 export const makeResolving = ({ listing }: { readonly listing: ListingArea }) =>
   Effect.gen(function* () {
@@ -210,11 +211,7 @@ export const makeResolving = ({ listing }: { readonly listing: ListingArea }) =>
       // externals with colliding basenames stay addressable (`sm rm .`).
       if (looksLikePath(ref)) {
         const abs = absolute(here, ref);
-        const isDirectory = yield* fs.stat(abs).pipe(
-          Effect.map((info) => info.type === "Directory"),
-          Effect.orElseSucceed(() => false),
-        );
-        if (isDirectory) {
+        if (yield* isDirectory(fs, abs)) {
           const repo = yield* git.locate(abs);
           if (Option.isSome(repo)) {
             const { located } = yield* worktreeAt(

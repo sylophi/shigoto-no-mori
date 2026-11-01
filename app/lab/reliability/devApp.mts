@@ -8,7 +8,7 @@ import { existsSync, readFileSync, rmSync, type WriteStream } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright-core";
-import { signalIfAlive } from "../../../test/testProcesses.mts";
+import { isAlive, signalIfAlive } from "../../../test/testProcesses.mts";
 import { descendantsIn } from "../../host/lib/scripts/descendants.ts";
 import type { RendererApi } from "../../renderer/lib/runtime/pageApi.tsx";
 import { devProfilePaths } from "../../scripts/lib/devProfile.mts";
@@ -291,7 +291,7 @@ export class DevApp {
     for (const pid of tree) signalIfAlive(pid, "SIGTERM");
     await waitFor(
       `${this.profile} to quit`,
-      async () => tree.every((pid) => !signalIfAlive(pid, 0)),
+      async () => tree.every((pid) => !isAlive(pid)),
       20_000,
     ).catch(() => {
       for (const pid of tree) signalIfAlive(pid, "SIGKILL");

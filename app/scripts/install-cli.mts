@@ -6,7 +6,6 @@
 // refreshes the installed commands in place.
 //
 // Run: pnpm cli:install
-import { execFileSync } from "node:child_process";
 import { lstatSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -17,18 +16,12 @@ import {
   cliUserBinDir,
 } from "../shared/packaging/cliDist.mts";
 import { appRoot } from "./lib/appRoot.mts";
+import { runScript } from "./lib/runScript.mts";
 
 const binary = join(appRoot, CLI_DIST_DIR, cliBinaryName("prod"));
 
-for (const [script, ...args] of [
-  ["build-go.mts", "nativefs"],
-  ["build-cli.mts"],
-] as const) {
-  execFileSync("node", [join(appRoot, "scripts", script), ...args], {
-    cwd: appRoot,
-    stdio: "inherit",
-  });
-}
+runScript("build-go.mts", "nativefs");
+runScript("build-cli.mts");
 
 for (const name of [cliBinaryName("prod"), cliAliasName("prod")]) {
   const link = join(cliUserBinDir(), name);

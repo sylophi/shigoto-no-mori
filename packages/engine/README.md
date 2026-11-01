@@ -39,4 +39,4 @@ Each change of state in several steps has one step after which it counts as done
 - **Project relocate** (`worktrees/relocating.ts`): the new path and what its worktrees kept commit in one transaction.
 - **The updater's swap** (`updater/swap.ts`): one exchange commits it where the filesystem helper can make one, else two renames.
 - **Carry-over** (`CarryOver.ts`): each entry is renamed in whole from a staging folder.
-- **The data-folder lock** (`DataDirLock.ts`) makes a data-folder move the one change under way, and says how. The move itself is the host's (`app/host/lib/dataDirMove.ts`), and its recovery is the engine's (`src/dataDirMove.ts`).
+- **The data-folder lock** (`DataDirLock.ts`) makes a data-folder move the one change under way, and says how. The move and its recovery are `src/dataDirMove.ts`, which the host asks with the checks and holds only it can make (`app/host/lib/dataDirMove.ts`).

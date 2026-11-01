@@ -68,7 +68,6 @@ import {
   engineOrNull,
   findSession,
   isWaitingOnPeer,
-  localWorktreeIdOf,
   type MirrorSessionRaw,
   mirrorSessions,
   ORIGINAL_GONE_DETAIL,
@@ -441,7 +440,7 @@ const stopAndRemoveCopy = Effect.fnUntraced(function* (
       ),
     );
   daemon.noteEvent(
-    localWorktreeIdOf(raw),
+    raw.localWorktreeId,
     "stopped",
     stayed === null ? "" : "Copy on the other device kept",
   );
@@ -505,7 +504,7 @@ export const pauseOrResume = (session: string, verb: "pause" | "resume") =>
       ),
     );
     daemon.noteEvent(
-      localWorktreeIdOf(yield* findSession(daemon, session)),
+      (yield* findSession(daemon, session))?.localWorktreeId ?? "",
       verb === "pause" ? "paused" : "resumed",
       "",
     );
@@ -556,7 +555,7 @@ export const reopenMirror = (
             reopenInput(raw, ignoreMode, ignores),
           );
           daemon.noteEvent(
-            localWorktreeIdOf(raw),
+            raw.localWorktreeId,
             "ignores-changed",
             summarizeIgnores(ignoreMode, ignores),
           );

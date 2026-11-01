@@ -176,13 +176,13 @@ export const makeVerbs = ({
           return yield* refuse("merge", "no-such-number", [number]);
         }
         const pr = found.value;
-        if (
+        const foreignFork =
           pr.isCrossRepository === true &&
           (yield* github.checkedOutPullRequest(
             project.path,
             pr.headRefName,
-          )) !== number
-        ) {
+          )) !== number;
+        if (foreignFork) {
           return yield* refuse("merge", "fork", [number]);
         }
         if (pr.state !== "OPEN") {
@@ -295,16 +295,29 @@ export const makeVerbs = ({
       // older PR merged with.
       const remote = Result.isSuccess(target) ? target.success.remote : "";
       const guarded = yield* deletesBranch(worktree, options);
-      if (guarded) {
-        yield* guardCommits(
-          project.path,
-          branch,
-          pr.number,
-          yield* github.headOf(project.path, pr.number),
-          remote,
-          "land",
-        );
-      }
+      const guardBranch = (verb: "land" | "rm") =>
+        Effect.gen(function* () {
+          if (!guarded) return;
+          yield* guardCommits(
+            project.path,
+            branch,
+            pr.number,
+            yield* github.headOf(project.path, pr.number),
+            remote,
+            verb,
+          );
+        });
+      yield* guardBranch("land");
+      // A merge can wait minutes on GitHub, and even one it answers at
+      // once leaves time for new work in the worktrees, so the guards run
+      // again, on the heads the PRs merged with, this worktree's own
+      // removal guard first. Refused in a removal's words: the PRs merged.
+      const guardAfterMerge = Effect.gen(function* () {
+        if (!worktree.isPrimary) {
+          yield* worktrees.checkRemovable(located, options.force);
+        }
+        yield* guardBranch("rm");
+      });
       if (options.stack) {
         const lookups = yield* lookupStack(
           Effect.fromResult(target),
@@ -347,24 +360,7 @@ export const makeVerbs = ({
           if (queued) {
             return mergeDocument(pr, branch, { method, outcome: "queued" });
           }
-          // The merge can wait minutes on GitHub, time enough for new work
-          // in any of the worktrees, so the guards run again, on the heads
-          // the PRs merged with, this worktree's own removal guard first,
-          // as a single land's.
-          if (!worktree.isPrimary) {
-            yield* worktrees.checkRemovable(located, options.force);
-          }
-          if (guarded) {
-            // Refused in a removal's words: the PRs merged.
-            yield* guardCommits(
-              project.path,
-              branch,
-              pr.number,
-              yield* github.headOf(project.path, pr.number),
-              remote,
-              "rm",
-            );
-          }
+          yield* guardAfterMerge;
           plan = yield* planCleanup;
         } else if (reporter.landing !== undefined) {
           yield* reporter.landing(pr, undefined);
@@ -410,23 +406,7 @@ export const makeVerbs = ({
           reporter,
         );
         yield* awaitMerge(project.path, pr, outcome, "land", reporter);
-        // The merge and its wait leave time for new work in the worktree,
-        // even a merge GitHub answers at once, so the guards run again, on
-        // the head the PR merged with.
-        if (!worktree.isPrimary) {
-          yield* worktrees.checkRemovable(located, options.force);
-        }
-        if (guarded) {
-          // Refused in a removal's words: the PR merged.
-          yield* guardCommits(
-            project.path,
-            branch,
-            pr.number,
-            yield* github.headOf(project.path, pr.number),
-            remote,
-            "rm",
-          );
-        }
+        yield* guardAfterMerge;
         method = outcome.method;
       }
       if (reporter.landing !== undefined) yield* reporter.landing(pr, method);

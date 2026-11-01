@@ -3,7 +3,8 @@
 // Authorization header and the ticket in the connect URL as opaque
 // strings, so this lives in hub/src and not in the shared contract
 // (packages/contracts/src/hubProtocol.ts).
-import { base64urlOfBytes } from "./crypto.ts";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Result from "effect/Result";
 
 // A device credential is `smdc_` + base64url(32 random bytes). The raw
 // string is returned exactly once by POST /devices/enroll and rides
@@ -28,19 +29,6 @@ const TICKET_PREFIX = "smrt_";
 // useful.
 export const TICKET_TTL_MS = 60_000;
 
-function base64urlEncode(text: string): string {
-  return base64urlOfBytes(new TextEncoder().encode(text));
-}
-
-function base64urlToBytes(encoded: string): Uint8Array<ArrayBuffer> | null {
-  const base64 = encoded.replaceAll("-", "+").replaceAll("_", "/");
-  try {
-    return Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
-  } catch {
-    return null;
-  }
-}
-
 // Imported per call: an HMAC key import is far cheaper than the DO
 // round trip every caller makes next, and no isolate-level cache has
 // to be kept in step with a rotated secret.
@@ -59,13 +47,13 @@ export async function buildTicket(
   accountId: string,
   random: string,
 ): Promise<string> {
-  const body = `${base64urlEncode(accountId)}.${random}`;
+  const body = `${Base64Url.encode(accountId)}.${random}`;
   const signature = await crypto.subtle.sign(
     "HMAC",
     await hmacKey(signingKey),
     new TextEncoder().encode(body),
   );
-  return `${TICKET_PREFIX}${body}.${base64urlOfBytes(new Uint8Array(signature))}`;
+  return `${TICKET_PREFIX}${body}.${Base64Url.encode(new Uint8Array(signature))}`;
 }
 
 // The random half is base64url of 16 bytes, which is always exactly 22
@@ -110,17 +98,19 @@ export async function parseTicket(
     encodedAccount.length > MAX_ENCODED_ACCOUNT_LENGTH
   )
     return null;
-  const accountBytes = base64urlToBytes(encodedAccount);
-  const signature = base64urlToBytes(encodedSignature);
-  if (accountBytes === null || signature === null) return null;
+  const accountBytes = Base64Url.decode(encodedAccount);
+  const signature = Base64Url.decode(encodedSignature);
+  if (Result.isFailure(accountBytes) || Result.isFailure(signature)) {
+    return null;
+  }
   // subtle.verify compares in constant time.
   const signed = await crypto.subtle.verify(
     "HMAC",
     await hmacKey(signingKey),
-    signature,
+    signature.success,
     new TextEncoder().encode(`${encodedAccount}.${random}`),
   );
   if (!signed) return null;
-  const accountId = new TextDecoder().decode(accountBytes);
+  const accountId = new TextDecoder().decode(accountBytes.success);
   return accountId.length === 0 ? null : { accountId, random };
 }

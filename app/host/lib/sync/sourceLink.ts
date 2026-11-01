@@ -83,9 +83,13 @@ type SourceServices = Engine.Services | ChildProcessSpawner.ChildProcessSpawner;
 // ---- The link: JSON lines and raw bytes over one channel.
 
 const LINK_GONE = "the other device went away mid-transfer";
+const OUT_OF_TURN = "the other device answered out of turn";
+
 // A message is a line of JSON, and none is anywhere near this: a line
 // that is, is a broken peer.
 const MAX_LINE_BYTES = 1 << 20;
+const jsonLine = (message: unknown) =>
+  Buffer.from(`${JSON.stringify(message)}\n`, "utf8");
 
 // What a link, or the other end over it, refused.
 class LinkError extends Schema.TaggedError<LinkError>()("LinkError", {
@@ -143,11 +147,14 @@ function attachLink(
     waiting?.();
   };
   const closed = Deferred.makeUnsafe<void>();
+  const wakeWriters = (): void => {
+    for (const waiter of writable) waiter();
+    writable.clear();
+  };
   const fail = (error: LinkError): void => {
     failure ??= error;
     wake();
-    for (const waiter of writable) waiter();
-    writable.clear();
+    wakeWriters();
   };
   const gone = () => new LinkError({ reason: LINK_GONE });
   const handle = attach({
@@ -166,10 +173,7 @@ function attachLink(
       Deferred.doneUnsafe(closed, Exit.void);
       fail(gone());
     },
-    onWritable() {
-      for (const waiter of writable) waiter();
-      writable.clear();
-    },
+    onWritable: wakeWriters,
   });
   if (!handle.open) {
     Deferred.doneUnsafe(closed, Exit.void);
@@ -276,12 +280,11 @@ function attachLink(
   return {
     read,
     readBytes,
-    write: (message) =>
-      writeBytes(Buffer.from(`${JSON.stringify(message)}\n`, "utf8")),
+    write: (message) => writeBytes(jsonLine(message)),
     writeBytes,
     post(message) {
       if (failure !== null || !handle.open) return;
-      handle.write(Buffer.from(`${JSON.stringify(message)}\n`, "utf8"));
+      handle.write(jsonLine(message));
     },
     end: () => handle.end(),
     reset() {
@@ -782,8 +785,7 @@ function askSource(
       if (reply === null) return yield* new LinkError({ reason: LINK_GONE });
       const parsed = yield* Effect.try({
         try: () => decodeAnswer(reply),
-        catch: () =>
-          new LinkError({ reason: "the other device answered out of turn" }),
+        catch: () => new LinkError({ reason: OUT_OF_TURN }),
       });
       if ("error" in parsed) {
         return yield* new LinkError({ reason: parsed.error });
@@ -794,14 +796,11 @@ function askSource(
     Effect.gen(function* () {
       const parsed = yield* answer(yield* linkOf, message);
       if (!("ok" in parsed)) {
-        return yield* new LinkError({
-          reason: "the other device answered out of turn",
-        });
+        return yield* new LinkError({ reason: OUT_OF_TURN });
       }
       return yield* Effect.try({
         try: () => decodeOk(parsed.ok),
-        catch: () =>
-          new LinkError({ reason: "the other device answered out of turn" }),
+        catch: () => new LinkError({ reason: OUT_OF_TURN }),
       });
     });
   return {
@@ -817,9 +816,7 @@ function askSource(
         const link = yield* linkOf;
         const parsed = yield* answer(link, { ask: "bundle", refs, haves });
         if (!("bundle" in parsed)) {
-          return yield* new LinkError({
-            reason: "the other device answered out of turn",
-          });
+          return yield* new LinkError({ reason: OUT_OF_TURN });
         }
         const { bytes } = parsed.bundle;
         onProgress?.(0, bytes);

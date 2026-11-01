@@ -26,7 +26,6 @@ import { PullRequestSourceView } from "../views/newWorktree/PullRequestPickerVie
 import { BranchComboboxView } from "../views/shared/BranchComboboxView.tsx";
 import { BROWSE_VALUE_PREFIX } from "../views/shared/PathBrowserView.tsx";
 import { DeviceTabBarView } from "../views/shared/DeviceTabBarView.tsx";
-import { ProjectDevicePageView } from "../views/shared/ProjectDevicePageView.tsx";
 import {
   VillagerFaceView,
   VillagerSaysView,
@@ -41,10 +40,10 @@ import {
 } from "../fixtures/fixtures.ts";
 import { fakePullRequestCandidates } from "../fixtures/pullRequestFixtures.ts";
 import { SceneDialog, SceneWindowFrame } from "./frame.tsx";
+import { shigotoProjectPage } from "./shared.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { deviceTabs, FACE, projectNamed } from "./world.ts";
+import { deviceTabs, FACE, noop, projectNamed } from "./world.ts";
 
-const noop = () => {};
 const HOME = "/Users/rin";
 const DEV = `${HOME}/dev`;
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
@@ -54,29 +53,11 @@ const DEST_ROOT = "~/.sm/wt/shigoto-no-mori";
 const CANDIDATES = fakePullRequestCandidates();
 const DEVICE_TABS = deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID]);
 
-function newWorktreePage(form: ReactNode) {
-  return (
-    <SceneWindowFrame
-      sidebar={<SceneSidebar view="projects" open />}
-      pathname="/projects"
-    >
-      <ProjectDevicePageView
-        projectName={SM.name}
-        title="New worktree"
-        tabs={
-          <DeviceTabBarView
-            tabs={DEVICE_TABS}
-            selectedId={LOCAL_DEVICE_ID}
-            onSelect={noop}
-          />
-        }
-        terrier
-        showAllDevices={false}
-        body={<NewWorktreeBodyView>{form}</NewWorktreeBodyView>}
-      />
-    </SceneWindowFrame>
-  );
-}
+const newWorktreePage = (form: ReactNode) =>
+  shigotoProjectPage({
+    title: "New worktree",
+    body: <NewWorktreeBodyView>{form}</NewWorktreeBodyView>,
+  });
 
 // What every form here shares but its source and its folder.
 const NEW_WORKTREE_FORM = {

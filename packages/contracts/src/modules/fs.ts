@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, gatedBy } from "../contract.ts";
 import { DirectoryListingSchema, PathPayloadSchema } from "../schemas/index.ts";
 
 // Every fs call is remote:true, gated:true.
@@ -11,19 +11,22 @@ import { DirectoryListingSchema, PathPayloadSchema } from "../schemas/index.ts";
 export const fsContract = defineContract(
   "fs",
   "host",
-  invoke("listDirectory", PathPayloadSchema, DirectoryListingSchema, {
-    remote: true,
-    gated: true,
-    grant: "browseFiles",
-  }),
-  invoke("scanForGitRepos", PathPayloadSchema, Schema.Array(Schema.String), {
-    remote: true,
-    gated: true,
-    grant: "browseFiles",
-  }),
-  invoke("isGitRepo", PathPayloadSchema, Schema.Boolean, {
-    remote: true,
-    gated: true,
-    grant: "browseFiles",
-  }),
+  invoke(
+    "listDirectory",
+    PathPayloadSchema,
+    DirectoryListingSchema,
+    gatedBy("browseFiles"),
+  ),
+  invoke(
+    "scanForGitRepos",
+    PathPayloadSchema,
+    Schema.Array(Schema.String),
+    gatedBy("browseFiles"),
+  ),
+  invoke(
+    "isGitRepo",
+    PathPayloadSchema,
+    Schema.Boolean,
+    gatedBy("browseFiles"),
+  ),
 );

@@ -394,11 +394,13 @@ export function buildSidebarRows({
   }
 
   const drawn = inProject
-    ? chunks.flatMap(({ header, rows }) => (pinned ? rows : [header, ...rows]))
+    ? chunks.flatMap(({ header, rows }) =>
+        header === pinned ? rows : [header, ...rows],
+      )
     : listRows(
         chunks,
         order,
-        byOwner?.shut ?? NONE_SHUT,
+        byOwner?.shut ?? EMPTY,
         shutFolders,
         (key, foldKey) => shutFoldRows.set(key, foldKey),
       );
@@ -485,7 +487,7 @@ interface Chunk {
   rows: SidebarRow[];
 }
 
-const NONE_SHUT: ReadonlySet<string> = new Set();
+const EMPTY: ReadonlySet<string> = new Set();
 
 const rowsOf = ({ header, rows }: Chunk): SidebarRow[] => [header, ...rows];
 
@@ -610,6 +612,9 @@ interface FiledGroup {
   unlisted: "worktree-skeleton" | "worktree-error" | null;
 }
 
+// Files a group as it draws. Filing one lists this device's sides of
+// its pairs (listedLocal), which the peers' rows filed after them fold
+// into, so the filer is called once per group, in drawing order.
 function groupFiler(
   {
     projects,
@@ -756,6 +761,8 @@ function projectHeader(
 ): ProjectListRow {
   const { groupId, project } = group;
   const section = byOwner ? ownerKeyOf(project) : ALL_KEY;
+  const rowsDrawn = expanded || folded === false;
+  const missing = project.pathExists === false;
   return {
     kind: "project",
     key: `p:${groupId}`,
@@ -775,10 +782,7 @@ function projectHeader(
     // machine's listing is loading or failed, since the peers' share
     // alone would read as the whole.
     branches:
-      expanded ||
-      folded === false ||
-      project.pathExists === false ||
-      unlisted !== null
+      rowsDrawn || missing || unlisted !== null
         ? undefined
         : localVisible.filter((worktree) => !worktree.isPrimary).length +
           remoteVisible.filter((row) => !row.worktree.isPrimary).length,
@@ -823,9 +827,9 @@ export function projectHeaders({
 }
 
 const NO_SHELVES: Record<GroupShelf, GroupIdSet> = {
-  agentWorking: NONE_SHUT,
-  shelved: NONE_SHUT,
-  hidden: NONE_SHUT,
+  agentWorking: EMPTY,
+  shelved: EMPTY,
+  hidden: EMPTY,
 };
 
 type WorktreeRow = Extract<SidebarRow, { kind: "worktree" }>;

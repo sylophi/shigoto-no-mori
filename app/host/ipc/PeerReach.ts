@@ -93,7 +93,7 @@ export const make = (reach: {
     admissions: reach.admissions ?? Stream.never,
     admits: reach.admits ?? (() => true),
     calls: <M extends ContractModule>(contract: M, deviceId: string) => {
-      const calls: object = effectClient(contract, {
+      const calls = effectClient(contract, {
         call: (channel, input) =>
           reach
             .invoke(deviceId, channel, input)
@@ -103,8 +103,8 @@ export const make = (reach: {
               ),
             ),
       });
-      // each call fails only as the CallFailure mapped above
-      return calls as PeerCalls<M>;
+      // oxlint-disable-next-line shigomori/no-double-cast -- each call fails only as the CallFailure mapped above
+      return calls as unknown as PeerCalls<M>;
     },
     onPush: (contract, key, deviceId, handler) =>
       reach.onPush(deviceId, channelOf(callOf(contract, key)), handler),

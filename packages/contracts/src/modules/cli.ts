@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, gatedBy } from "../contract.ts";
 import { VoidSchema } from "../schemas/index.ts";
 
 // stale: our link, at another copy. foreign: not ours, replaced only
@@ -59,11 +59,7 @@ export type DoctorReport = typeof DoctorReportSchema.Type;
 
 // Every call rides the grant, the status reads included: they name the
 // host's home, bin dir and rc files.
-const gated = {
-  remote: true,
-  gated: true,
-  grant: "changeApp",
-} as const;
+const gated = gatedBy("changeApp");
 
 export const cliContract = defineContract(
   "cli",
@@ -80,9 +76,5 @@ export const cliContract = defineContract(
   invoke("shellInstall", VoidSchema, ShellIntegrationStatusSchema, gated),
   invoke("shellUninstall", VoidSchema, ShellIntegrationStatusSchema, gated),
   invoke("doctor", VoidSchema, DoctorReportSchema, gated),
-  invoke("doctorFix", VoidSchema, DoctorReportSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeApp",
-  }),
+  invoke("doctorFix", VoidSchema, DoctorReportSchema, gated),
 );

@@ -39,7 +39,7 @@ function onVisibilityChange(): void {
   start();
 }
 
-function subscribe(listener: () => void): () => void {
+export function subscribeClock(listener: () => void): () => void {
   if (listeners.size === 0) {
     // The clock froze when the last subscriber left, so the first one
     // back gets a fresh reading rather than a label built on a `now`
@@ -65,5 +65,5 @@ function getSnapshot(): number {
 // The current time in milliseconds, re-rendering the caller on a
 // coarse shared tick. Pass it as `now` to formatRelativeTime.
 export function useNow(): number {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return useSyncExternalStore(subscribeClock, getSnapshot, getSnapshot);
 }

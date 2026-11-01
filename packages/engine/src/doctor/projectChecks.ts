@@ -39,11 +39,11 @@ import {
   check,
   errorText,
   isDirMode,
-  mtimeOf,
   repairable,
 } from "./documents.ts";
 import type { PortPoolListing, ReadsArea } from "./reads.ts";
 import type { DataDirChecksArea } from "./dataDirChecks.ts";
+import { mtimeOf } from "../entries.ts";
 
 export const makeProjectChecks = ({
   reads,

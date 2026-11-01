@@ -21,7 +21,7 @@ is here is the app's own.
   lines, and `log` for Promise code, so a line from either reads the
   same in the trace (EFFECT.md, section 7). `config.ts`: an environment setting for Promise code.
 - The rules two sides must apply alike, as pure functions:
-  `busy.ts`, `launchRow.ts`, `reorder.ts`, `pullCollision.ts`,
+  `busy.ts`, `reorder.ts`, `pullCollision.ts`,
   `cloneDestination.ts`, `cloneUrl.ts` (the add-project flow's reading
   of a pasted string, over `predicates/remoteUrl.ts` in the contracts),
   `releases.ts`, `ports/`, `villagers/`.

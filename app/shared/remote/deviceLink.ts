@@ -288,11 +288,13 @@ export const dialDevice = (
       ),
     )) as { appVersion: string };
 
+    // The loopback's dial, to this machine's own host.
+    const loopback = options.seal === undefined;
     const link = yield* rpcLink({
       client,
       group,
       onPush: options.onPush,
-      local: options.seal === undefined,
+      local: loopback,
     });
 
     // A round trip behind the subscriptions, so the link counts as open
@@ -301,17 +303,16 @@ export const dialDevice = (
     yield* call("link:ping", undefined).pipe(
       Effect.mapError(() => connectError("the peer did not answer the ping")),
     );
-    const liveness =
-      options.seal === undefined
-        ? { probe: () => {} }
-        : yield* watchLiveness({
-            ping: call("link:ping", undefined),
-            heard: cuttable.heard,
-            intervalMs: PING_INTERVAL_MS,
-            timeoutMs: PING_TIMEOUT_MS,
-            probeTimeoutMs: PROBE_TIMEOUT_MS,
-            dead: Effect.sync(cuttable.cut),
-          });
+    const liveness = loopback
+      ? { probe: () => {} }
+      : yield* watchLiveness({
+          ping: call("link:ping", undefined),
+          heard: cuttable.heard,
+          intervalMs: PING_INTERVAL_MS,
+          timeoutMs: PING_TIMEOUT_MS,
+          probeTimeoutMs: PROBE_TIMEOUT_MS,
+          dead: Effect.sync(cuttable.cut),
+        });
 
     const channels = createChannelMux({
       call: (tag, payload) => Effect.asVoid(call(tag, payload)),

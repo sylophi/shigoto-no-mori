@@ -5,7 +5,7 @@ import { BackButton } from "../../primitives/back-button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
-import { Sheet, SheetContent, SheetTitle } from "../../primitives/sheet.tsx";
+import { BottomSheet } from "../../primitives/sheet.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
 
@@ -142,11 +142,8 @@ export function FilesTreeSheetView({
   children: ReactNode;
 }) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" showCloseButton={false} className="gap-0 p-0">
-        <SheetTitle className="sr-only">Files</SheetTitle>
-        {children}
-      </SheetContent>
-    </Sheet>
+    <BottomSheet open={open} onOpenChange={onOpenChange} title="Files">
+      {children}
+    </BottomSheet>
   );
 }

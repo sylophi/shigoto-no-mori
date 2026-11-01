@@ -50,11 +50,8 @@ func run(args []string) int {
 		return 2
 	}
 	switch args[0] {
-	case "serve", "daemon":
-		watchParent(2 * time.Second)
-	}
-	switch args[0] {
 	case "serve":
+		watchParent(2 * time.Second)
 		flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 		flags.SetOutput(os.Stderr)
 		root := flags.String("root", "", "absolute directory the stream may reach")
@@ -83,6 +80,7 @@ func run(args []string) int {
 		}
 		return 0
 	case "daemon":
+		watchParent(2 * time.Second)
 		flags := flag.NewFlagSet("daemon", flag.ContinueOnError)
 		flags.SetOutput(os.Stderr)
 		gateway := flags.String("gateway", "", "loopback host:port the host's mirror gateway listens on")

@@ -1,3 +1,4 @@
+import type { LauncherEntry } from "@shigomori/contracts/schemas/launchers";
 import { findExecutable } from "./executables.ts";
 import { byPlatform } from "./platform.ts";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -40,14 +41,9 @@ export type CatalogEntry = {
 };
 
 // One launcher on a project's row: an installed app or a custom command
-// (the device's, then the project's).
-export type RowEntry = {
-  readonly kind: "detected" | "custom";
-  readonly id: string;
-  readonly label: string;
-  // Set on detected apps, which are installed by being listed.
-  readonly available?: true;
-};
+// (the device's, then the project's). A detected app is installed by
+// being listed.
+export type RowEntry = LauncherEntry;
 
 // A launcher with what launching it takes: an installed app with the
 // bundle or tool it was found by, or a custom command line.

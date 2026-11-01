@@ -38,6 +38,7 @@ import {
 } from "@/lib/runtime/atoms";
 import { useApi } from "@/lib/runtime/pageApi";
 import { toast } from "@/lib/toast";
+import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 
 // The phase as the detail page's banner reads it. The pull dialogs
 // word the same phases as steps of their own run (flow/PullProgress.tsx
@@ -62,12 +63,12 @@ function clippedLines(lines: readonly string[], max: number): string {
 }
 
 function withRemoval(state: Lifecycle, removal: WorktreeRemoval): Lifecycle {
-  const removing = removal.state === "removing";
-  if (removing === state.removing.has(removal.worktreeId)) return state;
-  const next = new Set(state.removing);
-  if (removing) next.add(removal.worktreeId);
-  else next.delete(removal.worktreeId);
-  return { ...state, removing: next };
+  const removing = withMember(
+    state.removing,
+    removal.worktreeId,
+    removal.state === "removing",
+  );
+  return removing === state.removing ? state : { ...state, removing };
 }
 
 function withPhase(

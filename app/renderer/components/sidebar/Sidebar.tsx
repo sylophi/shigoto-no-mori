@@ -13,10 +13,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useReorderProjects } from "@/hooks/projects/useProjects";
-import {
-  useMarkAgentsWaiting,
-  useInlineWorktrees,
-} from "@/hooks/config/useSidebarMarks";
+import { useClientFlag } from "@/hooks/config/useSidebarMarks";
 import {
   useSidebarView,
   useSidebarViewHotkey,
@@ -152,7 +149,7 @@ function Forest({
     filter,
     activeFilter,
   } = useForestSources({ arrangeMode, inboxFacts: inbox });
-  const markAgentsWaiting = useMarkAgentsWaiting();
+  const markAgentsWaiting = useClientFlag("markAgentsWaiting");
   const viewSettled = useSidebarViewSettled() || pinnedView !== undefined;
   const reorderProjects = useReorderProjects();
   // Off arranging, the drag files projects into folders.
@@ -173,7 +170,7 @@ function Forest({
   // Inline, it shows every project's worktrees under it instead, each
   // project folding in place.
   const { openKey, onScreenKey } = useOpenProject(projects, remoteItems);
-  const inline = useInlineWorktrees();
+  const inline = useClientFlag("inlineWorktrees");
   const worktreeSort = useWorktreeSorts();
   // The level last asked for here, by picking a project or going back,
   // as opposed to one the tree reached by following the page: only the

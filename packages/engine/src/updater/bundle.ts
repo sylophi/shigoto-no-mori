@@ -26,6 +26,7 @@ import {
 import type { FilesArea } from "./files.ts";
 import type { Installation } from "./installation.ts";
 import type { SignaturesArea } from "./signatures.ts";
+import { isDirectory } from "../entries.ts";
 
 export const makeBundle = ({
   files,
@@ -92,8 +93,7 @@ export const makeBundle = ({
         if (Option.isSome(yield* fs.readLink(target).pipe(Effect.option))) {
           return false;
         }
-        const info = yield* fs.stat(target).pipe(Effect.option);
-        return Option.isSome(info) && info.value.type === "Directory";
+        return yield* isDirectory(fs, target);
       });
 
     // The release zip holds exactly the .app at its top (Electron Forge's

@@ -1,5 +1,13 @@
 import * as Schema from "effect/Schema";
-import { push, defineContract, invoke, view } from "../contract.ts";
+import {
+  push,
+  defineContract,
+  invoke,
+  view,
+  gatedBy,
+  trackedCodeChange,
+  ungated,
+} from "../contract.ts";
 import {
   CreatePullRequestPayloadSchema,
   CreatePullRequestResultSchema,
@@ -36,24 +44,12 @@ import {
 export const githubCliContract = defineContract(
   "githubCli",
   "host",
-  invoke("readiness", VoidSchema, GithubCliReadinessSchema, {
-    remote: true,
-    gated: false,
-  }),
-  invoke("owners", VoidSchema, GithubOwnerListSchema, {
-    remote: true,
-    gated: false,
-  }),
-  invoke("repos", VoidSchema, GithubRepoListSchema, {
-    remote: true,
-    gated: false,
-  }),
+  invoke("readiness", VoidSchema, GithubCliReadinessSchema, ungated),
+  invoke("owners", VoidSchema, GithubOwnerListSchema, ungated),
+  invoke("repos", VoidSchema, GithubRepoListSchema, ungated),
   // Under the device's own gh login.
   invoke("publish", PublishRepoPayloadSchema, VoidSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...trackedCodeChange,
     busy: "push",
   }),
   // As the background sweep and the pages' reads of a branch's PR leave
@@ -62,27 +58,27 @@ export const githubCliContract = defineContract(
     "watchProjectPullRequests",
     ProjectScopedPayloadSchema,
     Schema.Record(Schema.String, PullRequestSchema),
-    { remote: true, gated: false },
+    ungated,
   ),
   invoke(
     "worktreePullRequest",
     GithubCliWorktreePullRequestPayloadSchema,
     Schema.NullOr(PullRequestDetailSchema),
-    { remote: true, gated: false },
+    ungated,
   ),
   // Uncached, fired only when the user picks that mode.
   invoke(
     "pullRequestCandidates",
     ProjectScopedPayloadSchema,
     PullRequestCandidateListSchema,
-    { remote: true, gated: false },
+    ungated,
   ),
   // Apart from worktrees.create, whose engine knows nothing about PRs.
   invoke(
     "resolvePullRequestCheckout",
     ResolvePullRequestCheckoutPayloadSchema,
     PullRequestCheckoutRefSchema,
-    { remote: true, gated: true, grant: "changeCode", busy: "fetch" },
+    { ...gatedBy("changeCode"), busy: "fetch" },
   ),
   // Null when gh is not ready or the repo is not on GitHub. A failed
   // read rejects.
@@ -90,7 +86,7 @@ export const githubCliContract = defineContract(
     "repoMergeConfig",
     ProjectScopedPayloadSchema,
     Schema.NullOr(RepoMergeConfigSchema),
-    { remote: true, gated: false },
+    ungated,
   ),
   // Null when there is none, off GitHub, or the integration is off. A
   // failed read rejects.
@@ -98,99 +94,81 @@ export const githubCliContract = defineContract(
     "repoDescription",
     ProjectScopedPayloadSchema,
     Schema.NullOr(Schema.String),
-    { remote: true, gated: false },
+    ungated,
   ),
   invoke(
     "mergePullRequest",
     MergePullRequestPayloadSchema,
     MergePullRequestResultSchema,
-    {
-      tracksProjectUsage: true,
-      remote: true,
-      gated: true,
-      grant: "changeCode",
-      busy: "merge",
-    },
+    { ...trackedCodeChange, busy: "merge" },
   ),
   invoke(
     "pullRequestDiff",
     GithubCliPullRequestDiffPayloadSchema,
     Schema.String,
-    { remote: true, gated: false },
+    ungated,
   ),
-  invoke("setPullRequestDraft", SetPullRequestDraftPayloadSchema, VoidSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "setPullRequestDraft",
+    SetPullRequestDraftPayloadSchema,
+    VoidSchema,
+    trackedCodeChange,
+  ),
   invoke(
     "pullRequestDraft",
     WorktreeScopedPayloadSchema,
     PullRequestDraftSchema,
-    {
-      remote: true,
-      gated: false,
-    },
+    ungated,
   ),
   invoke(
     "pullRequestCompare",
     PullRequestComparePayloadSchema,
     PullRequestCompareSchema,
-    { remote: true, gated: false },
+    ungated,
   ),
   invoke(
     "pullRequestOptions",
     ProjectScopedPayloadSchema,
     PullRequestOptionsSchema,
-    { remote: true, gated: false },
+    ungated,
   ),
   // Kept on the host until the PR is created.
-  invoke("stageAttachment", StageAttachmentPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "stageAttachment",
+    StageAttachmentPayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
   invoke(
     "stageAttachmentFromUrl",
     StageAttachmentFromUrlPayloadSchema,
     StagedAttachmentSchema,
-    { remote: true, gated: true, grant: "changeCode" },
+    gatedBy("changeCode"),
   ),
-  invoke("discardAttachment", DiscardAttachmentPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "discardAttachment",
+    DiscardAttachmentPayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
   invoke(
     "createPullRequest",
     CreatePullRequestPayloadSchema,
     CreatePullRequestResultSchema,
-    {
-      tracksProjectUsage: true,
-      remote: true,
-      gated: true,
-      grant: "changeCode",
-      busy: "pullRequest",
-    },
+    { ...trackedCodeChange, busy: "pullRequest" },
   ),
   invoke(
     "disablePullRequestAutoMerge",
     DisablePullRequestAutoMergePayloadSchema,
     VoidSchema,
-    {
-      tracksProjectUsage: true,
-      remote: true,
-      gated: true,
-      grant: "changeCode",
-    },
+    trackedCodeChange,
   ),
-  invoke("closePullRequest", ClosePullRequestPayloadSchema, VoidSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "closePullRequest",
+    ClosePullRequestPayloadSchema,
+    VoidSchema,
+    trackedCodeChange,
+  ),
   push("projectPullRequestsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,
   }),

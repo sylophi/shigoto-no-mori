@@ -17,7 +17,7 @@ import { errorWordsOf } from "@host/lib/errorWords";
 import * as Git from "@shigomori/engine/Git";
 import * as GitHub from "@shigomori/engine/GitHub";
 import { trimGhError } from "./actions";
-import { GH_TIMEOUT_MS, GithubCli } from "./GithubCli";
+import { gh, GithubCli } from "./GithubCli";
 import { remoteNameForUrl } from "./remote";
 
 // Why a pull request can't be checked out, in words for the form.
@@ -82,41 +82,35 @@ export const listPullRequestCandidates = Effect.fn("PullRequests.candidates")(
     if (unavailable) {
       return { status: "unavailable", reason: unavailable } as const;
     }
-    return yield* (yield* GitHub.GitHub)
-      .run(
-        cwd,
-        [
-          "pr",
-          "list",
-          "--state",
-          "open",
-          "--limit",
-          String(PR_CANDIDATE_LIMIT),
-          "--json",
-          CANDIDATE_JSON_FIELDS,
-        ],
-        { timeout: GH_TIMEOUT_MS },
-      )
-      .pipe(
-        Effect.flatMap(decodeGhPrCandidates),
-        // gh already returns newest-first, which is the order a reviewer
-        // wants.
-        Effect.map(
-          (rows): PullRequestCandidateList => ({
-            status: "ok",
-            pullRequests: rows.map(toCandidate),
-          }),
-        ),
-        // gh exited non-zero (network, SSO prompt, rate limit) or answered
-        // with something we can't read. The form says so rather than
-        // showing an empty list that reads as "no PRs".
-        Effect.orElseSucceed(
-          (): PullRequestCandidateList => ({
-            status: "unavailable",
-            reason: "gh-failed",
-          }),
-        ),
-      );
+    return yield* gh(cwd, [
+      "pr",
+      "list",
+      "--state",
+      "open",
+      "--limit",
+      String(PR_CANDIDATE_LIMIT),
+      "--json",
+      CANDIDATE_JSON_FIELDS,
+    ]).pipe(
+      Effect.flatMap(decodeGhPrCandidates),
+      // gh already returns newest-first, which is the order a reviewer
+      // wants.
+      Effect.map(
+        (rows): PullRequestCandidateList => ({
+          status: "ok",
+          pullRequests: rows.map(toCandidate),
+        }),
+      ),
+      // gh exited non-zero (network, SSO prompt, rate limit) or answered
+      // with something we can't read. The form says so rather than
+      // showing an empty list that reads as "no PRs".
+      Effect.orElseSucceed(
+        (): PullRequestCandidateList => ({
+          status: "unavailable",
+          reason: "gh-failed",
+        }),
+      ),
+    );
   },
 );
 
@@ -159,19 +153,13 @@ const decodeGhPrHead = Schema.decodeUnknownOption(
 // fetching the wrong ref into a branch is not a mistake worth being
 // relaxed about.
 const readPullRequestHead = (cwd: string, number: number) =>
-  Effect.flatMap(GitHub.GitHub, (github) =>
-    github.run(
-      cwd,
-      [
-        "pr",
-        "view",
-        String(number),
-        "--json",
-        "url,headRefName,isCrossRepository,headRepositoryOwner",
-      ],
-      { timeout: GH_TIMEOUT_MS },
-    ),
-  ).pipe(
+  gh(cwd, [
+    "pr",
+    "view",
+    String(number),
+    "--json",
+    "url,headRefName,isCrossRepository,headRepositoryOwner",
+  ]).pipe(
     Effect.catchTags({
       GitHubCliError: (cause) =>
         Effect.fail(
@@ -311,10 +299,10 @@ const pickForkBranchName = Effect.fnUntraced(function* (
     head.headRefName,
     head.headRepositoryOwner?.login,
   );
+  const github = yield* GitHub.GitHub;
   // The first usable name wins, so the rest aren't probed up front.
   for (const name of candidates) {
     if (!(yield* (yield* Git.Git).localBranchExists(cwd, name))) return name;
-    const github = yield* GitHub.GitHub;
     if ((yield* github.checkedOutPullRequest(cwd, name)) === number) {
       return name;
     }

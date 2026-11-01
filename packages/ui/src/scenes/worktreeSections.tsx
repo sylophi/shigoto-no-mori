@@ -2,7 +2,6 @@
 // for the page's scene, and the Git page's parts and the sections'
 // other states in a scene of their own.
 import { defaultBinding } from "../lib/keymap.ts";
-import type { ReactNode } from "react";
 import { GitBranch } from "lucide-react";
 import { StaticMenu } from "../primitives/dropdown-menu.tsx";
 import { ModalBox } from "../primitives/modal-shell.tsx";
@@ -69,15 +68,15 @@ import {
   PickSideView,
 } from "../views/worktreeDetail/WorktreeSyncPillView.tsx";
 import { NO_REWRITE } from "../lib/commitRewrite.ts";
-import { IDLE_RUN } from "./world.ts";
+import { IDLE_RUN, noop } from "./world.ts";
 import type {
   ChangedFile,
   StashEntry,
   Worktree,
   WorktreePort,
 } from "@shigomori/contracts/schemas";
+import { ScenePart } from "./frame.tsx";
 
-const noop = () => {};
 const resolved = async () => {};
 const NOW = Date.now();
 const MINUTE = 60_000;
@@ -310,15 +309,6 @@ export function portsSection() {
   );
 }
 
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
-}
-
 // The Git page's sidebar and dialogs, and the sections' other states.
 export function WorktreeSectionsPartsScene({
   worktree,
@@ -329,7 +319,7 @@ export function WorktreeSectionsPartsScene({
   return (
     <div className="grid h-full grid-cols-3 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex flex-col gap-5">
-        <Part label="History">
+        <ScenePart label="History">
           <div className="flex h-96 flex-col">
             <GitPageSidebarView
               tab="history"
@@ -428,8 +418,8 @@ export function WorktreeSectionsPartsScene({
               }
             />
           </div>
-        </Part>
-        <Part label="Commit's moves">
+        </ScenePart>
+        <ScenePart label="Commit's moves">
           {newest && (
             <StaticMenu>
               <CommitMenuItemsView
@@ -450,8 +440,8 @@ export function WorktreeSectionsPartsScene({
               />
             </StaticMenu>
           )}
-        </Part>
-        <Part label="Sync, split cleanly">
+        </ScenePart>
+        <ScenePart label="Sync, split cleanly">
           <span className="flex">
             <PickSideView
               ahead={1}
@@ -471,10 +461,10 @@ export function WorktreeSectionsPartsScene({
               onDisarm={noop}
             />
           </span>
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex flex-col gap-5">
-        <Part label="Stashes">
+        <ScenePart label="Stashes">
           <div className="flex h-56 flex-col">
             <StashListView
               stashes={STASHES}
@@ -494,8 +484,8 @@ export function WorktreeSectionsPartsScene({
             onRestoreAndKeep={noop}
             onDrop={noop}
           />
-        </Part>
-        <Part label="Stopped">
+        </ScenePart>
+        <ScenePart label="Stopped">
           <OperationBannerView
             state={{
               operation: "rebase",
@@ -509,8 +499,8 @@ export function WorktreeSectionsPartsScene({
             onContinue={noop}
             onResolve={noop}
           />
-        </Part>
-        <Part label="Stopped, in the Git page's narrowest sidebar">
+        </ScenePart>
+        <ScenePart label="Stopped, in the Git page's narrowest sidebar">
           <div className="w-46">
             <OperationBannerView
               state={{
@@ -527,8 +517,8 @@ export function WorktreeSectionsPartsScene({
               onResolve={noop}
             />
           </div>
-        </Part>
-        <Part label="Sync">
+        </ScenePart>
+        <ScenePart label="Sync">
           <span className="flex flex-wrap items-center gap-2">
             <HeldSyncView
               held={{ label: "Pull waits", tip: "A script is running" }}
@@ -552,8 +542,8 @@ export function WorktreeSectionsPartsScene({
               onDisarm={noop}
             />
           </span>
-        </Part>
-        <Part label="Merge">
+        </ScenePart>
+        <ScenePart label="Merge">
           <ModalBox className="max-w-md">
             <MergeDialogView
               branch={worktree.branch}
@@ -580,8 +570,8 @@ export function WorktreeSectionsPartsScene({
               onCancel={noop}
             />
           </ModalBox>
-        </Part>
-        <Part label="Hard reset">
+        </ScenePart>
+        <ScenePart label="Hard reset">
           <ModalBox className="max-w-md">
             <HardResetDialogView
               branch={worktree.branch}
@@ -605,10 +595,10 @@ export function WorktreeSectionsPartsScene({
               onCancel={noop}
             />
           </ModalBox>
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex flex-col gap-5">
-        <Part label="Reword">
+        <ScenePart label="Reword">
           <ModalBox className="max-w-lg">
             <RewordDialogView
               hash="7d02b18"
@@ -626,8 +616,8 @@ export function WorktreeSectionsPartsScene({
               }
             />
           </ModalBox>
-        </Part>
-        <Part label="Arranging scripts">
+        </ScenePart>
+        <ScenePart label="Arranging scripts">
           <ScriptListView>
             <ArrangeScriptRowView name="dev" label="dev" pinned onPin={noop} />
             <ArrangeScriptRowView
@@ -638,8 +628,8 @@ export function WorktreeSectionsPartsScene({
             />
           </ScriptListView>
           <ScriptDragPreviewView label="dev" pinned />
-        </Part>
-        <Part label="A peer's ports">
+        </ScenePart>
+        <ScenePart label="A peer's ports">
           <ModalBox className="max-w-2xl">
             <PortsDialogView
               remote
@@ -670,8 +660,8 @@ export function WorktreeSectionsPartsScene({
             />
           </ModalBox>
           <OpenLocalhostButtonView port={5173} />
-        </Part>
-        <Part label="A flow's frame">
+        </ScenePart>
+        <ScenePart label="A flow's frame">
           <FlowHeaderView
             tint={TONE_PILL.sky}
             icon={GitBranch}
@@ -691,7 +681,7 @@ export function WorktreeSectionsPartsScene({
             </CardListView>
           </FlowBodyView>
           <FlowFooterView>{null}</FlowFooterView>
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );

@@ -55,12 +55,11 @@ export const runGh = Effect.fnUntraced(function* (
 ) {
   yield* ghReady;
   const github = yield* GitHub.GitHub;
-  const timeout = { timeout: opts.timeout ?? GH_TIMEOUT_MS };
-  return yield* (
-    opts.cwd === undefined
-      ? github.runOn(null, args, timeout)
-      : github.run(opts.cwd, args, timeout)
-  ).pipe(
+  const options = { timeout: opts.timeout ?? GH_TIMEOUT_MS };
+  let run: Effect.Effect<string, GitHub.GitHubCliError>;
+  if (opts.cwd === undefined) run = github.runOn(null, args, options);
+  else run = github.run(opts.cwd, args, options);
+  return yield* run.pipe(
     Effect.catchTags({
       GitHubCliError: (cause) =>
         Effect.fail(

@@ -79,6 +79,8 @@ export function signalIfAlive(pid: number, name: NodeJS.Signals | 0): boolean {
   }
 }
 
+export const isAlive = (pid: number) => signalIfAlive(pid, 0);
+
 // Owned pids, by the scope they end with (a vitest case's, or the
 // file's or the lab run's when no case is running), each with when it
 // was owned.

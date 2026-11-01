@@ -7,8 +7,9 @@
 // The git facts a worktree row shows (branch, tip, ahead/behind) live
 // in the project's git directory, and a linked worktree's metadata
 // lives under its `worktrees/<name>/` there too, so one recursive watch
-// per project covers every worktree of it. On a machine that watches a folder at a time (watchTree.ts),
-// that watch is of the folders those paths are in.
+// per project covers every worktree of it. On a machine that watches a
+// folder at a time (watchTree.ts), that watch is of the folders those
+// paths are in.
 //
 // What counts as a change is an allowlist of git-dir paths (`RELEVANT`,
 // below), not "anything under .git": objects/ churns on every commit,
@@ -70,7 +71,6 @@ import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
-import type { Project } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
 import { splitZ } from "@shigomori/engine/gitParse";
 import { loadProjects } from "@host/lib/projects";
@@ -279,23 +279,10 @@ const gitStateOf = (gitDir: string) =>
 
 const treeKey = (projectId: string, tree: string) => `${projectId}\0${tree}`;
 
-export type GitWatcherDeps = {
+type GitWatcherDeps = {
   onChange: (projectId: string) => void;
   // A file changed in one of the project's working trees.
   onFilesChanged: (projectId: string) => void;
-  // The projects to follow. Defaults to the registry.
-  projects?: () => Project[];
-  // Test seams: how a path is watched, and how often the watcher
-  // reconciles regardless. Real callers take the defaults.
-  watch?: (
-    path: string,
-  ) => Stream.Stream<FileSystem.WatchEvent, PlatformError.PlatformError>;
-  backstop?: Duration.Input;
-  gitState?: (
-    gitDir: string,
-  ) =>
-    | Effect.Effect<GitState, unknown, FileSystem.FileSystem | Path.Path>
-    | undefined;
 };
 
 export class GitWatcher extends Context.Service<
@@ -363,8 +350,6 @@ const make = (deps: GitWatcherDeps) =>
       PubSub.unbounded<string>(),
       PubSub.shutdown,
     );
-    const watchOf = (path: string, leaveOut: TreeWatch.LeaveOut) =>
-      deps.watch?.(path) ?? TreeWatch.watchTree(fs, path, leaveOut);
     // Each watched project's git state as last seen. The projects whose
     // watch has heard a change not yet signalled (its debounce running),
     // by the beat it first heard one in, which the backstop leaves to it
@@ -398,9 +383,7 @@ const make = (deps: GitWatcherDeps) =>
         const gitDir = yield* Git.commonDirOf(projectPath);
         if (gitDir === null) return { gitDir, trees: new Set<string>() };
         const found = yield* workingTreesOf(projectPath, gitDir);
-        const state = yield* (
-          deps.gitState?.(gitDir) ?? gitStateOf(gitDir)
-        ).pipe(Effect.option);
+        const state = yield* gitStateOf(gitDir).pipe(Effect.option);
         return { gitDir, trees: found, state };
       }).pipe(Effect.provide(platform));
     type ProjectRead = Effect.Success<ReturnType<typeof readProject>>;
@@ -633,7 +616,7 @@ const make = (deps: GitWatcherDeps) =>
     // window. A tree that goes away drops its watch, which the next read
     // of the project's trees starts again if the tree is back.
     const watchTree = (projectId: string, tree: string): Effect.Effect<void> =>
-      watchOf(tree, ignoredFolders(projectId, tree)).pipe(
+      TreeWatch.watchTree(fs, tree, ignoredFolders(projectId, tree)).pipe(
         Stream.tap(() =>
           Effect.sync(() => failing.delete(treeKey(projectId, tree))),
         ),
@@ -730,7 +713,7 @@ const make = (deps: GitWatcherDeps) =>
       projectId: string,
       entry: { readonly gitDir: string; readonly projectPath: string },
     ) =>
-      watchOf(entry.gitDir, outsideRelevant).pipe(
+      TreeWatch.watchTree(fs, entry.gitDir, outsideRelevant).pipe(
         Stream.filter(
           (event) => isRelevantGitPath(event.path) || isIndexPath(event.path),
         ),
@@ -836,9 +819,7 @@ const make = (deps: GitWatcherDeps) =>
     // time, so two (the beat's and a store change's) don't read alike.
     const passes = yield* Semaphore.make(1);
     const reconcileNow = Effect.gen(function* () {
-      const projects = yield* Effect.try(() =>
-        (deps.projects ?? loadProjects)(),
-      ).pipe(Effect.option);
+      const projects = yield* Effect.try(loadProjects).pipe(Effect.option);
       // The registry is unreadable right now, so keep what is watched.
       if (Option.isNone(projects)) return;
       const ids = new Set(projects.value.map((project) => project.id));
@@ -881,7 +862,7 @@ const make = (deps: GitWatcherDeps) =>
     // Without a span: one every beat would crowd out the spans a restart's
     // log reads back.
     yield* Effect.forkScoped(
-      Effect.sleep(deps.backstop ?? BACKSTOP).pipe(
+      Effect.sleep(BACKSTOP).pipe(
         Effect.andThen(
           Effect.sync(() => {
             beats += 1;

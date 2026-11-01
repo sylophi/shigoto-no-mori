@@ -2,9 +2,8 @@ import {
   type ClientConfig,
   clientSetting,
   DEVICE_SETTINGS_DEFAULTS as DEFAULTS,
+  type DeviceSettingsPatch,
   type GlobalConfig,
-  type LauncherCommand,
-  type TerminalChoice,
   type Theme,
   type ThemeRotation,
 } from "@shigomori/contracts/schemas";
@@ -44,26 +43,9 @@ interface ClientFormState {
   keybindings: Readonly<Record<string, string>>;
 }
 
-interface DeviceFormState {
-  launchers: readonly LauncherCommand[];
-  hiddenLaunchers: string[];
-  launchScripts: boolean;
-  terminal: TerminalChoice;
-  // Null opens a file with its default app.
-  editor: string | null;
-  deleteBranchOnRemove: boolean;
-  autoPopulateInstall: boolean;
-  autoPullNew: boolean;
-  autoPullPrimaryOnly: boolean;
-  // Null while the idle shelf is off.
-  autoShelveDays: number | null;
-  doubutsuNames: boolean;
-  codexWorktreeNames: boolean;
-  managedOnProjectDrive: boolean;
-  portPool: boolean;
-  terrier: boolean;
-  githubCli: boolean;
-}
+type DeviceFormState = Required<DeviceSettingsPatch>;
+
+const DEVICE_FIELDS = Object.keys(DEFAULTS) as (keyof DeviceFormState)[];
 
 // Decode, the encoders' other half (useSettingsSave.ts). Each default
 // comes from the table its store omits it by, never respelled here.
@@ -102,33 +84,21 @@ function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
 }
 
 function fromDeviceConfig(config: GlobalConfig): DeviceFormState {
-  return {
-    launchers: config.launchers ?? [],
-    // Sorted here and on every toggle so the id list has one canonical
-    // order. useDirtyForm compares FormState by JSON.stringify, and
-    // hiding is set-semantic -- without this, re-hiding a tool in a
-    // different order would read as an unsaved change.
-    hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
-    launchScripts: config.launchScripts ?? DEFAULTS.launchScripts,
-    terminal: config.terminal ?? DEFAULTS.terminal,
-    editor: config.editor ?? DEFAULTS.editor,
-    deleteBranchOnRemove:
-      config.deleteBranchOnRemove ?? DEFAULTS.deleteBranchOnRemove,
-    autoPopulateInstall:
-      config.autoPopulateInstall ?? DEFAULTS.autoPopulateInstall,
-    autoPullNew: config.autoPullNew ?? DEFAULTS.autoPullNew,
-    autoPullPrimaryOnly:
-      config.autoPullPrimaryOnly ?? DEFAULTS.autoPullPrimaryOnly,
-    autoShelveDays: config.autoShelveDays ?? DEFAULTS.autoShelveDays,
-    doubutsuNames: config.doubutsuNames ?? DEFAULTS.doubutsuNames,
-    codexWorktreeNames:
-      config.codexWorktreeNames ?? DEFAULTS.codexWorktreeNames,
-    managedOnProjectDrive:
-      config.managedOnProjectDrive ?? DEFAULTS.managedOnProjectDrive,
-    portPool: config.portPool ?? DEFAULTS.portPool,
-    terrier: config.terrier ?? DEFAULTS.terrier,
-    githubCli: config.githubCli ?? DEFAULTS.githubCli,
-  };
+  const form = Object.fromEntries(
+    DEVICE_FIELDS.map((key) => [key, config[key] ?? DEFAULTS[key]]),
+  ) as DeviceFormState;
+  // Sorted here and on every toggle so the id list has one canonical
+  // order. useDirtyForm compares FormState by JSON.stringify, and
+  // hiding is set-semantic -- without this, re-hiding a tool in a
+  // different order would read as an unsaved change.
+  return { ...form, hiddenLaunchers: form.hiddenLaunchers.toSorted() };
+}
+
+// The form's device-config fields alone.
+export function deviceFields(form: SettingsFormState): DeviceFormState {
+  return Object.fromEntries(
+    DEVICE_FIELDS.map((key) => [key, form[key]]),
+  ) as DeviceFormState;
 }
 
 const CLIENT_FIELDS = Object.keys(

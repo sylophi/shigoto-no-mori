@@ -12,7 +12,6 @@ import type { MirrorIgnoreMode } from "@shigomori/contracts/modules/sync";
 import {
   carriedLabels,
   ignoreModeOf,
-  localWorktreeIdOf,
   MIRROR_LABEL_IGNORE_MODE,
   MIRROR_LABEL_LOCAL_PROJECT,
   type MirrorSessionRaw,
@@ -33,7 +32,7 @@ export function mirrorStartRefusal(
     readonly servedWorktreeIds: readonly string[];
   },
 ): string | null {
-  if (held.sessions.some((raw) => localWorktreeIdOf(raw) === worktreeId)) {
+  if (held.sessions.some((raw) => raw.localWorktreeId === worktreeId)) {
     return "This worktree is already mirrored. Open its Mirror button to manage that one.";
   }
   if (held.servedWorktreeIds.includes(worktreeId)) {
@@ -69,7 +68,7 @@ export function reopenInput(
     worktreeId: raw.worktreeId,
     remoteRoot: raw.remoteRoot,
     name: raw.name,
-    localWorktreeId: localWorktreeIdOf(raw),
+    localWorktreeId: raw.localWorktreeId,
     labels: carriedLabels(raw, { [MIRROR_LABEL_IGNORE_MODE]: ignoreMode }),
     ignores: [...ignores],
   };

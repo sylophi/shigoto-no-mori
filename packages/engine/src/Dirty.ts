@@ -14,6 +14,7 @@ import { errnoText, isNotFound } from "./platformErrors.ts";
 import { messageOf } from "./errorDocument.ts";
 import { entryExists } from "./entries.ts";
 import * as Git from "./Git.ts";
+import { splitZ } from "./gitParse.ts";
 
 export const dirtyRef = (worktreeId: string) =>
   `refs/shigomori/dirty/${worktreeId}`;
@@ -141,9 +142,6 @@ export class Dirty extends Context.Service<
   }
 >()("sm/engine/Dirty") {}
 
-const nulFields = (stdout: string) =>
-  stdout.split("\0").filter((field) => field !== "");
-
 const make = Effect.gen(function* () {
   const git = yield* Git.Git;
   const fs = yield* FileSystem.FileSystem;
@@ -164,7 +162,7 @@ const make = Effect.gen(function* () {
       ])
       .pipe(
         Effect.map((stdout) => {
-          const fields = nulFields(stdout);
+          const fields = splitZ(stdout);
           const found: Array<{ status: string; path: string }> = [];
           for (let index = 0; index + 1 < fields.length; index += 2) {
             found.push({

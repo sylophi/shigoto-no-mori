@@ -33,6 +33,10 @@ out/
 # committed: the app downloads it at runtime.
 app/lab/fake-host/villager-data/
 
+# Third-party notices, generated at packaging (forge prePackage,
+# scripts/package-linux.mts)
+app/resources/licenses/
+
 # App icon intermediates (icon.icns and icon.png are the committed sources)
 app/assets/icon.iconset/
 

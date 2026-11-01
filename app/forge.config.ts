@@ -5,7 +5,7 @@ import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { config as loadEnv } from "dotenv";
@@ -47,6 +47,7 @@ import {
   DMG_WINDOW,
   dmgBackgroundFor,
 } from "./shared/packaging/dmgLayout.mts";
+import { runScript } from "./scripts/lib/runScript.mts";
 
 // app/.env's signing and notarization settings, for this file alone:
 // in process.env they would reach every terminal and script a dev
@@ -206,35 +207,21 @@ const config: ForgeConfig = {
   rebuildConfig: { ignoreModules: ["node-pty"] },
   hooks: {
     prePackage: async (_config, platform, arch) => {
-      execFileSync("node", ["scripts/generate-third-party-licenses.mts"], {
-        cwd: import.meta.dirname,
-        stdio: "inherit",
-      });
+      runScript("generate-third-party-licenses.mts");
       // Compile the file-sync engine and the filesystem helper (Go), then
       // the terminal sm (Bun).
-      for (const [script, ...args] of [
-        ["build-go.mts", "file-sync"],
-        ["build-go.mts", "nativefs"],
-        ["build-cli.mts"],
-      ] as const) {
-        execFileSync("node", [`scripts/${script}`, ...args], {
-          cwd: import.meta.dirname,
-          stdio: "inherit",
-        });
-      }
+      runScript("build-go.mts", "file-sync");
+      runScript("build-go.mts", "nativefs");
+      runScript("build-cli.mts");
       // Fetch the pinned cloudflared for the TARGET platform, not the
       // build machine's: a cross-arch package must ship the arch it
       // runs on.
-      execFileSync(
-        "node",
-        [
-          "scripts/fetch-cloudflared.mts",
-          "--platform",
-          platform,
-          "--arch",
-          arch,
-        ],
-        { cwd: import.meta.dirname, stdio: "inherit" },
+      runScript(
+        "fetch-cloudflared.mts",
+        "--platform",
+        platform,
+        "--arch",
+        arch,
       );
     },
     // The ignore above spells out node-pty's layout. If a release moves

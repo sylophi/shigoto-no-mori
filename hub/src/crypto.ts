@@ -1,19 +1,12 @@
 // Small crypto helpers on the Web Crypto API (no node builtins, this
 // runs in workerd).
-
-export function base64urlOfBytes(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary)
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/, "");
-}
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Hex from "effect/encoding/Hex";
 
 export function randomBase64url(byteLength: number): string {
   const bytes = new Uint8Array(byteLength);
   crypto.getRandomValues(bytes);
-  return base64urlOfBytes(bytes);
+  return Base64Url.encode(bytes);
 }
 
 // Hex SHA-256 of a string, the shape stored in devices.credential_hash.
@@ -22,7 +15,5 @@ export async function sha256Hex(text: string): Promise<string> {
     "SHA-256",
     new TextEncoder().encode(text),
   );
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
+  return Hex.encode(new Uint8Array(digest));
 }

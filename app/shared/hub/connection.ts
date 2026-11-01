@@ -82,13 +82,6 @@ const TERMINATE_GRACE_MS = 1_500;
 // wake from sleep, a tab coming back) is a fresh ping at once. A hidden
 // tab's turns all come late, so it judges nothing until it comes back.
 
-// Test seams for the pings' timing. Real callers take the defaults.
-type PingOptions = {
-  intervalMs?: number;
-  timeoutMs?: number;
-  probeTimeoutMs?: number;
-};
-
 // One dialed hub socket as the platform adapter exposes it to the
 // core. The adapter owns the platform WebSocket and its event wiring,
 // the core owns everything above it.
@@ -130,7 +123,6 @@ export type HubConnectionDeps = {
   // listener (the web), whose link then answers every ask with the
   // no-listener refusal.
   serveConnectInfo?: ServeConnectInfo;
-  ping?: PingOptions;
 };
 
 // The lifecycle surface both platform bindings re-expose unchanged.
@@ -227,9 +219,6 @@ export const make = (
     const scope = yield* Effect.scope;
     const clock = yield* Clock.Clock;
     const lifecycle = yield* Semaphore.make(1);
-    const intervalMs = deps.ping?.intervalMs ?? PING_INTERVAL_MS;
-    const timeoutMs = deps.ping?.timeoutMs ?? PING_TIMEOUT_MS;
-    const probeTimeoutMs = deps.ping?.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
     let link: HubLink | null = null;
     // Kept across the links a redial replaces (link.ts, SeenAsks).
     const seenAsks: SeenAsks = new Map();
@@ -496,9 +485,9 @@ export const make = (
             Effect.andThen(Effect.never),
           ),
           heard: () => framesSeen,
-          intervalMs,
-          timeoutMs,
-          probeTimeoutMs,
+          intervalMs: PING_INTERVAL_MS,
+          timeoutMs: PING_TIMEOUT_MS,
+          probeTimeoutMs: PROBE_TIMEOUT_MS,
           dead: declareDead,
         });
         return {

@@ -413,12 +413,6 @@ export class Git extends Context.Service<
       repo: string,
       ref: string,
     ) => Effect.Effect<boolean>;
-    // The fully qualified default ref repo identity keys off (see
-    // pickDefaultRef), none when there is none.
-    readonly resolveDefaultRef: (
-      repo: string,
-      override?: string,
-    ) => Effect.Effect<Option.Option<string>>;
     // The fully qualified primary ref a row is measured against, which
     // may also fall back to the first local branch: a merge target only
     // has to exist. `remotes` saves a `git remote` for a caller that
@@ -936,7 +930,6 @@ const make = Effect.gen(function* () {
     appendExcludes,
     resolveDefaultBranch,
     resolvePrimaryRef,
-    resolveDefaultRef,
     checkoutBranch,
     createBranch,
     deleteBranch,
@@ -1135,7 +1128,6 @@ const make = Effect.gen(function* () {
     }),
     localBranchExists,
     remoteRefExists,
-    resolveDefaultRef,
     resolveDefaultBranch,
     resolvePrimaryRef,
     resolveCheckoutRef,

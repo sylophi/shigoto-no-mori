@@ -9,23 +9,11 @@ import {
   WorktreesErrorView,
   WorktreesLoadingView,
 } from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx";
-import type {
-  GroupShelf,
-  InboxShelf,
-  SidebarRow,
-} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import type { SidebarRow } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import type { RowHandlers } from "./VirtualRow";
 
-interface RowContentProps {
+interface RowContentProps extends RowHandlers {
   row: SidebarRow;
-  onToggle: (groupKey: string) => void;
-  onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
-  onToggleShelf: (shelf: InboxShelf) => void;
-  onToggleOwner: (ownerKey: string) => void;
-  onToggleFolder: (foldKey: string) => void;
-  onToggleWorktreeGroup: (groupId: string, prefix: string) => void;
-  onToggleInboxGroup: (prefix: string) => void;
-  currentGroupKey: string | undefined;
-  arrangeMode: boolean;
   isHovered: boolean;
 }
 

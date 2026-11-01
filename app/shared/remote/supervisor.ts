@@ -129,8 +129,7 @@ export function makeWake(): Wake {
       Effect.suspend(() => {
         const cut = Deferred.makeUnsafe<void>();
         waiting = cut;
-        return Deferred.await(cut).pipe(
-          Effect.timeoutOrElse({ duration: delay, orElse: () => Effect.void }),
+        return Effect.raceFirst(Effect.sleep(delay), Deferred.await(cut)).pipe(
           Effect.ensuring(
             Effect.sync(() => {
               if (waiting === cut) waiting = null;

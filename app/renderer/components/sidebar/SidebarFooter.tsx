@@ -4,7 +4,7 @@
 import { useBinding } from "@/hooks/ui/useKeymap";
 import { startGuide, useGuideChoices } from "@/hooks/useGuide";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { useMarkAgentsWaiting } from "@/hooks/config/useSidebarMarks";
+import { useClientFlag } from "@/hooks/config/useSidebarMarks";
 import { useLiveCount } from "@/hooks/live/useLiveActivity";
 import {
   useSetSidebarView,
@@ -40,7 +40,7 @@ export function SidebarFooter({
   const updateReady = Object.keys(useStagedUpdates()).length > 0;
   const running = useLiveCount();
   const waiting = useWaitingAgents().length;
-  const needsYou = useMarkAgentsWaiting() && waiting > 0;
+  const needsYou = useClientFlag("markAgentsWaiting") && waiting > 0;
   const guides = useGuideChoices();
   const api = useApi();
   return (

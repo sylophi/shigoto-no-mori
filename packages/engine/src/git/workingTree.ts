@@ -3,7 +3,6 @@ import type { ChangeCounts, ChangedFile } from "@shigomori/contracts/schemas";
 import { isUntracked } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { parseNumstat, parseStatus } from "../gitParse.ts";
 import {
@@ -13,6 +12,7 @@ import {
   UNTRACKED_COUNT_LIMIT,
 } from "./documents.ts";
 import type { RunningArea } from "./running.ts";
+import { mtimeOf } from "../entries.ts";
 
 export const makeWorkingTree = ({
   running,
@@ -144,12 +144,7 @@ export const makeWorkingTree = ({
         ].slice(0, CHANGE_MTIME_STATS),
         (file) =>
           fs.stat(path.join(worktree, file.path)).pipe(
-            Effect.map((info) =>
-              Option.match(info.mtime, {
-                onNone: () => 0,
-                onSome: (d) => d.getTime(),
-              }),
-            ),
+            Effect.map(mtimeOf),
             Effect.orElseSucceed(() => 0),
           ),
         { concurrency: 8 },
