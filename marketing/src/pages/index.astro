@@ -1,11 +1,12 @@
 ---
 import Band from "../components/Band.astro";
 import Card from "../components/Card.astro";
+import DownloadButtons from "../components/DownloadButtons.astro";
 import Frame from "../components/Frame.astro";
 import Icon from "../components/Icon.astro";
 import SectionHead from "../components/SectionHead.astro";
 import Page from "../layouts/Page.astro";
-import { LATEST_RELEASE, REPO, WEB_APP } from "../site";
+import { WEB_APP } from "../site";
 import {
   CreateScene,
   DevicesScene,
@@ -46,10 +47,7 @@ const PINS = [
         and see where each branch stands, whether it's on this Mac or another
         one of yours.
       </p>
-      <div class="actions">
-        <a class="button" data-download href={LATEST_RELEASE}>Download for Mac</a>
-        <a class="button quiet" href={REPO}>Source on GitHub</a>
-      </div>
+      <DownloadButtons />
       <p class="fine">
         For Apple Silicon Macs. Signed, notarized, free and open source.
       </p>
@@ -515,10 +513,7 @@ const PINS = [
       <img class="closing-icon framed" src="/img/icon.png" alt="" width="96" height="96" />
       <h2>Download Shigoto no Mori</h2>
       <p class="fine">For Apple Silicon Macs. Free and open source.</p>
-      <div class="actions">
-        <a class="button" data-download href={LATEST_RELEASE}>Download for Mac</a>
-        <a class="button quiet" href={REPO}>Source on GitHub</a>
-      </div>
+      <DownloadButtons />
     </div>
   </Band>
 </Page>
