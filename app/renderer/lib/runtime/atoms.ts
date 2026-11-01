@@ -64,7 +64,7 @@ export const deviceStream = <A, E>(
   Stream.unwrap(Effect.map(deviceApi(deviceId, localDeviceId), stream));
 
 // How many sessions to each device's host have landed, which the boot
-// counts: a peer's (onSessionLanded), and this machine's link landing
+// counts: a peer's (sessionLanded), and this machine's link landing
 // on its host again after a drop (startLocalHost). A peer's views start
 // again on each new session, since one riding a session this side
 // closed (a probe that found it dead) is never told it ended. What an
@@ -75,7 +75,7 @@ export const hostSessionAtom = Atom.family((_deviceId: string) =>
 );
 
 // How many accounts this window has left, which the boot counts
-// (onAccountLeft). What an atom keeps of a peer (its script runs, a
+// (accountLeft). What an atom keeps of a peer (its script runs, a
 // removal under way) is the peer's, and a device of a later account
 // with the same id (this machine on two accounts) starts over.
 export const accountsLeftAtom = Atom.keepAlive(Atom.make(0));
