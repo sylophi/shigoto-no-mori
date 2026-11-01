@@ -178,7 +178,10 @@ export const makeVerbs = ({
         const pr = found.value;
         if (
           pr.isCrossRepository === true &&
-          !(yield* github.checkedOutFrom(project.path, pr.headRefName, number))
+          (yield* github.checkedOutPullRequest(
+            project.path,
+            pr.headRefName,
+          )) !== number
         ) {
           return yield* refuse("merge", "fork", [number]);
         }

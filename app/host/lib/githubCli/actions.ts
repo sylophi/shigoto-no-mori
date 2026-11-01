@@ -9,14 +9,9 @@ import {
   PullRequestSchema,
 } from "@shigomori/contracts/schemas";
 import * as Git from "@shigomori/engine/Git";
-import {
-  isCommandError,
-  stderrOf,
-  stdoutOf,
-} from "@shigomori/engine/processes";
-import { gh, trimGhError } from "./exec";
+import * as GitHub from "@shigomori/engine/GitHub";
 import * as Ops from "../engineOps";
-import { GithubCli } from "./GithubCli";
+import { GH_TIMEOUT_MS, GithubCli } from "./GithubCli";
 import * as PullRequestMaps from "./PullRequestMaps";
 import { remoteNameForUrl } from "./remote";
 
@@ -29,6 +24,15 @@ export class GhActionError extends Schema.TaggedError<GhActionError>()(
   override get message(): string {
     return this.reason;
   }
+}
+
+// gh's stderr tends to be one long line with a `gh:` prefix, and the rest
+// is usable as-is. Trim noise so the renderer banner stays compact.
+export function trimGhError(raw: string): string {
+  const trimmed = raw.trim();
+  const lines = trimmed.split(/\r?\n/).filter((l) => l.length > 0);
+  const last = lines[lines.length - 1] ?? trimmed;
+  return last.replace(/^gh:\s*/i, "");
 }
 
 // The gate every action passes before it asks gh.
@@ -46,35 +50,35 @@ export const runGh = Effect.fnUntraced(function* (
   opts: {
     cwd?: string;
     fallback: string;
-    maxBuffer?: number;
     timeout?: number;
   },
 ) {
   yield* ghReady;
-  const { stdout } = yield* gh(args, {
-    cwd: opts.cwd,
-    maxBuffer: opts.maxBuffer,
-    timeout: opts.timeout,
-  }).pipe(
+  const github = yield* GitHub.GitHub;
+  const timeout = { timeout: opts.timeout ?? GH_TIMEOUT_MS };
+  return yield* (
+    opts.cwd === undefined
+      ? github.runOn(null, args, timeout)
+      : github.run(opts.cwd, args, timeout)
+  ).pipe(
     Effect.catchTags({
-      CommandError: (cause) =>
+      GitHubCliError: (cause) =>
         Effect.fail(
           new GhActionError({
             // gh vanished between the readiness probe (cached 30s) and
             // this spawn. "Not installed" reads as a state rather than a
             // bug.
             reason:
-              cause.reason === "not-found"
+              cause.reason === "missing"
                 ? "GitHub CLI isn't installed"
-                : cause.reason === "timed-out"
+                : cause.reason === "timeout"
                   ? "GitHub CLI timed out"
-                  : trimGhError(stderrOf(cause)) || opts.fallback,
+                  : trimGhError(GitHub.stderrOf(cause)) || opts.fallback,
             cause,
           }),
         ),
     }),
   );
-  return stdout;
 });
 
 // What gh printed before it failed: the error's reason keeps only the
@@ -83,8 +87,10 @@ export function ghStream(
   err: GhActionError,
   stream: "stdout" | "stderr",
 ): string {
-  if (!isCommandError(err.cause)) return "";
-  return stream === "stdout" ? stdoutOf(err.cause) : stderrOf(err.cause);
+  if (!(err.cause instanceof GitHub.GitHubCliError)) return "";
+  return stream === "stdout"
+    ? GitHub.stdoutOf(err.cause)
+    : GitHub.stderrOf(err.cause);
 }
 
 // A PR's diff, ready to hand to DiffView: git's, from the two commits
@@ -110,13 +116,11 @@ export const getPullRequestDiff = Effect.fn("GithubActions.diff")(
         .pipe(Effect.option);
       if (Option.isSome(local)) return local.value;
     }
-    // PR diffs can run into the MB range; bump the buffer so a sprawling
-    // PR doesn't ENOBUFS, and give the transfer more room than the
-    // default gh timeout.
+    // PR diffs can run into the MB range, so the transfer gets more room
+    // than the default gh timeout.
     return yield* runGh(["pr", "diff", String(number)], {
       cwd,
       fallback: "gh pr diff failed",
-      maxBuffer: 32 * 1024 * 1024,
       timeout: 120_000,
     }).pipe(
       Effect.catchIf(isDiffTooLarge, () =>

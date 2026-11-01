@@ -14,24 +14,25 @@ import type {
 } from "@shigomori/contracts/schemas";
 import { GhUnavailableError } from "@shigomori/contracts/errors";
 import { DEVICE_SETTINGS_DEFAULTS } from "@shigomori/contracts/schemas";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as EngineConfig from "@shigomori/engine/Config";
-import { ghKnownHosts } from "@shigomori/engine/ghHost";
 import * as Git from "@shigomori/engine/Git";
 import * as GitHub from "@shigomori/engine/GitHub";
-import * as Paths from "@shigomori/engine/Paths";
+import { isCommandError } from "@shigomori/engine/processes";
 import * as Ops from "../engineOps";
 import { keptAnswer, keptAnswers } from "../util/kept";
-import * as Processes from "@shigomori/engine/processes";
-import { gh, GH_TIMEOUT_MS } from "./exec";
 import { type GithubRepoInfo, parseRemoteUrl } from "./remote";
+
+// A wedged gh (proxy auth, SSO browser prompt) must not hang forever:
+// the readiness probe gates every PR feature, so one stuck spawn would
+// wedge them all. Callers moving real bytes (pr diff) pass a longer
+// timeout.
+export const GH_TIMEOUT_MS = 30_000;
 
 // gh installed but not usable, for a read that would rather fail than
 // answer blank.
@@ -74,7 +75,7 @@ export class GithubCli extends Context.Service<
       cwd: string,
     ) => Effect.Effect<
       string | null,
-      GhUnavailableError | Processes.CommandError
+      GhUnavailableError | GitHub.GitHubCliError
     >;
     // Who and what a new pull request can name: the signed-in user, the
     // repo's assignable people and its labels. Ungated, for the action
@@ -83,7 +84,7 @@ export class GithubCli extends Context.Service<
       cwd: string,
     ) => Effect.Effect<
       PullRequestOptions,
-      Processes.CommandError | Schema.SchemaError
+      GitHub.GitHubCliError | Schema.SchemaError
     >;
   }
 >()("sm/host/GithubCli") {}
@@ -148,38 +149,15 @@ const decodePullRequestOptions = Schema.decodeUnknownEffect(
 const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   // The device settings, for the integration's switch.
   const engineConfig = yield* EngineConfig.Config;
   const git = yield* Git.Git;
   const github = yield* GitHub.GitHub;
-  const withGh = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Effect.provideService(GitHub.GitHub, github),
-    );
 
-  // gh's own precedence for its hosts.yml: GH_CONFIG_DIR, then the XDG
-  // config directory. Diverging from gh here would leave Enterprise
-  // hosts unrecognized for users who set either variable. Set but empty
-  // reads as unset, as Config's environment provider reads it.
-  const { configHome } = yield* Paths.Paths;
-  const hostsFile = path.join(
-    Option.getOrElse(
-      yield* Config.String("GH_CONFIG_DIR").pipe(Config.option),
-      () => path.join(configHome, "gh"),
-    ),
-    "hosts.yml",
-  );
-
-  // The hosts gh is logged in to. github.com always counts, with the
-  // file missing (most users, a fresh install) or, for this ask alone,
-  // unreadable.
+  // github.com always counts, and alone for this ask when gh's file
+  // can't be read.
   const knownHosts = (yield* keptAnswer(
-    fs.readFileString(hostsFile).pipe(
-      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("")),
-      Effect.map(ghKnownHosts),
-    ),
+    github.knownHosts,
     KNOWN_HOSTS_TTL,
   )).pipe(Effect.orElseSucceed(() => new Set(["github.com"])));
 
@@ -205,24 +183,29 @@ const make = Effect.gen(function* () {
         [] as string[],
         ...[...(yield* knownHosts)].map((host) => ["--hostname", host]),
       ];
-      let unanswered: Processes.CommandError | undefined;
+      let unanswered: GitHub.GitHubCliError | undefined;
       for (const ask of asks) {
-        const answer = yield* gh(["auth", "token", ...ask]).pipe(
-          Effect.as(true),
-          Effect.catch((error) =>
-            Effect.sync(() => {
-              if (error.reason !== "failed" || error.exitCode === null) {
-                unanswered = error;
-              }
-              return false;
-            }),
-          ),
-        );
+        const answer = yield* github
+          .runOn(null, ["auth", "token", ...ask], { timeout: GH_TIMEOUT_MS })
+          .pipe(
+            Effect.as(true),
+            Effect.catch((error) =>
+              Effect.sync(() => {
+                if (
+                  !isCommandError(error.cause) ||
+                  error.cause.exitCode === null
+                ) {
+                  unanswered = error;
+                }
+                return false;
+              }),
+            ),
+          );
         if (answer) return { installed, authed: true };
       }
       if (unanswered !== undefined) return yield* unanswered;
       return { installed, authed: false };
-    }).pipe(withGh),
+    }),
     READINESS_TTL,
     { failures: UNANSWERED_PROBE_TTL },
   )).pipe(Effect.orElseSucceed(() => ({ installed: true, authed: false })));
@@ -251,49 +234,51 @@ const make = Effect.gen(function* () {
 
   const pullRequestOptions = yield* keptAnswers(
     (cwd: string) =>
-      gh(
-        [
-          "api",
-          "graphql",
-          "-F",
-          "owner={owner}",
-          "-F",
-          "name={repo}",
-          "-f",
-          `query=${PULL_REQUEST_OPTIONS_QUERY}`,
-        ],
-        { cwd },
-      ).pipe(
-        Effect.flatMap(({ stdout }) => decodePullRequestOptions(stdout)),
-        Effect.map(
-          ({ data: { viewer, repository } }): PullRequestOptions => ({
-            viewer: viewer.login,
-            people: repository.assignableUsers.nodes.flatMap((n) =>
-              n ? [n] : [],
-            ),
-            labels: repository.labels.nodes.flatMap((n) => (n ? [n] : [])),
-          }),
+      github
+        .run(
+          cwd,
+          [
+            "api",
+            "graphql",
+            "-F",
+            "owner={owner}",
+            "-F",
+            "name={repo}",
+            "-f",
+            `query=${PULL_REQUEST_OPTIONS_QUERY}`,
+          ],
+          { timeout: GH_TIMEOUT_MS },
+        )
+        .pipe(
+          Effect.flatMap(decodePullRequestOptions),
+          Effect.map(
+            ({ data: { viewer, repository } }): PullRequestOptions => ({
+              viewer: viewer.login,
+              people: repository.assignableUsers.nodes.flatMap((n) =>
+                n ? [n] : [],
+              ),
+              labels: repository.labels.nodes.flatMap((n) => (n ? [n] : [])),
+            }),
+          ),
         ),
-        withGh,
-      ),
     PULL_REQUEST_OPTIONS_TTL,
   );
 
   // Keyed by the repo (host/owner/repo), so clones of one repo share it.
   const descriptions = yield* keptAnswers(
     (slug: string) =>
-      gh(
-        [
-          "api",
-          `repos/${slug.slice(slug.indexOf("/") + 1)}`,
-          "--jq",
-          '.description // ""',
-        ],
-        { host: slug.slice(0, slug.indexOf("/")) },
-      ).pipe(
-        Effect.map(({ stdout }) => stdout.trim() || null),
-        withGh,
-      ),
+      github
+        .runOn(
+          slug.slice(0, slug.indexOf("/")),
+          [
+            "api",
+            `repos/${slug.slice(slug.indexOf("/") + 1)}`,
+            "--jq",
+            '.description // ""',
+          ],
+          { timeout: GH_TIMEOUT_MS },
+        )
+        .pipe(Effect.map((stdout) => stdout.trim() || null)),
     DESCRIPTION_TTL,
   );
 

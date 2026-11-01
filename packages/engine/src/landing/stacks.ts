@@ -80,7 +80,10 @@ export const makeStacks = ({
         const top = chain[chain.length - 1] as PullRequestSummary;
         if (
           top.isCrossRepository === true &&
-          !(yield* github.checkedOutFrom(project.path, top.headRefName, number))
+          (yield* github.checkedOutPullRequest(
+            project.path,
+            top.headRefName,
+          )) !== number
         ) {
           return yield* refuse(verb, "fork", [number]);
         }

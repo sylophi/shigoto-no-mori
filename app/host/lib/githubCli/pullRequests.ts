@@ -23,11 +23,13 @@ import {
 } from "@shigomori/contracts/schemas";
 import * as GitHub from "@shigomori/engine/GitHub";
 import { ageOf, type Stamp } from "../util/kept";
-import { gh } from "./exec";
-import {
-  checkedOutPullRequest,
-  checkedOutPullRequests,
-} from "./pullRequestCheckout";
+import { GH_TIMEOUT_MS } from "./GithubCli";
+
+// gh in the repo at `cwd`, at the host's gh deadline.
+const gh = (cwd: string, args: ReadonlyArray<string>) =>
+  Effect.flatMap(GitHub.GitHub, (github) =>
+    github.run(cwd, args, { timeout: GH_TIMEOUT_MS }),
+  );
 
 const GhPrListItemSchema = Schema.Struct({
   number: PullRequestSchema.fields.number,
@@ -53,20 +55,17 @@ const OPEN_PR_LIMIT = 1000;
 const CLOSED_PR_LIMIT = 200;
 
 const runGhPrList = (cwd: string, state: "open" | "closed", limit: number) =>
-  gh(
-    [
-      "pr",
-      "list",
-      "--state",
-      state,
-      "--limit",
-      String(limit),
-      "--json",
-      "number,url,title,state,isDraft,headRefName,baseRefName,isCrossRepository",
-    ],
-    { cwd },
-  ).pipe(
-    Effect.map(({ stdout }) => Option.getOrNull(decodeGhPrList(stdout))),
+  gh(cwd, [
+    "pr",
+    "list",
+    "--state",
+    state,
+    "--limit",
+    String(limit),
+    "--json",
+    "number,url,title,state,isDraft,headRefName,baseRefName,isCrossRepository",
+  ]).pipe(
+    Effect.map((stdout) => Option.getOrNull(decodeGhPrList(stdout))),
     Effect.orElseSucceed((): readonly GhPrListItem[] | null => null),
   );
 
@@ -99,14 +98,13 @@ function checkedOutMark(pr: {
 export const readProjectPullRequests = Effect.fnUntraced(function* (
   cwd: string,
 ) {
+  const github = yield* GitHub.GitHub;
   const [open, closed, stackOf, checkedOut] = yield* Effect.all(
     [
       runGhPrList(cwd, "open", OPEN_PR_LIMIT),
       runGhPrList(cwd, "closed", CLOSED_PR_LIMIT),
-      Effect.flatMap(GitHub.GitHub, (github) => github.stacks(cwd)).pipe(
-        Effect.orElseSucceed(() => null),
-      ),
-      checkedOutPullRequests(cwd),
+      github.stacks(cwd).pipe(Effect.orElseSucceed(() => null)),
+      github.checkedOutPullRequests(cwd),
     ],
     { concurrency: 4 },
   );
@@ -335,22 +333,19 @@ const decodeGqlExtrasResponse = Schema.decodeUnknownOption(
 // The branch's newest PRs with their reviews and rendered bodies, or
 // null on any failure: the PR shows without the reviews chip then.
 const fetchGraphqlExtras = (cwd: string, branch: string) =>
-  gh(
-    [
-      "api",
-      "graphql",
-      "-F",
-      "owner={owner}",
-      "-F",
-      "repo={repo}",
-      "-f",
-      `head=${branch}`,
-      "-f",
-      `query=${EXTRAS_QUERY}`,
-    ],
-    { cwd },
-  ).pipe(
-    Effect.map(({ stdout }) =>
+  gh(cwd, [
+    "api",
+    "graphql",
+    "-F",
+    "owner={owner}",
+    "-F",
+    "repo={repo}",
+    "-f",
+    `head=${branch}`,
+    "-f",
+    `query=${EXTRAS_QUERY}`,
+  ]).pipe(
+    Effect.map((stdout) =>
       decodeGqlExtrasResponse(stdout).pipe(
         Option.map((response) => response.data.repository.pullRequests.nodes),
         Option.getOrNull,
@@ -510,24 +505,23 @@ const runGhPrListDetail = Effect.fnUntraced(function* (
   cwd: string,
   branch: string,
 ) {
-  const [{ stdout }, checkedOut] = yield* Effect.all(
+  const [stdout, checkedOut] = yield* Effect.all(
     [
-      gh(
-        [
-          "pr",
-          "list",
-          "--state",
-          "all",
-          "--head",
-          branch,
-          "--limit",
-          "10",
-          "--json",
-          "number,url,title,body,state,isDraft,isCrossRepository,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
-        ],
-        { cwd },
+      gh(cwd, [
+        "pr",
+        "list",
+        "--state",
+        "all",
+        "--head",
+        branch,
+        "--limit",
+        "10",
+        "--json",
+        "number,url,title,body,state,isDraft,isCrossRepository,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
+      ]),
+      Effect.flatMap(GitHub.GitHub, (github) =>
+        github.checkedOutPullRequest(cwd, branch),
       ),
-      checkedOutPullRequest(cwd, branch),
     ],
     { concurrency: 2 },
   );
