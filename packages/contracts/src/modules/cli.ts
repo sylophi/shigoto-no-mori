@@ -76,5 +76,5 @@ export const cliContract = defineContract(
   invoke("shellInstall", VoidSchema, ShellIntegrationStatusSchema, gated),
   invoke("shellUninstall", VoidSchema, ShellIntegrationStatusSchema, gated),
   invoke("doctor", VoidSchema, DoctorReportSchema, gated),
-  invoke("doctorFix", VoidSchema, DoctorReportSchema, gatedBy("changeApp")),
+  invoke("doctorFix", VoidSchema, DoctorReportSchema, gated),
 );

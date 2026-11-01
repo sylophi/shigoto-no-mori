@@ -3,7 +3,7 @@ import {
   defineContract,
   invoke,
   gatedBy,
-  projectChange,
+  trackedCodeChange,
   ungated,
 } from "../contract.ts";
 import {
@@ -31,7 +31,7 @@ export const worktreeDataContract = defineContract(
     "patchPorts",
     PatchWorktreePortsPayloadSchema,
     VoidSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   // A worktree's title and description, carried onto its copy here by
   // the device that sent it or runs its mirror

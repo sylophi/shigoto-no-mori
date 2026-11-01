@@ -15,9 +15,8 @@ export function packageScripts(text: string): ReadonlyArray<PackageScript> {
   if (typeof top !== "object" || Array.isArray(top)) {
     throw new Error("package.json is not a JSON object");
   }
-  const scripts = members(text.trim()).findLast(
-    ([name]) => name === "scripts",
-  )?.[1];
+  const [, scripts] =
+    members(text.trim()).findLast(([name]) => name === "scripts") ?? [];
   if (scripts === undefined || !scripts.startsWith("{")) return [];
   return members(scripts).flatMap(([name, value]) => {
     const command: unknown = JSON.parse(value);

@@ -5,7 +5,7 @@ import {
   invoke,
   view,
   gatedBy,
-  projectChange,
+  trackedCodeChange,
   ungated,
 } from "../contract.ts";
 import {
@@ -49,7 +49,7 @@ export const githubCliContract = defineContract(
   invoke("repos", VoidSchema, GithubRepoListSchema, ungated),
   // Under the device's own gh login.
   invoke("publish", PublishRepoPayloadSchema, VoidSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "push",
   }),
   // As the background sweep and the pages' reads of a branch's PR leave
@@ -100,7 +100,7 @@ export const githubCliContract = defineContract(
     "mergePullRequest",
     MergePullRequestPayloadSchema,
     MergePullRequestResultSchema,
-    { ...projectChange, busy: "merge" },
+    { ...trackedCodeChange, busy: "merge" },
   ),
   invoke(
     "pullRequestDiff",
@@ -112,7 +112,7 @@ export const githubCliContract = defineContract(
     "setPullRequestDraft",
     SetPullRequestDraftPayloadSchema,
     VoidSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   invoke(
     "pullRequestDraft",
@@ -155,19 +155,19 @@ export const githubCliContract = defineContract(
     "createPullRequest",
     CreatePullRequestPayloadSchema,
     CreatePullRequestResultSchema,
-    { ...projectChange, busy: "pullRequest" },
+    { ...trackedCodeChange, busy: "pullRequest" },
   ),
   invoke(
     "disablePullRequestAutoMerge",
     DisablePullRequestAutoMergePayloadSchema,
     VoidSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   invoke(
     "closePullRequest",
     ClosePullRequestPayloadSchema,
     VoidSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   push("projectPullRequestsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,

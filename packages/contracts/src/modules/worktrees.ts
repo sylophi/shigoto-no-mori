@@ -7,7 +7,7 @@ import {
   invoke,
   view,
   gatedBy,
-  projectChange,
+  trackedCodeChange,
   ungated,
 } from "../contract.ts";
 import {
@@ -81,7 +81,7 @@ const worktreeMutationOf = <const Key extends string, P extends ContractSchema>(
   busy?: ChangeKind,
 ) =>
   invoke(key, payload, WorktreeSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     ...(busy === undefined ? {} : { busy }),
   });
 const worktreeMutation = <const Key extends string>(
@@ -106,17 +106,17 @@ export const worktreesContract = defineContract(
     ungated,
   ),
   invoke("create", CreateWorktreePayloadSchema, CreateWorktreeResultSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "create",
   }),
   invoke(
     "convertExternal",
     ConvertExternalPayloadSchema,
     CreateWorktreeResultSchema,
-    { ...projectChange, busy: "create" },
+    { ...trackedCodeChange, busy: "create" },
   ),
   invoke("relocate", RelocateWorktreePayloadSchema, WorktreeSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "move",
   }),
   invoke(
@@ -126,37 +126,42 @@ export const worktreesContract = defineContract(
     ungated,
   ),
   invoke("rename", RenameWorktreePayloadSchema, WorktreeSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "move",
   }),
   // A mirror's stop removes the copy on the copy's device.
   invoke("delete", DeleteWorktreePayloadSchema, DeleteWorktreeResultSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "remove",
   }),
   invoke("deleteStack", DeleteStackPayloadSchema, DeleteStackResultSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "remove",
   }),
   invoke(
     "renameBranch",
     RenameBranchPayloadSchema,
     WorktreeSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   // The open pull request's, through this device's gh, when there is one.
   invoke(
     "describe",
     DescribeWorktreePayloadSchema,
     WorktreeSchema,
-    projectChange,
+    trackedCodeChange,
   ),
-  invoke("setShelved", SetShelvedPayloadSchema, WorktreeSchema, projectChange),
+  invoke(
+    "setShelved",
+    SetShelvedPayloadSchema,
+    WorktreeSchema,
+    trackedCodeChange,
+  ),
   invoke(
     "setAutoPull",
     SetAutoPullPayloadSchema,
     WorktreeSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   // For a turn whose end no hook reported.
   worktreeMutation("idleAgents"),
@@ -167,7 +172,7 @@ export const worktreesContract = defineContract(
     remote: false,
   }),
   invoke("checkoutBranch", CheckoutBranchPayloadSchema, WorktreeSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "checkout",
   }),
   // A read, but it discloses any file (an ignored .env included).
@@ -210,17 +215,17 @@ export const worktreesContract = defineContract(
     "discardHunks",
     DiscardHunksPayloadSchema,
     DiscardChangesResultSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   invoke("commit", CommitChangesPayloadSchema, CommitChangesResultSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "commit",
   }),
   invoke(
     "discardChanges",
     DiscardChangesPayloadSchema,
     DiscardChangesResultSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   invoke(
     "restoreDiscard",
@@ -238,13 +243,13 @@ export const worktreesContract = defineContract(
     "resetSoft",
     ResetSoftPayloadSchema,
     ResetSoftResultSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   invoke(
     "resetHard",
     ResetHardPayloadSchema,
     ResetHardResultSchema,
-    projectChange,
+    trackedCodeChange,
   ),
   invoke("commitDiff", CommitDiffPayloadSchema, Schema.String, ungated),
   invoke(
@@ -293,14 +298,14 @@ export const worktreesContract = defineContract(
     ungated,
   ),
   invoke("mergeBranch", MergeBranchPayloadSchema, MergeBranchResultSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "merge",
   }),
   worktreeMutation("continueOperation", "commit"),
   worktreeMutation("abortOperation"),
   // After a sync from primary conflicts: merge anyway and stop on them.
   invoke("mergePrimary", WorktreeScopedPayloadSchema, MergeBranchResultSchema, {
-    ...projectChange,
+    ...trackedCodeChange,
     busy: "merge",
   }),
   // After a split with the upstream conflicts.
@@ -308,7 +313,7 @@ export const worktreesContract = defineContract(
     "mergeUpstream",
     WorktreeScopedPayloadSchema,
     MergeBranchResultSchema,
-    { ...projectChange, busy: "pull" },
+    { ...trackedCodeChange, busy: "pull" },
   ),
   worktreeMutation("push", "push"),
   worktreeMutation("pull", "pull"),

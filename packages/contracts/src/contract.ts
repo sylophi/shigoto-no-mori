@@ -72,9 +72,9 @@ export const ungated = { remote: true, gated: false } as const;
 export const gatedBy = <const G extends GrantId>(grant: G) =>
   ({ remote: true, gated: true, grant }) as const;
 
-export const projectChange = {
-  tracksProjectUsage: true,
+export const trackedCodeChange = {
   ...gatedBy("changeCode"),
+  tracksProjectUsage: true,
 } as const;
 
 // Only when given, so the registrar can fail closed on an absent one.

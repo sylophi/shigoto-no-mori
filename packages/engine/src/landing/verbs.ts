@@ -312,7 +312,7 @@ export const makeVerbs = ({
       // once leaves time for new work in the worktrees, so the guards run
       // again, on the heads the PRs merged with, this worktree's own
       // removal guard first. Refused in a removal's words: the PRs merged.
-      const guardAgain = Effect.gen(function* () {
+      const guardAfterMerge = Effect.gen(function* () {
         if (!worktree.isPrimary) {
           yield* worktrees.checkRemovable(located, options.force);
         }
@@ -360,7 +360,7 @@ export const makeVerbs = ({
           if (queued) {
             return mergeDocument(pr, branch, { method, outcome: "queued" });
           }
-          yield* guardAgain;
+          yield* guardAfterMerge;
           plan = yield* planCleanup;
         } else if (reporter.landing !== undefined) {
           yield* reporter.landing(pr, undefined);
@@ -406,7 +406,7 @@ export const makeVerbs = ({
           reporter,
         );
         yield* awaitMerge(project.path, pr, outcome, "land", reporter);
-        yield* guardAgain;
+        yield* guardAfterMerge;
         method = outcome.method;
       }
       if (reporter.landing !== undefined) yield* reporter.landing(pr, method);
