@@ -1,4 +1,4 @@
-import { defineContract, invoke, view } from "../contract.ts";
+import { defineContract, invoke, view, gatedBy, ungated } from "../contract.ts";
 import {
   StoredGlobalConfigSchema,
   VoidSchema,
@@ -11,14 +11,8 @@ export const globalConfigContract = defineContract(
   // The stored document, loose so keys it doesn't model (an imported
   // 2.x document's client keys, a newer build's) pass through.
   // It carries no secret, so every wire serves it ungated.
-  invoke("read", VoidSchema, StoredGlobalConfigSchema, {
-    remote: true,
-    gated: false,
-  }),
-  view("watch", VoidSchema, StoredGlobalConfigSchema, {
-    remote: true,
-    gated: false,
-  }),
+  invoke("read", VoidSchema, StoredGlobalConfigSchema, ungated),
+  view("watch", VoidSchema, StoredGlobalConfigSchema, ungated),
   // The one settings write, for this window's own device and for a
   // peer's: a patch of exactly the device-scoped settings the Settings
   // form manages. remote:true, gated:true, so over the device link
@@ -29,9 +23,10 @@ export const globalConfigContract = defineContract(
   // host handler applies them over the stored document and writes it
   // through the engine's Config, and the change reaches the config
   // listeners as a terminal write does.
-  invoke("writeDeviceSettings", WriteDeviceSettingsPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeApp",
-  }),
+  invoke(
+    "writeDeviceSettings",
+    WriteDeviceSettingsPayloadSchema,
+    VoidSchema,
+    gatedBy("changeApp"),
+  ),
 );

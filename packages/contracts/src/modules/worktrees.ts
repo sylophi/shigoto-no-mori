@@ -1,7 +1,15 @@
 import * as Schema from "effect/Schema";
 import type { ContractSchema } from "../codec.ts";
 import type { ChangeKind } from "./session.ts";
-import { push, defineContract, invoke, view } from "../contract.ts";
+import {
+  push,
+  defineContract,
+  invoke,
+  view,
+  gatedBy,
+  projectChange,
+  ungated,
+} from "../contract.ts";
 import {
   AgentSessionPayloadSchema,
   ApplyStashPayloadSchema,
@@ -73,10 +81,7 @@ const worktreeMutationOf = <const Key extends string, P extends ContractSchema>(
   busy?: ChangeKind,
 ) =>
   invoke(key, payload, WorktreeSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     ...(busy === undefined ? {} : { busy }),
   });
 const worktreeMutation = <const Key extends string>(
@@ -88,91 +93,71 @@ export const worktreesContract = defineContract(
   "worktrees",
   "host",
   // A mirror into this device looks its copy up here.
-  invoke("list", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
-    remote: true,
-    gated: false,
-  }),
-  view("watch", ProjectScopedPayloadSchema, Schema.Array(WorktreeSchema), {
-    remote: true,
-    gated: false,
-  }),
+  invoke(
+    "list",
+    ProjectScopedPayloadSchema,
+    Schema.Array(WorktreeSchema),
+    ungated,
+  ),
+  view(
+    "watch",
+    ProjectScopedPayloadSchema,
+    Schema.Array(WorktreeSchema),
+    ungated,
+  ),
   invoke("create", CreateWorktreePayloadSchema, CreateWorktreeResultSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "create",
   }),
   invoke(
     "convertExternal",
     ConvertExternalPayloadSchema,
     CreateWorktreeResultSchema,
-    {
-      tracksProjectUsage: true,
-      remote: true,
-      gated: true,
-      grant: "changeCode",
-      busy: "create",
-    },
+    { ...projectChange, busy: "create" },
   ),
   invoke("relocate", RelocateWorktreePayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "move",
   }),
-  invoke("relocationPlan", RelocationPlanPayloadSchema, RelocationPlanSchema, {
-    remote: true,
-    gated: false,
-  }),
+  invoke(
+    "relocationPlan",
+    RelocationPlanPayloadSchema,
+    RelocationPlanSchema,
+    ungated,
+  ),
   invoke("rename", RenameWorktreePayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "move",
   }),
   // A mirror's stop removes the copy on the copy's device.
   invoke("delete", DeleteWorktreePayloadSchema, DeleteWorktreeResultSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "remove",
   }),
   invoke("deleteStack", DeleteStackPayloadSchema, DeleteStackResultSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "remove",
   }),
-  invoke("renameBranch", RenameBranchPayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "renameBranch",
+    RenameBranchPayloadSchema,
+    WorktreeSchema,
+    projectChange,
+  ),
   // The open pull request's, through this device's gh, when there is one.
-  invoke("describe", DescribeWorktreePayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("setShelved", SetShelvedPayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("setAutoPull", SetAutoPullPayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "describe",
+    DescribeWorktreePayloadSchema,
+    WorktreeSchema,
+    projectChange,
+  ),
+  invoke("setShelved", SetShelvedPayloadSchema, WorktreeSchema, projectChange),
+  invoke(
+    "setAutoPull",
+    SetAutoPullPayloadSchema,
+    WorktreeSchema,
+    projectChange,
+  ),
   // For a turn whose end no hook reported.
   worktreeMutation("idleAgents"),
   worktreeMutationOf("unbindAgent", AgentSessionPayloadSchema),
@@ -182,121 +167,100 @@ export const worktreesContract = defineContract(
     remote: false,
   }),
   invoke("checkoutBranch", CheckoutBranchPayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "checkout",
   }),
   // A read, but it discloses any file (an ignored .env included).
-  invoke("readFile", ReadWorktreeFilePayloadSchema, WorktreeFileSchema, {
-    remote: true,
-    gated: true,
-    grant: "browseFiles",
-  }),
+  invoke(
+    "readFile",
+    ReadWorktreeFilePayloadSchema,
+    WorktreeFileSchema,
+    gatedBy("browseFiles"),
+  ),
   // Ungated like the diffs, which already show any blob's text.
-  invoke("readBlob", ReadBlobPayloadSchema, WorktreeFileSchema, {
-    remote: true,
-    gated: false,
-  }),
+  invoke("readBlob", ReadBlobPayloadSchema, WorktreeFileSchema, ungated),
   invoke(
     "changeStatus",
     WorktreeScopedPayloadSchema,
     Schema.Array(ChangedFileSchema),
-    { remote: true, gated: false },
+    ungated,
   ),
   view(
     "watchChangeStatus",
     WorktreeScopedPayloadSchema,
     Schema.Array(ChangedFileSchema),
-    { remote: true, gated: false },
+    ungated,
   ),
-  view("watchFileDiff", FileDiffPayloadSchema, Schema.String, {
-    remote: true,
-    gated: false,
-  }),
-  view("watchFileHunks", FileHunksPayloadSchema, FileHunksSchema, {
-    remote: true,
-    gated: false,
-  }),
-  view("watchOperation", WorktreeScopedPayloadSchema, GitOperationStateSchema, {
-    remote: true,
-    gated: false,
-  }),
+  view("watchFileDiff", FileDiffPayloadSchema, Schema.String, ungated),
+  view("watchFileHunks", FileHunksPayloadSchema, FileHunksSchema, ungated),
+  view(
+    "watchOperation",
+    WorktreeScopedPayloadSchema,
+    GitOperationStateSchema,
+    ungated,
+  ),
   // Answers once each read landed.
-  invoke("refreshChangeStatus", WorktreeScopedPayloadSchema, Schema.Void, {
-    remote: true,
-    gated: false,
-  }),
+  invoke(
+    "refreshChangeStatus",
+    WorktreeScopedPayloadSchema,
+    Schema.Void,
+    ungated,
+  ),
   invoke(
     "discardHunks",
     DiscardHunksPayloadSchema,
     DiscardChangesResultSchema,
-    {
-      tracksProjectUsage: true,
-      remote: true,
-      gated: true,
-      grant: "changeCode",
-    },
+    projectChange,
   ),
   invoke("commit", CommitChangesPayloadSchema, CommitChangesResultSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "commit",
   }),
   invoke(
     "discardChanges",
     DiscardChangesPayloadSchema,
     DiscardChangesResultSchema,
-    {
-      tracksProjectUsage: true,
-      remote: true,
-      gated: true,
-      grant: "changeCode",
-    },
+    projectChange,
   ),
-  invoke("restoreDiscard", RestoreDiscardPayloadSchema, WorktreeSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("commitMessage", CommitDiffPayloadSchema, CommitMessageSchema, {
-    remote: true,
-    gated: false,
-  }),
-  invoke("resetSoft", ResetSoftPayloadSchema, ResetSoftResultSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("resetHard", ResetHardPayloadSchema, ResetHardResultSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("commitDiff", CommitDiffPayloadSchema, Schema.String, {
-    remote: true,
-    gated: false,
-  }),
+  invoke(
+    "restoreDiscard",
+    RestoreDiscardPayloadSchema,
+    WorktreeSchema,
+    gatedBy("changeCode"),
+  ),
+  invoke(
+    "commitMessage",
+    CommitDiffPayloadSchema,
+    CommitMessageSchema,
+    ungated,
+  ),
+  invoke(
+    "resetSoft",
+    ResetSoftPayloadSchema,
+    ResetSoftResultSchema,
+    projectChange,
+  ),
+  invoke(
+    "resetHard",
+    ResetHardPayloadSchema,
+    ResetHardResultSchema,
+    projectChange,
+  ),
+  invoke("commitDiff", CommitDiffPayloadSchema, Schema.String, ungated),
   invoke(
     "listCommits",
     ListCommitsPayloadSchema,
     Schema.Array(CommitSummarySchema),
-    { remote: true, gated: false },
+    ungated,
   ),
-  view("watchBranchHistory", WorktreeScopedPayloadSchema, BranchHistorySchema, {
-    remote: true,
-    gated: false,
-  }),
+  view(
+    "watchBranchHistory",
+    WorktreeScopedPayloadSchema,
+    BranchHistorySchema,
+    ungated,
+  ),
   // As a pull request would show it, against the primary ref or `base`.
-  invoke("branchDiff", BranchDiffPayloadSchema, Schema.String, {
-    remote: true,
-    gated: false,
-  }),
+  invoke("branchDiff", BranchDiffPayloadSchema, Schema.String, ungated),
   // A cherry-pick's worktree is the one the commit lands on.
   worktreeMutationOf("revertCommit", CommitDiffPayloadSchema, "commit"),
   worktreeMutationOf("cherryPick", CommitDiffPayloadSchema, "commit"),
@@ -306,45 +270,37 @@ export const worktreesContract = defineContract(
     "watchStashes",
     WorktreeScopedPayloadSchema,
     Schema.Array(StashEntrySchema),
-    { remote: true, gated: false },
+    ungated,
   ),
-  invoke("stashDiff", DropStashPayloadSchema, Schema.String, {
-    remote: true,
-    gated: false,
-  }),
+  invoke("stashDiff", DropStashPayloadSchema, Schema.String, ungated),
   worktreeMutationOf("stashChanges", StashChangesPayloadSchema, "stash"),
   worktreeMutationOf("applyStash", ApplyStashPayloadSchema, "unstash"),
-  invoke("dropStash", DropStashPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "dropStash",
+    DropStashPayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
   invoke("restoreStash", RestoreStashPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...gatedBy("changeCode"),
     busy: "unstash",
   }),
   worktreeMutationOf("resolveConflict", ResolveConflictPayloadSchema),
-  invoke("mergePreview", MergePreviewPayloadSchema, MergePreviewSchema, {
-    remote: true,
-    gated: false,
-  }),
+  invoke(
+    "mergePreview",
+    MergePreviewPayloadSchema,
+    MergePreviewSchema,
+    ungated,
+  ),
   invoke("mergeBranch", MergeBranchPayloadSchema, MergeBranchResultSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "merge",
   }),
   worktreeMutation("continueOperation", "commit"),
   worktreeMutation("abortOperation"),
   // After a sync from primary conflicts: merge anyway and stop on them.
   invoke("mergePrimary", WorktreeScopedPayloadSchema, MergeBranchResultSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...projectChange,
     busy: "merge",
   }),
   // After a split with the upstream conflicts.
@@ -352,13 +308,7 @@ export const worktreesContract = defineContract(
     "mergeUpstream",
     WorktreeScopedPayloadSchema,
     MergeBranchResultSchema,
-    {
-      tracksProjectUsage: true,
-      remote: true,
-      gated: true,
-      grant: "changeCode",
-      busy: "pull",
-    },
+    { ...projectChange, busy: "pull" },
   ),
   worktreeMutation("push", "push"),
   worktreeMutation("pull", "pull"),

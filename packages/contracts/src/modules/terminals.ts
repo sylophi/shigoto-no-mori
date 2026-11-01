@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke, view } from "../contract.ts";
+import { defineContract, invoke, view, gatedBy } from "../contract.ts";
 import {
   AttachTerminalPayloadSchema,
   CloseTerminalPayloadSchema,
@@ -15,7 +15,7 @@ import {
 // gated under the scripts' consent: a terminal runs anything, as a
 // custom script already does, and which are open where, and their
 // output, are as private as a script's.
-const gated = { remote: true, gated: true, grant: "runCommands" } as const;
+const gated = gatedBy("runCommands");
 
 export const terminalsContract = defineContract(
   "terminals",

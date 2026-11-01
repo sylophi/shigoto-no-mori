@@ -1,4 +1,11 @@
-import { push, defineContract, invoke, view } from "../contract.ts";
+import {
+  push,
+  defineContract,
+  invoke,
+  view,
+  gatedBy,
+  ungated,
+} from "../contract.ts";
 import {
   MergeSharedSettingsPayloadSchema,
   SetSharedSettingPayloadSchema,
@@ -17,14 +24,8 @@ export const sharedSettingsContract = defineContract(
   // Served to any account peer: a copy is only useful if the others
   // can read it, and it holds nothing a project list does not already
   // say.
-  invoke("read", VoidSchema, SharedSettingsDocSchema, {
-    remote: true,
-    gated: false,
-  }),
-  view("watch", VoidSchema, SharedSettingsDocSchema, {
-    remote: true,
-    gated: false,
-  }),
+  invoke("read", VoidSchema, SharedSettingsDocSchema, ungated),
+  view("watch", VoidSchema, SharedSettingsDocSchema, ungated),
   // A write made at this device: the handler stamps it, so the stamp
   // and the device id are never the caller's to claim. Local only. A
   // peer's write arrives as an already-stamped entry through merge.
@@ -37,11 +38,12 @@ export const sharedSettingsContract = defineContract(
   // grants none still converges, because its own window pulls (reads a
   // peer, merges here over the local wire). `changed` below is the
   // signal.
-  invoke("merge", MergeSharedSettingsPayloadSchema, SharedSettingsDocSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeApp",
-  }),
+  invoke(
+    "merge",
+    MergeSharedSettingsPayloadSchema,
+    SharedSettingsDocSchema,
+    gatedBy("changeApp"),
+  ),
   // This copy moved, carrying it whole. Fired only when a set or a
   // merge actually changed something, which is what ends the exchange:
   // a peer that merges this and learns nothing announces nothing back.

@@ -1,4 +1,4 @@
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, projectChange } from "../contract.ts";
 import {
   CreateBranchPayloadSchema,
   DeleteBranchPayloadSchema,
@@ -9,22 +9,7 @@ import {
 export const branchesContract = defineContract(
   "branches",
   "host",
-  invoke("create", CreateBranchPayloadSchema, VoidSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("rename", RenameAnyBranchPayloadSchema, VoidSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
-  invoke("delete", DeleteBranchPayloadSchema, VoidSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke("create", CreateBranchPayloadSchema, VoidSchema, projectChange),
+  invoke("rename", RenameAnyBranchPayloadSchema, VoidSchema, projectChange),
+  invoke("delete", DeleteBranchPayloadSchema, VoidSchema, projectChange),
 );

@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { push, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke, gatedBy, ungated } from "../contract.ts";
 import { ProjectScopedPayloadSchema, VoidSchema } from "../schemas/index.ts";
 
 export const gitContract = defineContract(
@@ -7,17 +7,16 @@ export const gitContract = defineContract(
   "host",
   // Gated: it always ends in an auto-pull pass, which fast-forwards the
   // marked worktrees.
-  invoke("refreshProject", ProjectScopedPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "refreshProject",
+    ProjectScopedPayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
   // refreshProject a person asked for (the page's refresh), which a quit
   // waits on as it does on any git work someone started.
   invoke("fetchProject", ProjectScopedPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
+    ...gatedBy("changeCode"),
     busy: "fetch",
   }),
   // A peer looking at this host: runs the background sweep if stale and
@@ -28,7 +27,7 @@ export const gitContract = defineContract(
     "sweep",
     Schema.Struct({ renewal: Schema.Boolean }),
     Schema.Struct({ leaseMs: Schema.Finite }),
-    { remote: true, gated: false },
+    ungated,
   ),
   push("refsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,

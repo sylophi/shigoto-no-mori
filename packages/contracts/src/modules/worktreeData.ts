@@ -1,5 +1,11 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke } from "../contract.ts";
+import {
+  defineContract,
+  invoke,
+  gatedBy,
+  projectChange,
+  ungated,
+} from "../contract.ts";
 import {
   ReadWorktreeDataPayloadSchema,
   ShigomoriWorktreeDataSchema,
@@ -19,20 +25,21 @@ export const worktreeDataContract = defineContract(
     "read",
     ReadWorktreeDataPayloadSchema,
     Schema.NullOr(ShigomoriWorktreeDataSchema),
-    { remote: true, gated: false },
+    ungated,
   ),
-  invoke("patchPorts", PatchWorktreePortsPayloadSchema, VoidSchema, {
-    tracksProjectUsage: true,
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "patchPorts",
+    PatchWorktreePortsPayloadSchema,
+    VoidSchema,
+    projectChange,
+  ),
   // A worktree's title and description, carried onto its copy here by
   // the device that sent it or runs its mirror
   // (host/lib/sync/worktreeDescription.ts).
-  invoke("describe", WriteWorktreeDescriptionPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "describe",
+    WriteWorktreeDescriptionPayloadSchema,
+    VoidSchema,
+    gatedBy("changeCode"),
+  ),
 );

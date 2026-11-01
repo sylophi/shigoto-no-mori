@@ -67,6 +67,16 @@ type InvokeOptions = {
   readonly busy?: ChangeKind;
 };
 
+export const ungated = { remote: true, gated: false } as const;
+
+export const gatedBy = <const G extends GrantId>(grant: G) =>
+  ({ remote: true, gated: true, grant }) as const;
+
+export const projectChange = {
+  tracksProjectUsage: true,
+  ...gatedBy("changeCode"),
+} as const;
+
 // Only when given, so the registrar can fail closed on an absent one.
 function annotationsOf(options: InvokeOptions): Context.Context<never> {
   let annotations = Context.empty();
