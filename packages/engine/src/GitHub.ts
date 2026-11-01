@@ -1,7 +1,7 @@
-// What the engine asks GitHub, through the user's own `gh`: the pull
-// request a branch has. One runner under every lookup, so the install
-// check, the deadline and the reasons a lookup couldn't be made are the
-// same for each.
+// What the engine and the host ask GitHub, through the user's own `gh`:
+// the pull requests a branch and a repository have. One runner under
+// every lookup, so the install check, the deadline and the reasons a
+// lookup couldn't be made are the same for each.
 import {
   mergeSettingsOf,
   type MergeSettings,
@@ -28,8 +28,20 @@ import { ghHostFor, ghKnownHosts } from "./ghHost.ts";
 import * as Git from "./Git.ts";
 import * as GoJson from "./goJson.ts";
 import {
-  CheckNode,
-  checkVerdict,
+  DETAIL_FIELDS,
+  lookupArgs,
+  ownByBranch,
+  ownOf,
+  type PullRequestCard,
+  type PullRequestRow,
+  type PullRequestSummary,
+  rollupChecks,
+  rowOf,
+  rowsOf,
+  SUMMARY_FIELDS,
+  summaryOf,
+} from "./github/rows.ts";
+import {
   MERGE_PROGRESS_QUERY,
   type MergeProgress,
   parseMergeProgress,
@@ -59,36 +71,11 @@ export class GitHubCliError extends Schema.TaggedError<GitHubCliError>()(
   }
 }
 
-// GitHub's record of an armed auto-merge, the method as GraphQL spells
-// it (MERGE, SQUASH, REBASE).
-type AutoMergeRequest = { readonly mergeMethod: string };
-
-// A pull request as `sm --json` documents print it. The optional fields
-// are left out when empty, as Go's omitempty does.
-export type PullRequestSummary = {
-  readonly number: number;
-  readonly title: string;
-  readonly state: string;
-  readonly isDraft: boolean;
-  readonly url: string;
-  readonly baseRefName: string;
-  readonly headRefName: string;
-  readonly isCrossRepository?: true;
-  readonly mergeStateStatus?: string;
-  readonly autoMergeRequest?: AutoMergeRequest;
-};
-
-type PullRequestChecks = {
-  readonly total: number;
-  readonly passing: number;
-  readonly failing: number;
-  readonly pending: number;
-};
-
-// The status card's pull request: the summary and its check rollup.
-export type PullRequestCard = PullRequestSummary & {
-  readonly checks?: PullRequestChecks;
-};
+export type {
+  PullRequestCard,
+  PullRequestRow,
+  PullRequestSummary,
+} from "./github/rows.ts";
 
 // The open pull request that holds a worktree's title and description.
 // `isCrossRepository` is always false, and printed: the `--json`
@@ -110,6 +97,8 @@ export class GitHubOutputError extends Schema.TaggedError<GitHubOutputError>()(
     return `unexpected gh ${this.command} output`;
   }
 }
+
+const isOutputError = Schema.is(GitHubOutputError);
 
 // A stack GitHub knows, bottom first. A merged PR is "closed".
 export type GitHubStack = ReadonlyArray<{
@@ -152,6 +141,12 @@ export type OwningLookup = Lookup<OwningPullRequest> & {
 // A gh run's deadline, DEFAULT_TIMEOUT when none is given.
 type RunOptions = { readonly timeout?: Duration.Input | undefined };
 
+// One `gh pr list` of the repo's newest PRs.
+type ListPage = {
+  readonly state: "all" | "open" | "closed";
+  readonly limit: number;
+};
+
 export class GitHub extends Context.Service<
   GitHub,
   {
@@ -191,6 +186,15 @@ export class GitHub extends Context.Service<
       repo: string,
       branch: string,
     ) => Effect.Effect<OwningLookup>;
+    // The branch's own pull request, any state, as its page shows it.
+    readonly detailFor: (
+      repo: string,
+      branch: string,
+      options?: RunOptions,
+    ) => Effect.Effect<
+      Option.Option<PullRequestRow>,
+      GitHubCliError | GitHubOutputError
+    >;
     // The branch's pull request, any state, newest first: the first that
     // isn't a fork's, or is the one the branch was checked out from.
     // `extraFields` are asked for beside the summary.
@@ -215,6 +219,17 @@ export class GitHub extends Context.Service<
       repo: string,
     ) => Effect.Effect<
       ReadonlyArray<PullRequestSummary>,
+      GitHubCliError | GitHubOutputError
+    >;
+    // Each branch's own pull request of the repo's newest, read a page
+    // per entry of `pages`. A PR on two pages (it moved between the
+    // reads) is taken from the earlier one.
+    readonly ownPullRequests: (
+      repo: string,
+      pages: ReadonlyArray<ListPage>,
+      options?: RunOptions,
+    ) => Effect.Effect<
+      ReadonlyMap<string, PullRequestSummary>,
       GitHubCliError | GitHubOutputError
     >;
     // The fork's PR the branch was checked out from, or null: the app's
@@ -316,30 +331,6 @@ const REPO_MERGE_QUERY =
 const ASYNC_MERGE_POLL = Duration.seconds(2);
 const ASYNC_MERGE_TIMEOUT_MS = 3 * 60 * 1000;
 
-const SUMMARY_FIELDS =
-  "number,title,state,isDraft,url,baseRefName,headRefName,isCrossRepository";
-
-// How a branch's pull request is found: gh's server-side --head filter,
-// newest first. A few, not one: the filter matches the name across every
-// fork, so a stranger's fork PR of the same name may be newer than the
-// branch's own.
-const lookupArgs = (
-  branch: string,
-  state: "all" | "open" | "merged",
-  fields: ReadonlyArray<string>,
-) => [
-  "pr",
-  "list",
-  "--state",
-  state,
-  "--head",
-  branch,
-  "--limit",
-  "10",
-  "--json",
-  fields.join(","),
-];
-
 // Which failure gh's stderr describes. The auth failure is the common
 // case, and its own message is four lines of instructions. A repo with no
 // GitHub remote gets an error that points at `gh auth login` too, so it
@@ -418,59 +409,6 @@ const pullRequestOfMergeRef = (ref: string): number | null => {
   const match = /^refs\/pull\/(\d+)\/head$/.exec(ref.trim());
   return match ? Number(match[1]) : null;
 };
-
-// One node is one verdict (checkVerdict).
-const rollupChecks = (nodes: ReadonlyArray<CheckNode>): PullRequestChecks => {
-  const checks = { total: 0, passing: 0, failing: 0, pending: 0 };
-  for (const node of nodes) {
-    checks.total++;
-    checks[checkVerdict(node)]++;
-  }
-  return checks;
-};
-
-// A `gh pr list` or `gh pr view` row, read as goJson.ts reads it.
-const Row = Schema.Struct({
-  number: GoJson.count,
-  title: GoJson.text,
-  state: GoJson.text,
-  isDraft: GoJson.flag,
-  url: GoJson.text,
-  baseRefName: GoJson.text,
-  headRefName: GoJson.text,
-  headRefOid: GoJson.text,
-  isCrossRepository: GoJson.flag,
-  mergeStateStatus: GoJson.text,
-  body: GoJson.text,
-  autoMergeRequest: Schema.optional(
-    Schema.NullOr(Schema.Struct({ mergeMethod: GoJson.text })),
-  ),
-  statusCheckRollup: GoJson.list(CheckNode),
-});
-type Row = typeof Row.Type;
-const decodeRow = Schema.decodeUnknownOption(Schema.fromJsonString(Row));
-
-// The row as the document has it: the empty fields left out.
-const summaryOf = (row: Row): PullRequestSummary => ({
-  number: row.number,
-  title: row.title,
-  state: row.state,
-  isDraft: row.isDraft,
-  url: row.url,
-  baseRefName: row.baseRefName,
-  headRefName: row.headRefName,
-  ...(row.isCrossRepository ? { isCrossRepository: true as const } : {}),
-  ...(row.mergeStateStatus === ""
-    ? {}
-    : { mergeStateStatus: row.mergeStateStatus }),
-  ...(row.autoMergeRequest
-    ? { autoMergeRequest: { mergeMethod: row.autoMergeRequest.mergeMethod } }
-    : {}),
-});
-
-const rowsOf = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Array(Row)),
-);
 
 // The repository settings a GraphQL answer carries, none when it has
 // no repository.
@@ -608,20 +546,21 @@ const make = Effect.gen(function* () {
     ) => gh(undefined, host, args, options),
   );
 
-  // gh's rows for a lookup: the failure that kept them, or none when
-  // gh answered with something this build can't read.
-  const listed = (repo: string, args: ReadonlyArray<string>) =>
-    run(repo, args, { timeout: PROBE_TIMEOUT }).pipe(
-      Effect.map((stdout) =>
-        Result.fromOption(
-          rowsOf(stdout),
-          (): GitHubCliError | undefined => undefined,
-        ),
+  // gh's rows for `args`, failing when it answered with something this
+  // build can't read.
+  const rowsFor = (
+    repo: string,
+    args: ReadonlyArray<string>,
+    options?: RunOptions,
+  ) =>
+    run(repo, args, options).pipe(
+      Effect.flatMap((stdout) =>
+        Option.match(rowsOf(stdout), {
+          onNone: () =>
+            Effect.fail(new GitHubOutputError({ command: "pr list" })),
+          onSome: Effect.succeed,
+        }),
       ),
-      Effect.catchTags({
-        GitHubCliError: (error) =>
-          Effect.succeed(Result.fail<GitHubCliError | undefined>(error)),
-      }),
     );
 
   const checkedOutPullRequest = Effect.fn("GitHub.checkedOutPullRequest")(
@@ -655,59 +594,46 @@ const make = Effect.gen(function* () {
     },
   );
 
-  // The first of a branch's PRs that is its own: not a fork's, or the
-  // fork's one it was checked out from. That is asked once, and only
-  // when gh returned a fork's PR.
-  const ownOf = <
-    A extends { readonly number: number; readonly isCrossRepository?: true },
-  >(
+  // The branch's own pull request, any state, with `fields`.
+  const ownRow = (
     repo: string,
     branch: string,
-    prs: ReadonlyArray<A>,
+    fields: ReadonlyArray<string>,
+    options?: RunOptions,
   ) =>
-    Effect.gen(function* () {
-      const checkedOut = yield* Effect.cached(
-        checkedOutPullRequest(repo, branch),
-      );
-      for (const pr of prs) {
-        if (isBranchsOwn(pr, yield* checkedOut)) return Option.some(pr);
-      }
-      return Option.none<A>();
-    });
+    Effect.all(
+      [
+        rowsFor(repo, lookupArgs(branch, "all", fields), options),
+        checkedOutPullRequests(repo),
+      ],
+      { concurrency: 2 },
+    ).pipe(Effect.map(([rows, checkedOut]) => ownOf(rows, branch, checkedOut)));
 
   const cardFor = Effect.fn("GitHub.cardFor")(function* (
     repo: string,
     branch: string,
   ) {
-    const rows = yield* listed(
-      repo,
-      lookupArgs(branch, "all", [
-        SUMMARY_FIELDS,
-        "autoMergeRequest",
-        "statusCheckRollup",
-      ]),
-    );
-    if (Result.isFailure(rows)) {
-      return {
-        found: null,
-        unavailable:
-          rows.failure === undefined
-            ? "unexpected gh output"
-            : reasonOf(rows.failure),
-      };
-    }
-    const own = yield* ownOf(
-      repo,
-      branch,
-      rows.success.map((row) =>
-        Object.assign(summaryOf(row), { rollup: row.statusCheckRollup }),
+    const own = yield* Effect.result(
+      ownRow(
+        repo,
+        branch,
+        [SUMMARY_FIELDS, "autoMergeRequest", "statusCheckRollup"],
+        { timeout: PROBE_TIMEOUT },
       ),
     );
-    if (Option.isNone(own)) return { found: null };
-    const { rollup, ...summary } = own.value;
-    const checks = rollupChecks(rollup);
+    if (Result.isFailure(own)) {
+      return {
+        found: null,
+        unavailable: isOutputError(own.failure)
+          ? "unexpected gh output"
+          : reasonOf(own.failure),
+      };
+    }
+    if (Option.isNone(own.success)) return { found: null };
+    const row = own.success.value;
+    const checks = rollupChecks(row.statusCheckRollup);
     return {
-      found: { ...summary, ...(checks.total > 0 ? { checks } : {}) },
+      found: { ...summaryOf(row), ...(checks.total > 0 ? { checks } : {}) },
     };
   });
 
@@ -715,14 +641,17 @@ const make = Effect.gen(function* () {
     repo: string,
     branch: string,
   ): Effect.fn.Return<OwningLookup> {
-    const rows = yield* listed(
-      repo,
-      lookupArgs(branch, "open", ["number,url,title,body,isCrossRepository"]),
+    const rows = yield* Effect.result(
+      rowsFor(
+        repo,
+        lookupArgs(branch, "open", ["number,url,title,body,isCrossRepository"]),
+        { timeout: PROBE_TIMEOUT },
+      ),
     );
     // Not worth a word: no gh, and a repository off GitHub.
     if (Result.isFailure(rows)) {
       const failure = rows.failure;
-      if (failure === undefined) {
+      if (isOutputError(failure)) {
         return {
           found: null,
           unavailable: "gh's answer didn't parse",
@@ -752,27 +681,18 @@ const make = Effect.gen(function* () {
     };
   });
 
-  const prList = (repo: string, args: ReadonlyArray<string>) =>
-    run(repo, args).pipe(
-      Effect.flatMap((stdout) =>
-        Option.match(rowsOf(stdout), {
-          onNone: () =>
-            Effect.fail(new GitHubOutputError({ command: "pr list" })),
-          onSome: (rows) => Effect.succeed(rows.map(summaryOf)),
-        }),
-      ),
-    );
+  const detailFor = Effect.fn("GitHub.detailFor")(
+    (repo: string, branch: string, options?: RunOptions) =>
+      ownRow(repo, branch, DETAIL_FIELDS, options),
+  );
 
   const find = Effect.fn("GitHub.find")(function* (
     repo: string,
     branch: string,
     extraFields: ReadonlyArray<string> = [],
   ) {
-    const prs = yield* prList(
-      repo,
-      lookupArgs(branch, "all", [SUMMARY_FIELDS, ...extraFields]),
-    );
-    return yield* ownOf(repo, branch, prs);
+    const own = yield* ownRow(repo, branch, [SUMMARY_FIELDS, ...extraFields]);
+    return Option.map(own, summaryOf);
   });
 
   const findByNumber = Effect.fn("GitHub.findByNumber")(function* (
@@ -797,22 +717,52 @@ const make = Effect.gen(function* () {
       }
       return yield* answered.failure;
     }
-    const row = decodeRow(answered.success);
+    const row = rowOf(answered.success);
     if (Option.isSome(row)) return Option.some(summaryOf(row.value));
     return yield* new GitHubOutputError({ command: "pr view" });
   });
 
+  const page = (
+    repo: string,
+    { state, limit }: ListPage,
+    options?: RunOptions,
+  ) =>
+    rowsFor(
+      repo,
+      [
+        "pr",
+        "list",
+        "--state",
+        state,
+        "--limit",
+        String(limit),
+        "--json",
+        SUMMARY_FIELDS,
+      ],
+      options,
+    );
+
   const list = Effect.fn("GitHub.list")(function* (repo: string) {
-    return yield* prList(repo, [
-      "pr",
-      "list",
-      "--state",
-      "all",
-      "--limit",
-      "200",
-      "--json",
-      SUMMARY_FIELDS,
-    ]);
+    const rows = yield* page(repo, { state: "all", limit: 200 });
+    return rows.map(summaryOf);
+  });
+
+  const ownPullRequests = Effect.fn("GitHub.ownPullRequests")(function* (
+    repo: string,
+    pages: ReadonlyArray<ListPage>,
+    options?: RunOptions,
+  ) {
+    const [read, checkedOut] = yield* Effect.all(
+      [
+        Effect.forEach(pages, (each) => page(repo, each, options), {
+          concurrency: "unbounded",
+        }),
+        checkedOutPullRequests(repo),
+      ],
+      { concurrency: 2 },
+    );
+    const rows = read.flat().toSorted((a, b) => b.number - a.number);
+    return ownByBranch(rows.map(summaryOf), checkedOut);
   });
 
   const mergedHeads = Effect.fn("GitHub.mergedHeads")(function* (
@@ -843,7 +793,7 @@ const make = Effect.gen(function* () {
     repo: string,
     number: number,
   ) {
-    const row = decodeRow(
+    const row = rowOf(
       yield* run(repo, ["pr", "view", String(number), "--json", "headRefOid"]),
     );
     if (Option.isNone(row) || row.value.headRefOid === "") {
@@ -1052,9 +1002,11 @@ const make = Effect.gen(function* () {
     knownHosts,
     cardFor,
     owningPullRequest,
+    detailFor,
     find,
     findByNumber,
     list,
+    ownPullRequests,
     checkedOutPullRequest,
     checkedOutPullRequests,
     mergedHeads,

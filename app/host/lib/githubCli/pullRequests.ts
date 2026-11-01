@@ -5,19 +5,17 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import {
-  isBranchsOwn,
   isFromThisRepository,
   type MergeMethod,
   MergeMethodSchema,
   type PullRequest,
-  type PullRequestCheck,
+  PullRequestDetailSchema,
   type PullRequestDetail,
   PullRequestMergeStateSchema,
   PullRequestReviewDecisionSchema,
   PullRequestReviewerStateSchema,
   type PullRequestReviews,
   PullRequestSchema,
-  PullRequestStateSchema,
   pullRequestsEqual,
   summarizeChecks,
 } from "@shigomori/contracts/schemas";
@@ -31,90 +29,57 @@ const gh = (cwd: string, args: ReadonlyArray<string>) =>
     github.run(cwd, args, { timeout: GH_TIMEOUT_MS }),
   );
 
-const GhPrListItemSchema = Schema.Struct({
-  number: PullRequestSchema.fields.number,
-  url: PullRequestSchema.fields.url,
-  title: Schema.String,
-  state: PullRequestStateSchema,
-  isDraft: Schema.Boolean,
-  headRefName: Schema.String,
-  baseRefName: Schema.String,
-  isCrossRepository: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
-  ),
-});
-type GhPrListItem = typeof GhPrListItemSchema.Type;
-const decodeGhPrList = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Array(GhPrListItemSchema)),
-);
-
 // Open PRs read apart from closed ones (gh's "closed" is merged too), so
 // a busy repo's newer closed PRs don't crowd out its older open ones. Past
 // the open limit, the oldest open PRs still fall out (no title, no stack).
-const OPEN_PR_LIMIT = 1000;
-const CLOSED_PR_LIMIT = 200;
+// A PR on both closed between the two reads: its closed copy goes first.
+const PROJECT_PAGES = [
+  { state: "closed", limit: 200 },
+  { state: "open", limit: 1000 },
+] as const;
 
-const runGhPrList = (cwd: string, state: "open" | "closed", limit: number) =>
-  gh(cwd, [
-    "pr",
-    "list",
-    "--state",
-    state,
-    "--limit",
-    String(limit),
-    "--json",
-    "number,url,title,state,isDraft,headRefName,baseRefName,isCrossRepository",
-  ]).pipe(
-    Effect.map((stdout) => Option.getOrNull(decodeGhPrList(stdout))),
-    Effect.orElseSucceed((): readonly GhPrListItem[] | null => null),
-  );
+// A PR's slim fields (PullRequestSchema). A fork's PR here is always the
+// one its branch was checked out from (GitHub's ownership), marked so
+// the renderer keeps it too (isBranchsPullRequest).
+const slimOf = (pr: GitHub.PullRequestSummary | GitHub.PullRequestRow) => ({
+  number: pr.number,
+  url: pr.url,
+  title: pr.title,
+  state: pr.state,
+  isDraft: pr.isDraft,
+  baseRefName: pr.baseRefName,
+  isCrossRepository: pr.isCrossRepository === true,
+  ...(isFromThisRepository(pr) ? {} : { checkedOutFrom: true }),
+});
 
-function toPullRequest(item: GhPrListItem, stack?: number): PullRequest {
-  return {
-    number: item.number,
-    url: item.url,
-    title: item.title,
-    state: item.state,
-    isDraft: item.isDraft,
-    baseRefName: item.baseRefName,
-    isCrossRepository: item.isCrossRepository,
-    ...(stack === undefined ? {} : { stack }),
-    ...checkedOutMark(item),
-  };
-}
-
-// Kept fork PRs are always checked-out ones, marked so the renderer
-// keeps them too (isBranchsPullRequest).
-function checkedOutMark(pr: {
-  isCrossRepository: boolean;
-}): Pick<PullRequest, "checkedOutFrom"> {
-  return isFromThisRepository(pr) ? {} : { checkedOutFrom: true };
-}
+const decodePullRequest = Schema.decodeUnknownOption(PullRequestSchema);
 
 // The project's PRs by head branch, or null when gh failed (the
-// network, its output). Newest first, so a reused branch keeps its
-// newest own PR. A PR in both lists closed between the two reads: its
-// closed copy goes first.
+// network, its output).
 export const readProjectPullRequests = Effect.fnUntraced(function* (
   cwd: string,
 ) {
   const github = yield* GitHub.GitHub;
-  const [open, closed, stackOf, checkedOut] = yield* Effect.all(
-    [
-      runGhPrList(cwd, "open", OPEN_PR_LIMIT),
-      runGhPrList(cwd, "closed", CLOSED_PR_LIMIT),
-      github.stacks(cwd).pipe(Effect.orElseSucceed(() => null)),
-      github.checkedOutPullRequests(cwd),
-    ],
-    { concurrency: 4 },
+  const read = yield* Effect.option(
+    Effect.all(
+      [
+        github.ownPullRequests(cwd, PROJECT_PAGES, { timeout: GH_TIMEOUT_MS }),
+        github.stacks(cwd),
+      ],
+      { concurrency: 2 },
+    ),
   );
-  if (open === null || closed === null || stackOf === null) return null;
-  const rows = [...closed, ...open].toSorted((a, b) => b.number - a.number);
+  if (Option.isNone(read)) return null;
+  const [own, stackOf] = read.value;
   const map = new Map<string, PullRequest>();
-  for (const item of rows) {
-    if (map.has(item.headRefName)) continue;
-    if (!isBranchsOwn(item, checkedOut.get(item.headRefName))) continue;
-    map.set(item.headRefName, toPullRequest(item, stackOf.get(item.number)));
+  for (const [branch, pr] of own) {
+    const stack = stackOf.get(pr.number);
+    const decoded = decodePullRequest({
+      ...slimOf(pr),
+      ...(stack === undefined ? {} : { stack }),
+    });
+    if (Option.isNone(decoded)) return null;
+    map.set(branch, decoded.value);
   }
   return map;
 });
@@ -131,58 +96,6 @@ export function pullRequestMapsEqual(
   return true;
 }
 
-// Each rollup item is either a CheckRun or a StatusContext. We keep the
-// schema permissive (unknown keys ignored, every field optional)
-// because gh occasionally inlines extra typenames and we'd rather
-// degrade gracefully than reject the whole list.
-const StatusCheckRollupItemSchema = Schema.Struct({
-  __typename: Schema.optional(Schema.String),
-  name: Schema.optional(Schema.String),
-  context: Schema.optional(Schema.String),
-  status: Schema.optional(Schema.String),
-  conclusion: Schema.optional(Schema.String),
-  state: Schema.optional(Schema.String),
-  detailsUrl: Schema.optional(Schema.String),
-  targetUrl: Schema.optional(Schema.String),
-});
-
-const GhPrDetailSchema = Schema.Struct({
-  number: PullRequestSchema.fields.number,
-  url: PullRequestSchema.fields.url,
-  title: Schema.String,
-  body: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
-  isCrossRepository: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
-  ),
-  state: PullRequestStateSchema,
-  isDraft: Schema.Boolean,
-  mergeStateStatus: PullRequestMergeStateSchema.pipe(
-    Schema.catchDecoding(() => Effect.succeedSome("UNKNOWN" as const)),
-    Schema.withDecodingDefault(Effect.succeed("UNKNOWN" as const)),
-  ),
-  // GitHub's record of an armed auto-merge, null when there is none.
-  // It also carries who armed it and when, which nothing reads.
-  autoMergeRequest: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({ mergeMethod: Schema.optional(Schema.String) }),
-    ),
-  ),
-  baseRefName: Schema.String,
-  author: Schema.optional(
-    Schema.NullOr(Schema.Struct({ login: Schema.optional(Schema.String) })),
-  ),
-  updatedAt: Schema.String,
-  additions: Schema.Natural,
-  deletions: Schema.Natural,
-  changedFiles: Schema.Natural,
-  statusCheckRollup: Schema.Array(StatusCheckRollupItemSchema).pipe(
-    Schema.withDecodingDefault(Effect.succeed([])),
-  ),
-});
-const decodeGhPrDetails = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(Schema.Array(GhPrDetailSchema)),
-);
-
 // gh answered a branch's pull requests in a shape this build can't read.
 class PullRequestShapeError extends Schema.TaggedError<PullRequestShapeError>()(
   "PullRequestShapeError",
@@ -198,7 +111,7 @@ class PullRequestShapeError extends Schema.TaggedError<PullRequestShapeError>()(
 // worst case a non-web scheme. PullRequestCheckSchema.url requires a real
 // URL, and the renderer feeds it to openExternal, so only absolute
 // http(s) links make the cut.
-function toCheckUrl(value: string | undefined): string | undefined {
+function toCheckUrl(value: string): string | undefined {
   if (!value) return undefined;
   try {
     const protocol = new URL(value).protocol;
@@ -220,19 +133,58 @@ function autoMergeMethod(
   return isMergeMethod(method) ? method : null;
 }
 
+const isMergeState = Schema.is(PullRequestMergeStateSchema);
+const decodeDetail = Schema.decodeUnknownEffect(PullRequestDetailSchema);
+
+const detailOf = (pr: GitHub.PullRequestRow) => {
+  const checkList = pr.statusCheckRollup.map((item) => ({
+    name: item.name || item.context || "check",
+    bucket: checkBucket(item),
+    url: toCheckUrl(item.detailsUrl) ?? toCheckUrl(item.targetUrl),
+  }));
+  return decodeDetail({
+    ...slimOf(pr),
+    body: pr.body,
+    mergeState: isMergeState(pr.mergeStateStatus)
+      ? pr.mergeStateStatus
+      : "UNKNOWN",
+    autoMerge: autoMergeMethod(pr.autoMergeRequest),
+    authorLogin: pr.author.login || "ghost",
+    updatedAt: pr.updatedAt,
+    additions: pr.additions,
+    deletions: pr.deletions,
+    changedFiles: pr.changedFiles,
+    checks: summarizeChecks(checkList),
+    checkList,
+  });
+};
+
 // One branch's PR with its checks and merge state, for the worktree
-// page, read through gh's server-side --head filter so it stays cheap in
-// a repo of many PRs. Null is GitHub's "no PR": a gh, network or output
-// failure fails, and the caller has checked the repo is ready. `sign`
-// points the body's images at the rendered body's URLs
+// page (GitHub.detailFor). Null is GitHub's "no PR": a gh, network or
+// output failure fails, and the caller has checked the repo is ready.
+// `sign` points the body's images at the rendered body's URLs
 // (withSignedImages).
 export const readBranchPullRequest = Effect.fnUntraced(function* (
   cwd: string,
   branch: string,
   sign: (body: string, bodyHTML: string) => Effect.Effect<string>,
 ) {
+  const github = yield* GitHub.GitHub;
   const [detail, extras] = yield* Effect.all(
-    [runGhPrListDetail(cwd, branch), fetchGraphqlExtras(cwd, branch)],
+    [
+      github.detailFor(cwd, branch, { timeout: GH_TIMEOUT_MS }).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.succeed(null),
+            onSome: detailOf,
+          }),
+        ),
+        Effect.catchTag(["GitHubOutputError", "SchemaError"], (cause) =>
+          Effect.fail(new PullRequestShapeError({ branch, cause })),
+        ),
+      ),
+      fetchGraphqlExtras(cwd, branch),
+    ],
     { concurrency: 2 },
   );
   if (!detail) return null;
@@ -498,61 +450,3 @@ export function withSignedImages(
     },
   );
 }
-
-// Ten, so a newer fork's PR of the same name can't hide the branch's
-// own (isBranchsOwn).
-const runGhPrListDetail = Effect.fnUntraced(function* (
-  cwd: string,
-  branch: string,
-) {
-  const [stdout, checkedOut] = yield* Effect.all(
-    [
-      gh(cwd, [
-        "pr",
-        "list",
-        "--state",
-        "all",
-        "--head",
-        branch,
-        "--limit",
-        "10",
-        "--json",
-        "number,url,title,body,state,isDraft,isCrossRepository,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
-      ]),
-      Effect.flatMap(GitHub.GitHub, (github) =>
-        github.checkedOutPullRequest(cwd, branch),
-      ),
-    ],
-    { concurrency: 2 },
-  );
-  const validated = yield* decodeGhPrDetails(stdout).pipe(
-    Effect.mapError((cause) => new PullRequestShapeError({ branch, cause })),
-  );
-  const first = validated.find((pr) => isBranchsOwn(pr, checkedOut));
-  if (!first) return null;
-  const checkList: PullRequestCheck[] = first.statusCheckRollup.map((item) => ({
-    name: item.name ?? item.context ?? "check",
-    bucket: checkBucket(item),
-    url: toCheckUrl(item.detailsUrl) ?? toCheckUrl(item.targetUrl),
-  }));
-  return {
-    number: first.number,
-    url: first.url,
-    title: first.title,
-    body: first.body,
-    isCrossRepository: first.isCrossRepository,
-    ...checkedOutMark(first),
-    state: first.state,
-    isDraft: first.isDraft,
-    mergeState: first.mergeStateStatus,
-    autoMerge: autoMergeMethod(first.autoMergeRequest),
-    baseRefName: first.baseRefName,
-    authorLogin: first.author?.login ?? "ghost",
-    updatedAt: first.updatedAt,
-    additions: first.additions,
-    deletions: first.deletions,
-    changedFiles: first.changedFiles,
-    checks: summarizeChecks(checkList),
-    checkList,
-  } satisfies PullRequestDetail;
-});

@@ -1,8 +1,4 @@
 {
-  "PullRequestStateSchema": {
-    "accepts": ["OPEN", "CLOSED", "MERGED"],
-    "rejects": ["open", "DRAFT"]
-  },
   "PullRequestSchema": {
     "accepts": [
       {
@@ -84,6 +80,14 @@
         "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
         "title": "Aggregate worktrees across devices",
         "state": "DRAFT",
+        "isDraft": false,
+        "baseRefName": "main"
+      },
+      {
+        "number": 148,
+        "url": "https://github.com/sylophi/shigoto-no-mori/pull/148",
+        "title": "Aggregate worktrees across devices",
+        "state": "open",
         "isDraft": false,
         "baseRefName": "main"
       }
