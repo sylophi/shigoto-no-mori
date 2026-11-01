@@ -55,7 +55,7 @@ interface BuildInboxRowsArgs {
   // Which shelves are open. Absence means shut, so both shelves start
   // folded on every launch, the same reasoning as the per-group
   // "Show shelved" reveal in the classic view.
-  openShelves: Set<InboxShelf>;
+  openShelves: ReadonlySet<string>;
   // Worktrees starting with one of these go on the Hidden shelf.
   hiddenPrefixes: readonly string[];
   // The live worktrees starting with one of these gather under a
