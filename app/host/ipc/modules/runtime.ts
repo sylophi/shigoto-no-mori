@@ -95,22 +95,6 @@ const underWayByName = (
     };
   });
 
-// What follows a data-folder move that failed. Before the host let go
-// of the folder, nothing: the app carries on where it was. After, it
-// runs without its loopback and store watch, so it restarts: for a
-// peer's move at once, nobody here to ask; for one asked here, once
-// the user has read why (the shell's dialog, whose one button
-// restarts and whose dismissal quits).
-
-const afterFailedMove = ({
-  watchersStopped,
-  unattended,
-}: {
-  watchersStopped: boolean;
-  unattended: boolean;
-}): "carry-on" | "relaunch" | "ask" =>
-  !watchersStopped ? "carry-on" : unattended ? "relaunch" : "ask";
-
 export const runtimeHandlers = {
   // Host facts only. isDev deliberately isn't here: it describes the
   // client build and rides the preload bridge (api.isDev) instead.
@@ -171,22 +155,20 @@ export const runtimeHandlers = {
       }).pipe(
         Effect.onError((cause) =>
           Effect.suspend(() => {
-            // A move that failed after the watchers stopped leaves this
-            // app running without them. At this machine the shell says
-            // why and offers a restart, or quits. For a peer's move
-            // nobody here does, so the restart that brings them back
-            // happens anyway (the data dir and pointer are where they
-            // were).
-            switch (afterFailedMove({ watchersStopped, unattended })) {
-              case "relaunch":
-                return shell.relaunch;
-              case "ask":
-                return shell.moveFailed(errorWordsOf(Cause.squash(cause)));
-              case "carry-on":
-                moveInFlight = false;
-                // Only a hold this move took: a reset's, or none.
-                return updaterHeld ? shell.resumeUpdater : Effect.void;
+            // A move that failed before the host let go of the folder
+            // leaves the app carrying on where it was.
+            if (!watchersStopped) {
+              moveInFlight = false;
+              // Only a hold this move took: a reset's, or none.
+              return updaterHeld ? shell.resumeUpdater : Effect.void;
             }
+            // After, it runs without its loopback and store watch, so it
+            // restarts. A peer's move restarts at once, with nobody here
+            // to ask (the data dir and pointer are where they were). One
+            // asked here restarts once the user has read why (the shell's
+            // dialog, whose one button restarts and whose dismissal quits).
+            if (unattended) return shell.relaunch;
+            return shell.moveFailed(errorWordsOf(Cause.squash(cause)));
           }),
         ),
       );

@@ -110,12 +110,9 @@ import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import { dataDir } from "@shared/paths";
-import {
-  type AccountFacts,
-  acceptsPeerCommands,
-  listAccountDevices,
-  setAccountFacts,
-} from "./account";
+import type { AccountFacts } from "@shigomori/contracts/modules/session";
+import { HostAccount } from "@host/lib/HostAccount";
+import { acceptsPeerCommands, listAccountDevices } from "./account";
 import {
   broadcastAll,
   clearDirectTickets,
@@ -315,7 +312,9 @@ const toMirrorEngine = (tell: (engine: MirrorEngine["Service"]) => void) =>
 // copy). Every step is fenced so one failing cannot leave the remote
 // plane up.
 export async function applyAccount(next: AccountFacts | null): Promise<void> {
-  const previous = await setAccountFacts(next);
+  const previous = await Graph.run(
+    Effect.flatMap(HostAccount, (account) => account.set(next)),
+  );
   const leaving =
     previous.facts !== null &&
     (next === null || next.accountId !== previous.facts.accountId);

@@ -11,16 +11,16 @@ import * as Paths from "@shigomori/engine/Paths";
 import * as Updater from "@shigomori/engine/Updater";
 import * as Scripts from "@host/lib/Scripts";
 import * as Graph from "@host/process/graph";
-import { hostBinaryPath } from "@host/process/facts";
 import { quit } from "@host/process/run";
 import { broadcastAll } from "@host/process/wires";
 import type { HostFacts } from "@shared/hostFacts";
+import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import { makeUpdater } from "@shared/updater/machine";
 
 export const makeHeadlessUpdater = (facts: HostFacts) => {
   const cliBinary = () =>
-    hostBinaryPath(CLI_DIST_DIR, cliBinaryName(facts.flavor));
+    bundledBinaryPath(facts, CLI_DIST_DIR, cliBinaryName(facts.flavor));
   const updater = makeUpdater({
     flavor: facts.flavor,
     packaged: facts.packaged,

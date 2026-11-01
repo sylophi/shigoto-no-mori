@@ -4,9 +4,6 @@
 // (headless/facts.ts). Everything below the root reads them as the
 // HostFacts service (lib/HostFacts.ts), which the root provides from
 // these.
-import { join } from "node:path";
-import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
-import { TUNNEL_PID_FILE } from "@shigomori/engine/tunnelPid";
 import type { HostFacts } from "@shared/hostFacts";
 
 let given: HostFacts | undefined;
@@ -21,11 +18,3 @@ export function hostFacts(): HostFacts {
   }
   return given;
 }
-
-export const hostBinaryPath = (devDistDir: string, name: string): string =>
-  bundledBinaryPath(hostFacts(), devDistDir, name);
-
-// The live cloudflared's pid (direct/Tunnel.ts), in the shell's own data
-// so it outlives the host that wrote it.
-export const tunnelPidFile = (): string =>
-  join(hostFacts().userDataPath, TUNNEL_PID_FILE);
