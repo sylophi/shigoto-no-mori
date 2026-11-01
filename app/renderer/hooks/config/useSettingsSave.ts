@@ -14,27 +14,30 @@ import {
 } from "@shigomori/ui/lib/settingsForm.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 
-const LAUNCH_CATALOG = [
-  "launchers",
-  "hiddenLaunchers",
-  "launchScripts",
-  "terminal",
-  "editor",
-] as const;
-
 // The peer encoding: the globalConfig.writeDeviceSettings patch,
 // carrying ONLY the keys a peer's Settings section edits. The host
 // applies the patch as absent-means-keep, which is what keeps the
-// launch catalog out of it: those keys are local by nature and edited
-// only on this machine's Launch tools section, so a peer save must not
-// re-send a snapshot of them taken when the peer's form was seeded.
-// Every key carries an EXPLICIT value, default included: absent means
-// keep, so only an explicit default reverts a key (the host then stores
-// it by omission).
+// launch catalog (launchers, hiddenLaunchers, launchScripts, terminal,
+// editor) out of it: those keys are local by nature and edited only on
+// this machine's Launch tools section, so a peer save must not re-send a
+// snapshot of them taken when the peer's form was seeded. Every key
+// carries an EXPLICIT value, default included: absent means keep, so
+// only an explicit default reverts a key (the host then stores it by
+// omission).
 function toDeviceSettingsPatch(state: SettingsFormState): DeviceSettingsPatch {
-  const patch: DeviceSettingsPatch = deviceFields(state);
-  for (const key of LAUNCH_CATALOG) delete patch[key];
-  return patch;
+  return {
+    deleteBranchOnRemove: state.deleteBranchOnRemove,
+    autoPopulateInstall: state.autoPopulateInstall,
+    autoPullNew: state.autoPullNew,
+    autoPullPrimaryOnly: state.autoPullPrimaryOnly,
+    autoShelveDays: state.autoShelveDays,
+    doubutsuNames: state.doubutsuNames,
+    codexWorktreeNames: state.codexWorktreeNames,
+    managedOnProjectDrive: state.managedOnProjectDrive,
+    portPool: state.portPool,
+    terrier: state.terrier,
+    githubCli: state.githubCli,
+  };
 }
 
 // This machine's encoding: every device key, the launch catalog
