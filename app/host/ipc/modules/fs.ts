@@ -6,64 +6,9 @@ import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Effect from "effect/Effect";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Git from "@shigomori/engine/Git";
+import * as Projects from "@shigomori/engine/Projects";
 import type * as Engine from "@host/lib/Engine";
 import { toAbsolute } from "@shared/paths";
-
-// Directories that virtually never contain git repos but are huge and slow to
-// walk. Skipped during the scan to keep it responsive.
-const SCAN_SKIP_DIRS = new Set([
-  "node_modules",
-  "target",
-  "dist",
-  "build",
-  "vendor",
-  "venv",
-  ".venv",
-  "__pycache__",
-  ".next",
-  ".nuxt",
-  ".turbo",
-  ".cache",
-]);
-
-const SCAN_MAX_DEPTH = 6;
-
-async function scanForGitRepos(rootPath: string): Promise<string[]> {
-  const results: string[] = [];
-
-  async function walk(dir: string, depth: number): Promise<void> {
-    if (depth > SCAN_MAX_DEPTH) return;
-    let entries;
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return; // permission denied or vanished mid-scan
-    }
-
-    // Outermost-only: if this dir is itself a git repo, record it and stop.
-    if (entries.some((e) => e.isDirectory() && e.name === ".git")) {
-      results.push(dir);
-      return;
-    }
-
-    const subdirs = entries.filter(
-      (e) =>
-        e.isDirectory() &&
-        !e.isSymbolicLink() &&
-        !e.name.startsWith(".") &&
-        !SCAN_SKIP_DIRS.has(e.name),
-    );
-
-    // Walk siblings in parallel. The tree fan-out at top levels is small (~10)
-    // so this stays bounded.
-    await Promise.all(
-      subdirs.map((entry) => walk(join(dir, entry.name), depth + 1)),
-    );
-  }
-
-  await walk(rootPath, 0);
-  return results.toSorted();
-}
 
 async function listDirectory(path: string) {
   const absolute = toAbsolute(path);
@@ -102,7 +47,9 @@ export const fsHandlers = {
     Effect.flatMap(Git.Git, (git) => git.isRepo(toAbsolute(path))),
 
   scanForGitRepos: ({ path }) =>
-    onDisk(() => scanForGitRepos(toAbsolute(path))),
+    Effect.flatMap(Projects.Projects, (projects) =>
+      projects.scan(toAbsolute(path)),
+    ).pipe(Effect.map((found) => found.repos)),
 } satisfies EffectHandlers<
   typeof fsContract,
   unknown,
