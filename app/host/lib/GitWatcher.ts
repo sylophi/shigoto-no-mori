@@ -7,8 +7,9 @@
 // The git facts a worktree row shows (branch, tip, ahead/behind) live
 // in the project's git directory, and a linked worktree's metadata
 // lives under its `worktrees/<name>/` there too, so one recursive watch
-// per project covers every worktree of it. On a machine that watches a folder at a time (watchTree.ts),
-// that watch is of the folders those paths are in.
+// per project covers every worktree of it. On a machine that watches a
+// folder at a time (watchTree.ts), that watch is of the folders those
+// paths are in.
 //
 // What counts as a change is an allowlist of git-dir paths (`RELEVANT`,
 // below), not "anything under .git": objects/ churns on every commit,

@@ -127,6 +127,10 @@ import {
 import { log, warnOnFailure } from "@shared/log";
 import * as Graph from "./graph";
 
+// The hub's handlers, failing instead of throwing: hubHandlers() throws
+// LayerDownError before the hub is up.
+const bridge = Effect.try({ try: hubHandlers, catch: callFailureOf });
+
 // Every peer reach of the host (host/ipc/PeerReach.ts), the
 // pull/transplant orchestrations' and the port-forward engine's among
 // them, routed through the SAME invokePeer path (and so the same
@@ -136,10 +140,7 @@ import * as Graph from "./graph";
 // socket per device.
 const peerReach = PeerReach.make({
   invoke: (deviceId, channel, input) =>
-    Effect.flatMap(
-      Effect.try({ try: hubHandlers, catch: callFailureOf }),
-      (hub) => hub.invokeOnPeer(deviceId, channel, input),
-    ),
+    Effect.flatMap(bridge, (hub) => hub.invokeOnPeer(deviceId, channel, input)),
   // Off the same session's fan-out (onPeerPush): what a start the peer
   // runs for this device streams back, which the control ops relay to
   // the CLI.
