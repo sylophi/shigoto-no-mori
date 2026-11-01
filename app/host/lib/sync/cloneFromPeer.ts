@@ -119,7 +119,7 @@ class ProjectAlreadyHereError extends Schema.TaggedError<ProjectAlreadyHereError
 // checkout of the repo at the place the user named, and a retry lands
 // in it. So a failed register says where it is: a retry would only
 // find the folder taken.
-export const registerClone = (dest: string) =>
+const registerClone = (dest: string) =>
   addProject(dest).pipe(
     Effect.mapError(
       (error) =>
@@ -146,11 +146,8 @@ const pendingIn = (dir: string) =>
     ),
   );
 
-const finishRegister = <A, E, R>(
-  dest: string,
-  register: (dest: string) => Effect.Effect<A, E, R>,
-) =>
-  Effect.tap(register(dest), () =>
+const finishRegister = (dest: string) =>
+  Effect.tap(registerClone(dest), () =>
     Effect.promise(() =>
       rm(join(dest, ".git", PENDING), { force: true }).catch(() => {}),
     ),
@@ -199,9 +196,9 @@ export const cloneDestination = (
   });
 
 // An interrupt (the move's cancel) undoes the sibling like any failure.
-// During the fetch the link's reset does the failing. `register` makes
-// the checkout a project, right after the rename; answers what it does.
-export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
+// During the fetch the link's reset does the failing. The checkout is
+// made a project right after the rename, which is the answer.
+export const cloneCheckoutFromPeer = Effect.fnUntraced(function* (
   source: WorktreeSource,
   { parentDir, name }: SyncCloneInto,
   // The branch a landing puts its copy on afterwards: the clone's own
@@ -211,7 +208,6 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   // The repo's identity, which a clone a crash left must match to be
   // taken for this one.
   identity: string,
-  register: (dest: string) => Effect.Effect<A, E, R>,
   onProgress?: (bytes: number, totalBytes: number) => void,
 ) {
   // The source's default branch is what the checkout is made of: its
@@ -234,12 +230,12 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
   const left = join(parent, name);
   const pending = yield* pendingIn(left);
   if (pending?.dest === left && pending.identity === identity) {
-    return yield* finishRegister(left, register);
+    return yield* finishRegister(left);
   }
   if (
     (yield* cloneDestination({ parentDir, name }, identity)) === "same-repo"
   ) {
-    return yield* register(left);
+    return yield* registerClone(left);
   }
   const [dest, { branch, ref, remoteUrl }] = yield* Effect.all(
     [
@@ -344,7 +340,7 @@ export const cloneCheckoutFromPeer = Effect.fnUntraced(function* <A, E, R>(
                 reason: `Couldn't put the clone at ${dest}: ${errnoWords(error, errorMessageOf(error))}.`,
               }),
           });
-          return yield* finishRegister(dest, register);
+          return yield* finishRegister(dest);
         }),
       );
     }),
@@ -417,7 +413,7 @@ export const clonePeerProject = Effect.fnUntraced(function* (
   deviceId: string,
   peer: Project,
   parentDir: string | undefined,
-  progress: (frame: ProgressFrame) => void = () => {},
+  progress: (frame: ProgressFrame) => void,
 ) {
   const identity = peer.identity ?? null;
   if (identity === null) {
@@ -453,7 +449,6 @@ export const clonePeerProject = Effect.fnUntraced(function* (
         cloneInto,
         undefined,
         identity,
-        registerClone,
         (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
       ),
     ),

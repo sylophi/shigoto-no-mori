@@ -73,11 +73,13 @@ export const signedOut = () =>
     )}`,
   );
 
+const accountDevices = Effect.flatMap(
+  AccountPeers.AccountPeers,
+  (account) => account.listDevices,
+);
+
 export const roster = Effect.gen(function* () {
-  const devices = yield* Effect.flatMap(
-    AccountPeers.AccountPeers,
-    (account) => account.listDevices,
-  );
+  const devices = yield* accountDevices;
   const hereId = yield* DeviceId.current;
   const here = devices.find((device) => device.deviceId === hereId);
   if (here === undefined) return yield* Effect.fail(signedOut());
@@ -89,7 +91,7 @@ export const roster = Effect.gen(function* () {
 
 // Where each peer stands for one repo, in the dialogs' three blocks
 // (renderer/components/shared/deviceTargets.ts) but not their order:
-// standingOf puts command access first, since a send without a
+// standingIn puts command access first, since a send without a
 // checkout clones one. The checkout is read fresh off the peer and the
 // command access off the status snapshot. A read leaves the access
 // out, since reads are ungated. The wording is the CLI's. The dialogs
@@ -99,12 +101,8 @@ export const standingsOf = (
   identity: string | null,
   { grant }: { grant: boolean },
 ) =>
-  Effect.flatMap(directPeers, (direct) =>
-    Effect.forEach(
-      devices,
-      (device) => standingOf(device, identity, direct[device.deviceId], grant),
-      { concurrency: "unbounded" },
-    ),
+  Effect.map(projectsOnPeers(devices, grant), (held) =>
+    held.map((peer) => standingIn(identity, peer)),
   );
 
 // What a peer holds, read fresh, beside its standing: offline, not
@@ -178,34 +176,34 @@ const projectsOn = (
 // Then command access: a send needs it whether or not the device holds
 // the repo (without it, it clones the repo first), and a bring needs
 // both.
-const standingOf = (
-  device: DeviceInfo,
+const standingIn = (
   identity: string | null,
-  peer: DirectPeer | undefined,
-  grant: boolean,
-): Effect.Effect<ControlDevice, never, PeerReach> =>
-  Effect.map(projectsOn(device, peer, grant), ({ standing, projects }) => {
-    if (projects === null) return standing;
-    // A null identity never matches: it means this device couldn't
-    // tell what repo this is, not "the same unknown repo".
-    const held =
-      identity === null
-        ? undefined
-        : projects.find((project) => project.identity === identity);
-    if (held !== undefined) return { ...standing, projectId: held.id };
-    return standing.block === undefined
-      ? { ...standing, block: "no-project" }
-      : standing;
-  });
+  {
+    standing,
+    projects,
+  }: { standing: ControlDevice; projects: Project[] | null },
+): ControlDevice => {
+  if (projects === null) return standing;
+  // A null identity never matches: it means this device couldn't
+  // tell what repo this is, not "the same unknown repo".
+  const held =
+    identity === null
+      ? undefined
+      : projects.find((project) => project.identity === identity);
+  if (held !== undefined) return { ...standing, projectId: held.id };
+  return standing.block === undefined
+    ? { ...standing, block: "no-project" }
+    : standing;
+};
 
 // Each peer's projects, for a clone from one: its standing says
 // whether it could serve one (a clone reads the peer's checkout over
 // its grant).
-export const projectsOnPeers = (devices: DeviceInfo[]) =>
+export const projectsOnPeers = (devices: DeviceInfo[], grant: boolean) =>
   Effect.flatMap(directPeers, (direct) =>
     Effect.forEach(
       devices,
-      (device) => projectsOn(device, direct[device.deviceId], true),
+      (device) => projectsOn(device, direct[device.deviceId], grant),
       { concurrency: "unbounded" },
     ),
   );
@@ -267,22 +265,19 @@ export const askedPeers = Effect.fnUntraced(function* (
   return asked;
 });
 
-export const registryOrEmpty = probe(
-  Effect.flatMap(AccountPeers.AccountPeers, (account) => account.listDevices),
-  () => [],
-).pipe(Effect.orElseSucceed((): DeviceInfo[] => []));
-
-// The same, for a verb that decides on what it finds (a mirror a peer
-// runs, or none): the hub's rate limit fails it, so the verb says that
-// rather than that nothing is there.
-export const registryUnlessRateLimited = probe(
-  Effect.flatMap(AccountPeers.AccountPeers, (account) => account.listDevices),
-  () => [],
-).pipe(
+// The account's devices, for a verb that decides on what it finds (a
+// mirror a peer runs, or none): the hub's rate limit fails it, so the
+// verb says that rather than that nothing is there.
+export const registryUnlessRateLimited = probe(accountDevices, () => []).pipe(
   Effect.catchIf(
     (error) => !isHubRateLimitedError(error),
     () => Effect.succeed<DeviceInfo[]>([]),
   ),
+);
+
+// The same, empty on any failure.
+export const registryOrEmpty = registryUnlessRateLimited.pipe(
+  Effect.orElseSucceed((): DeviceInfo[] => []),
 );
 
 // A session a peer runs against one of this device's worktrees, with

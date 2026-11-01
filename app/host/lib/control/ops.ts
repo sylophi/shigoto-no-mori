@@ -643,7 +643,7 @@ export const clone = (
         device: { deviceId: target.deviceId, name: target.name },
       };
     }
-    const held = yield* projectsOnPeers(yield* askedPeers(input.device));
+    const held = yield* projectsOnPeers(yield* askedPeers(input.device), true);
     const { device, project } = yield* planned(() =>
       pickPeerProject(held, input.project),
     );
