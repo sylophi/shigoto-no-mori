@@ -11,8 +11,8 @@ import {
 } from "@shigomori/ui/lib/externalStore.ts";
 import {
   type Binding,
-  chordAccelerator,
   KEYMAP_ACTIONS,
+  menuAccelerators,
   resolveKeymap,
 } from "@shigomori/ui/lib/keymap.ts";
 import { isMac } from "@shigomori/ui/lib/platform.ts";
@@ -174,13 +174,7 @@ function useMenuChords(
   const hasLocalHost = useHasLocalHost();
   useEffect(() => {
     if (!hasLocalHost) return;
-    const chords: Record<string, string> = {};
-    for (const action of paused ? [] : KEYMAP_ACTIONS) {
-      const binding = keymap.get(action.id);
-      if (action.menu && binding) {
-        chords[action.id] = chordAccelerator(binding.chord);
-      }
-    }
+    const chords = paused ? {} : menuAccelerators(keymap);
     void api.run(api.menu.setChords({ chords }));
   }, [keymap, paused, api, hasLocalHost]);
 }
