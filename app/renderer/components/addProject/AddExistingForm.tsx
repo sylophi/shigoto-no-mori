@@ -27,6 +27,7 @@ import { useBinding } from "@/hooks/ui/useKeymap";
 import { useOpenAddedProject } from "./useOpenAddedProject";
 import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
 import { AddExistingFormView } from "@shigomori/ui/views/addProject/AddExistingFormView.tsx";
+import { isBrowseRow } from "@shigomori/ui/views/shared/PathBrowserView.tsx";
 import { useApi } from "@/lib/runtime/pageApi";
 
 interface AddExistingFormProps {
@@ -96,13 +97,11 @@ export function AddExistingForm({
     browseDir,
     leafFilter,
     listing,
-    isLoading,
     error,
     filtered,
     submitTarget,
     targetIsGitRepo,
     targetSettled,
-    browseTo,
     browseUp,
   } = browse;
   // The listed folder as the device resolved it, for matching entries
@@ -232,8 +231,6 @@ export function AddExistingForm({
   // clone once it parses), and going "up" from it would eat the scheme.
   const canBrowseUp = isAnchoredPath(query) && canNavigateUp(query);
 
-  const hasHighlighted = highlighted.startsWith("browse:");
-
   const primaryAction = async () => {
     // The hint can trail the input (useBrowseState), and a path pasted
     // and entered at once would scan its parent off a stale "no". ↩
@@ -250,7 +247,10 @@ export function AddExistingForm({
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (confirmKeys.matches(e) || (e.key === "Enter" && !hasHighlighted)) {
+    if (
+      confirmKeys.matches(e) ||
+      (e.key === "Enter" && !isBrowseRow(highlighted))
+    ) {
       e.preventDefault();
       e.stopPropagation();
       void primaryAction();
@@ -314,8 +314,7 @@ export function AddExistingForm({
       onInputKeyDown={onInputKeyDown}
       highlighted={highlighted}
       onHighlight={setHighlighted}
-      browseDir={browseDir}
-      entries={filtered}
+      browse={browse}
       registeredNames={
         new Set(
           listedDir === null
@@ -327,10 +326,6 @@ export function AddExistingForm({
                 .map((entry) => entry.name),
         )
       }
-      isLoading={isLoading}
-      hasListing={!!listing}
-      error={error}
-      leafFilter={leafFilter}
       targetIsGitRepo={targetIsGitRepo}
       canPrimary={
         targetIsGitRepo
@@ -340,8 +335,6 @@ export function AddExistingForm({
       pending={addProject.isPending}
       onPrimary={() => void primaryAction()}
       canBrowseUp={canBrowseUp}
-      onBrowseUp={browseUp}
-      onBrowseTo={browseTo}
       onAdd={(path) => void submit(path)}
       confirmKeys={confirmKeys.label}
       terrierOptIn={terrierOptIn}

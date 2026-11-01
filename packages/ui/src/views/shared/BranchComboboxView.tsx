@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
-import { ChevronsUpDown, Loader2, Search } from "lucide-react";
+import { ChevronsUpDown } from "lucide-react";
 import { cn } from "../../lib/utils.ts";
 import { rankByScore } from "../../lib/fuzzyMatch.ts";
 import { localBranchOf } from "@shigomori/contracts/git/branches";
 import type { BranchList } from "@shigomori/contracts/schemas";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
-import { useThemeRoot } from "../../root.tsx";
+import {
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxPopup,
+} from "../../primitives/combobox.tsx";
 
 // The branch picker (BranchCombobox reads the project's branches).
 export interface BranchComboboxProps {
@@ -149,75 +153,32 @@ export function BranchComboboxView({
           className="size-3.5 shrink-0 text-muted-foreground/60"
         />
       </Combobox.Trigger>
-      <Combobox.Portal container={useThemeRoot()}>
-        <Combobox.Positioner
-          sideOffset={4}
-          side="bottom"
-          align="start"
-          className="z-50"
-        >
-          <Combobox.Popup
-            data-slot="combobox-popup"
-            className="flex max-h-72 w-(--anchor-width) min-w-56 flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
-          >
-            <div
-              data-slot="search-row"
-              className="flex items-center gap-2 border-b border-border px-3"
-            >
-              <Search
-                aria-hidden
-                className="size-3.5 shrink-0 text-muted-foreground/60"
-              />
-              <Combobox.Input
-                placeholder="Search branches…"
-                className="flex-1 bg-transparent py-2 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
-              />
-              {fetching && (
-                <Loader2
-                  aria-label="Syncing branches"
-                  className="size-3.5 shrink-0 animate-spin text-muted-foreground/60"
-                />
-              )}
-            </div>
-            <Combobox.List className="flex-1 overflow-y-auto p-1">
-              {sorted.length === 0 && !showCustom && (
-                <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                  No matching branches.
-                </div>
-              )}
-              {sorted.map((entry) => (
-                <Combobox.Item
-                  key={`${entry.kind}:${entry.name}`}
-                  value={entry.name}
-                  className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-                >
-                  <SimpleTooltip whenTruncated lazy tip={entry.name}>
-                    <span className="flex-1 truncate font-mono">
-                      {entry.name}
-                    </span>
-                  </SimpleTooltip>
-                  {entry.kind === "remote" && (
-                    <span className="text-3xs text-muted-foreground">
-                      remote
-                    </span>
-                  )}
-                </Combobox.Item>
-              ))}
-              {showCustom && (
-                <Combobox.Item
-                  value={trimmedQuery}
-                  className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-                >
-                  <span className="text-muted-foreground">Use as ref:</span>
-                  <span className="flex-1 truncate font-mono">
-                    {trimmedQuery}
-                  </span>
-                </Combobox.Item>
-              )}
-            </Combobox.List>
-          </Combobox.Popup>
-        </Combobox.Positioner>
-      </Combobox.Portal>
+      <ComboboxPopup
+        placeholder="Search branches…"
+        mono
+        busy={fetching ? "Syncing branches" : undefined}
+        className="w-(--anchor-width) min-w-56"
+      >
+        {sorted.length === 0 && !showCustom && (
+          <ComboboxEmpty>No matching branches.</ComboboxEmpty>
+        )}
+        {sorted.map((entry) => (
+          <ComboboxItem key={`${entry.kind}:${entry.name}`} value={entry.name}>
+            <SimpleTooltip whenTruncated lazy tip={entry.name}>
+              <span className="flex-1 truncate font-mono">{entry.name}</span>
+            </SimpleTooltip>
+            {entry.kind === "remote" && (
+              <span className="text-3xs text-muted-foreground">remote</span>
+            )}
+          </ComboboxItem>
+        ))}
+        {showCustom && (
+          <ComboboxItem value={trimmedQuery}>
+            <span className="text-muted-foreground">Use as ref:</span>
+            <span className="flex-1 truncate font-mono">{trimmedQuery}</span>
+          </ComboboxItem>
+        )}
+      </ComboboxPopup>
     </Combobox.Root>
   );
 }

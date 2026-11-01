@@ -658,8 +658,8 @@
   --card: var(--doubutsu-modal-card);
   --muted: var(--doubutsu-modal-muted);
 }
-/* The branch combobox's popup is a popover too, and its search tray
-   the one muted thing in it. */
+/* A combobox's popup (primitives/combobox.tsx) is a popover too, and
+   its search tray the one muted thing in it. */
 .doubutsu.dark [data-slot="combobox-popup"] {
   --muted: var(--doubutsu-modal-muted);
 }

@@ -69,7 +69,8 @@ Rules that keep both themes cheap to maintain:
   `primitives/textarea.tsx`, chips use `primitives/chip-button.tsx`,
   few-way toggles use `primitives/segmented-control.tsx`, a row's
   label and status use `RowTag` and `ToneTag` (`primitives/row-tag.tsx`),
-  a popup's footer `primitives/footer-row.tsx`, an empty body
+  a popup's footer `primitives/footer-row.tsx`, a combobox's search
+  popup `primitives/combobox.tsx`, an empty body
   `primitives/empty-panel.tsx`, and a bare icon button
   `primitives/icon-button.tsx` (`reveal` for one that shows on its
   row's hover, `size="xs"` in a diff's headers). Don't re-inline their
