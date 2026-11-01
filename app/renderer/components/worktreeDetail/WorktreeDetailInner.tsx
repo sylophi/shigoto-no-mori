@@ -22,10 +22,9 @@ import { LaunchSection } from "./LaunchSection";
 import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorCopyTabs, useMirrorCopies } from "./mirror/MirrorCopyTabs";
 import type { TransferDialog } from "@shigomori/ui/views/worktreeDetail/TransferActionsView.tsx";
-import { PeerTransferActions } from "./PeerTransferActions";
+import { TransferActions } from "./TransferActions";
 import { FilesButton } from "./FilesButton";
 import { PortsSection } from "./ports/PortsSection";
-import { RemoteTransferActions } from "./RemoteWorktreeActions";
 import { PullRequestLead } from "./pullRequests/PullRequestLead";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
@@ -59,14 +58,11 @@ export function WorktreeDetailInner({
   const { toProjectPage } = useProjectNav();
   // Which device this page is scoped to. Everything data-shaped below
   // already rides the host scope. `remote` only gates what is local by
-  // nature (the create-phase lock, while LaunchSection gates launching
-  // itself) and adds the cross-device ones (mirror, transplant, the
-  // device chip).
+  // nature: the create-phase lock (LaunchSection gates launching
+  // itself, and the transfers and the device chip pick their side).
   const { remote } = useHostScope();
-  // This device's worktree sends to a peer, a peer's brings here, and
-  // either renders in two parts (the footer below) that share which
-  // dialog is open.
-  const Transfers = remote ? RemoteTransferActions : PeerTransferActions;
+  // The transfers render in two parts (the footer below) that share
+  // which dialog is open.
   const [transferDialog, setTransferDialog] = useState<TransferDialog>(null);
   // Or asked for off the page (the sidebar's worktree menu), as is the
   // running mirror's, which its button opens.
@@ -183,13 +179,13 @@ export function WorktreeDetailInner({
                 asked={mirrorAsked}
                 onOpened={() => setMirrorAsked(false)}
               />
-              <Transfers part="footer" {...transfers} />
+              <TransferActions part="footer" {...transfers} />
             </>
           }
           options={
             <>
               <NewWindowOption worktree={worktree} />
-              <Transfers part="option" {...transfers} />
+              <TransferActions part="option" {...transfers} />
             </>
           }
         />
