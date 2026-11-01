@@ -1,6 +1,5 @@
 import { clientSetting } from "@shigomori/contracts/schemas/config";
 import type { SidebarMarks } from "@shigomori/ui/views/sidebar/WorktreeEntryView.tsx";
-import type { ClientConfig } from "@shigomori/contracts/schemas";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useClientConfig } from "./useClientConfig";
 import { useLocalGlobalConfig } from "./useGlobalConfig";
@@ -9,11 +8,27 @@ import { useLocalGlobalConfig } from "./useGlobalConfig";
 // so it holds for every device's rows the window shows: the sidebar's
 // marks among them. False until the config has loaded, so a mark
 // switched off never flashes in.
-type ClientFlag = {
-  [K in keyof ClientConfig]-?: NonNullable<ClientConfig[K]> extends boolean
-    ? K
-    : never;
-}[keyof ClientConfig];
+//
+// - markTerrierProjects: terrier's paw on the projects it lists. Off
+//   unless switched on, and then shown only where terrierMarksHere
+//   holds too.
+// - showDeviceBadges: the device badges on project headers and worktree
+//   rows. On unless switched off.
+// - allowAgentWorking: whether a worktree an agent session is working in
+//   (`sm agents`) goes on its own shelf (isAgentWorking). Off unless
+//   switched on.
+// - markAgentsWaiting: the "Needs you" mark on a worktree whose agent
+//   session waits on the user (AgentWaitingMark), its lead in the inbox
+//   and the Live mark's amber. On unless switched off.
+// - inlineWorktrees: whether the list of projects shows every project's
+//   worktrees under it (buildSidebarRows' inline). Off unless switched
+//   on.
+type ClientFlag =
+  | "markTerrierProjects"
+  | "showDeviceBadges"
+  | "allowAgentWorking"
+  | "markAgentsWaiting"
+  | "inlineWorktrees";
 
 export function useClientFlag(key: ClientFlag): boolean {
   const { data } = useClientConfig();

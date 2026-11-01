@@ -196,6 +196,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
           tab.push(hubContract, "statusChanged", status);
         },
         broadcastPeerPush: (push) => tab.push(hubContract, "peerPush", push),
+        // A browser page dials only the wss tunnel, since mixed content
+        // forbids ws:// under https.
         dialableKinds: ["tunnel"],
         // One device per browser profile, a link per tab: a host keeps a set
         // of links per web device, and the hub relays to each.
