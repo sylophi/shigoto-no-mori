@@ -18,7 +18,7 @@ import { CLI_DIST_DIR, cliBinaryName } from "../shared/packaging/cliDist.mts";
 import {
   NATIVEFS_BINARY_NAME,
   NATIVEFS_DIST_DIR,
-} from "../shared/packaging/nativefsDist.mts";
+} from "../shared/packaging/goHelpersDist.mts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
 const flavor = process.argv.includes("--dev")

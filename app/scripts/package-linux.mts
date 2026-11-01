@@ -24,11 +24,9 @@ import {
 import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
-} from "../shared/packaging/fileSyncDist.mts";
-import {
   NATIVEFS_BINARY_NAME,
   NATIVEFS_DIST_DIR,
-} from "../shared/packaging/nativefsDist.mts";
+} from "../shared/packaging/goHelpersDist.mts";
 import {
   NODE_BINARY_NAME,
   NODE_DIST_DIR,
@@ -55,8 +53,8 @@ const node = (script: string, ...args: string[]) =>
     cwd: appRoot,
     stdio: "inherit",
   });
-node("build-file-sync.mts");
-node("build-nativefs.mts");
+node("build-go.mts", "file-sync");
+node("build-go.mts", "nativefs");
 node("build-cli.mts");
 node("fetch-cloudflared.mts", "--platform", "linux", "--arch", "x64");
 node("fetch-node.mts");

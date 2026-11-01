@@ -128,10 +128,6 @@ export class DeviceHub extends DurableObject<Env> {
     WebSocket,
     { tokens: number; at: number }
   >();
-  // The clock of the tickets' expiry, the relay budget, the silence
-  // sweep and the sockets' connection order.
-  clock: () => number = () => Date.now();
-
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     // The devices' liveness pings (packages/contracts/src/hubProtocol.ts)
@@ -155,9 +151,8 @@ export class DeviceHub extends DurableObject<Env> {
   }
 
   async mintTicket(holder: Tickets.TicketHolder): Promise<string> {
-    const now = this.clock();
     return await this.runtime.runPromise(
-      Effect.flatMap(Tickets.Tickets, (tickets) => tickets.mint(holder, now)),
+      Effect.flatMap(Tickets.Tickets, (tickets) => tickets.mint(holder)),
     );
   }
 
@@ -233,7 +228,6 @@ export class DeviceHub extends DurableObject<Env> {
   // the device no longer has (revoked or rotated).
   override async fetch(request: Request): Promise<Response> {
     const random = new URL(request.url).searchParams.get(CONNECT_RANDOM_PARAM);
-    const clock = this.clock;
     const admitted =
       random === null
         ? null
@@ -243,7 +237,7 @@ export class DeviceHub extends DurableObject<Env> {
               const registry = yield* Registry.Registry;
               // Read once the permit is held, so a wait behind another
               // admission counts against the ticket's life.
-              const now = clock();
+              const now = yield* Clock.currentTimeMillis;
               const holder = yield* tickets.take(random, now);
               if (holder === null) return null;
               // The device must still be enrolled, under the credential
@@ -322,7 +316,7 @@ export class DeviceHub extends DurableObject<Env> {
 
   // Whether the socket may send one more message now (RELAY_BURST).
   private withinRelayBudget(ws: WebSocket): boolean {
-    const now = this.clock();
+    const now = Date.now();
     const budget = this.relayBudget.get(ws) ?? { tokens: RELAY_BURST, at: now };
     // A clock stepped back refills nothing, never drains.
     budget.tokens = Math.min(
@@ -346,7 +340,7 @@ export class DeviceHub extends DurableObject<Env> {
   override webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
     ws.serializeAttachment({
       connectedAt: connectedAt(ws),
-      heardAt: this.clock(),
+      heardAt: Date.now(),
     } satisfies SocketAttachment);
     // The protocol is JSON text. Binary frames are not part of it.
     if (typeof message !== "string") return;
@@ -476,7 +470,7 @@ export class DeviceHub extends DurableObject<Env> {
   // closed, which the caller leaves out of the roster it announces or
   // reads.
   private evictSilent(): ReadonlySet<WebSocket> {
-    const now = this.clock();
+    const now = Date.now();
     const evicted = new Set<WebSocket>();
     for (const ws of this.ctx.getWebSockets()) {
       const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws);

@@ -1,5 +1,5 @@
-// The proofs in test/ (test/README.md). They spawn real git, the real
-// sm and file-sync binaries, sockets and workerd, and some bind fixed
+// The proofs in test/ (test/README.md). They spawn real git and the
+// real sm and file-sync binaries, open real sockets, and some bind fixed
 // ports, so they run one file at a time, each in a process of its own.
 import { join } from "node:path";
 import { defineConfig } from "vitest/config";

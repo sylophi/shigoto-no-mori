@@ -4,7 +4,8 @@
 // fake host serves (lab/fake-host/villagerData.ts). The folder is
 // gitignored: the data never enters the repo. Run again, it resumes a
 // stopped download and leaves a finished one alone. Also the way to try
-// the real download by hand, into a scratch folder.
+// the real download by hand, into a scratch folder. It runs under Bun,
+// which resolves the app modules it imports as the bundler does.
 //
 // Run: pnpm villagers:fetch [folder]
 import { join, resolve } from "node:path";

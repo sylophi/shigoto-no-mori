@@ -20,8 +20,11 @@ import { appRoot } from "./lib/appRoot.mts";
 
 const binary = join(appRoot, CLI_DIST_DIR, cliBinaryName("prod"));
 
-for (const script of ["build-nativefs.mts", "build-cli.mts"]) {
-  execFileSync("node", [join(appRoot, "scripts", script)], {
+for (const [script, ...args] of [
+  ["build-go.mts", "nativefs"],
+  ["build-cli.mts"],
+] as const) {
+  execFileSync("node", [join(appRoot, "scripts", script), ...args], {
     cwd: appRoot,
     stdio: "inherit",
   });

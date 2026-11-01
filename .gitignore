@@ -42,7 +42,7 @@ dist-cli/
 # bundled cloudflared, fetched by scripts/fetch-cloudflared.mts
 dist-cloudflared/
 
-# file-sync engine compiled binary (scripts/build-file-sync.mts)
+# file-sync engine compiled binary (scripts/build-go.mts)
 dist-file-sync/
 file-sync/file-sync
 file-sync/filesync
@@ -53,7 +53,7 @@ dist-headless/
 # the node a Linux package ships, fetched by scripts/fetch-node.mts
 dist-node/
 
-# filesystem helper compiled binary (scripts/build-nativefs.mts)
+# filesystem helper compiled binary (scripts/build-go.mts)
 dist-nativefs/
 nativefs/nativefs
 
