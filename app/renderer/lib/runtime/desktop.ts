@@ -7,8 +7,10 @@
 // swapping these.
 import { isHostSide } from "@shigomori/contracts/link";
 import { callOf, channelOf } from "@shigomori/contracts/contract";
-import type { HostRestartReason } from "@shigomori/ui/views/hostBand/HostBandView.tsx";
-import { windowContract } from "@shigomori/contracts/modules/window";
+import {
+  type HostRestartReasonSchema,
+  windowContract,
+} from "@shigomori/contracts/modules/window";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
@@ -38,10 +40,11 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
       });
       const shell = yield* shellLink(port);
       const runFork = yield* FiberSet.makeRuntime<never>();
+      // The shell is this window's own build.
       const restarts = followHostRestarts(
         shell.pushes(
           channelOf(callOf(windowContract, "hostRestarted")),
-        ) as Stream.Stream<HostRestartReason>,
+        ) as Stream.Stream<typeof HostRestartReasonSchema.Type>,
       );
       runFork(restarts.heard);
       const host = yield* hostLink({

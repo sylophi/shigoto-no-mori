@@ -96,11 +96,15 @@ export function WorktreeDetailInner({
     limboLabel,
   } = useWorktreeDeletionFooter(worktree, siblings);
   const home = runtime?.homedir ?? null;
+  // This page's own delete, or a removal the host announced: the page
+  // goes into limbo either way, instead of standing as an ordinary
+  // worktree until the row vanishes.
+  const inLimbo = limboLabel !== null;
 
   // Banner-only for setup / port-pool provision: those are user scripts
   // (`pnpm install` etc.) that can run alongside the user opening files
   // or kicking off launches. Carry-over moves real files into the new
-  // worktree, so we lock the page until it finishes. Limbo wins, so a
+  // worktree, so we lock the page until it finishes. inLimbo wins, so a
   // delete-during-setup race shows the destructive banner instead.
   // Scoped to this machine: the lifecycle broadcast is local, and a
   // pull can mint a local worktree with the SAME id as the peer's (ids
@@ -108,7 +112,7 @@ export function WorktreeDetailInner({
   const createPhase = useWorktreeCreatePhase(remote ? null : worktree.id);
   const bannerLabel =
     limboLabel ?? (createPhase ? CREATE_PHASE_LABEL[createPhase] : null);
-  const locked = limboLabel !== null || createPhase === "carryOver";
+  const locked = inLimbo || createPhase === "carryOver";
   // The resident's birthday party, with their face to throw it, and
   // never over a create or a removal.
   const party =

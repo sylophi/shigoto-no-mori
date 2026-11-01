@@ -16,46 +16,58 @@ import type {
 } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import type { RowHandlers } from "./VirtualRow";
 
-// Whether a kind of fold starts open: a group's shelves (by shelf) and
-// the inbox's start shut, the owners, folders and prefix groups open.
-const OPEN_BY_DEFAULT = {
-  agentWorking: false,
-  shelved: false,
-  hidden: false,
-  inboxShelf: false,
-  owner: true,
-  folder: true,
-  worktreeGroup: true,
-  inboxGroup: true,
-};
-type FoldKind = keyof typeof OPEN_BY_DEFAULT;
-
-const NONE_TOGGLED: Record<FoldKind, ReadonlySet<string>> = {
+// The kinds of fold that start shut: a group's shelves (by shelf) and
+// the inbox's.
+const NONE_OPENED: Record<GroupShelf | "inboxShelf", ReadonlySet<string>> = {
   agentWorking: new Set(),
   shelved: new Set(),
   hidden: new Set(),
   inboxShelf: new Set(),
+};
+// The kinds that start open: the owners, folders and prefix groups.
+const NONE_SHUT: Record<
+  "owner" | "folder" | "worktreeGroup" | "inboxGroup",
+  ReadonlySet<string>
+> = {
   owner: new Set(),
   folder: new Set(),
   worktreeGroup: new Set(),
   inboxGroup: new Set(),
 };
+type StartsShut = keyof typeof NONE_OPENED;
+type FoldKind = StartsShut | keyof typeof NONE_SHUT;
+
+const startsShut = (kind: FoldKind): kind is StartsShut => kind in NONE_OPENED;
 
 export function useForestFolds(projects: readonly Project[]) {
-  // The keys toggled off their kind's default: the open ones of a kind
-  // that starts shut, the shut ones of a kind that starts open.
-  const [toggled, setToggled] = useState(NONE_TOGGLED);
-  const toggle = (kind: FoldKind, key: string) =>
-    setToggled((prev) => ({ ...prev, [kind]: withToggled(key)(prev[kind]) }));
+  // The open keys of the kinds that start shut, and the shut keys of
+  // the rest.
+  const [opened, setOpened] = useState(NONE_OPENED);
+  const [shut, setShut] = useState(NONE_SHUT);
+  const toggle = (kind: FoldKind, key: string) => {
+    if (startsShut(kind)) {
+      setOpened((prev) => ({ ...prev, [kind]: withToggled(key)(prev[kind]) }));
+    } else {
+      setShut((prev) => ({ ...prev, [kind]: withToggled(key)(prev[kind]) }));
+    }
+  };
   // Sets rather than flips, so a second call before the first lands is
   // harmless.
-  const open = (kind: FoldKind, key: string) =>
-    setToggled((prev) => ({
-      ...prev,
-      [kind]: withMember(prev[kind], key, !OPEN_BY_DEFAULT[kind]),
-    }));
+  const open = (kind: FoldKind, key: string) => {
+    if (startsShut(kind)) {
+      setOpened((prev) => ({
+        ...prev,
+        [kind]: withMember(prev[kind], key, true),
+      }));
+    } else {
+      setShut((prev) => ({
+        ...prev,
+        [kind]: withMember(prev[kind], key, false),
+      }));
+    }
+  };
   const isOpen = (kind: FoldKind, key: string) =>
-    OPEN_BY_DEFAULT[kind] !== toggled[kind].has(key);
+    startsShut(kind) ? opened[kind].has(key) : !shut[kind].has(key);
 
   // The project folds are kept by group key (projectGroupKey), one per
   // repo: narrowed to a peer, a repo this machine also holds is drawn as
@@ -74,7 +86,7 @@ export function useForestFolds(projects: readonly Project[]) {
   const { collapsedKeys, toggleCollapsed } = useCollapsedProjects();
 
   const shelfOpen = (shelf: GroupShelf): GroupIdSet => ({
-    has: (groupId) => isOpen(shelf, groupKeyOf(groupId)),
+    has: (groupId) => opened[shelf].has(groupKeyOf(groupId)),
   });
   // A fold's kind and key, for a row heading one.
   const foldOf = (row: SidebarRow): [FoldKind, string] | null => {
@@ -107,12 +119,12 @@ export function useForestFolds(projects: readonly Project[]) {
       hidden: shelfOpen("hidden"),
     } satisfies Record<GroupShelf, GroupIdSet>,
     worktreeGroupShut: (groupId: string, prefix: string) =>
-      !isOpen("worktreeGroup", worktreeGroupKey(groupId, prefix)),
-    shutOwners: toggled.owner,
-    shutFolders: toggled.folder,
+      shut.worktreeGroup.has(worktreeGroupKey(groupId, prefix)),
+    shutOwners: shut.owner,
+    shutFolders: shut.folder,
     // buildInboxRows'.
-    inboxShelvesOpen: toggled.inboxShelf,
-    shutInboxGroups: toggled.inboxGroup,
+    inboxShelvesOpen: opened.inboxShelf,
+    shutInboxGroups: shut.inboxGroup,
     toggleCollapsed,
     toggles: {
       onToggleShelved: (groupId, shelf) => toggle(shelf, groupKeyOf(groupId)),
