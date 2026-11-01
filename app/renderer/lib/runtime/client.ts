@@ -38,6 +38,6 @@ export function startClientNow(links: Layer.Layer<ClientLinks>): Client {
 // to (the back-forward cache) is left as it is.
 export function disposeWithPage(client: Pick<Client, "dispose">): void {
   window.addEventListener("pagehide", (event) => {
-    if (event.persisted) void client.dispose();
+    if (!event.persisted) void client.dispose();
   });
 }
