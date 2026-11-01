@@ -13,7 +13,6 @@ import * as AccountPeers from "../../host/lib/control/AccountPeers.ts";
 import * as DeviceId from "../../host/lib/config/DeviceId.ts";
 import { DataDirHolders } from "../../host/lib/DataDirHolders.ts";
 import * as HostFacts from "../../host/lib/HostFacts.ts";
-import * as HostPushes from "../../host/lib/HostPushes.ts";
 import * as Ops from "../../host/lib/engineOps.ts";
 import * as Shell from "../../host/lib/Shell.ts";
 import * as PeerReach from "../../host/ipc/PeerReach.ts";
@@ -163,6 +162,3 @@ const standIns = Layer.mergeAll(
 export const layer = PortForwards.layer({ onChange: () => {} }).pipe(
   Layer.provideMerge(standIns),
 );
-
-// The host's pushes, as the app makes them.
-export const pushesLayer = HostPushes.layer;
