@@ -249,7 +249,7 @@ export function DevicesPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-5">
-        <ScenePart label="Loading" className="min-w-0">
+        <ScenePart label="Loading">
           <AccountLoadingView />
           <DeviceRegistryView
             account={
@@ -261,13 +261,13 @@ export function DevicesPartsScene() {
             list={{ state: "loading" }}
           />
         </ScenePart>
-        <ScenePart label="Signed out" className="min-w-0">
+        <ScenePart label="Signed out">
           <SignedOutPanelView desktop signIn={signIn} />
         </ScenePart>
-        <ScenePart label="No account service" className="min-w-0">
+        <ScenePart label="No account service">
           <NotConfiguredPanelView isDev desktop />
         </ScenePart>
-        <ScenePart label="Removed, and the list refused" className="min-w-0">
+        <ScenePart label="Removed, and the list refused">
           <DeviceRegistryView
             account={
               <AccountIdentityView
@@ -293,10 +293,7 @@ export function DevicesPartsScene() {
         </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-5">
-        <ScenePart
-          label="Renaming, removing, and not taking control"
-          className="min-w-0"
-        >
+        <ScenePart label="Renaming, removing, and not taking control">
           <ul className="divide-y divide-border">
             {HERE &&
               row(HERE, {
@@ -333,7 +330,7 @@ export function DevicesPartsScene() {
               })}
           </ul>
         </ScenePart>
-        <ScenePart label="Control, before its first read" className="min-w-0">
+        <ScenePart label="Control, before its first read">
           <AcceptCommandsToggleView
             enabled={undefined}
             isError={false}
@@ -341,7 +338,7 @@ export function DevicesPartsScene() {
             onChange={noop}
           />
         </ScenePart>
-        <ScenePart label="A peer that can't be reached" className="min-w-0">
+        <ScenePart label="A peer that can't be reached">
           <div className="h-24 overflow-hidden rounded-lg border border-border">
             <RemoteScopeFrameView
               banner={

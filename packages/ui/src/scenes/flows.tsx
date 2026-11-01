@@ -698,7 +698,7 @@ export function FlowPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-5">
-        <ScenePart label="Picker rows" className="min-w-0">
+        <ScenePart label="Picker rows">
           <div className="flex flex-wrap items-center gap-2">
             <LeaveOutTrailingView
               picked
@@ -742,7 +742,7 @@ export function FlowPartsScene() {
             />
           </div>
         </ScenePart>
-        <ScenePart label="Leave out, read-only and reading" className="min-w-0">
+        <ScenePart label="Leave out, read-only and reading">
           <LeaveOutPickerView
             value={{
               base: "gitignored",
@@ -766,7 +766,7 @@ export function FlowPartsScene() {
         </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-5">
-        <ScenePart label="Reading" className="min-w-0">
+        <ScenePart label="Reading">
           <ChangedFilesView files={[]} isPending isError={false} />
           <ChangedFilesView files={[]} isPending={false} isError />
           <CarryOverListView
@@ -778,7 +778,7 @@ export function FlowPartsScene() {
           <MirrorHistoryListView events={undefined} isPending />
           <MirrorHistoryListView events={[]} isPending={false} />
         </ScenePart>
-        <ScenePart label="A primary checkout's mirror" className="min-w-0">
+        <ScenePart label="A primary checkout's mirror">
           {(["review", "running", "cancelled", "done"] as const).map(
             (stage) => (
               <p key={stage} className="text-sm text-muted-foreground">

@@ -156,6 +156,7 @@ export const CHANGE_PATCHES: Record<string, ChangePatch> = {
       "--- /dev/null",
       "+++ b/app/test/proofs/commitComposer.test.ts",
       "@@ -0,0 +1,64 @@",
+      // The 64 lines the hunk header promises, from the 7th line of the block.
       ...[...TEST_FILLER, ...TEST_FILLER, ...TEST_FILLER].slice(6, 70),
       "",
     ],

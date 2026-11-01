@@ -89,15 +89,17 @@ export function SceneDialog({
 // A labeled part on a scene that lays several out.
 export function ScenePart({
   label,
-  className,
+  gap = 2,
   children,
 }: {
   label: string;
-  className?: string;
+  gap?: 2 | 3;
   children: ReactNode;
 }) {
   return (
-    <section className={cn("flex flex-col gap-2", className)}>
+    <section
+      className={cn("flex min-w-0 flex-col", gap === 3 ? "gap-3" : "gap-2")}
+    >
       <h2 className="text-xs text-muted-foreground">{label}</h2>
       {children}
     </section>

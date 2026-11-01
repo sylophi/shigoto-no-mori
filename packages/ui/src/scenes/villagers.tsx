@@ -175,7 +175,7 @@ export function VillagersPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-8 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-8">
-        <ScenePart label="A birthday" className="min-w-0 gap-3">
+        <ScenePart label="A birthday" gap={3}>
           <div className="relative h-40 overflow-hidden rounded-xl border border-border">
             <BuntingView color={RAYMOND.color} />
             <BalloonsView />
@@ -198,7 +198,7 @@ export function VillagersPartsScene() {
             <NextArrowView />
           </div>
         </ScenePart>
-        <ScenePart label="A move's toast" className="min-w-0 gap-3">
+        <ScenePart label="A move's toast" gap={3}>
           <VillageToasterView onDismiss={noop}>
             <div className="flex w-80 items-start gap-3 rounded-lg border border-border bg-popover p-3">
               <ToastFacesView
@@ -224,16 +224,13 @@ export function VillagersPartsScene() {
             joined={new Set()}
           />
         </ScenePart>
-        <ScenePart
-          label="The album, empty and loading"
-          className="min-w-0 gap-3"
-        >
+        <ScenePart label="The album, empty and loading" gap={3}>
           <NobodyYetView face={FACE} />
           <AlbumSkeletonView />
         </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-8">
-        <ScenePart label="A special guest moves in" className="min-w-0 gap-3">
+        <ScenePart label="A special guest moves in" gap={3}>
           <VillagerDialogueView
             news={news(LEIF, "I'm here to help the place grow!")}
             speaker={LEIF}
@@ -247,7 +244,7 @@ export function VillagersPartsScene() {
           <NameplateView>Raymond</NameplateView>
           <MoveCaptionView news={news(RAYMOND, null)} ink="#c27a3e" />
         </ScenePart>
-        <ScenePart label="A legend writes" className="min-w-0 gap-3">
+        <ScenePart label="A legend writes" gap={3}>
           <VillagerLetterView
             news={news(ISABELLE, "Welcome to the island!")}
             speaker={ISABELLE}

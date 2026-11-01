@@ -383,14 +383,14 @@ export function SettingsPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-8 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-8">
-        <ScenePart label="Launch tools" className="min-w-0 gap-3">
+        <ScenePart label="Launch tools" gap={3}>
           <LaunchToolsPanelView
             form={FORM}
             setForm={setForm}
             detected={FAKE_DETECTED}
           />
         </ScenePart>
-        <ScenePart label="Agents" className="min-w-0 gap-3">
+        <ScenePart label="Agents" gap={3}>
           <AgentsSectionView
             harnesses={fakeAgentHarnesses(HOME)}
             home={HOME}
@@ -400,10 +400,7 @@ export function SettingsPartsScene() {
         </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-8">
-        <ScenePart
-          label="Worktrees and integrations, a peer read-only"
-          className="min-w-0 gap-3"
-        >
+        <ScenePart label="Worktrees and integrations, a peer read-only" gap={3}>
           <DeviceTogglesView
             readOnly
             note={<PeerReadOnlyNoteView label={macbook.label} />}
@@ -427,7 +424,7 @@ export function SettingsPartsScene() {
             }}
           />
         </ScenePart>
-        <ScenePart label="A peer's General section" className="min-w-0 gap-3">
+        <ScenePart label="A peer's General section" gap={3}>
           <PeerOfflineNoteView label="Mini" dialing={false} />
           <PeerOfflineNoteView label={macbook.label} dialing />
           <PeerSettingsLoadingView />
@@ -453,7 +450,7 @@ export function SettingsPartsScene() {
           />
           <UpdaterStatusLineView state={{ kind: "checking" }} />
         </ScenePart>
-        <ScenePart label="Phone" className="min-w-0 gap-3">
+        <ScenePart label="Phone" gap={3}>
           <SettingsSectionChipsView
             sections={SECTIONS}
             activeId={GENERAL_TAB}
@@ -562,16 +559,16 @@ export function SettingsKeyboardScene() {
 export function SettingsKeyboardStatesScene() {
   return (
     <div className="grid h-full grid-cols-3 gap-8 overflow-hidden bg-background p-6 text-foreground">
-      <ScenePart label="One rebound" className="min-w-0 gap-3">
+      <ScenePart label="One rebound" gap={3}>
         {keyboard({ palette: "Mod+P" }, null, null)}
       </ScenePart>
-      <ScenePart label="A conflict refused" className="min-w-0 gap-3">
+      <ScenePart label="A conflict refused" gap={3}>
         {keyboard(undefined, null, {
           id: "terminal",
           message: "⌘K is taken by “Open or close the palette”.",
         })}
       </ScenePart>
-      <ScenePart label="Recording" className="min-w-0 gap-3">
+      <ScenePart label="Recording" gap={3}>
         {keyboard(undefined, "terminal", null)}
       </ScenePart>
     </div>

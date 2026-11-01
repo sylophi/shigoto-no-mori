@@ -227,7 +227,7 @@ export function ProjectPagesPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-8 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-8">
-        <ScenePart label="All devices" className="min-w-0 gap-3">
+        <ScenePart label="All devices" gap={3}>
           <ConfigureSharedView>
             <CreateOnSectionView
               holders={[
@@ -270,7 +270,7 @@ export function ProjectPagesPartsScene() {
             />
           </ConfigureSharedView>
         </ScenePart>
-        <ScenePart label="Branches" className="min-w-0 gap-3">
+        <ScenePart label="Branches" gap={3}>
           <ManageBranchesView
             creating
             onCreate={noop}
@@ -301,10 +301,7 @@ export function ProjectPagesPartsScene() {
           <LocalBranchListView names={[]} rows={new Map()} />
           <RemoteBranchesView names={BRANCHES.remote} />
         </ScenePart>
-        <ScenePart
-          label="Deleting an unmerged branch"
-          className="min-w-0 gap-3"
-        >
+        <ScenePart label="Deleting an unmerged branch" gap={3}>
           <ModalBox className="max-w-md">
             <BranchDeleteDialogView
               name="exp/terrier-sync"
@@ -318,7 +315,7 @@ export function ProjectPagesPartsScene() {
         </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-8">
-        <ScenePart label="Worktree location" className="min-w-0 gap-3">
+        <ScenePart label="Worktree location" gap={3}>
           <LocationPaneView>
             <LocationFormView
               layout="custom"
@@ -345,10 +342,7 @@ export function ProjectPagesPartsScene() {
           </LocationPaneView>
           <LocationSkeletonView />
         </ScenePart>
-        <ScenePart
-          label="Converting external worktrees"
-          className="min-w-0 gap-3"
-        >
+        <ScenePart label="Converting external worktrees" gap={3}>
           {external && (
             <ConvertExternalView
               externals={[external]}
@@ -369,7 +363,7 @@ export function ProjectPagesPartsScene() {
             />
           )}
         </ScenePart>
-        <ScenePart label="Tidying" className="min-w-0 gap-3">
+        <ScenePart label="Tidying" gap={3}>
           <ModalBox className="max-w-lg">
             <TidyConfirmView
               summary={summarize(tidy.entries, tidy.selected)}
@@ -380,10 +374,7 @@ export function ProjectPagesPartsScene() {
             />
           </ModalBox>
         </ScenePart>
-        <ScenePart
-          label="Carry-over, loading and failing"
-          className="min-w-0 gap-3"
-        >
+        <ScenePart label="Carry-over, loading and failing" gap={3}>
           <div className="flex flex-wrap items-center gap-2">
             <CarryOverTrailingView
               added

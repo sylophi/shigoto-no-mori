@@ -8,16 +8,13 @@ import { noop } from "./world.ts";
 export function GuidePartsScene() {
   return (
     <div className="flex h-full flex-col gap-6 overflow-hidden bg-background p-6 text-foreground">
-      <ScenePart label="The band over the page" className="min-w-0">
+      <ScenePart label="The band over the page">
         <div className="overflow-hidden rounded-lg bg-card">
           <GuideBandView harnessLabel="Claude Code" onStop={noop} />
           <div className="h-10" />
         </div>
       </ScenePart>
-      <ScenePart
-        label="Pointing, with room under the target"
-        className="min-w-0"
-      >
+      <ScenePart label="Pointing, with room under the target">
         <div className="relative h-44 overflow-hidden rounded-lg bg-card">
           <div className="absolute top-6 left-6 flex gap-2">
             <Button size="sm" variant="outline">
@@ -38,7 +35,7 @@ export function GuidePartsScene() {
           />
         </div>
       </ScenePart>
-      <ScenePart label="Pointing, with room over it" className="min-w-0">
+      <ScenePart label="Pointing, with room over it">
         <div className="relative h-44 overflow-hidden rounded-lg bg-card">
           <div className="absolute bottom-6 left-6">
             <Button size="sm">Save</Button>
