@@ -1,6 +1,5 @@
-// A Link over an RpcClient (rpcLink), and the Promise face over any
-// Link (linkTransport): what a connection hands the contract clients
-// (effectClient) once it is open, for the device link (deviceLink.ts),
+// A Link over an RpcClient (rpcLink): what a connection hands the
+// contract clients (effectClient) once it is open, for the device link (deviceLink.ts),
 // the loopback (hostLink.ts) and the desktop window's link to its shell
 // (portLink.ts) alike. Every push the group serves is subscribed to as
 // the link is made, and fanned out here by channel.
@@ -12,22 +11,17 @@ import {
 } from "@shigomori/contracts/contract";
 import { type ContractSchema, decode } from "@shigomori/contracts/codec";
 import {
-  errorMessageOf,
   isContractError,
   isRemoteCallError,
 } from "@shigomori/contracts/errors";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import type * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import type { ClientTransport, Link } from "@shared/ipc/transport";
-import { log } from "@shared/log";
+import type { Link } from "@shared/ipc/transport";
 import type { FlatClient } from "@shigomori/engine/rpcClient";
 
 // The link dropped while calls were in flight, or a call came after it
@@ -170,14 +164,14 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
     ).pipe(Effect.ignore, Effect.forkScoped({ startImmediately: true }));
   }
   return {
-    call: (channel, input, span) => {
+    call: (channel, input) => {
       const rpc = group.requests.get(channel);
       if (rpc === undefined || !isInvoke(rpc)) {
         return Effect.die(
           new Error(`No handler registered for channel "${channel}"`),
         );
       }
-      const called = Effect.suspend(() =>
+      return Effect.suspend(() =>
         (
           client(
             channel,
@@ -192,7 +186,6 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
           }),
         ),
       ).pipe(Effect.mapError(failureOn(local)), gated);
-      return span === undefined ? called : Effect.withParentSpan(called, span);
     },
     view: (channel, input) => {
       const rpc = group.requests.get(channel);
@@ -221,78 +214,6 @@ export const rpcLink = Effect.fnUntraced(function* (options: {
   };
 });
 
-// The Promise face over a Link, its calls, views and pushes run with
-// `runFork`: the runtime of the scope the link lives in.
-export function linkTransport(
-  link: Link,
-  runFork: <A, E>(effect: Effect.Effect<A, E>) => Fiber.Fiber<A, E>,
-): ClientTransport {
-  return {
-    local: link.local,
-    invoke: (channel, input, invokeOptions) =>
-      new Promise((resolve, reject) => {
-        const fiber = runFork(link.call(channel, input, invokeOptions?.span));
-        const signal = invokeOptions?.signal;
-        const abort = () => runFork(Fiber.interrupt(fiber));
-        signal?.addEventListener("abort", abort, { once: true });
-        if (signal?.aborted === true) abort();
-        fiber.addObserver((exit) => {
-          signal?.removeEventListener("abort", abort);
-          if (Exit.isSuccess(exit)) resolve(exit.value);
-          // Interrupted with no abort, the call went with its link's
-          // scope, as a view does.
-          else if (
-            Cause.hasInterruptsOnly(exit.cause) &&
-            signal?.aborted !== true
-          ) {
-            reject(new RemoteDisconnectedError(link.local === true));
-          } else reject(rejectionOf(exit.cause));
-        });
-      }),
-    watch(channel, input, observer) {
-      let stopped = false;
-      const fiber = runFork(
-        Stream.runForEach(link.view(channel, input), (value) =>
-          Effect.sync(() => observer.value(value)),
-        ),
-      );
-      // Interrupted with no stop, the view went with its link's scope.
-      fiber.addObserver((exit) => {
-        if (stopped) return;
-        observer.end(
-          Exit.isSuccess(exit)
-            ? undefined
-            : Cause.hasInterruptsOnly(exit.cause)
-              ? new RemoteDisconnectedError(link.local === true)
-              : Cause.squash(exit.cause),
-        );
-      });
-      return () => {
-        stopped = true;
-        runFork(Fiber.interrupt(fiber));
-      };
-    },
-    subscribe(channel, handler) {
-      const fiber = runFork(
-        Stream.runForEach(link.pushes(channel), (payload) =>
-          Effect.sync(() => {
-            try {
-              handler(payload);
-            } catch (error) {
-              log.warn(
-                `[link] a ${channel} subscriber threw: ${errorMessageOf(error)}`,
-              );
-            }
-          }),
-        ),
-      );
-      return () => {
-        runFork(Fiber.interrupt(fiber));
-      };
-    },
-  };
-}
-
 // A request the socket couldn't write: the link going under it, which
 // the transport raises as a defect.
 const droppedOn = (local: boolean) => (defect: unknown) =>
@@ -310,10 +231,3 @@ const failureOn =
     }
     return error instanceof Error ? error : new Error(String(error));
   };
-
-function rejectionOf(cause: Cause.Cause<unknown>): unknown {
-  if (Cause.hasInterruptsOnly(cause)) {
-    return new Error("the call was cancelled");
-  }
-  return Cause.squash(cause);
-}

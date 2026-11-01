@@ -286,10 +286,7 @@ beforeAll(async () => {
   }));
   // Every peer reach of the dialer's host code (the follower's sync and mirror
   // calls, its source links) rides the same session.
-  standInPeers({
-    transportFor: () => toListener.transport,
-    channelsFor: () => toListener.channels,
-  });
+  standInPeers(toListener);
   standInDeviceId(DIALER);
 
   // The dialer's half: the real gateway over the real peer client, the real
@@ -298,13 +295,7 @@ beforeAll(async () => {
   gateway = ManagedRuntime.make(
     MirrorGateway.layer.pipe(
       Layer.provide(
-        Layer.succeed(
-          PeerReach.PeerReach,
-          PeerReach.make({
-            transportFor: () => toListener.transport,
-            channelsFor: () => toListener.channels,
-          }),
-        ),
+        Layer.succeed(PeerReach.PeerReach, PeerReach.make(toListener)),
       ),
       Layer.provideMerge(HostAccount.layer),
       Layer.provide(
@@ -905,18 +896,14 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, and 
     standInPeers({
       // The peer's own serving side, as far as this check asks it: the
       // copy's delete. Everything else refuses.
-      transportFor: () => ({
-        local: true,
-        invoke: async (channel, input) => {
-          const { worktreeId } = input as { worktreeId: string };
-          if (channel === "worktrees:delete") {
-            deleted.push(worktreeId);
-            return { ok: true };
-          }
-          throw new Error("not in this check");
-        },
-        subscribe: () => () => {},
-      }),
+      invoke: (_, channel, input) =>
+        channel === "worktrees:delete"
+          ? Effect.sync(() => {
+              deleted.push((input as { worktreeId: string }).worktreeId);
+              return { ok: true };
+            })
+          : Effect.fail(new Error("not in this check")),
+      onPush: () => () => {},
       channelsFor: () => () => Promise.reject(new Error("not in this check")),
     });
     standInDeviceId(DIALER);

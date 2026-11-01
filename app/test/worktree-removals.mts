@@ -361,14 +361,17 @@ const mirroredFox = async (
   );
   let peer = deleteCopy;
   standInPeers({
-    transportFor: () => ({
-      invoke: async (channel) => {
-        if (channel !== "worktrees:delete") throw new Error("not here");
-        calls.push(`delete copy, fox ${at()}`);
-        return peer();
-      },
-      subscribe: () => () => {},
-    }),
+    invoke: (_, channel) =>
+      channel !== "worktrees:delete"
+        ? Effect.fail(new Error("not here"))
+        : Effect.tryPromise({
+            try: () => {
+              calls.push(`delete copy, fox ${at()}`);
+              return peer();
+            },
+            catch: (error) => error,
+          }),
+    onPush: () => () => {},
     channelsFor: () => () => Promise.reject(new Error("not here")),
     admits: () => true,
   });

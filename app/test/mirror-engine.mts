@@ -181,13 +181,11 @@ it("a stop's fresh git check that doesn't finish in its limit times out, never a
   // The peer answers the first look, then holds every later one.
   let holding = false;
   standInPeers({
-    transportFor: () => ({
-      invoke: (channel) =>
-        holding && channel === "mirror:gitState"
-          ? new Promise(() => {})
-          : Promise.reject(new Error("the peer can't say")),
-      subscribe: () => () => {},
-    }),
+    invoke: (_, channel) =>
+      holding && channel === "mirror:gitState"
+        ? Effect.never
+        : Effect.fail(new Error("the peer can't say")),
+    onPush: () => () => {},
     channelsFor: () => () => Promise.reject(new Error("not in this check")),
   });
   const project = await Effect.runPromiseWith(await hostContext())(
@@ -307,10 +305,8 @@ async function movedOriginalWithPeerAway(id: string) {
   const asked: string[] = [];
   let reached = false;
   standInPeers({
-    transportFor: () => ({
-      invoke: () => Promise.reject(new Error("not in this check")),
-      subscribe: () => () => {},
-    }),
+    invoke: () => Effect.fail(new Error("not in this check")),
+    onPush: () => () => {},
     channelsFor: () => () => Promise.reject(new Error("not in this check")),
     admissions: Stream.fromPubSub(admissions),
     admits: (deviceId: string) => {

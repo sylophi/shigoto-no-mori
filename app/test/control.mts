@@ -49,7 +49,7 @@ import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import { hostContext, runHost } from "./lib/hostRuntime.mts";
 import type { HostServices } from "@host/process/services";
-import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import { loose } from "@shigomori/contracts/schemas/loose";
 import { strict } from "@shigomori/contracts/schemas/strict";
@@ -318,18 +318,6 @@ beforeAll(async () => {
   // the peer's original living in the source and its copy landing in
   // the target.
   peerOwns = targetProjectId;
-  const peerTransport: ClientTransport = {
-    ...toListener.transport,
-    invoke: async (channel, input) => {
-      const result = await toListener.transport.invoke(channel, input);
-      return channel === "projects:list"
-        ? // Loose: the host under test gets the peer's rows as sent.
-          looseRows(result).toSorted(
-            (a, b) => Number(b.id === peerOwns) - Number(a.id === peerOwns),
-          )
-        : result;
-    },
-  };
   standInAccount({
     listDevices: Effect.succeed(registry),
     directPeers: Effect.sync(() => ({
@@ -342,8 +330,16 @@ beforeAll(async () => {
   // Every reach into the peer: its contracts, and the session's byte
   // channels, which a mirror's send rides.
   standInPeers({
-    transportFor: () => peerTransport,
-    channelsFor: () => toListener.channels,
+    ...toListener,
+    invoke: (deviceId, channel, input) =>
+      Effect.map(toListener.invoke(deviceId, channel, input), (result) =>
+        channel === "projects:list"
+          ? // Loose: the host under test gets the peer's rows as sent.
+            looseRows(result).toSorted(
+              (a, b) => Number(b.id === peerOwns) - Number(a.id === peerOwns),
+            )
+          : result,
+      ),
   });
   standInDeviceId(DIALER);
   track(await startLoopback());

@@ -24,7 +24,8 @@ import { inertMirrorImpl } from "./mirrorFakes.mts";
 const notHere = () => Promise.reject(new Error("not in this check"));
 
 let peers = PeerReach.make({
-  transportFor: () => ({ invoke: notHere, subscribe: () => () => {} }),
+  invoke: () => Effect.fail(new Error("not in this check")),
+  onPush: () => () => {},
   channelsFor: () => notHere,
 });
 // The peers a proof reaches, over its own transport.

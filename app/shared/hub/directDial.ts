@@ -81,14 +81,12 @@ import { newConnectionId } from "@shigomori/engine/rpcClient";
 import { HELLO_TIMEOUT_MS } from "@shared/remote/link";
 import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 
-// A DialedDevice (shared/remote/deviceLink.ts) less its link, so
-// everything downstream of a direct dial (the bridge cache, sync,
-// port-forward) is transport agnostic, plus the two facts the connectInfo answer carried beside the
-// candidates: whether the peer runs this device's commands, and
-// whether it shares with this device at all. The bridge keeps them
-// current from the peer's commandAccessChanged and sharing:changed
-// pushes.
-export type PeerConnection = Omit<DialedDevice, "link"> & {
+// A DialedDevice (shared/remote/deviceLink.ts), plus the two facts the
+// connectInfo answer carried beside the candidates: whether the peer
+// runs this device's commands, and whether it shares with this device
+// at all. The bridge keeps them current from the peer's
+// commandAccessChanged and sharing:changed pushes.
+export type PeerConnection = DialedDevice & {
   acceptsCommands: boolean;
   sharesData: boolean;
 };
@@ -286,9 +284,6 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
               appVersion: deps.localAppVersion,
               localDeviceId: deps.localDeviceId,
               deviceKind: deps.deviceKind,
-              // Identity pin: a welcome from any other deviceId fails
-              // the handshake and closes the socket.
-              expectedDeviceId: deviceId,
               onPush: (channel, payload) => {
                 if (winner === index) {
                   deps.onAnyPush?.(deviceId, channel, payload);
@@ -454,7 +449,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           message: `peer ${deviceId} has no key on the roster`,
         });
       }
-      const { link: _, ...dialed } = yield* raceCandidates(
+      const dialed = yield* raceCandidates(
         deviceId,
         info.candidates,
         deadlineMs,

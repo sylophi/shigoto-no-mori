@@ -9,19 +9,12 @@
 //
 // Every session here is a direct socket from the injected dialer, with
 // no hub fallback, and the keeper is dialPeer's only caller: an invoke
-// joins an in-flight dial, and a miss rejects at once with the keeper's
+// joins an in-flight dial, and a miss fails at once with the keeper's
 // last failure. The web bridge's dialer takes wss candidates only
 // (mixed content).
 import type { hubContract, HubStatus } from "@shigomori/contracts/modules/hub";
-
-type DirectPeerFacts = Pick<
-  HubStatus,
-  "peerAppVersions" | "peerAcceptsCommands" | "peerSharesData"
->;
-type PeerFact = "acceptsCommands" | "sharesData";
-import type { ChannelMux } from "@shared/remote/channels";
-import type { InvokeOptions } from "@shared/ipc/transport";
-import type { Handlers, ViewObserver } from "@shigomori/contracts/types";
+import type { LinkChannels } from "@shigomori/contracts/link";
+import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
 import type { PeerConnection } from "@shared/hub/directDial";
 import * as Deferred from "effect/Deferred";
 import * as Exit from "effect/Exit";
@@ -37,8 +30,13 @@ import {
   errorMessageOf,
   NoDirectConnectionError,
 } from "@shigomori/contracts/errors";
-import { peerViewFailure } from "./peerViewFailure";
 import { RemoteDisconnectedError } from "@shared/remote/rpcTransport";
+
+type DirectPeerFacts = Pick<
+  HubStatus,
+  "peerAppVersions" | "peerAcceptsCommands" | "peerSharesData"
+>;
+type PeerFact = "acceptsCommands" | "sharesData";
 
 // No session to the peer, with what the dial or the drop said.
 const noSession = (deviceId: string, error: unknown) =>
@@ -46,72 +44,61 @@ const noSession = (deviceId: string, error: unknown) =>
     ? error
     : new NoDirectConnectionError({ deviceId, reason: errorMessageOf(error) });
 
-// hub:invokePeer as a window's host and a web tab serve it: an effect,
-// so a call interrupted where it was made (a query superseded or
-// dropped) cancels it on the peer too, and the peer's work stops. A
-// failure crosses as the contract error, or RemoteCallError with its
-// message.
-export const servedInvokePeer =
-  (hub: () => HubHandlers) =>
-  ({ deviceId, channel, input }: Parameters<HubHandlers["invokePeer"]>[0]) =>
-    Effect.tryPromise({
-      try: (signal) => hub().invokeOnPeer(deviceId, channel, input, { signal }),
-      catch: callFailureOf,
-    });
-
-// A view not started yet stops nothing.
-const noop = (): void => {};
+// How a call or a view on a session ended short of its caller stopping
+// it. Interrupted, it went with its link's scope (a sweep, the quit),
+// which is the link gone. A defect (the peer's handler died) is the
+// failure it is.
+const linkFailureOf = (cause: Cause.Cause<unknown>): unknown =>
+  Cause.hasInterruptsOnly(cause)
+    ? new RemoteDisconnectedError()
+    : Cause.squash(cause);
 
 // Values of a peer's view this host holds for a window that has not
 // taken them, as many as a terminal's client may fall behind its shell
 // by (host/lib/terminals/Terminals.ts).
 const RELAY_BACKLOG = 64;
 
-// hub:watchPeer as a window's host serves it. A window that falls
-// RELAY_BACKLOG values behind the peer's view has it ended as no
-// session, which it asks again on (a terminal picking up after the last
-// chunk it has), so a flood it cannot keep up with is not buffered here.
-// Not held back to the peer's pace instead: the RPC client's buffer
-// for a stream, full, stops its whole link's reading.
-export const servedWatchPeer =
-  (hub: () => HubHandlers) =>
-  (input: Parameters<HubHandlers["watchPeer"]>[0]) =>
-    Stream.callback<unknown, unknown>(
-      (queue) =>
-        Effect.acquireRelease(
-          Effect.sync(() => {
-            let behind = false;
-            let stop = noop;
-            stop = hub().watchPeer(input, {
-              value: (value) => {
-                if (behind || Queue.offerUnsafe(queue, value)) return;
-                // Stopped at once, not once the window reaches the end.
-                behind = true;
-                Queue.failCauseUnsafe(
-                  queue,
-                  Cause.fail(
-                    new NoDirectConnectionError({
-                      deviceId: input.deviceId,
-                      reason: "the window fell behind the peer's view",
-                    }),
-                  ),
-                );
-                stop();
-              },
-              end: (failure) =>
-                failure === undefined
-                  ? Queue.endUnsafe(queue)
-                  : Queue.failCauseUnsafe(
-                      queue,
-                      Cause.fail(peerViewFailure(input.deviceId, failure)),
-                    ),
-            });
-            return () => stop();
-          }),
-          (stop) => Effect.sync(stop),
+// The hub module as a window's host and a web tab serve it, over the
+// bridge `hub` answers with. A call interrupted where it was made (a
+// query superseded or dropped) cancels it on the peer too, and the
+// peer's work stops. A failure crosses as the contract error, or
+// RemoteCallError with its message.
+//
+// A window that falls RELAY_BACKLOG values behind a peer's view has it
+// ended as no session, which it asks again on (a terminal picking up
+// after the last chunk it has), so a flood it cannot keep up with is
+// not buffered here. Not held back to the peer's pace instead: the RPC
+// client's buffer for a stream, full, stops its whole link's reading.
+export const servedHub = (hub: () => HubHandlers) => ({
+  handlers: {
+    status: () =>
+      Effect.try({ try: () => hub().status(), catch: callFailureOf }),
+    invokePeer: ({ deviceId, channel, input }) =>
+      Effect.try({ try: hub, catch: (error) => error }).pipe(
+        Effect.flatMap((bridge) =>
+          bridge.invokeOnPeer(deviceId, channel, input),
         ),
-      { bufferSize: RELAY_BACKLOG },
-    );
+        Effect.mapError(callFailureOf),
+      ),
+  } satisfies EffectHandlers<typeof hubContract>,
+  views: {
+    watchPeer: (input) =>
+      Stream.callback<unknown, unknown>(
+        (queue) =>
+          Stream.runForEach(hub().watchPeer(input), (value) =>
+            Queue.offerUnsafe(queue, value)
+              ? Effect.void
+              : Effect.fail(
+                  new NoDirectConnectionError({
+                    deviceId: input.deviceId,
+                    reason: "the window fell behind the peer's view",
+                  }),
+                ),
+          ).pipe(Effect.andThen(Queue.end(queue))),
+        { bufferSize: RELAY_BACKLOG },
+      ),
+  } satisfies ViewHandlers<typeof hubContract, never>,
+});
 
 type HubHandlerDeps = {
   status(): HubStatus;
@@ -138,27 +125,34 @@ type HubHandlerDeps = {
   peerUnavailableReason?: (deviceId: string) => string | null;
 };
 
-export type HubHandlers = Handlers<typeof hubContract> & {
+export type HubHandlers = {
+  status(): HubStatus;
   // One dial attempt (or a join onto the cached session or in-flight
   // dial) for one peer. Not a contract channel: the keeper is its only
   // production caller, which is what makes sessions desired state
   // instead of use-triggered. Interrupting the wait leaves the dial to
   // its owner, the bridge: the sweeps and the scope's close end it.
   dialPeer(deviceId: string): Effect.Effect<void, unknown>;
-  // invokePeer for this device's own callers, who may cancel the call
-  // and hand it the span it continues (InvokeOptions).
+  // hub:invokePeer: a call on the peer's session, which interrupting
+  // cancels on the peer. One the link dropped under (a peer that slept
+  // is found out only by the next probe or ping) fails as no session,
+  // which a query waits out quietly until the redial lands, not the
+  // peer's own failure.
   invokeOnPeer(
     deviceId: string,
     channel: string,
     input: unknown,
-    options?: InvokeOptions,
-  ): Promise<unknown>;
-  // hub:watchPeer: a peer's view over its session, until the returned
-  // stop. No session ends it at once with the keeper's reason.
-  watchPeer(
-    input: { deviceId: string; channel: string; input?: unknown },
-    observer: ViewObserver<unknown>,
-  ): () => void;
+  ): Effect.Effect<unknown, unknown>;
+  // hub:watchPeer: a peer's view over its session. No way to the peer
+  // (whatever the dial said, or the link going) is the redial's to
+  // mend, so it ends as no session, which a view asks again on, where
+  // the peer's own failure (a refusal, an answer this build can't read)
+  // ends it as it is.
+  watchPeer(input: {
+    deviceId: string;
+    channel: string;
+    input?: unknown;
+  }): Stream.Stream<unknown, unknown>;
   // Each established direct session's facts, keyed by deviceId, as
   // HubStatus carries them: the appVersion its welcome confirmed
   // (membership is what "has a direct session" means: the renderer
@@ -187,9 +181,9 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // The peer's direct session's byte channels (shared/remote/
   // channels.ts), for a caller that attaches its end under a minted id
   // before opening the far end with forward:open / mirror:openStream. Same
-  // session rules as invokePeer: joins an in-flight keeper dial,
-  // rejects at once with the keeper's reason when there is none.
-  peerChannels(deviceId: string): Promise<ChannelMux>;
+  // session rules as invokePeer: joins an in-flight keeper dial, fails
+  // at once with the keeper's reason when there is none.
+  peerChannels(deviceId: string): Effect.Effect<LinkChannels, unknown>;
   // Close and drop every cached direct session, for the quit path:
   // without it the remote host keeps a dead socket in its per-device
   // slot and relaunch lands on the supersede path instead of a clean
@@ -203,18 +197,11 @@ export type HubHandlers = Handlers<typeof hubContract> & {
 export const makeHubHandlers = (
   deps: HubHandlerDeps,
 ): Effect.Effect<HubHandlers, never, Scope.Scope> =>
-  Effect.map(
-    Effect.all([
-      FiberSet.makeRuntime<never>(),
-      FiberSet.makeRuntimePromise<never>(),
-    ]),
-    ([run, runPromise]) => hubHandlers(deps, run, runPromise),
-  );
+  Effect.map(FiberSet.makeRuntime<never>(), (run) => hubHandlers(deps, run));
 
 function hubHandlers(
   deps: HubHandlerDeps,
   run: <A, E>(effect: Effect.Effect<A, E>) => Fiber.Fiber<A, E>,
-  runPromise: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>,
 ): HubHandlers {
   // Peer sessions opened by the keeper's dials, cached by deviceId, and
   // dropped the moment they die, so the keeper's redial lands on an
@@ -279,7 +266,7 @@ function hubHandlers(
       version: null,
       acceptsCommands: false,
       sharesData: false,
-      probe: noop,
+      probe: () => {},
     };
     peers.set(deviceId, entry);
     entry.fiber = run(
@@ -326,45 +313,26 @@ function hubHandlers(
   // The keeper's session, or the honest refusal. A present entry may
   // still be an in-flight keeper dial: awaiting it is what makes an
   // invoke racing the eager dial seamless instead of flaky, and a
-  // failed dial rejects the invoke with the dialer's typed error. A
-  // miss never dials (see the header): the peer is offline, or the
-  // keeper is between attempts, and the rejection says which.
-  function requirePeer(deviceId: string): Promise<PeerConnection> {
-    const entry = peers.get(deviceId);
-    if (entry === undefined) {
-      const reason = deps.peerUnavailableReason?.(deviceId);
-      return Promise.reject(
-        new NoDirectConnectionError(
-          reason == null ? { deviceId } : { deviceId, reason },
-        ),
-      );
-    }
-    return runPromise(Deferred.await(entry.connection)).catch(
-      (error: unknown) => Promise.reject(noSession(deviceId, error)),
-    );
-  }
-
-  // A call on the session: one the link dropped under (a peer that slept
-  // is found out only by the next probe or ping) is no session, which a
-  // query waits out quietly until the redial lands, not the peer's own
-  // failure.
-  async function invokeOn(
+  // failed dial fails the invoke with the dialer's typed error. A miss
+  // never dials (see the header): the peer is offline, or the keeper is
+  // between attempts, and the failure says which.
+  const requirePeer = (
     deviceId: string,
-    channel: string,
-    input: unknown,
-    options?: InvokeOptions,
-  ): Promise<unknown> {
-    const peer = await requirePeer(deviceId);
-    return peer.transport
-      .invoke(channel, input, options)
-      .catch((error: unknown) =>
-        Promise.reject(
-          error instanceof RemoteDisconnectedError
-            ? noSession(deviceId, error)
-            : error,
-        ),
+  ): Effect.Effect<PeerConnection, NoDirectConnectionError> =>
+    Effect.suspend(() => {
+      const entry = peers.get(deviceId);
+      if (entry === undefined) {
+        const reason = deps.peerUnavailableReason?.(deviceId);
+        return Effect.fail(
+          new NoDirectConnectionError(
+            reason == null ? { deviceId } : { deviceId, reason },
+          ),
+        );
+      }
+      return Deferred.await(entry.connection).pipe(
+        Effect.mapError((error) => noSession(deviceId, error)),
       );
-  }
+    });
 
   return {
     status: () => deps.status(),
@@ -372,32 +340,38 @@ function hubHandlers(
     dialPeer: (deviceId) =>
       Effect.suspend(() => Deferred.await(openPeer(deviceId).connection)),
 
-    invokeOnPeer: invokeOn,
+    invokeOnPeer: (deviceId, channel, input) =>
+      Effect.flatMap(requirePeer(deviceId), (peer) =>
+        peer.link.call(channel, input).pipe(
+          Effect.catchCause((cause) => {
+            const error = linkFailureOf(cause);
+            return Effect.fail(
+              error instanceof RemoteDisconnectedError
+                ? noSession(deviceId, error)
+                : error,
+            );
+          }),
+        ),
+      ),
 
-    // A peer's contract error reaches the renderer as its class.
-    invokePeer: ({ deviceId, channel, input }) =>
-      invokeOn(deviceId, channel, input),
+    watchPeer: ({ deviceId, channel, input }) =>
+      Stream.unwrap(
+        Effect.map(requirePeer(deviceId), (peer) =>
+          peer.link.view(channel, input).pipe(
+            Stream.catchCause((cause) => {
+              const error = linkFailureOf(cause);
+              return Stream.fail(
+                error instanceof RemoteDisconnectedError
+                  ? new NoDirectConnectionError({ deviceId })
+                  : error,
+              );
+            }),
+          ),
+        ),
+      ),
 
-    watchPeer: ({ deviceId, channel, input }, observer) => {
-      let stopped = false;
-      let stop = noop;
-      requirePeer(deviceId).then(
-        (peer) => {
-          if (stopped) return;
-          stop = peer.transport.watch?.(channel, input, observer) ?? stop;
-        },
-        // No way to the peer yet, whatever the dial said (a hub ask timed
-        // out, no listener offered): the redial's to mend, so the view
-        // asks again, where the peer's own view failing ends it.
-        (error: unknown) => observer.end(error),
-      );
-      return () => {
-        stopped = true;
-        stop();
-      };
-    },
-
-    peerChannels: async (deviceId) => (await requirePeer(deviceId)).channels,
+    peerChannels: (deviceId) =>
+      Effect.map(requirePeer(deviceId), (peer) => peer.channels),
 
     directPeers: () => {
       const peerAppVersions: Record<string, string> = {};

@@ -1,65 +1,29 @@
 import type { ContractModule } from "@shigomori/contracts/contract";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
-import type * as Tracer from "effect/Tracer";
 import type { LinkChannels } from "@shigomori/contracts/link";
-import type {
-  PushKeys,
-  PushProducerPayload,
-  ViewObserver,
-} from "@shigomori/contracts/types";
+import type { PushKeys, PushProducerPayload } from "@shigomori/contracts/types";
 
-// The client's one seam onto the wire. A transport carries invokes and
-// broadcast subscriptions for a single connection to a serving process.
-// Effect RPC binds it on every wire (shared/remote/rpcTransport.ts), the
-// window's port to its shell and the device link alike, and nothing
-// above this type knows which.
-export type ClientTransport = {
-  invoke(
-    channel: string,
-    input: unknown,
-    options?: InvokeOptions,
-  ): Promise<unknown>;
-  subscribe(channel: string, handler: (payload: unknown) => void): () => void;
-  // A view (contract.ts): its values as they come, until the returned
-  // stop, or `end` when the far side ends it, fails, or the link drops.
-  // Only a wire that carries views has it.
-  watch?(
-    channel: string,
-    input: unknown,
-    observer: ViewObserver<unknown>,
-  ): () => void;
+// The client's one seam onto the wire: a single connection to a serving
+// process as Effects and Streams, which a client runtime runs its
+// calls, views and pushes on (renderer/lib/runtime). Effect RPC binds it
+// on every wire (shared/remote/rpcTransport.ts), the window's port to
+// its shell and the device link alike, and nothing above this type
+// knows which. A call fails with the contract error it was sent as, or
+// the link gone. Interrupting it cancels the call on the far side.
+export type Link = {
   // True when the far end is this machine's own serving side, the same
   // build.
-  readonly local?: boolean;
-};
-
-// The same connection as Effects and Streams, which a client runtime
-// runs its calls, views and pushes on (renderer/lib/runtime). A call
-// fails with what its Promise face rejects with: the contract error it
-// was sent as, or the link gone. Interrupting it cancels the call on
-// the far side. `linkTransport` (shared/remote/rpcTransport.ts) is the
-// Promise face over it.
-export type Link = {
   readonly local?: boolean;
   readonly call: (
     channel: string,
     input: unknown,
-    span?: Tracer.AnySpan,
   ) => Effect.Effect<unknown, unknown>;
   readonly view: (
     channel: string,
     input: unknown,
   ) => Stream.Stream<unknown, unknown>;
   readonly pushes: (channel: string) => Stream.Stream<unknown>;
-};
-
-// What a caller may hand an invoke on the device link: `signal`
-// cancels it, interrupting the host's handler, and `span` is the span
-// the call continues, so the peer's work joins the caller's trace.
-export type InvokeOptions = {
-  readonly signal?: AbortSignal | undefined;
-  readonly span?: Tracer.AnySpan | undefined;
 };
 
 // Context handed to every invoke handler. Deliberately Electron free:
