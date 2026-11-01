@@ -164,8 +164,8 @@ type guardedEndpoint struct {
 }
 
 func (e guardedEndpoint) Supply(paths []string, signatures []*rsync.Signature, receiver rsync.Receiver) error {
-	if p := slices.IndexFunc(paths, touchesGit); p >= 0 {
-		return fmt.Errorf("refused to read %q: .git is not synchronized", paths[p])
+	if i := slices.IndexFunc(paths, touchesGit); i >= 0 {
+		return fmt.Errorf("refused to read %q: .git is not synchronized", paths[i])
 	}
 	return e.Endpoint.Supply(paths, signatures, receiver)
 }
