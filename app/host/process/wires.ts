@@ -43,10 +43,6 @@ import { createServed, resolvePush } from "@shared/ipc/served";
 import type { HandlerContext } from "@shared/ipc/transport";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
-import {
-  CLOUDFLARED_BINARY_NAME,
-  CLOUDFLARED_DIST_DIR,
-} from "@shared/packaging/cloudflaredDist.mts";
 import * as TunnelService from "@host/direct/Tunnel";
 import { makeConnectInfo } from "@host/direct/connectInfo";
 import { reconcileOnLastPort } from "@host/direct/listenerPort";
@@ -63,13 +59,8 @@ import * as Sharing from "@host/lib/Sharing";
 import * as PeerReach from "@host/ipc/PeerReach";
 import * as Loopback from "@host/socket/Loopback";
 import * as DeviceLink from "@host/socket/DeviceLink";
-import {
-  acceptsPeerCommands,
-  allowedWebOrigin,
-  hubAccount,
-  provisionDeviceTunnel,
-} from "./account";
-import { hostBinaryPath, hostFacts, tunnelPidFile } from "./facts";
+import { acceptsPeerCommands, allowedWebOrigin, hubAccount } from "./account";
+import { hostFacts } from "./facts";
 
 // The device link's listener. A peer's socket opens with one of the
 // single-use connect tickets connectInfo mints over the device hub and
@@ -165,24 +156,6 @@ const onTunnel = <A, E>(
 // as reconcile(null) through the same path. The connector token stays
 // inside the Tunnel.
 export const tunnelLayer = TunnelService.layer({
-  // Resolved fresh per start attempt: the probe is one bounded
-  // spawn, and any memo here would leave the install-cloudflared
-  // recovery path (any config write re-probes) dead for the PATH
-  // case.
-  resolveBinary: Effect.promise(() => Graph.run(Ops.readGlobalConfig())).pipe(
-    Effect.flatMap((config) =>
-      TunnelService.resolveCloudflaredBinary(
-        config.cloudflaredPath,
-        hostBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
-      ),
-    ),
-  ),
-  provision: (port) =>
-    Effect.tryPromise({
-      try: () => provisionDeviceTunnel(port),
-      catch: (cause) => new TunnelService.TunnelProvisionError({ cause }),
-    }),
-  pidFilePath: tunnelPidFile,
   // Tunnel state rides the hub status snapshot, so the account
   // page updates live.
   onChange: () => remote.now()?.plane.notifyStatusChanged(),

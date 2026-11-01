@@ -6,6 +6,7 @@
 // these.
 import { join } from "node:path";
 import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
+import { TUNNEL_PID_FILE } from "@shigomori/engine/tunnelPid";
 import type { HostFacts } from "@shared/hostFacts";
 
 let given: HostFacts | undefined;
@@ -27,4 +28,4 @@ export const hostBinaryPath = (devDistDir: string, name: string): string =>
 // The live cloudflared's pid (direct/Tunnel.ts), in the shell's own data
 // so it outlives the host that wrote it.
 export const tunnelPidFile = (): string =>
-  join(hostFacts().userDataPath, "cloudflared.pid");
+  join(hostFacts().userDataPath, TUNNEL_PID_FILE);

@@ -72,6 +72,7 @@ import {
   sameState,
 } from "./followPlan";
 import { chooseDirection, pull, push } from "./followTransfer";
+import type * as ScratchIndex from "./ScratchIndex";
 import {
   type GitState,
   type GitStateCore,
@@ -202,13 +203,14 @@ export const makeGitFollower = (deps: {
 const failureOf = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
-// What the reconciles reach: the engine, git, and the moves a push's
-// link runs on.
+// What the reconciles reach: the engine, git, the scratch index its
+// reads take, and the moves a push's link runs on.
 type FollowServices =
   | Engine.Services
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem
   | PeerReach
+  | ScratchIndex.ScratchIndex
   | Moves.Moves;
 
 const reconcileOf = (

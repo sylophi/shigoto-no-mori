@@ -37,6 +37,10 @@ import * as Semaphore from "effect/Semaphore";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { errorWordsOf } from "@host/lib/errorWords";
+import * as Ops from "@host/lib/engineOps";
+import * as HostAccount from "@host/lib/HostAccount";
+import * as HostFacts from "@host/lib/HostFacts";
+import * as EngineConfig from "@shigomori/engine/Config";
 import { HubTunnelUnconfiguredError } from "@shigomori/contracts/hubApi";
 import { TunnelProvisionDeniedError } from "@shared/account/service";
 import type { TunnelState } from "@shigomori/contracts/modules/hub";
@@ -46,8 +50,17 @@ import {
   restartSchedule,
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
+import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
+import {
+  CLOUDFLARED_BINARY_NAME,
+  CLOUDFLARED_DIST_DIR,
+} from "@shared/packaging/cloudflaredDist.mts";
 import * as Processes from "@shigomori/engine/processes";
-import { readTunnelPid, tunnelPidText } from "@shigomori/engine/tunnelPid";
+import {
+  readTunnelPid,
+  TUNNEL_PID_FILE,
+  tunnelPidText,
+} from "@shigomori/engine/tunnelPid";
 import { elapsedMillis, elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 
 // ---- pure deciders ----
@@ -157,7 +170,7 @@ const runsAsCloudflared = (path: string) =>
 // normally takes), then PATH for a build that carries none. Null means
 // tunnels are off: the caller logs one clear line and reports the
 // typed status, never an error loop.
-export const resolveCloudflaredBinary = Effect.fn("resolveCloudflaredBinary")(
+const resolveCloudflaredBinary = Effect.fn("resolveCloudflaredBinary")(
   function* (
     configuredPath: string | undefined,
     bundledPath: string | null,
@@ -186,17 +199,10 @@ type TunnelStatus = {
   hostname: string | null;
 };
 
-// What the hub Worker's provision call hands back for a listener port.
-type TunnelProvision = {
-  hostname: string;
-  connectorToken: string;
-  dnsCreated: boolean;
-};
-
 // The hub Worker's provision call failed. `cause` is its error:
 // HubTunnelUnconfiguredError when the Worker has no tunnel env,
 // TunnelProvisionDeniedError when it refuses.
-export class TunnelProvisionError extends Schema.TaggedError<TunnelProvisionError>()(
+class TunnelProvisionError extends Schema.TaggedError<TunnelProvisionError>()(
   "TunnelProvisionError",
   { cause: Schema.Defect() },
 ) {
@@ -205,29 +211,9 @@ export class TunnelProvisionError extends Schema.TaggedError<TunnelProvisionErro
   }
 }
 
-export interface Options {
-  // Resolves the usable binary, null when absent.
-  readonly resolveBinary: Effect.Effect<
-    string | null,
-    never,
-    ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
-  >;
-  // The hub Worker's provision call for the given listener port.
-  readonly provision: (
-    port: number,
-  ) => Effect.Effect<TunnelProvision, TunnelProvisionError>;
-  // One readiness probe attempt: true when the hostname routes from
-  // the edge to the local listener. The default GETs the hostname over
-  // HTTPS and reads any edge answer that the listener produced (the
-  // 426 a ws server earns for a non-upgrade GET) as routable.
-  readonly probe?: ((hostname: string) => Effect.Effect<boolean>) | undefined;
-  // Where the live child's pid is recorded, for the next host to reap
-  // it if this one dies unasked (reapOrphanedConnector). A getter
-  // because the userData path is an app-ready fact. When absent
-  // (tests), the bookkeeping is disabled.
-  readonly pidFilePath?: (() => string) | undefined;
+interface Options {
   // Fired on every state transition so the owner can fan status out.
-  readonly onChange?: (() => void) | undefined;
+  readonly onChange: () => void;
 }
 
 export class Tunnel extends Context.Service<
@@ -272,7 +258,8 @@ export class Tunnel extends Context.Service<
 // its edge connections promptly, so this only bounds a wedged one.
 const KILL_GRACE_MS = 3_000;
 
-// The default readiness probe: a plain HTTPS GET of the tunnel
+// One readiness probe attempt, true when the hostname routes from the
+// edge to the local listener: a plain HTTPS GET of the tunnel
 // hostname. The direct listener is a ws server, so a non-upgrade GET
 // that actually reached it earns an HTTP 426 (or 400) relayed through
 // the edge. A tunnel the edge cannot route yet answers 5xx (CF 530
@@ -390,12 +377,60 @@ const make = (options: Options) =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const fs = yield* FileSystem.FileSystem;
-    const probeOnce = options.probe ?? probeTunnelEdge;
-    const platformPath = yield* Path.Path;
-    const withSpawner = Effect.provideService(
-      ChildProcessSpawner.ChildProcessSpawner,
-      spawner,
+    const facts = yield* HostFacts.HostFacts;
+    const account = yield* HostAccount.HostAccount;
+    const services = yield* Effect.context<
+      | ChildProcessSpawner.ChildProcessSpawner
+      | FileSystem.FileSystem
+      | Path.Path
+      | EngineConfig.Config
+    >();
+    // Where the live child's pid is recorded, for the next host to reap
+    // it if this one dies unasked (reapOrphanedConnector).
+    const pidFile = (yield* Path.Path).join(
+      facts.userDataPath,
+      TUNNEL_PID_FILE,
     );
+
+    // Resolved fresh per start attempt: the probe is one bounded spawn,
+    // and any memo here would leave the install-cloudflared recovery
+    // path (any config write re-probes) dead for the PATH case.
+    const resolveBinary = Ops.readGlobalConfig().pipe(
+      Effect.orDie,
+      Effect.flatMap((config) =>
+        resolveCloudflaredBinary(
+          config.cloudflaredPath,
+          bundledBinaryPath(
+            facts,
+            CLOUDFLARED_DIST_DIR,
+            CLOUDFLARED_BINARY_NAME,
+          ),
+        ),
+      ),
+      Effect.provideContext(services),
+    );
+
+    // The hub Worker's provision call for the listener's port. Bounded,
+    // so a black-holed route cannot wedge the serialized lifecycle.
+    const provisionFor = (port: number) =>
+      Effect.flatMap(account.current, (current) =>
+        Effect.tryPromise({
+          try: async () => {
+            if (current.facts === null || current.service === null) {
+              throw new Error(
+                "signed out or the account service is not configured",
+              );
+            }
+            return current.service.provisionTunnel(
+              current.facts.credential,
+              port,
+              AbortSignal.timeout(15_000),
+            );
+          },
+          catch: (cause) => new TunnelProvisionError({ cause }),
+        }),
+      );
+
     const status = yield* SubscriptionRef.make<TunnelStatus>({
       state: "off",
       hostname: null,
@@ -409,17 +444,9 @@ const make = (options: Options) =>
         Effect.flatMap((previous) =>
           previous.state === next.state && previous.hostname === next.hostname
             ? Effect.void
-            : Effect.sync(() => options.onChange?.()),
+            : Effect.sync(options.onChange),
         ),
       );
-
-    const pidFile = Effect.sync(() => {
-      try {
-        return options.pidFilePath?.() ?? null;
-      } catch {
-        return null;
-      }
-    });
 
     // Set while a child is up, or the runner asks the Worker for a
     // provision, for `recheck`.
@@ -436,7 +463,7 @@ const make = (options: Options) =>
         : TUNNEL_PROBE_DELAYS_REUSED_MS;
       return Effect.sleep(delaysMs[0]).pipe(
         Effect.andThen(
-          probeOnce(hostname).pipe(
+          probeTunnelEdge(hostname).pipe(
             Effect.repeat(probeSchedule(spawnedAt, delaysMs)),
           ),
         ),
@@ -451,7 +478,7 @@ const make = (options: Options) =>
         yield* Ref.set(rechecks, Option.some(asked));
         while (true) {
           yield* Queue.take(asked);
-          if (yield* probeOnce(hostname)) continue;
+          if (yield* probeTunnelEdge(hostname)) continue;
           yield* setStatus({ state: "starting", hostname });
           const routable = yield* probe(hostname, false, yield* elapsedMillis);
           if (!routable) return STOPPED_ROUTING;
@@ -491,10 +518,7 @@ const make = (options: Options) =>
         const previous = (yield* SubscriptionRef.get(status)).state;
         yield* setStatus({ state: "starting", hostname: null });
         yield* remember({ denied: false, unconfigured: false });
-        const binaryPath = yield* withSpawner(options.resolveBinary).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-          Effect.provideService(Path.Path, platformPath),
-        );
+        const binaryPath = yield* resolveBinary;
         if (binaryPath === null) {
           // Logged on the way into no-binary, not on every reconcile.
           if (previous !== "no-binary") {
@@ -531,7 +555,7 @@ const make = (options: Options) =>
           // ends the wait after it.
           const asked = yield* Queue.sliding<void>(1);
           yield* Ref.set(rechecks, Option.some(asked));
-          const provisioned = yield* options.provision(port).pipe(
+          const provisioned = yield* provisionFor(port).pipe(
             Effect.tapError((error) =>
               Effect.gen(function* () {
                 if (!(yield* waits(error))) return;
@@ -614,15 +638,12 @@ const make = (options: Options) =>
             const spawnedAt = yield* elapsedMillis;
             yield* remember({ provision: { ...provision, ready: false } });
             yield* setStatus({ state: "starting", hostname });
-            const path = yield* pidFile;
-            if (path !== null) {
-              yield* fs
-                .writeFileString(path, tunnelPidText(child.pid))
-                .pipe(Effect.ignore);
-              yield* Effect.addFinalizer(() =>
-                fs.remove(path, { force: true }).pipe(Effect.ignore),
-              );
-            }
+            yield* fs
+              .writeFileString(pidFile, tunnelPidText(child.pid))
+              .pipe(Effect.ignore);
+            yield* Effect.addFinalizer(() =>
+              fs.remove(pidFile, { force: true }).pipe(Effect.ignore),
+            );
             const exited = child.exitCode.pipe(
               Effect.exit,
               Effect.map((exit) =>

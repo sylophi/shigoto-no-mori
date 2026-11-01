@@ -30,6 +30,7 @@ import type * as Shell from "@host/lib/Shell";
 import type * as PeerReach from "@host/ipc/PeerReach";
 import type * as MirrorEngine from "@host/mirror/MirrorEngine";
 import type * as MirrorSignals from "@host/mirror/MirrorSignals";
+import type * as ScratchIndex from "@host/mirror/ScratchIndex";
 import type * as PortForwards from "@host/portForward/PortForwards";
 
 export type HostServices =
@@ -61,5 +62,6 @@ export type HostServices =
   | AccountPeers.AccountPeers
   | MirrorEngine.MirrorEngine
   | MirrorSignals.MirrorSignals
+  | ScratchIndex.ScratchIndex
   | PortForwards.PortForwards
   | DataDirHolders.DataDirHolders;

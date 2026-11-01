@@ -11,7 +11,7 @@ import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";
 import { pidAlive, PS_BIRTH_ENV } from "../processes.ts";
 import * as RunningScripts from "../RunningScripts.ts";
-import { readTunnelPid } from "../tunnelPid.ts";
+import { readTunnelPid, TUNNEL_PID_FILE } from "../tunnelPid.ts";
 import { SCRIPT_START_TOLERANCE_MS, check } from "./documents.ts";
 import type { ReadsArea } from "./reads.ts";
 
@@ -31,7 +31,7 @@ export const makeLeftoverChecks = ({ reads }: { readonly reads: ReadsArea }) =>
     // machine reachable.
     const checkOrphanTunnel = Effect.gen(function* () {
       const { userData } = appFolders(flavor, paths);
-      const raw = yield* readText(path.join(userData, "cloudflared.pid"));
+      const raw = yield* readText(path.join(userData, TUNNEL_PID_FILE));
       if (Option.isNone(raw)) return [];
       const pid = readTunnelPid(raw.value);
       if (pid === undefined || pid < 2) return [];

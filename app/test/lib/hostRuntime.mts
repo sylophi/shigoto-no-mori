@@ -20,6 +20,7 @@ import * as Layer from "effect/Layer";
 import * as Migration from "@shigomori/engine/Migration";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as FileSync from "../../host/fileSync/FileSync.ts";
+import * as ScratchIndex from "../../host/mirror/ScratchIndex.ts";
 import * as Engine from "../../host/lib/Engine.ts";
 import * as BackgroundFetch from "../../host/lib/BackgroundFetch.ts";
 import * as CliShell from "../../host/lib/cli/shell.ts";
@@ -130,6 +131,7 @@ const runtime = ManagedRuntime.make(
         // Over the file's fresh store, with nothing a previous run left
         // behind to sweep.
         OrphanSweep.layer,
+        ScratchIndex.layer,
       ),
     ),
     // The engine's deletes stop the mirrors of what they take first.
