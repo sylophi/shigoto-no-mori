@@ -11,6 +11,7 @@ import {
   localDeviceIdAtom,
   hostSessionAtom,
 } from "@/lib/runtime/atoms";
+import { withMember } from "@shigomori/ui/lib/toggleSet.ts";
 
 const NONE: ReadonlySet<string> = new Set();
 
@@ -34,13 +35,8 @@ export const gitFetchingAtom = Atom.family((deviceId: string) =>
         ).pipe(
           Stream.scan(
             (): ReadonlySet<string> => NONE,
-            (active, { projectId, active: fetching }) => {
-              if (fetching === active.has(projectId)) return active;
-              const next = new Set(active);
-              if (fetching) next.add(projectId);
-              else next.delete(projectId);
-              return next;
-            },
+            (active, { projectId, active: fetching }) =>
+              withMember(active, projectId, fetching),
           ),
         );
       },

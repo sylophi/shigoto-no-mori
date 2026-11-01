@@ -96,8 +96,6 @@ function isRefusedStatus(error: unknown): boolean {
 
 type AccountServiceDeps = {
   baseUrl: string;
-  // Injected so tests avoid the network. Defaults to the global fetch.
-  fetchImpl?: typeof fetch;
 };
 
 type EnrollFields = {
@@ -156,7 +154,6 @@ type HubClient = HttpApiClient.ForApi<typeof HubApi>;
 
 export function createAccountService(deps: AccountServiceDeps): AccountService {
   const baseUrl = deps.baseUrl.replace(/\/+$/, "");
-  const fetchImpl = deps.fetchImpl ?? fetch;
 
   // One call under one bearer: the Clerk token for enroll and
   // signInToken, the device credential for everything else. Every call
@@ -183,7 +180,6 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
         run,
       ).pipe(
         Effect.provide(FetchHttpClient.layer),
-        Effect.provideService(FetchHttpClient.Fetch, fetchImpl),
         // No trace headers: the hub reads none, and a browser could not
         // send them past its CORS allowlist.
         Effect.provideService(HttpClient.TracerPropagationEnabled, false),

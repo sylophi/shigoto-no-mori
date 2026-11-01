@@ -12,7 +12,6 @@ import {
   sortEntries,
   type SortableEntry,
 } from "@shigomori/ui/views/worktreeDetail/scripts/sortPackageScripts.ts";
-import { withLaunchRowScript } from "@shared/launchRow";
 import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
@@ -124,10 +123,14 @@ export function useSetLaunchRowScript(projectId: string | null) {
       queryClient.setQueriesData<PackageScriptsResult | null>(
         { queryKey },
         (pkg) => {
-          if (!pkg) return pkg;
+          if (!pkg || pkg.launchRow.includes(scriptName) === onRow) {
+            return pkg;
+          }
           return {
             ...pkg,
-            launchRow: withLaunchRowScript(pkg.launchRow, scriptName, onRow),
+            launchRow: onRow
+              ? [...pkg.launchRow, scriptName]
+              : pkg.launchRow.filter((name) => name !== scriptName),
           };
         },
       );

@@ -4,7 +4,7 @@ import type {
   PaletteRow,
 } from "@shigomori/ui/views/palette/paletteEntries.ts";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
+import { useClientFlag } from "@/hooks/config/useSidebarMarks";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { SHELF_LABELS } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
@@ -49,7 +49,7 @@ function WorktreeRow({
   now: number;
 }) {
   const { worktree, project, device } = entry;
-  const showBadge = useShowDeviceBadges();
+  const showBadge = useClientFlag("showDeviceBadges");
   return (
     <WorktreeRowView
       entry={entry}

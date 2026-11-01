@@ -88,10 +88,6 @@ export type DirectPlane = {
   // The renderer-facing hub bridge, for the contract registration.
   // Teardown is the plane's scope closing, not a call in here.
   handlers: HubHandlers;
-  // The status snapshot: the connection's own status plus the direct
-  // surface (peerAppVersions, whose keys are the live direct sessions,
-  // and peerAcceptsCommands) plus the host half's tunnel state.
-  status(): HubStatus;
   // Fan a fresh snapshot out, for owner-side transitions outside the
   // connection (the host's tunnel runner state changes).
   notifyStatusChanged(): void;
@@ -203,7 +199,6 @@ export const make = (
 
     return {
       handlers,
-      status,
       notifyStatusChanged,
       handleConnectionChange: () => {
         const current = deps.connection().status();
