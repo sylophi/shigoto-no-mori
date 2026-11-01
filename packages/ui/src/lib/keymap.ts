@@ -247,9 +247,8 @@ function parseChord(text: string): Chord | null {
   };
 }
 
-// A chord as it is stored, the modifiers in one order. With `Mod` as
-// "Cmd", it is an Electron accelerator for the shell's menu, which is
-// macOS's alone.
+// A chord as it is stored, the modifiers in one order. `mod` names the
+// Mod key.
 function chordText(chord: Chord, mod = "Mod"): string {
   return [
     chord.mod && mod,
@@ -379,6 +378,12 @@ function chordAria(chord: Chord, mac: boolean): string {
     .join("+");
 }
 
+// A chord as an Electron accelerator, for the shell's menu, which is
+// macOS's alone.
+function chordAccelerator(chord: Chord): string {
+  return chordText(chord, "Cmd");
+}
+
 // ---- a window's keymap ----
 
 // An action's chord as this window binds it, ready to show and to match.
@@ -473,7 +478,7 @@ export function menuAccelerators(
   const accelerators: Record<string, string> = {};
   for (const action of KEYMAP_ACTIONS) {
     const binding = action.menu ? keymap.get(action.id) : undefined;
-    if (binding) accelerators[action.id] = chordText(binding.chord, "Cmd");
+    if (binding) accelerators[action.id] = chordAccelerator(binding.chord);
   }
   return accelerators;
 }
