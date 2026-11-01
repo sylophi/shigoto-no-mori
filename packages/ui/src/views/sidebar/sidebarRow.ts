@@ -212,7 +212,7 @@ type SidebarRowKinds =
     };
 
 export type SidebarRow = SidebarRowKinds & {
-  // Drawn inside a folder of projects (folderRuns), set in under its
+  // Drawn inside a folder of projects (listRows), set in under its
   // header.
   nested?: boolean;
 };

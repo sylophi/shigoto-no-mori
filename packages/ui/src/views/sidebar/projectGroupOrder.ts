@@ -6,7 +6,7 @@ import {
   remoteGroupId,
 } from "../../lib/forest.ts";
 import { sortByProject } from "../../lib/sortProjects.ts";
-import { type Owner, ownerOf } from "./sidebarRow.ts";
+import { type Owner, ownerOf, type ProjectListRow } from "./sidebarRow.ts";
 
 // Group rank by group id. A repo this machine holds is also ranked
 // under the peer-only id it would have, so narrowed to a peer that
@@ -186,7 +186,7 @@ export function claimRemote(
 // A section's folders by name, in name order, each with the group keys
 // filed in it. A section is an owner's (ownerOf), and the whole list is
 // one too (ALL_KEY), for when it isn't split by owner.
-export type Filed = ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
+type Filed = ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>;
 
 export const ownerKeyOf = (project: Project) =>
   ownerOf(project)?.key ?? NO_OWNER_KEY;
@@ -194,5 +194,98 @@ export const ownerKeyOf = (project: Project) =>
 // The section of the projects with no owner, and the one section of a
 // list not split by owner. Not valid owner keys (those always hold a
 // slash), so no owner can take them.
-export const NO_OWNER_KEY = "none";
+const NO_OWNER_KEY = "none";
 export const ALL_KEY = "all";
+
+// The list of projects as its sections, in the tree's order: the
+// pinned projects, then a run per owner, the owners where `order` puts
+// them, each run its folders' projects, a folder each in name order,
+// then its projects in no folder. A list not split by owner, or with a
+// single owner, is one run with no owner to head it, as a header would
+// only repeat. `items` come in the order's rank, `headerOf` reading
+// each one's project row.
+export function groupSections<T>(
+  items: readonly T[],
+  headerOf: (item: T) => Pick<ProjectListRow, "pinned" | "section" | "folder">,
+  order: ProjectGroupOrder,
+): { pinned: T[]; runs: OwnerRun<T>[] } {
+  const pinned = items.filter((item) => headerOf(item).pinned);
+  const bySection = new Map<string, T[]>();
+  for (const item of items) {
+    const header = headerOf(item);
+    if (header.pinned) continue;
+    const run = bySection.get(header.section);
+    if (run) run.push(item);
+    else bySection.set(header.section, [item]);
+  }
+  const split = bySection.size > 1;
+  const rankOf = (key: string) =>
+    order.owners.get(key)?.rank ?? order.owners.size;
+  const runs = [...bySection]
+    .toSorted(([a], [b]) => rankOf(a) - rankOf(b))
+    .map(([section, run]): OwnerRun<T> => {
+      const loose: T[] = [];
+      const byFolder = new Map<string, T[]>();
+      for (const item of run) {
+        const { folder } = headerOf(item);
+        if (folder === null) {
+          loose.push(item);
+          continue;
+        }
+        const filed = byFolder.get(folder);
+        if (filed) filed.push(item);
+        else byFolder.set(folder, [item]);
+      }
+      const folders = [...(order.filed.get(section) ?? [])].flatMap(
+        ([name, groupKeys]) => {
+          const filed = byFolder.get(name);
+          if (filed === undefined) return [];
+          const foldKey = `${section}\n${name}`;
+          return [
+            {
+              name,
+              foldKey,
+              headerKey: `f:${foldKey}`,
+              groupKeys,
+              items: filed,
+            },
+          ];
+        },
+      );
+      return {
+        owner: split
+          ? {
+              key: section,
+              headerKey: `o:${section}`,
+              label: order.owners.get(section)?.label ?? "No remote",
+            }
+          : null,
+        section,
+        items: run,
+        folders,
+        loose,
+      };
+    });
+  return { pinned, runs };
+}
+
+// One owner's run of the list of projects. Projects with no owner trail
+// the rest under a header of their own, as the order leaves them out.
+interface OwnerRun<T> {
+  owner: { key: string; headerKey: string; label: string } | null;
+  // The run's section (the project rows' `section`).
+  section: string;
+  // Every project in the run, for its header's count.
+  items: T[];
+  // `foldKey` is the section's key and the folder's name, what the
+  // shell keeps it shut by, and `groupKeys` every project filed in it
+  // there, the pinned ones too, for a rename.
+  folders: {
+    name: string;
+    foldKey: string;
+    headerKey: string;
+    groupKeys: readonly string[];
+    items: T[];
+  }[];
+  loose: T[];
+}
