@@ -1,6 +1,7 @@
-// Whole folder entries: whether one is there, and copying a tree as
-// `cp` does.
+// Whole folder entries: whether one is there, whether it is a folder,
+// and copying a tree as `cp` does.
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as FileSystem from "effect/FileSystem";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -15,6 +16,20 @@ export const entryExists = (fs: FileSystem.FileSystem, file: string) =>
     Effect.catch(() => fs.exists(file)),
     Effect.orElseSucceed(() => false),
   );
+
+// Whether a folder is at a path, through a symlink to one too.
+export const isDirectory = (fs: FileSystem.FileSystem, file: string) =>
+  fs.stat(file).pipe(
+    Effect.map((info) => info.type === "Directory"),
+    Effect.orElseSucceed(() => false),
+  );
+
+// A stat's mtime, epoch ms, 0 when it has none.
+export const mtimeOf = (info: FileSystem.File.Info) =>
+  Option.match(info.mtime, {
+    onNone: () => 0,
+    onSome: (date) => date.getTime(),
+  });
 
 // A copy that didn't finish. cp's own words are the cause.
 export class CopyFailed extends Schema.TaggedError<CopyFailed>()("CopyFailed", {

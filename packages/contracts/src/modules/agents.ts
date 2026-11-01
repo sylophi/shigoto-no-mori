@@ -1,4 +1,4 @@
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, gatedBy } from "../contract.ts";
 import {
   AgentHarnessStatusListSchema,
   SetAgentHooksPayloadSchema,
@@ -10,15 +10,17 @@ import {
 export const agentsContract = defineContract(
   "agents",
   "host",
-  invoke("status", VoidSchema, AgentHarnessStatusListSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeApp",
-  }),
+  invoke(
+    "status",
+    VoidSchema,
+    AgentHarnessStatusListSchema,
+    gatedBy("changeApp"),
+  ),
   // Installs or removes one harness's hooks.
-  invoke("setHooks", SetAgentHooksPayloadSchema, AgentHarnessStatusListSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeApp",
-  }),
+  invoke(
+    "setHooks",
+    SetAgentHooksPayloadSchema,
+    AgentHarnessStatusListSchema,
+    gatedBy("changeApp"),
+  ),
 );

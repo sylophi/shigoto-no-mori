@@ -306,33 +306,13 @@ export const verifiedRecord = (oid: string, st: IndexStat) =>
 const encoder = new TextEncoder();
 
 // The bytes git hashes as a blob: its header, then the content.
-export const blobBytes = (content: Uint8Array): Uint8Array => {
-  const header = encoder.encode(`blob ${content.length}\0`);
-  const all = new Uint8Array(header.length + content.length);
-  all.set(header);
-  all.set(content, header.length);
-  return all;
-};
+export const blobBytes = (content: Uint8Array): Uint8Array =>
+  Buffer.concat([encoder.encode(`blob ${content.length}\0`), content]);
 
-const hexBytes = (hex: string): Uint8Array | undefined => {
-  if (!/^(?:[0-9a-f]{2})+$/.test(hex)) return undefined;
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-};
+const hexBytes = (hex: string): Uint8Array | undefined =>
+  /^(?:[0-9a-f]{2})+$/.test(hex) ? Buffer.from(hex, "hex") : undefined;
 
-const compareBytes = (a: Uint8Array, b: Uint8Array) => {
-  for (let i = 0; i < Math.min(a.length, b.length); i++) {
-    const diff = (a[i] ?? 0) - (b[i] ?? 0);
-    if (diff !== 0) return diff;
-  }
-  return a.length - b.length;
-};
-
-export const toHex = (bytes: Uint8Array) =>
-  Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+export const toHex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
 
 // A version 2 index without extensions (git adds what it wants on its
 // next write), each path with its stat (zeroes for none, which git reads
@@ -347,7 +327,7 @@ export function indexBody(
     entry,
     name: encoder.encode(entry.path),
   }));
-  named.sort((a, b) => compareBytes(a.name, b.name));
+  named.sort((a, b) => Buffer.compare(a.name, b.name));
   const sorted = named.map(({ entry }) => entry);
   const chunks: Uint8Array[] = [];
   const header = new DataView(new ArrayBuffer(12));
@@ -383,12 +363,5 @@ export function indexBody(
     record.set(name, 40 + oid.length + 2);
     chunks.push(record);
   }
-  const size = chunks.reduce((total, chunk) => total + chunk.length, 0);
-  const body = new Uint8Array(size);
-  let at = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, at);
-    at += chunk.length;
-  }
-  return body;
+  return Buffer.concat(chunks);
 }

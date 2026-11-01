@@ -70,17 +70,6 @@ export class CloneCheckout extends Context.Service<
       Result.Result<CloneReport, CloneFailed>,
       CheckoutUnfinished | HookFailed | Git.GitError
     >;
-    // The clone checkout itself, for a worktree made --no-checkout. On
-    // failure the caller resets the worktree.
-    readonly clone: (
-      source: string,
-      worktree: string,
-    ) => Effect.Effect<CloneReport, CloneFailed>;
-    // Empties the worktree (but its .git link) and checks HEAD out with
-    // git, the state a plain `git worktree add` leaves.
-    readonly resetToPlainCheckout: (
-      worktree: string,
-    ) => Effect.Effect<void, Git.GitError>;
     // Drops what clones proved about a source's files.
     readonly forget: (worktreeId: string) => Effect.Effect<void>;
   }
@@ -96,6 +85,8 @@ const make = Effect.gen(function* () {
   const { runPostCheckoutHook } = yield* makeHook;
   const { pickSource } = yield* makeSources({ reads });
 
+  // Empties the worktree (but its .git link) and checks HEAD out with
+  // git, the state a plain `git worktree add` leaves.
   const resetToPlainCheckout = Effect.fn("CloneCheckout.resetToPlainCheckout")(
     function* (worktree: string) {
       const entries = yield* fs
@@ -132,8 +123,6 @@ const make = Effect.gen(function* () {
   return CloneCheckout.of({
     pickSource,
     finish,
-    clone,
-    resetToPlainCheckout,
     forget: verified.forget,
   });
 });

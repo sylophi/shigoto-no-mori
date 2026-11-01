@@ -3,7 +3,7 @@ import { errorMessageOf } from "../errors.ts";
 import { MIRROR_IGNORES_LIMIT } from "../mirrorIgnores.ts";
 import { isValidWorktreeDirName } from "../predicates/worktreeDirName.ts";
 import { isSafeRelPath } from "../predicates/relPath.ts";
-import { push, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke, gatedBy } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import {
   CloneFolderNameSchema,
@@ -408,50 +408,47 @@ export const syncContract = defineContract(
     "worktreeFolder",
     SyncWorktreeFolderPayloadSchema,
     Schema.Array(SyncWorktreeFolderEntrySchema),
-    { remote: true, gated: true, grant: "browseFiles" },
+    gatedBy("browseFiles"),
   ),
   invoke(
     "ignoredPaths",
     SyncIgnoredPathsPayloadSchema,
     SyncIgnoredPathsResultSchema,
-    { remote: true, gated: true, grant: "browseFiles" },
+    gatedBy("browseFiles"),
   ),
   // Discloses whether a path is there, as fs:listDirectory does.
   invoke(
     "cloneDestination",
     SyncCloneDestinationPayloadSchema,
     SyncCloneDestinationSchema,
-    { remote: true, gated: true, grant: "browseFiles" },
+    gatedBy("browseFiles"),
   ),
   invoke(
     "hasCommits",
     SyncHasCommitsPayloadSchema,
     SyncHasCommitsResultSchema,
-    { remote: true, gated: true, grant: "browseFiles" },
+    gatedBy("browseFiles"),
   ),
-  invoke("openSource", SyncOpenSourcePayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "browseFiles",
-  }),
+  invoke(
+    "openSource",
+    SyncOpenSourcePayloadSchema,
+    VoidSchema,
+    gatedBy("browseFiles"),
+  ),
   // receiveBundle lands under refs/shigomori/, never a branch, so the
   // project is scope enough.
   invoke(
     "receiveWorktree",
     SyncReceiveWorktreePayloadSchema,
     SyncReceiveWorktreeResultSchema,
-    {
-      remote: true,
-      gated: true,
-      grant: "changeCode",
-      busy: "land",
-    },
+    { ...gatedBy("changeCode"), busy: "land" },
   ),
-  invoke("receiveBundle", SyncReceiveBundlePayloadSchema, SyncFetchedSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeCode",
-  }),
+  invoke(
+    "receiveBundle",
+    SyncReceiveBundlePayloadSchema,
+    SyncFetchedSchema,
+    gatedBy("changeCode"),
+  ),
   // gated keeps the web client's refusal of them.
   invoke(
     "pullWorktree",
@@ -469,7 +466,7 @@ export const syncContract = defineContract(
     "cancelMove",
     SyncCancelMovePayloadSchema,
     SyncCancelMoveResultSchema,
-    { remote: true, gated: true, grant: "changeCode" },
+    gatedBy("changeCode"),
   ),
   // After a pull, its remote half is the peer's worktrees:delete.
   invoke(

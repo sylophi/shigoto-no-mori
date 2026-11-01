@@ -5,7 +5,6 @@ import type {
 } from "@shigomori/contracts/modules/cli";
 import { RegistryFileSchema } from "@shigomori/contracts/schemas/dataDir";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import type * as SqlClient from "effect/sql/SqlClient";
 import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
@@ -220,12 +219,6 @@ export const lstatMtime = (entry: NativeFs.LstatEntry) =>
 
 // Who holds the update stager's pidfile, read once a pass.
 export type Holder = Effect.Success<ReturnType<typeof stagingHolder>>;
-
-export const mtimeOf = (info: FileSystem.File.Info) =>
-  Option.match(info.mtime, {
-    onNone: () => 0,
-    onSome: (date) => date.getTime(),
-  });
 
 // A lock older than this belonged to a process that died holding it:
 // the writes they guard take milliseconds.

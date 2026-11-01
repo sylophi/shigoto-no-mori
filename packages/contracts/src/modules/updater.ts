@@ -1,4 +1,4 @@
-import { push, defineContract, invoke } from "../contract.ts";
+import { push, defineContract, invoke, gatedBy, ungated } from "../contract.ts";
 import { UpdaterStateSchema, VoidSchema } from "../schemas/index.ts";
 
 // The app updater, as a HOST module: the update is a fact about the
@@ -10,27 +10,12 @@ import { UpdaterStateSchema, VoidSchema } from "../schemas/index.ts";
 export const updaterContract = defineContract(
   "updater",
   "host",
-  invoke("get", VoidSchema, UpdaterStateSchema, {
-    remote: true,
-    gated: false,
-  }),
-  invoke("check", VoidSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeApp",
-  }),
-  invoke("install", VoidSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeApp",
-  }),
+  invoke("get", VoidSchema, UpdaterStateSchema, ungated),
+  invoke("check", VoidSchema, VoidSchema, gatedBy("changeApp")),
+  invoke("install", VoidSchema, VoidSchema, gatedBy("changeApp")),
   // Install the staged update, or fetch one first and install it once
   // it is staged (Update all, for a device that hasn't found the
   // release yet). Answers once the install started or was armed.
-  invoke("update", VoidSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "changeApp",
-  }),
+  invoke("update", VoidSchema, VoidSchema, gatedBy("changeApp")),
   push("state", UpdaterStateSchema, { remote: true }),
 );

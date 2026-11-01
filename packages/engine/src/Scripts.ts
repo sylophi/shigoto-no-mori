@@ -20,6 +20,7 @@ import {
   type Runner,
 } from "./scriptFiles.ts";
 import * as Usage from "./Usage.ts";
+import { entryExists, isDirectory } from "./entries.ts";
 
 export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
 
@@ -265,20 +266,15 @@ const make = Effect.gen(function* () {
   const usage = yield* Usage.Usage;
   const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
-  // Whether the entry is there, a dangling symlink included.
-  const present = (file: string) =>
-    fs.exists(file).pipe(
-      Effect.flatMap((exists) =>
-        exists ? Effect.succeed(true) : fs.readLink(file).pipe(Effect.as(true)),
-      ),
-      Effect.orElseSucceed(() => false),
-    );
-
   // The manager a package.json's lockfile picks, npm without one.
   const packageManager = (dir: string) =>
-    Effect.forEach(LOCKFILES, ([file]) => present(path.join(dir, file)), {
-      concurrency: "unbounded",
-    }).pipe(
+    Effect.forEach(
+      LOCKFILES,
+      ([file]) => entryExists(fs, path.join(dir, file)),
+      {
+        concurrency: "unbounded",
+      },
+    ).pipe(
       Effect.map(
         (found) =>
           LOCKFILES.find((_, index) => found[index])?.[1] ?? ("npm" as const),
@@ -289,7 +285,7 @@ const make = Effect.gen(function* () {
   const packageManagerOf = Effect.fn("Scripts.packageManager")(function* (
     dir: string,
   ) {
-    const found = yield* present(path.join(dir, "package.json"));
+    const found = yield* entryExists(fs, path.join(dir, "package.json"));
     return found
       ? Option.some(yield* packageManager(dir))
       : Option.none<PackageManager>();
@@ -363,10 +359,7 @@ const make = Effect.gen(function* () {
           if (file === undefined) return undefined;
           const at = path.join(dir, file);
           // A directory by the name is no script file.
-          const info = yield* fs.stat(at).pipe(Effect.option);
-          if (Option.isSome(info) && info.value.type === "Directory") {
-            return undefined;
-          }
+          if (yield* isDirectory(fs, at)) return undefined;
           return yield* fs.readFileString(at).pipe(
             Effect.mapError(
               (cause) =>

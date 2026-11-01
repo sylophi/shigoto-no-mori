@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, ungated } from "../contract.ts";
 import {
   DetectedLauncherSchema,
   LaunchedSchema,
@@ -15,10 +15,7 @@ import {
 export const launchersContract = defineContract(
   "launchers",
   "host",
-  invoke("detect", VoidSchema, Schema.Array(DetectedLauncherSchema), {
-    remote: true,
-    gated: false,
-  }),
+  invoke("detect", VoidSchema, Schema.Array(DetectedLauncherSchema), ungated),
   invoke(
     "forProject",
     ProjectScopedPayloadSchema,
@@ -29,7 +26,7 @@ export const launchersContract = defineContract(
       // without re-deriving the filter in the renderer.
       hiddenCount: Schema.Natural,
     }),
-    { remote: true, gated: false },
+    ungated,
   ),
   // launch is remote false: it spawns an arbitrary shell command from
   // config, the one clear remote code execution vector. Detection is safe to serve, launching is not.

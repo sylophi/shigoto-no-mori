@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, ungated } from "../contract.ts";
 import { DeviceIdSchema } from "../hubProtocol.ts";
 import { HexId32Schema } from "../schemas/hexId.ts";
 import { VoidSchema } from "../schemas/void.ts";
@@ -76,17 +76,15 @@ const ReadBytesSchema = Schema.Uint8Array.check(
   Schema.makeFilter((bytes) => bytes.byteLength <= CHANNEL_MAX_READ_BYTES),
 );
 
-const link = { remote: true, gated: false } as const;
-
 export const linkContract = defineContract(
   "link",
   "host",
-  invoke("hello", HelloSchema, WelcomeSchema, link),
+  invoke("hello", HelloSchema, WelcomeSchema, ungated),
   // For a link that may have died unseen.
-  invoke("ping", VoidSchema, VoidSchema, link),
-  invoke("read", ReadSchema, ReadBytesSchema, link),
+  invoke("ping", VoidSchema, VoidSchema, ungated),
+  invoke("read", ReadSchema, ReadBytesSchema, ungated),
   // Answers once the far end has taken them.
-  invoke("write", WriteSchema, VoidSchema, link),
-  invoke("end", ChannelSchema, VoidSchema, link),
-  invoke("reset", ChannelSchema, VoidSchema, link),
+  invoke("write", WriteSchema, VoidSchema, ungated),
+  invoke("end", ChannelSchema, VoidSchema, ungated),
+  invoke("reset", ChannelSchema, VoidSchema, ungated),
 );

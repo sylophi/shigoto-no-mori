@@ -58,6 +58,7 @@ import * as Paths from "./Paths.ts";
 import { errnoText, isNotFound } from "./platformErrors.ts";
 import * as Registry from "./Registry.ts";
 import * as Worktrees from "./Worktrees.ts";
+import { isDirectory } from "./entries.ts";
 
 // A session as its harness and id name it.
 export type SessionRef = {
@@ -275,12 +276,7 @@ const make = (binary: string) =>
     const hooksPath = (harness: Harness) =>
       Effect.map(dirOf(harness), (dir) => path.join(dir, harness.file));
     const detected = (harness: Harness) =>
-      Effect.flatMap(dirOf(harness), (dir) =>
-        fs.stat(dir).pipe(
-          Effect.map((info) => info.type === "Directory"),
-          Effect.orElseSucceed(() => false),
-        ),
-      );
+      Effect.flatMap(dirOf(harness), (dir) => isDirectory(fs, dir));
 
     // The file a hooks path names: through a symlink (a dotfiles repo's)
     // to the file itself, even one not created yet, so a write replaces

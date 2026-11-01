@@ -76,7 +76,7 @@ const make = Effect.gen(function* () {
       )
       .pipe(
         Effect.map((stdout) => {
-          const files = splitZ(stdout).filter((file) => file !== "");
+          const files = splitZ(stdout);
           return files.length === 0
             ? Option.none()
             : Option.some(new Set(files));

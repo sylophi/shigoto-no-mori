@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { defineContract, invoke } from "../contract.ts";
+import { defineContract, invoke, gatedBy } from "../contract.ts";
 import { HexId32Schema } from "../schemas/hexId.ts";
 import { PortNumberSchema, VoidSchema } from "../schemas/index.ts";
 import { strict } from "../schemas/strict.ts";
@@ -23,9 +23,5 @@ const ForwardOpenPayloadSchema = strict(
 export const forwardContract = defineContract(
   "forward",
   "host",
-  invoke("open", ForwardOpenPayloadSchema, VoidSchema, {
-    remote: true,
-    gated: true,
-    grant: "reachServers",
-  }),
+  invoke("open", ForwardOpenPayloadSchema, VoidSchema, gatedBy("reachServers")),
 );
