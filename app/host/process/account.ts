@@ -2,23 +2,16 @@
 // graph), synchronously: unknown until the graph is up and the shell's
 // first report lands, which every reader takes as no account.
 import type { HubAccount } from "@shared/account/hubConnect";
-import type { AccountFacts } from "@shigomori/contracts/modules/session";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Effect from "effect/Effect";
 import { type Account, HostAccount, UNREPORTED } from "@host/lib/HostAccount";
 import * as Graph from "./graph";
-
-export type { AccountFacts };
 
 const account = (): Account =>
   Graph.readNow(
     Effect.flatMap(HostAccount, (it) => it.current),
     () => UNREPORTED,
   );
-
-// Replaces the facts, answering the account they replaced.
-export const setAccountFacts = (next: AccountFacts | null): Promise<Account> =>
-  Graph.run(Effect.flatMap(HostAccount, (it) => it.set(next)));
 
 // The predicate the device link's gate consults live on every gated
 // call, and the verdict every connectInfo answer reports. Every peer
@@ -33,17 +26,6 @@ export function allowedWebOrigin(): string | undefined {
   return facts === null || facts.webOrigin === "" ? undefined : facts.webOrigin;
 }
 
-function signedIn(): {
-  facts: AccountFacts;
-  service: NonNullable<Account["service"]>;
-} {
-  const { facts, service } = account();
-  if (facts === null || service === null) {
-    throw new Error("signed out or the account service is not configured");
-  }
-  return { facts, service };
-}
-
 // The account as the hub socket dials with it (shared/account/hubConnect.ts).
 export function hubAccount(): HubAccount | null {
   const { facts, service } = account();
@@ -54,7 +36,10 @@ export function hubAccount(): HubAccount | null {
 export async function listAccountDevices(
   signal: AbortSignal,
 ): Promise<DeviceInfo[]> {
-  if (account().facts === null) return [];
-  const current = signedIn();
-  return current.service.listDevices(current.facts.credential, signal);
+  const { facts, service } = account();
+  if (facts === null) return [];
+  if (service === null) {
+    throw new Error("signed out or the account service is not configured");
+  }
+  return service.listDevices(facts.credential, signal);
 }

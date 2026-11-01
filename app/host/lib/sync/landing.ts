@@ -34,10 +34,7 @@ import {
   findProjectByIdentity,
   findProjectByIdentityOrFail,
 } from "@host/lib/projects";
-import {
-  cloneCheckoutFromPeer,
-  registerClone,
-} from "@host/lib/sync/cloneFromPeer";
+import { cloneCheckoutFromPeer } from "@host/lib/sync/cloneFromPeer";
 import { MoveCancelledError } from "@host/lib/sync/Moves";
 import {
   attachLinkFarEnd,
@@ -201,7 +198,6 @@ export const landWorktree = (
           cloneInto,
           landBranch,
           landing.identity,
-          registerClone,
           (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
         ).pipe(Effect.withSpan("Landing.clone")));
     }
@@ -229,7 +225,8 @@ export const landWorktree = (
     const capture = yield* source.capture.pipe(
       Effect.withSpan("Landing.capture"),
     );
-    const captured = capture.captured && capture.commit !== undefined;
+    const captureCommit = capture.captured ? capture.commit : undefined;
+    const captured = captureCommit !== undefined;
     yield* Effect.annotateCurrentSpan("captured", captured);
 
     // 4. Fetch what's missing. Tip already here + clean worktree means
@@ -283,8 +280,8 @@ export const landWorktree = (
       // Read before the create, so nothing after it but the capture's
       // ref steps can fail the landing.
       const captureTree =
-        captured && capture.commit !== undefined
-          ? yield* git.treeOf(project.path, capture.commit as string)
+        captureCommit !== undefined
+          ? yield* git.treeOf(project.path, captureCommit)
           : undefined;
 
       // 5 and 6. The create on the incoming ref, then the capture
@@ -300,8 +297,8 @@ export const landWorktree = (
             ? (landing.ignores ?? [])
             : undefined,
           capture:
-            captured && capture.commit !== undefined
-              ? { sourceWorktreeId, commit: capture.commit }
+            captureCommit !== undefined
+              ? { sourceWorktreeId, commit: captureCommit }
               : undefined,
         },
         ctx,
@@ -375,25 +372,29 @@ export const landForSender: EffectHandlers<
   );
 };
 
+type IncomingInput = {
+  branch: string;
+  incomingRef: string;
+  worktreeName: string | undefined;
+  runSetup: boolean | undefined;
+  ignoredFilesFollow: readonly string[] | undefined;
+  // The capture commit, and the worktree id its ref arrived under.
+  capture: { sourceWorktreeId: string; commit: string } | undefined;
+};
+
+type IncomingProgress = (
+  frame: Pick<SyncPullProgress, "step" | "createPhase" | "worktreeId">,
+) => void;
+
 // The landing proper: the worktree created on the incoming ref, then
 // the capture re-applied in it. The caller owns the incoming ref and
 // its sweep. `branch` is the one the copy is created on, which the
 // incoming ref need not be named after.
 const landIncoming = (
   project: Project,
-  input: {
-    branch: string;
-    incomingRef: string;
-    worktreeName: string | undefined;
-    runSetup: boolean | undefined;
-    ignoredFilesFollow: readonly string[] | undefined;
-    // The capture commit, and the worktree id its ref arrived under.
-    capture: { sourceWorktreeId: string; commit: string } | undefined;
-  },
+  input: IncomingInput,
   ctx: HandlerContext,
-  progress: (
-    frame: Pick<SyncPullProgress, "step" | "createPhase" | "worktreeId">,
-  ) => void,
+  progress: IncomingProgress,
   move: Scope.Scope,
 ) =>
   // The create, the capture's ref and its apply, held as one change
@@ -410,11 +411,12 @@ const landIncoming = (
     ),
   );
 
+// The create on the incoming ref, then the capture re-applied in it.
 const landWhole = (
   project: Project,
-  input: Parameters<typeof landIncoming>[1],
+  input: IncomingInput,
   ctx: HandlerContext,
-  progress: Parameters<typeof landIncoming>[3],
+  progress: IncomingProgress,
   move: Scope.Scope,
 ) =>
   Effect.gen(function* () {

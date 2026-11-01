@@ -92,8 +92,8 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       // to, so the copy of its mirror stays.
       const moved = input.expect !== undefined;
       return yield* scripts
-        .withDeleteInflight(
-          worktreeId,
+        .withDeletesInflight(
+          [worktreeId],
           { kind: "remove", busy },
           bookingScripts(scripts, notifyScript, (reporter) =>
             Ops.deleteWorktree(
@@ -226,8 +226,8 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
             ).pipe(thisSideOnly),
         );
       return yield* scripts
-        .withDeleteInflight(
-          worktreeId,
+        .withDeletesInflight(
+          [worktreeId],
           { kind: "remove", busy: undefined },
           Effect.gen(function* () {
             // A cleanup the clock stopped reads as a cleanup failure. A

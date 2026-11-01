@@ -208,12 +208,6 @@ export const makeRemoving = ({
     return {
       withDeletesInflight,
       reapRemovedProjects,
-      withDeleteInflight: <A, E, R, E2, R2>(
-        worktreeId: string,
-        mark: Mark,
-        run: Effect.Effect<A, E, R>,
-        mirrorsAfter: (result: A) => Effect.Effect<unknown, E2, R2>,
-      ) => withDeletesInflight([worktreeId], mark, run, mirrorsAfter),
       reapRemoved,
     };
   });

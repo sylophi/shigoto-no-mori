@@ -20,6 +20,7 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 import { errorWordsOf } from "@host/lib/errorWords";
 import type { HostFacts as Facts } from "@shared/hostFacts";
 import { log } from "@shared/log";
+import { bundledBinaryPath } from "@shared/packaging/bundledBinary.mts";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import {
   NATIVEFS_BINARY_NAME,
@@ -35,7 +36,8 @@ import { initDataDir } from "@shared/paths";
 import * as Graph from "./graph";
 import * as Loopback from "@host/socket/Loopback";
 import { reapOrphanedConnector } from "@host/direct/Tunnel";
-import { hostBinaryPath, setHostFacts, tunnelPidFile } from "./facts";
+import { TUNNEL_PID_FILE } from "@shigomori/engine/tunnelPid";
+import { setHostFacts } from "./facts";
 import * as HostLayer from "./layer";
 import * as HostNodeServices from "./nodeServices";
 import { startHost } from "./session";
@@ -136,9 +138,10 @@ export async function runHost<E>(root: {
   const flavor = facts.flavor;
   // The connector a host that died unasked left running, killed first:
   // a boot that stalls later must not leave it running too. Awaited
-  // before the graph, whose Tunnel writes the file again.
+  // before the graph, whose Tunnel writes the file again. The pid file is
+  // in the shell's own data so it outlives the host that wrote it.
   const reaped = Effect.runPromise(
-    reapOrphanedConnector(tunnelPidFile()).pipe(
+    reapOrphanedConnector(join(facts.userDataPath, TUNNEL_PID_FILE)).pipe(
       Effect.provide(
         childDefaults.pipe(Layer.provideMerge(HostNodeServices.layer)),
       ),
@@ -150,8 +153,8 @@ export async function runHost<E>(root: {
   startHost({ quit });
   const engine = {
     flavor,
-    nativefs: hostBinaryPath(NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME),
-    sm: hostBinaryPath(CLI_DIST_DIR, cliBinaryName(flavor)),
+    nativefs: bundledBinaryPath(facts, NATIVEFS_DIST_DIR, NATIVEFS_BINARY_NAME),
+    sm: bundledBinaryPath(facts, CLI_DIST_DIR, cliBinaryName(flavor)),
   };
   const migration = await Effect.runPromise(Migration.make);
   await reaped;

@@ -110,12 +110,9 @@ import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
 import { dataDir } from "@shared/paths";
-import {
-  type AccountFacts,
-  acceptsPeerCommands,
-  listAccountDevices,
-  setAccountFacts,
-} from "./account";
+import type { AccountFacts } from "@shigomori/contracts/modules/session";
+import { HostAccount } from "@host/lib/HostAccount";
+import { acceptsPeerCommands, listAccountDevices } from "./account";
 import {
   broadcastAll,
   clearDirectTickets,
@@ -130,6 +127,10 @@ import {
 import { log, warnOnFailure } from "@shared/log";
 import * as Graph from "./graph";
 
+// The hub's handlers, failing instead of throwing: hubHandlers() throws
+// LayerDownError before the hub is up.
+const bridge = Effect.try({ try: hubHandlers, catch: callFailureOf });
+
 // Every peer reach of the host (host/ipc/PeerReach.ts), the
 // pull/transplant orchestrations' and the port-forward engine's among
 // them, routed through the SAME invokePeer path (and so the same
@@ -139,10 +140,7 @@ import * as Graph from "./graph";
 // socket per device.
 const peerReach = PeerReach.make({
   invoke: (deviceId, channel, input) =>
-    Effect.flatMap(
-      Effect.try({ try: hubHandlers, catch: callFailureOf }),
-      (hub) => hub.invokeOnPeer(deviceId, channel, input),
-    ),
+    Effect.flatMap(bridge, (hub) => hub.invokeOnPeer(deviceId, channel, input)),
   // Off the same session's fan-out (onPeerPush): what a start the peer
   // runs for this device streams back, which the control ops relay to
   // the CLI.
@@ -315,7 +313,9 @@ const toMirrorEngine = (tell: (engine: MirrorEngine["Service"]) => void) =>
 // copy). Every step is fenced so one failing cannot leave the remote
 // plane up.
 export async function applyAccount(next: AccountFacts | null): Promise<void> {
-  const previous = await setAccountFacts(next);
+  const previous = await Graph.run(
+    Effect.flatMap(HostAccount, (account) => account.set(next)),
+  );
   const leaving =
     previous.facts !== null &&
     (next === null || next.accountId !== previous.facts.accountId);
@@ -369,7 +369,6 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
     endMirrorsWithPeers(
       stillOn,
       "The other device left the account. The copy stays as a worktree.",
-      { transfers: true },
     ),
   ).catch(() => {});
   // A forward is standing intent across a peer being asleep, so it
