@@ -46,6 +46,23 @@ export function isHolder(
   return candidate.project !== undefined && candidate.block !== "no-project";
 }
 
+// Where a quick create lands: the designated device (the Configure
+// page's "Create on" pick) when it can take one now, else the first
+// candidate that can. The sidebar's `+`, the inbox's New worktree and
+// the pick's own fallback line all land by it.
+export function quickCreateTarget<
+  T extends Pick<ViewTarget, "deviceId" | "block">,
+>(candidates: readonly T[], designatedId: string | undefined): T | undefined {
+  const ready = candidates.filter((candidate) => candidate.block === undefined);
+  return (
+    ready.find((candidate) => candidate.deviceId === designatedId) ?? ready[0]
+  );
+}
+
+// A checkout whose folder is gone can't take a create either.
+const missing = (held: Project | undefined) =>
+  held === undefined || held.pathExists === false;
+
 // A tab with the repo's checkout on that device laid on top.
 function target(
   tab: DeviceTab,
@@ -70,14 +87,7 @@ export function useDeviceTargets(project: Project | undefined): DeviceTarget[] {
   return tabs.map((tab): DeviceTarget => {
     if (tab.isThisDevice) {
       const held = scope.remote ? localMatch : project;
-      // A checkout whose folder is gone can't take a create either.
-      return target(
-        tab,
-        held,
-        held === undefined || held.pathExists === false
-          ? "no-project"
-          : undefined,
-      );
+      return target(tab, held, missing(held) ? "no-project" : undefined);
     }
     // A null identity (a repo with no remote, an empty checkout) can
     // never match: it means "this device couldn't tell what repo this
@@ -98,7 +108,7 @@ export function useDeviceTargets(project: Project | undefined): DeviceTarget[] {
       held,
       tab.block === "offline"
         ? "offline"
-        : held === undefined
+        : missing(held)
           ? "no-project"
           : tab.block,
     );
