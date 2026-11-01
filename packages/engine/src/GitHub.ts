@@ -29,6 +29,7 @@ import * as Git from "./Git.ts";
 import * as GoJson from "./goJson.ts";
 import {
   DETAIL_FIELDS,
+  detailRowsOf,
   lookupArgs,
   ownByBranch,
   ownOf,
@@ -140,6 +141,10 @@ export type OwningLookup = Lookup<OwningPullRequest> & {
 
 // A gh run's deadline, DEFAULT_TIMEOUT when none is given.
 type RunOptions = { readonly timeout?: Duration.Input | undefined };
+
+type DecodeRows = (
+  stdout: string,
+) => Option.Option<ReadonlyArray<PullRequestRow>>;
 
 // One `gh pr list` of the repo's newest PRs.
 type ListPage = {
@@ -546,16 +551,17 @@ const make = Effect.gen(function* () {
     ) => gh(undefined, host, args, options),
   );
 
-  // gh's rows for `args`, failing when it answered with something this
-  // build can't read.
+  // gh's rows for `args`, failing when it answered with something
+  // `decode` can't read.
   const rowsFor = (
     repo: string,
     args: ReadonlyArray<string>,
     options?: RunOptions,
+    decode: DecodeRows = rowsOf,
   ) =>
     run(repo, args, options).pipe(
       Effect.flatMap((stdout) =>
-        Option.match(rowsOf(stdout), {
+        Option.match(decode(stdout), {
           onNone: () =>
             Effect.fail(new GitHubOutputError({ command: "pr list" })),
           onSome: Effect.succeed,
@@ -600,10 +606,11 @@ const make = Effect.gen(function* () {
     branch: string,
     fields: ReadonlyArray<string>,
     options?: RunOptions,
+    decode?: DecodeRows,
   ) =>
     Effect.all(
       [
-        rowsFor(repo, lookupArgs(branch, "all", fields), options),
+        rowsFor(repo, lookupArgs(branch, "all", fields), options, decode),
         checkedOutPullRequests(repo),
       ],
       { concurrency: 2 },
@@ -683,7 +690,7 @@ const make = Effect.gen(function* () {
 
   const detailFor = Effect.fn("GitHub.detailFor")(
     (repo: string, branch: string, options?: RunOptions) =>
-      ownRow(repo, branch, DETAIL_FIELDS, options),
+      ownRow(repo, branch, DETAIL_FIELDS, options, detailRowsOf),
   );
 
   const find = Effect.fn("GitHub.find")(function* (

@@ -1,7 +1,10 @@
 // A pull request as gh's `pr list` and `pr view` answer it, and which of
 // a branch's is its own: what every pull request read decodes and picks
 // with.
-import { isBranchsOwn } from "@shigomori/contracts/schemas/pullRequest";
+import {
+  isBranchsOwn,
+  PullRequestSchema,
+} from "@shigomori/contracts/schemas/pullRequest";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as GoJson from "../goJson.ts";
@@ -75,6 +78,29 @@ export type PullRequestRow = typeof Row.Type;
 export const rowOf = Schema.decodeUnknownOption(Schema.fromJsonString(Row));
 export const rowsOf = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Array(Row)),
+);
+
+// Rows read for a pull request's page, where every row must have what
+// the page shows: one that lacks it fails the read rather than show a
+// zero.
+export const detailRowsOf = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Array(
+      Schema.Struct({
+        ...Row.fields,
+        number: PullRequestSchema.fields.number,
+        url: PullRequestSchema.fields.url,
+        title: Schema.String,
+        state: PullRequestSchema.fields.state,
+        isDraft: Schema.Boolean,
+        baseRefName: Schema.String,
+        updatedAt: Schema.String,
+        additions: Schema.Natural,
+        deletions: Schema.Natural,
+        changedFiles: Schema.Natural,
+      }),
+    ),
+  ),
 );
 
 export const SUMMARY_FIELDS =
