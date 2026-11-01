@@ -11,6 +11,7 @@ import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import { elapsedMillisUnsafe } from "./elapsed.ts";
 
 // An observation's time on both clocks, and its age by whichever reads
@@ -67,8 +68,11 @@ export const keptAnswers = Effect.fnUntraced(function* <K, A, E, R>(
   // Settled by the lookup's fiber however it ends: interrupted with the
   // layer, or never started on a set already closed, included.
   const start = (key: K, caller: Fiber.Fiber<unknown, unknown>) => {
+    // A fork runs until its first wait before the set can refuse it.
     const fiber = Effect.runForkWith(Context.merge(context, caller.context))(
-      lookup(key),
+      Predicate.isTagged(lookups.state, "Closed")
+        ? Effect.interrupt
+        : lookup(key),
     );
     FiberSet.addUnsafe(lookups, fiber);
     const entry: Entry<A, E> = {
