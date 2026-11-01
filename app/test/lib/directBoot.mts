@@ -450,7 +450,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     () => bridged.bridge.directPeers().peerAppVersions[LISTENER] !== undefined,
     "the keeper to establish the direct session to the listener",
   );
-  const toListener = bridgePeerReach(bridged.bridge, pushListeners);
+  const toListener = bridgePeerReach(bridged.bridge, LISTENER, pushListeners);
   return { ...bridged, listener, toListener };
 }
 
@@ -497,17 +497,20 @@ type PeerTransport = Omit<
 >;
 
 // The host's peer reach (host/process/handlers.ts) over the bridge's
-// cached direct session: its calls, the peer's pushes off the bridge's
-// fan-out, and the session's byte channels
+// cached direct session to `deviceId`, whichever device a call names:
+// both devices' handlers run in this process, so the listener's reach
+// into its own peer lands here too. Its calls, the peer's pushes off
+// the bridge's fan-out, and the session's byte channels
 // (shared/remote/channels.ts), resolving like invokePeer does.
 function bridgePeerReach(
   bridge: HubHandlers,
+  deviceId: string,
   pushListeners: Set<(push: HubPeerPush) => void>,
 ): PeerTransport {
   return {
-    invoke: (deviceId, channel, input) =>
+    invoke: (_, channel, input) =>
       bridge.invokeOnPeer(deviceId, channel, input),
-    onPush: (deviceId, channel, handler) => {
+    onPush: (_, channel, handler) => {
       const listener = (push: HubPeerPush) => {
         if (push.deviceId === deviceId && push.channel === channel) {
           handler(push.payload);
@@ -516,7 +519,6 @@ function bridgePeerReach(
       pushListeners.add(listener);
       return () => pushListeners.delete(listener);
     },
-    channelsFor: (deviceId) => () =>
-      Effect.runPromise(bridge.peerChannels(deviceId)),
+    channelsFor: () => () => Effect.runPromise(bridge.peerChannels(deviceId)),
   };
 }

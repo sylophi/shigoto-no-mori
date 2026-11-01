@@ -26,6 +26,7 @@ import {
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shigomori/contracts/modules/mirror";
+import { callFailureOf } from "@shigomori/contracts/errors";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { packageScriptsContract } from "@shigomori/contracts/modules/packageScripts";
 import { portForwardContract } from "@shigomori/contracts/modules/portForward";
@@ -142,7 +143,7 @@ import * as Graph from "./graph";
 const peerReach = PeerReach.make({
   invoke: (deviceId, channel, input) =>
     Effect.flatMap(
-      Effect.try({ try: hubHandlers, catch: (error) => error }),
+      Effect.try({ try: hubHandlers, catch: callFailureOf }),
       (hub) => hub.invokeOnPeer(deviceId, channel, input),
     ),
   // Off the same session's fan-out (onPeerPush): what a start the peer

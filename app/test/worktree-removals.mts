@@ -29,6 +29,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, it } from "vitest";
@@ -363,13 +364,13 @@ const mirroredFox = async (
   standInPeers({
     invoke: (_, channel) =>
       channel !== "worktrees:delete"
-        ? Effect.fail(new Error("not here"))
+        ? Effect.fail(new RemoteCallError({ text: "not here" }))
         : Effect.tryPromise({
             try: () => {
               calls.push(`delete copy, fox ${at()}`);
               return peer();
             },
-            catch: (error) => error,
+            catch: callFailureOf,
           }),
     onPush: () => () => {},
     channelsFor: () => () => Promise.reject(new Error("not here")),

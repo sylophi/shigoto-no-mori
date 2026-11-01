@@ -74,11 +74,10 @@ export const servedHub = (hub: () => HubHandlers) => ({
     status: () =>
       Effect.try({ try: () => hub().status(), catch: callFailureOf }),
     invokePeer: ({ deviceId, channel, input }) =>
-      Effect.try({ try: hub, catch: (error) => error }).pipe(
-        Effect.flatMap((bridge) =>
-          bridge.invokeOnPeer(deviceId, channel, input),
-        ),
-        Effect.mapError(callFailureOf),
+      Effect.flatMap(Effect.try({ try: hub, catch: callFailureOf }), (bridge) =>
+        bridge
+          .invokeOnPeer(deviceId, channel, input)
+          .pipe(Effect.mapError(callFailureOf)),
       ),
   } satisfies EffectHandlers<typeof hubContract>,
   views: {

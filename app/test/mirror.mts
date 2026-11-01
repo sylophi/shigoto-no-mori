@@ -69,6 +69,7 @@ import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
+import { RemoteCallError } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -902,7 +903,7 @@ it("stop: a conflict or git not in step refuses removing the copy unforced, and 
               deleted.push((input as { worktreeId: string }).worktreeId);
               return { ok: true };
             })
-          : Effect.fail(new Error("not in this check")),
+          : Effect.fail(new RemoteCallError({ text: "not in this check" })),
       onPush: () => () => {},
       channelsFor: () => () => Promise.reject(new Error("not in this check")),
     });

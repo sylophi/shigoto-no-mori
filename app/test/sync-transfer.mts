@@ -47,6 +47,7 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { runHost } from "./lib/hostRuntime.mts";
 import * as Effect from "effect/Effect";
+import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import * as Ops from "@host/lib/engineOps";
 import * as Scripts from "@host/lib/Scripts";
@@ -177,7 +178,9 @@ beforeAll(async () => {
         "a peer call dialed an unexpected device",
       );
       if (channel.startsWith("mirror:")) {
-        return Effect.fail(new Error("this proof asks for no mirror"));
+        return Effect.fail(
+          new RemoteCallError({ text: "this proof asks for no mirror" }),
+        );
       }
       // The title's carry. Both devices share the data dir, so the
       // listener's handlers answer in-process.
@@ -189,7 +192,7 @@ beforeAll(async () => {
                 input as Parameters<typeof worktreeDataHandlers.read>[0],
               ),
             ),
-          catch: (error) => error,
+          catch: callFailureOf,
         });
       }
       if (channel === "worktreeData:describe") {
@@ -200,7 +203,7 @@ beforeAll(async () => {
                 input as Parameters<typeof worktreeDataHandlers.describe>[0],
               ),
             ),
-          catch: (error) => error,
+          catch: callFailureOf,
         });
       }
       return toListener.invoke(deviceId, channel, input);
