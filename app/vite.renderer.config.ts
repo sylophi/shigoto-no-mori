@@ -1,14 +1,7 @@
 import { execSync } from "node:child_process";
-import { resolve } from "node:path";
-import react from "@vitejs/plugin-react";
-import { reactCompiler } from "./vite.reactCompiler";
-import { materialIcons } from "./vite.materialIcons";
-import { dedupe } from "./vite.dedupe";
+import { defineConfig, mergeConfig } from "vite";
 import { reactGrabBuild } from "./vite.reactGrab";
-import tailwindcss from "@tailwindcss/vite";
-import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
-import { woff2Only } from "@shigomori/ui/styles/woff2Only.ts";
-import { defineConfig } from "vite";
+import { rendererTreeConfig } from "./vite.rendererTree";
 import { rendererDevServerPort } from "./scripts/lib/portsEnvFile.mts";
 
 function gitOutput(args: string): string | null {
@@ -44,61 +37,29 @@ export default defineConfig(({ mode }) => {
   const port = envPort ? Number(envPort) : undefined;
   const { version, commit } = buildInfo(mode);
 
-  return {
-    resolve: {
-      dedupe,
-      alias: {
-        "@": resolve(__dirname, "renderer"),
-        "@shared": resolve(__dirname, "shared"),
-      },
-    },
-    // The Electron window loads over the shigomori-dev:// scheme with
-    // main proxying http to this server (main/electron/clerk.ts), so
-    // the HMR client cannot derive its websocket endpoint from the page
-    // location, so pin it to the dev server directly. The pin is
-    // unconditional: with no RENDERER_PORT vite picks its own port and
-    // injects the resolved one, and losing the pin with the port block
-    // would leave a working page with silently dead HMR. `ws` is the
-    // current spelling, `hmr.{host,port,…}` is deprecated in vite 8.
-    server: {
-      ...(port ? { port, strictPort: true } : {}),
-      ws: { host: "localhost", protocol: "ws" },
-    },
-    // Scope the dep scanner to the real entry. Its default **/*.html
+  return mergeConfig(
+    // The dep scanner scoped to the real entry. Its default **/*.html
     // glob picks up LICENSES.chromium.html inside out/ packaged builds
     // and fails the scan with noisy (harmless) errors at dev boot.
-    // The contracts package is served as source, and effect with it, as
-    // the contracts import it: prebundled, either is a second copy.
-    // The ui package is source the app imports, so the scanner crawls it
-    // too: a dependency only it imports (Base UI's dialog) is served raw
-    // otherwise, and its CommonJS imports fail in the page.
-    optimizeDeps: {
-      entries: ["index.html", "../packages/ui/src/**/*.{ts,tsx}"],
-      exclude: ["@shigomori/contracts", "effect"],
-      // Served as source, contracts brings its CommonJS dependencies
-      // unbundled, which a browser can't run.
-      include: ["@shigomori/contracts > semver"],
-    },
-    // The web client's public files, for the boot script the window's
-    // page loads too (index.html). The material icons come in through
-    // their plugin (vite.materialIcons.ts).
-    publicDir: resolve(__dirname, "web/public"),
-    define: {
-      __APP_VERSION__: JSON.stringify(version),
-      __APP_COMMIT__: JSON.stringify(commit),
-    },
-    // The package's stylesheet stops at the theme root.
-    css: { postcss: { plugins: [insideTheRoot(), woff2Only()] } },
-    plugins: [tailwindcss(), react(), reactCompiler(), materialIcons()],
-    build: {
-      ...reactGrabBuild,
-      // Keep material-icon-theme SVGs as separate hashed files so each one
-      // loads on-demand when its icon is actually displayed. Inlined as
-      // base64 they'd bloat the JS bundle for icons that may never render.
-      assetsInlineLimit: (filePath) => {
-        if (filePath.includes("material-icon-theme/icons/")) return false;
-        return undefined;
+    rendererTreeConfig({ root: __dirname, entry: "index.html" }),
+    {
+      // The Electron window loads over the shigomori-dev:// scheme with
+      // main proxying http to this server (main/electron/clerk.ts), so
+      // the HMR client cannot derive its websocket endpoint from the page
+      // location, so pin it to the dev server directly. The pin is
+      // unconditional: with no RENDERER_PORT vite picks its own port and
+      // injects the resolved one, and losing the pin with the port block
+      // would leave a working page with silently dead HMR. `ws` is the
+      // current spelling, `hmr.{host,port,…}` is deprecated in vite 8.
+      server: {
+        ...(port ? { port, strictPort: true } : {}),
+        ws: { host: "localhost", protocol: "ws" },
       },
+      define: {
+        __APP_VERSION__: JSON.stringify(version),
+        __APP_COMMIT__: JSON.stringify(commit),
+      },
+      build: reactGrabBuild,
     },
-  };
+  );
 });

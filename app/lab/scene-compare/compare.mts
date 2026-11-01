@@ -209,8 +209,10 @@ function compare(
 // How long the base's install may take: a minute or two from the store.
 const INSTALL_TIMEOUT_MS = 10 * 60_000;
 
-// The repo's own script, no dependency's, run where one exists (a base
-// from before it has none, and draws no icons on either side's terms).
+// A base from when the file icons were copied into the app's public/
+// by its postinstall (scripts/copy-material-icons.mts), which an install
+// that runs no scripts skips: run where it exists, or every comparison
+// carries the icons as changes.
 const copyIconsInto = (checkout: string) => {
   const script = join(checkout, "app", "scripts", "copy-material-icons.mts");
   if (existsSync(script)) {
@@ -261,14 +263,7 @@ try {
       { cause: error },
     );
   }
-  // Both sides' file icons, from each checkout's own copy script
-  // (scripts/copy-material-icons.mts, the app's postinstall): an
-  // install that runs no scripts, the base's above or this machine's
-  // with scripts off, leaves public/ without them, and every comparison
-  // carried those pairs as changes. Idempotent, so a side that has them
-  // costs nothing.
   copyIconsInto(baseCheckout);
-  copyIconsInto(repo);
 
   const [baseOrigin, headOrigin] = await Promise.all([
     serve(baseCheckout),
