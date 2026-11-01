@@ -1,41 +1,12 @@
-import { execSync } from "node:child_process";
 import { defineConfig, mergeConfig } from "vite";
+import { buildInfoDefine } from "./vite.buildInfo";
 import { reactGrabBuild } from "./vite.reactGrab";
 import { rendererTreeConfig } from "./vite.rendererTree";
 import { rendererDevServerPort } from "./scripts/lib/portsEnvFile.mts";
 
-function gitOutput(args: string): string | null {
-  try {
-    return execSync(`git ${args}`, { stdio: ["ignore", "pipe", "ignore"] })
-      .toString()
-      .trim();
-  } catch {
-    return null;
-  }
-}
-
-function buildInfo(mode: string): { version: string; commit: string } {
-  const sha = gitOutput("rev-parse --short HEAD");
-  // The release workflow stamps the tag into package.json before
-  // building, because Info.plist and app.getVersion() read the version
-  // from there at packaging time. Excluding that one file keeps shipped
-  // builds from reporting themselves as dirty, while genuine
-  // uncommitted changes still set the flag. The "top" magic anchors the
-  // exclusion to the repo root, so it holds no matter which directory
-  // vite is invoked from.
-  const dirty =
-    (gitOutput("status --porcelain -- ':(exclude,top)app/package.json'") ??
-      "") !== "";
-  const commit = sha ? (dirty ? `${sha}-dirty` : sha) : "unknown";
-  const tag = gitOutput("describe --tags --exact-match HEAD");
-  const version = mode === "production" ? (tag ?? "unknown") : "dev";
-  return { version, commit };
-}
-
 export default defineConfig(({ mode }) => {
   const envPort = rendererDevServerPort();
   const port = envPort ? Number(envPort) : undefined;
-  const { version, commit } = buildInfo(mode);
 
   return mergeConfig(
     // The dep scanner scoped to the real entry. Its default **/*.html
@@ -55,10 +26,7 @@ export default defineConfig(({ mode }) => {
         ...(port ? { port, strictPort: true } : {}),
         ws: { host: "localhost", protocol: "ws" },
       },
-      define: {
-        __APP_VERSION__: JSON.stringify(version),
-        __APP_COMMIT__: JSON.stringify(commit),
-      },
+      define: buildInfoDefine(mode),
       build: reactGrabBuild,
     },
   );
