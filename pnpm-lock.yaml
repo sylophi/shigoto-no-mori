@@ -316,6 +316,7 @@ overrides:
 
 patchedDependencies:
   react-grab@0.2.0: 5b181239b3224dc270abd8ee8a987199f3f9df83cb885cc2f3f05762970beb68
+  sonner@2.0.7: 2afe964a3e3e4c4eeac59ebc36efe9ec792e84a5a66a1d5dbf29bf7a34a9c032
 
 importers:
 
@@ -467,7 +468,7 @@ importers:
         version: 0.2.0(patch_hash=5b181239b3224dc270abd8ee8a987199f3f9df83cb885cc2f3f05762970beb68)(react@19.2.7)
       sonner:
         specifier: ^2.0.7
-        version: 2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 2.0.7(patch_hash=2afe964a3e3e4c4eeac59ebc36efe9ec792e84a5a66a1d5dbf29bf7a34a9c032)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       tailwind-merge:
         specifier: 'catalog:'
         version: 3.6.0
@@ -15380,7 +15381,7 @@ snapshots:
       ip-address: 10.2.0
       smart-buffer: 4.2.0
 
-  sonner@2.0.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+  sonner@2.0.7(patch_hash=2afe964a3e3e4c4eeac59ebc36efe9ec792e84a5a66a1d5dbf29bf7a34a9c032)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)

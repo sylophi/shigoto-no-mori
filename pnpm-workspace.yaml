@@ -157,5 +157,9 @@ catalog:
 
 # React Grab reads sourcemaps over http(s) alone. The patch lets it
 # read them over the page's own scheme too, the desktop window's.
+# sonner measures a toast that changes behind the front one through
+# the stack's scale, so it shrank on hover. The patch measures it
+# unscaled.
 patchedDependencies:
   react-grab@0.2.0: patches/react-grab@0.2.0.patch
+  sonner@2.0.7: patches/sonner@2.0.7.patch
