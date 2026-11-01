@@ -46,12 +46,16 @@ const noSession = (deviceId: string, error: unknown) =>
 
 // How a call or a view on a session ended short of its caller stopping
 // it. Interrupted, it went with its link's scope (a sweep, the quit),
-// which is the link gone. A defect (the peer's handler died) is the
+// which is the session gone. A defect (the peer's handler died) is the
 // failure it is.
-const linkFailureOf = (cause: Cause.Cause<unknown>): unknown =>
-  Cause.hasInterruptsOnly(cause)
+const sessionFailure = (deviceId: string, cause: Cause.Cause<unknown>) => {
+  const error = Cause.hasInterruptsOnly(cause)
     ? new RemoteDisconnectedError()
     : Cause.squash(cause);
+  return error instanceof RemoteDisconnectedError
+    ? noSession(deviceId, error)
+    : error;
+};
 
 // Values of a peer's view this host holds for a window that has not
 // taken them, as many as a terminal's client may fall behind its shell
@@ -73,12 +77,15 @@ export const servedHub = (hub: () => HubHandlers) => ({
   handlers: {
     status: () =>
       Effect.try({ try: () => hub().status(), catch: callFailureOf }),
-    invokePeer: ({ deviceId, channel, input }) =>
-      Effect.flatMap(Effect.try({ try: hub, catch: callFailureOf }), (bridge) =>
-        bridge
+    invokePeer: ({ deviceId, channel, input }) => {
+      // hubHandlers() throws LayerDownError before the hub is up.
+      const bridge = Effect.try({ try: hub, catch: callFailureOf });
+      return Effect.flatMap(bridge, (peers) =>
+        peers
           .invokeOnPeer(deviceId, channel, input)
           .pipe(Effect.mapError(callFailureOf)),
-      ),
+      );
+    },
   } satisfies EffectHandlers<typeof hubContract>,
   views: {
     watchPeer: (input) =>
@@ -341,31 +348,25 @@ function hubHandlers(
 
     invokeOnPeer: (deviceId, channel, input) =>
       Effect.flatMap(requirePeer(deviceId), (peer) =>
-        peer.link.call(channel, input).pipe(
-          Effect.catchCause((cause) => {
-            const error = linkFailureOf(cause);
-            return Effect.fail(
-              error instanceof RemoteDisconnectedError
-                ? noSession(deviceId, error)
-                : error,
-            );
-          }),
-        ),
+        peer.link
+          .call(channel, input)
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.fail(sessionFailure(deviceId, cause)),
+            ),
+          ),
       ),
 
     watchPeer: ({ deviceId, channel, input }) =>
       Stream.unwrap(
         Effect.map(requirePeer(deviceId), (peer) =>
-          peer.link.view(channel, input).pipe(
-            Stream.catchCause((cause) => {
-              const error = linkFailureOf(cause);
-              return Stream.fail(
-                error instanceof RemoteDisconnectedError
-                  ? new NoDirectConnectionError({ deviceId })
-                  : error,
-              );
-            }),
-          ),
+          peer.link
+            .view(channel, input)
+            .pipe(
+              Stream.catchCause((cause) =>
+                Stream.fail(sessionFailure(deviceId, cause)),
+              ),
+            ),
         ),
       ),
 
