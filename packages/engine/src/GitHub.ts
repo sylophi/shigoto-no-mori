@@ -146,6 +146,10 @@ type DecodeRows = (
   stdout: string,
 ) => Option.Option<ReadonlyArray<PullRequestRow>>;
 
+// A run's options, and the decoder for a read that needs more of its rows
+// than the summary's.
+type RowsOptions = RunOptions & { readonly decode?: DecodeRows };
+
 // One `gh pr list` of the repo's newest PRs.
 type ListPage = {
   readonly state: "all" | "open" | "closed";
@@ -556,10 +560,9 @@ const make = Effect.gen(function* () {
   const rowsFor = (
     repo: string,
     args: ReadonlyArray<string>,
-    options?: RunOptions,
-    decode: DecodeRows = rowsOf,
+    { decode = rowsOf, ...runOptions }: RowsOptions = {},
   ) =>
-    run(repo, args, options).pipe(
+    run(repo, args, runOptions).pipe(
       Effect.flatMap((stdout) =>
         Option.match(decode(stdout), {
           onNone: () =>
@@ -605,12 +608,11 @@ const make = Effect.gen(function* () {
     repo: string,
     branch: string,
     fields: ReadonlyArray<string>,
-    options?: RunOptions,
-    decode?: DecodeRows,
+    options?: RowsOptions,
   ) =>
     Effect.all(
       [
-        rowsFor(repo, lookupArgs(branch, "all", fields), options, decode),
+        rowsFor(repo, lookupArgs(branch, "all", fields), options),
         checkedOutPullRequests(repo),
       ],
       { concurrency: 2 },
@@ -690,7 +692,7 @@ const make = Effect.gen(function* () {
 
   const detailFor = Effect.fn("GitHub.detailFor")(
     (repo: string, branch: string, options?: RunOptions) =>
-      ownRow(repo, branch, DETAIL_FIELDS, options, detailRowsOf),
+      ownRow(repo, branch, DETAIL_FIELDS, { ...options, decode: detailRowsOf }),
   );
 
   const find = Effect.fn("GitHub.find")(function* (
@@ -768,6 +770,8 @@ const make = Effect.gen(function* () {
       ],
       { concurrency: 2 },
     );
+    // Newest first. toSorted is stable, so a PR in two pages keeps the
+    // copy from the page listed first.
     const rows = read.flat().toSorted((a, b) => b.number - a.number);
     return ownByBranch(rows.map(summaryOf), checkedOut);
   });

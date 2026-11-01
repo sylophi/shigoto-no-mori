@@ -32,7 +32,8 @@ const gh = (cwd: string, args: ReadonlyArray<string>) =>
 // Open PRs read apart from closed ones (gh's "closed" is merged too), so
 // a busy repo's newer closed PRs don't crowd out its older open ones. Past
 // the open limit, the oldest open PRs still fall out (no title, no stack).
-// A PR on both closed between the two reads: its closed copy goes first.
+// Listed closed first, so a PR that closed between the reads keeps its
+// closed copy.
 const PROJECT_PAGES = [
   { state: "closed", limit: 200 },
   { state: "open", limit: 1000 },
@@ -136,6 +137,8 @@ function autoMergeMethod(
 const isMergeState = Schema.is(PullRequestMergeStateSchema);
 const decodeDetail = Schema.decodeUnknownEffect(PullRequestDetailSchema);
 
+// The second decode, against the contract's schema, is what checks the
+// page's shape.
 const detailOf = (pr: GitHub.PullRequestRow) => {
   const checkList = pr.statusCheckRollup.map((item) => ({
     name: item.name || item.context || "check",
@@ -170,21 +173,21 @@ export const readBranchPullRequest = Effect.fnUntraced(function* (
   sign: (body: string, bodyHTML: string) => Effect.Effect<string>,
 ) {
   const github = yield* GitHub.GitHub;
-  const [detail, extras] = yield* Effect.all(
-    [
-      github.detailFor(cwd, branch, { timeout: GH_TIMEOUT_MS }).pipe(
-        Effect.flatMap(
-          Option.match({
-            onNone: () => Effect.succeed(null),
-            onSome: detailOf,
-          }),
-        ),
-        Effect.catchTag(["GitHubOutputError", "SchemaError"], (cause) =>
-          Effect.fail(new PullRequestShapeError({ branch, cause })),
-        ),
+  const readDetail = github
+    .detailFor(cwd, branch, { timeout: GH_TIMEOUT_MS })
+    .pipe(
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.succeed(null),
+          onSome: detailOf,
+        }),
       ),
-      fetchGraphqlExtras(cwd, branch),
-    ],
+      Effect.catchTag(["GitHubOutputError", "SchemaError"], (cause) =>
+        Effect.fail(new PullRequestShapeError({ branch, cause })),
+      ),
+    );
+  const [detail, extras] = yield* Effect.all(
+    [readDetail, fetchGraphqlExtras(cwd, branch)],
     { concurrency: 2 },
   );
   if (!detail) return null;

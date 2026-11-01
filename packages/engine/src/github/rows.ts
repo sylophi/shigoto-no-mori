@@ -81,8 +81,8 @@ export const rowsOf = Schema.decodeUnknownOption(
 );
 
 // Rows read for a pull request's page, where every row must have what
-// the page shows: one that lacks it fails the read rather than show a
-// zero.
+// the page shows. Strict because a missing field must fail the read, not
+// decode as zero the way the lenient Row does.
 export const detailRowsOf = Schema.decodeUnknownOption(
   Schema.fromJsonString(
     Schema.Array(
