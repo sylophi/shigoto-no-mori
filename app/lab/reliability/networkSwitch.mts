@@ -7,11 +7,11 @@
 // stalled flows either resume (a blip the network rode out) or are cut
 // (a network that changed under them, as after a sleep).
 //
-// - NetworkSwitch: the browser's CONNECT proxy, for everything Chrome
-//   reaches but this machine's own servers.
-// - HubFront: a desktop app's hub, the dev hub behind a local http
+// - startNetworkSwitch: the browser's CONNECT proxy, for everything
+//   Chrome reaches but this machine's own servers.
+// - startHubFront: a desktop app's hub, the dev hub behind a local http
 //   address the app is given as SM_DEVICE_HUB_URL.
-// - ListenerFront: the peer's direct listener, at the port it
+// - startListenerFront: the peer's direct listener, at the port it
 //   advertises (SHIGOMORI_DIRECT_FRONT_PORT) for its LAN candidates and
 //   its tunnel's ingress, so every client's device link to it rides
 //   through here.
@@ -104,159 +104,125 @@ function closing(server: Server | TcpServer): Promise<void> {
   return new Promise((done) => server.close(() => done()));
 }
 
-export class NetworkSwitch implements Switch {
-  private readonly flows = new Flows();
-  private readonly server: Server;
-  readonly port: number;
+export type PortSwitch = Switch & { readonly port: number };
 
-  private constructor(server: Server, port: number) {
-    this.server = server;
-    this.port = port;
-  }
+function switchControls(
+  server: Server | TcpServer,
+  flows: Flows,
+  beforeClose: () => void = () => {},
+): Switch {
+  return {
+    down: () => flows.down(),
+    restore: (options) => flows.restore(options),
+    async stop() {
+      flows.restore({ cut: true });
+      beforeClose();
+      await closing(server);
+    },
+  };
+}
 
-  static async start(): Promise<NetworkSwitch> {
-    const server = createServer((_request, response) => {
-      // Only https and wss reach the proxy, and both tunnel.
-      response.writeHead(502).end();
-    });
-    const self = new NetworkSwitch(
-      server,
-      await listening(server, "127.0.0.1"),
-    );
-    server.on("connect", (request, client: Socket, head) =>
-      self.tunnel(request.url ?? "", client, head),
-    );
-    return self;
-  }
-
-  private tunnel(target: string, client: Socket, head: Buffer): void {
-    if (!this.flows.up) {
+export async function startNetworkSwitch(): Promise<PortSwitch> {
+  const flows = new Flows();
+  const server = createServer((_request, response) => {
+    // Only https and wss reach the proxy, and both tunnel.
+    response.writeHead(502).end();
+  });
+  server.on("connect", (request, client: Socket, head) => {
+    if (!flows.up) {
       client.destroy();
       return;
     }
-    const [host = "", port = "443"] = target.split(":");
+    const [host = "", port = "443"] = (request.url ?? "").split(":");
     const upstream = connect(Number(port), host);
     upstream.once("connect", () => {
       client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
       if (head.length > 0) upstream.write(head);
-      this.flows.carry(client, upstream);
-      if (this.flows.up) {
+      flows.carry(client, upstream);
+      if (flows.up) {
         client.pipe(upstream);
         upstream.pipe(client);
       }
     });
     upstream.once("error", () => client.destroy());
-  }
-
-  down(): void {
-    this.flows.down();
-  }
-
-  restore(options: { cut: boolean }): void {
-    this.flows.restore(options);
-  }
-
-  async stop(): Promise<void> {
-    this.restore({ cut: true });
-    await closing(this.server);
-  }
+  });
+  const port = await listening(server, "127.0.0.1");
+  return { ...switchControls(server, flows), port };
 }
 
 // The dev hub at http://127.0.0.1:<port>: requests are forwarded over
 // https with the hub's own Host, and a websocket upgrade becomes a TLS
 // connection to the hub carrying the same bytes, so the hub sees what
 // the app would have sent it.
-export class HubFront implements Switch {
-  private readonly flows = new Flows();
-  private readonly server: Server;
-  readonly port: number;
-  readonly url: string;
-
-  private constructor(server: Server, port: number) {
-    this.server = server;
-    this.port = port;
-    this.url = `http://127.0.0.1:${port}`;
-  }
-
-  static async start(hubUrl: string): Promise<HubFront> {
-    const hub = new URL(hubUrl);
-    const secure = hub.protocol === "https:";
-    const hubPort = Number(hub.port || (secure ? 443 : 80));
-    const server = createServer();
-    const self = new HubFront(server, await listening(server, "127.0.0.1"));
-    server.on("request", (request, response) => {
-      if (!self.flows.up) {
-        request.socket.destroy();
-        return;
-      }
-      const forward = (secure ? httpsRequest : httpRequest)(
-        {
+export async function startHubFront(
+  hubUrl: string,
+): Promise<PortSwitch & { url: string }> {
+  const hub = new URL(hubUrl);
+  const secure = hub.protocol === "https:";
+  const hubPort = Number(hub.port || (secure ? 443 : 80));
+  const flows = new Flows();
+  const server = createServer();
+  server.on("request", (request, response) => {
+    if (!flows.up) {
+      request.socket.destroy();
+      return;
+    }
+    const forward = (secure ? httpsRequest : httpRequest)(
+      {
+        host: hub.hostname,
+        port: hubPort,
+        method: request.method,
+        path: request.url,
+        headers: { ...request.headers, host: hub.host },
+        agent: false,
+      },
+      (answer) => {
+        response.writeHead(answer.statusCode ?? 502, answer.headers);
+        answer.pipe(response);
+      },
+    );
+    forward.on("socket", (upstream) => flows.carry(request.socket, upstream));
+    forward.on("error", () => request.socket.destroy());
+    request.pipe(forward);
+  });
+  server.on("upgrade", (request: IncomingMessage, client: Socket, head) => {
+    if (!flows.up) {
+      client.destroy();
+      return;
+    }
+    const upstream = secure
+      ? tlsConnect({
           host: hub.hostname,
           port: hubPort,
-          method: request.method,
-          path: request.url,
-          headers: { ...request.headers, host: hub.host },
-          agent: false,
-        },
-        (answer) => {
-          response.writeHead(answer.statusCode ?? 502, answer.headers);
-          answer.pipe(response);
-        },
+          servername: hub.hostname,
+        })
+      : connect(hubPort, hub.hostname);
+    upstream.once(secure ? "secureConnect" : "connect", () => {
+      const headers = Object.entries({ ...request.headers, host: hub.host })
+        .flatMap(([name, value]) =>
+          (Array.isArray(value) ? value : [value ?? ""]).map(
+            (each) => `${name}: ${each}`,
+          ),
+        )
+        .join("\r\n");
+      upstream.write(
+        `${request.method} ${request.url} HTTP/1.1\r\n${headers}\r\n\r\n`,
       );
-      forward.on("socket", (upstream) =>
-        self.flows.carry(request.socket, upstream),
-      );
-      forward.on("error", () => request.socket.destroy());
-      request.pipe(forward);
-    });
-    server.on("upgrade", (request: IncomingMessage, client: Socket, head) => {
-      if (!self.flows.up) {
-        client.destroy();
-        return;
+      if (head.length > 0) upstream.write(head);
+      flows.carry(client, upstream);
+      if (flows.up) {
+        client.pipe(upstream);
+        upstream.pipe(client);
       }
-      const upstream = secure
-        ? tlsConnect({
-            host: hub.hostname,
-            port: hubPort,
-            servername: hub.hostname,
-          })
-        : connect(hubPort, hub.hostname);
-      upstream.once(secure ? "secureConnect" : "connect", () => {
-        const headers = Object.entries({ ...request.headers, host: hub.host })
-          .flatMap(([name, value]) =>
-            (Array.isArray(value) ? value : [value ?? ""]).map(
-              (each) => `${name}: ${each}`,
-            ),
-          )
-          .join("\r\n");
-        upstream.write(
-          `${request.method} ${request.url} HTTP/1.1\r\n${headers}\r\n\r\n`,
-        );
-        if (head.length > 0) upstream.write(head);
-        self.flows.carry(client, upstream);
-        if (self.flows.up) {
-          client.pipe(upstream);
-          upstream.pipe(client);
-        }
-      });
-      upstream.once("error", () => client.destroy());
     });
-    return self;
-  }
-
-  down(): void {
-    this.flows.down();
-  }
-
-  restore(options: { cut: boolean }): void {
-    this.flows.restore(options);
-  }
-
-  async stop(): Promise<void> {
-    this.restore({ cut: true });
-    this.server.closeAllConnections();
-    await closing(this.server);
-  }
+    upstream.once("error", () => client.destroy());
+  });
+  const port = await listening(server, "127.0.0.1");
+  return {
+    ...switchControls(server, flows, () => server.closeAllConnections()),
+    port,
+    url: `http://127.0.0.1:${port}`,
+  };
 }
 
 // A TCP front on every interface at a fixed port, for the peer's direct
@@ -264,68 +230,45 @@ export class HubFront implements Switch {
 // it arrived on, so a LAN candidate still reaches the listener from a
 // LAN address and the tunnel's connector from loopback, which is how
 // the listener tells the two apart.
-export class ListenerFront implements Switch {
-  private readonly flows = new Flows();
-  private readonly server: TcpServer;
-  readonly port: number;
-
-  private constructor(server: TcpServer, port: number) {
-    this.server = server;
-    this.port = port;
-  }
-
-  // `listenerPort` answers where the listener is now, null while it is
-  // not (a connection then is refused, as the listener would).
-  static async start(
-    port: number,
-    listenerPort: () => Promise<number | null>,
-  ): Promise<ListenerFront> {
-    const server = createTcpServer({ pauseOnConnect: true });
-    const self = new ListenerFront(server, await listening(server, "::", port));
-    server.on("connection", (client) => {
-      if (!self.flows.up) {
-        client.destroy();
-        return;
-      }
-      const local = (client.localAddress ?? "127.0.0.1").replace(
-        /^::ffff:/,
-        "",
-      );
-      void listenerPort().then(
-        (target) => {
-          if (target === null || !self.flows.up) {
-            client.destroy();
-            return;
+//
+// `listenerPort` answers where the listener is now, null while it is
+// not (a connection then is refused, as the listener would).
+export async function startListenerFront(
+  port: number,
+  listenerPort: () => Promise<number | null>,
+): Promise<PortSwitch> {
+  const flows = new Flows();
+  const server = createTcpServer({ pauseOnConnect: true });
+  server.on("connection", (client) => {
+    if (!flows.up) {
+      client.destroy();
+      return;
+    }
+    const local = (client.localAddress ?? "127.0.0.1").replace(/^::ffff:/, "");
+    void listenerPort().then(
+      (target) => {
+        if (target === null || !flows.up) {
+          client.destroy();
+          return;
+        }
+        const upstream = connect(target, local);
+        upstream.once("connect", () => {
+          flows.carry(client, upstream);
+          if (flows.up) {
+            client.pipe(upstream);
+            upstream.pipe(client);
+            client.resume();
           }
-          const upstream = connect(target, local);
-          upstream.once("connect", () => {
-            self.flows.carry(client, upstream);
-            if (self.flows.up) {
-              client.pipe(upstream);
-              upstream.pipe(client);
-              client.resume();
-            }
-          });
-          upstream.once("error", () => client.destroy());
-        },
-        () => client.destroy(),
-      );
-    });
-    return self;
-  }
-
-  down(): void {
-    this.flows.down();
-  }
-
-  restore(options: { cut: boolean }): void {
-    this.flows.restore(options);
-  }
-
-  async stop(): Promise<void> {
-    this.restore({ cut: true });
-    await closing(this.server);
-  }
+        });
+        upstream.once("error", () => client.destroy());
+      },
+      () => client.destroy(),
+    );
+  });
+  return {
+    ...switchControls(server, flows),
+    port: await listening(server, "::", port),
+  };
 }
 
 // Several switches thrown as one: the clients' whole network.
