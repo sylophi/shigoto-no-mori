@@ -185,15 +185,8 @@ func (h mirrorGatewayHandler) Connect(
 	// would otherwise hold the exit. Closing the conn unblocks every
 	// read. Once the endpoint is established the conn is Mutagen's and
 	// this watcher stands down.
-	handshakeDone := make(chan struct{})
-	defer close(handshakeDone)
-	go func() {
-		select {
-		case <-ctx.Done():
-			conn.Close()
-		case <-handshakeDone:
-		}
-	}()
+	stopWatching := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stopWatching()
 	preface := mirrorPreface{
 		Token:           os.Getenv(mirrorGatewayTokenEnv),
 		DeviceID:        u.Host,
@@ -205,12 +198,7 @@ func (h mirrorGatewayHandler) Connect(
 		conn.Close()
 		return nil, err
 	}
-	line, err := json.Marshal(preface)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if _, err := conn.Write(append(line, '\n')); err != nil {
+	if err := json.NewEncoder(conn).Encode(preface); err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("mirror gateway preface: %w", err)
 	}
@@ -520,10 +508,7 @@ func relabelV2Sessions(dataDir string, logOut io.Writer) {
 // tracked: served sessions hide the peer's, and the guard refuses the
 // deletion that would follow, every cycle. True when it rewrote one.
 func unanchorGitPointer(configuration *synchronization.Configuration) bool {
-	if configuration == nil {
-		return false
-	}
-	for i, pattern := range configuration.Ignores {
+	for i, pattern := range configuration.GetIgnores() {
 		if pattern == mirrorLegacyGitPointerIgnore {
 			configuration.Ignores[i] = mirrorGitPointerIgnore
 			return true
@@ -760,11 +745,7 @@ func streamMirrorState(ctx context.Context, manager *synchronization.Manager, em
 		slices.SortFunc(doc.Sessions, func(a, b mirrorSessionState) int {
 			return cmp.Compare(a.Session, b.Session)
 		})
-		encoded, err := json.Marshal(doc)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "file-sync: json encode: %v\n", err)
-			continue
-		}
+		encoded, _ := json.Marshal(doc)
 		lastPoll = time.Now()
 		if bytes.Equal(encoded, last) {
 			continue
@@ -781,16 +762,10 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 		labels = map[string]string{}
 	}
 	ignores := []string{}
-	if session.Configuration != nil {
-		for _, pattern := range session.Configuration.Ignores {
-			if !isGitPointerIgnore(pattern) {
-				ignores = append(ignores, pattern)
-			}
+	for _, pattern := range session.Configuration.GetIgnores() {
+		if !isGitPointerIgnore(pattern) {
+			ignores = append(ignores, pattern)
 		}
-	}
-	var createdAt int64
-	if session.CreationTime != nil {
-		createdAt = session.CreationTime.AsTime().UnixMilli()
 	}
 	// This side is alpha on a mirror and beta on a pull (createMirrorSession).
 	// The app's document is always local/remote, so the roles are read
@@ -816,7 +791,7 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 		RemoteRoot:        remote.Path,
 		Paused:            session.Paused,
 		Ignores:           ignores,
-		CreatedAt:         createdAt,
+		CreatedAt:         session.CreationTime.AsTime().UnixMilli(),
 		Status:            mirrorStatusCode(state.Status),
 		StatusText:        state.Status.Description(),
 		LastError:         state.LastError,
@@ -837,9 +812,6 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 }
 
 func mirrorEndpointStateOf(state, other *synchronization.EndpointState) mirrorEndpointState {
-	if state == nil {
-		return mirrorEndpointState{Problems: []mirrorProblem{}}
-	}
 	out := mirrorEndpointState{
 		Connected:        state.Connected,
 		Scanned:          state.Scanned,
@@ -855,7 +827,7 @@ func mirrorEndpointStateOf(state, other *synchronization.EndpointState) mirrorEn
 	}
 	if progress := state.StagingProgress; progress != nil {
 		var beyond uint64
-		if other != nil && other.TotalFileSize > state.TotalFileSize {
+		if other.TotalFileSize > state.TotalFileSize {
 			beyond = other.TotalFileSize - state.TotalFileSize
 		}
 		out.Staging = &mirrorStaging{
@@ -915,11 +887,7 @@ type lineEmitter struct {
 }
 
 func (e *lineEmitter) emit(value any) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "file-sync: json encode: %v\n", err)
-		return
-	}
+	data, _ := json.Marshal(value)
 	e.emitRaw(data)
 }
 
