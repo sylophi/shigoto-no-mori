@@ -1,7 +1,7 @@
 // The journal a data-folder move keeps in the data dir while it runs
-// (the app's host/lib/dataDirMove.ts), and the start that finds a move a
-// crash cut between its rename and its pointer (Paths.ts), which every
-// process runs before it opens a store.
+// (dataDirMove.ts), and the start that finds a move a crash cut between
+// its rename and its pointer (Paths.ts), which every process runs
+// before it opens a store.
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";

@@ -1,20 +1,91 @@
-// The data-folder move's recovery and the steps of it the engine owns:
-// while a move's journal is in the data dir the store refuses every
-// write but the move's own, and every engine graph but the doctor's
-// settles the journal as it comes up, holding the data-folder lock alone
-// (`DataDirLock`), or keeps refusing. The move itself is the app's
-// (app/host/lib/dataDirMove.ts), and the journal and the store's refusal
-// are `dataDirMoveJournal.ts`'s.
+// Moves the data dir to a new parent directory, or back to its default
+// place: the folder moves under the flavor's name (.sm / .smd, which
+// also renames a pre-2.0 ~/shigomori), and the pointer file (Paths)
+// records the new place for the app's and the CLI's next start, or goes
+// when that place is the default, so a pointer always means a moved
+// folder. The app asks for it (host/lib/dataDirMove.ts), with the checks
+// and holds only it can make as `hooks`, and relaunches right after: the
+// data dir is a boot-time constant every module has derived paths from.
+//
+// Two kinds of stored paths go stale and are carried along: worktree
+// ids are hashes of the worktree's absolute path, so everything the
+// engine keys by the id of every managed worktree under the data dir
+// (marks, the worktree's data, a pending dirty capture) is re-keyed
+// (Worktrees' rekey), and git's own worktree links are re-pointed by
+// `git worktree repair`.
+//
+// The move is the one change under way: it holds the data-folder lock
+// alone from its first step to its last (`DataDirLock`). A move a crash
+// cuts short is finished or undone at the next start: the move keeps a
+// journal in the data dir from before its re-key to its end, and a copy
+// to another volume goes into a sibling of the destination, flushed to
+// disk and renamed in only once whole. While the journal is there the
+// store refuses every write but the move's own, and every engine graph
+// but the doctor's settles it as it comes up (`settleLayer`), or keeps
+// refusing.
+//
+// The journal (`dataDirMoveJournal.ts`) holds an entry per worktree that
+// moves, marked `planned`, `rekeyed` or `returned`. A strict read takes
+// an error as an error, never as absence: a capture ref git can't open
+// or parse (`Git.readRef`), a journal that can't be read or decoded. The
+// steps, and what a crash after each leaves:
+//  0. The lock alone, waiting 30 s for the changes under way (one still
+//     running refuses the move), then an earlier journal settled. Until
+//     it is, the move is refused and the store keeps refusing writes.
+//  1. The app's last checks, scripts killed (`ready`), the pointer
+//     staged and flushed. A staged pointer naming a folder that never
+//     came, which Paths ignores: its rescue needs a journal.
+//  2. The store refusing, then the journal, with no entries. Before the
+//     journal, a refusing store with none, which the next settle lets
+//     write; after it, an undo with nothing to reverse.
+//  3. The plan: git's listing of each project's worktrees, made holding
+//     the lock alone, so no create, adopt or move can change it. A
+//     project git can't list is left out. As 2.
+//  4. The preflight: nothing kept under any entry's new id (marks,
+//     sessions, shelf, data rows, a capture read strictly), or the move
+//     is refused. As 2.
+//  5. The snapshot: each entry's capture, read strictly, and every entry
+//     `planned`. An undo with nothing to reverse.
+//  6. Each entry re-keyed (its rows in one transaction, the capture only
+//     if it is the snapshot's, else the move fails), then marked
+//     `rekeyed`. One re-keyed but still `planned` is reversed by the
+//     undo, since only its re-key can have put anything under its new id
+//     (2 and 4).
+//  7. What holds the folder let go (`releasing`): the store's watcher,
+//     the updater's bridge, the loopback's address file. As 6.
+//  8. The folder moved and flushed: a rename, one step with its mark that
+//     a cancel can't cut, or a copy, `partial` set first, holding the
+//     store's write lock, every file and folder flushed past the drive's
+//     cache, then renamed in. Before it, an undo at the source; after
+//     it, the journal is at the destination with the pointer unmoved,
+//     which Paths' rescue commits (a rename) or the source's journal
+//     undoes (a copy).
+//  9. The pointer committed, renamed in (or removed, for the default
+//     place) and its folder flushed. Finished at the destination.
+// 10. The finish (`finishMove`), here for git's links only, then in full
+//     in the first engine graph to come up at the new place. A crash
+//     leaves it to the next one there, and a copy's old tree takes its
+//     space until then.
+//
+// Not covered: `SHIGOMORI_DATA_DIR` naming the folder a move moved still
+// names the old place; a write from outside sm into a copy's old tree
+// before the relaunch goes with the old tree; a copy can take a mirrored
+// file mid-write (the peer's next cycle sends it again); under reftable
+// a capture ref git can't open reads as absent.
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
+import * as Random from "effect/Random";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
 import type * as Types from "effect/Types";
 import { DataDirLock } from "./DataDirLock.ts";
+import { dirtyRef } from "./Dirty.ts";
 import {
   JOURNAL,
   type Journal,
@@ -31,12 +102,12 @@ import { worktreeIdFromPath } from "./worktreeLayout.ts";
 import * as Worktrees from "./Worktrees.ts";
 
 // A journal entry, its mark set as the move goes.
-export type Entry = Types.Mutable<Journal["moved"][number]>;
+type Entry = Types.Mutable<Journal["moved"][number]>;
 
 // A write of the move's while its journal refuses everyone else's: one
 // write transaction lets the store write, writes, and makes it refuse
 // again, so no other connection ever finds it writable.
-export const asMoveOwner = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+const asMoveOwner = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
       reviveStore.pipe(
@@ -298,7 +369,7 @@ const letGo = (file: string, doing: "undoing" | "finishing") =>
 // last first, and marked before the next. A copy's partial or landed
 // folder is removed (its own, its journal last). Then the journal goes,
 // and the store writes again, last of all.
-export const undoMove = (journal: Journal, at: string, file: string) =>
+const undoMove = (journal: Journal, at: string, file: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -395,6 +466,270 @@ export const resumeDataDirMove = (at: string) =>
     yield* Effect.logInfo(`[data] undoing the move to ${journal.value.to}`);
     yield* undoMove(journal.value, at, file);
   });
+
+// A move refused before anything moved: an earlier move still owed, or
+// something kept under the id the worktree at `kept.oldPath` would take.
+class DataDirMoveRefused extends Schema.TaggedError<DataDirMoveRefused>()(
+  "DataDirMoveRefused",
+  {
+    kept: Schema.NullOr(
+      Schema.Struct({ oldPath: Schema.String, newPath: Schema.String }),
+    ),
+  },
+) {
+  override get message(): string {
+    return this.kept === null
+      ? "An earlier move of the data folder isn't finished or undone yet. " +
+          "It's tried again at every start; see the log for what stops it."
+      : `Something is still kept for a worktree that was once at ${this.kept.newPath}, so ${this.kept.oldPath} can't take its place there. Move the data folder somewhere else.`;
+  }
+}
+
+// The store held still while a copy reads it: a write transaction open
+// for the copy's length (an UPDATE that changes nothing still takes the
+// write lock), so a write from the terminal or a hook waits rather than
+// tearing the copy, and the store left behind retired in the same
+// transaction (`retireStore`).
+export const holdingStore = <A, E, R>(copy: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* sql`UPDATE changes SET version = version WHERE 0`;
+        const copied = yield* copy;
+        yield* retireStore;
+        return copied;
+      }),
+    ),
+  );
+
+// A rename refused because the two paths are on different volumes.
+const crossesVolumes = (error: PlatformError.PlatformError) =>
+  (error.reason.cause as { readonly code?: unknown } | undefined)?.code ===
+  "EXDEV";
+
+// The data dir `from` moved to `to`, by the steps above.
+export const moveDataDir = Effect.fnUntraced(function* <E, R>(
+  move: {
+    readonly from: string;
+    // `from` by each spelling git may name a path under it with: git
+    // spells one under a folder reached through a link by its target.
+    readonly spellings: ReadonlyArray<string>;
+    readonly to: string;
+    // `to` by its parent's real path, which git will name the moved
+    // worktrees by and their new ids hash.
+    readonly toReal: string;
+    // The pointer that will lead to `to`, none for the default place
+    // (`toDefault`), and the pre-2.0 one that goes either way.
+    readonly pointerFile: string;
+    readonly legacyPointerFile: string | null;
+    readonly toDefault: boolean;
+  },
+  hooks: {
+    // Once an earlier move is settled: the app's last checks, and its
+    // scripts stopped (step 1).
+    readonly ready: Effect.Effect<void, E, R>;
+    // The worktrees that move, held from the app's scripts until the
+    // move ends (step 4).
+    readonly holding: (
+      worktreeIds: ReadonlyArray<string>,
+    ) => Effect.Effect<void, E, R | Scope.Scope>;
+    // What holds the folder let go (step 7).
+    readonly releasing: Effect.Effect<void, E, R>;
+    // The tree at `from` copied into `to` and flushed whole, holding the
+    // store with `holdingStore` (step 8).
+    readonly copy: (
+      from: string,
+      to: string,
+    ) => Effect.Effect<void, E, R | SqlClient.SqlClient>;
+  },
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const git = yield* Git.Git;
+  const registry = yield* Registry.Registry;
+  const worktrees = yield* Worktrees.Worktrees;
+  const { from, to, pointerFile, legacyPointerFile } = move;
+  // A file or folder flushed to disk (on macOS, past the drive's cache).
+  const flushed = (at: string) =>
+    Effect.scoped(
+      Effect.flatMap(fs.open(at, { flag: "r" }), (handle) => handle.sync),
+    );
+  const underFrom = (at: string) =>
+    move.spellings.find((dir) => isSameOrInside(at, dir));
+  const suffix = (yield* Random.nextInt).toString(36);
+  // The pointer is written beside itself under a name of its own, then
+  // renamed in.
+  const pointerTmp = `${pointerFile}.tmp.${suffix}`;
+  const journal: Omit<Types.Mutable<Journal>, "moved"> & {
+    moved: Array<Entry>;
+  } = { from, to, partial: null, moved: [] };
+  const journalFile = path.join(from, JOURNAL);
+  const journalHere = Effect.suspend(() => writeJournal(journalFile, journal));
+  let pointerStaged = false;
+  let storeRetired = false;
+  let journaled = false;
+  let renamed = false;
+  const moving = Effect.gen(function* () {
+    // An earlier move's journal is the only record of what it still owes:
+    // settled first, as a start settles it, and a move waits while it
+    // can't be, rather than write its own over it.
+    yield* resumeDataDirMove(from).pipe(Effect.ignoreCause({ log: "Warn" }));
+    if (yield* fs.exists(journalFile).pipe(Effect.orElseSucceed(() => true))) {
+      return yield* new DataDirMoveRefused({ kept: null });
+    }
+    yield* hooks.ready;
+    // Read holding the lock, so no project is added after.
+    const projects = yield* registry.listed;
+    // Staged before anything moves: a move that succeeds but leaves the
+    // pointer unwritable would strand the data where no boot can find
+    // it. The default location needs no pointer.
+    if (!move.toDefault) {
+      yield* fs.makeDirectory(path.dirname(pointerFile), { recursive: true });
+      yield* fs.writeFileString(pointerTmp, `${to}\n`);
+      yield* flushed(pointerTmp);
+      pointerStaged = true;
+    }
+    yield* retireStore;
+    storeRetired = true;
+    yield* journalHere;
+    journaled = true;
+
+    // The managed worktrees whose checkout sits under the data dir. The
+    // listing's own writes (an idle worktree shelved) are the move's.
+    const { rows } = yield* asMoveOwner(
+      worktrees.identityList(projects, { primaryRef: false }),
+    );
+    const entries = rows.flatMap((i): Array<Entry & { oldId: string }> => {
+      const under = underFrom(i.path);
+      if (i.isPrimary || under === undefined) return [];
+      return [
+        {
+          oldId: i.id,
+          projectId: i.projectId,
+          oldPath: i.path,
+          newPath: path.join(
+            move.toReal,
+            i.path.slice(under.length).replace(/^[/\\]/, ""),
+          ),
+          capture: null,
+          state: "planned",
+        },
+      ];
+    });
+    for (const entry of entries) {
+      const held = yield* keptUnderNewId(entry).pipe(
+        Effect.orElseSucceed(() => true),
+      );
+      if (held) {
+        const { oldPath, newPath } = entry;
+        return yield* new DataDirMoveRefused({ kept: { oldPath, newPath } });
+      }
+    }
+    yield* hooks.holding(entries.map(({ oldId }) => oldId));
+    const repoOf = new Map(projects.map((one) => [one.id, one.path]));
+    journal.moved = yield* Effect.forEach(entries, ({ oldId, ...entry }) =>
+      git.readRef(repoOf.get(entry.projectId) ?? "", dirtyRef(oldId)).pipe(
+        Effect.map(
+          (capture): Entry => ({
+            ...entry,
+            capture: Option.getOrNull(capture),
+          }),
+        ),
+      ),
+    );
+    yield* journalHere;
+
+    // Re-keyed while the engine still reads the old location.
+    for (const entry of journal.moved) {
+      yield* rekeyForward(entry);
+      entry.state = "rekeyed";
+      yield* journalHere;
+    }
+
+    yield* hooks.releasing;
+
+    // rename() can't cross volumes. Then the tree is copied into a
+    // sibling of the destination and renamed in. Either way the folders
+    // the rename changed are flushed before the pointer commits, so no
+    // power loss leaves a pointer naming a folder that isn't on disk.
+    // A rename and its mark are one step: one a cancel cut short after
+    // the folder left would be undone where the data no longer is.
+    const landed = Effect.sync(() => {
+      renamed = true;
+    });
+    const sameVolume = yield* fs.rename(from, to).pipe(
+      Effect.andThen(landed),
+      Effect.as(true),
+      Effect.catchIf(crossesVolumes, () => Effect.succeed(false)),
+      Effect.uninterruptible,
+    );
+    if (!sameVolume) {
+      const partial = `${to}.partial-${suffix}`;
+      journal.partial = partial;
+      yield* journalHere;
+      yield* hooks.copy(from, partial);
+      yield* fs
+        .rename(partial, to)
+        .pipe(Effect.andThen(landed), Effect.uninterruptible);
+    }
+    yield* flushed(path.dirname(to));
+    if (sameVolume) yield* flushed(path.dirname(from));
+
+    // Renamed in, so no reader sees a half-written path, and committed
+    // before the old copy goes. Moving to the default removes the pointer
+    // instead, and the pre-2.0 pointer goes either way: exactly one file
+    // may ever redirect a boot. A start that found the folder gone may
+    // have committed it first (Paths' rescue).
+    yield* move.toDefault
+      ? fs.remove(pointerFile, { force: true })
+      : fs
+          .rename(pointerTmp, pointerFile)
+          .pipe(
+            Effect.catch((error) =>
+              Effect.flatMap(
+                fs
+                  .readFileString(pointerFile)
+                  .pipe(Effect.orElseSucceed(() => "")),
+                (now) => (now.trim() === to ? Effect.void : Effect.fail(error)),
+              ),
+            ),
+          );
+    if (legacyPointerFile !== null) {
+      yield* fs.remove(legacyPointerFile, { force: true });
+    }
+    yield* flushed(path.dirname(pointerFile));
+    yield* finishMove(journal, to, {
+      settle: false,
+      file: path.join(to, JOURNAL),
+    });
+  }).pipe(
+    Effect.onError(() =>
+      Effect.gen(function* () {
+        // A rename that failed may still have moved the folder (a network
+        // volume's lost answer): the folder gone counts as landed.
+        if (
+          !renamed &&
+          !(yield* fs.exists(from).pipe(Effect.orElseSucceed(() => true)))
+        ) {
+          renamed = true;
+        }
+        // Once the folder landed, the staged pointer is how a start finds
+        // it (Paths' rescue).
+        if (pointerStaged && !renamed) {
+          yield* Effect.ignore(fs.remove(pointerTmp, { force: true }));
+        }
+        if (journaled && !renamed) {
+          yield* undoMove(journal, from, journalFile);
+        } else if (storeRetired && !journaled) {
+          yield* Effect.ignore(reviveStore);
+        }
+      }),
+    ),
+    Effect.scoped,
+  );
+  const lock = yield* DataDirLock;
+  yield* lock.alone(moving, "30 seconds");
+});
 
 // Every engine graph built on `engineServices` (all but the doctor's,
 // `doctorLayer`) settles what a move left in its data dir as it comes

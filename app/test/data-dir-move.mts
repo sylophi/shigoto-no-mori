@@ -1,5 +1,5 @@
 // Durable proof that a data-folder move a crash cut short is undone at
-// the next start (host/lib/dataDirMove.ts). The move re-keys every
+// the next start (the engine's dataDirMove.ts). The move re-keys every
 // worktree under the data folder before it copies, so a crash mid-copy
 // leaves the store keyed to paths that never come to be, and a partial
 // copy that would refuse every retry. Asserts, for a move to another
@@ -45,8 +45,9 @@ import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as PlatformError from "effect/PlatformError";
 import { afterAll, beforeAll, it } from "vitest";
-import { holdingStore, moveDataDir } from "../host/lib/dataDirMove.ts";
+import { moveDataDir } from "../host/lib/dataDirMove.ts";
 import {
+  holdingStore,
   keptUnderNewId,
   rekeyForward,
   resumeDataDirMove,
@@ -732,7 +733,7 @@ it.each([
         movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
       }).pipe(Effect.flip),
     );
-    assert.equal(moved, "stop before the folder moves");
+    assert.equal(moved.message, "stop before the folder moves");
     assert.equal(await titleOf(identity.id), "Fox", "undone");
   },
 );
@@ -787,7 +788,7 @@ it.each([
       movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
     }).pipe(Effect.flip),
   );
-  if (own) assert.equal(failed, "stop before the folder moves");
+  if (own) assert.equal(failed.message, "stop before the folder moves");
   else assert.match(String(failed), /Something is still kept/);
   const tip = (id: string) =>
     git(repo, "for-each-ref", "--format=%(objectname)", ref(id)).trim();
@@ -829,7 +830,7 @@ it("a capture made while a move kills the scripts comes back with its undo", asy
       movesUnderWay: Effect.succeed(NOTHING_UNDER_WAY),
     }).pipe(Effect.flip),
   );
-  assert.equal(failed, "stop before the folder moves");
+  assert.equal(failed.message, "stop before the folder moves");
   const tip = (id: string) =>
     git(repo, "for-each-ref", "--format=%(objectname)", ref(id)).trim();
   assert.deepEqual(
@@ -875,7 +876,10 @@ it("a move settles an earlier move's journal first, and waits while it can't", a
       moved: [],
     }),
   );
-  assert.equal(await tryMove("settled"), "stop before the folder moves");
+  assert.equal(
+    (await tryMove("settled")).message,
+    "stop before the folder moves",
+  );
   assert.equal(journalLeft(), false);
 });
 
