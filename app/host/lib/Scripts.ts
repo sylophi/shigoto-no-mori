@@ -79,16 +79,6 @@ export class Scripts extends Context.Service<
     ) => Effect.Effect<void, WorktreeBusyError | WorktreeSettingUpError>;
     // The tombstone protocol (./scripts/removing.ts) around a mutation
     // that removes or moves worktrees.
-    readonly withDeleteInflight: <A, E, R, E2, R2>(
-      worktreeId: string,
-      mark: Mark,
-      run: Effect.Effect<A, E, R>,
-      mirrorsAfter: (result: A) => Effect.Effect<unknown, E2, R2>,
-    ) => Effect.Effect<
-      A,
-      E | E2 | WorktreeBusyError | WorktreeSettingUpError,
-      R | R2
-    >;
     readonly withDeletesInflight: <A, E, R, E2, R2>(
       worktreeIds: readonly string[],
       mark: Mark,

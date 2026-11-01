@@ -205,7 +205,7 @@ export const findSession = (daemon: MirrorEngine["Service"], session: string) =>
 
 // Every session whose local side is the named worktree, stopped. The
 // tombstone protocol calls this once a delete or a relocate has gone
-// through (withDeleteInflight says why after and not before): left
+// through (withDeletesInflight says why after and not before): left
 // alone, the session sits halted on a root that is gone or moved and
 // the peer keeps calling its worktree mirrored. It goes through the
 // injected impl, the one mirror:stop uses, so the git follower forgets

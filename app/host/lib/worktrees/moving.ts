@@ -57,8 +57,8 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
         // The engine refuses to move the primary checkout, whatever runs
         // in it, so that is what it hears.
         if (!worktree.isPrimary) yield* refuseRunningWork(worktree, verb);
-        return yield* scripts.withDeleteInflight(
-          worktree.id,
+        return yield* scripts.withDeletesInflight(
+          [worktree.id],
           {
             kind: "move",
             busy: "This worktree is already being removed or moved.",
