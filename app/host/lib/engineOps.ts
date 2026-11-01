@@ -3,10 +3,13 @@
 // move, the shelf and auto-pull marks, agent sessions and hooks, project
 // add, remove and reorder) and every read of what the engine owns
 // (worktree rows and identities, the project list and icons, the stored
-// config, the launcher row, package scripts). The app and a terminal run the same services, and
-// each function answers in the shape `sm --json` prints, decoded
-// against the shared schemas, so drift fails loudly here instead of
-// surfacing as undefined-flavored breakage in the renderer.
+// config, the launcher row, package scripts). The app and a terminal
+// run the same services. A read the engine already types comes back as
+// it is, minus the fields only the terminal's rows carry. What the
+// engine hands back as plain documents (a mutation's result, the stored
+// config, the doctor's report) is decoded against the shared schemas,
+// so drift fails loudly here instead of surfacing as undefined-flavored
+// breakage in the renderer.
 import * as HostNodeServices from "@host/process/nodeServices";
 import { childDefaults } from "@shigomori/engine/processes";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -39,16 +42,11 @@ import {
   CleanupErrorSchema,
   type CleanupError,
   type DeleteStackResult,
-  DetectedLauncherSchema,
   type DeviceSettingsPatch,
-  LauncherEntrySchema,
   type MergeMethod,
   type MergeOutcome,
   MergeOutcomeSchema,
-  PackageScriptsDocSchema,
   type Project,
-  ProjectIconSchema,
-  ProjectRowSchema,
   ProjectSchema,
   type MovedSource,
   type CustomPort,
@@ -57,8 +55,8 @@ import {
   type ShigomoriWorktreeData,
   StoredGlobalConfigSchema,
   StoredShigomoriConfigSchema,
+  type Worktree,
   type WorktreeDescription,
-  WorktreeIdentitySchema,
   WorktreeSchema,
 } from "@shigomori/contracts/schemas";
 import { DoctorReportSchema } from "@shigomori/contracts/modules/cli";
@@ -751,10 +749,16 @@ export const wtFolderMovedIds = Effect.suspend(() =>
   asCall(Effect.flatMap(WtFolder.WtFolder, (folder) => folder.movedIds)),
 );
 
-const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
-const decodeWorktreeIdentities = Schema.decodeUnknownSync(
-  Schema.Array(WorktreeIdentitySchema),
-);
+// The contract's row: the terminal's project name and its sessions'
+// permission prompts are left out.
+const hostWorktree = ({
+  projectName: _projectName,
+  agentSessions,
+  ...row
+}: Worktrees.WorktreeRow): Worktree => ({
+  ...row,
+  agentSessions: agentSessions.map(({ waits: _waits, ...session }) => session),
+});
 
 // A project's rows, primary first: the sidebar's list. A project whose
 // checkouts git can't list reads as having none, as the terminal's
@@ -767,7 +771,7 @@ export const listWorktrees = Effect.fnUntraced(function* (projectId: string) {
     }),
     { projectId },
   );
-  return decodeWorktrees(listing.rows);
+  return listing.rows.map(hostWorktree);
 });
 
 // One row, freshly probed: what a mutation hands back to the renderer.
@@ -784,10 +788,10 @@ export const describeWorktree = Effect.fnUntraced(function* (
     }),
     { projectId, worktreeId },
   );
-  return decodeWorktree(row);
+  return hostWorktree(row);
 });
 
-// Identities without git probes (see WorktreeIdentitySchema): a
+// Identities without git probes (see Worktrees.IdentityRow): a
 // project's (or, with no projectId, every project's), or the one
 // `worktreeId` names. `primaryRef` adds the project's primary ref.
 export const listWorktreeIdentities = Effect.fnUntraced(function* (
@@ -795,7 +799,7 @@ export const listWorktreeIdentities = Effect.fnUntraced(function* (
   opts: { primaryRef?: boolean } = {},
 ) {
   const options = { primaryRef: opts.primaryRef === true };
-  const rows = yield* asCall(
+  return yield* asCall(
     Effect.gen(function* () {
       const worktrees = yield* Worktrees.Worktrees;
       const at = yield* worktrees.nowhere;
@@ -811,15 +815,7 @@ export const listWorktreeIdentities = Effect.fnUntraced(function* (
     }),
     scope,
   );
-  return decodeWorktreeIdentities(rows);
 });
-
-const decodeProjectRows = Schema.decodeUnknownSync(
-  Schema.Array(ProjectRowSchema),
-);
-const decodeProjectIcon = Schema.decodeUnknownSync(
-  Schema.NullOr(ProjectIconSchema),
-);
 
 // The repo's identity (what makes the same project on two devices the
 // same repo), or null.
@@ -838,16 +834,12 @@ export const listedProjects = Effect.flatMap(
 // Every registered project, terrier's merged in, decorated for the
 // sidebar. `refreshIcons` re-scans projects the icon cache remembers
 // as icon-less (the first list of a session).
-export const listProjects = Effect.fnUntraced(function* (
-  opts: { refreshIcons?: boolean } = {},
-) {
-  const rows = yield* asCall(
+export const listProjects = (opts: { refreshIcons?: boolean } = {}) =>
+  asCall(
     Effect.flatMap(Registry.Registry, (registry) =>
       registry.rows({ rescanIconMisses: opts.refreshIcons === true }),
     ),
   );
-  return decodeProjectRows(rows);
-});
 
 // The icon's bytes, or null. A remembered miss is scanned again: the
 // renderer asks once per project per session, and an icon added since
@@ -862,25 +854,14 @@ export const projectIcon = Effect.fnUntraced(function* (projectId: string) {
     }),
     { projectId },
   );
-  return decodeProjectIcon(Option.getOrNull(icon));
+  return Option.getOrNull(icon);
 });
-
-const decodeWorktreeDestination = Schema.decodeUnknownSync(
-  Schema.Struct({
-    name: Schema.String,
-    path: Schema.String,
-    taken: Schema.Boolean,
-  }),
-);
 
 // Where a new worktree would land, and under what name: `name` when
 // given (then `taken` says whether a worktree already holds the name
 // or something the path), else a freshly picked free one.
-export const worktreeDestination = Effect.fnUntraced(function* (
-  projectId: string,
-  name?: string,
-) {
-  const destination = yield* asCall(
+export const worktreeDestination = (projectId: string, name?: string) =>
+  asCall(
     Effect.gen(function* () {
       const project = yield* projectById(projectId);
       return yield* (yield* Worktrees.Worktrees).destination(
@@ -890,8 +871,6 @@ export const worktreeDestination = Effect.fnUntraced(function* (
     }),
     { projectId },
   );
-  return decodeWorktreeDestination(destination);
-});
 
 const decodeGlobalConfig = Schema.decodeUnknownSync(StoredGlobalConfigSchema);
 
@@ -924,39 +903,27 @@ export const readProjectConfig = Effect.fnUntraced(function* (
   return decodeProjectConfig(stored);
 });
 
-const decodeLauncherRow = Schema.decodeUnknownSync(
-  Schema.Struct({
-    entries: Schema.Array(LauncherEntrySchema),
-    hiddenCount: Schema.Natural,
-  }),
-);
-
 // The project's launcher row: installed tools and custom commands,
 // hidden ones left out, most used first.
 export const launcherRow = Effect.fnUntraced(function* (projectId: string) {
-  const row = yield* asCall(
+  // The row's usage stats stay in the engine: the order is already in
+  // `entries`.
+  const { entries, hiddenCount } = yield* asCall(
     Effect.gen(function* () {
       const project = yield* projectById(projectId);
       return yield* (yield* Launchers.Launchers).row(project);
     }),
     { projectId },
   );
-  return decodeLauncherRow(row);
+  return { entries, hiddenCount };
 });
-
-const decodeCatalog = Schema.decodeUnknownSync(
-  Schema.Array(DetectedLauncherSchema),
-);
 
 // Every tool the catalog knows, installed or not, by label.
 export const launcherCatalog = Effect.fnUntraced(function* () {
-  const apps = yield* asCall(
+  return yield* asCall(
     Effect.flatMap(Launchers.Launchers, (launchers) => launchers.catalog),
   );
-  return decodeCatalog(apps);
 });
-
-const decodePackageScripts = Schema.decodeUnknownSync(PackageScriptsDocSchema);
 
 // The worktree's scripts, or null when it has no package.json, justfile
 // or Makefile, or none of them reads. A worktree or project that is gone
@@ -982,7 +949,7 @@ export const packageScripts = Effect.fnUntraced(function* (
     }),
     { projectId, worktreeId },
   );
-  return listed === null ? null : decodePackageScripts(listed);
+  return listed;
 });
 
 // A wedged git or gh probe must not leave Settings' health check
