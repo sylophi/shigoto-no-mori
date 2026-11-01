@@ -65,6 +65,7 @@ import * as Loopback from "@host/socket/Loopback";
 import type { LinkRegistrar } from "@host/socket/DeviceLink";
 import { createServed } from "@shared/ipc/served";
 import * as Views from "@host/lib/Views";
+import * as HostPushes from "@host/lib/HostPushes";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -76,7 +77,6 @@ import { cliSandbox } from "./lib/cliSandbox.mts";
 import { bootDirectWire, DIALER, LISTENER } from "./lib/directBoot.mts";
 import { inertMirrorImpl, rawMirrorSession } from "./lib/mirrorFakes.mts";
 import {
-  pushesLayer,
   standInAccount,
   standInDeviceId,
   standInMirror,
@@ -111,9 +111,11 @@ async function startLoopback() {
         ),
       ).pipe(
         Layer.provide(
-          Layer.mergeAll(StoreChanges.layer, pushesLayer, Views.layer).pipe(
-            Layer.provideMerge(Layer.succeedContext(host)),
-          ),
+          Layer.mergeAll(
+            StoreChanges.layer,
+            HostPushes.layer,
+            Views.layer,
+          ).pipe(Layer.provideMerge(Layer.succeedContext(host))),
         ),
       ),
       scope,

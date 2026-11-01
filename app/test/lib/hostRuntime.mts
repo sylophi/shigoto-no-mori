@@ -35,6 +35,7 @@ import * as Sharing from "../../host/lib/Sharing.ts";
 import * as Moves from "../../host/lib/sync/Moves.ts";
 import * as OrphanSweep from "../../host/lib/scripts/OrphanSweep.ts";
 import * as Views from "../../host/lib/Views.ts";
+import * as HostPushes from "../../host/lib/HostPushes.ts";
 import { mirrorsOnDelete } from "../../host/mirror/onDelete.ts";
 import * as SharedSettingsStore from "../../host/lib/sharedSettings/store.ts";
 import * as EngineStoreChanges from "@shigomori/engine/StoreChanges";
@@ -136,7 +137,7 @@ const runtime = ManagedRuntime.make(
     ),
     // The engine's deletes stop the mirrors of what they take first.
     Layer.provideMerge(Layer.effect(MirrorsOnDelete, mirrorsOnDelete("both"))),
-    Layer.provideMerge(HostStandIns.pushesLayer),
+    Layer.provideMerge(HostPushes.layer),
     // The copy of the shared settings, read from the store and following
     // its changes.
     Layer.provideMerge(SharedSettingsStore.layer),

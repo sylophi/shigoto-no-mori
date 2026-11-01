@@ -10,15 +10,15 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { isolateGit } from "../../../test/gitIsolation.ts";
 import { ownTestTemp } from "../../../test/testTemp.mts";
 import { onRunEnd, signalIfAlive } from "../../../test/testProcesses.mts";
 import * as Predicate from "effect/Predicate";
 import { chromium, type Browser, type Page } from "playwright-core";
+import { freePort, repoDir, sleep } from "../reliability/util.mts";
 
 const { values } = parseArgs({
   options: {
@@ -33,13 +33,11 @@ const THEMES = ["light", "dark"] as const;
 // to absorb the rounding of a gradient, not enough to hide a colour.
 const CHANNEL_TOLERANCE = 16;
 
-const appDir = resolve(import.meta.dirname, "../..");
-const repo = resolve(appDir, "..");
 const out = join(import.meta.dirname, "report");
 const started = Date.now();
 
 const git = (...args: string[]) =>
-  execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+  execFileSync("git", args, { cwd: repoDir, encoding: "utf8" }).trim();
 
 // Its scratch files, Vite's and Chromium's with them, in a folder of
 // this run's (../../../test/testTemp.mts), and its git off this machine's
@@ -76,15 +74,6 @@ function cleanUp(): void {
 }
 const forget = onRunEnd(cleanUp);
 
-function freePort(): Promise<number> {
-  return new Promise((done) => {
-    const server = createServer().listen(0, () => {
-      const { port } = server.address() as AddressInfo;
-      server.close(() => done(port));
-    });
-  });
-}
-
 // The desktop fake host's server, whose /scenes.html draws one scene.
 async function serve(checkout: string): Promise<string> {
   const port = await freePort();
@@ -102,7 +91,7 @@ async function serve(checkout: string): Promise<string> {
       () => false,
     );
     if (ready) return origin;
-    await new Promise((wait) => setTimeout(wait, 500));
+    await sleep(500);
   }
   throw new Error(`the fake host in ${checkout} did not start`);
 }
@@ -267,7 +256,7 @@ try {
 
   const [baseOrigin, headOrigin] = await Promise.all([
     serve(baseCheckout),
-    serve(repo),
+    serve(repoDir),
   ]);
   browser = await chromium.launch({ channel: "chrome" });
   const context = await browser.newContext({
