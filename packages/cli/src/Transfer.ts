@@ -35,6 +35,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import type * as Types from "effect/Types";
 import * as Control from "./Control.ts";
 
 // A transfer's flags as the command line gave them. An absent flag was
@@ -286,11 +287,11 @@ const refused = (
   flagName = "",
 ) => new TransferRefused({ reason, flag: flagName, binary });
 
-const isLeaveOut = Schema.is(ControlLeaveOutSchema);
 type TransferOptions = Omit<
   ViewInput<typeof controlContract, "send">,
   "projectId" | "worktreeId"
 >;
+const isLeaveOut = Schema.is(ControlLeaveOutSchema);
 const isSourceFate = Schema.is(ControlSourceFateSchema);
 
 // The options every transfer takes, as the control op takes them.
@@ -309,8 +310,7 @@ const transferOptions = (
 ): Effect.Effect<TransferOptions, TransferRefused> => {
   const fail = (reason: TransferRefused["reason"]) =>
     Effect.fail(refused(options.binary, reason));
-  const input: { -readonly [K in keyof TransferOptions]: TransferOptions[K] } =
-    {};
+  const input: Types.Mutable<TransferOptions> = {};
   if (options.device !== undefined && options.device !== "") {
     input["device"] = options.device;
   }

@@ -1,8 +1,8 @@
 // A Link over an RpcClient (rpcLink): what a connection hands the
-// contract clients (effectClient) once it is open, for the device link (deviceLink.ts),
-// the loopback (hostLink.ts) and the desktop window's link to its shell
-// (portLink.ts) alike. Every push the group serves is subscribed to as
-// the link is made, and fanned out here by channel.
+// contract clients (effectClient) once it is open, for the device link
+// (deviceLink.ts), the loopback (hostLink.ts) and the desktop window's
+// link to its shell (portLink.ts) alike. Every push the group serves
+// is subscribed to as the link is made, and fanned out here by channel.
 import {
   channelOf,
   type ContractCall,

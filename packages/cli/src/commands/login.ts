@@ -18,10 +18,6 @@ import { rest } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
 import { confirm, interactive } from "../prompt.ts";
 
-const host = Effect.map(Control.Control, (control) =>
-  control.client(loginContract),
-);
-
 const onLinux = byPlatform({
   darwin: Effect.fail(
     new UsageError({
@@ -35,15 +31,15 @@ export const login = Command.make("login", { rest }, () =>
   Effect.gen(function* () {
     yield* onLinux;
     const { json, stdoutColor, stderrColor } = yield* Effect.service(Output);
-    const account = yield* host;
-    const status = yield* account.status();
+    const app = (yield* Control.Control).client(loginContract);
+    const status = yield* app.status();
     if (status.signedIn) {
       if (json) return yield* emit({ ok: true, ...status });
       return yield* out(
-        `Already signed in. This machine is "${status.deviceName}" on your account.`,
+        `Already signed in. This machine is "${status.deviceName}" on your app.`,
       );
     }
-    const code = yield* account.start();
+    const code = yield* app.start();
     const { bold, dim } = styles(stderrColor);
     yield* note(
       code.verificationUriComplete === undefined
@@ -51,11 +47,11 @@ export const login = Command.make("login", { rest }, () =>
         : `To sign this machine in, open ${bold(code.verificationUriComplete)} and check it shows ${bold(code.userCode)}.`,
     );
     yield* note(dim("Waiting for you to approve it…"));
-    const signedIn = yield* account.finish(code);
+    const signedIn = yield* app.finish(code);
     if (json) return yield* emit({ ok: true, ...signedIn });
     const { green } = styles(stdoutColor);
     yield* out(
-      `${green("Signed in.")} This machine is "${signedIn.deviceName}" on your account.`,
+      `${green("Signed in.")} This machine is "${signedIn.deviceName}" on your app.`,
     );
   }),
 );
@@ -64,9 +60,9 @@ export const logout = Command.make("logout", { rest }, () =>
   Effect.gen(function* () {
     yield* onLinux;
     const { json } = yield* Effect.service(Output);
-    const account = yield* host;
-    const status = yield* account.status();
-    if (status.signedIn) yield* account.signOut();
+    const app = (yield* Control.Control).client(loginContract);
+    const status = yield* app.status();
+    if (status.signedIn) yield* app.signOut();
     if (json) return yield* emit({ ok: true, signedIn: false });
     yield* out(
       status.signedIn ? "Signed out." : "This machine isn't signed in.",
@@ -80,9 +76,10 @@ const rename = Command.make(
   ({ name }) =>
     Effect.gen(function* () {
       const { json } = yield* Effect.service(Output);
-      const status = yield* (yield* host).rename(name);
+      const app = (yield* Control.Control).client(loginContract);
+      const status = yield* app.rename(name);
       if (json) return yield* emit({ ok: true, ...status });
-      yield* out(`This machine is "${status.deviceName}" on your account.`);
+      yield* out(`This machine is "${status.deviceName}" on your app.`);
     }),
 );
 
@@ -98,11 +95,9 @@ const icon = Command.make(
           problem: `"${picked}" isn't an icon. Pick one of ${DEVICE_ICONS.join(", ")}.`,
         });
       }
-      const account = yield* host;
+      const app = (yield* Control.Control).client(loginContract);
       const status =
-        picked === undefined
-          ? yield* account.status()
-          : yield* account.setIcon(picked);
+        picked === undefined ? yield* app.status() : yield* app.setIcon(picked);
       if (json) return yield* emit({ ok: true, ...status });
       const { dim, green } = styles(stdoutColor);
       const line = `Icon: ${status.deviceIcon}`;
@@ -132,9 +127,10 @@ const remove = Command.make(
         );
         if (!sure) return yield* new Cancelled();
       }
-      const removed = yield* (yield* host).removeDevice(device);
+      const app = (yield* Control.Control).client(loginContract);
+      const removed = yield* app.removeDevice(device);
       if (json) return yield* emit({ ok: true, removed });
-      yield* out(`Removed "${removed}" from your account.`);
+      yield* out(`Removed "${removed}" from your app.`);
     }),
 );
 

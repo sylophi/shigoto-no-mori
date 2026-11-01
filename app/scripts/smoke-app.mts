@@ -59,6 +59,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { isolateGit } from "../../test/gitIsolation.ts";
 import {
   endAll,
+  isAlive,
   onRunEnd,
   own,
   signalIfAlive,
@@ -453,7 +454,7 @@ async function update(identity: string) {
     // update. Started again on the local list before then, it has the
     // update ready from the start. Then Settings' button is pressed, the
     // way the window presses it.
-    await stop(failed.pid, () => !signalIfAlive(failed.pid, 0));
+    await stop(failed.pid, () => !isAlive(failed.pid));
     // Gone, so the end has no pid of it to stop: another process may
     // take the number.
     opened.delete(failed.pid);
@@ -474,8 +475,7 @@ async function update(identity: string) {
     await until(() => {
       const status = statusIn(dataDir);
       return (
-        !signalIfAlive(pid, 0) ||
-        (status?.pid === pid && status.state.kind === "ready")
+        !isAlive(pid) || (status?.pid === pid && status.state.kind === "ready")
       );
     }, OPEN_WITHIN_MS);
     const ready = statusIn(dataDir);
@@ -492,7 +492,7 @@ async function update(identity: string) {
     const pressedAt = Date.now();
     const refused = pressRestartToUpdate(dataDir);
     if (refused !== null) fail(`Restart to update failed: ${refused}`);
-    if (!(await until(() => !signalIfAlive(pid, 0), RESTART_WITHIN_MS))) {
+    if (!(await until(() => !isAlive(pid), RESTART_WITHIN_MS))) {
       fail("the app answered Restart to update and didn't quit");
     }
     opened.delete(pid);
@@ -525,9 +525,7 @@ async function update(identity: string) {
   } finally {
     chmodSync(installedDir, 0o755);
     if (!exited && child.pid !== undefined) await stop(child.pid, () => exited);
-    await Promise.all(
-      [...opened].map((pid) => stop(pid, () => !signalIfAlive(pid, 0))),
-    );
+    await Promise.all([...opened].map((pid) => stop(pid, () => !isAlive(pid))));
     server.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -583,7 +581,7 @@ async function updateInstalled(
     throw new Error(`the installed app's update: ${message}`);
   };
   const before = statusIn(dataDir);
-  if (before === null || !signalIfAlive(before.pid, 0)) {
+  if (before === null || !isAlive(before.pid)) {
     fail(`${installed} isn't running on ${dataDir}`);
   }
   if (!signedIn()) fail("the installed app isn't signed in");
@@ -606,7 +604,7 @@ async function updateInstalled(
       `tell application id "${bundleIdOf(installed)}" to quit`,
     ]);
     const quitting = before.pid;
-    if (!(await until(() => !signalIfAlive(quitting, 0), STAGE_WITHIN_MS))) {
+    if (!(await until(() => !isAlive(quitting), STAGE_WITHIN_MS))) {
       fail("the installed app didn't quit");
     }
     owed = true;
@@ -638,7 +636,7 @@ async function updateInstalled(
       return (
         status !== null &&
         status.pid !== ready.pid &&
-        signalIfAlive(status.pid, 0) &&
+        isAlive(status.pid) &&
         status.appVersion === next &&
         versionOf(installed) === next
       );
@@ -679,13 +677,13 @@ async function reopenOnRealFeed(installed: string, dataDir: string) {
     // By its executable: the status can still name the app before.
     const running =
       runningFrom(executableIn(installed)) ?? statusIn(dataDir)?.pid;
-    if (running !== undefined && signalIfAlive(running, 0)) {
+    if (running !== undefined && isAlive(running)) {
       execFileSync("osascript", [
         "-e",
         `tell application id "${bundleIdOf(installed)}" to quit`,
       ]);
       // A busy app asks first.
-      if (!(await until(() => !signalIfAlive(running, 0), STAGE_WITHIN_MS))) {
+      if (!(await until(() => !isAlive(running), STAGE_WITHIN_MS))) {
         console.error(`the installed app didn't quit: ${byHand}`);
         return;
       }

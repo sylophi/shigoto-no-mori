@@ -32,13 +32,13 @@ export function ScriptLaunchRowView({
 
       {/* inert keeps the natural-width copy out of the tab order and the
           accessibility tree, since pointer-events-none alone leaves the
-          duplicated buttons focusable. The wrapper is pinned to the row's width and
-          clips: a left-0 absolute nowrap box shrink-wraps to its full
+          duplicated buttons focusable. The wrapper is pinned to the row's width
+          and clips: a left-0 absolute nowrap box shrink-wraps to its full
           content width, so unclipped it widens the scroll pane's scrollable
           area (horizontal scrollbar). The observed inner div stays w-max so
-          pill-width changes (font swap, doubutsu weight remap) resize it
-          and re-trigger measurement even while it overflows the wrapper.
-          Clipping doesn't affect the children's measured rects. */}
+          pill-width changes (font swap, doubutsu weight remap) resize it and
+          re-trigger measurement even while it overflows the wrapper. Clipping
+          doesn't affect the children's measured rects. */}
       <div
         aria-hidden
         inert

@@ -26,6 +26,7 @@ export function CreateOnSection({ project }: { project: Project }) {
   // no grant, its folder gone). The list ticks the pick and says so.
   const lands = quickCreateTarget(holders, picked);
   const pickedHolder = holders.find((holder) => holder.deviceId === picked);
+  const pickBlocked = pickedHolder?.block !== undefined;
 
   return (
     <CreateOnSectionView
@@ -33,7 +34,7 @@ export function CreateOnSection({ project }: { project: Project }) {
       blockReasons={BLOCK_REASON}
       current={picked ?? lands?.deviceId}
       waiting={
-        pickedHolder?.block !== undefined && lands
+        pickBlocked && lands
           ? { picked: pickedHolder.label, fallback: lands.label }
           : null
       }

@@ -239,12 +239,11 @@ export const layer = Layer.effect(
     // Ours: a dead instance's, or this pid's from a session before. A
     // live instance's are running right now, with a window attached.
     const left = yield* recorded.list.pipe(
-      Effect.flatMap((records) =>
-        Effect.filter(records, (record) =>
-          Effect.map(
-            Processes.pidAlive(record.ownerPid),
-            (alive) => record.ownerPid === ownerPid || !alive,
-          ),
+      Effect.map((records) =>
+        records.filter(
+          (record) =>
+            record.ownerPid === ownerPid ||
+            !Processes.isPidAlive(record.ownerPid),
         ),
       ),
       Effect.tap((records) => recorded.remove(records.map((r) => r.runId))),

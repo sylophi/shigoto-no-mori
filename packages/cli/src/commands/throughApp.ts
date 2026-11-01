@@ -36,21 +36,18 @@ const throughApp = Effect.fnUntraced(function* <E, R>(
   );
 });
 
-const app = Effect.map(Control.Control, (control) =>
-  control.client(worktreesContract),
-);
-
 export const moveWorktree = (
   here: Worktrees.Here,
   located: Worktrees.Located,
   destination: string,
 ) =>
   Effect.gen(function* () {
+    const app = (yield* Control.Control).client(worktreesContract);
     const worktrees = yield* Worktrees.Worktrees;
     return yield* throughApp(
       here,
       located,
-      (yield* app).relocate({
+      app.relocate({
         projectId: located.project.id,
         worktreeId: located.worktree.id,
         destinationPath: destination,
@@ -65,11 +62,12 @@ export const renameWorktree = (
   name: string,
 ) =>
   Effect.gen(function* () {
+    const app = (yield* Control.Control).client(worktreesContract);
     const worktrees = yield* Worktrees.Worktrees;
     return yield* throughApp(
       here,
       located,
-      (yield* app).rename({
+      app.rename({
         projectId: located.project.id,
         worktreeId: located.worktree.id,
         name,

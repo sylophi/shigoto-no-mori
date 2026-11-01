@@ -72,15 +72,15 @@ export function PullRequestIdentityView({
         className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
       >
         {metaRow(showUpdated ? updatedLabel : null)}
-        {/* inert keeps the natural-width measurer out of the tab order
-            and the accessibility tree, since pointer-events-none alone
-            leaves the duplicated button focusable. The wrapper is pinned to the
-            row's width and clips: a left-0 absolute nowrap box
-            shrink-wraps to its full content width, so unclipped it widens
-            the scroll pane's scrollable area (horizontal scrollbar). The
-            observed inner div stays w-max so content-width changes (font
-            swap, doubutsu weight remap) resize it and re-trigger
-            measurement. Its scrollWidth reports the full natural width. */}
+        {/* inert keeps the natural-width measurer out of the tab order and the
+            accessibility tree, since pointer-events-none alone leaves the
+            duplicated button focusable. The wrapper is pinned to the row's
+            width and clips: a left-0 absolute nowrap box shrink-wraps to its
+            full content width, so unclipped it widens the scroll pane's
+            scrollable area (horizontal scrollbar). The observed inner div stays
+            w-max so content-width changes (font swap, doubutsu weight remap)
+            resize it and re-trigger measurement. Its scrollWidth reports the
+            full natural width. */}
         <div
           aria-hidden
           inert
