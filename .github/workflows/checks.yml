@@ -26,18 +26,9 @@ jobs:
       # cannot change what runs here.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
       # Only the two binaries are needed, so no install scripts: that
       # skips the Electron download and the app's own postinstall.
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: ./.github/actions/install-workspace
 
       - name: Lint
         run: pnpm run check:lint
@@ -54,16 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: ./.github/actions/install-workspace
 
       - name: Knip
         run: pnpm run check:knip
@@ -77,17 +59,8 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
       # The typecheck reads sources and types only.
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: ./.github/actions/install-workspace
 
       - name: Typecheck
         run: pnpm run check:typecheck
@@ -111,14 +84,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
       # file-sync/go.mod asks for the newest Go of the modules. The cache
       # key matches release.yml's so the two share an entry.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -128,9 +93,8 @@ jobs:
             file-sync/go.sum
             nativefs/go.sum
 
-      - name: Install dependencies
+      - uses: ./.github/actions/install-workspace
         id: install
-        run: pnpm install --frozen-lockfile --ignore-scripts
 
       # The terminal binary is built with Bun.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -176,14 +140,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
       # file-sync/go.mod asks for the newest Go of the modules.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -201,10 +157,10 @@ jobs:
       # window). The app's own postinstall still runs: the proofs that
       # start scripts need node-pty's spawn-helper made executable, and
       # on Linux its addon compiled, which ships no Linux prebuild.
-      - name: Install dependencies
-        run: |
-          pnpm install --frozen-lockfile --ignore-scripts
-          pnpm -C app run postinstall
+      - uses: ./.github/actions/install-workspace
+
+      - name: App postinstall
+        run: pnpm -C app run postinstall
 
       - name: Proofs
         run: pnpm run check:proofs
