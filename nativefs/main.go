@@ -4,7 +4,7 @@
 //
 //	nativefs clone [-stdin] <src> <dst>   copy-on-write clone of a tree, mode and mtime kept
 //	nativefs exchange <a> <b>             the two swapped in one step
-//	nativefs flags [-stdin] [-clear] <root>   the file flags a checkout's files don't carry, cleared
+//	nativefs clear-flags [-stdin] <root>  the file flags a checkout's files don't carry, cleared
 //	nativefs xattrs [-stdin] [-strip] <root>  the xattr names the OS doesn't stamp, stripped
 //	nativefs cloneable [-stdin] <root>    whether the volume can clone
 //	nativefs lstat [-stdin] [-private] [-skip <dir>...] <root>  lstat(2): what git's index records, the flags, blocks and links
@@ -18,11 +18,10 @@
 // Every entry is one NDJSON line on stdout, in no particular order,
 // keyed by its path relative to the root ("." for the root):
 //
-//	{"path":"a/b","flags":32}
+//	{"path":"a/b"}
 //	{"path":"a/c","error":{"code":"ENOENT","message":"no such file or directory"}}
 //
-// With -clear or -strip a line reports the flags or names as found,
-// before they went.
+// With -strip a line reports the names as found, before they went.
 // A directory a walk can't list adds an error line under its own path.
 // Exit status 0 means every entry was answered, 2 a usage error, 1 a
 // failure reading stdin or writing stdout.
@@ -52,11 +51,6 @@ func main() {
 
 type cloned struct {
 	Path string `json:"path"`
-}
-
-type flagged struct {
-	Path  string `json:"path"`
-	Flags uint32 `json:"flags"`
 }
 
 type attributed struct {
@@ -129,15 +123,9 @@ var verbs = map[string]verb{
 			return cloned{rel}, cloneTree(filepath.Join(roots[0], rel), filepath.Join(roots[1], rel))
 		}
 	}},
-	"flags": {roots: 1, walks: true, op: func(set *flag.FlagSet) op {
-		clear := set.Bool("clear", false, "clear the flags the owner may")
+	"clear-flags": {roots: 1, walks: true, op: func(*flag.FlagSet) op {
 		return func(roots []string, rel string) (any, error) {
-			p := filepath.Join(roots[0], rel)
-			flags, err := fileFlags(p)
-			if err == nil && *clear && flags != 0 {
-				err = clearFlags(p)
-			}
-			return flagged{rel, flags}, err
+			return cloned{rel}, clearFlags(filepath.Join(roots[0], rel))
 		}
 	}},
 	"xattrs": {roots: 1, walks: true, op: func(set *flag.FlagSet) op {
@@ -194,7 +182,7 @@ var verbs = map[string]verb{
 	}},
 }
 
-const usage = "usage: nativefs clone|exchange|flags|xattrs|cloneable|lstat [-stdin] [-clear|-strip|-private] <root> [<dst>]"
+const usage = "usage: nativefs clone|exchange|clear-flags|xattrs|cloneable|lstat [-stdin] [-strip|-private] <root> [<dst>]"
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {

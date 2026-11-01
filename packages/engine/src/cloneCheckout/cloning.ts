@@ -60,7 +60,7 @@ export const makeCloning = ({
         Effect.catch(() =>
           Effect.gen(function* () {
             yield* nativeFs
-              .flags({ root: target, clear: true })
+              .clearFlags({ root: target })
               .pipe(Stream.runDrain, Effect.ignore);
             const entries = yield* nativeFs.lstat({ root: target }).pipe(
               Stream.runCollect,
@@ -470,7 +470,7 @@ export const makeCloning = ({
       if (keep.length > 0) {
         const folders = keep.map(({ rel }) => rel);
         yield* nativeFs
-          .flags({ root: worktree, paths: folders, clear: true })
+          .clearFlags({ root: worktree, paths: folders })
           .pipe(Stream.runDrain);
         yield* nativeFs
           .xattrs({ root: worktree, paths: folders, strip: true })

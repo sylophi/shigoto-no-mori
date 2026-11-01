@@ -21,7 +21,7 @@ export class NativeFsError extends Schema.TaggedError<NativeFsError>()(
     method: Schema.Literals([
       "clone",
       "exchange",
-      "flags",
+      "clearFlags",
       "xattrs",
       "cloneable",
       "lstat",
@@ -45,11 +45,6 @@ const EntryError = Schema.Struct({
 const Failed = Schema.Struct({ path: Schema.String, error: EntryError });
 
 const Cloned = Schema.Struct({ path: Schema.String });
-
-const Flags = Schema.Struct({
-  path: Schema.String,
-  flags: Schema.Int,
-});
 
 const Xattrs = Schema.Struct({
   path: Schema.String,
@@ -92,8 +87,9 @@ const Cloneability = Schema.Struct({
 export type Entry<A> = A | typeof Failed.Type;
 
 // `paths` are relative to the root (clone: to both roots). Without
-// them the reads walk the whole tree under the root, the root included
-// as ".", and clone and cloneable answer for the root itself.
+// them clearFlags, xattrs and lstat walk the whole tree under the root,
+// the root included as ".", and clone and cloneable answer for the root
+// itself.
 type Target = {
   readonly root: string;
   readonly paths?: readonly string[] | undefined;
@@ -116,11 +112,11 @@ export class NativeFs extends Context.Service<
       readonly a: string;
       readonly b: string;
     }) => Effect.Effect<Entry<typeof Cloned.Type>, NativeFsError>;
-    // The file flags a checkout's own files don't carry, as found.
-    // `clear` then removes the ones the owner may.
-    readonly flags: (
-      input: Target & { readonly clear?: boolean | undefined },
-    ) => Stream.Stream<Entry<typeof Flags.Type>, NativeFsError>;
+    // Removes the file flags a checkout's own files don't carry, the ones
+    // the owner may.
+    readonly clearFlags: (
+      input: Target,
+    ) => Stream.Stream<Entry<typeof Cloned.Type>, NativeFsError>;
     // Extended attribute names as found, but the one the OS stamps on
     // whatever this process writes. `strip` then removes them.
     readonly xattrs: (
@@ -259,14 +255,8 @@ const make = (binary: string) =>
         }
         return line.value;
       }),
-      flags: ({ root, paths, clear }) =>
-        run(
-          "flags",
-          ["flags", ...(clear ? ["-clear"] : [])],
-          [root],
-          paths,
-          lineOf(Flags),
-        ),
+      clearFlags: ({ root, paths }) =>
+        run("clearFlags", ["clear-flags"], [root], paths, lineOf(Cloned)),
       xattrs: ({ root, paths, strip }) =>
         run(
           "xattrs",

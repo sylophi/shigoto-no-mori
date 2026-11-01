@@ -40,15 +40,6 @@ func statFlags(st *unix.Stat_t) uint32 {
 	return st.Flags &^ keptFlags
 }
 
-// p's own file flags (st_flags) but keptFlags, a symlink's included.
-func fileFlags(p string) (uint32, error) {
-	var st unix.Stat_t
-	if err := unix.Lstat(p, &st); err != nil {
-		return 0, err
-	}
-	return statFlags(&st), nil
-}
-
 // The flags clearing removes: the owner's (immutable, hidden, ...) but
 // keptFlags. The system's (an iCloud placeholder, restricted) only root
 // may change, so they stay, and asking to drop them would fail the
