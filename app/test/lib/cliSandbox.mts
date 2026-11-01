@@ -10,13 +10,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { GIT_IDENTITY } from "../../../test/gitIsolation.ts";
 import { createCliRunner, scrubProcessGitEnv } from "./checkKit.mts";
-import {
-  addProject,
-  builtSm,
-  smBinaryPath,
-  type WiredHostCli,
-  wireHostCli,
-} from "./smBinary.mts";
+import { addProject, builtSm, hostEngine, smBinaryPath } from "./smBinary.mts";
 
 const execFileP = promisify(execFile);
 
@@ -41,7 +35,6 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
   // paths (/var/folders is a symlink on macOS).
   const sandbox = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
   const dataDir = join(sandbox, "data");
-  const smBinary = smBinaryPath();
 
   // The kit's scrub (no inherited GIT_*, config pinned) applied to
   // process.env itself rather than a copy: the host modules under test
@@ -55,34 +48,17 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
   const baseEnv = { ...process.env };
   const smEnv = { ...baseEnv, SHIGOMORI_DATA_DIR: dataDir, ...extraSmEnv };
 
-  const gitOpts = (cwd: string) => ({
-    cwd,
-    env: baseEnv,
-    maxBuffer: 16 * 1024 * 1024,
-  });
-
   async function git(
     cwd: string,
     args: string[],
   ): Promise<{ stdout: string; stderr: string }> {
     try {
       return await execFileP("git", args, {
-        ...gitOpts(cwd),
+        cwd,
+        env: baseEnv,
+        maxBuffer: 16 * 1024 * 1024,
         encoding: "utf8",
       });
-    } catch (error) {
-      throw gitFailure(cwd, args, error);
-    }
-  }
-
-  // git's stdout as raw bytes, for output that is not text (a blob).
-  async function gitBytes(cwd: string, args: string[]): Promise<Buffer> {
-    try {
-      const { stdout } = await execFileP("git", args, {
-        ...gitOpts(cwd),
-        encoding: "buffer",
-      });
-      return stdout;
     } catch (error) {
       throw gitFailure(cwd, args, error);
     }
@@ -146,21 +122,17 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
   }
 
   // The terminal binary, on the same data dir.
-  const { runCli, sm } = createCliRunner(smBinary, smEnv);
-  let wired: WiredHostCli | undefined;
+  const { runCli, sm } = createCliRunner(smBinaryPath(), smEnv);
+  let engine: { close: () => Promise<void> } | undefined;
 
   return {
     sandbox,
     dataDir,
-    smBinary,
-    baseEnv,
     smEnv,
     git,
-    gitBytes,
     gitOut,
     commitFile,
     addWorktree,
-    disableAutoGc,
     initRepo,
     cloneRepo,
     runCli,
@@ -172,7 +144,7 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
     // Points the host at the sandbox's data dir and brings the engine
     // up on it, which `remove` closes.
     async useCli(): Promise<void> {
-      wired = await wireHostCli(dataDir, extraSmEnv);
+      engine = await hostEngine(dataDir, join(builtSm(), "..", "nativefs"));
     },
     // Registers a repo as a project through the terminal binary,
     // returning its id.
@@ -180,7 +152,7 @@ export function cliSandbox(prefix: string, extraSmEnv: NodeJS.ProcessEnv = {}) {
       return (await addProject(sm, path)).id;
     },
     remove: async () => {
-      await wired?.close();
+      await engine?.close();
       rmSync(sandbox, { recursive: true, force: true });
     },
   };

@@ -7,7 +7,6 @@
 // the proofs after the first in a run skip the build.
 import * as Schema from "effect/Schema";
 import assert from "node:assert/strict";
-import { join } from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Migration from "@shigomori/engine/Migration";
 import * as Layer from "effect/Layer";
@@ -17,7 +16,7 @@ import {
   ProjectSchema,
   type Project,
 } from "@shigomori/contracts/schemas/project";
-import { createCliRunner, type CliRunner } from "./checkKit.mts";
+import type { CliRunner } from "./checkKit.mts";
 import {
   binaryPath,
   builtBinary,
@@ -26,34 +25,6 @@ import {
 export const smBinaryPath = () => binaryPath("prod");
 
 export const builtSm = () => builtBinary("prod");
-
-// The filesystem helper beside the built binary.
-function builtNativefs(): string {
-  return join(builtSm(), "..", "nativefs");
-}
-
-export type WiredHostCli = CliRunner & {
-  binary: string;
-  env: NodeJS.ProcessEnv;
-  // Closes the engine, its store with it.
-  close: () => Promise<void>;
-};
-
-// Points the host at `dataDir` and brings the engine up on it, as the
-// app's graph does at launch, until `close`. The terminal
-// binary runs on the same data dir. Imported lazily so a proof can
-// scrub its environment before any host module loads. `extraEnv` lands
-// on top of the env the binary runs under.
-export async function wireHostCli(
-  dataDir: string,
-  extraEnv: NodeJS.ProcessEnv = {},
-): Promise<WiredHostCli> {
-  const binary = builtSm();
-  const env = { ...process.env, SHIGOMORI_DATA_DIR: dataDir, ...extraEnv };
-  const engine = await hostEngine(dataDir, builtNativefs());
-  const { runCli, sm } = createCliRunner(binary, env);
-  return { binary, env, runCli, sm, close: engine.close };
-}
 
 // The host pointed at `dataDir` with the engine up on it, as the app's
 // graph does at launch, until `close`. `nativefs` only matters to a proof

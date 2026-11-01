@@ -15,7 +15,6 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import type { HandlerContext } from "../../shared/ipc/transport.ts";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as TestClock from "effect/testing/TestClock";
@@ -153,20 +152,17 @@ export async function settleTurns(): Promise<void> {
   }
 }
 
-// A TestClock for checks that drive supervised loops headlessly (the
-// direct keeper, the supervisor): hand `context` to the loop, and
-// `advance` moves the clock, runs whatever was due, then lets promise
-// chains complete before assertions, as `settle` does on its own.
+// A TestClock for a check that drives a supervised loop headlessly:
+// hand `context` to the loop, and `advance` moves the clock, runs
+// whatever was due, then lets promise chains complete before
+// assertions.
 export function testClock() {
   const runtime = ManagedRuntime.make(TestClock.layer());
-  const settle = settleTurns;
   return {
     context: runtime.runSync(Effect.context<never>()),
-    now: () => runtime.runSync(Clock.currentTimeMillis),
-    settle,
     advance: async (ms: number) => {
       await runtime.runPromise(TestClock.adjust(ms));
-      await settle();
+      await settleTurns();
     },
   };
 }
