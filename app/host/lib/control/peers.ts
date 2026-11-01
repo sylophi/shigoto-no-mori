@@ -196,9 +196,9 @@ const standingIn = (
     : standing;
 };
 
-// Each peer's projects, for a clone from one: its standing says
-// whether it could serve one (a clone reads the peer's checkout over
-// its grant).
+// Each peer's projects beside its standing. With `grant`, a peer
+// without command access reads as one that can't serve (a clone reads
+// the peer's checkout over its grant).
 export const projectsOnPeers = (devices: DeviceInfo[], grant: boolean) =>
   Effect.flatMap(directPeers, (direct) =>
     Effect.forEach(
