@@ -14,63 +14,7 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import type { HTMLProps } from "@base-ui/react/types";
 import { isTruncated } from "../hooks/useIsTruncated.ts";
 
-import { cn } from "../lib/utils.ts";
 import { useThemeRoot } from "../root.tsx";
-
-function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
-}
-
-// No data-slot: it would replace the wrapped element's own (see
-// DropdownMenuTrigger). 500ms before each tooltip shows. There is no
-// Tooltip.Provider: its grouping opens the next tooltip at once, so
-// sweeping the pointer past one hint pops up every hint it crosses.
-function TooltipTrigger({
-  delay = 500,
-  ...props
-}: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger delay={delay} {...props} />;
-}
-
-function TooltipContent({
-  className,
-  side = "top",
-  sideOffset = 4,
-  align = "center",
-  alignOffset = 0,
-  anchor,
-  children,
-  ...props
-}: TooltipPrimitive.Popup.Props &
-  Pick<
-    TooltipPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
-  >) {
-  return (
-    <TooltipPrimitive.Portal container={useThemeRoot()}>
-      <TooltipPrimitive.Positioner
-        anchor={anchor}
-        align={align}
-        alignOffset={alignOffset}
-        side={side}
-        sideOffset={sideOffset}
-        className="isolate z-50"
-      >
-        <TooltipPrimitive.Popup
-          data-slot="tooltip-content"
-          className={cn(
-            "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-            className,
-          )}
-          {...props}
-        >
-          {children}
-          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
-        </TooltipPrimitive.Popup>
-      </TooltipPrimitive.Positioner>
-    </TooltipPrimitive.Portal>
-  );
-}
 
 // The browser's own tooltip is banned (no-native-tooltip in
 // lint/rules/no-native-tooltip.mts). A wrapper that passes its props to
@@ -84,7 +28,7 @@ type TooltipChild = ReactElement<
 >;
 
 // Drop-in replacement for a native `title` hint: wraps one element
-// with a styled tooltip without adding DOM (TooltipTrigger merges onto
+// with a styled tooltip without adding DOM (the trigger merges onto
 // the child via the render prop, so the child needs to accept ref and
 // event props on its root, as plain DOM elements always do). A falsy tip
 // shows nothing, mirroring `title={undefined}`, and keeps the same
@@ -105,7 +49,7 @@ type TooltipChild = ReactElement<
 // child, so keep it to plain text that nothing anchors to or focuses.
 function SimpleTooltip({
   tip,
-  delay,
+  delay = 500,
   whenTruncated,
   lazy,
   children,
@@ -118,6 +62,7 @@ function SimpleTooltip({
 }) {
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const [armed, setArmed] = useState(false);
+  const themeRoot = useThemeRoot();
   const childDisabled = Boolean(children.props.disabled);
   // Taken off the props, not read through them: a `.ref` member read in
   // render is a ref read to the compiler.
@@ -131,7 +76,7 @@ function SimpleTooltip({
     });
   }
   return (
-    <Tooltip
+    <TooltipPrimitive.Root
       disabled={!tip}
       onOpenChange={(open, details) => {
         if (open && whenTruncated && !overflows(details.trigger)) {
@@ -139,8 +84,13 @@ function SimpleTooltip({
         }
       }}
     >
+      {/* No data-slot on the trigger: it would replace the wrapped
+          element's own (see DropdownMenuTrigger). There is no
+          Tooltip.Provider: its grouping opens the next tooltip at once,
+          so sweeping the pointer past one hint pops up every hint it
+          crosses. */}
       {childDisabled ? (
-        <TooltipTrigger
+        <TooltipPrimitive.Trigger
           render={
             <span ref={wrapperRef} className="contents">
               {children}
@@ -149,28 +99,38 @@ function SimpleTooltip({
           delay={delay}
         />
       ) : (
-        <TooltipTrigger
+        <TooltipPrimitive.Trigger
           ref={childRef}
           render={withoutOpenState(children)}
           delay={delay}
         />
       )}
-      {/* A contents span has no box to place the tip against, so it
-          points at the child. */}
-      <TooltipContent
-        anchor={
-          childDisabled
-            ? () => wrapperRef.current?.firstElementChild ?? null
-            : undefined
-        }
-      >
-        {/* One wrapper span keeps a mixed text/element tip a single
-            flex item: TooltipContent is inline-flex with a gap, which
-            would otherwise space out every text run. pre-line keeps a
-            tip's \n, as a native `title` does. */}
-        <span className="whitespace-pre-line">{tip}</span>
-      </TooltipContent>
-    </Tooltip>
+      <TooltipPrimitive.Portal container={themeRoot}>
+        {/* A contents span has no box to place the tip against, so it
+            points at the child. */}
+        <TooltipPrimitive.Positioner
+          anchor={
+            childDisabled
+              ? () => wrapperRef.current?.firstElementChild ?? null
+              : undefined
+          }
+          sideOffset={4}
+          className="isolate z-50"
+        >
+          <TooltipPrimitive.Popup
+            data-slot="tooltip-content"
+            className="z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95"
+          >
+            {/* One wrapper span keeps a mixed text/element tip a single
+                flex item: the popup is inline-flex with a gap, which
+                would otherwise space out every text run. pre-line keeps
+                a tip's \n, as a native `title` does. */}
+            <span className="whitespace-pre-line">{tip}</span>
+            <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
+          </TooltipPrimitive.Popup>
+        </TooltipPrimitive.Positioner>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
   );
 }
 
