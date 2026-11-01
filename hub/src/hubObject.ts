@@ -235,9 +235,10 @@ export class DeviceHub extends DurableObject<Env> {
             Effect.gen(function* () {
               const tickets = yield* Tickets.Tickets;
               const registry = yield* Registry.Registry;
-              // Taken once the permit is held, so a wait behind another
+              // Read once the permit is held, so a wait behind another
               // admission counts against the ticket's life.
-              const holder = yield* tickets.take(random);
+              const now = yield* Clock.currentTimeMillis;
+              const holder = yield* tickets.take(random, now);
               if (holder === null) return null;
               // The device must still be enrolled, under the credential
               // the ticket was minted with: what keeps a revoked or
@@ -252,7 +253,7 @@ export class DeviceHub extends DurableObject<Env> {
                 device.public_key !== null
                 ? {
                     ...holder,
-                    now: yield* Clock.currentTimeMillis,
+                    now,
                     publicKey: device.public_key,
                     // Every browser profile enrolls as the web platform.
                     web: device.platform === WEB_PLATFORM,

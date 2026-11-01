@@ -519,12 +519,17 @@ function buildHandler(env: Env) {
   return HttpRouter.toWebHandler(api, { disableLogger: true }).handler;
 }
 
-// Built on the isolate's first request, the first time env is at hand.
-let handler: ReturnType<typeof buildHandler> | undefined;
+// One handler per env: an isolate can outlive a bindings or secrets
+// update, which hands it a new env.
+const builtHandlers = new WeakMap<Env, ReturnType<typeof buildHandler>>();
 
 export default {
   async fetch(request, env, ctx) {
-    handler ??= buildHandler(env);
+    let handler = builtHandlers.get(env);
+    if (handler === undefined) {
+      handler = buildHandler(env);
+      builtHandlers.set(env, handler);
+    }
     return await handler(
       request,
       Context.make(WaitUntil, (promise) => ctx.waitUntil(promise)),

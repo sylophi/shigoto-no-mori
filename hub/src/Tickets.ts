@@ -36,9 +36,10 @@ export class Tickets extends Context.Service<
     // answers its random half.
     readonly mint: (holder: TicketHolder) => Effect.Effect<string, SqlError>;
     // Burns the ticket, answering who it was minted for while it is
-    // unexpired, so a replay or a late dial gets null.
+    // unexpired at `now`, so a replay or a late dial gets null.
     readonly take: (
       random: string,
+      now: number,
     ) => Effect.Effect<TicketHolder | null, SqlError>;
   }
 >()("sm/hub/Tickets") {}
@@ -91,7 +92,10 @@ const make = Effect.gen(function* () {
     return random;
   });
 
-  const take = Effect.fn("Tickets.take")(function* (random: string) {
+  const take = Effect.fn("Tickets.take")(function* (
+    random: string,
+    now: number,
+  ) {
     // Single use: the ticket is burned before any validity verdict, so
     // a replay races nothing.
     const rows = yield* sql<{
@@ -102,12 +106,7 @@ const make = Effect.gen(function* () {
     }>`DELETE FROM tickets WHERE random = ${random}
        RETURNING device_id, connection_id, credential_hash, expires_at`;
     const [row] = rows;
-    if (
-      row === undefined ||
-      row.expires_at <= (yield* Clock.currentTimeMillis)
-    ) {
-      return null;
-    }
+    if (row === undefined || row.expires_at <= now) return null;
     return {
       deviceId: row.device_id,
       connectionId: row.connection_id,
