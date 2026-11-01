@@ -85,3 +85,5 @@ export const IDLE_RUN: ScriptRunState = {
   endedAt: null,
   cancelling: false,
 };
+
+export const noop = () => {};

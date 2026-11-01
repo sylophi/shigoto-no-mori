@@ -8,8 +8,7 @@ import {
   type MigrationPose,
 } from "../fixtures/stepsFixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
-
-const noop = () => {};
+import { noop } from "./world.ts";
 
 function migration(pose: MigrationPose, retried = false) {
   return function MigrationScene() {

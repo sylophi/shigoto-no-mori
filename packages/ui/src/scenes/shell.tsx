@@ -10,8 +10,7 @@ import { NotFoundPageView } from "../views/NotFoundPageView.tsx";
 import { WhatsNewLinkView } from "../views/WhatsNewLinkView.tsx";
 import { SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-
-const noop = () => {};
+import { noop } from "./world.ts";
 
 // The home with no project, a fresh install's first screen.
 export function FirstRunScene() {

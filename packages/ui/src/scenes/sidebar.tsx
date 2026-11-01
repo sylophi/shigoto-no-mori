@@ -68,13 +68,12 @@ import {
   MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
+import { noop } from "./world.ts";
 
 // Which app draws the forest: the desktop window on Studio Mac, whose
 // own projects are local there, or the web shell, a browser to which
 // every machine is a peer.
 type SceneShell = "desktop" | "web";
-
-const noop = () => {};
 
 // What a settled sidebar marks with the default settings.
 const MARKS: SidebarMarks = {

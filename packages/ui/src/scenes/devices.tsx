@@ -48,11 +48,10 @@ import {
   LOCAL_DEVICE_ID,
   MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
-import { SceneWindowFrame } from "./frame.tsx";
+import { ScenePart, SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { deviceById } from "./world.ts";
+import { deviceById, noop } from "./world.ts";
 
-const noop = () => {};
 const ACCOUNT_ID = "user_2rin8xk3";
 const GRANTED = { granted: true, isLoading: false, canCommand: true };
 const REFUSED = { granted: false, isLoading: false, canCommand: false };
@@ -241,15 +240,6 @@ export function DevicesPageScene() {
   );
 }
 
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-2">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
-}
-
 // The page's other states: before sign-in, a build with no account
 // service, a removed device signing back in, a rename and a removal
 // under way, this machine not taking control, and a peer that cannot
@@ -259,7 +249,7 @@ export function DevicesPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-5">
-        <Part label="Loading">
+        <ScenePart label="Loading">
           <AccountLoadingView />
           <DeviceRegistryView
             account={
@@ -270,14 +260,14 @@ export function DevicesPartsScene() {
             self={null}
             list={{ state: "loading" }}
           />
-        </Part>
-        <Part label="Signed out">
+        </ScenePart>
+        <ScenePart label="Signed out">
           <SignedOutPanelView desktop signIn={signIn} />
-        </Part>
-        <Part label="No account service">
+        </ScenePart>
+        <ScenePart label="No account service">
           <NotConfiguredPanelView isDev desktop />
-        </Part>
-        <Part label="Removed, and the list refused">
+        </ScenePart>
+        <ScenePart label="Removed, and the list refused">
           <DeviceRegistryView
             account={
               <AccountIdentityView
@@ -300,10 +290,10 @@ export function DevicesPartsScene() {
                 "The device hub refused this request, so the device list is unavailable.",
             }}
           />
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-5">
-        <Part label="Renaming, removing, and not taking control">
+        <ScenePart label="Renaming, removing, and not taking control">
           <ul className="divide-y divide-border">
             {HERE &&
               row(HERE, {
@@ -339,16 +329,16 @@ export function DevicesPartsScene() {
                 ),
               })}
           </ul>
-        </Part>
-        <Part label="Control, before its first read">
+        </ScenePart>
+        <ScenePart label="Control, before its first read">
           <AcceptCommandsToggleView
             enabled={undefined}
             isError={false}
             pending={false}
             onChange={noop}
           />
-        </Part>
-        <Part label="A peer that can't be reached">
+        </ScenePart>
+        <ScenePart label="A peer that can't be reached">
           <div className="h-24 overflow-hidden rounded-lg border border-border">
             <RemoteScopeFrameView
               banner={
@@ -373,7 +363,7 @@ export function DevicesPartsScene() {
               action={<OpenDevicesButtonView desktop onClick={noop} />}
             />
           </div>
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );

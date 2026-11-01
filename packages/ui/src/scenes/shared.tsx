@@ -48,76 +48,96 @@ import {
   deviceTabs,
   FACE,
   IDLE_RUN,
+  noop,
   projectNamed,
   worktreeNamed,
 } from "./world.ts";
 
-const noop = () => {};
 const NOW = Date.now();
 const MINUTE = 60_000;
 
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 
-// shigoto-no-mori's Configure page, held on three devices: its tabs
-// lead the header, this device picked, over a form of the shared parts.
-export function ProjectPageScene() {
+// A page of shigoto-no-mori, held on three devices: its tabs lead the
+// header, this device picked.
+export function shigotoProjectPage({
+  title,
+  body,
+  allDevicesTab = false,
+}: {
+  title: string;
+  body: ReactNode;
+  allDevicesTab?: boolean;
+}) {
   return (
-    <SceneWindowFrame sidebar={<SceneSidebar view="projects" open />}>
+    <SceneWindowFrame
+      sidebar={<SceneSidebar view="projects" open />}
+      pathname="/projects"
+    >
       <ProjectDevicePageView
         projectName={SM.name}
-        title="Configure"
+        title={title}
         tabs={
           <DeviceTabBarView
             tabs={deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID])}
             selectedId={LOCAL_DEVICE_ID}
             onSelect={noop}
-            allDevicesTab
+            allDevicesTab={allDevicesTab}
           />
         }
         terrier
         showAllDevices={false}
-        body={
-          <>
-            <StaleDeviceNoteView note="Mini is offline, and its copy of this project loads when it reconnects." />
-            <div className="flex flex-col gap-6 p-6">
-              <section className="flex items-center justify-between gap-3">
-                <BranchComboboxView
-                  branches={{ local: ["main", "v3"], remote: [] }}
-                  fetching={false}
-                  value="main"
-                  onChange={noop}
-                  className="max-w-64"
-                />
-                <ScriptEnvPopoverView />
-              </section>
-              <ToggleRowView
-                checked
-                onCheckedChange={noop}
-                label="Run setup on new worktrees"
-                description="The setup script runs in each worktree as it is created."
-              />
-              <CustomLauncherInputView
-                launcher={{
-                  id: "lazygit",
-                  label: "lazygit",
-                  command: "lazygit",
-                }}
-                onChange={noop}
-                onRemove={noop}
-              />
-            </div>
-            <EditorFooterView
-              isDirty
-              isPending={false}
-              isSuccess={false}
-              onDiscard={noop}
-              onSave={noop}
-            />
-          </>
-        }
+        body={body}
       />
     </SceneWindowFrame>
   );
+}
+
+// shigoto-no-mori's Configure page over a form of the shared parts.
+export function ProjectPageScene() {
+  return shigotoProjectPage({
+    title: "Configure",
+    allDevicesTab: true,
+    body: (
+      <>
+        <StaleDeviceNoteView note="Mini is offline, and its copy of this project loads when it reconnects." />
+        <div className="flex flex-col gap-6 p-6">
+          <section className="flex items-center justify-between gap-3">
+            <BranchComboboxView
+              branches={{ local: ["main", "v3"], remote: [] }}
+              fetching={false}
+              value="main"
+              onChange={noop}
+              className="max-w-64"
+            />
+            <ScriptEnvPopoverView />
+          </section>
+          <ToggleRowView
+            checked
+            onCheckedChange={noop}
+            label="Run setup on new worktrees"
+            description="The setup script runs in each worktree as it is created."
+          />
+          <CustomLauncherInputView
+            launcher={{
+              id: "lazygit",
+              label: "lazygit",
+              command: "lazygit",
+            }}
+            onChange={noop}
+            onRemove={noop}
+          />
+        </div>
+        <EditorFooterView
+          isDirty
+          isPending={false}
+          isSuccess={false}
+          onDiscard={noop}
+          onSave={noop}
+        />
+      </>
+    ),
+  });
 }
 
 // A peer's project page with no tabs to pick: the chip names the peer,

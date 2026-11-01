@@ -3,7 +3,6 @@
 // worktree page, a move's toast, a rare villager's dialogue box and a
 // legend's letter. Faces are the scenes' stand-in (world.ts FACE): the
 // villager data is a download the fixtures don't hold.
-import type { ReactNode } from "react";
 import { SettingsPageView } from "../views/settings/SettingsFormView.tsx";
 import { VISITORS_TAB } from "../views/settings/settingsSections.ts";
 import { BirthdayBadgeView } from "../views/villagers/BirthdayBadgeView.tsx";
@@ -57,11 +56,10 @@ import {
   FAKE_VILLAGER_PROFILES,
   fakeVisitTally,
 } from "../fixtures/villagerFixtures.ts";
-import { SceneWindowFrame } from "./frame.tsx";
+import { ScenePart, SceneWindowFrame } from "./frame.tsx";
 import { settingsSidebar } from "./settings.tsx";
-import { FACE } from "./world.ts";
+import { FACE, noop } from "./world.ts";
 
-const noop = () => {};
 const ALBUM = buildAlbum(FAKE_VILLAGER_PROFILES, fakeVisitTally());
 
 const SECTIONS = [
@@ -169,15 +167,6 @@ function news(who: Speaker, words: string | null): MoveNews {
   };
 }
 
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
-}
-
 // Where villagers show up: a birthday party on a worktree page, the
 // toasts their moves send, a rare villager's dialogue box, a legend's
 // letter, and the album empty and loading.
@@ -186,7 +175,7 @@ export function VillagersPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-8 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-8">
-        <Part label="A birthday">
+        <ScenePart label="A birthday" gap={3}>
           <div className="relative h-40 overflow-hidden rounded-xl border border-border">
             <BuntingView color={RAYMOND.color} />
             <BalloonsView />
@@ -208,8 +197,8 @@ export function VillagersPartsScene() {
             <MovingBoxView className="w-10" />
             <NextArrowView />
           </div>
-        </Part>
-        <Part label="A move's toast">
+        </ScenePart>
+        <ScenePart label="A move's toast" gap={3}>
           <VillageToasterView onDismiss={noop}>
             <div className="flex w-80 items-start gap-3 rounded-lg border border-border bg-popover p-3">
               <ToastFacesView
@@ -234,14 +223,14 @@ export function VillagersPartsScene() {
             badge={<MovingBoxBadgeView />}
             joined={new Set()}
           />
-        </Part>
-        <Part label="The album, empty and loading">
+        </ScenePart>
+        <ScenePart label="The album, empty and loading" gap={3}>
           <NobodyYetView face={FACE} />
           <AlbumSkeletonView />
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-8">
-        <Part label="A special guest moves in">
+        <ScenePart label="A special guest moves in" gap={3}>
           <VillagerDialogueView
             news={news(LEIF, "I'm here to help the place grow!")}
             speaker={LEIF}
@@ -254,8 +243,8 @@ export function VillagersPartsScene() {
           </DialogueFrameView>
           <NameplateView>Raymond</NameplateView>
           <MoveCaptionView news={news(RAYMOND, null)} ink="#c27a3e" />
-        </Part>
-        <Part label="A legend writes">
+        </ScenePart>
+        <ScenePart label="A legend writes" gap={3}>
           <VillagerLetterView
             news={news(ISABELLE, "Welcome to the island!")}
             speaker={ISABELLE}
@@ -264,7 +253,7 @@ export function VillagersPartsScene() {
           <div className="relative h-24 overflow-hidden rounded-lg">
             <StationeryPrintView paper={stationeryFor("raymond")} still />
           </div>
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );

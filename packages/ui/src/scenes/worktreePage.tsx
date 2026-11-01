@@ -3,7 +3,6 @@
 // header go through.
 import { peerReadOnlyNote } from "../lib/commandAccessCopy.ts";
 import { defaultBinding } from "../lib/keymap.ts";
-import type { ReactNode } from "react";
 import { WorktreeKindIconView } from "../views/shared/WorktreeKindIconView.tsx";
 import { StaticMenu } from "../primitives/dropdown-menu.tsx";
 import { StaticPopover } from "../primitives/popover.tsx";
@@ -50,7 +49,7 @@ import type { PullRequest, Worktree } from "@shigomori/contracts/schemas";
 import { fakeStashes, LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
 import { FAKE_LAUNCHERS } from "../fixtures/settingsFixtures.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
-import { SceneWindowFrame } from "./frame.tsx";
+import { ScenePart, SceneWindowFrame } from "./frame.tsx";
 import { pullRequestLead } from "./pullRequests.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
 import {
@@ -59,9 +58,8 @@ import {
   scriptsSection,
   WorktreeSectionsPartsScene,
 } from "./worktreeSections.tsx";
-import { projectNamed, worktreeNamed } from "./world.ts";
+import { noop, projectNamed, worktreeNamed } from "./world.ts";
 
-const noop = () => {};
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 const HUMMINGBIRD = worktreeNamed(SM, "happy-hummingbird");
 const QUAIL = worktreeNamed(SM, "quiet-quail");
@@ -269,15 +267,6 @@ export function WorktreePageScene() {
   );
 }
 
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
-}
-
 // The page's parts in their other states: untitled work under its
 // branch, a rename, removal and its failures, a page locked by a
 // create, the tools' empty states, and the menus drawn open.
@@ -285,16 +274,16 @@ export function WorktreePagePartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex flex-col gap-5">
-        <Part label="Untitled">{branchTitle(QUAIL, false)}</Part>
-        <Part label="Stopped mid-rebase">
+        <ScenePart label="Untitled">{branchTitle(QUAIL, false)}</ScenePart>
+        <ScenePart label="Stopped mid-rebase">
           <BranchTitleView
             branch="49971ed"
             detached
             rebasing={QUAIL.branch}
             actions={null}
           />
-        </Part>
-        <Part label="Renaming">
+        </ScenePart>
+        <ScenePart label="Renaming">
           <BranchTitleView
             branch={QUAIL.branch}
             detached={false}
@@ -308,8 +297,8 @@ export function WorktreePagePartsScene() {
             }}
             actions={null}
           />
-        </Part>
-        <Part label="Titled, editable">
+        </ScenePart>
+        <ScenePart label="Titled, editable">
           <WorktreeHeaderView
             title="Retry port-pool leases"
             titleEdit={{
@@ -330,8 +319,8 @@ export function WorktreePagePartsScene() {
             onEdit={noop}
             pencilBeside
           />
-        </Part>
-        <Part label="Editing the title and description">
+        </ScenePart>
+        <ScenePart label="Editing the title and description">
           <EditableTitleView
             title="Retry port-pool leases"
             edit={{
@@ -350,8 +339,8 @@ export function WorktreePagePartsScene() {
             onCancel={noop}
             saveKeys={defaultBinding("save")}
           />
-        </Part>
-        <Part label="Renaming the folder">
+        </ScenePart>
+        <ScenePart label="Renaming the folder">
           <div className="flex text-xs text-muted-foreground">
             <WorktreeLocationView
               path={QUAIL.path}
@@ -364,8 +353,8 @@ export function WorktreePagePartsScene() {
               }}
             />
           </div>
-        </Part>
-        <Part label="Footer">
+        </ScenePart>
+        <ScenePart label="Footer">
           {footer({ kind: "cleanupRunning", cancelling: false })}
           {footer({
             kind: "needsForce",
@@ -407,8 +396,8 @@ export function WorktreePagePartsScene() {
             readOnlyNote={peerReadOnlyNote("MacBook")}
             optionsMenu={null}
           />
-        </Part>
-        <Part label="Tools">
+        </ScenePart>
+        <ScenePart label="Tools">
           <LauncherRowView
             entries={undefined}
             onLaunch={noop}
@@ -424,10 +413,10 @@ export function WorktreePagePartsScene() {
           />
           <LaunchSectionView scripts={null} scriptsLoading />
           <SortMenuView value="frequent" onChange={noop} onArrange={noop} />
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex flex-col gap-5">
-        <Part label="Agents">
+        <ScenePart label="Agents">
           <StaticMenu className="w-80">
             {(QUAIL.agentSessions ?? []).map((session) => (
               <SessionRowView
@@ -441,8 +430,8 @@ export function WorktreePagePartsScene() {
               />
             ))}
           </StaticMenu>
-        </Part>
-        <Part label="Options">
+        </ScenePart>
+        <ScenePart label="Options">
           <StaticPopover>
             <TransferActionsView
               part="option"
@@ -453,8 +442,8 @@ export function WorktreePagePartsScene() {
               onOpen={noop}
             />
           </StaticPopover>
-        </Part>
-        <Part label="A create, locking the page">
+        </ScenePart>
+        <ScenePart label="A create, locking the page">
           <div className="h-48 overflow-hidden rounded-lg border border-border">
             <WorktreeDetailView
               projectName={SM.name}
@@ -474,15 +463,15 @@ export function WorktreePagePartsScene() {
               footer={null}
             />
           </div>
-        </Part>
-        <Part label="No worktree">
+        </ScenePart>
+        <ScenePart label="No worktree">
           <div className="h-24">
             <WorktreeUnavailableView onRetry={noop} />
           </div>
           <div className="h-16">
             <WorktreeUnavailableView />
           </div>
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );

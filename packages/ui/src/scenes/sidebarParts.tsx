@@ -1,7 +1,6 @@
 // The sidebar's parts no settled sidebar shows at rest: its menus drawn
 // open, the New worktree list, a page's takeover, a drag, arranging,
 // and the marks a quiet fixture forest has no row for.
-import type { ReactNode } from "react";
 import { ActivityIconView } from "../views/sidebar/ActivityIconView.tsx";
 import { TerminalMarkView } from "../views/sidebar/TerminalMarkView.tsx";
 import { AgentWaitingMarkView } from "../views/sidebar/AgentWaitingMarkView.tsx";
@@ -42,19 +41,10 @@ import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { DropdownMenuItem, StaticMenu } from "../primitives/dropdown-menu.tsx";
 import { LOCAL_DEVICE_ID, MACBOOK_ID } from "../fixtures/fixtures.ts";
 import { projectRows } from "./sidebar.tsx";
-import { deviceById, projectNamed, worktreeNamed } from "./world.ts";
+import { deviceById, noop, projectNamed, worktreeNamed } from "./world.ts";
+import { ScenePart } from "./frame.tsx";
 
-const noop = () => {};
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
-
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
-}
 
 export function SidebarPartsScene() {
   const macbook = deviceById(MACBOOK_ID);
@@ -72,7 +62,7 @@ export function SidebarPartsScene() {
       className="grid h-full grid-cols-3 gap-6 bg-background p-6 text-foreground"
     >
       <div className="flex flex-col gap-6">
-        <Part label="Sort">
+        <ScenePart label="Sort">
           <StaticMenu>
             <SortOptionsView
               options={[
@@ -91,16 +81,16 @@ export function SidebarPartsScene() {
             </DropdownMenuItem>
           </StaticMenu>
           <WorktreeSortMenuView sort="recent" onPick={noop} />
-        </Part>
-        <Part label="Guide menu">
+        </ScenePart>
+        <ScenePart label="Guide menu">
           <StaticMenu>
             <SidebarGuideMenuItemsView
               choices={{ harnesses: ["claude", "codex"], terminals: [] }}
               onPick={noop}
             />
           </StaticMenu>
-        </Part>
-        <Part label="Worktree menu">
+        </ScenePart>
+        <ScenePart label="Worktree menu">
           <StaticMenu>
             <WorktreeMenuLeadView
               onGoToProject={noop}
@@ -118,8 +108,8 @@ export function SidebarPartsScene() {
               remove={{ armed: false, disabled: false, onClick: noop }}
             />
           </StaticMenu>
-        </Part>
-        <Part label="Marks">
+        </ScenePart>
+        <ScenePart label="Marks">
           <span className="flex items-center gap-2 text-3xs">
             <ActivityIconView kind="setup" />
             <ActivityIconView kind="failed" />
@@ -132,16 +122,16 @@ export function SidebarPartsScene() {
               worktree={{ ...worktree, changedCount: null }}
             />
           </span>
-        </Part>
-        <Part label="Dragging">
+        </ScenePart>
+        <ScenePart label="Dragging">
           <ProjectDragPreviewView project={SM} />
-        </Part>
-        <Part label="Listing">
+        </ScenePart>
+        <ScenePart label="Listing">
           <WorktreesLoadingView />
           <WorktreesErrorView />
-        </Part>
+        </ScenePart>
       </div>
-      <Part label="New worktree in">
+      <ScenePart label="New worktree in">
         <CreateMenuView
           open={false}
           onOpenChange={noop}
@@ -172,25 +162,25 @@ export function SidebarPartsScene() {
             )}
           />
         </div>
-      </Part>
+      </ScenePart>
       <div className="flex flex-col gap-6">
-        <Part label="Dev build">
+        <ScenePart label="Dev build">
           <SidebarHeaderView hasLocalHost showDevStyle onRevealProd={noop} />
-        </Part>
-        <Part label="A page's list">
+        </ScenePart>
+        <ScenePart label="A page's list">
           <SidebarTakeoverSlotView>
             <SidebarTakeoverView back={{ label: "Back", onClick: noop }}>
               <p className="px-3 text-xs">Settings sections</p>
             </SidebarTakeoverView>
           </SidebarTakeoverSlotView>
-        </Part>
-        <Part label="Arranging">
+        </ScenePart>
+        <ScenePart label="Arranging">
           <SidebarFooterView
             onDoneArranging={noop}
             toggle={null}
             actions={null}
           />
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );
