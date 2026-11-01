@@ -1,19 +1,17 @@
 // Everything the two fake host flavors share (vite.config.ts for the
-// desktop renderer tree, vite.web.config.ts for the web shell),
-// parameterized by the two things that actually differ, and the pieces
-// the marketing site's build takes too. Its own module rather than
-// named exports beside a default one, which vite's config bundler
-// warns about.
+// desktop renderer tree, vite.web.config.ts for the web shell) on top of
+// the renderer tree's base (vite.rendererTree.ts), parameterized by the
+// two things that actually differ, and the pieces the marketing site's
+// build takes too. Its own module rather than named exports beside a
+// default one, which vite's config bundler warns about.
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import react from "@vitejs/plugin-react";
-import { reactCompiler } from "../../vite.reactCompiler";
-import { materialIcons } from "../../vite.materialIcons";
-import { dedupe } from "../../vite.dedupe";
-import tailwindcss from "@tailwindcss/vite";
-import { insideTheRoot } from "@shigomori/ui/styles/insideTheRoot.ts";
-import { woff2Only } from "@shigomori/ui/styles/woff2Only.ts";
-import type { UserConfig } from "vite";
+import { FAKE_APP_VERSION } from "@shigomori/ui/fixtures/fixtures.ts";
+import { mergeConfig, type UserConfig } from "vite";
+import {
+  rendererTreeAliases,
+  rendererTreeConfig,
+} from "../../vite.rendererTree";
 import { fixedDevServerPort } from "../../scripts/lib/portsEnvFile.mts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -27,19 +25,20 @@ const CACHE_DIRS = {
   FAKE_HOST_WEB_PORT: ".vite-fake-host-web",
 } as const;
 
-// What any build of the renderer tree over the fixtures needs, the fake
-// host's and the marketing site's live frames (frames.tsx): the app's
-// aliases, Clerk's two flavors on the in-memory stub so the account UI
-// renders signed in without a network, and the build info.
-export const fixtureAliases = {
+// Clerk's two flavors on the in-memory stub, so the account UI renders
+// signed in without a network.
+const clerkStubAliases = {
   "@clerk/electron/react": resolve(here, "clerkStub.tsx"),
   "@clerk/react": resolve(here, "clerkStub.tsx"),
-  "@": resolve(appRoot, "renderer"),
-  "@shared": resolve(appRoot, "shared"),
 };
 
+// What any build of the renderer tree over the fixtures needs, the fake
+// host's and the marketing site's live frames (frames.tsx): the app's
+// aliases, the Clerk stub and the build info.
+export const fixtureAliases = { ...clerkStubAliases, ...rendererTreeAliases };
+
 export const fixtureDefine = {
-  __APP_VERSION__: JSON.stringify("3.0.3"),
+  __APP_VERSION__: JSON.stringify(FAKE_APP_VERSION),
   __APP_COMMIT__: JSON.stringify("fake-host"),
 };
 
@@ -50,45 +49,13 @@ export function fakeHostBaseConfig(opts: {
   // index.html, the web shell's web.html.
   entry: string;
 }): UserConfig {
-  return {
-    root: here,
-    // Reuse the web client's public dir for the CSP-safe theme boot
-    // script the HTML shell references.
-    publicDir: resolve(appRoot, "web/public"),
-    resolve: {
-      dedupe,
-      alias: fixtureAliases,
-    },
+  return mergeConfig(rendererTreeConfig({ root: here, entry: opts.entry }), {
+    resolve: { alias: clerkStubAliases },
     server: {
       port: fixedDevServerPort(opts.portKey),
       strictPort: true,
     },
     cacheDir: resolve(appRoot, "node_modules", CACHE_DIRS[opts.portKey]),
-    // The contracts package is served as source. Prebundled, it carries a
-    // copy of effect's Schema of its own, and the renderer's Schema calls
-    // fail on schemas built by that copy.
-    // The ui package is source the app imports, so the scanner crawls it
-    // too: a dependency only it imports (Base UI's dialog) is served raw
-    // otherwise, and its CommonJS imports fail in the page. Nor does the
-    // scanner enter the contracts package, an excluded one, so it
-    // crawls that source too: a dependency only it imports (effect's
-    // RpcMiddleware) is otherwise met as the page loads, bundled then,
-    // and the page reloads.
-    optimizeDeps: {
-      entries: [
-        opts.entry,
-        "../../../packages/ui/src/**/*.{ts,tsx}",
-        "../../../packages/contracts/src/**/*.ts",
-      ],
-      exclude: ["@shigomori/contracts"],
-      // Imported only by a module of the app's (HighlightWorkers.tsx),
-      // which the scan doesn't reach: met as a page draws, it's bundled
-      // then and the page reloads, losing the fake host's state.
-      include: ["@pierre/diffs/worker"],
-    },
     define: fixtureDefine,
-    // The package's stylesheet stops at the theme root.
-    css: { postcss: { plugins: [insideTheRoot(), woff2Only()] } },
-    plugins: [tailwindcss(), react(), reactCompiler(), materialIcons()],
-  };
+  });
 }

@@ -154,8 +154,8 @@ export function resolveFolderIcon(
   return map[lower] ?? (expanded ? m.folderExpanded : m.folder);
 }
 
-// Icons live in public/material-icons/ (synced from node_modules by
-// scripts/copy-material-icons.mts). Anchoring at `import.meta.env.BASE_URL`
+// Each build serves the icons under material-icons/ (the app's
+// vite.materialIcons.ts). Anchoring at `import.meta.env.BASE_URL`
 // matters for packaged Electron: electron-forge's Vite plugin builds with
 // `base: './'` so the renderer works under file://, and a leading-slash
 // path would resolve to the filesystem root instead. In dev BASE_URL is

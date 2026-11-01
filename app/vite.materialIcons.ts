@@ -1,23 +1,55 @@
-// The material icons the file pickers show, for every build of the
-// renderer tree (the desktop window, the web client, the fake host).
-// scripts/copy-material-icons.mts stages them in the app-root public/
-// (with the bare-name aliases of the package's .clone.svg files the
-// manifest asks for), which none of those builds serves: their public
-// dir is web/public, for the theme boot script. Without them every icon
-// request falls through to index.html. So that directory is served from
-// where it is in dev and copied into the output. A build that finds it
-// missing fails, where skipping would ship every icon broken. The
-// `web:build` script stages the icons itself first rather than trusting
-// the postinstall to have run: a deploy that restores its install from
-// a build cache (Vercel's) skips lifecycle scripts.
-import { cpSync, createReadStream, existsSync } from "node:fs";
+// The material icons the file pickers show, at the URL they ask for
+// (/material-icons/<name>.svg, @shigomori/ui's materialIcons.ts),
+// for every build of the renderer tree (the desktop window, the web
+// client, the fake host) and the marketing site's live frames: served
+// from material-icon-theme in dev, written into the output by a build.
+// A file each, fetched only when a picker shows it. The manifest names
+// some icons whose only file is the package's `<name>.clone.svg`, so
+// each of those answers to its bare name too.
+import {
+  copyFileSync,
+  createReadStream,
+  mkdirSync,
+  readdirSync,
+} from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Plugin } from "vite";
+import type { Connect, Plugin } from "vite";
 
-const materialIconsDir = fileURLToPath(
-  new URL("public/material-icons", import.meta.url),
+const iconsDir = fileURLToPath(
+  new URL("node_modules/material-icon-theme/icons", import.meta.url),
 );
+
+// Each icon's file name under /material-icons and the package's file.
+function iconFiles(): Map<string, string> {
+  const svgs = readdirSync(iconsDir).filter((name) => name.endsWith(".svg"));
+  const files = new Map(svgs.map((name) => [name, join(iconsDir, name)]));
+  for (const name of svgs) {
+    if (!name.endsWith(".clone.svg")) continue;
+    const bare = `${name.slice(0, -".clone.svg".length)}.svg`;
+    if (!files.has(bare)) files.set(bare, join(iconsDir, name));
+  }
+  return files;
+}
+
+export function serveMaterialIcons(middlewares: Connect.Server): void {
+  const files = iconFiles();
+  middlewares.use("/material-icons", (req, res, next) => {
+    const file = files.get(basename((req.url ?? "").split("?")[0] ?? ""));
+    if (file === undefined) {
+      next();
+      return;
+    }
+    res.setHeader("Content-Type", "image/svg+xml");
+    createReadStream(file).pipe(res);
+  });
+}
+
+export function writeMaterialIcons(outDir: string): void {
+  const dir = join(outDir, "material-icons");
+  mkdirSync(dir, { recursive: true });
+  for (const [name, file] of iconFiles()) copyFileSync(file, join(dir, name));
+}
 
 export function materialIcons(): Plugin {
   let outDir = "";
@@ -29,28 +61,11 @@ export function materialIcons(): Plugin {
       building = config.command === "build";
     },
     configureServer(server) {
-      server.middlewares.use("/material-icons", (req, res, next) => {
-        const [path = ""] = (req.url ?? "").split("?");
-        const file = join(materialIconsDir, basename(path));
-        if (!file.endsWith(".svg") || !existsSync(file)) {
-          next();
-          return;
-        }
-        res.setHeader("Content-Type", "image/svg+xml");
-        createReadStream(file).pipe(res);
-      });
+      serveMaterialIcons(server.middlewares);
     },
     // A dev server's close calls this too, and has no output to fill.
     closeBundle() {
-      if (!building) return;
-      if (!existsSync(materialIconsDir)) {
-        throw new Error(
-          `no material icons at ${materialIconsDir}: run node scripts/copy-material-icons.mts`,
-        );
-      }
-      cpSync(materialIconsDir, join(outDir, "material-icons"), {
-        recursive: true,
-      });
+      if (building) writeMaterialIcons(outDir);
     },
   };
 }

@@ -14,10 +14,10 @@ pnpm scenes:compare --threshold 50       # pixels a pair may differ by (20)
 Fetch first, since the script compares against the ref as it stands
 locally.
 
-It checks the base out into a temporary git worktree, installs it, copies
-the file icons into both sides (the app's own `copy-material-icons.mts`,
-which an install with scripts off never runs), starts both fake hosts'
-servers on free ports, and drives the system's Chrome
+It checks the base out into a temporary git worktree, installs it (a
+base whose postinstall copies the file icons, `copy-material-icons.mts`,
+has that run too, since the install runs no scripts), starts both fake
+hosts' servers on free ports, and drives the system's Chrome
 (`playwright-core`, `channel: "chrome"`). Each scene loads from the
 viewer (`/scenes.html?scene=<name>&theme=<theme>`). The shot is the
 theme root, with reduced motion and animations off. A pixel counts as

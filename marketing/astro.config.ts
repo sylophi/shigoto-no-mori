@@ -1,5 +1,4 @@
-import { cpSync, createReadStream, existsSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
@@ -12,6 +11,10 @@ import {
   fixtureDefine,
 } from "shigoto-no-mori/lab/fake-host/vite.base.ts";
 import { dedupe } from "shigoto-no-mori/vite.dedupe.ts";
+import {
+  serveMaterialIcons,
+  writeMaterialIcons,
+} from "shigoto-no-mori/vite.materialIcons.ts";
 import { reactCompiler } from "shigoto-no-mori/vite.reactCompiler.ts";
 
 const app = resolve(dirname(fileURLToPath(import.meta.url)), "../app");
@@ -62,33 +65,17 @@ function pageHasAppStylesheets(): Plugin {
   };
 }
 
-// The file icons the live frames' file lists draw, from the URL the
-// app asks for them at (/material-icons/<name>.svg, @shigomori/ui's
-// materialIcons.ts): served in dev, copied into the build. A file each,
-// fetched only when a frame shows it.
+// The file icons the live frames' file lists draw, as the app's builds
+// serve and write them (app/vite.materialIcons.ts).
 function materialIcons(): AstroIntegration {
-  const icons = resolve(
-    app,
-    "../packages/ui/node_modules/material-icon-theme/icons",
-  );
   return {
     name: "material-icons",
     hooks: {
       "astro:server:setup": ({ server }) => {
-        server.middlewares.use("/material-icons", (req, res, next) => {
-          const file = join(
-            icons,
-            basename((req.url ?? "").split("?")[0] ?? ""),
-          );
-          if (!file.endsWith(".svg") || !existsSync(file)) return next();
-          res.setHeader("Content-Type", "image/svg+xml");
-          createReadStream(file).pipe(res);
-        });
+        serveMaterialIcons(server.middlewares);
       },
       "astro:build:done": ({ dir }) => {
-        cpSync(icons, join(fileURLToPath(dir), "material-icons"), {
-          recursive: true,
-        });
+        writeMaterialIcons(fileURLToPath(dir));
       },
     },
   };
