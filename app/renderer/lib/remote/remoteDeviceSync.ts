@@ -68,10 +68,9 @@ function accessOf(
   deviceId: string,
   had?: boolean,
 ): boolean | undefined {
-  return status.peerAppVersions[deviceId] !== undefined &&
-    status.peerSharesData[deviceId] === false
-    ? false
-    : (status.peerAcceptsCommands[deviceId] ?? had);
+  const connected = status.peerAppVersions[deviceId] !== undefined;
+  if (connected && status.peerSharesData[deviceId] === false) return false;
+  return status.peerAcceptsCommands[deviceId] ?? had;
 }
 
 // Boot wiring, for the life of the page (`signal`): the hub, the account
@@ -140,7 +139,7 @@ export function startRemoteDeviceSync({
   // already out, so a snapshot that comes meanwhile rewrites the access
   // as it lands: a peer that stopped taking commands from here is
   // refused as it says so.
-  const show = (devices: readonly RemoteDevice[]): void => {
+  const applyNewestAccess = (devices: readonly RemoteDevice[]): void => {
     const newest = registry.get(hubStatusAtom);
     setRemoteDevices(
       registry,
@@ -220,11 +219,11 @@ export function startRemoteDeviceSync({
 
   // Every snapshot heard, in the order it is heard, ahead of the passes
   // that coalesce them.
-  const take = (status: HubStatus): void => {
+  const hearStatus = (status: HubStatus): void => {
     heardCount += 1;
     noteSessions(status);
     registry.set(hubStatusAtom, status);
-    show(registry.get(remoteDevicesAtom));
+    applyNewestAccess(registry.get(remoteDevicesAtom));
   };
 
   // The hub's snapshot now, heard unless another was heard while it was
@@ -233,7 +232,7 @@ export function startRemoteDeviceSync({
     const before = heardCount;
     return Effect.tap(api.hub.status(), (status) =>
       heard("hub status", () => {
-        if (heardCount === before) take(status);
+        if (heardCount === before) hearStatus(status);
       }),
     );
   });
@@ -354,7 +353,7 @@ export function startRemoteDeviceSync({
     // A window with nothing fetched (one loaded while the hub is away)
     // draws the shell's list while its own read is out, which the
     // client's retries keep out for seconds.
-    if (cachedList() === undefined) show(entries(yield* kept));
+    if (cachedList() === undefined) applyNewestAccess(entries(yield* kept));
     // Offline or signed out mid-flight, the read fails. react-query
     // keeps the last good data through a failed refetch, so the store
     // keeps whatever we had. The shell's list is asked again, since the
@@ -381,7 +380,7 @@ export function startRemoteDeviceSync({
       (id) => id !== localDeviceId && !knownIds.has(id),
     );
     if ((hasUnknownOnline || someoneLeft) && hubDriven) askListAgain();
-    show(entries(list));
+    applyNewestAccess(entries(list));
   });
 
   // Unknown until the account's status lands. A change to signed out is
@@ -426,36 +425,35 @@ export function startRemoteDeviceSync({
         );
         // The boot's pass, whose read is the status's seed.
         reconcile({ hubDriven: false });
+        const runPasses = Queue.take(passes).pipe(
+          Effect.flatMap((pass) => Effect.exit(reconcileNow(pass))),
+          Effect.forever,
+        );
+        const followHubStatus = Stream.runForEach(
+          api.pushes(hubContract, "statusChanged"),
+          (status) =>
+            heard("hub status", () => {
+              hearStatus(status);
+              reconcile({ status, hubDriven: true });
+            }),
+        );
+        const followAccount = Stream.runForEach(
+          api.pushes(accountContract, "changed"),
+          ({ accountId }) =>
+            heard("account change", () => accountChanged(accountId)),
+        );
+        const seedAccountId = api.account.status().pipe(
+          Effect.tap((status) =>
+            Effect.sync(() => {
+              if (syncedAccountId === undefined) {
+                syncedAccountId = status.signedIn ? status.accountId : null;
+              }
+            }),
+          ),
+          Effect.ignore,
+        );
         yield* Effect.all(
-          [
-            Queue.take(passes).pipe(
-              Effect.flatMap((pass) => Effect.exit(reconcileNow(pass))),
-              Effect.forever,
-            ),
-            Stream.runForEach(
-              api.pushes(hubContract, "statusChanged"),
-              (status) =>
-                heard("hub status", () => {
-                  take(status);
-                  reconcile({ status, hubDriven: true });
-                }),
-            ),
-            Stream.runForEach(
-              api.pushes(accountContract, "changed"),
-              ({ accountId }) =>
-                heard("account change", () => accountChanged(accountId)),
-            ),
-            api.account.status().pipe(
-              Effect.tap((status) =>
-                Effect.sync(() => {
-                  if (syncedAccountId === undefined) {
-                    syncedAccountId = status.signedIn ? status.accountId : null;
-                  }
-                }),
-              ),
-              Effect.ignore,
-            ),
-          ],
+          [runPasses, followHubStatus, followAccount, seedAccountId],
           { concurrency: "unbounded", discard: true },
         );
       }).pipe(Effect.scoped),
