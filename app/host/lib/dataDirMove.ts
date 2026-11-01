@@ -14,6 +14,7 @@ import * as Schema from "effect/Schema";
 import * as DataDirMove from "@shigomori/engine/dataDirMove";
 import { findProjectInsideDataDir, freshProjects } from "./projects";
 import { busyRefusal } from "@shared/busy";
+import { hostCallFailure } from "./Engine";
 import * as Scripts from "./Scripts";
 import {
   canonicalDataDirName,
@@ -265,5 +266,5 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
           yield* flushTree(to);
         }),
     },
-  ).pipe(Effect.mapError(callFailureOf));
+  ).pipe(Effect.mapError(hostCallFailure));
 });
