@@ -99,9 +99,8 @@ function cfApi(cf: TunnelEnv) {
   // GET a CF list endpoint and take the first entry, the shape both
   // finders share (the query narrows to at most one match).
   async function findFirst<T>(path: string): Promise<T | null> {
-    const result = await call<T[] | null>("GET", path);
-    if (!Array.isArray(result)) return null;
-    return result[0] ?? null;
+    const [first] = await call<T[]>("GET", path);
+    return first ?? null;
   }
 
   return {
