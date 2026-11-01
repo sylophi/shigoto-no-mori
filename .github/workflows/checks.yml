@@ -137,14 +137,12 @@ jobs:
         with:
           bun-version: "1.4.0"
 
-      # The release build regenerates the notices, so stale committed
-      # copies make every shipped build report a "-dirty" commit. They
-      # list the darwin-arm64 packages, the only ones pnpm installs on a
-      # Mac, and the Go modules linked into file-sync and the filesystem
-      # helper.
-      - name: Third-party notices are up to date
+      # Fails on missing or unknown license metadata. The notices cover
+      # the darwin-arm64 packages, the only ones pnpm installs on a Mac,
+      # and the Go modules linked into file-sync and the filesystem helper.
+      - name: Third-party notices have license metadata
         if: ${{ runner.os == 'macOS' && !cancelled() && steps.install.outcome == 'success' }}
-        run: pnpm run check:licenses
+        run: pnpm -C app run licenses --out "$RUNNER_TEMP/licenses"
 
       # The engine's and the terminal's tests drive the filesystem helper,
       # built from nativefs/.
