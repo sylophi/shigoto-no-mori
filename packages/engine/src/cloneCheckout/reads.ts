@@ -6,7 +6,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as NativeFs from "../NativeFs.ts";
-import { envVar } from "../environment.ts";
 import * as Git from "../Git.ts";
 import {
   blobBytes,
@@ -24,10 +23,7 @@ export const makeReads = Effect.gen(function* () {
   const crypto = yield* Crypto.Crypto;
   const paths = yield* Paths.Paths;
 
-  const configHome = Effect.gen(function* () {
-    const xdg = yield* envVar("XDG_CONFIG_HOME");
-    return xdg !== "" ? xdg : path.join(paths.home, ".config");
-  });
+  const configHome = Effect.succeed(paths.configHome);
 
   // The process's umask, read the only way that doesn't set it: a file
   // made with every permission keeps those the umask leaves.

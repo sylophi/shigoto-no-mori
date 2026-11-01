@@ -26,6 +26,7 @@ import {
 import type { ListingArea } from "./listing.ts";
 import type { KeptArea, Moved } from "./kept.ts";
 import type { MovingArea } from "./moving.ts";
+import { isDirectory } from "../entries.ts";
 
 export const makeRelocating = ({
   listing,
@@ -90,11 +91,7 @@ export const makeRelocating = ({
           for (const [from, to] of pairs) {
             if (!entry.path.startsWith(`${from}/`)) continue;
             const candidate = path.join(to, entry.path.slice(from.length + 1));
-            const isDirectory = yield* fs.stat(candidate).pipe(
-              Effect.map((info) => info.type === "Directory"),
-              Effect.orElseSucceed(() => false),
-            );
-            if (isDirectory) {
+            if (yield* isDirectory(fs, candidate)) {
               moved.set(entry.path, candidate);
               break;
             }
@@ -206,10 +203,7 @@ export const makeRelocating = ({
       if (to !== project.path) {
         // Only for a repo that went: pointing a project that is still there
         // at another repo would hand that repo its settings and marks.
-        const stillThere = yield* fs.stat(project.path).pipe(
-          Effect.map((info) => info.type === "Directory"),
-          Effect.orElseSucceed(() => false),
-        );
+        const stillThere = yield* isDirectory(fs, project.path);
         if (stillThere) return yield* refuse("still-there", project.path);
         // terrier's rows merge in by path, so a repo it lists at the new
         // path would list twice.

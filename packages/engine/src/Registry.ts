@@ -20,6 +20,7 @@ import { terrierProjectId } from "./terrierId.ts";
 import * as Usage from "./Usage.ts";
 import * as WorktreeData from "./WorktreeData.ts";
 import { worktreeIdFromPath } from "./worktreeLayout.ts";
+import { isDirectory } from "./entries.ts";
 
 // A project as the registry holds it.
 export type RegisteredProject = {
@@ -356,10 +357,7 @@ const make = Effect.gen(function* () {
       (project) =>
         Effect.gen(function* () {
           const stats = uses.get(project.id);
-          const pathExists = yield* fs.stat(project.path).pipe(
-            Effect.map((info) => info.type === "Directory"),
-            Effect.orElseSucceed(() => false),
-          );
+          const pathExists = yield* isDirectory(fs, project.path);
           const [repo, icon] = pathExists
             ? yield* Effect.all(
                 [
