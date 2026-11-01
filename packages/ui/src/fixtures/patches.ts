@@ -3,11 +3,8 @@
 
 const patch = (lines: readonly string[]) => lines.join("\n");
 
-// A commit changing an image, adding a file and changing two.
-export const COMMIT_PATCH = patch([
-  "diff --git a/public/icon.png b/public/icon.png",
-  "index fd71f53be0b0be2e10c86b0c3d69e43d414f966c..0081a1eba3316323a2e7a75462ef228ba1f048b1 100644",
-  "Binary files a/public/icon.png and b/public/icon.png differ",
+// The new DeviceBadge.tsx, in the commit and on the changes page.
+const DEVICE_BADGE = [
   "diff --git a/renderer/components/sidebar/DeviceBadge.tsx b/renderer/components/sidebar/DeviceBadge.tsx",
   "new file mode 100644",
   "index 0000000000000000000000000000000000000000..b4050b82635f35f52bd626f410b8df9b40ae0b27",
@@ -21,6 +18,43 @@ export const COMMIT_PATCH = patch([
   "+  const short = label.slice(0, 2).toUpperCase();",
   "+  return <RowTag title={label}>{short}</RowTag>;",
   "+}",
+];
+
+// The new commitComposer.test.ts repeats these lines.
+const TEST_FILLER = [
+  '+import { cn } from "@/lib/utils";',
+  '+import { pluralize } from "@/lib/pluralize";',
+  '+import type { ChangedFile } from "@shigomori/contracts/schemas";',
+  "+",
+  "+// What the button says it will do.",
+  "+export function label(count: number, amending: boolean): string {",
+  '+  const what = pluralize(count, "file");',
+  "+  return amending ? `Amend with ${what}` : `Commit ${what}`;",
+  "+}",
+  "+",
+  "+export function tone(ahead: number): string {",
+  '+  return ahead > 0 ? "text-emerald-500" : "text-muted-foreground";',
+  "+}",
+  "+",
+  "+export function included(files: readonly ChangedFile[]): number {",
+  '+  return files.filter((file) => file.staged !== "none").length;',
+  "+}",
+  "+",
+  "+export const SUMMARY_SOFT_LIMIT = 72;",
+  "+",
+  "+export function overLimit(summary: string): boolean {",
+  "+  return summary.trim().length > SUMMARY_SOFT_LIMIT;",
+  "+}",
+  "+",
+  '+export const scope = (all: boolean) => (all ? "all" : "some");',
+];
+
+// A commit changing an image, adding a file and changing two.
+export const COMMIT_PATCH = patch([
+  "diff --git a/public/icon.png b/public/icon.png",
+  "index fd71f53be0b0be2e10c86b0c3d69e43d414f966c..0081a1eba3316323a2e7a75462ef228ba1f048b1 100644",
+  "Binary files a/public/icon.png and b/public/icon.png differ",
+  ...DEVICE_BADGE,
   "diff --git a/renderer/components/sidebar/RowContent.tsx b/renderer/components/sidebar/RowContent.tsx",
   "index 43ae3465ce866759b778bc88d237e20edc21f208..005f55f30dc31b3f0e44f52eab083ed6c582af01 100644",
   "--- a/renderer/components/sidebar/RowContent.tsx",
@@ -68,23 +102,36 @@ export const COMMIT_ICON_SIDES = [
   },
 ];
 
+type ChangePatch = {
+  patch: string;
+  counts: { additions: number; deletions: number };
+  hunks: Array<{
+    oldStart: number;
+    oldCount: number;
+    newStart: number;
+    newCount: number;
+  }>;
+};
+
+const change = (
+  lines: readonly string[],
+  hunks: ChangePatch["hunks"],
+): ChangePatch => {
+  const body = lines.slice(lines.findIndex((line) => line.startsWith("@@")));
+  const count = (sign: string) =>
+    body.filter((line) => line.startsWith(sign)).length;
+  return {
+    patch: patch(lines),
+    counts: { additions: count("+"), deletions: count("-") },
+    hunks,
+  };
+};
+
 // The changes page's files: each one's patch as the changes page reads
 // it, its counts and the hunks its ticks pick from.
-export const CHANGE_PATCHES: Record<
-  string,
-  {
-    patch: string;
-    counts: { additions: number; deletions: number };
-    hunks: Array<{
-      oldStart: number;
-      oldCount: number;
-      newStart: number;
-      newCount: number;
-    }>;
-  }
-> = {
-  "README.md": {
-    patch: patch([
+export const CHANGE_PATCHES: Record<string, ChangePatch> = {
+  "README.md": change(
+    [
       "diff --git a/README.md b/README.md",
       "index 498eb8916334c593616a079a0deccf87117c82dc..e76279e504e91ce51398e87a244ecc33c2673616 100644",
       "--- a/README.md",
@@ -98,102 +145,24 @@ export const CHANGE_PATCHES: Record<
       "+",
       "+pnpm test",
       "",
-    ]),
-    counts: {
-      additions: 4,
-      deletions: 0,
-    },
-    hunks: [
-      {
-        oldStart: 7,
-        oldCount: 0,
-        newStart: 8,
-        newCount: 4,
-      },
     ],
-  },
-  "app/test/proofs/commitComposer.test.ts": {
-    patch: patch([
+    [{ oldStart: 7, oldCount: 0, newStart: 8, newCount: 4 }],
+  ),
+  "app/test/proofs/commitComposer.test.ts": change(
+    [
       "diff --git a/app/test/proofs/commitComposer.test.ts b/app/test/proofs/commitComposer.test.ts",
       "new file mode 100644",
       "index 0000000000000000000000000000000000000000..acf34639c07c848c13a4a9103b6f99237730280b",
       "--- /dev/null",
       "+++ b/app/test/proofs/commitComposer.test.ts",
       "@@ -0,0 +1,64 @@",
-      '+  const what = pluralize(count, "file");',
-      "+  return amending ? `Amend with ${what}` : `Commit ${what}`;",
-      "+}",
-      "+",
-      "+export function tone(ahead: number): string {",
-      '+  return ahead > 0 ? "text-emerald-500" : "text-muted-foreground";',
-      "+}",
-      "+",
-      "+export function included(files: readonly ChangedFile[]): number {",
-      '+  return files.filter((file) => file.staged !== "none").length;',
-      "+}",
-      "+",
-      "+export const SUMMARY_SOFT_LIMIT = 72;",
-      "+",
-      "+export function overLimit(summary: string): boolean {",
-      "+  return summary.trim().length > SUMMARY_SOFT_LIMIT;",
-      "+}",
-      "+",
-      '+export const scope = (all: boolean) => (all ? "all" : "some");',
-      '+import { cn } from "@/lib/utils";',
-      '+import { pluralize } from "@/lib/pluralize";',
-      '+import type { ChangedFile } from "@shigomori/contracts/schemas";',
-      "+",
-      "+// What the button says it will do.",
-      "+export function label(count: number, amending: boolean): string {",
-      '+  const what = pluralize(count, "file");',
-      "+  return amending ? `Amend with ${what}` : `Commit ${what}`;",
-      "+}",
-      "+",
-      "+export function tone(ahead: number): string {",
-      '+  return ahead > 0 ? "text-emerald-500" : "text-muted-foreground";',
-      "+}",
-      "+",
-      "+export function included(files: readonly ChangedFile[]): number {",
-      '+  return files.filter((file) => file.staged !== "none").length;',
-      "+}",
-      "+",
-      "+export const SUMMARY_SOFT_LIMIT = 72;",
-      "+",
-      "+export function overLimit(summary: string): boolean {",
-      "+  return summary.trim().length > SUMMARY_SOFT_LIMIT;",
-      "+}",
-      "+",
-      '+export const scope = (all: boolean) => (all ? "all" : "some");',
-      '+import { cn } from "@/lib/utils";',
-      '+import { pluralize } from "@/lib/pluralize";',
-      '+import type { ChangedFile } from "@shigomori/contracts/schemas";',
-      "+",
-      "+// What the button says it will do.",
-      "+export function label(count: number, amending: boolean): string {",
-      '+  const what = pluralize(count, "file");',
-      "+  return amending ? `Amend with ${what}` : `Commit ${what}`;",
-      "+}",
-      "+",
-      "+export function tone(ahead: number): string {",
-      '+  return ahead > 0 ? "text-emerald-500" : "text-muted-foreground";',
-      "+}",
-      "+",
-      "+export function included(files: readonly ChangedFile[]): number {",
-      '+  return files.filter((file) => file.staged !== "none").length;',
-      "+}",
-      "+",
-      "+export const SUMMARY_SOFT_LIMIT = 72;",
-      "+",
+      ...[...TEST_FILLER, ...TEST_FILLER, ...TEST_FILLER].slice(6, 70),
       "",
-    ]),
-    counts: {
-      additions: 64,
-      deletions: 0,
-    },
-    hunks: [],
-  },
-  "renderer/components/diff/CommitComposer.tsx": {
-    patch: patch([
+    ],
+    [],
+  ),
+  "renderer/components/diff/CommitComposer.tsx": change(
+    [
       "diff --git a/renderer/components/diff/CommitComposer.tsx b/renderer/components/diff/CommitComposer.tsx",
       "index 6e382fda654a4415c3bc0c90abb50744c2faa8dd..90631c0a875b5a132d18f190091cc17b6c14e1ac 100644",
       "--- a/renderer/components/diff/CommitComposer.tsx",
@@ -233,99 +202,44 @@ export const CHANGE_PATCHES: Record<
       "+export function tone(ahead: number): string {",
       '+  return ahead > 0 ? "text-emerald-500" : "text-muted-foreground";',
       "",
-    ]),
-    counts: {
-      additions: 15,
-      deletions: 1,
-    },
-    hunks: [
-      {
-        oldStart: 11,
-        oldCount: 1,
-        newStart: 11,
-        newCount: 12,
-      },
-      {
-        oldStart: 37,
-        oldCount: 0,
-        newStart: 49,
-        newCount: 1,
-      },
-      {
-        oldStart: 60,
-        oldCount: 0,
-        newStart: 73,
-        newCount: 2,
-      },
     ],
-  },
-  "renderer/components/sidebar/DeviceBadge.tsx": {
-    patch: patch([
-      "diff --git a/renderer/components/sidebar/DeviceBadge.tsx b/renderer/components/sidebar/DeviceBadge.tsx",
-      "new file mode 100644",
-      "index 0000000000000000000000000000000000000000..b4050b82635f35f52bd626f410b8df9b40ae0b27",
-      "--- /dev/null",
-      "+++ b/renderer/components/sidebar/DeviceBadge.tsx",
-      "@@ -0,0 +1,7 @@",
-      '+import { RowTag } from "@/components/ui/row-tag";',
-      "+",
-      "+// The owning device, as a two-letter tag at the row's trailing edge.",
-      "+export function DeviceBadge({ label }: { label: string }) {",
-      "+  const short = label.slice(0, 2).toUpperCase();",
-      "+  return <RowTag title={label}>{short}</RowTag>;",
-      "+}",
-      "",
-    ]),
-    counts: {
-      additions: 7,
-      deletions: 0,
-    },
-    hunks: [
-      {
-        oldStart: 0,
-        oldCount: 0,
-        newStart: 1,
-        newCount: 7,
-      },
+    [
+      { oldStart: 11, oldCount: 1, newStart: 11, newCount: 12 },
+      { oldStart: 37, oldCount: 0, newStart: 49, newCount: 1 },
+      { oldStart: 60, oldCount: 0, newStart: 73, newCount: 2 },
     ],
-  },
-  "renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts": {
-    patch: patch([
-      "diff --git a/renderer/components/worktreeDetail/commits/useSyncState.ts b/renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
-      "similarity index 73%",
-      "rename from renderer/components/worktreeDetail/commits/useSyncState.ts",
-      "rename to renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
-      "index 4484b1cdda498ca360ba6e6443e90130229a951c..56731017690851299a70a6cc251477a2513838c2 100644",
-      "--- a/renderer/components/worktreeDetail/commits/useSyncState.ts",
-      "+++ b/renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
-      '@@ -2,8 +2,8 @@ import type { ChangedFile } from "@shigomori/contracts/schemas";',
-      " ",
-      " // What the button says it will do.",
-      " export function label(count: number, amending: boolean): string {",
-      '-  const what = pluralize(count, "file");',
-      "-  return amending ? `Amend with ${what}` : `Commit ${what}`;",
-      '+  return ahead > 0 ? "text-emerald-500" : "text-muted-foreground";',
-      "+}",
-      " }",
-      " ",
-      " export function tone(ahead: number): string {",
-      "",
-    ]),
-    counts: {
-      additions: 2,
-      deletions: 2,
-    },
-    hunks: [
-      {
-        oldStart: 0,
-        oldCount: 0,
-        newStart: 1,
-        newCount: 12,
-      },
-    ],
-  },
-  "renderer/lib/toast.tsx": {
-    patch: patch([
+  ),
+  "renderer/components/sidebar/DeviceBadge.tsx": change(
+    [...DEVICE_BADGE, ""],
+    [{ oldStart: 0, oldCount: 0, newStart: 1, newCount: 7 }],
+  ),
+  "renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts":
+    change(
+      [
+        "diff --git a/renderer/components/worktreeDetail/commits/useSyncState.ts b/renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
+        "similarity index 73%",
+        "rename from renderer/components/worktreeDetail/commits/useSyncState.ts",
+        "rename to renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
+        "index 4484b1cdda498ca360ba6e6443e90130229a951c..56731017690851299a70a6cc251477a2513838c2 100644",
+        "--- a/renderer/components/worktreeDetail/commits/useSyncState.ts",
+        "+++ b/renderer/components/worktreeDetail/commits/useWorktreeSyncAvailability.ts",
+        '@@ -2,8 +2,8 @@ import type { ChangedFile } from "@shigomori/contracts/schemas";',
+        " ",
+        " // What the button says it will do.",
+        " export function label(count: number, amending: boolean): string {",
+        '-  const what = pluralize(count, "file");',
+        "-  return amending ? `Amend with ${what}` : `Commit ${what}`;",
+        '+  return ahead > 0 ? "text-emerald-500" : "text-muted-foreground";',
+        "+}",
+        " }",
+        " ",
+        " export function tone(ahead: number): string {",
+        "",
+      ],
+      [{ oldStart: 0, oldCount: 0, newStart: 1, newCount: 12 }],
+    ),
+  "renderer/lib/toast.tsx": change(
+    [
       "diff --git a/renderer/lib/toast.tsx b/renderer/lib/toast.tsx",
       "index d39abf049942b34dd51d21b9d74439ec5469f786..a9d136310ce0299058127beba316bc8e85a1fc97 100644",
       "--- a/renderer/lib/toast.tsx",
@@ -343,22 +257,11 @@ export const CHANGE_PATCHES: Record<
       " }",
       " ",
       "",
-    ]),
-    counts: {
-      additions: 4,
-      deletions: 1,
-    },
-    hunks: [
-      {
-        oldStart: 10,
-        oldCount: 1,
-        newStart: 10,
-        newCount: 4,
-      },
     ],
-  },
-  "renderer/lib/villagerVoice.ts": {
-    patch: patch([
+    [{ oldStart: 10, oldCount: 1, newStart: 10, newCount: 4 }],
+  ),
+  "renderer/lib/villagerVoice.ts": change(
+    [
       "diff --git a/renderer/lib/villagerVoice.ts b/renderer/lib/villagerVoice.ts",
       "index 9d6c37d89313d498639fb4c8aa79fa890915bc1c..ec65ca8c5838d6b5cf691ddeb0cf8dd4a42fc0d4 100644",
       "--- a/renderer/lib/villagerVoice.ts",
@@ -384,22 +287,11 @@ export const CHANGE_PATCHES: Record<
       " ",
       " export const SUMMARY_SOFT_LIMIT = 72;",
       "",
-    ]),
-    counts: {
-      additions: 11,
-      deletions: 2,
-    },
-    hunks: [
-      {
-        oldStart: 6,
-        oldCount: 2,
-        newStart: 6,
-        newCount: 11,
-      },
     ],
-  },
-  "shared/legacy/oldStatus.ts": {
-    patch: patch([
+    [{ oldStart: 6, oldCount: 2, newStart: 6, newCount: 11 }],
+  ),
+  "shared/legacy/oldStatus.ts": change(
+    [
       "diff --git a/shared/legacy/oldStatus.ts b/shared/legacy/oldStatus.ts",
       "deleted file mode 100644",
       "index c7b8dc44c02026aac6b886026073dc51dca7ea56..0000000000000000000000000000000000000000",
@@ -428,18 +320,7 @@ export const CHANGE_PATCHES: Record<
       "-}",
       "-",
       "",
-    ]),
-    counts: {
-      additions: 0,
-      deletions: 21,
-    },
-    hunks: [
-      {
-        oldStart: 1,
-        oldCount: 21,
-        newStart: 0,
-        newCount: 0,
-      },
     ],
-  },
+    [{ oldStart: 1, oldCount: 21, newStart: 0, newCount: 0 }],
+  ),
 };
