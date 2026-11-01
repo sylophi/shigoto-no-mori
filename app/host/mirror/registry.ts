@@ -99,11 +99,6 @@ export function carriedLabels(
 // (contracts' modules/mirror.ts), re-exported for the host's own callers.
 export type { MirrorSessionRaw };
 
-// The local worktree a session runs on, "" when its create named none.
-export function localWorktreeIdOf(raw: MirrorSessionRaw | undefined): string {
-  return raw?.localWorktreeId ?? "";
-}
-
 // The ignore mode a session's labels carry, "everything" when none.
 const isMirrorIgnoreMode = Schema.is(MirrorIgnoreModeSchema);
 export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
@@ -252,7 +247,7 @@ const endSessionsOnWorktree = (
           // made at the old folder doesn't inherit it.
           Effect.tap(() =>
             Effect.sync(() => {
-              const labelled = localWorktreeIdOf(raw);
+              const labelled = raw.localWorktreeId;
               if (labelled !== localWorktreeId) {
                 daemon.forgetHistory(labelled);
               }
@@ -376,7 +371,7 @@ const deleteCopyAndEnd = (
       log: "Warn",
       message: "[mirror] the mirror of a deleted worktree didn't end",
     });
-    daemon.forgetHistory(localWorktreeIdOf(raw));
+    daemon.forgetHistory(raw.localWorktreeId);
     return true;
   }).pipe(
     Effect.ensuring(Effect.sync(() => endingSessions.delete(raw.session))),
@@ -395,7 +390,7 @@ const noteEnded = (
   worktreeId: string,
 ) => {
   if (worktreeId === "") return;
-  daemon.moveHistory(localWorktreeIdOf(raw), worktreeId);
+  daemon.moveHistory(raw.localWorktreeId, worktreeId);
   daemon.noteEvent(worktreeId, "stopped", detail);
 };
 
@@ -513,7 +508,7 @@ const PEER_WAIT_MS = 2 * 60_000;
 // The worktree a session's local side is now: a waiting one's is the
 // worktree its original became, which its labels don't say yet.
 const worktreeIdNow = (raw: MirrorSessionRaw): string =>
-  waitingOnPeer.get(raw.session)?.id ?? localWorktreeIdOf(raw);
+  waitingOnPeer.get(raw.session)?.id ?? raw.localWorktreeId;
 
 // Sessions a re-open is replacing right now (MirrorEngine's recreate): the
 // re-open ends the old one itself once the new one is up, so the
@@ -648,7 +643,7 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
             }
             if (
               movedBack !== null &&
-              worktreeIdFromPath(movedBack) === localWorktreeIdOf(raw)
+              worktreeIdFromPath(movedBack) === raw.localWorktreeId
             ) {
               waitingOnPeer.delete(raw.session);
             }
@@ -682,7 +677,7 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
           const movedId = worktreeIdFromPath(movedTo);
           // The worktree it became mirrors on its own now, and a worktree
           // has one mirror.
-          if (sessions.some((other) => localWorktreeIdOf(other) === movedId)) {
+          if (sessions.some((other) => other.localWorktreeId === movedId)) {
             yield* end(MIRRORED_AGAIN_DETAIL, movedId);
             return;
           }
@@ -717,7 +712,7 @@ export const settleMirrorBookkeeping = Effect.gen(function* () {
           // One re-open per worktree carries all of its sessions.
           if (reopening.has(raw.localRoot)) return;
           reopening.add(raw.localRoot);
-          yield* moveMirrorsOfWorktree(localWorktreeIdOf(raw), {
+          yield* moveMirrorsOfWorktree(raw.localWorktreeId, {
             id: movedId,
             path: movedTo,
           });
@@ -786,7 +781,7 @@ export const moveMirrorsOfWorktree = (
     }
     if ((yield* daemon.status) !== "running") return;
     const sessions = (yield* mirrorSessions(daemon)).filter(
-      (raw) => localWorktreeIdOf(raw) === oldId,
+      (raw) => raw.localWorktreeId === oldId,
     );
     yield* Effect.forEach(
       sessions,
@@ -830,25 +825,21 @@ export const moveMirrorsOfWorktree = (
 // delete is only safe against a live peer confirming nothing is held
 // here alone, and the peer is exactly what is gone. The worktree's
 // thread says so. Failures are logged, not thrown, like
-// stopMirrorsForWorktree. With `transfers`, the one-shot transfer
-// sessions with such a peer go too: their tokens stay live, so the
-// orphan reaper never would, and their wait then fails the transfer.
+// stopMirrorsForWorktree. The one-shot transfer sessions with such a
+// peer go too: their tokens stay live, so the orphan reaper never
+// would, and their wait then fails the transfer.
 export const endMirrorsWithPeers = (
   stillOnAccount: (deviceId: string) => boolean,
   detail: string,
-  opts: { transfers?: boolean } = {},
 ) =>
   Effect.gen(function* () {
     const daemon = yield* engineOrNull;
     // A daemon that isn't running ends nothing: the sessions it brings
     // back are swept as they come (MirrorEngineLayer.ts endSignedOut).
     if (daemon === null || (yield* daemon.status) !== "running") return;
-    const candidates = opts.transfers
-      ? yield* daemon.sessions
-      : yield* mirrorSessions(daemon);
     yield* endSessions(
       daemon,
-      candidates.filter((raw) => !stillOnAccount(raw.deviceId)),
+      (yield* daemon.sessions).filter((raw) => !stillOnAccount(raw.deviceId)),
       "a mirror with a device that left the account",
       detail,
     );

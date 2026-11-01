@@ -368,7 +368,6 @@ export function noteAccountDevices(deviceIds: ReadonlyArray<string>): void {
     endMirrorsWithPeers(
       stillOn,
       "The other device left the account. The copy stays as a worktree.",
-      { transfers: true },
     ),
   ).catch(() => {});
   // A forward is standing intent across a peer being asleep, so it

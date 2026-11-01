@@ -16,10 +16,7 @@ import {
   type MirrorEventKind,
   type MirrorGitStatus,
 } from "@shigomori/contracts/modules/mirror";
-import {
-  localWorktreeIdOf,
-  type MirrorSessionRaw,
-} from "@host/mirror/registry";
+import type { MirrorSessionRaw } from "@host/mirror/registry";
 
 // The two rows the link chatter around a pause or re-open repeats.
 const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
@@ -198,7 +195,7 @@ export function createMirrorHistory(deps: {
     const live = new Set<string>();
     for (const session of sessions) {
       live.add(session.session);
-      const localWorktreeId = localWorktreeIdOf(session);
+      const localWorktreeId = session.localWorktreeId;
       const git = gitStatusOf(session.session);
       const previous = seen.get(session.session);
       const connected = session.local.connected && session.remote.connected;

@@ -296,9 +296,7 @@ const make = (options: {
     // running daemon's own snapshot is asked about: the one that stands
     // through a restart can end nothing.
     const endAll = withEngine(
-      endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
-        transfers: true,
-      }),
+      endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL),
     );
     const asked = new Set<string>();
     const endSignedOut = Effect.gen(function* () {
