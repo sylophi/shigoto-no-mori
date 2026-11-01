@@ -40,7 +40,7 @@ import {
   startHubFront,
   startListenerFront,
   startNetworkSwitch,
-  type Switch,
+  type PortSwitch,
 } from "./networkSwitch.mts";
 import {
   answers,
@@ -242,7 +242,7 @@ export class Lab {
   // A, the desktop device under test, and C, the one on the tunnel.
   readonly desk: DevApp | null;
   readonly remote: DevApp | null;
-  browserSwitch: (Switch & { port: number }) | null = null;
+  browserSwitch: PortSwitch | null = null;
   context!: BrowserContext;
   private webServer: ChildProcess | null = null;
   private readonly logs: WriteStream;

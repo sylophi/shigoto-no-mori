@@ -104,23 +104,25 @@ function closing(server: Server | TcpServer): Promise<void> {
   return new Promise((done) => server.close(() => done()));
 }
 
-function switchOver(
+export type PortSwitch = Switch & { readonly port: number };
+
+function switchControls(
   server: Server | TcpServer,
   flows: Flows,
-  cleanup: () => void = () => {},
+  beforeClose: () => void = () => {},
 ): Switch {
   return {
     down: () => flows.down(),
     restore: (options) => flows.restore(options),
     async stop() {
       flows.restore({ cut: true });
-      cleanup();
+      beforeClose();
       await closing(server);
     },
   };
 }
 
-export async function startNetworkSwitch(): Promise<Switch & { port: number }> {
+export async function startNetworkSwitch(): Promise<PortSwitch> {
   const flows = new Flows();
   const server = createServer((_request, response) => {
     // Only https and wss reach the proxy, and both tunnel.
@@ -145,7 +147,7 @@ export async function startNetworkSwitch(): Promise<Switch & { port: number }> {
     upstream.once("error", () => client.destroy());
   });
   const port = await listening(server, "127.0.0.1");
-  return { ...switchOver(server, flows), port };
+  return { ...switchControls(server, flows), port };
 }
 
 // The dev hub at http://127.0.0.1:<port>: requests are forwarded over
@@ -154,7 +156,7 @@ export async function startNetworkSwitch(): Promise<Switch & { port: number }> {
 // the app would have sent it.
 export async function startHubFront(
   hubUrl: string,
-): Promise<Switch & { port: number; url: string }> {
+): Promise<PortSwitch & { url: string }> {
   const hub = new URL(hubUrl);
   const secure = hub.protocol === "https:";
   const hubPort = Number(hub.port || (secure ? 443 : 80));
@@ -217,7 +219,7 @@ export async function startHubFront(
   });
   const port = await listening(server, "127.0.0.1");
   return {
-    ...switchOver(server, flows, () => server.closeAllConnections()),
+    ...switchControls(server, flows, () => server.closeAllConnections()),
     port,
     url: `http://127.0.0.1:${port}`,
   };
@@ -234,7 +236,7 @@ export async function startHubFront(
 export async function startListenerFront(
   port: number,
   listenerPort: () => Promise<number | null>,
-): Promise<Switch & { port: number }> {
+): Promise<PortSwitch> {
   const flows = new Flows();
   const server = createTcpServer({ pauseOnConnect: true });
   server.on("connection", (client) => {
@@ -264,7 +266,7 @@ export async function startListenerFront(
     );
   });
   return {
-    ...switchOver(server, flows),
+    ...switchControls(server, flows),
     port: await listening(server, "::", port),
   };
 }
