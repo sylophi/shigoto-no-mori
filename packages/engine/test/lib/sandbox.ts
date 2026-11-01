@@ -25,7 +25,6 @@ import * as Stream from "effect/Stream";
 import * as Agents from "../../src/Agents.ts";
 import * as CarryOver from "../../src/CarryOver.ts";
 import * as Config from "../../src/Config.ts";
-import * as Control from "../../src/Control.ts";
 import * as DataDirLock from "../../src/DataDirLock.ts";
 import * as Doctor from "../../src/Doctor.ts";
 import { errorDocument } from "../../src/errorDocument.ts";
@@ -40,7 +39,6 @@ import * as Projects from "../../src/Projects.ts";
 import * as Registry from "../../src/Registry.ts";
 import * as Scripts from "../../src/Scripts.ts";
 import * as Terrier from "../../src/Terrier.ts";
-import * as Transfer from "../../src/Transfer.ts";
 import * as Usage from "../../src/Usage.ts";
 import { doctorLayer, migratingEngineLayer } from "../../src/layer.ts";
 import * as Migration from "../../src/Migration.ts";
@@ -81,8 +79,6 @@ export type Engine =
   | Landing.Landing
   | Hygiene.Hygiene
   | Doctor.Doctor
-  | Control.Control
-  | Transfer.Transfer
   | WtFolder.WtFolder
   | WorktreeData.WorktreeData
   | SqlClient.SqlClient

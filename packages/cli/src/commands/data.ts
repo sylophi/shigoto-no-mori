@@ -2,12 +2,12 @@
 // move Settings' Data location makes, which restarts the host holding
 // it (host/ipc/modules/runtime.ts).
 import { join, resolve } from "node:path";
-import type { RuntimeInfo } from "@shigomori/contracts/schemas";
+import { runtimeContract } from "@shigomori/contracts/modules/runtime";
 import { byPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
-import { askHost } from "../askHost.ts";
+import * as Control from "../Control.ts";
 import { rest } from "../here.ts";
 import { emit, out, Output, styles } from "../output.ts";
 
@@ -16,13 +16,16 @@ const RESTARTS = byPlatform({
   linux: "The host restarts into it.",
 });
 
-const info = askHost<RuntimeInfo>("runtime:info");
+const host = Effect.map(Control.Control, (control) =>
+  control.client(runtimeContract),
+);
+const info = Effect.flatMap(host, (runtime) => runtime.info());
 
 const moveTo = (parentDir: string | undefined) =>
   Effect.gen(function* () {
     const { json, stdoutColor } = yield* Effect.service(Output);
     const { canonicalDataDirName } = yield* info;
-    yield* askHost<void>("runtime:moveDataDir", { parentDir });
+    yield* (yield* host).moveDataDir({ parentDir });
     const dataDir =
       parentDir === undefined ? null : join(parentDir, canonicalDataDirName);
     if (json) return yield* emit({ ok: true, dataDir });

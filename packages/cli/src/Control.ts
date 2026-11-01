@@ -16,14 +16,41 @@ import {
   LinkRefusedError,
   RemoteCallError,
 } from "@shigomori/contracts/errors";
-import { CLOSE_TRY_AGAIN, LoopbackGroup } from "@shigomori/contracts/link";
-import { isInvoke } from "@shigomori/contracts/contract";
+import {
+  callsOf,
+  channelOf,
+  type ContractModule,
+  isInvoke,
+  keyOf,
+} from "@shigomori/contracts/contract";
+import {
+  CLOSE_TRY_AGAIN,
+  LOOPBACK_FILE,
+  LoopbackFile,
+  LoopbackGroup,
+} from "@shigomori/contracts/link";
 import {
   CONTROL_ERROR_CODES,
-  type ControlTransferEvent,
   isControlErrorCode,
 } from "@shigomori/contracts/modules/control";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
+import type {
+  EffectClient,
+  ViewInput,
+  ViewKeys,
+  ViewValue,
+} from "@shigomori/contracts/types";
+import { type Flavor, flavorNames, isFlavor } from "@shigomori/engine/flavor";
+import { answerWithin } from "@shigomori/engine/liveness";
+import * as Paths from "@shigomori/engine/Paths";
+import { byPlatform } from "@shigomori/engine/platform";
+import { pidAlive } from "@shigomori/engine/processes";
+import * as Registry from "@shigomori/engine/Registry";
+import {
+  flatClient,
+  newConnectionId,
+  quietProtocol,
+} from "@shigomori/engine/rpcClient";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -37,13 +64,6 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/socket/Socket";
-import { type Flavor, flavorNames, isFlavor } from "./flavor.ts";
-import { byPlatform } from "./platform.ts";
-import { answerWithin } from "./liveness.ts";
-import * as Paths from "./Paths.ts";
-import { pidAlive } from "./processes.ts";
-import { flatClient, newConnectionId, quietProtocol } from "./rpcClient.ts";
-import * as Registry from "./Registry.ts";
 
 // Nothing answers at the address loopback.json names, or what answers
 // isn't the app.
@@ -136,46 +156,50 @@ export type ControlError =
   | HubRateLimited
   | ControlRefused;
 
+// A view over the loopback is a transfer's: its progress, then its
+// answer.
+type Event =
+  | { readonly _tag: "progress"; readonly progress: unknown }
+  | { readonly _tag: "result"; readonly result: unknown };
+
+type ProgressOf<A> = A extends {
+  readonly _tag: "progress";
+  readonly progress: infer P;
+}
+  ? P
+  : never;
+type ResultOf<A> = A extends {
+  readonly _tag: "result";
+  readonly result: infer R;
+}
+  ? R
+  : never;
+
+// A module's invokes, each answered with its output, and its views,
+// each answered with the transfer's result once `onProgress` has seen
+// its progress.
+type ControlClient<M extends ContractModule> = EffectClient<M, ControlError> & {
+  readonly [K in ViewKeys<M>]: (
+    input: ViewInput<M, K>,
+    onProgress: (progress: ProgressOf<ViewValue<M, K>>) => Effect.Effect<void>,
+  ) => Effect.Effect<ResultOf<ViewValue<M, K>>, ControlError>;
+};
+
 export class Control extends Context.Service<
   Control,
   {
-    // One call over a fresh connection, answered with the result the
-    // RpcClient decoded against LoopbackGroup's schema. `onPush` sees
-    // each progress push the call streams to its caller before its
-    // answer. An undefined input sends none.
-    readonly call: (
-      channel: string,
-      input: unknown,
-      onPush?: (channel: string, payload: unknown) => Effect.Effect<void>,
-    ) => Effect.Effect<unknown, ControlError>;
+    // A module's calls to the app, each over a fresh connection and
+    // answered with what the RpcClient decoded against LoopbackGroup's
+    // schema.
+    readonly client: <M extends ContractModule>(module: M) => ControlClient<M>;
   }
->()("sm/engine/Control") {}
-
-export const LOOPBACK_FILE = "loopback.json";
-
-// What loopback.json holds: the host's pid, the loopback's port and
-// token, and the app's version. Written aside first, at
-// loopbackPartialOf, and renamed in.
-export const LoopbackFile = Schema.fromJsonString(
-  Schema.Struct({
-    pid: Schema.Int,
-    port: Schema.Int,
-    token: Schema.String,
-    appVersion: Schema.String,
-  }),
-);
-
-export const loopbackPartialOf = (file: string, pid: number) =>
-  `${file}.${pid}`;
+>()("sm/cli/Control") {}
 
 // The app answers a hello at once, so a dial or a welcome that takes
 // this long, of turns this process ran through, is not the app. One
 // this process was stopped for (a Ctrl-Z, a sleep) is asked again
 // (answerWithin).
 const HANDSHAKE_TIMEOUT_MS = 5_000;
-
-// What a transfer's progress is, to the verbs that show it.
-const PROGRESS = "sync:pullProgress";
 
 const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
   const fs = yield* FileSystem.FileSystem;
@@ -253,6 +277,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     );
     return { client, call };
   });
+  type Link = Effect.Success<ReturnType<typeof connect>>;
 
   // A call's failure as the verbs read it. A refusal of commands is a
   // peer's (the loopback's callers pass no gate), and names the device
@@ -300,10 +325,11 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     return new ControlRefused({ channel, said: errorMessageOf(error) });
   };
 
-  const call = Effect.fn("Control.call")(function* (
+  // One call over a fresh connection: `ask` over the link once the
+  // handshake is through.
+  const call = Effect.fn("Control.call")(function* <A>(
     channel: string,
-    input: unknown,
-    onPush?: (pushed: string, payload: unknown) => Effect.Effect<void>,
+    ask: (link: Link) => Effect.Effect<A, unknown>,
   ) {
     const found = yield* published;
     // A file left by a crash names a dead pid, or a port nothing (or
@@ -337,26 +363,7 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
         );
         // A transfer takes as long as it takes, so the call is on no
         // clock.
-        const rpc = LoopbackGroup.requests.get(channel);
-        if (rpc === undefined || isInvoke(rpc)) {
-          return yield* link.call(channel, input);
-        }
-        // A transfer streams its progress, then its answer.
-        let answer: unknown;
-        yield* Stream.runForEach(
-          link.client(channel, input) as Stream.Stream<
-            ControlTransferEvent,
-            unknown
-          >,
-          (event) =>
-            "progress" in event
-              ? (onPush?.(PROGRESS, event.progress) ?? Effect.void)
-              : Effect.sync(() => {
-                  answer = event.result;
-                }),
-        );
-        if (answer === undefined) return yield* new ConnectionLost();
-        return answer;
+        return yield* ask(link);
       }).pipe(
         // A call the app interrupted (it is quitting) is the app gone.
         // This fiber's own interruption, a Ctrl-C, still ends it.
@@ -371,7 +378,42 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
     );
   });
 
-  return Control.of({ call });
+  const invoke = (channel: string) => (input?: unknown) =>
+    call(channel, (link) => link.call(channel, input));
+
+  const progressing =
+    (channel: string) =>
+    (input: unknown, onProgress: (progress: unknown) => Effect.Effect<void>) =>
+      call(channel, (link) =>
+        Effect.gen(function* () {
+          let answer: unknown;
+          yield* Stream.runForEach(
+            link.client(channel, input) as Stream.Stream<Event, unknown>,
+            (event) =>
+              "progress" in event
+                ? onProgress(event.progress)
+                : Effect.sync(() => {
+                    answer = event.result;
+                  }),
+          );
+          if (answer === undefined) return yield* new ConnectionLost();
+          return answer;
+        }),
+      );
+
+  const client = <M extends ContractModule>(module: M): ControlClient<M> => {
+    const calls: Record<string, unknown> = {};
+    for (const one of callsOf(module)) {
+      const channel = channelOf(one);
+      calls[keyOf(one)] = isInvoke(one)
+        ? invoke(channel)
+        : progressing(channel);
+    }
+    // oxlint-disable-next-line shigomori/no-double-cast -- built from the module's own calls, each answering as its call
+    return calls as unknown as ControlClient<M>;
+  };
+
+  return Control.of({ client });
 });
 
 export const layer = (flavor: Flavor) =>

@@ -128,7 +128,6 @@ const ControlTransferEventSchema = Schema.Union([
   Schema.TaggedStruct("progress", { progress: SyncPullProgressSchema }),
   Schema.TaggedStruct("result", { result: ControlTransferResultSchema }),
 ]);
-export type ControlTransferEvent = typeof ControlTransferEventSchema.Type;
 
 // A project set up on a device that lacks it: another device's here
 // (`from`), or this device's on the peer `device` names (`to`).

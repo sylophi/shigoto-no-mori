@@ -62,10 +62,10 @@ type ContractInfo<M> = NonNullable<
   M extends { readonly "~contract"?: infer C } ? C : never
 >;
 
-export type EffectClient<M extends ContractModule> = {
+export type EffectClient<M extends ContractModule, E = unknown> = {
   [R in InvokesOf<M> as KeyOf<R["_tag"]>]: (
     ...args: Args<Encoded<InputOf<R>>>
-  ) => Effect.Effect<Decoded<OutputOf<R>>, unknown>;
+  ) => Effect.Effect<Decoded<OutputOf<R>>, E>;
 };
 
 export type EffectApi<M extends ContractModule> = {

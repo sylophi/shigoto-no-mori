@@ -5,7 +5,6 @@
 // its terminal; and the hub socket with the direct plane, which dials
 // the peers. Every host-side module (`isHostSide`) registers here.
 import { hubConnectInputs } from "@shared/account/hubConnect";
-import { LOOPBACK_FILE } from "@shigomori/engine/Control";
 import { ROSTER_UNAVAILABLE, STALE_TICKET } from "@shared/remote/sealedSocket";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -25,7 +24,7 @@ import {
   nameOf,
   Remote,
 } from "@shigomori/contracts/contract";
-import { isHostSide } from "@shigomori/contracts/link";
+import { isHostSide, LOOPBACK_FILE } from "@shigomori/contracts/link";
 import {
   hubContract,
   type HubPeerPush,

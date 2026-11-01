@@ -10,7 +10,6 @@ import * as Bundle from "./Bundle.ts";
 import * as CarryOver from "./CarryOver.ts";
 import * as CloneCheckout from "./CloneCheckout.ts";
 import * as Config from "./Config.ts";
-import * as Control from "./Control.ts";
 import * as NativeFs from "./NativeFs.ts";
 import * as Dirty from "./Dirty.ts";
 import * as Doctor from "./Doctor.ts";
@@ -39,7 +38,6 @@ import * as SharedSettings from "./SharedSettings.ts";
 import * as Store from "./Store.ts";
 import type * as SqlClient from "effect/sql/SqlClient";
 import * as Terrier from "./Terrier.ts";
-import * as Transfer from "./Transfer.ts";
 import * as Updater from "./Updater.ts";
 import * as Usage from "./Usage.ts";
 import * as WorktreeData from "./WorktreeData.ts";
@@ -58,42 +56,23 @@ type EngineOptions = {
   readonly sm: string;
 };
 
-// Every service but Paths, which is built once beside them.
-const services = (options: EngineOptions) =>
-  Agents.layer(options.sm).pipe(
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Landing.layer,
-        Projects.layer,
-        Doctor.layer,
-        Transfer.layer,
-        Bundle.layer,
-        Open.layer,
-      ),
-    ),
-    Layer.provideMerge(Hygiene.layer),
-    Layer.provideMerge(WtFolder.layer),
+// The services over the store, which the engine's graph and the
+// doctor's checks share.
+const storeServices = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
+  WtFolder.layer.pipe(
     Layer.provideMerge(Worktrees.layer),
-    Layer.provideMerge(Control.layer(options.flavor)),
     Layer.provideMerge(
       Layer.mergeAll(
-        Launchers.layer,
         Layout.layer,
-        ShellIntegration.layer,
         Registry.layer,
-        Scripts.layer,
         GitHub.layer,
         Lifecycle.layer,
         CarryOver.layer,
-        Updater.layer(options.flavor).pipe(
-          Layer.provide(FetchHttpClient.layer),
-        ),
       ),
     ),
     // Below Registry, which forgets a removed project's clone records.
     Layer.provideMerge(CloneCheckout.layer),
     Layer.provideMerge(Terrier.layer),
-    Layer.provideMerge(NativeFs.layer(options.nativefs)),
     // Above Identity and SharedSettings, which an edit is stamped with.
     Layer.provideMerge(Config.layer),
     Layer.provideMerge(
@@ -110,10 +89,40 @@ const services = (options: EngineOptions) =>
         MirrorHistory.layer,
       ),
     ),
+    Layer.provideMerge(store),
+  );
+
+// Every service but Paths, which is built once beside them.
+const services = (options: EngineOptions) =>
+  Agents.layer(options.sm).pipe(
     Layer.provideMerge(
-      Layer.mergeAll(Git.layer, DataDirLock.layer(options.open)),
+      Layer.mergeAll(
+        Landing.layer,
+        Projects.layer,
+        Doctor.layer,
+        Bundle.layer,
+        Open.layer,
+      ),
     ),
-    Layer.provideMerge(options.store),
+    Layer.provideMerge(Hygiene.layer),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Launchers.layer,
+        ShellIntegration.layer,
+        Scripts.layer,
+        Updater.layer(options.flavor).pipe(
+          Layer.provide(FetchHttpClient.layer),
+        ),
+      ),
+    ),
+    Layer.provideMerge(storeServices(options.store)),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        NativeFs.layer(options.nativefs),
+        Git.layer,
+        DataDirLock.layer(options.open),
+      ),
+    ),
     Layer.provideMerge(childDefaults),
   );
 
@@ -133,36 +142,6 @@ const engineLayer = (options: EngineOptions) =>
 export const migratingEngineLayer = (options: EngineOptions) =>
   WtFolder.drained.pipe(Layer.provideMerge(engineLayer(options)));
 
-// The store-backed services the doctor's checks read, over `store`.
-const doctorStore = <E, R>(store: Layer.Layer<SqlClient.SqlClient, E, R>) =>
-  WtFolder.layer.pipe(
-    Layer.provideMerge(Worktrees.layer),
-    Layer.provideMerge(
-      Layer.mergeAll(
-        Layout.layer,
-        Registry.layer,
-        GitHub.layer,
-        Lifecycle.layer,
-        CarryOver.layer,
-      ),
-    ),
-    Layer.provideMerge(CloneCheckout.layer),
-    Layer.provideMerge(Terrier.layer),
-    Layer.provideMerge(Config.layer),
-    Layer.provideMerge(
-      Layer.mergeAll(
-        WorktreeData.layer,
-        Dirty.layer,
-        Usage.layer,
-        Identity.layer,
-        Icons.layer,
-        SharedSettings.layer,
-        RunningScripts.layer,
-      ),
-    ),
-    Layer.provideMerge(store),
-  );
-
 // The terminal's `sm doctor`, which answers when the store can't open:
 // the store is opened inside each run (`Doctor.standalone`), with a
 // migration of its own that nothing shows. Paths comes along for the
@@ -173,9 +152,9 @@ export const doctorLayer = (options: {
   readonly nativefs: string;
 }) =>
   Doctor.standalone(
-    doctorStore(Store.layer(options.open)),
-    doctorStore(Store.fromFiles(options.open, true)),
-    doctorStore(Store.fromFiles(options.open, false)),
+    storeServices(Store.layer(options.open)),
+    storeServices(Store.fromFiles(options.open, true)),
+    storeServices(Store.fromFiles(options.open, false)),
     Store.importOwed(options.open),
   ).pipe(
     Layer.provide(

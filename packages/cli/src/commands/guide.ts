@@ -7,9 +7,8 @@
 import {
   type GuideAction,
   GuideActionFields,
-  GuideReplySchema,
+  guideDriveContract,
 } from "@shigomori/contracts/modules/guide";
-import * as Control from "@shigomori/engine/Control";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -22,6 +21,7 @@ import * as Toolkit from "effect/ai/Toolkit";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import { version } from "../build.ts";
+import * as Control from "../Control.ts";
 
 // The app turned an action down, or could not be reached, in its words.
 class GuideToolFailed extends Schema.TaggedError<GuideToolFailed>()(
@@ -89,26 +89,21 @@ const Tools = Toolkit.make(
   bareTool("clear", "Removes the highlight."),
 );
 
-const decodeReply = Schema.decodeUnknownEffect(GuideReplySchema);
-
 const handlers = (session: string) =>
   Tools.toLayer(
     Effect.gen(function* () {
-      const control = yield* Control.Control;
+      const app = (yield* Control.Control).client(guideDriveContract);
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       // The screenshots, gone when the server stops.
       const shots = yield* fs.makeTempDirectoryScoped({ prefix: "sm-guide-" });
       // The agent is gone once its server stops, and so is its session.
       yield* Effect.addFinalizer(() =>
-        control
-          .call("guideDrive:drive", { session, action: { _tag: "end" } })
-          .pipe(Effect.ignore),
+        app.drive({ session, action: { _tag: "end" } }).pipe(Effect.ignore),
       );
       let taken = 0;
       const drive = (action: GuideAction) =>
-        control.call("guideDrive:drive", { session, action }).pipe(
-          Effect.flatMap(decodeReply),
+        app.drive({ session, action }).pipe(
           Effect.flatMap(({ png, ...reply }) =>
             png === undefined
               ? Effect.succeed(reply)
