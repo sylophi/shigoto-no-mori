@@ -118,6 +118,10 @@ export function DiffFileIndexView({
   const [pendingDiscard, setPendingDiscard] = useState<PendingDiscard | null>(
     null,
   );
+  const discardLabel =
+    editable && pendingDiscard
+      ? `Discard ${describeDiscard(pendingDiscard, editable)}?`
+      : "";
   // The row whose context menu is up, or null for the list's empty
   // space, which has the header's bulk menu. One menu serves the whole
   // list, anchored at the pointer: a menu per row would mount a menu's
@@ -332,16 +336,22 @@ export function DiffFileIndexView({
       {changes && footer}
 
       {editable && pendingDiscard && (
-        <DiscardConfirmDialog
-          label={`Discard ${describeDiscard(pendingDiscard, editable)}?`}
-          busy={editable.busy}
-          onCancel={() => setPendingDiscard(null)}
-          onConfirm={() => {
-            const paths = discardPaths(pendingDiscard, editable);
-            if (paths.length > 0) editable.onDiscard(paths);
-            setPendingDiscard(null);
-          }}
-        />
+        <ModalShell
+          label={discardLabel}
+          onClose={() => setPendingDiscard(null)}
+          popoverClassName="max-w-md"
+        >
+          <DiscardConfirmView
+            label={discardLabel}
+            busy={editable.busy}
+            onCancel={() => setPendingDiscard(null)}
+            onConfirm={() => {
+              const paths = discardPaths(pendingDiscard, editable);
+              if (paths.length > 0) editable.onDiscard(paths);
+              setPendingDiscard(null);
+            }}
+          />
+        </ModalShell>
       )}
     </div>
   );
@@ -484,29 +494,6 @@ function ChangesMenuItems({
         Stash all changes
       </DropdownMenuItem>
     </>
-  );
-}
-
-function DiscardConfirmDialog({
-  label,
-  busy,
-  onCancel,
-  onConfirm,
-}: {
-  label: string;
-  busy: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <ModalShell label={label} onClose={onCancel} popoverClassName="max-w-md">
-      <DiscardConfirmView
-        label={label}
-        busy={busy}
-        onCancel={onCancel}
-        onConfirm={onConfirm}
-      />
-    </ModalShell>
   );
 }
 
