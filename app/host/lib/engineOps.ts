@@ -906,6 +906,8 @@ export const readProjectConfig = Effect.fnUntraced(function* (
 // The project's launcher row: installed tools and custom commands,
 // hidden ones left out, most used first.
 export const launcherRow = Effect.fnUntraced(function* (projectId: string) {
+  // The row's usage stats stay in the engine: the order is already in
+  // `entries`.
   const { entries, hiddenCount } = yield* asCall(
     Effect.gen(function* () {
       const project = yield* projectById(projectId);
