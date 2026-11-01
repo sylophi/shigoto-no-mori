@@ -467,21 +467,27 @@ export const resumeDataDirMove = (at: string) =>
     yield* undoMove(journal.value, at, file);
   });
 
-// A move refused before anything moved: an earlier move still owed, or
-// something kept under the id the worktree at `kept.oldPath` would take.
-class DataDirMoveRefused extends Schema.TaggedError<DataDirMoveRefused>()(
-  "DataDirMoveRefused",
-  {
-    kept: Schema.NullOr(
-      Schema.Struct({ oldPath: Schema.String, newPath: Schema.String }),
-    ),
-  },
+// A move refused before anything moved: an earlier move still owed.
+class EarlierMoveUnfinished extends Schema.TaggedError<EarlierMoveUnfinished>()(
+  "EarlierMoveUnfinished",
+  {},
 ) {
   override get message(): string {
-    return this.kept === null
-      ? "An earlier move of the data folder isn't finished or undone yet. " +
-          "It's tried again at every start; see the log for what stops it."
-      : `Something is still kept for a worktree that was once at ${this.kept.newPath}, so ${this.kept.oldPath} can't take its place there. Move the data folder somewhere else.`;
+    return (
+      "An earlier move of the data folder isn't finished or undone yet. " +
+      "It's tried again at every start; see the log for what stops it."
+    );
+  }
+}
+
+// A move refused before anything moved: something kept under the id the
+// worktree at `oldPath` would take.
+class KeptUnderNewId extends Schema.TaggedError<KeptUnderNewId>()(
+  "KeptUnderNewId",
+  { oldPath: Schema.String, newPath: Schema.String },
+) {
+  override get message(): string {
+    return `Something is still kept for a worktree that was once at ${this.newPath}, so ${this.oldPath} can't take its place there. Move the data folder somewhere else.`;
   }
 }
 
@@ -575,14 +581,15 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // can't be, rather than write its own over it.
     yield* resumeDataDirMove(from).pipe(Effect.ignoreCause({ log: "Warn" }));
     if (yield* fs.exists(journalFile).pipe(Effect.orElseSucceed(() => true))) {
-      return yield* new DataDirMoveRefused({ kept: null });
+      return yield* new EarlierMoveUnfinished();
     }
     yield* hooks.ready;
     // Read holding the lock, so no project is added after.
     const projects = yield* registry.listed;
     // Staged before anything moves: a move that succeeds but leaves the
     // pointer unwritable would strand the data where no boot can find
-    // it. The default location needs no pointer.
+    // it. Staged last of the preconditions so a failure above can't
+    // orphan the temp file. The default location needs no pointer.
     if (!move.toDefault) {
       yield* fs.makeDirectory(path.dirname(pointerFile), { recursive: true });
       yield* fs.writeFileString(pointerTmp, `${to}\n`);
@@ -616,13 +623,15 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
         },
       ];
     });
+    // Nothing may be kept under an id a worktree is about to take: the
+    // undo reads anything there as its own re-key's.
     for (const entry of entries) {
       const held = yield* keptUnderNewId(entry).pipe(
         Effect.orElseSucceed(() => true),
       );
       if (held) {
         const { oldPath, newPath } = entry;
-        return yield* new DataDirMoveRefused({ kept: { oldPath, newPath } });
+        return yield* new KeptUnderNewId({ oldPath, newPath });
       }
     }
     yield* hooks.holding(entries.map(({ oldId }) => oldId));
@@ -698,6 +707,9 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
       yield* fs.remove(legacyPointerFile, { force: true });
     }
     yield* flushed(path.dirname(pointerFile));
+    // The store this process holds is the old place's: the first engine
+    // graph to come up at the new place (not the doctor's) removes the old
+    // tree, the journal, and lets it write.
     yield* finishMove(journal, to, {
       settle: false,
       file: path.join(to, JOURNAL),
