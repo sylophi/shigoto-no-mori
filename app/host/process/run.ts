@@ -24,7 +24,7 @@ import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import {
   NATIVEFS_BINARY_NAME,
   NATIVEFS_DIST_DIR,
-} from "@shared/packaging/nativefsDist.mts";
+} from "@shared/packaging/goHelpersDist.mts";
 import * as Migration from "@shigomori/engine/Migration";
 import * as DeviceId from "@host/lib/config/DeviceId";
 import * as HostFacts from "@host/lib/HostFacts";

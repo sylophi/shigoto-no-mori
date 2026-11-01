@@ -25,8 +25,8 @@ function build(script: string, ...args: string[]): Promise<void> {
 
 // The file-sync engine and the filesystem helper ship beside the CLI, so a
 // dev run builds them here too (one flavor each, see
-// shared/packaging/fileSyncDist.mts and nativefsDist.mts).
+// shared/packaging/goHelpersDist.mts).
 await Promise.all([
-  build("build-nativefs.mts").then(() => build("build-cli.mts", "--dev")),
-  build("build-file-sync.mts"),
+  build("build-go.mts", "nativefs").then(() => build("build-cli.mts", "--dev")),
+  build("build-go.mts", "file-sync"),
 ]);

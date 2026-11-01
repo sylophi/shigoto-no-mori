@@ -24,11 +24,9 @@ import {
 import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
-} from "./shared/packaging/fileSyncDist.mts";
-import {
   NATIVEFS_BINARY_NAME,
   NATIVEFS_DIST_DIR,
-} from "./shared/packaging/nativefsDist.mts";
+} from "./shared/packaging/goHelpersDist.mts";
 import {
   APPLE_EVENTS_USAGE_DESCRIPTION,
   LOCAL_NETWORK_USAGE_DESCRIPTION,
@@ -214,12 +212,12 @@ const config: ForgeConfig = {
       });
       // Compile the file-sync engine and the filesystem helper (Go), then
       // the terminal sm (Bun).
-      for (const script of [
-        "build-file-sync.mts",
-        "build-nativefs.mts",
-        "build-cli.mts",
-      ]) {
-        execFileSync("node", [`scripts/${script}`], {
+      for (const [script, ...args] of [
+        ["build-go.mts", "file-sync"],
+        ["build-go.mts", "nativefs"],
+        ["build-cli.mts"],
+      ] as const) {
+        execFileSync("node", [`scripts/${script}`, ...args], {
           cwd: import.meta.dirname,
           stdio: "inherit",
         });
