@@ -68,10 +68,11 @@ commits it (`EFFECT.md`, section 5); the engine's are in
   fail. Until then a failure or a cancel undoes its create
   (`Worktrees.createHeld`); after it only a cancel does, at a later
   step of the move (a pull's files step).
-- **The data-folder move** (`lib/dataDirMove.ts`): the pointer commits
-  it. Its journal, kept in the data folder, is written before the
-  re-key: a start that finds it at the source undoes the move, one that
-  finds it at the destination finishes it. A rename cut before the
+- **The data-folder move** (the engine's `src/dataDirMove.ts`, asked
+  for by `lib/dataDirMove.ts`): the pointer commits it. Its journal,
+  kept in the data folder, is written before the re-key: a start that
+  finds it at the source undoes the move, one that finds it at the
+  destination finishes it. A rename cut before the
   pointer moves leaves the pointer naming a folder that is gone, so
   every process, the terminal's included, finds the data dir through
   `Paths`, which looks for a rename's journal at the staged pointer's
@@ -82,8 +83,8 @@ commits it (`EFFECT.md`, section 5); the engine's are in
   another volume holds the store's write lock for its length, so no
   store write tears the copy. The recovery keeps the journal until
   every step it owes is done, and one it can't read stays, for a look.
-  The steps are in the module's header. The finish, the undo and the
-  lock that makes the move the one change under way are the engine's.
+  The steps are in the engine module's header. The host adds the
+  checks and holds only it can make, and the copy itself.
 - **Nuke** (`lib/nuke.ts`, then the shell's `main/electron/nuke.ts`):
   the marker the shell writes in userData commits it. The start that
   finds it deletes what it names and userData, the marker last, and
