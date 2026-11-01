@@ -5,7 +5,6 @@
 // `checkout` path, so the engine's create stays the one create and
 // knows nothing about PRs.
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import {
   type PullRequestCandidate,
@@ -16,9 +15,9 @@ import {
 import { forkBranchCandidates } from "@shigomori/contracts/git/branches";
 import { errorWordsOf } from "@host/lib/errorWords";
 import * as Git from "@shigomori/engine/Git";
-import { stderrOf } from "@shigomori/engine/processes";
-import { gh, trimGhError } from "./exec";
-import { GithubCli } from "./GithubCli";
+import * as GitHub from "@shigomori/engine/GitHub";
+import { trimGhError } from "./actions";
+import { GH_TIMEOUT_MS, GithubCli } from "./GithubCli";
 import { remoteNameForUrl } from "./remote";
 
 // Why a pull request can't be checked out, in words for the form.
@@ -83,38 +82,41 @@ export const listPullRequestCandidates = Effect.fn("PullRequests.candidates")(
     if (unavailable) {
       return { status: "unavailable", reason: unavailable } as const;
     }
-    return yield* gh(
-      [
-        "pr",
-        "list",
-        "--state",
-        "open",
-        "--limit",
-        String(PR_CANDIDATE_LIMIT),
-        "--json",
-        CANDIDATE_JSON_FIELDS,
-      ],
-      { cwd },
-    ).pipe(
-      Effect.flatMap(({ stdout }) => decodeGhPrCandidates(stdout)),
-      // gh already returns newest-first, which is the order a reviewer
-      // wants.
-      Effect.map(
-        (rows): PullRequestCandidateList => ({
-          status: "ok",
-          pullRequests: rows.map(toCandidate),
-        }),
-      ),
-      // gh exited non-zero (network, SSO prompt, rate limit) or answered
-      // with something we can't read. The form says so rather than
-      // showing an empty list that reads as "no PRs".
-      Effect.orElseSucceed(
-        (): PullRequestCandidateList => ({
-          status: "unavailable",
-          reason: "gh-failed",
-        }),
-      ),
-    );
+    return yield* (yield* GitHub.GitHub)
+      .run(
+        cwd,
+        [
+          "pr",
+          "list",
+          "--state",
+          "open",
+          "--limit",
+          String(PR_CANDIDATE_LIMIT),
+          "--json",
+          CANDIDATE_JSON_FIELDS,
+        ],
+        { timeout: GH_TIMEOUT_MS },
+      )
+      .pipe(
+        Effect.flatMap(decodeGhPrCandidates),
+        // gh already returns newest-first, which is the order a reviewer
+        // wants.
+        Effect.map(
+          (rows): PullRequestCandidateList => ({
+            status: "ok",
+            pullRequests: rows.map(toCandidate),
+          }),
+        ),
+        // gh exited non-zero (network, SSO prompt, rate limit) or answered
+        // with something we can't read. The form says so rather than
+        // showing an empty list that reads as "no PRs".
+        Effect.orElseSucceed(
+          (): PullRequestCandidateList => ({
+            status: "unavailable",
+            reason: "gh-failed",
+          }),
+        ),
+      );
   },
 );
 
@@ -157,26 +159,29 @@ const decodeGhPrHead = Schema.decodeUnknownOption(
 // fetching the wrong ref into a branch is not a mistake worth being
 // relaxed about.
 const readPullRequestHead = (cwd: string, number: number) =>
-  gh(
-    [
-      "pr",
-      "view",
-      String(number),
-      "--json",
-      "url,headRefName,isCrossRepository,headRepositoryOwner",
-    ],
-    { cwd },
+  Effect.flatMap(GitHub.GitHub, (github) =>
+    github.run(
+      cwd,
+      [
+        "pr",
+        "view",
+        String(number),
+        "--json",
+        "url,headRefName,isCrossRepository,headRepositoryOwner",
+      ],
+      { timeout: GH_TIMEOUT_MS },
+    ),
   ).pipe(
     Effect.catchTags({
-      CommandError: (cause) =>
+      GitHubCliError: (cause) =>
         Effect.fail(
           refused(
-            `Couldn't read pull request #${number}: ${trimGhError(stderrOf(cause)) || "gh failed"}`,
+            `Couldn't read pull request #${number}: ${trimGhError(GitHub.stderrOf(cause)) || "gh failed"}`,
             cause,
           ),
         ),
     }),
-    Effect.flatMap(({ stdout }) =>
+    Effect.flatMap((stdout) =>
       Effect.fromOption(decodeGhPrHead(stdout)).pipe(
         Effect.mapError(() =>
           refused(`Unexpected gh pr view output for #${number}`),
@@ -301,7 +306,6 @@ const pickForkBranchName = Effect.fnUntraced(function* (
   number: number,
   head: GhPrHead,
 ) {
-  const pullRef = `refs/pull/${number}/head`;
   const candidates = forkBranchCandidates(
     number,
     head.headRefName,
@@ -310,52 +314,16 @@ const pickForkBranchName = Effect.fnUntraced(function* (
   // The first usable name wins, so the rest aren't probed up front.
   for (const name of candidates) {
     if (!(yield* (yield* Git.Git).localBranchExists(cwd, name))) return name;
-    if ((yield* readBranchMerge(cwd, name)) === pullRef) return name;
+    const github = yield* GitHub.GitHub;
+    if ((yield* github.checkedOutPullRequest(cwd, name)) === number) {
+      return name;
+    }
   }
   return yield* refused(
     `Branches ${candidates.join(" and ")} both already exist and neither ` +
       `tracks pull request #${number}. Delete or rename one and try again.`,
   );
 });
-
-// The fork's PR a branch was checked out from, by number: what
-// resolveForkHead (and `gh pr checkout`) points branch.<b>.merge at.
-// That PR is the branch's own though it comes from a fork. Null for
-// any other branch.
-export const checkedOutPullRequest = (cwd: string, branch: string) =>
-  Effect.map(readBranchMerge(cwd, branch), pullRequestOfMergeRef);
-
-// The same for every branch of the repo at once, in one git call:
-// branch to the number of the fork PR it was checked out from.
-export const checkedOutPullRequests = Effect.fnUntraced(function* (
-  cwd: string,
-) {
-  const numbers = new Map<string, number>();
-  const listed = yield* Effect.result(
-    git(cwd, ["config", "--get-regexp", String.raw`^branch\..*\.merge$`]),
-  );
-  // Exit 1: no branch has a merge ref.
-  if (Result.isFailure(listed)) return numbers;
-  for (const line of listed.success.split("\n")) {
-    const [key = "", ref = null] = line.split(" ");
-    const branch = key.match(/^branch\.(.+)\.merge$/)?.[1];
-    const number = pullRequestOfMergeRef(ref);
-    if (branch && number !== null) numbers.set(branch, number);
-  }
-  return numbers;
-});
-
-function pullRequestOfMergeRef(ref: string | null): number | null {
-  const match = ref?.trim().match(/^refs\/pull\/(\d+)\/head$/);
-  return match?.[1] ? Number(match[1]) : null;
-}
-
-const readBranchMerge = (cwd: string, branch: string) =>
-  git(cwd, ["config", "--get", `branch.${branch}.merge`]).pipe(
-    Effect.map((stdout) => stdout.trim() || null),
-    // Exit 1 just means the key isn't set.
-    Effect.orElseSucceed(() => null),
-  );
 
 // A git failure's words are its stderr, of which the last line is the
 // useful part.

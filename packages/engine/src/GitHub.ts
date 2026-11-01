@@ -18,10 +18,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { elapsedMillis } from "./elapsed.ts";
 import { envVar } from "./environment.ts";
@@ -36,11 +35,12 @@ import {
   parseMergeProgress,
 } from "./mergeProgress.ts";
 import * as Paths from "./Paths.ts";
-import { isMissingProgram } from "./platformErrors.ts";
+import * as Processes from "./processes.ts";
 
 // A gh that couldn't answer, sorted where it failed: not installed, not
-// signed in, no remote on a GitHub host it knows, any other failure (gh's
-// stderr is the cause), or past the caller's deadline.
+// signed in, no remote on a GitHub host it knows, any other failure, or
+// past the caller's deadline. The command's failure is the cause
+// (stderrOf, stdoutOf).
 export class GitHubCliError extends Schema.TaggedError<GitHubCliError>()(
   "GitHubCliError",
   {
@@ -149,20 +149,35 @@ export type OwningLookup = Lookup<OwningPullRequest> & {
   readonly uncertain?: true;
 };
 
+// A gh run's deadline, DEFAULT_TIMEOUT when none is given.
+type RunOptions = { readonly timeout?: Duration.Input | undefined };
+
 export class GitHub extends Context.Service<
   GitHub,
   {
-    // gh with `args` in `cwd`, pinned to its GitHub host (hostOf),
-    // failing past `timeout` when one is given.
+    // gh with `args` in `cwd`, pinned to its GitHub host (hostOf).
     readonly run: (
       cwd: string,
       args: ReadonlyArray<string>,
-      options?: { readonly timeout?: Duration.Input | undefined },
+      options?: RunOptions,
+    ) => Effect.Effect<string, GitHubCliError>;
+    // gh with `args` outside any repo, pinned to `host` when one is
+    // given (gh's own default host otherwise).
+    readonly runOn: (
+      host: string | null,
+      args: ReadonlyArray<string>,
+      options?: RunOptions,
     ) => Effect.Effect<string, GitHubCliError>;
     // The GitHub host of the remote gh resolves `cwd`'s repo from, or
-    // null for none. Every gh run in a repo, the engine's and the
-    // app's, goes there: `gh api` asks github.com otherwise.
+    // null for none. Every gh run in a repo goes there: `gh api` asks
+    // github.com otherwise.
     readonly hostOf: (cwd: string) => Effect.Effect<string | null>;
+    // The hosts gh is signed in to, as its hosts.yml lists them, and
+    // github.com always. A file that is there and can't be read fails.
+    readonly knownHosts: Effect.Effect<
+      ReadonlySet<string>,
+      PlatformError.PlatformError
+    >;
     // The branch's pull request with its checks, as the status card
     // shows it: the newest that is the branch's own.
     readonly cardFor: (
@@ -202,13 +217,19 @@ export class GitHub extends Context.Service<
       ReadonlyArray<PullRequestSummary>,
       GitHubCliError | GitHubOutputError
     >;
-    // Whether the PR's branch here was checked out from it, the one way
-    // a fork's PR is the branch's own.
-    readonly checkedOutFrom: (
+    // The fork's PR the branch was checked out from, or null: the app's
+    // PR checkout, like `gh pr checkout`, points branch.<b>.merge at
+    // refs/pull/<n>/head. That PR is the branch's own though it comes
+    // from a fork.
+    readonly checkedOutPullRequest: (
       repo: string,
       branch: string,
-      number: number,
-    ) => Effect.Effect<boolean>;
+    ) => Effect.Effect<number | null>;
+    // The same for every branch of the repo, in one git call: branch to
+    // the number of the fork's PR it was checked out from.
+    readonly checkedOutPullRequests: (
+      repo: string,
+    ) => Effect.Effect<ReadonlyMap<string, number>>;
     // The commits the branch's merged PRs ended on: from this
     // repository, or the fork's one the branch was checked out from.
     readonly mergedHeads: (
@@ -283,6 +304,10 @@ const PROBE_TIMEOUT = Duration.seconds(6);
 // button behind it with it.
 const DEFAULT_TIMEOUT = Duration.minutes(2);
 
+// Room for a stack read's every page (`--paginate --slurp`) and a
+// sprawling PR's diff.
+const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
+
 // On one line so the call logs as one.
 const REPO_MERGE_QUERY =
   "query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) " +
@@ -334,9 +359,24 @@ const truncateRunes = (text: string, max: number): string => {
     : `${chars.slice(0, max - 1).join("")}…`;
 };
 
-// What gh said, "" when it said nothing.
+// What gh wrote to stderr, "" when it said nothing or didn't exit.
 export const stderrOf = (error: GitHubCliError): string =>
-  error.cause instanceof Error ? error.cause.message : "";
+  Processes.isCommandError(error.cause) ? Processes.stderrOf(error.cause) : "";
+
+// What gh wrote to stdout before it failed, for a partial answer.
+export const stdoutOf = (error: GitHubCliError): string =>
+  Processes.isCommandError(error.cause) ? Processes.stdoutOf(error.cause) : "";
+
+// gh's own words for a failure: its stderr, else its exit status, else
+// why it couldn't be run.
+const wordsOf = (error: GitHubCliError): string => {
+  const cause = error.cause;
+  if (!Processes.isCommandError(cause)) return "";
+  if (cause.exitCode !== null) {
+    return Processes.stderrOf(cause) || `exit status ${cause.exitCode}`;
+  }
+  return cause.cause instanceof Error ? cause.cause.message : "";
+};
 
 // The failure as one short line, which the status card shows: any other
 // failure is the first line of gh's own words.
@@ -351,7 +391,7 @@ const reasonOf = (error: GitHubCliError): string => {
     case "timeout":
       return "gh timed out";
     case "failed": {
-      const first = stderrOf(error)
+      const first = wordsOf(error)
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line !== "");
@@ -369,8 +409,14 @@ export const commandMessageOf = (error: GitHubCliError): string => {
     case "timeout":
       return "gh timed out";
     default:
-      return stderrOf(error) || "gh failed";
+      return wordsOf(error) || "gh failed";
   }
+};
+
+// The PR number a branch's merge ref names (refs/pull/<n>/head), or null.
+const pullRequestOfMergeRef = (ref: string): number | null => {
+  const match = /^refs\/pull\/(\d+)\/head$/.exec(ref.trim());
+  return match ? Number(match[1]) : null;
 };
 
 // One node is one verdict (checkVerdict).
@@ -488,7 +534,7 @@ const make = Effect.gen(function* () {
   const paths = yield* Paths.Paths;
 
   // gh's own precedence for its hosts.yml: GH_CONFIG_DIR, then the XDG
-  // config directory.
+  // config directory. Missing for most users and on a fresh install.
   const knownHosts = Effect.gen(function* () {
     const dir = yield* envVar("GH_CONFIG_DIR");
     const file = path.join(
@@ -496,78 +542,71 @@ const make = Effect.gen(function* () {
       "hosts.yml",
     );
     return ghKnownHosts(
-      yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => "")),
+      yield* fs
+        .readFileString(file)
+        .pipe(
+          Effect.catchReason("PlatformError", "NotFound", () =>
+            Effect.succeed(""),
+          ),
+        ),
     );
   });
 
   const hostOf = Effect.fn("GitHub.hostOf")(function* (cwd: string) {
     const [remotes, known] = yield* Effect.all(
-      [git.listRemoteEntries(cwd), knownHosts],
+      [
+        git.listRemoteEntries(cwd),
+        knownHosts.pipe(Effect.orElseSucceed(() => ghKnownHosts(""))),
+      ],
       { concurrency: 2 },
     );
     return ghHostFor(remotes, known);
   });
 
+  // No stdin, so it never waits on a prompt.
+  const gh = (
+    cwd: string | undefined,
+    host: string | null,
+    args: ReadonlyArray<string>,
+    options: RunOptions,
+  ) =>
+    Processes.exec("gh", args, {
+      cwd,
+      timeout: options.timeout ?? DEFAULT_TIMEOUT,
+      maxOutputBytes: MAX_OUTPUT_BYTES,
+      ...(host === null ? {} : { env: { GH_HOST: host }, extendEnv: true }),
+    }).pipe(
+      Effect.map(({ stdout }) => stdout),
+      Effect.mapError(
+        (cause) =>
+          new GitHubCliError({
+            reason:
+              cause.reason === "not-found"
+                ? "missing"
+                : cause.reason === "timed-out"
+                  ? "timeout"
+                  : reasonOfStderr(Processes.stderrOf(cause)),
+            cause,
+          }),
+      ),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
+
   const run = Effect.fn("GitHub.run")(function* (
     cwd: string,
     args: ReadonlyArray<string>,
-    options: { readonly timeout?: Duration.Input | undefined } = {},
+    options: RunOptions = {},
   ) {
-    const failed = (cause: unknown) =>
-      new GitHubCliError({ reason: "failed", cause });
-    const host = yield* hostOf(cwd);
-    const answer = Effect.scoped(
-      Effect.gen(function* () {
-        // In a process group of its own, so a deadline ends gh with the
-        // git and credential helper it started. No stdin: it never waits
-        // on a prompt.
-        const handle = yield* spawner
-          .spawn(
-            ChildProcess.make("gh", [...args], {
-              cwd,
-              stdin: "ignore",
-              ...(host === null
-                ? {}
-                : { env: { GH_HOST: host }, extendEnv: true }),
-            }),
-          )
-          .pipe(
-            Effect.mapError((error) =>
-              isMissingProgram(error)
-                ? new GitHubCliError({ reason: "missing" })
-                : failed(error),
-            ),
-          );
-        const collect = (stream: Stream.Stream<Uint8Array, unknown>) =>
-          stream.pipe(
-            Stream.decodeText(),
-            Stream.mkString,
-            Effect.mapError(failed),
-          );
-        const [stdout, stderr] = yield* Effect.all(
-          [collect(handle.stdout), collect(handle.stderr)],
-          { concurrency: 2 },
-        );
-        const code = yield* handle.exitCode.pipe(Effect.mapError(failed));
-        if (code !== 0) {
-          return yield* new GitHubCliError({
-            reason: reasonOfStderr(stderr),
-            // `exit status N` when gh said nothing.
-            cause: new Error(stderr.trim() || `exit status ${code}`),
-          });
-        }
-        return stdout;
-      }),
-    );
-    const done = yield* Effect.timeoutOption(
-      answer,
-      options.timeout ?? DEFAULT_TIMEOUT,
-    );
-    if (Option.isNone(done)) {
-      return yield* new GitHubCliError({ reason: "timeout" });
-    }
-    return done.value;
+    return yield* gh(cwd, yield* hostOf(cwd), args, options);
   });
+
+  const runOn = Effect.fn("GitHub.runOn")(
+    (
+      host: string | null,
+      args: ReadonlyArray<string>,
+      options: RunOptions = {},
+    ) => gh(undefined, host, args, options),
+  );
 
   // gh's rows for a lookup: the failure that kept them, or none when
   // gh answered with something this build can't read.
@@ -585,17 +624,36 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  // The fork PR the branch was checked out from, 0 for none: the app's
-  // PR checkout, like `gh pr checkout`, points branch.<b>.merge at
-  // refs/pull/<n>/head, and that PR is the branch's own.
-  const checkedOutPullRequest = (repo: string, branch: string) =>
-    git.run(repo, ["config", "--get", `branch.${branch}.merge`]).pipe(
-      Effect.map((ref) => {
-        const match = /^refs\/pull\/(\d+)\/head$/.exec(ref.trim());
-        return match ? Number(match[1]) : 0;
-      }),
-      Effect.orElseSucceed(() => 0),
-    );
+  const checkedOutPullRequest = Effect.fn("GitHub.checkedOutPullRequest")(
+    (repo: string, branch: string) =>
+      git.run(repo, ["config", "--get", `branch.${branch}.merge`]).pipe(
+        Effect.map(pullRequestOfMergeRef),
+        // Exit 1: the key isn't set.
+        Effect.orElseSucceed(() => null),
+      ),
+  );
+
+  const checkedOutPullRequests = Effect.fn("GitHub.checkedOutPullRequests")(
+    function* (repo: string) {
+      const numbers = new Map<string, number>();
+      const refs = yield* Effect.result(
+        git.run(repo, [
+          "config",
+          "--get-regexp",
+          String.raw`^branch\..*\.merge$`,
+        ]),
+      );
+      // Exit 1: no branch has a merge ref.
+      if (Result.isFailure(refs)) return numbers;
+      for (const line of refs.success.split("\n")) {
+        const [key = "", ref = ""] = line.split(" ");
+        const branch = /^branch\.(.+)\.merge$/.exec(key)?.[1];
+        const number = pullRequestOfMergeRef(ref);
+        if (branch && number !== null) numbers.set(branch, number);
+      }
+      return numbers;
+    },
+  );
 
   // The first of a branch's PRs that is its own: not a fork's, or the
   // fork's one it was checked out from. That is asked once, and only
@@ -704,14 +762,6 @@ const make = Effect.gen(function* () {
         }),
       ),
     );
-
-  const checkedOutFrom = Effect.fn("GitHub.checkedOutFrom")(function* (
-    repo: string,
-    branch: string,
-    number: number,
-  ) {
-    return (yield* checkedOutPullRequest(repo, branch)) === number;
-  });
 
   const find = Effect.fn("GitHub.find")(function* (
     repo: string,
@@ -997,13 +1047,16 @@ const make = Effect.gen(function* () {
 
   return GitHub.of({
     run,
+    runOn,
     hostOf,
+    knownHosts,
     cardFor,
     owningPullRequest,
     find,
     findByNumber,
     list,
-    checkedOutFrom,
+    checkedOutPullRequest,
+    checkedOutPullRequests,
     mergedHeads,
     headOf,
     mergeSettings,
