@@ -1,10 +1,10 @@
-// The cross-device verbs over the engine's Transfer, which the running
+// The cross-device verbs over Transfer, which the running
 // app carries out: send and bring move a worktree, mirror keeps a copy
 // in step, unmirror stops one, projects clone sets a project up on a
 // device that lacks it, mirrors and devices list. The remote
 // listing (`list --remote`, `--from`) is here too.
 import type { ControlDevice } from "@shigomori/contracts/modules/control";
-import * as Transfer from "@shigomori/engine/Transfer";
+import * as Transfer from "../Transfer.ts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";

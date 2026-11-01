@@ -17,24 +17,25 @@
 import type { CallsOf, OutputOf } from "@shigomori/contracts/contract";
 import {
   type ControlCloneResult,
-  type controlContract,
+  controlContract,
   ControlLeaveOutSchema,
   type ControlPeerWorktree,
   ControlSourceFateSchema,
   type ControlTransferResult,
 } from "@shigomori/contracts/modules/control";
 import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
+import type { ViewInput } from "@shigomori/contracts/types";
+import type * as Git from "@shigomori/engine/Git";
+import * as Paths from "@shigomori/engine/Paths";
+import type * as Registry from "@shigomori/engine/Registry";
+import type { RegisteredProject } from "@shigomori/engine/Registry";
+import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Control from "./Control.ts";
-import type * as Git from "./Git.ts";
-import * as Paths from "./Paths.ts";
-import type * as Registry from "./Registry.ts";
-import type { RegisteredProject } from "./Registry.ts";
-import * as Worktrees from "./Worktrees.ts";
 
 // A transfer's flags as the command line gave them. An absent flag was
 // not given, and an empty string was given blank.
@@ -156,7 +157,6 @@ type Answer<
 type MirrorStop = Answer<"mirrorStop">;
 type MirrorList = Answer<"mirrors">;
 type DeviceList = Answer<"devices">;
-type PeerWorktreeList = Answer<"peerWorktrees">;
 
 // --- what the verbs answer ------------------------------------------------
 
@@ -276,7 +276,7 @@ export class Transfer extends Context.Service<
       TransferRefused | ResolveError | ReadError
     >;
   }
->()("sm/engine/Transfer") {}
+>()("sm/cli/Transfer") {}
 
 // --- the pure parts -------------------------------------------------------
 
@@ -287,6 +287,10 @@ const refused = (
 ) => new TransferRefused({ reason, flag: flagName, binary });
 
 const isLeaveOut = Schema.is(ControlLeaveOutSchema);
+type TransferOptions = Omit<
+  ViewInput<typeof controlContract, "send">,
+  "projectId" | "worktreeId"
+>;
 const isSourceFate = Schema.is(ControlSourceFateSchema);
 
 // The options every transfer takes, as the control op takes them.
@@ -302,10 +306,11 @@ const transferOptions = (
     readonly sent: boolean;
     readonly binary: string;
   },
-): Effect.Effect<Record<string, unknown>, TransferRefused> => {
+): Effect.Effect<TransferOptions, TransferRefused> => {
   const fail = (reason: TransferRefused["reason"]) =>
     Effect.fail(refused(options.binary, reason));
-  const input: Record<string, unknown> = {};
+  const input: { -readonly [K in keyof TransferOptions]: TransferOptions[K] } =
+    {};
   if (options.device !== undefined && options.device !== "") {
     input["device"] = options.device;
   }
@@ -404,19 +409,11 @@ const appDocument = <T extends object>(answer: T): Ok<T> => ({
 // --- the service ----------------------------------------------------------
 
 const make = Effect.gen(function* () {
-  const control = yield* Control.Control;
+  const app = (yield* Control.Control).client(controlContract);
   const worktrees = yield* Worktrees.Worktrees;
   const paths = yield* Paths.Paths;
   const { binaryName: binary } = paths;
   const path = yield* Path.Path;
-
-  // A call's answer as the contracts type it: the loopback's RpcClient
-  // decoded it against LoopbackGroup before Control handed it on.
-  const invoke = <T>(
-    channel: string,
-    input: unknown,
-    onPush?: (pushed: string, payload: unknown) => Effect.Effect<void>,
-  ) => control.call(channel, input, onPush) as Effect.Effect<T, ReadError>;
 
   // A blank device is refused, not read as none: an unset shell
   // variable in `--from "$DEVICE"` would otherwise read as no direction,
@@ -431,12 +428,10 @@ const make = Effect.gen(function* () {
     return Effect.void;
   };
 
-  // Progress as the app streams it, each sync:pullProgress push.
+  // Progress as the app streams it.
   const progressOf = (onProgress: OnProgress) => {
     let last = "";
-    return (channel: string, payload: unknown) => {
-      if (channel !== "sync:pullProgress") return Effect.void;
-      const pushed = payload as SyncPullProgress;
+    return (pushed: SyncPullProgress) => {
       const line = stepLine(pushed);
       const fresh = line !== last;
       if (fresh) last = line;
@@ -448,16 +443,10 @@ const make = Effect.gen(function* () {
   };
 
   const transferred = Effect.fn(function* (
-    channel: string,
-    input: Record<string, unknown>,
+    transfer: Effect.Effect<ControlTransferResult, ReadError>,
     direction: { readonly mirror: boolean; readonly sent: boolean },
-    onProgress: OnProgress,
   ) {
-    const result = yield* invoke<ControlTransferResult>(
-      channel,
-      input,
-      progressOf(onProgress),
-    );
+    const result = yield* transfer;
     return {
       document: { ...appDocument(result), caveats: caveatsOf(result) },
       headline: headlineOf(result, direction),
@@ -483,14 +472,15 @@ const make = Effect.gen(function* () {
       binary,
     });
     return yield* transferred(
-      "control:send",
-      {
-        ...input,
-        projectId: located.project.id,
-        worktreeId: located.worktree.id,
-      },
+      app.send(
+        {
+          ...input,
+          projectId: located.project.id,
+          worktreeId: located.worktree.id,
+        },
+        progressOf(onProgress),
+      ),
       { mirror, sent: true },
-      onProgress,
     );
   });
 
@@ -512,10 +502,11 @@ const make = Effect.gen(function* () {
       binary,
     });
     return yield* transferred(
-      "control:bring",
-      { ...input, projectId: project.id, worktree: wanted },
+      app.bring(
+        { ...input, projectId: project.id, worktree: wanted },
+        progressOf(onProgress),
+      ),
       { mirror, sent: false },
-      onProgress,
     );
   });
 
@@ -584,8 +575,7 @@ const make = Effect.gen(function* () {
                 ? path.resolve(here.cwd, paths.expandHome(input.into))
                 : input.into,
           };
-    const result = yield* invoke<ControlCloneResult>(
-      "control:clone",
+    const result = yield* app.clone(
       to === ""
         ? {
             _tag: "from",
@@ -636,18 +626,20 @@ const make = Effect.gen(function* () {
     options: { readonly force: boolean },
   ) {
     const located = yield* worktrees.resolve(here, target);
-    const stopped = yield* invoke<MirrorStop>("control:mirrorStop", {
-      projectId: located.project.id,
-      worktreeId: located.worktree.id,
-      ...(options.force ? { force: true } : {}),
-    }).pipe(
-      Effect.catchTags({
-        ControlRefused: (error) =>
-          error.code === "stop-unconfirmed"
-            ? Effect.fail(new StopUnconfirmed({ said: error.said, binary }))
-            : Effect.fail(error),
-      }),
-    );
+    const stopped = yield* app
+      .mirrorStop({
+        projectId: located.project.id,
+        worktreeId: located.worktree.id,
+        ...(options.force ? { force: true } : {}),
+      })
+      .pipe(
+        Effect.catchTags({
+          ControlRefused: (error) =>
+            error.code === "stop-unconfirmed"
+              ? Effect.fail(new StopUnconfirmed({ said: error.said, binary }))
+              : Effect.fail(error),
+        }),
+      );
     // The mirror stopped either way. A copy that stayed is the caveat.
     return {
       document: {
@@ -659,10 +651,9 @@ const make = Effect.gen(function* () {
     };
   });
 
-  const mirrors = invoke<MirrorList>("control:mirrors", undefined).pipe(
-    Effect.map(appDocument),
-    Effect.withSpan("Transfer.mirrors"),
-  );
+  const mirrors = app
+    .mirrors()
+    .pipe(Effect.map(appDocument), Effect.withSpan("Transfer.mirrors"));
 
   const devices = Effect.fn("Transfer.devices")(function* (
     here: Worktrees.Here,
@@ -675,7 +666,7 @@ const make = Effect.gen(function* () {
     const input = scoped
       ? { projectId: (yield* worktrees.resolveProjectRef(here, ref)).id }
       : {};
-    return appDocument(yield* invoke<DeviceList>("control:devices", input));
+    return appDocument(yield* app.devices(input));
   });
 
   const peerWorktrees = Effect.fn("Transfer.peerWorktrees")(function* (
@@ -687,8 +678,7 @@ const make = Effect.gen(function* () {
     yield* checkDeviceFlags({ from: ref.from });
     const project = yield* worktrees.resolveProjectRef(here, ref);
     const from = ref.from ?? "";
-    const listed = yield* invoke<PeerWorktreeList>(
-      "control:peerWorktrees",
+    const listed = yield* app.peerWorktrees(
       from === ""
         ? { projectId: project.id }
         : { projectId: project.id, device: from },

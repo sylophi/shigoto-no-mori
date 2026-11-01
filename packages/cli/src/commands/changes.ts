@@ -6,10 +6,7 @@ import type * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
 import * as Agents from "@shigomori/engine/Agents";
 import * as Worktrees from "@shigomori/engine/Worktrees";
-import {
-  moveWorktree,
-  renameWorktree,
-} from "@shigomori/engine/worktrees/throughApp";
+import { moveWorktree, renameWorktree } from "./throughApp.ts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";

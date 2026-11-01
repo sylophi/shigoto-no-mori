@@ -13,9 +13,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessageOf } from "@shigomori/contracts/errors";
-import { LoopbackGroup } from "@shigomori/contracts/link";
+import {
+  LOOPBACK_FILE,
+  LoopbackFile,
+  LoopbackGroup,
+} from "@shigomori/contracts/link";
 import { PROTOCOL_VERSION } from "@shigomori/contracts/protocol";
-import { LOOPBACK_FILE, LoopbackFile } from "@shigomori/engine/Control";
 import {
   flatClient,
   newConnectionId,

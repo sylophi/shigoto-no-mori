@@ -1,5 +1,5 @@
 // The device link a second time, on loopback, for the processes on this
-// machine: the terminal `sm` (packages/engine/src/Control.ts), the
+// machine: the terminal `sm` (packages/cli/src/Control.ts), the
 // app's windows and its shell. It serves
 // LoopbackGroup (@shigomori/contracts/link): every host call, its pushes
 // and views, and the control contract's ops.
@@ -22,8 +22,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { LoopbackGroup } from "@shigomori/contracts/link";
-import { LoopbackFile, loopbackPartialOf } from "@shigomori/engine/Control";
+import {
+  LoopbackFile,
+  LoopbackGroup,
+  loopbackPartialOf,
+} from "@shigomori/contracts/link";
 import { mintHexId } from "@host/lib/hexId";
 import {
   type LateServices,

@@ -28,7 +28,7 @@
 // holding two projects (source and target, one repo identity), as in
 // test/sync-transfer.mts: what separates them is the direct wire.
 // Run: pnpm test control.
-import { LOOPBACK_FILE } from "@shigomori/engine/Control";
+import { LOOPBACK_FILE } from "@shigomori/contracts/link";
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";

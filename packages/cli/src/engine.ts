@@ -1,6 +1,7 @@
 // The engine under the terminal: the store over Bun's SQLite, the
-// filesystem helper beside the binary, and the app asked to stop a
-// mirror before its worktree's files go.
+// filesystem helper beside the binary, and the running app, which the
+// cross-device verbs ask and which is asked to stop a mirror before its
+// worktree's files go.
 import { dirname, join } from "node:path";
 import * as SqliteClient from "@effect/sql-sqlite-bun/SqliteClient";
 import * as DataDirLock from "@shigomori/engine/DataDirLock";
@@ -14,7 +15,9 @@ import * as Command from "effect/cli/Command";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Control from "./Control.ts";
 import { mirrorsOnDelete } from "./mirrorsOnDelete.ts";
+import * as Transfer from "./Transfer.ts";
 
 const open: Store.OpenDatabase = (filename, options) =>
   SqliteClient.make({ filename, ...options });
@@ -37,7 +40,8 @@ export class Unmigrated extends Context.Service<
 export const engine = (flavor: Flavor) =>
   Layer.unwrap(
     Effect.map(Store.importOwed(open), (owed) =>
-      mirrorsOnDelete.pipe(
+      Layer.merge(mirrorsOnDelete, Transfer.layer).pipe(
+        Layer.provideMerge(Control.layer(flavor)),
         Layer.provideMerge(
           engineServices({
             flavor,

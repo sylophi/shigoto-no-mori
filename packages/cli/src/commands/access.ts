@@ -1,13 +1,16 @@
 // This device's switches on the account page, under `sm devices`: each
 // set with on or off and shown without. The host keeps them where the
 // page does (control:access).
-import type { ControlAccess } from "@shigomori/contracts/modules/control";
+import {
+  type ControlAccess,
+  controlContract,
+} from "@shigomori/contracts/modules/control";
 import { byPlatform } from "@shigomori/engine/platform";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
-import { askHost } from "../askHost.ts";
+import * as Control from "../Control.ts";
 import { UsageError } from "../errors.ts";
 import { emit, out, Output, styles } from "../output.ts";
 
@@ -24,12 +27,11 @@ const accessSwitch = (name: string, key: keyof ControlAccess, label: string) =>
             problem: `Usage: ${binaryName} devices ${name} [on|off]`,
           });
         }
+        const app = (yield* Control.Control).client(controlContract);
         const access =
           mode === undefined
-            ? yield* askHost<ControlAccess>("control:access")
-            : yield* askHost<ControlAccess>("control:setAccess", {
-                [key]: mode === "on",
-              });
+            ? yield* app.access()
+            : yield* app.setAccess({ [key]: mode === "on" });
         if (json) return yield* emit({ ok: true, ...access });
         const line = `${label}: ${access[key] === true ? "on" : "off"}`;
         yield* out(mode === undefined ? line : styles(stdoutColor).green(line));

@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import * as Path from "effect/Path";
 import { plural, pluralize } from "@shigomori/contracts/words";
 import { parseProcessTable } from "../doctorParse.ts";
-import { LOOPBACK_FILE, LoopbackFile } from "../Control.ts";
+import { LOOPBACK_FILE, LoopbackFile } from "@shigomori/contracts/link";
 import { appFolders } from "../footprint.ts";
 import * as Paths from "../Paths.ts";
 import { byPlatform } from "../platform.ts";

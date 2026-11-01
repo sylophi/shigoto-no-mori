@@ -1,7 +1,7 @@
 // The contract clients' RpcClient over one socket, for every link that
 // dials one: a device's or the loopback's (app/shared/remote/
 // deviceLink.ts), a MessagePort's (portLink.ts), the terminal's to the
-// app (Control.ts).
+// app (packages/cli/src/Control.ts).
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

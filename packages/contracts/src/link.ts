@@ -37,6 +37,24 @@ export const LINK_MAX_FRAME_BYTES = 32 * 1024 * 1024;
 // unavailable). Nothing against the dialer, which reads it as busy.
 export const CLOSE_TRY_AGAIN = 1013;
 
+// Where the app publishes its loopback listener, in its data dir.
+export const LOOPBACK_FILE = "loopback.json";
+
+// What loopback.json holds: the host's pid, the loopback's port and
+// token, and the app's version. Written aside first, at
+// loopbackPartialOf, and renamed in.
+export const LoopbackFile = Schema.fromJsonString(
+  Schema.Struct({
+    pid: Schema.Int,
+    port: Schema.Int,
+    token: Schema.String,
+    appVersion: Schema.String,
+  }),
+);
+
+export const loopbackPartialOf = (file: string, pid: number) =>
+  `${file}.${pid}`;
+
 export type ChannelEndpoint = {
   // Call `consumed` once the sink has taken them: calling it early
   // defeats backpressure.
