@@ -39,7 +39,7 @@ export type Project = typeof ProjectSchema.Type;
 
 // `sm projects list --json`'s row. hue is always null, kept for the
 // JSON's shape.
-export const ProjectRowSchema = Schema.Struct({
+const ProjectRowSchema = Schema.Struct({
   ...ProjectSchema.fields,
   pathExists: Schema.Boolean,
   identity: Schema.NullOr(Schema.String),

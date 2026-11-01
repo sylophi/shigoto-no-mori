@@ -60,7 +60,7 @@ export const PackageScriptSortModeSchema = Schema.Literals([
 ]);
 export type PackageScriptSortMode = typeof PackageScriptSortModeSchema.Type;
 
-export const PackageScriptsDocSchema = Schema.Struct({
+const PackageScriptsDocSchema = Schema.Struct({
   packageManager: PackageManagerSchema,
   scripts: Schema.Array(
     Schema.Struct({
