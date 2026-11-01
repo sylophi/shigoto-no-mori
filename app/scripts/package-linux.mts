@@ -37,6 +37,7 @@ import {
   NODE_PTY_PACKAGE,
 } from "../shared/packaging/nodePty.mts";
 import { appRoot } from "./lib/appRoot.mts";
+import { runScript } from "./lib/runScript.mts";
 
 if (process.platform !== "linux" || process.arch !== "x64") {
   throw new Error("A Linux package is built on Linux x64.");
@@ -48,17 +49,12 @@ const { version } = JSON.parse(
 ) as { version: string };
 const name = linuxPackageName(flavor, version);
 
-const node = (script: string, ...args: string[]) =>
-  execFileSync("node", [`scripts/${script}`, ...args], {
-    cwd: appRoot,
-    stdio: "inherit",
-  });
-node("build-go.mts", "file-sync");
-node("build-go.mts", "nativefs");
-node("build-cli.mts");
-node("fetch-cloudflared.mts", "--platform", "linux", "--arch", "x64");
-node("fetch-node.mts");
-node("build-headless.mts");
+runScript("build-go.mts", "file-sync");
+runScript("build-go.mts", "nativefs");
+runScript("build-cli.mts");
+runScript("fetch-cloudflared.mts", "--platform", "linux", "--arch", "x64");
+runScript("fetch-node.mts");
+runScript("build-headless.mts");
 
 const folder = join(appRoot, "out", "linux", name);
 rmSync(folder, { recursive: true, force: true });
@@ -83,7 +79,11 @@ ship(
 ship(join(NODE_PTY_PACKAGE, "lib"), join(NODE_PTY_PACKAGE, "lib"));
 ship(NODE_PTY_BUILT_ADDON, NODE_PTY_BUILT_ADDON);
 // The notices of what this package ships, and node's own.
-node("generate-third-party-licenses.mts", "--out", join(folder, "licenses"));
+runScript(
+  "generate-third-party-licenses.mts",
+  "--out",
+  join(folder, "licenses"),
+);
 ship(join(NODE_DIST_DIR, NODE_LICENSE_NAME), join("licenses", "node-LICENSE"));
 
 const tarball = join(appRoot, "out", "make", `${name}.tar.gz`);

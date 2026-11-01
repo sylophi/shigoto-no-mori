@@ -4,7 +4,6 @@
 // renderer dev server can run beside it, and the envPrefix entries that
 // bake the non-secret account service config into the bundle (see
 // web/account/config.ts).
-import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import {
   defineConfig,
@@ -12,55 +11,11 @@ import {
   type HtmlTagDescriptor,
   type Plugin,
 } from "vite";
+import { buildInfoDefine } from "./vite.buildInfo";
 import { reactGrabBuild } from "./vite.reactGrab";
 import { rendererTreeConfig } from "./vite.rendererTree";
 import { ACCOUNT_ENV_KEYS } from "@shigomori/contracts/accountServiceConfig";
 import { fixedDevServerPort } from "./scripts/lib/portsEnvFile.mts";
-
-// Bounded, so a stalled remote (remoteTag's) costs the version rather
-// than the build.
-function gitOutput(args: string): string | null {
-  try {
-    return execSync(`git ${args}`, {
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 10_000,
-    })
-      .toString()
-      .trim();
-  } catch {
-    return null;
-  }
-}
-
-// Git can't read the repository in Vercel's deploy build, so there
-// Vercel names the commit and the remote names its tag. The commit is
-// cut to the length git abbreviates this repo's to, so it reads as the
-// desktop's does.
-function buildInfo(mode: string): { version: string; commit: string } {
-  const vercelSha = process.env.VERCEL_GIT_COMMIT_SHA;
-  const sha = vercelSha
-    ? vercelSha.slice(0, 8)
-    : gitOutput("rev-parse --short HEAD");
-  const dirty =
-    (gitOutput("status --porcelain -- ':(exclude,top)app/package.json'") ??
-      "") !== "";
-  const commit = sha ? (dirty ? `${sha}-dirty` : sha) : "unknown";
-  const tag = vercelSha
-    ? remoteTag(vercelSha)
-    : gitOutput("describe --tags --exact-match HEAD");
-  const version = mode === "production" ? (tag ?? "unknown") : "dev";
-  return { version, commit };
-}
-
-function remoteTag(sha: string): string | undefined {
-  return gitOutput(
-    `ls-remote --tags https://github.com/${process.env.VERCEL_GIT_REPO_OWNER}/${process.env.VERCEL_GIT_REPO_SLUG}`,
-  )
-    ?.split("\n")
-    .find((line) => line.startsWith(`${sha}\t`))
-    ?.split("\t")[1]
-    ?.replace(/^refs\/tags\/|\^\{\}$/g, "");
-}
 
 // web/main.tsx reaches the app through a dynamic import (the bridge
 // must be installed first), so on its own the built page names only
@@ -111,8 +66,6 @@ function preloadBoot(): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
-  const { version, commit } = buildInfo(mode);
-
   return mergeConfig(
     rendererTreeConfig({
       root: resolve(__dirname, "web"),
@@ -136,10 +89,7 @@ export default defineConfig(({ mode }) => {
         port: fixedDevServerPort("WEB_PORT"),
         strictPort: true,
       },
-      define: {
-        __APP_VERSION__: JSON.stringify(version),
-        __APP_COMMIT__: JSON.stringify(commit),
-      },
+      define: buildInfoDefine(mode),
       plugins: [preloadBoot()],
       build: {
         ...reactGrabBuild,

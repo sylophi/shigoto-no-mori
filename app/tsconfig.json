@@ -36,10 +36,7 @@
     "test/**/*.mts",
     "forge.config.ts",
     "forge.env.d.ts",
-    "vite.*.config.ts",
-    "vitest.config.ts",
-    "vite.reactCompiler.ts",
-    "vite.dedupe.ts"
+    "vite*.ts"
   ],
   // Outputs a run writes inside the tree, gitignored but not hidden
   // from the compiler, which a copy of the repo in one would swamp.
