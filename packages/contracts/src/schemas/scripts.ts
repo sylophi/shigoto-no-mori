@@ -60,7 +60,8 @@ export const PackageScriptSortModeSchema = Schema.Literals([
 ]);
 export type PackageScriptSortMode = typeof PackageScriptSortModeSchema.Type;
 
-const PackageScriptsDocSchema = Schema.Struct({
+/** @public the wire fixtures read it, through the barrel */
+export const PackageScriptsDocSchema = Schema.Struct({
   packageManager: PackageManagerSchema,
   scripts: Schema.Array(
     Schema.Struct({

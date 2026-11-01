@@ -1044,6 +1044,114 @@
       }
     ]
   },
+  "WorktreeIdentitySchema": {
+    "accepts": [
+      {
+        "id": "e0f76c6cc80a",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "happy-hummingbird",
+        "branch": "remote-ui-flows",
+        "path": "/Users/alex/.sm/worktrees/shigoto-no-mori/happy-hummingbird",
+        "isPrimary": false,
+        "isExternal": false,
+        "detached": false,
+        "shelved": false,
+        "autoPull": false,
+        "agentWorking": false,
+        "primaryRef": "origin/main",
+        "primaryBranch": "main"
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true,
+        "agentWorking": false
+      }
+    ],
+    "normalizes": [
+      {
+        "input": {
+          "id": "cbc5ccb43624",
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "name": "shigoto-no-mori",
+          "branch": "main",
+          "path": "/Users/alex/dev/shigoto-no-mori",
+          "ahead": 0,
+          "behind": 0,
+          "hasUpstream": true,
+          "hasRemote": true,
+          "divergedClean": false,
+          "behindPrimary": 0,
+          "unpushedCount": 0,
+          "mergedIntoPrimary": false,
+          "changedCount": 0,
+          "recentCommits": [
+            {
+              "hash": "a91f3c7",
+              "subject": "Merge pull request #148 from alexkim/remote-ui-flows",
+              "author": "Alex Kim",
+              "date": "2026-10-05T18:02:44+02:00",
+              "additions": 0,
+              "deletions": 0
+            }
+          ],
+          "isPrimary": true,
+          "isExternal": true,
+          "detached": false,
+          "shelved": false,
+          "autoPull": true,
+          "agentWorking": false
+        },
+        "output": {
+          "id": "cbc5ccb43624",
+          "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+          "name": "shigoto-no-mori",
+          "branch": "main",
+          "path": "/Users/alex/dev/shigoto-no-mori",
+          "isPrimary": true,
+          "isExternal": true,
+          "detached": false,
+          "shelved": false,
+          "autoPull": true,
+          "agentWorking": false
+        }
+      }
+    ],
+    "rejects": [
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "path": "/Users/alex/dev/shigoto-no-mori",
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true,
+        "agentWorking": false
+      },
+      {
+        "id": "cbc5ccb43624",
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "name": "shigoto-no-mori",
+        "branch": "main",
+        "isPrimary": true,
+        "isExternal": true,
+        "detached": false,
+        "shelved": false,
+        "autoPull": true,
+        "agentWorking": false
+      }
+    ]
+  },
   "WorktreeLifecyclePhaseSchema": {
     "accepts": [
       {

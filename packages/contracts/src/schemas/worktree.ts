@@ -105,7 +105,8 @@ export type Worktree = typeof WorktreeSchema.Type;
 // A worktree without its git probes (`sm worktrees list --identities`),
 // the cheap read every worktree-scoped handler opens with. The fields are
 // in the JSON's order, not the row's.
-const WorktreeIdentitySchema = Schema.Struct({
+/** @public the wire fixtures read it, through the barrel */
+export const WorktreeIdentitySchema = Schema.Struct({
   id: WorktreeSchema.fields.id,
   projectId: WorktreeSchema.fields.projectId,
   name: WorktreeSchema.fields.name,
