@@ -27,9 +27,7 @@ import { FAKE_TREE, fakeFile } from "../fixtures/filesFixtures.ts";
 import { LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
 import { SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { projectNamed, worktreeNamed } from "./world.ts";
-
-const noop = () => {};
+import { noop, projectNamed, worktreeNamed } from "./world.ts";
 
 const find = {
   open: false,

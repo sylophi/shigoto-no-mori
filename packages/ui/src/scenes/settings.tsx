@@ -92,11 +92,10 @@ import {
   fakeCliStatus,
   fakeShellStatus,
 } from "../fixtures/settingsFixtures.ts";
-import { SceneWindowFrame } from "./frame.tsx";
+import { ScenePart, SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { deviceById, deviceTabs } from "./world.ts";
+import { deviceById, deviceTabs, noop } from "./world.ts";
 
-const noop = () => {};
 const HOME = "/Users/rin";
 const VERSION = "3.0.3";
 const COMMIT = "fake-host";
@@ -376,15 +375,6 @@ export function SettingsAppearanceScene() {
   );
 }
 
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
-}
-
 // The other sections, and a peer's in its states: not reached yet,
 // read-only, loading, and its CLI read refused. The phone layout's
 // section chips, and the page while its configs load.
@@ -393,24 +383,27 @@ export function SettingsPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-8 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-8">
-        <Part label="Launch tools">
+        <ScenePart label="Launch tools" className="min-w-0 gap-3">
           <LaunchToolsPanelView
             form={FORM}
             setForm={setForm}
             detected={FAKE_DETECTED}
           />
-        </Part>
-        <Part label="Agents">
+        </ScenePart>
+        <ScenePart label="Agents" className="min-w-0 gap-3">
           <AgentsSectionView
             harnesses={fakeAgentHarnesses(HOME)}
             home={HOME}
             busy={false}
             onSetHooks={noop}
           />
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-8">
-        <Part label="Worktrees and integrations, a peer read-only">
+        <ScenePart
+          label="Worktrees and integrations, a peer read-only"
+          className="min-w-0 gap-3"
+        >
           <DeviceTogglesView
             readOnly
             note={<PeerReadOnlyNoteView label={macbook.label} />}
@@ -433,8 +426,8 @@ export function SettingsPartsScene() {
               ghAuthed: false,
             }}
           />
-        </Part>
-        <Part label="A peer's General section">
+        </ScenePart>
+        <ScenePart label="A peer's General section" className="min-w-0 gap-3">
           <PeerOfflineNoteView label="Mini" dialing={false} />
           <PeerOfflineNoteView label={macbook.label} dialing />
           <PeerSettingsLoadingView />
@@ -459,8 +452,8 @@ export function SettingsPartsScene() {
             changelog={null}
           />
           <UpdaterStatusLineView state={{ kind: "checking" }} />
-        </Part>
-        <Part label="Phone">
+        </ScenePart>
+        <ScenePart label="Phone" className="min-w-0 gap-3">
           <SettingsSectionChipsView
             sections={SECTIONS}
             activeId={GENERAL_TAB}
@@ -471,7 +464,7 @@ export function SettingsPartsScene() {
             <SettingsLoadingView />
           </div>
           <SettingsSkeletonView />
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );
@@ -569,16 +562,18 @@ export function SettingsKeyboardScene() {
 export function SettingsKeyboardStatesScene() {
   return (
     <div className="grid h-full grid-cols-3 gap-8 overflow-hidden bg-background p-6 text-foreground">
-      <Part label="One rebound">
+      <ScenePart label="One rebound" className="min-w-0 gap-3">
         {keyboard({ palette: "Mod+P" }, null, null)}
-      </Part>
-      <Part label="A conflict refused">
+      </ScenePart>
+      <ScenePart label="A conflict refused" className="min-w-0 gap-3">
         {keyboard(undefined, null, {
           id: "terminal",
           message: "⌘K is taken by “Open or close the palette”.",
         })}
-      </Part>
-      <Part label="Recording">{keyboard(undefined, "terminal", null)}</Part>
+      </ScenePart>
+      <ScenePart label="Recording" className="min-w-0 gap-3">
+        {keyboard(undefined, "terminal", null)}
+      </ScenePart>
     </div>
   );
 }

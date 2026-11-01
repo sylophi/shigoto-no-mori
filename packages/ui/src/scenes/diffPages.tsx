@@ -60,11 +60,10 @@ import { createFakeChanges } from "../fixtures/changesFixtures.ts";
 import { LOCAL_DEVICE_ID } from "../fixtures/fixtures.ts";
 import { fakeBlob } from "../fixtures/filesFixtures.ts";
 import { FAKE_DIFF } from "../fixtures/pullRequestFixtures.ts";
-import { SceneWindowFrame } from "./frame.tsx";
+import { ScenePart, SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { projectNamed, worktreeNamed } from "./world.ts";
+import { noop, projectNamed, worktreeNamed } from "./world.ts";
 
-const noop = () => {};
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 const HUM = worktreeNamed(SM, "happy-hummingbird");
 const CHANGES = createFakeChanges(() => ({ ...HUM }));
@@ -374,15 +373,6 @@ export function CommitPageScene() {
   });
 }
 
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
-}
-
 // The pages' other pieces: their titles, the pane's other states, a
 // hunk's bar, a commit only the remote has, and the phone's file sheet
 // (closed: a sheet opens over the window), and a discard's dialog drawn
@@ -392,7 +382,7 @@ export function DiffPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex flex-col gap-5">
-        <Part label="Titles">
+        <ScenePart label="Titles">
           {pageHeader(
             <PullRequestDiffTitleView
               title="Aggregate worktrees across devices"
@@ -424,8 +414,8 @@ export function DiffPartsScene() {
             "Commit",
             <CommitBylineView commit={undefined} hash="5eed5ab" />,
           )}
-        </Part>
-        <Part label="A commit only the upstream has">
+        </ScenePart>
+        <ScenePart label="A commit only the upstream has">
           <CommitDetailsView
             hash="a41c9e2"
             description={undefined}
@@ -448,17 +438,17 @@ export function DiffPartsScene() {
             onHardReset={noop}
             dialog={null}
           />
-        </Part>
+        </ScenePart>
         {group && (
-          <Part label="A hunk's bar">
+          <ScenePart label="A hunk's bar">
             <HunkBarView
               group={{ changes: [group], ticked: "partial" }}
               controls={HUNKS}
               busy={false}
             />
-          </Part>
+          </ScenePart>
         )}
-        <Part label="A discard's dialog">
+        <ScenePart label="A discard's dialog">
           <ModalBox className="max-w-md">
             <DiscardConfirmView
               label="Discard the 2 unticked files?"
@@ -467,18 +457,18 @@ export function DiffPartsScene() {
               onConfirm={noop}
             />
           </ModalBox>
-        </Part>
-        <Part label="A detached HEAD">
+        </ScenePart>
+        <ScenePart label="A detached HEAD">
           <BranchBarView
             branch="5eed5ab"
             detached
             rebasing={false}
             syncPill={null}
           />
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex flex-col gap-5">
-        <Part label="A clean tree">
+        <ScenePart label="A clean tree">
           <div className="flex h-40 flex-col">
             <DiffPaneView
               state="empty"
@@ -496,32 +486,32 @@ export function DiffPartsScene() {
               {null}
             </DiffPaneView>
           </div>
-        </Part>
-        <Part label="Computing">
+        </ScenePart>
+        <ScenePart label="Computing">
           <div className="flex h-24 flex-col">
             <DiffPaneView state="loading" message={null} virtualizer={null}>
               {null}
             </DiffPaneView>
           </div>
-        </Part>
-        <Part label="Failed">
+        </ScenePart>
+        <ScenePart label="Failed">
           <div className="flex h-24 flex-col">
             <DiffPaneView state="error" message={null} virtualizer={null}>
               {null}
             </DiffPaneView>
           </div>
-        </Part>
-        <Part label="A pull request's image, its commits not fetched">
+        </ScenePart>
+        <ScenePart label="A pull request's image, its commits not fetched">
           <MediaDiffView unnamed={{ onRetry: noop, retrying: false }} />
-        </Part>
-        <Part label="A peer's foot">
+        </ScenePart>
+        <ScenePart label="A peer's foot">
           <ChangesFooterView
             branchBar={branchBar}
             lastCommit={null}
             composer={null}
             readOnlyNote={peerReadOnlyNote("MacBook")}
           />
-        </Part>
+        </ScenePart>
         <DiffFilesSheetView
           open={false}
           onOpenChange={noop}

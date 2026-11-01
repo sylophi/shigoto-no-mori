@@ -65,9 +65,9 @@ import {
   mirrorSessionFixture,
 } from "../fixtures/mirrorFixtures.ts";
 import { posedPullRequestDetail } from "../fixtures/pullRequestFixtures.ts";
-import { deviceById, projectNamed, worktreeNamed } from "./world.ts";
+import { deviceById, noop, projectNamed, worktreeNamed } from "./world.ts";
+import { ScenePart } from "./frame.tsx";
 
-const noop = () => {};
 const HERE = deviceById(LOCAL_DEVICE_ID);
 const MACBOOK = deviceById(MACBOOK_ID);
 const MINI = deviceById(MINI_ID);
@@ -140,15 +140,6 @@ function FlowDialog({
         {children}
       </PullFlowFrameView>
     </ModalBox>
-  );
-}
-
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-2">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
   );
 }
 
@@ -707,7 +698,7 @@ export function FlowPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-6 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-5">
-        <Part label="Picker rows">
+        <ScenePart label="Picker rows" className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <LeaveOutTrailingView
               picked
@@ -750,8 +741,8 @@ export function FlowPartsScene() {
               onPick={noop}
             />
           </div>
-        </Part>
-        <Part label="Leave out, read-only and reading">
+        </ScenePart>
+        <ScenePart label="Leave out, read-only and reading" className="min-w-0">
           <LeaveOutPickerView
             value={{
               base: "gitignored",
@@ -772,10 +763,10 @@ export function FlowPartsScene() {
             onApply={noop}
             onRevert={noop}
           />
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-5">
-        <Part label="Reading">
+        <ScenePart label="Reading" className="min-w-0">
           <ChangedFilesView files={[]} isPending isError={false} />
           <ChangedFilesView files={[]} isPending={false} isError />
           <CarryOverListView
@@ -786,8 +777,8 @@ export function FlowPartsScene() {
           />
           <MirrorHistoryListView events={undefined} isPending />
           <MirrorHistoryListView events={[]} isPending={false} />
-        </Part>
-        <Part label="A primary checkout's mirror">
+        </ScenePart>
+        <ScenePart label="A primary checkout's mirror" className="min-w-0">
           {(["review", "running", "cancelled", "done"] as const).map(
             (stage) => (
               <p key={stage} className="text-sm text-muted-foreground">
@@ -812,7 +803,7 @@ export function FlowPartsScene() {
               running=""
             />
           </p>
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );

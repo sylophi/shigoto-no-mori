@@ -35,9 +35,8 @@ import { defaultBinding } from "../lib/keymap.ts";
 import { unposedPullRequests } from "../fixtures/pullRequestFixtures.ts";
 import { SceneDialog, SceneWindowFrame } from "./frame.tsx";
 import { SceneSidebar } from "./sidebar.tsx";
-import { projectNamed } from "./world.ts";
+import { noop, projectNamed } from "./world.ts";
 
-const noop = () => {};
 const QUERY = "port";
 // A repo's URL, which is no branch to offer and names nothing here.
 const UNMATCHED = "https://github.com/acme/rocket.git";

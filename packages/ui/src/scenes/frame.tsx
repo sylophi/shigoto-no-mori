@@ -85,3 +85,21 @@ export function SceneDialog({
     </div>
   );
 }
+
+// A labeled part on a scene that lays several out.
+export function ScenePart({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={cn("flex flex-col gap-2", className)}>
+      <h2 className="text-xs text-muted-foreground">{label}</h2>
+      {children}
+    </section>
+  );
+}

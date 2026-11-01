@@ -2,11 +2,9 @@
 // page and its shared settings, its branches, its worktree location and
 // the conversion of its external worktrees, the Tidy page across the
 // forest, and the home page's tiles.
-import type { ReactNode } from "react";
 import { EditorFooterView } from "../views/shared/EditorFooterView.tsx";
 import { BranchComboboxView } from "../views/shared/BranchComboboxView.tsx";
 import { DeviceTabBarView } from "../views/shared/DeviceTabBarView.tsx";
-import { ProjectDevicePageView } from "../views/shared/ProjectDevicePageView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import { WorktreeKindIconView } from "../views/shared/WorktreeKindIconView.tsx";
 import { ModalBox } from "../primitives/modal-shell.tsx";
@@ -74,11 +72,11 @@ import {
   MACBOOK_ID,
 } from "../fixtures/fixtures.ts";
 import { fakeDiskUsage, fakeHygiene } from "../fixtures/tidyFixtures.ts";
-import { SceneWindowFrame } from "./frame.tsx";
+import { ScenePart, SceneWindowFrame } from "./frame.tsx";
+import { shigotoProjectPage } from "./shared.tsx";
 import { sceneGrid, SceneSidebar } from "./sidebar.tsx";
-import { deviceById, deviceTabs, projectNamed } from "./world.ts";
+import { deviceById, deviceTabs, noop, projectNamed } from "./world.ts";
 
-const noop = () => {};
 const HOME = "/Users/rin";
 const SM = projectNamed(LOCAL_DEVICE_ID, "shigoto-no-mori");
 const WORKTREES: Worktree[] = forests[LOCAL_DEVICE_ID]?.worktrees[SM.id] ?? [];
@@ -100,129 +98,98 @@ const icon = (name: string) => (
   <ProjectIconView src={null} name={name} className="size-3" />
 );
 
-function projectPage(title: string, body: ReactNode) {
-  return (
-    <SceneWindowFrame
-      sidebar={<SceneSidebar view="projects" open />}
-      pathname="/projects"
-    >
-      <ProjectDevicePageView
-        projectName={SM.name}
-        title={title}
-        tabs={
-          <DeviceTabBarView
-            tabs={deviceTabs([LOCAL_DEVICE_ID, MACBOOK_ID, MINI_ID])}
-            selectedId={LOCAL_DEVICE_ID}
-            onSelect={noop}
-            allDevicesTab
-          />
-        }
-        terrier
-        showAllDevices={false}
-        body={body}
-      />
-    </SceneWindowFrame>
-  );
-}
-
 // shigoto-no-mori's Configure page on this machine.
 export function ConfigureScene() {
-  return projectPage(
-    "Configure",
-    <ConfigureFormView
-      form={{
-        defaultBranch: "main",
-        setup: "pnpm install",
-        teardown: "",
-        launchers: [
-          { id: "storybook", label: "Storybook", command: "pnpm storybook" },
-        ],
-        carryOver: [
-          { path: ".env.local", mode: "copy" },
-          { path: "node_modules", mode: "symlink" },
-        ],
-        useWorktreeInclude: true,
-        showPrimaryInInbox: false,
-      }}
-      setForm={noop}
-      projectPath={SM.path}
-      home={HOME}
-      remote={false}
-      deviceLabel={deviceById(LOCAL_DEVICE_ID).label}
-      onReveal={noop}
-      onOpenLaunchTools={noop}
-      branchPicker={
-        <BranchComboboxView
-          id="default-branch"
-          branches={BRANCHES}
-          fetching={false}
-          onOpen={noop}
-          value="main"
-          onChange={noop}
-          placeholder="main"
-        />
-      }
-      location={
-        <WorktreeLocationFieldView
-          label={LAYOUT_OPTIONS[0]?.label}
-          description={LAYOUT_OPTIONS[0]?.description}
-          shownPath={null}
-          home={HOME}
-          blocked={false}
-          onChange={noop}
-        />
-      }
-      carryOver={
-        <CarryOverSectionView
-          entries={[
+  return shigotoProjectPage({
+    title: "Configure",
+    allDevicesTab: true,
+    body: (
+      <ConfigureFormView
+        form={{
+          defaultBranch: "main",
+          setup: "pnpm install",
+          teardown: "",
+          launchers: [
+            { id: "storybook", label: "Storybook", command: "pnpm storybook" },
+          ],
+          carryOver: [
             { path: ".env.local", mode: "copy" },
             { path: "node_modules", mode: "symlink" },
-          ]}
-          includePaths={[".claude/settings.local.json"]}
-          stats={{
-            ".env.local": {
-              isDirectory: false,
-              inPrimary: true,
-              worktrees: [],
-            },
-            node_modules: {
-              isDirectory: true,
-              inPrimary: false,
-              worktrees: ["happy-hummingbird", "quiet-quail"],
-            },
-          }}
-          isCovered={() => false}
-          includeFileExists
-          noMatches={false}
-          useWorktreeInclude
-          onToggleUseWorktreeInclude={noop}
-          onChangeMode={noop}
-          onRemove={noop}
-          onPickPath={noop}
-          picker={null}
-        />
-      }
-      saveError={null}
-      footer={
-        <EditorFooterView
-          isDirty
-          isPending={false}
-          isSuccess={false}
-          onDiscard={noop}
-          onSave={noop}
-        />
-      }
-    />,
-  );
-}
-
-function Part({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3">
-      <h2 className="text-xs text-muted-foreground">{label}</h2>
-      {children}
-    </section>
-  );
+          ],
+          useWorktreeInclude: true,
+          showPrimaryInInbox: false,
+        }}
+        setForm={noop}
+        projectPath={SM.path}
+        home={HOME}
+        remote={false}
+        deviceLabel={deviceById(LOCAL_DEVICE_ID).label}
+        onReveal={noop}
+        onOpenLaunchTools={noop}
+        branchPicker={
+          <BranchComboboxView
+            id="default-branch"
+            branches={BRANCHES}
+            fetching={false}
+            onOpen={noop}
+            value="main"
+            onChange={noop}
+            placeholder="main"
+          />
+        }
+        location={
+          <WorktreeLocationFieldView
+            label={LAYOUT_OPTIONS[0]?.label}
+            description={LAYOUT_OPTIONS[0]?.description}
+            shownPath={null}
+            home={HOME}
+            blocked={false}
+            onChange={noop}
+          />
+        }
+        carryOver={
+          <CarryOverSectionView
+            entries={[
+              { path: ".env.local", mode: "copy" },
+              { path: "node_modules", mode: "symlink" },
+            ]}
+            includePaths={[".claude/settings.local.json"]}
+            stats={{
+              ".env.local": {
+                isDirectory: false,
+                inPrimary: true,
+                worktrees: [],
+              },
+              node_modules: {
+                isDirectory: true,
+                inPrimary: false,
+                worktrees: ["happy-hummingbird", "quiet-quail"],
+              },
+            }}
+            isCovered={() => false}
+            includeFileExists
+            noMatches={false}
+            useWorktreeInclude
+            onToggleUseWorktreeInclude={noop}
+            onChangeMode={noop}
+            onRemove={noop}
+            onPickPath={noop}
+            picker={null}
+          />
+        }
+        saveError={null}
+        footer={
+          <EditorFooterView
+            isDirty
+            isPending={false}
+            isSuccess={false}
+            onDiscard={noop}
+            onSave={noop}
+          />
+        }
+      />
+    ),
+  });
 }
 
 // The project's other pages: its shared settings, branches, worktree
@@ -260,7 +227,7 @@ export function ProjectPagesPartsScene() {
   return (
     <div className="grid h-full grid-cols-2 gap-8 overflow-hidden bg-background p-6 text-foreground">
       <div className="flex min-w-0 flex-col gap-8">
-        <Part label="All devices">
+        <ScenePart label="All devices" className="min-w-0 gap-3">
           <ConfigureSharedView>
             <CreateOnSectionView
               holders={[
@@ -302,8 +269,8 @@ export function ProjectPagesPartsScene() {
               browser={null}
             />
           </ConfigureSharedView>
-        </Part>
-        <Part label="Branches">
+        </ScenePart>
+        <ScenePart label="Branches" className="min-w-0 gap-3">
           <ManageBranchesView
             creating
             onCreate={noop}
@@ -333,8 +300,11 @@ export function ProjectPagesPartsScene() {
           />
           <LocalBranchListView names={[]} rows={new Map()} />
           <RemoteBranchesView names={BRANCHES.remote} />
-        </Part>
-        <Part label="Deleting an unmerged branch">
+        </ScenePart>
+        <ScenePart
+          label="Deleting an unmerged branch"
+          className="min-w-0 gap-3"
+        >
           <ModalBox className="max-w-md">
             <BranchDeleteDialogView
               name="exp/terrier-sync"
@@ -345,10 +315,10 @@ export function ProjectPagesPartsScene() {
               onDelete={noop}
             />
           </ModalBox>
-        </Part>
+        </ScenePart>
       </div>
       <div className="flex min-w-0 flex-col gap-8">
-        <Part label="Worktree location">
+        <ScenePart label="Worktree location" className="min-w-0 gap-3">
           <LocationPaneView>
             <LocationFormView
               layout="custom"
@@ -374,8 +344,11 @@ export function ProjectPagesPartsScene() {
             />
           </LocationPaneView>
           <LocationSkeletonView />
-        </Part>
-        <Part label="Converting external worktrees">
+        </ScenePart>
+        <ScenePart
+          label="Converting external worktrees"
+          className="min-w-0 gap-3"
+        >
           {external && (
             <ConvertExternalView
               externals={[external]}
@@ -395,8 +368,8 @@ export function ProjectPagesPartsScene() {
               onConvert={noop}
             />
           )}
-        </Part>
-        <Part label="Tidying">
+        </ScenePart>
+        <ScenePart label="Tidying" className="min-w-0 gap-3">
           <ModalBox className="max-w-lg">
             <TidyConfirmView
               summary={summarize(tidy.entries, tidy.selected)}
@@ -406,8 +379,11 @@ export function ProjectPagesPartsScene() {
               onConfirm={noop}
             />
           </ModalBox>
-        </Part>
-        <Part label="Carry-over, loading and failing">
+        </ScenePart>
+        <ScenePart
+          label="Carry-over, loading and failing"
+          className="min-w-0 gap-3"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <CarryOverTrailingView
               added
@@ -451,7 +427,7 @@ export function ProjectPagesPartsScene() {
             onRetry={noop}
           />
           <ConfigureSkeletonView />
-        </Part>
+        </ScenePart>
       </div>
     </div>
   );
