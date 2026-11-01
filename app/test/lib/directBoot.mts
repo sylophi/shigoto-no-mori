@@ -269,14 +269,14 @@ async function bridgeTo(
   return plane.handlers;
 }
 
-type PeerTransport = Omit<
+type PeerReachDeps = Omit<
   Parameters<typeof PeerReach.make>[0],
   "admissions" | "admits"
 >;
 
 export type DirectWire = {
   listener: DirectListener;
-  toListener: PeerTransport;
+  toListener: PeerReachDeps;
 };
 
 // The whole direct wire the transfer checks share, exactly as
@@ -324,7 +324,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
 function bridgePeerReach(
   bridge: HubHandlers,
   pushListeners: Set<(push: HubPeerPush) => void>,
-): PeerTransport {
+): PeerReachDeps {
   return {
     invoke: (_, channel, input) =>
       bridge.invokeOnPeer(LISTENER, channel, input),
