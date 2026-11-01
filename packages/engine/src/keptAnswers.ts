@@ -66,33 +66,31 @@ export const keptAnswers = Effect.fnUntraced(function* <K, A, E, R>(
 
   // Settled by the lookup's fiber however it ends: interrupted with the
   // layer, or never started on a set already closed, included.
-  const start = (key: K, clock: Clock.Clock) =>
-    Effect.gen(function* () {
-      const fiber = yield* FiberSet.run(
-        lookups,
-        Effect.updateContext(lookup(key), (input: Context.Context<never>) =>
-          Context.merge(context, input),
-        ),
-      );
-      const entry: Entry<A, E> = {
-        result: Deferred.makeUnsafe<A, E>(),
-        fiber,
-        waiters: 0,
-        kept: null,
-      };
-      MutableHashMap.set(entries, key, entry);
-      fiber.addObserver((exit) => {
-        const ms = Exit.isSuccess(exit)
-          ? answerMs
-          : Exit.hasInterrupts(exit)
-            ? 0
-            : failureMs;
-        entry.kept = { at: stampOf(clock), ms };
-        if (ms === 0) drop(key, entry);
-        Deferred.doneUnsafe(entry.result, exit);
-      });
-      return entry;
+  const start = (key: K, caller: Fiber.Fiber<unknown, unknown>) => {
+    const fiber = Effect.runForkWith(Context.merge(context, caller.context))(
+      lookup(key),
+    );
+    FiberSet.addUnsafe(lookups, fiber);
+    const entry: Entry<A, E> = {
+      result: Deferred.makeUnsafe<A, E>(),
+      fiber,
+      waiters: 0,
+      kept: null,
+    };
+    MutableHashMap.set(entries, key, entry);
+    const clock = caller.getRef(Clock.Clock);
+    fiber.addObserver((exit) => {
+      const ms = Exit.isSuccess(exit)
+        ? answerMs
+        : Exit.hasInterrupts(exit)
+          ? 0
+          : failureMs;
+      entry.kept = { at: stampOf(clock), ms };
+      if (ms === 0) drop(key, entry);
+      Deferred.doneUnsafe(entry.result, exit);
     });
+    return entry;
+  };
 
   const leave = (key: K, entry: Entry<A, E>) =>
     Effect.suspend(() => {
@@ -103,30 +101,26 @@ export const keptAnswers = Effect.fnUntraced(function* <K, A, E, R>(
     });
 
   return {
-    // Uninterruptible but for the wait: an asker interrupted between
-    // setting an entry and counting itself would leave a lookup nothing
-    // waits on and nothing interrupts.
+    // An entry is found or started and its asker counted in one
+    // synchronous step, so no other fiber sees it between: a leave can't
+    // interrupt a lookup just joined, nor an invalidate miss one just
+    // started. Uninterruptible but for the wait, so a count taken is
+    // always given back.
     get: (key: K): Effect.Effect<A, E> =>
       Effect.uninterruptibleMask((restore) =>
-        Clock.clockWith((clock) =>
-          Effect.suspend(() => {
-            const now = stampOf(clock);
-            const found = Option.getOrUndefined(
-              MutableHashMap.get(entries, key),
-            );
-            return found !== undefined &&
-              (found.kept === null || ageOf(found.kept.at, now) < found.kept.ms)
-              ? Effect.succeed(found)
-              : start(key, clock);
-          }),
-        ).pipe(
-          Effect.flatMap((entry) => {
-            entry.waiters += 1;
-            return restore(Deferred.await(entry.result)).pipe(
-              Effect.ensuring(leave(key, entry)),
-            );
-          }),
-        ),
+        Effect.withFiber((caller) => {
+          const now = stampOf(caller.getRef(Clock.Clock));
+          const found = Option.getOrUndefined(MutableHashMap.get(entries, key));
+          const entry =
+            found !== undefined &&
+            (found.kept === null || ageOf(found.kept.at, now) < found.kept.ms)
+              ? found
+              : start(key, caller);
+          entry.waiters += 1;
+          return restore(Deferred.await(entry.result)).pipe(
+            Effect.ensuring(leave(key, entry)),
+          );
+        }),
       ),
     invalidate: (key: K): Effect.Effect<void> =>
       Effect.sync(() => {
