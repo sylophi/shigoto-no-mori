@@ -101,7 +101,7 @@ export const standingsOf = (
   identity: string | null,
   { grant }: { grant: boolean },
 ) =>
-  Effect.map(projectsOnPeers(devices, grant), (held) =>
+  Effect.map(projectsOnPeers(devices, { grant }), (held) =>
     held.map((peer) => standingIn(identity, peer)),
   );
 
@@ -199,7 +199,10 @@ const standingIn = (
 // Each peer's projects beside its standing. With `grant`, a peer
 // without command access reads as one that can't serve (a clone reads
 // the peer's checkout over its grant).
-export const projectsOnPeers = (devices: DeviceInfo[], grant: boolean) =>
+export const projectsOnPeers = (
+  devices: DeviceInfo[],
+  { grant }: { grant: boolean },
+) =>
   Effect.flatMap(directPeers, (direct) =>
     Effect.forEach(
       devices,

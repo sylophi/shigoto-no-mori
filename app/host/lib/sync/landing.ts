@@ -372,110 +372,36 @@ export const landForSender: EffectHandlers<
   );
 };
 
+type IncomingInput = {
+  branch: string;
+  incomingRef: string;
+  worktreeName: string | undefined;
+  runSetup: boolean | undefined;
+  ignoredFilesFollow: readonly string[] | undefined;
+  // The capture commit, and the worktree id its ref arrived under.
+  capture: { sourceWorktreeId: string; commit: string } | undefined;
+};
+
+type IncomingProgress = (
+  frame: Pick<SyncPullProgress, "step" | "createPhase" | "worktreeId">,
+) => void;
+
 // The landing proper: the worktree created on the incoming ref, then
 // the capture re-applied in it. The caller owns the incoming ref and
 // its sweep. `branch` is the one the copy is created on, which the
 // incoming ref need not be named after.
 const landIncoming = (
   project: Project,
-  input: {
-    branch: string;
-    incomingRef: string;
-    worktreeName: string | undefined;
-    runSetup: boolean | undefined;
-    ignoredFilesFollow: readonly string[] | undefined;
-    // The capture commit, and the worktree id its ref arrived under.
-    capture: { sourceWorktreeId: string; commit: string } | undefined;
-  },
+  input: IncomingInput,
   ctx: HandlerContext,
-  progress: (
-    frame: Pick<SyncPullProgress, "step" | "createPhase" | "worktreeId">,
-  ) => void,
+  progress: IncomingProgress,
   move: Scope.Scope,
 ) =>
   // The create, the capture's ref and its apply, held as one change
   // while no data-folder move can start: a move between them would
   // carry the worktree to its new id and leave the ref under the old.
   changing(
-    Effect.gen(function* () {
-      // The ordinary create, on a new branch at the incoming ref.
-      // checkout stays UNSET: checkout:true would leave the worktree ON
-      // the incoming ref instead of the new branch. Its run is waited out
-      // whole, so the dirty apply below never races the setup scripts.
-      // The new worktree's own lifecycle phases still reach its detail
-      // page as usual. They are mirrored into the move's progress because
-      // the caller cannot subscribe by an id that does not exist yet.
-      progress({ step: "create" });
-      const notify = worktreeNotifiers(ctx);
-      const { worktree, keep } = yield* (yield* Worktrees.Worktrees)
-        .createHeld(
-          {
-            projectId: project.id,
-            branchName: input.branch,
-            base: input.incomingRef,
-            worktreeName: input.worktreeName,
-            skipSetup: input.runSetup === false,
-            ignoredFilesFollow: input.ignoredFilesFollow,
-          },
-          {
-            ...notify,
-            // The copy's id goes out as soon as it exists, ahead of its
-            // carry-over and setup: a mirror start folds the pair by it.
-            notifyCreated: (made) =>
-              progress({ step: "create", worktreeId: made.id }),
-            notifyPhase: (payload) => {
-              notify.notifyPhase(payload);
-              if (payload.phase !== "idle") {
-                progress({ step: "create", createPhase: payload.phase });
-              }
-            },
-          },
-        )
-        .pipe(Effect.withSpan("Landing.create"), Scope.provide(move));
-
-      // Capture refs are keyed by worktree id, and ids are derived
-      // from paths (sha256(path)[:12]), so the source's id names the
-      // worktree just created only when both devices minted the SAME
-      // managed path (root/wt/<project>/<name> with the name from
-      // a shared pool) -- rare, but real across same-username machines.
-      // Re-key the ref to the local id, then apply and let the engine
-      // consume it. On that collision the re-key is a no-op and the
-      // delete below is skipped, or it would discard the capture it just
-      // parked. An apply refusal (a setup script left an untracked file,
-      // say) does NOT throw away the successful create: the worktree is
-      // real, the capture stays parked under the local id for sm dirty
-      // apply, and the caller learns via dirtyApplied:false.
-      // The frame is emitted either way, so the last step reads as
-      // reached on a clean source too (and a mirror's session open,
-      // which follows, is not mistaken for a stuck create).
-      progress({ step: "apply" });
-      let dirtyApplied = false;
-      const { capture } = input;
-      if (capture !== undefined) {
-        const sourceDirtyRef = dirtyRef(capture.sourceWorktreeId);
-        const localDirtyRef = dirtyRef(worktree.id);
-        const git = yield* Git.Git;
-        yield* git.updateRef({
-          repo: project.path,
-          ref: localDirtyRef,
-          commit: capture.commit,
-        });
-        if (localDirtyRef !== sourceDirtyRef) {
-          yield* git.deleteRef(project.path, sourceDirtyRef);
-        }
-        dirtyApplied = yield* Ops.dirtyApply(project, worktree.id).pipe(
-          Effect.withSpan("Landing.apply"),
-          Effect.as(true),
-          Effect.catch((error) =>
-            Effect.logWarning(
-              "[sync] dirty apply failed after create:",
-              error,
-            ).pipe(Effect.as(false)),
-          ),
-        );
-      }
-      return { worktree, dirtyApplied, keep };
-    }),
+    landWhole(project, input, ctx, progress, move),
     { projectId: project.id },
     "land",
   ).pipe(
@@ -484,3 +410,91 @@ const landIncoming = (
       (error) => Effect.fail(callFailureOf(error)),
     ),
   );
+
+// The create on the incoming ref, then the capture re-applied in it.
+const landWhole = (
+  project: Project,
+  input: IncomingInput,
+  ctx: HandlerContext,
+  progress: IncomingProgress,
+  move: Scope.Scope,
+) =>
+  Effect.gen(function* () {
+    // The ordinary create, on a new branch at the incoming ref.
+    // checkout stays UNSET: checkout:true would leave the worktree ON
+    // the incoming ref instead of the new branch. Its run is waited out
+    // whole, so the dirty apply below never races the setup scripts.
+    // The new worktree's own lifecycle phases still reach its detail
+    // page as usual. They are mirrored into the move's progress because
+    // the caller cannot subscribe by an id that does not exist yet.
+    progress({ step: "create" });
+    const notify = worktreeNotifiers(ctx);
+    const { worktree, keep } = yield* (yield* Worktrees.Worktrees)
+      .createHeld(
+        {
+          projectId: project.id,
+          branchName: input.branch,
+          base: input.incomingRef,
+          worktreeName: input.worktreeName,
+          skipSetup: input.runSetup === false,
+          ignoredFilesFollow: input.ignoredFilesFollow,
+        },
+        {
+          ...notify,
+          // The copy's id goes out as soon as it exists, ahead of its
+          // carry-over and setup: a mirror start folds the pair by it.
+          notifyCreated: (made) =>
+            progress({ step: "create", worktreeId: made.id }),
+          notifyPhase: (payload) => {
+            notify.notifyPhase(payload);
+            if (payload.phase !== "idle") {
+              progress({ step: "create", createPhase: payload.phase });
+            }
+          },
+        },
+      )
+      .pipe(Effect.withSpan("Landing.create"), Scope.provide(move));
+
+    // Capture refs are keyed by worktree id, and ids are derived
+    // from paths (sha256(path)[:12]), so the source's id names the
+    // worktree just created only when both devices minted the SAME
+    // managed path (root/wt/<project>/<name> with the name from
+    // a shared pool) -- rare, but real across same-username machines.
+    // Re-key the ref to the local id, then apply and let the engine
+    // consume it. On that collision the re-key is a no-op and the
+    // delete below is skipped, or it would discard the capture it just
+    // parked. An apply refusal (a setup script left an untracked file,
+    // say) does NOT throw away the successful create: the worktree is
+    // real, the capture stays parked under the local id for sm dirty
+    // apply, and the caller learns via dirtyApplied:false.
+    // The frame is emitted either way, so the last step reads as
+    // reached on a clean source too (and a mirror's session open,
+    // which follows, is not mistaken for a stuck create).
+    progress({ step: "apply" });
+    let dirtyApplied = false;
+    const { capture } = input;
+    if (capture !== undefined) {
+      const sourceDirtyRef = dirtyRef(capture.sourceWorktreeId);
+      const localDirtyRef = dirtyRef(worktree.id);
+      const git = yield* Git.Git;
+      yield* git.updateRef({
+        repo: project.path,
+        ref: localDirtyRef,
+        commit: capture.commit,
+      });
+      if (localDirtyRef !== sourceDirtyRef) {
+        yield* git.deleteRef(project.path, sourceDirtyRef);
+      }
+      dirtyApplied = yield* Ops.dirtyApply(project, worktree.id).pipe(
+        Effect.withSpan("Landing.apply"),
+        Effect.as(true),
+        Effect.catch((error) =>
+          Effect.logWarning(
+            "[sync] dirty apply failed after create:",
+            error,
+          ).pipe(Effect.as(false)),
+        ),
+      );
+    }
+    return { worktree, dirtyApplied, keep };
+  });
