@@ -176,13 +176,13 @@ export const makeVerbs = ({
           return yield* refuse("merge", "no-such-number", [number]);
         }
         const pr = found.value;
-        if (
+        const foreignFork =
           pr.isCrossRepository === true &&
           (yield* github.checkedOutPullRequest(
             project.path,
             pr.headRefName,
-          )) !== number
-        ) {
+          )) !== number;
+        if (foreignFork) {
           return yield* refuse("merge", "fork", [number]);
         }
         if (pr.state !== "OPEN") {
