@@ -253,7 +253,6 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
   const raceCandidates = (
     deviceId: string,
     candidates: readonly DirectCandidate[],
-    budgetMs: number,
     seal: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array },
     connectionId: string,
   ): Effect.Effect<DialedDevice, unknown, Scope.Scope> =>
@@ -289,7 +288,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
                   deps.onAnyPush?.(deviceId, channel, payload);
                 }
               },
-              deadlineMs: budgetMs,
+              deadlineMs,
             },
             { opened, helloAsked },
           ).pipe(
@@ -380,7 +379,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       return yield* hellos.pipe(
         Effect.scoped,
         Effect.timeoutOrElse({
-          duration: budgetMs,
+          duration: deadlineMs,
           orElse: () =>
             Effect.fail(
               refusal ??
@@ -452,7 +451,6 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       const dialed = yield* raceCandidates(
         deviceId,
         info.candidates,
-        deadlineMs,
         { localKey, remoteKey },
         connectionId,
       );
