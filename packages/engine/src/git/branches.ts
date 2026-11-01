@@ -122,16 +122,6 @@ export const makeBranches = ({
       },
     );
 
-    const resolveDefaultRef = Effect.fn("Git.resolveDefaultRef")(function* (
-      repo: string,
-      override?: string,
-    ) {
-      return Option.flatMap(
-        yield* pickDefault(repo, override, undefined),
-        ({ picked }) => Option.fromUndefinedOr(picked),
-      );
-    });
-
     const checkoutBranch = Effect.fn("Git.checkoutBranch")(function* (
       worktree: string,
       branch: string,
@@ -259,7 +249,6 @@ export const makeBranches = ({
       appendExcludes,
       resolveDefaultBranch,
       resolvePrimaryRef,
-      resolveDefaultRef,
       checkoutBranch,
       createBranch,
       deleteBranch,
