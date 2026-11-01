@@ -36,10 +36,11 @@ import { signalIfAlive } from "../../../test/testProcesses.mts";
 import { DevApp } from "./devApp.mts";
 import { withPageApi } from "./pageApi.mts";
 import {
-  HubFront,
-  ListenerFront,
   Network,
-  NetworkSwitch,
+  startHubFront,
+  startListenerFront,
+  startNetworkSwitch,
+  type Switch,
 } from "./networkSwitch.mts";
 import {
   answers,
@@ -241,9 +242,8 @@ export class Lab {
   // A, the desktop device under test, and C, the one on the tunnel.
   readonly desk: DevApp | null;
   readonly remote: DevApp | null;
-  browserSwitch: NetworkSwitch | null = null;
+  browserSwitch: (Switch & { port: number }) | null = null;
   context!: BrowserContext;
-  private hubFront: HubFront | null = null;
   private webServer: ChildProcess | null = null;
   private readonly logs: WriteStream;
   private tabCount = 0;
@@ -293,7 +293,7 @@ export class Lab {
   async startNetwork(): Promise<void> {
     const frontPort = await freePort();
     this.network.add(
-      await ListenerFront.start(frontPort, async () =>
+      await startListenerFront(frontPort, async () =>
         this.hostApp.listenerPort(),
       ),
     );
@@ -303,15 +303,15 @@ export class Lab {
     const hubUrl = envFile(".env.local").SM_DEVICE_HUB_URL;
     if (hubUrl === undefined)
       throw new Error("no SM_DEVICE_HUB_URL in .env.local");
-    this.hubFront = this.network.add(await HubFront.start(hubUrl));
+    const hubFront = this.network.add(await startHubFront(hubUrl));
     for (const each of [this.desk, this.remote]) {
-      if (each !== null) each.options.env.SM_DEVICE_HUB_URL = this.hubFront.url;
+      if (each !== null) each.options.env.SM_DEVICE_HUB_URL = hubFront.url;
     }
     if (this.remote !== null) {
       this.remote.options.env.SHIGOMORI_DIAL_KINDS = "tunnel";
     }
     this.note(
-      `B's listener front on ${frontPort}, the hub front on ${this.hubFront.port}`,
+      `B's listener front on ${frontPort}, the hub front on ${hubFront.port}`,
     );
   }
 
@@ -546,7 +546,7 @@ export class Lab {
   // ---- the browser ----
 
   async startBrowser(): Promise<void> {
-    this.browserSwitch = this.network.add(await NetworkSwitch.start());
+    this.browserSwitch = this.network.add(await startNetworkSwitch());
     mkdirSync(this.browserDir, { recursive: true });
     this.context = await chromium.launchPersistentContext(this.browserDir, {
       channel: "chrome",
