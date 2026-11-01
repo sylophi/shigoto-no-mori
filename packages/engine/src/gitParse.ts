@@ -379,15 +379,12 @@ export function splitRemoteRef(
   return best;
 }
 
-// Every row of `git remote -v` as a name and URL, fetch and push both
-// (a remote can push somewhere other than it fetches), deduped.
-export function parseRemoteEntries(
-  stdout: string,
-): { name: string; url: string }[] {
+// Each line's name and URL, as `pattern` captures them, deduped.
+const remoteEntriesBy = (pattern: RegExp, stdout: string) => {
   const entries: { name: string; url: string }[] = [];
   const seen = new Set<string>();
   for (const line of stdout.split("\n")) {
-    const match = /^(\S+)\s+(\S+)\s+\(/.exec(line);
+    const match = pattern.exec(line);
     const name = match?.[1];
     const url = match?.[2];
     if (!name || !url || seen.has(`${name}\t${url}`)) continue;
@@ -395,27 +392,19 @@ export function parseRemoteEntries(
     entries.push({ name, url });
   }
   return entries;
-}
+};
+
+// Every row of `git remote -v` as a name and URL, fetch and push both
+// (a remote can push somewhere other than it fetches), deduped.
+export const parseRemoteEntries = (stdout: string) =>
+  remoteEntriesBy(/^(\S+)\s+(\S+)\s+\(/, stdout);
 
 // Every remote's URLs as configured (`git config --get-regexp` over
 // remote.<name>.url and .pushurl), before this machine's url.insteadOf
 // rewrites them, deduped: what another machine is handed, as it has
 // rules of its own.
-export function parseConfiguredRemoteEntries(
-  stdout: string,
-): { name: string; url: string }[] {
-  const entries: { name: string; url: string }[] = [];
-  const seen = new Set<string>();
-  for (const line of stdout.split("\n")) {
-    const match = /^remote\.(.+)\.(?:url|pushurl) (\S+)$/.exec(line);
-    const name = match?.[1];
-    const url = match?.[2];
-    if (!name || !url || seen.has(`${name}\t${url}`)) continue;
-    seen.add(`${name}\t${url}`);
-    entries.push({ name, url });
-  }
-  return entries;
-}
+export const parseConfiguredRemoteEntries = (stdout: string) =>
+  remoteEntriesBy(/^remote\.(.+)\.(?:url|pushurl) (\S+)$/, stdout);
 
 // --- ignore rules -----------------------------------------------------
 
