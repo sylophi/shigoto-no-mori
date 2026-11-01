@@ -4,6 +4,7 @@ import { Button } from "../../primitives/button.tsx";
 import { InlineError } from "../../primitives/inline-error.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { assertNever } from "../../lib/utils.ts";
+import { cleanupFailedNote } from "../../lib/scriptRun.ts";
 import { type CleanupError, type Worktree } from "@shigomori/contracts/schemas";
 import {
   CollapsedThroughProvider,
@@ -146,10 +147,7 @@ function CleanupErrorRow({
   return (
     <>
       <span className="min-w-0 flex-1 truncate text-xs text-destructive select-text">
-        {error.phase === "teardown"
-          ? "Teardown didn't complete cleanly"
-          : "Port-pool release didn't complete cleanly"}{" "}
-        (exit {error.exitCode === null ? "errored" : error.exitCode}).
+        {cleanupFailedNote(error)}
       </span>
       <Button variant="ghost" size="xs" onClick={actions.onCancelCleanupError}>
         Cancel

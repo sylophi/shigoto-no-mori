@@ -48,6 +48,7 @@ import {
 import { TidyGroupHeadingView } from "@shigomori/ui/views/tidy/TidyGroupHeadingView.tsx";
 import { TidyRow } from "./TidyRow";
 import { withToggled } from "@shigomori/ui/lib/toggleSet.ts";
+import { cleanupFailedNote } from "@shigomori/ui/lib/scriptRun.ts";
 import { useApi } from "@/lib/runtime/pageApi";
 
 // One shared object for every un-started row: a fresh literal per render
@@ -194,11 +195,7 @@ function TidyBody() {
         // disk. Raising it here is what marks the row failed instead of
         // "Removed", and keeps its bytes out of the freed total.
         if (!result.ok) {
-          throw new Error(
-            result.cleanupError.phase === "teardown"
-              ? "Teardown script failed. The worktree is still on disk."
-              : "Releasing its ports failed. The worktree is still on disk.",
-          );
+          throw new Error(cleanupFailedNote(result.cleanupError));
         }
       },
     );

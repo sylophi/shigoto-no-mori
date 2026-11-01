@@ -8,6 +8,7 @@ import {
 import type { Project } from "@shigomori/contracts/schemas";
 import {
   BLOCK_REASON,
+  quickCreateTarget,
   useDeviceTargets,
 } from "@/components/shared/deviceTargets";
 import { CreateOnSectionView } from "@shigomori/ui/views/configure/CreateOnSectionView.tsx";
@@ -22,21 +23,18 @@ export function CreateOnSection({ project }: { project: Project }) {
 
   // The `+` falls back to the first holder that can take a create now,
   // both when nothing is picked and while the pick is blocked (asleep,
-  // no grant). The list ticks the pick and says so.
-  const fallback = holders.find((holder) => holder.block === undefined);
-  const current = picked ?? fallback?.deviceId;
+  // no grant, its folder gone). The list ticks the pick and says so.
+  const lands = quickCreateTarget(holders, picked);
   const pickedHolder = holders.find((holder) => holder.deviceId === picked);
-  const pickBlocked =
-    pickedHolder?.block !== undefined && fallback !== undefined;
 
   return (
     <CreateOnSectionView
       holders={holders}
       blockReasons={BLOCK_REASON}
-      current={current}
+      current={picked ?? lands?.deviceId}
       waiting={
-        pickBlocked && fallback
-          ? { picked: pickedHolder.label, fallback: fallback.label }
+        pickedHolder?.block !== undefined && lands
+          ? { picked: pickedHolder.label, fallback: lands.label }
           : null
       }
       onPick={setDevice}

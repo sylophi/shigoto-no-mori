@@ -18,11 +18,12 @@ import {
   WorktreeMenuView,
 } from "@shigomori/ui/views/sidebar/WorktreeMenuView.tsx";
 import {
-  transferSource,
-  usePeerTransferOffers,
+  hasOwnBranch,
+  useHereSide,
+  useToPeerSide,
+  useTransferOffers,
   type TransferOffers,
-} from "@/components/worktreeDetail/PeerTransferActions";
-import { useRemoteTransferOffers } from "@/components/worktreeDetail/RemoteWorktreeActions";
+} from "@/components/worktreeDetail/TransferActions";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useCommandableDeviceApi } from "@/hooks/remote/useCommandAccess";
 import { MaybeHostScope, useHostScope } from "@/hooks/remote/useHostScope";
@@ -40,6 +41,7 @@ import {
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { WorktreeDialog } from "@/lib/routePaths";
 import { notifyError } from "@/lib/toast";
+import { cleanupFailedNote } from "@shigomori/ui/lib/scriptRun.ts";
 import { useGoToProject } from "./openProject";
 
 type DeleteArm = ReturnType<typeof useConfirmTwice>;
@@ -109,9 +111,7 @@ function TransferItems({ worktree }: { worktree: Worktree }) {
   const { remote } = useHostScope();
   const { data: projects } = useProjects();
   const project = projects?.find((p) => p.id === worktree.projectId);
-  if (project === undefined || transferSource(worktree, project) === null) {
-    return null;
-  }
+  if (project?.identity == null || !hasOwnBranch(worktree)) return null;
   return remote ? (
     <RemoteTransferItems worktree={worktree} />
   ) : (
@@ -126,12 +126,12 @@ function LocalTransferItems({
   worktree: Worktree;
   project: Project;
 }) {
-  const offers = usePeerTransferOffers(worktree, project);
+  const offers = useTransferOffers(worktree, useToPeerSide(project));
   return <TransferMenuItems worktree={worktree} offers={offers} />;
 }
 
 function RemoteTransferItems({ worktree }: { worktree: Worktree }) {
-  const offers = useRemoteTransferOffers(worktree);
+  const offers = useTransferOffers(worktree, useHereSide());
   return <TransferMenuItems worktree={worktree} offers={offers} />;
 }
 
@@ -185,12 +185,12 @@ function ManageItems({
   const runDelete = () =>
     deleteWorktree.mutateAsync(target).then(
       (data) => {
-        if (data.ok) return;
-        const { phase, exitCode } = data.cleanupError;
-        notifyError(
-          "Kept the worktree: its cleanup didn't complete cleanly",
-          `${phase === "teardown" ? "Teardown" : "Port-pool release"} exited with ${exitCode ?? "an error"}.`,
-        );
+        if (!data.ok) {
+          notifyError(
+            "Kept the worktree",
+            cleanupFailedNote(data.cleanupError),
+          );
+        }
       },
       (error: unknown) => {
         // A peer's refusal is toasted centrally.
