@@ -247,10 +247,11 @@ function parseChord(text: string): Chord | null {
   };
 }
 
-// A chord as it is stored, the modifiers in one order.
-function chordText(chord: Chord): string {
+// A chord as it is stored, the modifiers in one order. `mod` names the
+// Mod key.
+function chordText(chord: Chord, mod = "Mod"): string {
   return [
-    chord.mod && "Mod",
+    chord.mod && mod,
     chord.ctrl && "Ctrl",
     chord.alt && "Alt",
     chord.shift && "Shift",
@@ -379,16 +380,8 @@ function chordAria(chord: Chord, mac: boolean): string {
 
 // A chord as an Electron accelerator, for the shell's menu, which is
 // macOS's alone.
-export function chordAccelerator(chord: Chord): string {
-  return [
-    chord.mod && "Cmd",
-    chord.ctrl && "Ctrl",
-    chord.alt && "Alt",
-    chord.shift && "Shift",
-    chord.key,
-  ]
-    .filter(Boolean)
-    .join("+");
+function chordAccelerator(chord: Chord): string {
+  return chordText(chord, "Cmd");
 }
 
 // ---- a window's keymap ----
@@ -478,13 +471,11 @@ export function resolveKeymap(
   return keymap;
 }
 
-// The menu's chords as accelerators, for the shell's menu before a
-// window has sent its own: the device's bindings over the defaults.
+// The menu's actions' chords as accelerators, for the shell's menu.
 export function menuAccelerators(
-  stored: Readonly<Record<string, string>> | undefined,
+  keymap: ReadonlyMap<string, Binding>,
 ): Readonly<Record<string, string>> {
   const accelerators: Record<string, string> = {};
-  const keymap = resolveKeymap(stored, { mac: true, desktop: true });
   for (const action of KEYMAP_ACTIONS) {
     const binding = action.menu ? keymap.get(action.id) : undefined;
     if (binding) accelerators[action.id] = chordAccelerator(binding.chord);

@@ -59,13 +59,8 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
   // the peer a local one is mirrored with.
   device: SidebarDeviceBadge | undefined;
   mirror: SidebarDeviceBadge | undefined;
-  look: WorktreeRowLook;
-  onOpen: () => void;
-  // The villager whose home it is, and this machine's forwards of a
-  // peer's worktree (useWorktreeEntry).
-  resident: Resident | null;
-  forwardTip: string | undefined;
-  marks: SidebarMarks;
+  // What useWorktreeEntry reads for the row.
+  entry: WorktreeEntry;
   // The fold or shelf the row was filed behind (sidebarRow), null for
   // the open rows.
   shelf: InboxShelf | null;
@@ -98,11 +93,7 @@ export function WorktreeEntryView({
   hideStackPosition,
   device,
   mirror,
-  look,
-  onOpen,
-  resident,
-  forwardTip,
-  marks,
+  entry,
   shelf,
   context,
   className,
@@ -110,6 +101,7 @@ export function WorktreeEntryView({
   onClick,
   ...button
 }: WorktreeEntryProps) {
+  const { look, open, resident, forwardTip, marks } = entry;
   const { isSelected, isDeleting } = look;
   // The tree's row, which has no context line to carry these marks.
   const inline = context === undefined;
@@ -121,7 +113,7 @@ export function WorktreeEntryView({
       {...button}
       onClick={(event) => {
         onClick?.(event);
-        onOpen();
+        open();
       }}
       className={cn(
         "relative flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors",

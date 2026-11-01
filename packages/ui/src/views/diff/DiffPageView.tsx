@@ -15,7 +15,7 @@ import { ChipButton } from "../../primitives/chip-button.tsx";
 import { CopyButton } from "../../primitives/copy-button.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
-import { Sheet, SheetContent, SheetTitle } from "../../primitives/sheet.tsx";
+import { BottomSheet } from "../../primitives/sheet.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { isBinaryChange, isMediaBinary } from "../../lib/patchFiles.ts";
 import { cn } from "../../lib/utils.ts";
@@ -309,12 +309,9 @@ export function DiffFilesSheetView({
   children: ReactNode;
 }) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" showCloseButton={false} className="gap-0 p-0">
-        <SheetTitle className="sr-only">{title}</SheetTitle>
-        <div className="flex h-[70cqh] w-full flex-col">{children}</div>
-      </SheetContent>
-    </Sheet>
+    <BottomSheet open={open} onOpenChange={onOpenChange} title={title}>
+      <div className="flex h-[70cqh] w-full flex-col">{children}</div>
+    </BottomSheet>
   );
 }
 

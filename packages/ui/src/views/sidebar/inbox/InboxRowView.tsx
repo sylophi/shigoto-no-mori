@@ -77,11 +77,7 @@ export function InboxRowView({
       stack={stack}
       device={device}
       mirror={mirror}
-      look={entry.look}
-      onOpen={entry.open}
-      resident={entry.resident}
-      forwardTip={entry.forwardTip}
-      marks={marks}
+      entry={entry}
       shelf={shelf}
       context={
         <div className="flex min-w-0 items-center gap-1.5 text-3xs text-muted-foreground">

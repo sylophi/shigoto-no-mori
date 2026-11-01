@@ -4,7 +4,7 @@
 // Accelerators here fire regardless of which element has focus, and
 // Electron dispatches them through the menu before the renderer sees
 // them.
-import { menuAccelerators } from "@shigomori/ui/lib/keymap.ts";
+import { menuAccelerators, resolveKeymap } from "@shigomori/ui/lib/keymap.ts";
 import { readClientConfigSync } from "./clientConfig";
 import {
   app,
@@ -58,7 +58,12 @@ function shownChords(): Chords {
     (focusedWindowId === null
       ? undefined
       : chordsByWindow.get(focusedWindowId)) ??
-    menuAccelerators(readClientConfigSync().keybindings)
+    menuAccelerators(
+      resolveKeymap(readClientConfigSync().keybindings, {
+        mac: true,
+        desktop: true,
+      }),
+    )
   );
 }
 

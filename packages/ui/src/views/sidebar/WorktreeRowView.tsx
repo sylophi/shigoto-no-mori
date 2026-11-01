@@ -114,11 +114,7 @@ export function WorktreeRowView({
       stack={stack}
       device={device}
       mirror={mirror}
-      look={entry.look}
-      onOpen={entry.open}
-      resident={entry.resident}
-      forwardTip={entry.forwardTip}
-      marks={entry.marks}
+      entry={entry}
       shelf={shelf}
       hideStackPosition={stackRail?.whole}
       className={cn(stackRail && "ml-4.5 w-[calc(100%-var(--spacing)*4.5)]")}
