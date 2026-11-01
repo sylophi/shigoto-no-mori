@@ -487,6 +487,8 @@ interface Chunk {
 
 const NONE_SHUT: ReadonlySet<string> = new Set();
 
+const rowsOf = ({ header, rows }: Chunk): SidebarRow[] => [header, ...rows];
+
 // The list of projects' rows: the pinned ones first, the last of them
 // marked for the gap under it when more follow and it is a header
 // alone, then the rest's sections (groupSections), each owner's and
@@ -499,7 +501,6 @@ function listRows(
   shutFolders: ReadonlySet<string>,
   hide: (key: string, foldKey: string) => void,
 ): SidebarRow[] {
-  const rowsOf = ({ header, rows }: Chunk): SidebarRow[] => [header, ...rows];
   const { pinned, runs } = groupSections(
     chunks,
     (chunk) => chunk.header,
