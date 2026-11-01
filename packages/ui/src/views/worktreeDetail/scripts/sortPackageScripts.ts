@@ -1,4 +1,4 @@
-import { assertNever } from "../../../lib/utils.ts";
+import { sortByUsage } from "../../../lib/sortProjects.ts";
 import type {
   PackageScriptSortMode,
   PackageScriptUsage,
@@ -8,17 +8,6 @@ export interface SortableEntry {
   name: string;
   command: string;
 }
-
-// Most-used first by one usage figure, ties by name.
-const byUsage =
-  (
-    field: "lastUsed" | "recentCount",
-    usage: Record<string, PackageScriptUsage>,
-  ) =>
-  (a: SortableEntry, b: SortableEntry) => {
-    const diff = (usage[b.name]?.[field] ?? 0) - (usage[a.name]?.[field] ?? 0);
-    return diff !== 0 ? diff : a.name.localeCompare(b.name);
-  };
 
 export function sortEntries(
   entries: ReadonlyArray<[string, string]>,
@@ -43,14 +32,13 @@ export function sortEntries(
           (rank.get(a.name) ?? unranked) - (rank.get(b.name) ?? unranked),
       );
     }
-    case "alphabetical":
-      return mapped.toSorted((a, b) => a.name.localeCompare(b.name));
-    case "recent":
-      return mapped.toSorted(byUsage("lastUsed", usage));
-    case "frequent":
-      return mapped.toSorted(byUsage("recentCount", usage));
     default:
-      return assertNever(mode);
+      return sortByUsage(
+        mapped,
+        mode,
+        (entry) => entry.name,
+        (entry) => usage[entry.name],
+      );
   }
 }
 

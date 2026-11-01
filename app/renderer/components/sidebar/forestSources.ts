@@ -18,7 +18,7 @@ import { useProjectFolders } from "@/hooks/sharedSettings/useProjectFolders";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { type LocalSide, localSidesWith } from "@shigomori/ui/lib/forest.ts";
-import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
+import { sortByProject } from "@shigomori/ui/lib/sortProjects.ts";
 import { projectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
 import { useDeviceBadges } from "./deviceBadges";
 import { useDeviceFilter } from "./deviceFilter";
@@ -45,7 +45,11 @@ export function useForestSources({
   // order (`projects`), which is safe because dragging is gated to
   // arrange mode and arrange mode is only reachable via the manual sort,
   // where the orders match.
-  const orderedProjects = sortProjects(projects, sortMode);
+  const orderedProjects = sortByProject(
+    projects,
+    sortMode,
+    (project) => project,
+  );
   // Read here rather than inside the row builders so the two views
   // share one set of reads. Toggling the view then costs nothing: the
   // builders are plain functions over these results.
