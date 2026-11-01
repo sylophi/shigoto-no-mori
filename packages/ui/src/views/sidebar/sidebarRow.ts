@@ -88,18 +88,28 @@ type SidebarRowKinds =
       // That section: an owner's, or the whole list's when it isn't split.
       section: string;
     }
-  // A local worktree. `mirror` names the peer device it is kept in
-  // step with (a live mirror either way round), in which case the
-  // peer's own row for the pair is folded into this one.
+  // A worktree in the tree, this machine's or a peer's: a peer's sits
+  // beside the local rows under the local project sharing its repo
+  // identity when one exists, else under a peer-only project header.
+  // `groupId` names the group it renders in (its header's groupId) so
+  // hover attribution works without re-deriving the merge.
   | {
       kind: "worktree";
       key: string;
       worktree: Worktree;
+      // A peer's row carries the device's badge, in its connection
+      // tone. Not `reachable` renders the row faded: the device is off
+      // and this is its last known state. Absent, the row is local.
+      device?: SidebarDeviceBadge;
+      // The peer device a local row is kept in step with (a live mirror
+      // either way round), in which case the peer's own row for the
+      // pair is folded into this one.
       mirror?: SidebarDeviceBadge;
       // The peer's copy the row stands for too, whose page selects it.
       mirrorWorktreeId?: string;
       // Its PR off the project's map, which the builder already holds
-      // (as the inbox row's, see below).
+      // (as the inbox row's, see below). A peer's row reads the peer's
+      // own map.
       pr: PullRequest | undefined;
       // The PR's place in its stack, off the project's map, and its
       // stop on the stack's rail when its rows sit together
@@ -109,6 +119,7 @@ type SidebarRowKinds =
       // The fold the row was filed behind, null for the group's open
       // rows. The row fades by it (WorktreeEntry).
       shelf: GroupShelf | null;
+      groupId: string;
     }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The project
@@ -135,27 +146,6 @@ type SidebarRowKinds =
     }
   | { kind: "worktree-skeleton"; key: string; projectId: string }
   | { kind: "worktree-error"; key: string; projectId: string }
-  // A peer device's worktree, merged into the tree beside the local
-  // rows: under the local project sharing its repo identity when one
-  // exists, else under a peer-only project header. groupId names the
-  // group it renders in (its header's groupId) so hover attribution
-  // works without re-deriving the merge.
-  | {
-      kind: "remote-worktree";
-      key: string;
-      worktree: Worktree;
-      // The device's badge on the row, in its connection tone. Not
-      // `reachable` renders the row faded: the device is off and this
-      // is its last known state.
-      device: SidebarDeviceBadge;
-      // Its PR on that device, off the peer's own map like a local
-      // row's off this machine's.
-      pr: PullRequest | undefined;
-      stack: StackPosition | null;
-      stackRail?: StackRail;
-      shelf: GroupShelf | null;
-      groupId: string;
-    }
   // The head of an owner's run on the list of projects, when it is
   // split by owner (buildSidebarRows, ownerOf): the org or user the
   // projects below belong to. Shut, the projects are left out and
@@ -222,7 +212,7 @@ type SidebarRowKinds =
     };
 
 export type SidebarRow = SidebarRowKinds & {
-  // Drawn inside a folder of projects (folderRuns), set in under its
+  // Drawn inside a folder of projects (listRows), set in under its
   // header.
   nested?: boolean;
 };
@@ -274,7 +264,6 @@ const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "inbox-worktree": 66,
   "inbox-shelf": 36,
   "inbox-group": 36,
-  "remote-worktree": 49,
 };
 
 // The phone layout draws the same rows on a larger scale, and never
@@ -321,7 +310,6 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   "inbox-worktree": WORKTREE_ROW_GAP,
   "inbox-shelf": "px-2 pb-1",
   "inbox-group": "px-2 pb-1",
-  "remote-worktree": WORKTREE_ROW_GAP,
 };
 
 // One project row and the sections a project list splits into.

@@ -4,7 +4,7 @@
 import type { Project } from "@shigomori/contracts/schemas";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
-import type { ProjectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import type { ProjectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
 import { projectListSections } from "@shigomori/ui/views/sidebar/projectListSections.ts";
 import type { ProjectSection } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 
@@ -42,6 +42,5 @@ export function buildCreateSections({
         : [],
     ),
     mirrors: [],
-    deviceBadges: new Map(),
   });
 }

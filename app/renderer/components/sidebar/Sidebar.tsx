@@ -13,7 +13,6 @@ import {
 } from "@dnd-kit/sortable";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useReorderProjects } from "@/hooks/projects/useProjects";
-import { useCollapsedProjects } from "@/hooks/projects/useCollapsedProjects";
 import {
   useMarkAgentsWaiting,
   useInlineWorktrees,
@@ -28,12 +27,7 @@ import {
   useFanOutErrorToast,
   useUnreachedDevicesToast,
 } from "./useFanOutErrorToast";
-import {
-  buildSidebarRows,
-  type GroupIdSet,
-  projectGroupKey,
-  remoteGroupKeyOf,
-} from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import { buildSidebarRows } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import { useForestSources } from "./forestSources";
 import { DeviceFilterBar } from "./DeviceFilterBar";
 import { buildInboxRows } from "@shigomori/ui/views/sidebar/inbox/buildInboxRows.ts";
@@ -43,12 +37,7 @@ import { useLeaveInboxForPage } from "./inbox/useLeaveInboxForPage";
 import { setOpenProject, useOpenProject } from "./openProject";
 import { useFolderDragging } from "./ProjectFolder";
 import { ProjectDragPreviewView } from "@shigomori/ui/views/sidebar/ProjectDragPreviewView.tsx";
-import type {
-  GroupShelf,
-  InboxShelf,
-  SidebarRow,
-  SidebarViewModel,
-} from "@shigomori/ui/views/sidebar/sidebarRow.ts";
+import type { SidebarViewModel } from "@shigomori/ui/views/sidebar/sidebarRow.ts";
 import {
   ForestSlotView,
   InboxCreateRowView,
@@ -67,7 +56,7 @@ import { SidebarList } from "./SidebarList";
 import { RowContent } from "./RowContent";
 import type { RowHandlers } from "./VirtualRow";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
-import { withMember, withToggled } from "@shigomori/ui/lib/toggleSet.ts";
+import { useForestFolds } from "./useForestFolds";
 
 // The app sidebar, one for both shells: the brand header, the forest
 // (or, while a page with a list of its own is open, that list:
@@ -168,59 +157,7 @@ function Forest({
   const reorderProjects = useReorderProjects();
   // Off arranging, the drag files projects into folders.
   const filing = useFolderDragging();
-  // The open project and the shelf reveals are kept by group key
-  // (projectGroupKey), one per repo: narrowed to a peer, a repo this
-  // machine also holds is drawn as that peer's group, and it still
-  // reads and writes the one key the local project's group goes by.
-  const localGroupKeys = new Map(
-    projects.map((project) => [
-      project.id,
-      projectGroupKey(project, undefined),
-    ]),
-  );
-  const groupKeyOf = (groupId: string): string =>
-    remoteGroupKeyOf(groupId) ?? localGroupKeys.get(groupId) ?? groupId;
-  const byGroupKey = (keys: ReadonlySet<string>): GroupIdSet => ({
-    has: (groupId) => keys.has(groupKeyOf(groupId)),
-  });
-  // Per-group "Show agent working", "Show shelved" and "Show hidden"
-  // reveals. Transient on purpose, since the whole point of them is to
-  // keep the noise down on a fresh window.
-  const [shelfOpenKeys, setShelfOpenKeys] = useState<
-    Record<GroupShelf, Set<string>>
-  >(() => ({ agentWorking: new Set(), shelved: new Set(), hidden: new Set() }));
-  const groupShelvesOpen: Record<GroupShelf, GroupIdSet> = {
-    agentWorking: byGroupKey(shelfOpenKeys.agentWorking),
-    shelved: byGroupKey(shelfOpenKeys.shelved),
-    hidden: byGroupKey(shelfOpenKeys.hidden),
-  };
-  // Inbox shelves, same transient-by-design reasoning as the per-group
-  // reveal above: both start folded on every launch.
-  const [openShelves, setOpenShelves] = useState<Set<InboxShelf>>(
-    () => new Set(),
-  );
-  // The owners shut on the list of projects split by owner, by owner
-  // key (ownerOf). Transient like the shelves: every owner starts open.
-  const [shutOwners, setShutOwners] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  // The folders shut on the list of projects, by fold key. Transient
-  // too: every folder starts open.
-  const [shutFolders, setShutFolders] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
-  // The prefix groups shut inside a project, by group key and prefix.
-  // Transient too: every group starts open.
-  const [shutWorktreeGroups, setShutWorktreeGroups] = useState<
-    ReadonlySet<string>
-  >(() => new Set());
-  const worktreeGroupKey = (groupId: string, prefix: string) =>
-    `${groupKeyOf(groupId)}\n${prefix}`;
-  // The inbox's prefix groups shut, by prefix. Apart from a project's:
-  // the inbox's group gathers every project's worktrees.
-  const [shutInboxGroups, setShutInboxGroups] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const folds = useForestFolds(projects);
   const [activeId, setActiveId] = useState<string | null>(null);
   // Stepped aside for a page's list (SidebarTakeover).
   const takenOver = useSidebarTakenOver();
@@ -228,52 +165,6 @@ function Forest({
   // shows. A pinned view has its tab bar.
   useSidebarViewHotkey(!arrangeMode && !takenOver && pinnedView === undefined);
 
-  const toggleShelved = (groupId: string, shelf: GroupShelf) => {
-    setShelfOpenKeys((prev) => ({
-      ...prev,
-      [shelf]: withToggled(groupKeyOf(groupId))(prev[shelf]),
-    }));
-  };
-
-  const toggleShelf = (shelf: InboxShelf) => {
-    setOpenShelves(withToggled(shelf));
-  };
-
-  // For revealing a worktree behind a shut shelf (SidebarList). Adds
-  // rather than toggles, so a second call before the first lands is
-  // harmless.
-  const openFold = (row: SidebarRow): boolean => {
-    if (row.kind === "group-shelf" && !row.expanded) {
-      const key = groupKeyOf(row.groupId);
-      setShelfOpenKeys((prev) => ({
-        ...prev,
-        [row.shelf]: new Set(prev[row.shelf]).add(key),
-      }));
-      return true;
-    }
-    if (row.kind === "worktree-group" && !row.expanded) {
-      const key = worktreeGroupKey(row.groupId, row.prefix);
-      setShutWorktreeGroups((prev) => withMember(prev, key, false));
-      return true;
-    }
-    if (row.kind === "owner-header" && !row.expanded) {
-      setShutOwners((prev) => withMember(prev, row.ownerKey, false));
-      return true;
-    }
-    if (row.kind === "project-folder" && !row.expanded) {
-      setShutFolders((prev) => withMember(prev, row.foldKey, false));
-      return true;
-    }
-    if (row.kind === "inbox-shelf" && !row.expanded) {
-      setOpenShelves((prev) => new Set(prev).add(row.shelf));
-      return true;
-    }
-    if (row.kind === "inbox-group" && !row.expanded) {
-      setShutInboxGroups((prev) => withMember(prev, row.prefix, false));
-      return true;
-    }
-    return false;
-  };
   // SidebarList's, kept here so a takeover's unmount doesn't reset it.
   const foldsOpenedForRef = useRef<string | null>(null);
 
@@ -283,7 +174,6 @@ function Forest({
   // project folding in place.
   const { openKey, onScreenKey } = useOpenProject(projects, remoteItems);
   const inline = useInlineWorktrees();
-  const { collapsedKeys, toggleCollapsed } = useCollapsedProjects();
   const worktreeSort = useWorktreeSorts();
   // The level last asked for here, by picking a project or going back,
   // as opposed to one the tree reached by following the page: only the
@@ -300,30 +190,29 @@ function Forest({
         mirrors,
         localSides,
         deviceBadges,
-        openShelves,
+        openShelves: folds.inboxShelvesOpen,
         hiddenPrefixes,
         groupedPrefixes,
-        shutGroups: shutInboxGroups,
+        shutGroups: folds.shutInboxGroups,
         allowAgentWorking,
         pinWaiting: markAgentsWaiting,
       })
     : buildSidebarRows({
         ...local,
         openKey,
-        inline: inline ? { collapsed: byGroupKey(collapsedKeys) } : null,
+        inline: inline ? { collapsed: folds.collapsed } : null,
         worktreeSort,
         order,
-        openShelves: groupShelvesOpen,
+        openShelves: folds.groupShelvesOpen,
         hiddenPrefixes,
         allowAgentWorking,
         byPrefix: {
           prefixes: groupedPrefixes,
-          shut: (groupId, prefix) =>
-            shutWorktreeGroups.has(worktreeGroupKey(groupId, prefix)),
+          shut: folds.worktreeGroupShut,
         },
         arrangeMode,
-        byOwner: groupByOwner ? { shut: shutOwners } : null,
-        shutFolders,
+        byOwner: groupByOwner ? { shut: folds.shutOwners } : null,
+        shutFolders: folds.shutFolders,
         remote: shownRemote,
         mirrors,
         localSides,
@@ -408,14 +297,8 @@ function Forest({
   }
 
   const handlers: RowHandlers = {
-    onToggle: inline ? toggleCollapsed : goTo,
-    onToggleShelved: toggleShelved,
-    onToggleShelf: toggleShelf,
-    onToggleOwner: (ownerKey) => setShutOwners(withToggled(ownerKey)),
-    onToggleFolder: (foldKey) => setShutFolders(withToggled(foldKey)),
-    onToggleWorktreeGroup: (groupId, prefix) =>
-      setShutWorktreeGroups(withToggled(worktreeGroupKey(groupId, prefix))),
-    onToggleInboxGroup: (prefix) => setShutInboxGroups(withToggled(prefix)),
+    onToggle: inline ? folds.toggleCollapsed : goTo,
+    ...folds.toggles,
     currentGroupKey: onScreenKey,
     arrangeMode,
   };
@@ -433,7 +316,7 @@ function Forest({
       <SidebarList
         rows={rows}
         revealKey={view.revealKey}
-        openFold={openFold}
+        openFold={folds.openFold}
         foldsOpenedForRef={foldsOpenedForRef}
         scrollerRef={scrollerRef}
         // Not while the forest is still listing: the level it settles on

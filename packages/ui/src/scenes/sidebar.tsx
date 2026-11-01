@@ -8,11 +8,8 @@ import { buildGrid } from "../views/home/gridModel.ts";
 import type { ReactNode } from "react";
 import type { Project, SidebarView } from "@shigomori/contracts/schemas";
 import { AddProjectButtonView } from "../views/sidebar/AddProjectButtonView.tsx";
-import {
-  buildSidebarRows,
-  projectGroupKey,
-  projectGroupOrder,
-} from "../views/sidebar/buildSidebarRows.ts";
+import { buildSidebarRows } from "../views/sidebar/buildSidebarRows.ts";
+import { projectGroupOrder } from "../views/sidebar/projectGroupOrder.ts";
 import type { SidebarDeviceBadge } from "../views/sidebar/DeviceBadgeView.tsx";
 import { DeviceBadgeClusterView } from "../views/sidebar/DeviceBadgeView.tsx";
 import {
@@ -61,7 +58,7 @@ import { WorktreeRowView } from "../views/sidebar/WorktreeRowView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import type { DeviceRosterEntry } from "../lib/deviceRoster.ts";
 import type { SidebarMarks } from "../views/sidebar/WorktreeEntryView.tsx";
-import type { RemoteForestItem } from "../lib/forest.ts";
+import { projectGroupKey, type RemoteForestItem } from "../lib/forest.ts";
 import { deviceStatusView } from "../lib/deviceStatus.ts";
 import { assertNever } from "../lib/utils.ts";
 import {
@@ -381,14 +378,13 @@ function SceneRow({
         />
       );
     case "worktree":
-    case "remote-worktree":
       return (
         <WorktreeMenuView
           row={
             <WorktreeRowView
               worktree={row.worktree}
-              device={row.kind === "remote-worktree" ? row.device : undefined}
-              mirror={row.kind === "worktree" ? row.mirror : undefined}
+              device={row.device}
+              mirror={row.mirror}
               pr={row.pr}
               stack={row.stack}
               stackRail={row.stackRail}
@@ -396,7 +392,7 @@ function SceneRow({
               entry={entryOf(
                 row.worktree.id,
                 selected,
-                row.kind === "remote-worktree",
+                row.device !== undefined,
               )}
             />
           }

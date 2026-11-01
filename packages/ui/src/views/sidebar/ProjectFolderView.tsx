@@ -1,5 +1,5 @@
 // The folders the list of projects gathers projects into, inside their
-// owner (buildSidebarRows, folderRuns): a folder's header and its
+// owner (groupSections, listRows): a folder's header and its
 // right-click, a project's pick of folder, and the dialog naming one.
 import { ChevronDown } from "lucide-react";
 import {

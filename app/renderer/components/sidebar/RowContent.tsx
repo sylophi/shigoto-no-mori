@@ -94,19 +94,9 @@ export function RowContent({
       return (
         <WorktreeRow
           worktree={row.worktree}
+          device={row.device}
           mirror={row.mirror}
           mirrorWorktreeId={row.mirrorWorktreeId}
-          pr={row.pr}
-          stack={row.stack}
-          stackRail={row.stackRail}
-          shelf={row.shelf}
-        />
-      );
-    case "remote-worktree":
-      return (
-        <WorktreeRow
-          worktree={row.worktree}
-          device={row.device}
           pr={row.pr}
           stack={row.stack}
           stackRail={row.stackRail}

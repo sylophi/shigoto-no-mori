@@ -4,13 +4,19 @@ import {
   trunkOf,
 } from "@shigomori/contracts/pullRequestStack";
 import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
-import type {
-  LocalSide,
-  MirrorLink,
-  ProjectPullRequestQueries,
-  ProjectShigomoriConfigQueries,
-  ProjectWorktreeQueries,
-  RemoteForestItem,
+import {
+  deviceBadgeOf,
+  type LocalSide,
+  mirrorBadgeLookup,
+  mirrorPairsOf,
+  type MirrorLink,
+  type ProjectPullRequestQueries,
+  type ProjectShigomoriConfigQueries,
+  type ProjectWorktreeQueries,
+  type RemoteForestItem,
+  remoteWorktreeKey,
+  worktreeRowKey,
+  worktreeShelfOf,
 } from "../../../lib/forest.ts";
 import { showPrimaryInInbox } from "../../../lib/showPrimaryInInbox.ts";
 import type {
@@ -18,14 +24,6 @@ import type {
   PullRequest,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import {
-  deviceBadgeOf,
-  mirrorBadgeLookup,
-  mirrorPairsOf,
-  remoteWorktreeKey,
-  worktreeRowKey,
-  worktreeShelfOf,
-} from "../buildSidebarRows.ts";
 import type { SidebarDeviceBadge } from "../DeviceBadgeView.tsx";
 import {
   INBOX_SHELVES,
@@ -57,7 +55,7 @@ interface BuildInboxRowsArgs {
   // Which shelves are open. Absence means shut, so both shelves start
   // folded on every launch, the same reasoning as the per-group
   // "Show shelved" reveal in the classic view.
-  openShelves: Set<InboxShelf>;
+  openShelves: ReadonlySet<string>;
   // Worktrees starting with one of these go on the Hidden shelf.
   hiddenPrefixes: readonly string[];
   // The live worktrees starting with one of these gather under a

@@ -10,7 +10,7 @@ import {
 } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
 import type { Project } from "@shigomori/contracts/schemas";
-import type { ProjectGroupOrder } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import type { ProjectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
 import { DeviceBadgeView } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
   useGroupCreator,

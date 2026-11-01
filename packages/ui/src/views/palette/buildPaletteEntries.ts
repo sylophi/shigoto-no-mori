@@ -4,11 +4,17 @@ import type {
   PaletteProject,
 } from "./paletteEntries.ts";
 import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
-import type {
-  MirrorLink,
-  ProjectPullRequestQueries,
-  ProjectWorktreeQueries,
-  RemoteForestItem,
+import {
+  deviceBadgeOf,
+  mirrorBadgeLookup,
+  mirrorPairsOf,
+  type MirrorLink,
+  type ProjectPullRequestQueries,
+  type ProjectWorktreeQueries,
+  projectGroupKey,
+  type RemoteForestItem,
+  worktreeRowKey,
+  worktreeShelfOf,
 } from "../../lib/forest.ts";
 import { rankByScore, scoreFields } from "../../lib/fuzzyMatch.ts";
 import { sanitizeBranchName } from "@shigomori/contracts/git/branches";
@@ -18,14 +24,6 @@ import {
   worktreeLastActivityAt,
   type Project,
 } from "@shigomori/contracts/schemas";
-import {
-  deviceBadgeOf,
-  mirrorBadgeLookup,
-  mirrorPairsOf,
-  projectGroupKey,
-  worktreeRowKey,
-  worktreeShelfOf,
-} from "../sidebar/buildSidebarRows.ts";
 import { ownerOf } from "../sidebar/sidebarRow.ts";
 import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
 import { worktreeTitle } from "../../lib/worktreeTitle.ts";
