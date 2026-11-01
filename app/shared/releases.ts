@@ -19,12 +19,10 @@ export const RELEASES_PAGE_URL = `https://github.com/${APP_REPO}/releases`;
 
 const decodeReleaseList = Schema.decodeUnknownResult(ReleaseList);
 
-export async function fetchReleases(
-  fetchImpl: typeof fetch = fetch,
-): Promise<Release[]> {
+export async function fetchReleases(): Promise<Release[]> {
   let response: Response;
   try {
-    response = await fetchImpl(RELEASE_LIST_URL, {
+    response = await fetch(RELEASE_LIST_URL, {
       headers: {
         Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",

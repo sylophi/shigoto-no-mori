@@ -53,9 +53,6 @@ export async function bootDevice(
     createConnection({
       serveConnectInfo: opts.serveConnectInfo,
       onChange: opts.onChange,
-      // The ping seams, so the liveness scenario runs in milliseconds
-      // instead of the shared production cadence.
-      ping: opts.ping,
     }).pipe(Scope.provide(scope)),
   );
   if (track) track(stop);

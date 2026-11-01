@@ -86,12 +86,6 @@ export type WebBridgeDeps = {
   openExternal: (url: string) => void;
   isDev: boolean;
   appVersion: string;
-  fetchImpl?: typeof fetch;
-  // Test seam: the candidate kinds the tab dials. A browser page dials
-  // the wss tunnel only (mixed content forbids ws:// under https).
-  dialableKinds?: ReadonlyArray<"lan" | "tunnel">;
-  // navigator.locks, which every tab of the profile shares.
-  locks?: Pick<LockManager, "request">;
 };
 
 export type WebBridge = {
@@ -127,8 +121,25 @@ const ENROLL_WAIT_MS = 30_000;
 // id, its enrollment and its sign-out.
 const ACCOUNT_LOCK = "sm.web.accountChange";
 
-const isDomError = (error: unknown, name: string): boolean =>
-  error instanceof DOMException && error.name === name;
+// `run` under the account lock, which every tab of the profile shares
+// (navigator.locks), or `timedOut` once ENROLL_WAIT_MS passes waiting
+// for it. A page without navigator.locks (an insecure context) runs it
+// at once.
+function underAccountLock<A>(
+  run: () => A | Promise<A>,
+  timedOut: () => A | Promise<A>,
+): Promise<A> {
+  const locks = globalThis.navigator?.locks;
+  if (locks === undefined) return Promise.resolve().then(run);
+  return locks
+    .request(ACCOUNT_LOCK, { signal: AbortSignal.timeout(ENROLL_WAIT_MS) }, run)
+    .catch((error: unknown) => {
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        return timedOut();
+      }
+      throw error;
+    });
+}
 
 export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 
@@ -139,31 +150,18 @@ export const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 // id that tab minted before it enrolled, as a sign-out goes ahead.
 export async function establishWebDeviceId(
   storage: KeyValueStorage,
-  locks: Pick<LockManager, "request"> | undefined = globalThis.navigator?.locks,
 ): Promise<string> {
   const stored = readWebDeviceId(storage);
   if (stored !== null) return stored;
-  if (locks === undefined) return getWebDeviceId(storage);
-  return await locks
-    .request(
-      ACCOUNT_LOCK,
-      { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
-      async () => getWebDeviceId(storage),
-    )
-    .catch((error: unknown) => {
-      if (isDomError(error, "TimeoutError")) return getWebDeviceId(storage);
-      throw error;
-    });
+  const mint = () => getWebDeviceId(storage);
+  return await underAccountLock(mint, mint);
 }
 
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = resolveServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);
   const { deviceId } = deps;
-  const service = createAccountService({
-    baseUrl: config.hubUrl,
-    fetchImpl: deps.fetchImpl,
-  });
+  const service = createAccountService({ baseUrl: config.hubUrl });
   const tab = createLocalRegistrar({ validateOutputs: deps.isDev });
   // A sign-out whose revoke never reached the hub is delivered at the
   // next boot (enroll.ts retryParkedRevoke), the desktop's rule too.
@@ -198,7 +196,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
           tab.push(hubContract, "statusChanged", status);
         },
         broadcastPeerPush: (push) => tab.push(hubContract, "peerPush", push),
-        dialableKinds: deps.dialableKinds ?? ["tunnel"],
+        dialableKinds: ["tunnel"],
         // One device per browser profile, a link per tab: a host keeps a set
         // of links per web device, and the hub relays to each.
         deviceKind: "web",
@@ -305,7 +303,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // this tab rides the one under way, as the handlers' own join does.
   // The tab enrolls under the profile's id as storage holds it, so a
   // credential never lands beside an id other than its own.
-  const locks = deps.locks ?? globalThis.navigator?.locks;
   let enrolling: Promise<AccountStatus> | undefined;
   const enrollOneTab: typeof accountHandlers.enroll = (token, ctx) => {
     if (enrolling !== undefined) return enrolling;
@@ -316,27 +313,13 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         ? accountHandlers.enroll(token, ctx)
         : accountHandlers.status(undefined, ctx);
     };
-    const run = (
-      locks === undefined
-        ? enrollHere()
-        : // A tab whose enroll hangs (no timeout of its own) holds the
-          // others for a while, not for good: theirs then fail, and retry.
-          locks
-            .request(
-              ACCOUNT_LOCK,
-              { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
-              enrollHere,
-            )
-            .catch((error: unknown) => {
-              // Given up while waiting: said as what the user can do.
-              if (isDomError(error, "TimeoutError")) {
-                throw new Error(
-                  "Another tab of this browser is still enrolling it. Try again once it's done.",
-                );
-              }
-              throw error;
-            })
-    ).finally(() => {
+    // A tab whose enroll hangs (no timeout of its own) holds the others
+    // for a while, not for good: theirs then fail, and retry.
+    const run = underAccountLock(enrollHere, () => {
+      throw new Error(
+        "Another tab of this browser is still enrolling it. Try again once it's done.",
+      );
+    }).finally(() => {
       enrolling = undefined;
     });
     enrolling = run;
@@ -347,21 +330,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // this tab's does behind its own (AccountShell.transitions), or the
   // enrollment's late write signs the profile back in. A local sign-out
   // must land, so one that waited out ENROLL_WAIT_MS goes ahead.
-  const signOutOneTab: typeof accountHandlers.signOut = (input, ctx) =>
-    locks === undefined
-      ? accountHandlers.signOut(input, ctx)
-      : locks
-          .request(
-            ACCOUNT_LOCK,
-            { signal: AbortSignal.timeout(ENROLL_WAIT_MS) },
-            () => accountHandlers.signOut(input, ctx),
-          )
-          .catch((error: unknown) => {
-            if (isDomError(error, "TimeoutError")) {
-              return accountHandlers.signOut(input, ctx);
-            }
-            throw error;
-          });
+  const signOutOneTab: typeof accountHandlers.signOut = (input, ctx) => {
+    const signOut = () => accountHandlers.signOut(input, ctx);
+    return underAccountLock(signOut, signOut);
+  };
 
   // ---- clientConfig module ----
 
@@ -492,7 +464,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   });
   tab.served.serve(shellContract, shellHandlers);
   tab.served.serve(releasesContract, {
-    list: () => fetchReleases(deps.fetchImpl),
+    list: () => fetchReleases(),
   });
 
   // The tab serves both scopes itself: the client modules, and the host
