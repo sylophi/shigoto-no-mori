@@ -49,7 +49,8 @@ import { createServed, resolvePush, type View } from "@shared/ipc/served";
 import { allContractModules } from "@shigomori/contracts/allModules";
 import type { HostServices } from "@host/process/services";
 import { hostContext } from "./hostRuntime.mts";
-import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
+import type { HandlerContext } from "@shared/ipc/transport";
+import type * as PeerReach from "@host/ipc/PeerReach";
 import { WebSocket as WsClient } from "ws";
 import { startStubHub, type StubHub, testDeviceKey } from "./hubStub.mts";
 import { bootDevice, type BootedDevice } from "./hubBoot.mts";
@@ -411,8 +412,7 @@ export type DirectWire = Bridged & {
 // The whole direct wire the transfer checks share, exactly as
 // production composes it: a REAL direct listener serving the check's
 // contracts, the dialer's REAL direct plane supervised over the stub
-// device hub (bridgeTo), and a counting peer transport aimed at the
-// listener. The keeper establishes the session eagerly, before any
+// device hub (bridgeTo), and a peer reach aimed at the listener. The keeper establishes the session eagerly, before any
 // invoke, which is the supervised model the transfer checks ride.
 // Everything registers its teardown on the caller's tracker.
 // `opts.contracts` lists the [contract, handlers] pairs the listener
@@ -450,11 +450,7 @@ export async function bootDirectWire<const C extends readonly ContractModule[]>(
     () => bridged.bridge.directPeers().peerAppVersions[LISTENER] !== undefined,
     "the keeper to establish the direct session to the listener",
   );
-  const toListener = bridgePeerTransport(
-    bridged.bridge,
-    LISTENER,
-    pushListeners,
-  );
+  const toListener = bridgePeerReach(bridged.bridge, LISTENER, pushListeners);
   return { ...bridged, listener, toListener };
 }
 
@@ -495,43 +491,34 @@ function makeDirectBridge(
   };
 }
 
-type PeerTransport = {
-  transport: ClientTransport;
-  invokeCount(channel: string): number;
-  channels(): ReturnType<HubHandlers["peerChannels"]>;
-};
+type PeerTransport = Omit<
+  Parameters<typeof PeerReach.make>[0],
+  "admissions" | "admits"
+>;
 
-// A ClientTransport riding the bridge's cached direct session, with a
-// per-channel invoke counter so a transfer check can pin poll-side
-// chunking as round trips (the hub stub sees none of them, which the
-// checks assert separately via forwardedCount). Its subscribe hears
-// the peer's pushes off the bridge's fan-out, the way the host's peer
-// transport does.
-function bridgePeerTransport(
+// The host's peer reach (host/process/handlers.ts) over the bridge's
+// cached direct session to `deviceId`, whichever device a call names:
+// both devices' handlers run in this process, so the listener's reach
+// into its own peer lands here too. Its calls, the peer's pushes off
+// the bridge's fan-out, and the session's byte channels
+// (shared/remote/channels.ts), resolving like invokePeer does.
+function bridgePeerReach(
   bridge: HubHandlers,
   deviceId: string,
   pushListeners: Set<(push: HubPeerPush) => void>,
 ): PeerTransport {
-  const counts = new Map<string, number>();
   return {
-    transport: {
-      invoke: (channel, input, options) => {
-        counts.set(channel, (counts.get(channel) ?? 0) + 1);
-        return bridge.invokeOnPeer(deviceId, channel, input, options);
-      },
-      subscribe: (channel, handler) => {
-        const listener = (push: HubPeerPush) => {
-          if (push.deviceId === deviceId && push.channel === channel) {
-            handler(push.payload);
-          }
-        };
-        pushListeners.add(listener);
-        return () => pushListeners.delete(listener);
-      },
+    invoke: (_, channel, input) =>
+      bridge.invokeOnPeer(deviceId, channel, input),
+    onPush: (_, channel, handler) => {
+      const listener = (push: HubPeerPush) => {
+        if (push.deviceId === deviceId && push.channel === channel) {
+          handler(push.payload);
+        }
+      };
+      pushListeners.add(listener);
+      return () => pushListeners.delete(listener);
     },
-    invokeCount: (channel) => counts.get(channel) ?? 0,
-    // The session's byte channels (shared/remote/channels.ts),
-    // resolving like invokePeer does.
-    channels: () => bridge.peerChannels(deviceId),
+    channelsFor: () => () => Effect.runPromise(bridge.peerChannels(deviceId)),
   };
 }

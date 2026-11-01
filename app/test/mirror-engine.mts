@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import { RemoteCallError } from "@shigomori/contracts/errors";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
@@ -181,13 +182,11 @@ it("a stop's fresh git check that doesn't finish in its limit times out, never a
   // The peer answers the first look, then holds every later one.
   let holding = false;
   standInPeers({
-    transportFor: () => ({
-      invoke: (channel) =>
-        holding && channel === "mirror:gitState"
-          ? new Promise(() => {})
-          : Promise.reject(new Error("the peer can't say")),
-      subscribe: () => () => {},
-    }),
+    invoke: (_, channel) =>
+      holding && channel === "mirror:gitState"
+        ? Effect.never
+        : Effect.fail(new RemoteCallError({ text: "the peer can't say" })),
+    onPush: () => () => {},
     channelsFor: () => () => Promise.reject(new Error("not in this check")),
   });
   const project = await Effect.runPromiseWith(await hostContext())(
@@ -307,10 +306,9 @@ async function movedOriginalWithPeerAway(id: string) {
   const asked: string[] = [];
   let reached = false;
   standInPeers({
-    transportFor: () => ({
-      invoke: () => Promise.reject(new Error("not in this check")),
-      subscribe: () => () => {},
-    }),
+    invoke: () =>
+      Effect.fail(new RemoteCallError({ text: "not in this check" })),
+    onPush: () => () => {},
     channelsFor: () => () => Promise.reject(new Error("not in this check")),
     admissions: Stream.fromPubSub(admissions),
     admits: (deviceId: string) => {

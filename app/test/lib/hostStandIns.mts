@@ -6,6 +6,7 @@
 // or the engine between its checks.
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import { RemoteCallError } from "@shigomori/contracts/errors";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as AccountPeers from "../../host/lib/control/AccountPeers.ts";
@@ -24,7 +25,8 @@ import { inertMirrorImpl } from "./mirrorFakes.mts";
 const notHere = () => Promise.reject(new Error("not in this check"));
 
 let peers = PeerReach.make({
-  transportFor: () => ({ invoke: notHere, subscribe: () => () => {} }),
+  invoke: () => Effect.fail(new RemoteCallError({ text: "not in this check" })),
+  onPush: () => () => {},
   channelsFor: () => notHere,
 });
 // The peers a proof reaches, over its own transport.

@@ -96,7 +96,7 @@ export function bridgeDuplexToChannel(
 // been claimed, the cap may have filled. On any refusal the duplex is
 // destroyed and the coded marker thrown, so a handler that spawned a
 // process for the far end need only kill it on a throw. A channel the
-// peer already reset comes back closed (see ChannelMux.attach), and
+// peer already reset comes back closed (see LinkChannels.attach), and
 // the adapter tears the far end down through its ordinary close path.
 export function requireChannels(
   ctx: HandlerContext,

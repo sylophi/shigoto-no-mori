@@ -34,7 +34,7 @@ import {
 } from "@shigomori/contracts/errors";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import {
-  type DeviceConnection,
+  type DialedDevice,
   RemoteConnectError,
 } from "@shared/remote/deviceLink";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
@@ -55,7 +55,7 @@ export type SupervisorStatus = HubStatus["socket"];
 
 // The part of an established connection the supervisor's owner
 // touches: the probe.
-export type SupervisedConnection = Pick<DeviceConnection, "probe">;
+export type SupervisedConnection = Pick<DialedDevice, "probe">;
 
 // The connect function: one attempt, handed the supervisor's close
 // handler, answering with the established connection, which lives as

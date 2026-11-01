@@ -21,20 +21,12 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Queue from "effect/Queue";
-import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
+import type { ChannelEndpoint, LinkChannels } from "@shigomori/contracts/link";
 import {
   CHANNEL_CALLS_IN_FLIGHT,
   CHANNEL_MAX_READ_BYTES,
   CHANNEL_MAX_WRITE_BYTES,
 } from "@shigomori/contracts/modules/link";
-
-// The dialing side's channels on one link.
-export type ChannelMux = {
-  // Throws when the id is attached already or the link is gone.
-  attach(channelId: string, endpoint: ChannelEndpoint): ChannelHandle;
-  has(channelId: string): boolean;
-  size(): number;
-};
 
 // Bytes a side queues before its writer is told to pause.
 export const CHANNEL_WINDOW_BYTES = 4 * 1024 * 1024;
@@ -99,7 +91,9 @@ export type ChannelCalls = {
 
 type Piece = Uint8Array | "end";
 
-export function createChannelMux(calls: ChannelCalls): ChannelMux & {
+// The dialing side's channels on one link. Attach throws when the id is
+// attached already or the link is gone.
+export function createChannelMux(calls: ChannelCalls): LinkChannels & {
   // The link is gone: every channel resets, and attach refuses.
   readonly closeAll: () => void;
 } {

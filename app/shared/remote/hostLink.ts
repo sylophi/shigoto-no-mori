@@ -71,7 +71,6 @@ export const hostLink = Effect.fnUntraced(function* (options: {
       group: LoopbackGroup,
       appVersion: options.appVersion,
       localDeviceId: deviceId,
-      expectedDeviceId: deviceId,
       openSocket: options.openSocket,
       deadlineMs: DIAL_DEADLINE_MS,
       onPush: fanOut.emit,
@@ -102,8 +101,8 @@ export const hostLink = Effect.fnUntraced(function* (options: {
   return {
     // The host is this machine's own build, which decodes what it sends.
     local: true,
-    call: (channel, input, span) =>
-      Effect.flatMap(up, (link) => link.call(channel, input, span)),
+    call: (channel, input) =>
+      Effect.flatMap(up, (link) => link.call(channel, input)),
     view: (channel, input) =>
       Stream.unwrap(Effect.map(up, (link) => link.view(channel, input))),
     pushes: fanOut.pushes,

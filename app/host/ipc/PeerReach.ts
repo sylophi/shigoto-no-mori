@@ -2,17 +2,17 @@
 // for any contract on the peer's direct session, the byte channels of
 // that session, and each peer as it comes to take this device's calls.
 // The root provides it (host/process/handlers.ts), since the remote
-// plumbing lives there, and its transport must route through the
+// plumbing lives there, and its calls must route through the
 // bridge's SHARED direct-session cache (makeHubHandlers), never a fresh
 // dial: the host keeps exactly one authed socket per deviceId, and a
 // second dial silently supersedes the session every remote-forest query
 // is riding on.
 import { mirrorContract } from "@shigomori/contracts/modules/mirror";
 import { worktreeDataContract } from "@shigomori/contracts/modules/worktreeData";
-import type { ChannelMux } from "@shared/remote/channels";
+import type { LinkChannels } from "@shigomori/contracts/link";
 import { syncContract } from "@shigomori/contracts/modules/sync";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
-import type { ClientTransport } from "@shared/ipc/transport";
+import { effectClient } from "@shared/ipc/effectClient";
 import * as Context from "effect/Context";
 import {
   type CallFailure,
@@ -21,15 +21,11 @@ import {
 } from "@shigomori/contracts/errors";
 import {
   callOf,
-  callsOf,
   channelOf,
   type ContractModule,
-  isInvoke,
-  keyOf,
 } from "@shigomori/contracts/contract";
 import type { HubStatus } from "@shigomori/contracts/modules/hub";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import type { EffectClient, PushKeys } from "@shigomori/contracts/types";
@@ -37,7 +33,7 @@ import type { EffectClient, PushKeys } from "@shigomori/contracts/types";
 // The byte channels of a peer's cached session, which the source links
 // ride (host/lib/sync/sourceLink.ts): resolving once the direct
 // session exists, rejecting when there is none.
-export type PeerChannels = () => Promise<Pick<ChannelMux, "attach" | "has">>;
+export type PeerChannels = () => Promise<Pick<LinkChannels, "attach" | "has">>;
 
 // A peer's surface for one contract as effects: built per call, never
 // held. Each call continues the caller's span, interrupting it cancels
@@ -75,7 +71,18 @@ export class PeerReach extends Context.Service<
 >()("sm/host/PeerReach") {}
 
 export const make = (reach: {
-  readonly transportFor: (deviceId: string) => ClientTransport;
+  // A call on the peer's cached session.
+  readonly invoke: (
+    deviceId: string,
+    channel: string,
+    input: unknown,
+  ) => Effect.Effect<unknown, unknown>;
+  // One channel of the peer's pushes, until the returned stop.
+  readonly onPush: (
+    deviceId: string,
+    channel: string,
+    handler: (payload: unknown) => void,
+  ) => () => void;
   readonly channelsFor: (deviceId: string) => PeerChannels;
   // A check that doesn't exercise them has none, and every peer taking
   // this device's calls.
@@ -86,30 +93,21 @@ export const make = (reach: {
     admissions: reach.admissions ?? Stream.never,
     admits: reach.admits ?? (() => true),
     calls: <M extends ContractModule>(contract: M, deviceId: string) => {
-      const transport = reach.transportFor(deviceId);
-      const calls: Record<string, (input?: unknown) => unknown> = {};
-      for (const call of callsOf(contract)) {
-        if (!isInvoke(call)) continue;
-        const channel = channelOf(call);
-        calls[keyOf(call)] = (input) =>
-          Effect.flatMap(Effect.option(Effect.currentSpan), (span) =>
-            Effect.tryPromise({
-              try: (signal) =>
-                transport.invoke(channel, input, {
-                  signal,
-                  span: Option.getOrUndefined(span),
-                }),
-              catch: (error) => refusalNamed(callFailureOf(error), deviceId),
-            }),
-          );
-      }
-      // built from the contract's own calls, each answering as its call
+      const calls: object = effectClient(contract, {
+        call: (channel, input) =>
+          reach
+            .invoke(deviceId, channel, input)
+            .pipe(
+              Effect.mapError((error) =>
+                refusalNamed(callFailureOf(error), deviceId),
+              ),
+            ),
+      });
+      // each call fails only as the CallFailure mapped above
       return calls as PeerCalls<M>;
     },
     onPush: (contract, key, deviceId, handler) =>
-      reach
-        .transportFor(deviceId)
-        .subscribe(channelOf(callOf(contract, key)), handler),
+      reach.onPush(deviceId, channelOf(callOf(contract, key)), handler),
     channels: reach.channelsFor,
   });
 

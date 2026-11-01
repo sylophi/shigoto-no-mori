@@ -1,6 +1,6 @@
 // The dialing side of the device link (link.ts): one socket to a peer's
 // listener, an RpcClient over it, the handshake, and then the peer's
-// calls as a ClientTransport, its pushes, and its byte channels. It
+// calls, views and pushes as a Link, and its byte channels. It
 // runs in the host and, verbatim, in the web client, so its one platform
 // dependency is the socket constructor it is handed.
 //
@@ -24,15 +24,16 @@ import * as FiberSet from "effect/FiberSet";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as Socket from "effect/socket/Socket";
 import type * as Scope from "effect/Scope";
-import type { ClientTransport, Link } from "@shared/ipc/transport";
-import { type ChannelMux, createChannelMux } from "./channels";
+import type { Link } from "@shared/ipc/transport";
+import type { LinkChannels } from "@shigomori/contracts/link";
+import { createChannelMux } from "./channels";
 import { watchLiveness } from "@shigomori/engine/liveness";
 import {
   flatClient,
   newConnectionId,
   quietProtocol,
 } from "@shigomori/engine/rpcClient";
-import { linkTransport, rpcLink } from "./rpcTransport";
+import { rpcLink } from "./rpcTransport";
 import { PING_INTERVAL_MS, PING_TIMEOUT_MS, PROBE_TIMEOUT_MS } from "./link";
 import { LinkGroup } from "@shigomori/contracts/link";
 import type { KeyPair } from "@shared/crypto/noise";
@@ -79,21 +80,16 @@ export type DeviceLinkOptions = {
   // when not given.
   connectionId?: string;
   // A peer's link is sealed (sealedSocket.ts): this device's key pair,
-  // and the key the hub's roster names for the peer. The loopback's is
-  // not.
+  // and the key the hub's roster names for the peer. The loopback's, to
+  // this machine's own host, is not.
   seal?: { readonly localKey: KeyPair; readonly remoteKey: Uint8Array };
   appVersion: string;
   localDeviceId: string;
-  // The peer this dial means to reach, which is this machine's own host
-  // on the loopback.
-  expectedDeviceId: string;
   // Every push the peer sends, by channel, decoded.
   onPush?: (channel: string, payload: unknown) => void;
   openSocket: OpenClientSocket;
   // How long the whole dial may take, the socket's open included.
   deadlineMs: number;
-  // Test seam: the protocol version the hello claims. This build's.
-  protocolVersion?: number;
   // What this device is (contracts' link.ts, DeviceKindSchema), which
   // decides whether a second link of its supersedes the first. A
   // desktop app unless said otherwise.
@@ -104,21 +100,6 @@ export type DeviceLinkOptions = {
   group?: typeof LinkGroup;
 };
 
-export type DeviceConnection = {
-  transport: ClientTransport;
-  // The port-forward engine and the mirror gateway attach their local
-  // sockets here, under ids they mint, before opening the far end.
-  channels: ChannelMux;
-  close(): void;
-  // Asks the peer to answer NOW, within PROBE_TIMEOUT_MS: on a wake from
-  // sleep or a tab coming back, so a link that died meanwhile is found
-  // out in seconds. One that fails it drops like any other. Nothing on
-  // the loopback, whose host the shell's watchdog judges.
-  probe(): void;
-  remoteDeviceId: string;
-  remoteAppVersion: string;
-};
-
 // A link dialed in the caller's scope: open, said hello on, and up
 // until the scope closes or the link drops (`dropped`). `gate`, for a
 // direct dial's race (shared/hub/directDial.ts), hears the socket open
@@ -126,9 +107,17 @@ export type DeviceConnection = {
 // candidate's own ticket and supersedes nothing, so the race opens
 // every candidate at once, and the hello supersedes the device's older
 // link on the host, so it says one at a time.
-export type DialedDevice = Omit<DeviceConnection, "close"> & {
-  // The link's Effect face, which `transport` is the Promise face of.
+export type DialedDevice = {
   readonly link: Link;
+  // The port-forward engine and the mirror gateway attach their local
+  // sockets here, under ids they mint, before opening the far end.
+  readonly channels: LinkChannels;
+  // Asks the peer to answer NOW, within PROBE_TIMEOUT_MS: on a wake from
+  // sleep or a tab coming back, so a link that died meanwhile is found
+  // out in seconds. One that fails it drops like any other. Nothing on
+  // the loopback, whose host the shell's watchdog judges.
+  probe(): void;
+  readonly remoteAppVersion: string;
   // Settles when the link drops on its own.
   readonly dropped: Effect.Effect<void>;
 };
@@ -287,7 +276,7 @@ export const dialDevice = (
       deviceKind: options.deviceKind ?? "desktop",
       connectionId: options.connectionId ?? newConnectionId(),
       appVersion: options.appVersion,
-      protocolVersion: options.protocolVersion ?? PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       ...(options.seal === undefined ? { token: options.ticket } : {}),
     }).pipe(
       Effect.mapError((error) =>
@@ -297,14 +286,13 @@ export const dialDevice = (
             ? connectError("the peer refused the connect ticket", true, error)
             : connectError(`the hello failed: ${errorMessageOf(error)}`),
       ),
-    )) as { deviceId: string; appVersion: string };
+    )) as { appVersion: string };
 
     const link = yield* rpcLink({
       client,
       group,
       onPush: options.onPush,
-      // The loopback's dial, to this machine's own host.
-      local: options.expectedDeviceId === options.localDeviceId,
+      local: options.seal === undefined,
     });
 
     // A round trip behind the subscriptions, so the link counts as open
@@ -314,7 +302,7 @@ export const dialDevice = (
       Effect.mapError(() => connectError("the peer did not answer the ping")),
     );
     const liveness =
-      options.expectedDeviceId === options.localDeviceId
+      options.seal === undefined
         ? { probe: () => {} }
         : yield* watchLiveness({
             ping: call("link:ping", undefined),
@@ -338,10 +326,8 @@ export const dialDevice = (
 
     return {
       link,
-      transport: linkTransport(link, runFork),
       channels,
       probe: liveness.probe,
-      remoteDeviceId: welcome.deviceId,
       remoteAppVersion: welcome.appVersion,
       dropped: Deferred.await(dropped),
     };

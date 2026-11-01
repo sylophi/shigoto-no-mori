@@ -37,7 +37,9 @@ export function followSharedSettings(): void {
     for (const deviceId of now) {
       if (landed.has(deviceId)) continue;
       const peer = (channel: string, input?: unknown) =>
-        hubHandlers().invokeOnPeer(deviceId, channel, input).then(decodeDoc);
+        Effect.runPromise(
+          hubHandlers().invokeOnPeer(deviceId, channel, input),
+        ).then(decodeDoc);
       exchangeSharedSettings(
         { merge: ({ doc }) => mergeHere(doc) },
         {

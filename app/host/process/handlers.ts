@@ -15,7 +15,7 @@ import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import { launchersContract } from "@shigomori/contracts/modules/launchers";
-import { servedInvokePeer, servedWatchPeer } from "@shared/hub/bridgeHandlers";
+import { servedHub } from "@shared/hub/bridgeHandlers";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -108,7 +108,6 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { worktreesHandlers, worktreesViews } from "@host/ipc/modules/worktrees";
-import type { ClientTransport } from "@shared/ipc/transport";
 import * as PeerReach from "@host/ipc/PeerReach";
 import * as MirrorDaemon from "@host/mirror/MirrorDaemon";
 import { ProjectScopedPayloadSchema } from "@shigomori/contracts/schemas/payloads";
@@ -134,31 +133,30 @@ import {
 import { log, warnOnFailure } from "@shared/log";
 import * as Graph from "./graph";
 
-// The pull/transplant orchestrations' and the port-forward engine's
-// peer reach, routed through the SAME invokePeer path (and so the same
+// Every peer reach of the host (host/ipc/PeerReach.ts), the
+// pull/transplant orchestrations' and the port-forward engine's among
+// them, routed through the SAME invokePeer path (and so the same
 // cached direct peer session) the renderer's remote-device api uses.
 // Opening a second session directly would supersede-kill the one every
 // remote-forest query is riding, since the host keeps one authed
 // socket per device.
-const peerTransportFor = (deviceId: string): ClientTransport => ({
-  invoke: (channel, input, options) =>
-    hubHandlers().invokeOnPeer(deviceId, channel, input, options),
-  // One channel of the peer's pushes, off the same session's fan-out
-  // (onPeerPush): what a start the peer runs for this device streams
-  // back, which the control ops relay to the CLI.
-  subscribe: (channel: string, handler: (payload: unknown) => void) =>
+const peerReach = PeerReach.make({
+  invoke: (deviceId, channel, input) =>
+    Effect.flatMap(
+      Effect.try({ try: hubHandlers, catch: callFailureOf }),
+      (hub) => hub.invokeOnPeer(deviceId, channel, input),
+    ),
+  // Off the same session's fan-out (onPeerPush): what a start the peer
+  // runs for this device streams back, which the control ops relay to
+  // the CLI.
+  onPush: (deviceId, channel, handler) =>
     onPeerPush((push) => {
       if (push.deviceId === deviceId && push.channel === channel) {
         handler(push.payload);
       }
     }),
-});
-
-// Every peer reach of the host (host/ipc/PeerReach.ts), riding
-// peerTransportFor above and the byte channels of the same session.
-const peerReach = PeerReach.make({
-  transportFor: peerTransportFor,
-  channelsFor: (deviceId) => () => hubHandlers().peerChannels(deviceId),
+  channelsFor: (deviceId) => () =>
+    Effect.runPromise(hubHandlers().peerChannels(deviceId)),
   admissions: peerAdmissions.admissions,
   admits: peerAdmissions.admits,
 });
@@ -449,7 +447,7 @@ export const rootServices = Layer.mergeAll(
         }),
       ),
       directPeers: Effect.map(
-        Effect.promise(async () => hubHandlers().status(undefined, undefined)),
+        Effect.promise(async () => hubHandlers().status()),
         (status) =>
           Object.fromEntries(
             Object.entries(status.peerAcceptsCommands).map(
@@ -493,19 +491,10 @@ export function registerHostHandlers(): void {
   // The windows' bridge onto the host's hub socket: status, invokes
   // over the keeper-held direct sessions, and the peerPush and
   // statusChanged fan-outs. Built in wires.ts, which owns every dep.
-  // The bridge is shared with the web client, which serves it as
-  // Promises: each call answers here as an effect.
-  registerContract(hubContract, {
-    status: () =>
-      Effect.tryPromise({
-        try: async () => hubHandlers().status(undefined, undefined),
-        catch: callFailureOf,
-      }),
-    invokePeer: servedInvokePeer(hubHandlers),
-  });
-  registerViews(hubContract, {
-    watchPeer: servedWatchPeer(hubHandlers),
-  });
+  // The bridge is shared with the web client, which serves it the same.
+  const hub = servedHub(hubHandlers);
+  registerContract(hubContract, hub.handlers);
+  registerViews(hubContract, hub.views);
   // The listeners belong to this machine, so the surface never mounts
   // on a remote wire.
   registerContract(portForwardContract, portForwardHandlers);

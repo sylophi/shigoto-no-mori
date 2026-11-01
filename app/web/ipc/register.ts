@@ -34,9 +34,8 @@ import { hubContract } from "@shigomori/contracts/modules/hub";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import { releasesContract } from "@shigomori/contracts/modules/releases";
 import { shellContract } from "@shigomori/contracts/modules/shell";
-import { callFailureOf } from "@shigomori/contracts/errors";
-import type { EffectHandlers, Handlers } from "@shigomori/contracts/types";
-import { servedInvokePeer, servedWatchPeer } from "@shared/hub/bridgeHandlers";
+import type { Handlers } from "@shigomori/contracts/types";
+import { servedHub } from "@shared/hub/bridgeHandlers";
 import * as DirectPlane from "@shared/hub/directPlane";
 import type { HubConnection } from "@shared/hub/connection";
 import { fetchReleases } from "@shared/releases";
@@ -486,18 +485,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     watch: () => SubscriptionRef.changes(clientConfigNow),
   });
   // As the host serves its own (host/process/handlers.ts).
-  const hubServed: EffectHandlers<typeof hubContract> = {
-    status: () =>
-      Effect.tryPromise({
-        try: async () => hubHandlers.status(undefined, undefined),
-        catch: callFailureOf,
-      }),
-    invokePeer: servedInvokePeer(() => hubHandlers),
-  };
-  tab.served.serve(hubContract, hubServed);
-  tab.served.view(hubContract, {
-    watchPeer: servedWatchPeer(() => hubHandlers),
-  });
+  const hubServed = servedHub(() => hubHandlers);
+  tab.served.serve(hubContract, hubServed.handlers);
+  tab.served.view(hubContract, hubServed.views);
   tab.served.serve(sharedSettingsContract, sharedSettingsHandlers);
   tab.served.view(sharedSettingsContract, {
     watch: () => SubscriptionRef.changes(sharedSettingsNow),

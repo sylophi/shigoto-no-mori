@@ -53,11 +53,6 @@ export type ViewHandlers<M extends ContractModule, R> = {
   ) => Stream.Stream<Decoded<PayloadOf<V>>, unknown, R>;
 };
 
-export type ViewObserver<A> = {
-  readonly value: (value: A) => void;
-  readonly end: (failure?: unknown) => void;
-};
-
 type ContractInfo<M> = NonNullable<
   M extends { readonly "~contract"?: infer C } ? C : never
 >;

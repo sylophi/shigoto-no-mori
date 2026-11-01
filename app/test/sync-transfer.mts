@@ -46,6 +46,8 @@ import { standInDeviceId, standInPeers } from "./lib/hostStandIns.mts";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { runHost } from "./lib/hostRuntime.mts";
+import * as Effect from "effect/Effect";
+import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
 import { worktreeDataHandlers } from "@host/ipc/modules/worktreeData";
 import * as Ops from "@host/lib/engineOps";
 import * as Scripts from "@host/lib/Scripts";
@@ -168,41 +170,47 @@ beforeAll(async () => {
   // real seams injected: the engine (already up) and the peer reach,
   // the direct wire and its channels.
   standInPeers({
-    transportFor: (deviceId) => {
+    ...toListener,
+    invoke: (deviceId, channel, input) => {
       assert.equal(
         deviceId,
         LISTENER,
         "a peer call dialed an unexpected device",
       );
-      return {
-        ...toListener.transport,
-        invoke: async (channel, input, options) => {
-          if (channel.startsWith("mirror:")) {
-            throw new Error("this proof asks for no mirror");
-          }
-          // The title's carry. Both devices share the data dir, so the
-          // listener's handlers answer in-process.
-          if (channel === "worktreeData:read") {
-            return runHost(
+      if (channel.startsWith("mirror:")) {
+        return Effect.fail(
+          new RemoteCallError({ text: "this proof asks for no mirror" }),
+        );
+      }
+      // The title's carry. Both devices share the data dir, so the
+      // listener's handlers answer in-process.
+      if (channel === "worktreeData:read") {
+        return Effect.tryPromise({
+          try: () =>
+            runHost(
               worktreeDataHandlers.read(
                 input as Parameters<typeof worktreeDataHandlers.read>[0],
               ),
-            );
-          }
-          if (channel === "worktreeData:describe") {
-            return runHost(
+            ),
+          catch: callFailureOf,
+        });
+      }
+      if (channel === "worktreeData:describe") {
+        return Effect.tryPromise({
+          try: () =>
+            runHost(
               worktreeDataHandlers.describe(
                 input as Parameters<typeof worktreeDataHandlers.describe>[0],
               ),
-            );
-          }
-          return toListener.transport.invoke(channel, input, options);
-        },
-      };
+            ),
+          catch: callFailureOf,
+        });
+      }
+      return toListener.invoke(deviceId, channel, input);
     },
     channelsFor: (deviceId) => {
       assert.equal(deviceId, LISTENER, "the move dialed an unexpected device");
-      return toListener.channels;
+      return toListener.channelsFor(deviceId);
     },
   });
   standInDeviceId(DIALER);

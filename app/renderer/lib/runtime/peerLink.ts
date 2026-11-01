@@ -25,9 +25,9 @@ const hop = (deviceId: string, channel: string, input: unknown) =>
 
 export function peerLink(hub: Link, deviceId: string): Link {
   return {
-    call: (channel, input, span) =>
+    call: (channel, input) =>
       hub
-        .call("hub:invokePeer", hop(deviceId, channel, input), span)
+        .call("hub:invokePeer", hop(deviceId, channel, input))
         .pipe(Effect.mapError((error) => refusalNamed(error, deviceId))),
     view: (channel, input) =>
       hub
