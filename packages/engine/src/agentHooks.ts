@@ -11,7 +11,7 @@ import { knownHarness } from "@shigomori/contracts/harnesses";
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
 import * as Predicate from "effect/Predicate";
-import { canonicalJson } from "./json.ts";
+import { canonicalJson, members, skipSpace, valueEnd } from "./json.ts";
 import { shellQuote } from "@shigomori/contracts/lifecycleScripts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 
@@ -146,64 +146,6 @@ const hookHandler = (spec: HookSpec, command: string) =>
 
 type JsonObject = Array<[key: string, raw: string]>;
 
-// Where the JSON value (or key) starting at `start` ends, in text
-// JSON.parse has already accepted.
-function valueEnd(text: string, start: number): number {
-  const first = text[start];
-  if (first === '"') {
-    let i = start + 1;
-    for (; i < text.length && text[i] !== '"'; i++) {
-      if (text[i] === "\\") i++;
-    }
-    return i + 1;
-  }
-  if (first === "{" || first === "[") {
-    let depth = 0;
-    for (let i = start; i < text.length; i++) {
-      const c = text[i];
-      if (c === '"') {
-        i = valueEnd(text, i) - 1;
-      } else if (c === "{" || c === "[") {
-        depth++;
-      } else if (c === "}" || c === "]") {
-        depth--;
-        if (depth === 0) return i + 1;
-      }
-    }
-    return text.length;
-  }
-  let i = start;
-  while (i < text.length && !/[\s,:}\]]/.test(text[i] ?? "")) i++;
-  return i;
-}
-
-const skipSpace = (text: string, i: number) => {
-  while (i < text.length && /\s/.test(text[i] ?? "")) i++;
-  return i;
-};
-
-// The items of a JSON object or array, each as its text: a key and its
-// value's text for an object, the item's text for an array.
-function members(text: string): Array<[key: string, raw: string]> {
-  const object = text.startsWith("{");
-  const close = object ? "}" : "]";
-  const found: Array<[string, string]> = [];
-  let i = skipSpace(text, 1);
-  while (i < text.length && text[i] !== close) {
-    let key = "";
-    if (object) {
-      const keyEnd = valueEnd(text, i);
-      key = JSON.parse(text.slice(i, keyEnd)) as string;
-      i = skipSpace(text, skipSpace(text, keyEnd) + 1);
-    }
-    const end = valueEnd(text, i);
-    found.push([key, text.slice(i, end)]);
-    i = skipSpace(text, end);
-    if (text[i] === ",") i = skipSpace(text, i + 1);
-  }
-  return found;
-}
-
 // A JSON object's entries, each value as its text, a key given twice
 // keeping its first place and its last value. Empty input is an empty
 // object. Throws on anything that isn't an object.
@@ -247,12 +189,9 @@ function indent(raw: string): string {
   for (let i = 0; i < raw.length; i++) {
     const c = raw[i] ?? "";
     if (c === '"') {
-      let end = i + 1;
-      for (; end < raw.length && raw[end] !== '"'; end++) {
-        if (raw[end] === "\\") end++;
-      }
-      out += raw.slice(i, end + 1);
-      i = end;
+      const end = valueEnd(raw, i);
+      out += raw.slice(i, end);
+      i = end - 1;
     } else if (/\s/.test(c)) {
       continue;
     } else if (c === "{" || c === "[") {
