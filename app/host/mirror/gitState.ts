@@ -37,7 +37,7 @@
 // working tree is never touched (the engine owns it). read-tree plus
 // an index refresh is what makes the staged view match without
 // rewriting a single file.
-import { copyFile, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { GitOperationInProgressError } from "@shigomori/contracts/errors";
 import type {
@@ -191,20 +191,17 @@ const copyIndexToScratch = Effect.fnUntraced(function* (
   indexPath: string,
 ) {
   const scratch = yield* ScratchIndex.ScratchIndex;
+  const fs = yield* FileSystem.FileSystem;
   const copyInto = (dir: string) => {
     const copy = join(dir, worktreeIdFromPath(worktreePath));
-    return Effect.tryPromise({
-      try: () => copyFile(indexPath, copy),
-      catch: (error) => error,
-    }).pipe(Effect.as(copy));
+    return fs.copyFile(indexPath, copy).pipe(Effect.as(copy));
   };
   return yield* copyInto(yield* scratch.dir).pipe(
     // Either the source index vanished (nothing to retry) or the
-    // scratch directory did. Mint it again and let a second ENOENT
+    // scratch directory did. Mint it again and let a second NotFound
     // stand.
     Effect.catchIf(
-      (error) =>
-        Predicate.hasProperty(error, "code") && error.code === "ENOENT",
+      (error) => Predicate.isTagged(error.reason, "NotFound"),
       () => Effect.flatMap(scratch.remint, copyInto),
     ),
   );
