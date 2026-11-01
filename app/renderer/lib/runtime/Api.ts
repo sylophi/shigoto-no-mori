@@ -7,6 +7,7 @@ import { allContractModules } from "@shigomori/contracts/allModules";
 import type { AllContractModule } from "@shigomori/contracts/allModules";
 import {
   callOf,
+  channelOf,
   type ContractModule,
   nameOf,
   scopeOf,
@@ -31,7 +32,6 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import { effectClient } from "@shared/ipc/effectClient";
 import type { Link } from "@shared/ipc/transport";
-import { pushesOn, viewOn } from "./atoms";
 import { ClientLinks } from "./ClientLinks";
 import { peerLink } from "./peerLink";
 
@@ -78,8 +78,9 @@ export type HostApi = EffectApi<HostModule> & Streams<HostModule> & Runner;
 export type ClientApi = EffectApi<AllContractModule> &
   Streams<AllContractModule> &
   Runner & {
-    // A peer's api, its host modules over the hub hop. A client module
-    // belongs to the machine the window runs on, so a peer's has none.
+    // A peer's api, its host modules over the hub hop, one per peer. A
+    // client module belongs to the machine the window runs on, so a
+    // peer's has none.
     readonly peerApi: (deviceId: string) => HostApi;
   };
 
@@ -98,13 +99,17 @@ function clientsOf(
   return api;
 }
 
-function streamsOf(linkOf: (module: ContractModule) => Link) {
-  return {
+function streamsOf<M extends ContractModule>(
+  linkOf: (module: ContractModule) => Link,
+): Streams<M> {
+  const streams = {
     pushes: (module: ContractModule, key: string) =>
-      pushesOn(linkOf(module), callOf(module, key)),
+      linkOf(module).pushes(channelOf(callOf(module, key))),
     view: (module: ContractModule, key: string, input: unknown) =>
-      viewOn(linkOf(module), callOf(module, key), input),
+      linkOf(module).view(channelOf(callOf(module, key)), input),
   };
+  // oxlint-disable-next-line shigomori/no-double-cast -- built from the module's own calls, each streaming as its call
+  return streams as unknown as Streams<M>;
 }
 
 const hostModules = allContractModules.filter(
@@ -146,17 +151,22 @@ const make = Effect.gen(function* () {
   };
   // The side that holds the peers' sessions, which the hop rides.
   const hub = linkOf(hubContract);
+  const peers = new Map<string, HostApi>();
   return Api.of({
     ...(clientsOf(allContractModules, linkOf) as EffectApi<AllContractModule>),
-    ...(streamsOf(linkOf) as Streams<AllContractModule>),
+    ...streamsOf<AllContractModule>(linkOf),
     ...runner,
     peerApi: (deviceId) => {
-      const peer = peerLink(hub, deviceId);
-      return {
-        ...(clientsOf(hostModules, () => peer) as EffectApi<HostModule>),
-        ...(streamsOf(() => peer) as Streams<HostModule>),
+      const known = peers.get(deviceId);
+      if (known !== undefined) return known;
+      const link = peerLink(hub, deviceId);
+      const peer: HostApi = {
+        ...(clientsOf(hostModules, () => link) as EffectApi<HostModule>),
+        ...streamsOf<HostModule>(() => link),
         ...runner,
       };
+      peers.set(deviceId, peer);
+      return peer;
     },
   });
 });

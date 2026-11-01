@@ -1,4 +1,3 @@
-import { callOf } from "@shigomori/contracts/contract";
 import { globalConfigContract } from "@shigomori/contracts/modules/globalConfig";
 import { DEVICE_SETTINGS_DEFAULTS } from "@shigomori/contracts/schemas";
 import type { QueryClient } from "@tanstack/react-query";
@@ -19,8 +18,7 @@ import { useView, useViewErrorToast } from "@/lib/runtime/viewHooks";
 const globalConfigAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    view: callOf(globalConfigContract, "watch"),
-    input: undefined,
+    view: (api) => api.view(globalConfigContract, "watch", undefined),
   }),
 );
 

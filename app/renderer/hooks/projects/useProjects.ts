@@ -5,7 +5,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import { callOf } from "@shigomori/contracts/contract";
 import { projectsContract } from "@shigomori/contracts/modules/projects";
 import type {
   AddProjectPayload,
@@ -13,13 +12,20 @@ import type {
   CreateProjectPayload,
   Project,
 } from "@shigomori/contracts/schemas";
+import * as Effect from "effect/Effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { reorderProjects } from "@shared/reorder";
 import { hostKeyDeviceId, worktreeQueriesOn } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { noteProjects } from "@/lib/viewFeed";
-import { hostCallFn, hostViewAtom, optimisticView } from "@/lib/runtime/atoms";
+import {
+  clientAtoms,
+  deviceApi,
+  hostViewAtom,
+  localDeviceIdAtom,
+  optimisticView,
+} from "@/lib/runtime/atoms";
 import {
   type LiveViewState,
   useRegistry,
@@ -33,8 +39,7 @@ import { useApi } from "@/lib/runtime/pageApi";
 export const projectsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    view: callOf(projectsContract, "watch"),
-    input: undefined,
+    view: (api) => api.view(projectsContract, "watch", undefined),
     onValue: (list) => noteProjects(deviceId, list),
     onStop: () => noteProjects(deviceId, null),
   }),
@@ -227,10 +232,11 @@ const reorderProjectsAtom = Atom.family((deviceId: string) =>
       AsyncResult.map(current, (list) =>
         reorderProjects(list, draggedId, targetId, position),
       ),
-    fn: hostCallFn({
-      deviceId,
-      call: (input: ReorderInput) => ({ channel: "projects:reorder", input }),
-    }),
+    fn: clientAtoms.fn((input: ReorderInput, get) =>
+      Effect.flatMap(deviceApi(deviceId, get(localDeviceIdAtom)), (api) =>
+        api.projects.reorder(input),
+      ),
+    ),
   }),
 );
 

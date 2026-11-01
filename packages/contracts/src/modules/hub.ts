@@ -91,7 +91,7 @@ export const hubContract = defineContract(
     // alone is JSON there.
     Schema.UndefinedOr(Schema.Unknown),
   ),
-  // The caller decodes the values as the view's.
+  // The values arrive decoded by the RPC client holding the session.
   view(
     "watchPeer",
     Schema.Struct({

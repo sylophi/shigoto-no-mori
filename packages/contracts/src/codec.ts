@@ -1,6 +1,6 @@
-// How a contract's schemas are read: the registrar, the client over a
-// peer's link (renderer/lib/runtime/atoms.ts), the lab bridge, the web
-// stubs and the JSON file readers decode through here.
+// How a contract's schemas are read: the registrar, the RPC client
+// holding a peer's session (shared/remote/deviceLink.ts), the lab
+// bridge, the web stubs and the JSON file readers decode through here.
 //
 // A schema's decoded value serializes to the JSON it decodes from, so
 // the wires send values as they are and only decode.

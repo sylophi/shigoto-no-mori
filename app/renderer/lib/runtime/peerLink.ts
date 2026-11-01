@@ -6,7 +6,10 @@
 // (shared/hub/directKeeper.ts), so a call that lands on no session
 // rejects, and a push needs only the session the keeper already holds.
 // A refusal it answers names the peer (refusalNamed), which the peer
-// itself never sends, so a toast can say which device said no.
+// itself never sends, so a toast can say which device said no. What
+// the peer answers, views and pushes comes decoded already: the side
+// that holds the session reads it with this build's schemas (its
+// device link's RPC client), so nothing here decodes it again.
 import { refusalNamed } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";

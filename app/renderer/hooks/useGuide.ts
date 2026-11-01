@@ -8,7 +8,6 @@ import {
   type GuideState,
   isGuideHarness,
 } from "@shigomori/contracts/modules/guide";
-import { callOf } from "@shigomori/contracts/contract";
 import {
   DEVICE_SETTINGS_DEFAULTS,
   installedTerminals,
@@ -28,10 +27,10 @@ import { useView } from "@/lib/runtime/viewHooks";
 // premise.
 const guideAtom = Atom.keepAlive(
   clientAtoms.atom(
-    shellState(guideContract, {
-      read: callOf(guideContract, "read"),
-      push: callOf(guideContract, "changed"),
-    }),
+    shellState((api) => ({
+      read: api.guide.read(),
+      push: api.pushes(guideContract, "changed"),
+    })),
   ),
 );
 

@@ -2,7 +2,6 @@
 // for its account page: the host's view of it (sharing:watch), which
 // moves whoever moved it (this window, another one, `sm config` in a
 // terminal).
-import { callOf } from "@shigomori/contracts/contract";
 import { sharingContract } from "@shigomori/contracts/modules/sharing";
 import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
@@ -13,8 +12,7 @@ import { useView } from "@/lib/runtime/viewHooks";
 const sharingAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    view: callOf(sharingContract, "watch"),
-    input: undefined,
+    view: (api) => api.view(sharingContract, "watch", undefined),
   }),
 );
 

@@ -10,7 +10,6 @@ import type {
   ResetSoftResult,
   Worktree,
 } from "@shigomori/contracts/schemas";
-import { callOf } from "@shigomori/contracts/contract";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type * as Effect from "effect/Effect";
 import { useEffect } from "react";
@@ -54,8 +53,7 @@ const treeViewAtom = Atom.family((key: string) => {
   };
   return hostViewAtom({
     deviceId,
-    view: callOf(worktreesContract, view),
-    input,
+    view: (api) => api.view(worktreesContract, view, input),
     // A file's diff and hunks stream a few seconds after the page moves
     // to another file: flicking back to the file just left is instant,
     // and the files a review passes through soon stop rereading.

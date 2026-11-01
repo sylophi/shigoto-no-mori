@@ -1,4 +1,3 @@
-import { callOf } from "@shigomori/contracts/contract";
 import { terminalsContract } from "@shigomori/contracts/modules/terminals";
 import type { Terminal } from "@shigomori/contracts/schemas";
 import type { TerminalMark } from "@shigomori/ui/views/sidebar/TerminalMarkView.tsx";
@@ -14,8 +13,7 @@ import { useView } from "@/lib/runtime/viewHooks";
 export const terminalsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    view: callOf(terminalsContract, "list"),
-    input: undefined,
+    view: (api) => api.view(terminalsContract, "list", undefined),
   }),
 );
 

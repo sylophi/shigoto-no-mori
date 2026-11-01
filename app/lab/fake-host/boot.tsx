@@ -5,7 +5,6 @@ import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { mountWindow, startApp } from "@/boot";
 import { pageRoot } from "@/lib/themeRoot";
-import type { ClientLinks } from "@/lib/runtime/ClientLinks";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { poseToday } from "@shigomori/ui/hooks/useToday.ts";
 
@@ -19,14 +18,8 @@ if (today) {
   poseToday(new Date(year, Number(today[2]) - 1, Number(today[3]), 12));
 }
 
-export function bootFakeHost({
-  api,
-  links,
-}: {
-  api: RendererApi;
-  links: ClientLinks["Service"];
-}): void {
-  const router = mountWindow(startApp({ api, links }), {
+export function bootFakeHost({ api }: { api: RendererApi }): void {
+  const router = mountWindow(startApp({ api }), {
     element: pageRoot(),
     ClerkProvider,
     history: createMemoryHistory({ initialEntries: ["/"] }),

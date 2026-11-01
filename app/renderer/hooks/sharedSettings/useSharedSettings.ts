@@ -8,7 +8,6 @@ import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import * as Cause from "effect/Cause";
 import { notifyError } from "@/lib/toast";
-import { callOf } from "@shigomori/contracts/contract";
 import { sharedSettingsContract } from "@shigomori/contracts/modules/sharedSettings";
 import type {
   SharedSettingsDoc,
@@ -25,8 +24,7 @@ import { useRegistry } from "@/lib/runtime/viewHooks";
 const sharedSettingsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    view: callOf(sharedSettingsContract, "watch"),
-    input: undefined,
+    view: (api) => api.view(sharedSettingsContract, "watch", undefined),
   }),
 );
 

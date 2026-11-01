@@ -29,7 +29,6 @@ import { type Deadline, deadlineIn, deadlinePassed } from "@/lib/deadline";
 import { useHasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 import { type RendererApi, useApi } from "@/lib/runtime/pageApi";
-import { callOf } from "@shigomori/contracts/contract";
 import * as Atom from "effect/reactivity/Atom";
 import { clientAtoms, shellState } from "@/lib/runtime/atoms";
 import {
@@ -234,10 +233,10 @@ export function useSetDeviceIcon() {
 // out.
 const acceptsCommandsAtom = Atom.keepAlive(
   clientAtoms.atom(
-    shellState(accountContract, {
-      read: callOf(accountContract, "acceptsCommands"),
-      push: callOf(accountContract, "commandAccessChanged"),
-    }),
+    shellState((api) => ({
+      read: api.account.acceptsCommands(),
+      push: api.pushes(accountContract, "commandAccessChanged"),
+    })),
   ),
 );
 

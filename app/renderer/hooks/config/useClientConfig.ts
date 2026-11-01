@@ -9,7 +9,6 @@
 // write never puts back what another changed. Until the store's owner
 // hands the patched config back, this window shows the patch over what
 // it had: a second press reads the first one's value.
-import { callOf } from "@shigomori/contracts/contract";
 import { clientConfigContract } from "@shigomori/contracts/modules/clientConfig";
 import type { ClientConfig } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
@@ -18,8 +17,8 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Stream from "effect/Stream";
-import { ClientLinks } from "@/lib/runtime/ClientLinks";
-import { clientAtoms, viewOn } from "@/lib/runtime/atoms";
+import { Api } from "@/lib/runtime/Api";
+import { clientAtoms } from "@/lib/runtime/atoms";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import {
   firstValueOf,
@@ -34,14 +33,9 @@ import {
 const storedAtom = Atom.keepAlive(
   clientAtoms.atom(
     Stream.unwrap(
-      Effect.gen(function* () {
-        const { linkOf } = yield* ClientLinks;
-        return viewOn(
-          linkOf(clientConfigContract),
-          callOf(clientConfigContract, "watch"),
-          undefined,
-        );
-      }),
+      Effect.map(Api, (api) =>
+        api.view(clientConfigContract, "watch", undefined),
+      ),
     ).pipe(Stream.retry(Schedule.spaced("1 second"))),
   ),
 ) as Atom.Atom<AsyncResult.AsyncResult<ClientConfig, unknown>>;

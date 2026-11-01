@@ -9,7 +9,6 @@
 // only this machine's atom hears them, while a peer's carries the
 // peer's removals.
 import { useAtomValue } from "@effect/atom-react";
-import { callOf } from "@shigomori/contracts/contract";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type {
   CreatePhase,
@@ -27,12 +26,12 @@ import {
   isOwnDeletePending,
 } from "@/hooks/worktrees/useWorktreeMutations";
 import { queryKeysFor, worktreeQueriesOn } from "@/lib/queryKeys";
-import type { ClientLinks } from "@/lib/runtime/ClientLinks";
+import type { Api } from "@/lib/runtime/Api";
 import {
   accountsLeftAtom,
   clientAtoms,
+  deviceStream,
   heard,
-  hostPushes,
   localDeviceIdAtom,
   hostSessionAtom,
   queryClientAtom,
@@ -200,8 +199,14 @@ export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
       if (!local) get(accountsLeftAtom);
       const queryClient = get(queryClientAtom);
       const registry = get.registry;
-      const pushes = <K extends "removal" | "lifecyclePhase">(key: K) =>
-        hostPushes(deviceId, localDeviceId, callOf(worktreesContract, key));
+      const pushes = <
+        K extends "removal" | "lifecyclePhase" | "carryOverComplete",
+      >(
+        key: K,
+      ) =>
+        deviceStream(deviceId, localDeviceId, (api) =>
+          api.pushes(worktreesContract, key),
+        );
       let state = NOTHING;
       const removals = pushes("removal").pipe(
         Stream.tap((removal) =>
@@ -217,7 +222,7 @@ export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
         ),
       );
       // Starting over shows nothing held until a push says otherwise.
-      const states = (events: Stream.Stream<unknown, never, ClientLinks>) =>
+      const states = (events: Stream.Stream<unknown, never, Api>) =>
         Stream.concat(
           Stream.make(NOTHING),
           events.pipe(Stream.map(() => state)),
@@ -234,11 +239,7 @@ export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
           }),
         ),
       );
-      const carryOvers = hostPushes(
-        deviceId,
-        localDeviceId,
-        callOf(worktreesContract, "carryOverComplete"),
-      ).pipe(
+      const carryOvers = pushes("carryOverComplete").pipe(
         Stream.tap((evt) =>
           heard("carry-over", () => {
             if (queryClient !== null) tellCarryOver(queryClient, deviceId, evt);

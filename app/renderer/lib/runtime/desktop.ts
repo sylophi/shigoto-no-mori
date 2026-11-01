@@ -6,15 +6,16 @@
 // through the hub bridge (shared/hub/bridgeHandlers.ts), never by
 // swapping these.
 import { isHostSide } from "@shigomori/contracts/link";
-import { callOf } from "@shigomori/contracts/contract";
+import { callOf, channelOf } from "@shigomori/contracts/contract";
+import type { HostRestartReason } from "@shigomori/ui/views/hostBand/HostBandView.tsx";
 import { windowContract } from "@shigomori/contracts/modules/window";
 import * as Effect from "effect/Effect";
 import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
+import type * as Stream from "effect/Stream";
 import { SHELL_PORT_CHANNEL, shellLink } from "@shared/ipc/shell";
 import { type HostAddress, hostLink } from "@shared/remote/hostLink";
 import type { ElectronBridge } from "../../../main/preload";
-import { pushesOn } from "./atoms";
 import { ClientLinks } from "./ClientLinks";
 import { followHostRestarts, hostAnswering } from "./hostAnswering";
 
@@ -36,11 +37,11 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
         );
       });
       const shell = yield* shellLink(port);
-      // The shell is this window's own build.
-      const ownShell = { ...shell, local: true };
       const runFork = yield* FiberSet.makeRuntime<never>();
       const restarts = followHostRestarts(
-        pushesOn(ownShell, callOf(windowContract, "hostRestarted")),
+        shell.pushes(
+          channelOf(callOf(windowContract, "hostRestarted")),
+        ) as Stream.Stream<HostRestartReason>,
       );
       runFork(restarts.heard);
       const host = yield* hostLink({
@@ -56,7 +57,7 @@ export const layer = (bridge: ElectronBridge): Layer.Layer<ClientLinks> =>
         },
       });
       return ClientLinks.of({
-        linkOf: (module) => (isHostSide(module) ? host : ownShell),
+        linkOf: (module) => (isHostSide(module) ? host : shell),
       });
     }),
   );

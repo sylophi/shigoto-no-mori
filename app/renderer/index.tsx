@@ -36,7 +36,7 @@ async function boot() {
   const { deviceId } = first;
   const api: RendererApi = { ...facts, deviceId, ...client.api };
   if (facts.isDev || isLab) exposeToLab(api);
-  const router = mountWindow(startApp({ api, links: client.links }), {
+  const router = mountWindow(startApp({ api }), {
     element: pageRoot(),
     ClerkProvider,
     history: createMemoryHistory({ initialEntries: [route] }),

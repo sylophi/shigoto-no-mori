@@ -6,7 +6,6 @@
 // added port with the next write of the worktree's data. The readers are
 // the worktree page's Ports section, the Ports dialog and the Live page's
 // cards of worktrees running a script.
-import { callOf } from "@shigomori/contracts/contract";
 import { portsContract } from "@shigomori/contracts/modules/ports";
 import type { WorktreePortsResult } from "@shigomori/contracts/schemas";
 import * as Atom from "effect/reactivity/Atom";
@@ -19,8 +18,7 @@ const worktreePortsAtom = Atom.family((key: string) => {
   const [deviceId = "", projectId = "", worktreeId = ""] = key.split("\n");
   return hostViewAtom({
     deviceId,
-    view: callOf(portsContract, "watch"),
-    input: { projectId, worktreeId },
+    view: (api) => api.view(portsContract, "watch", { projectId, worktreeId }),
   });
 });
 

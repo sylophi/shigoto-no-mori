@@ -1,4 +1,3 @@
-import { callOf } from "@shigomori/contracts/contract";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import * as Atom from "effect/reactivity/Atom";
@@ -31,8 +30,7 @@ export const worktreesAtom = Atom.family((key: string) => {
   const [deviceId = "", projectId = ""] = key.split("\n");
   return hostViewAtom({
     deviceId,
-    view: callOf(worktreesContract, "watch"),
-    input: { projectId },
+    view: (api) => api.view(worktreesContract, "watch", { projectId }),
     onValue: (list) => noteWorktreeList({ key, deviceId, list }),
     onStop: () => noteWorktreeList({ key, deviceId, list: null }),
   });

@@ -1,5 +1,4 @@
 import { useAtomValue } from "@effect/atom-react";
-import { callOf } from "@shigomori/contracts/contract";
 import { gitContract } from "@shigomori/contracts/modules/git";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
@@ -8,7 +7,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   accountsLeftAtom,
   clientAtoms,
-  hostPushes,
+  deviceStream,
   localDeviceIdAtom,
   hostSessionAtom,
 } from "@/lib/runtime/atoms";
@@ -30,10 +29,8 @@ export const gitFetchingAtom = Atom.family((deviceId: string) =>
         const localDeviceId = get(localDeviceIdAtom);
         get(hostSessionAtom(deviceId));
         if (deviceId !== localDeviceId) get(accountsLeftAtom);
-        return hostPushes(
-          deviceId,
-          localDeviceId,
-          callOf(gitContract, "fetchActive"),
+        return deviceStream(deviceId, localDeviceId, (api) =>
+          api.pushes(gitContract, "fetchActive"),
         ).pipe(
           Stream.scan(
             (): ReadonlySet<string> => NONE,
