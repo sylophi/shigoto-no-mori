@@ -30,7 +30,6 @@ import {
   type MirrorEvent,
   type MirrorListResult,
   type MirrorSession,
-  type MirrorServing,
 } from "@shigomori/contracts/modules/mirror";
 import type { Worktree } from "@shigomori/contracts/schemas";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
@@ -219,20 +218,6 @@ export function useMirrorLinks(): MirrorLink[] {
   return links;
 }
 
-// The one mirror picture a worktree row cares about: the session this
-// device runs ON it (it is the original of a copy made on a peer), and
-// the streams this device serves FROM it (it is a peer's copy).
-function useWorktreeMirror(worktree: Worktree): {
-  session: MirrorSession | undefined;
-  serving: MirrorServing[];
-} {
-  const { sessions, serving } = useMirrors();
-  return {
-    session: sessions.find((s) => s.localWorktreeId === worktree.id),
-    serving: serving.filter((s) => s.worktreeId === worktree.id),
-  };
-}
-
 const hostsMirrorsAtom = viewsOf((deviceId) => mirrorsAtom(deviceId));
 
 // Every other host's mirror picture, projected by `select`: this
@@ -324,8 +309,12 @@ export function useWorktreeMirrorLinks(
   worktree: Worktree,
 ): WorktreeMirrorLink[] {
   const scope = useHostScope();
-  const { daemon, daemonFailure } = useMirrors();
-  const { session: own, serving } = useWorktreeMirror(worktree);
+  const { sessions, serving: served, daemon, daemonFailure } = useMirrors();
+  // The session this device runs ON the worktree (it is the original of
+  // a copy made on a peer), and the streams this device serves FROM it
+  // (it is a peer's copy).
+  const own = sessions.find((s) => s.localWorktreeId === worktree.id);
+  const serving = served.filter((s) => s.worktreeId === worktree.id);
   // A peer's page read off its cache while it is away: its own session
   // is its last word too.
   const scopeApi = useRemoteDeviceApi(

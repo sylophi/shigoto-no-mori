@@ -73,16 +73,10 @@ function useSyncMutation(
   });
 }
 
-const usePushWorktree = () => useSyncMutation("push", "Couldn't push");
-const usePullWorktree = () => useSyncMutation("pull", "Couldn't pull");
 export const usePushForceWorktree = () =>
   useSyncMutation("pushForce", "Couldn't force-push");
 export const useOverwriteWorktree = () =>
   useSyncMutation("overwrite", "Couldn't overwrite from upstream");
-const usePublishWorktree = () =>
-  useSyncMutation("publish", "Couldn't publish branch");
-const usePullAndPushWorktree = () =>
-  useSyncMutation("pullAndPush", "Couldn't pull and push");
 // A conflict is the pill's to say, with its way on. Anything else is
 // said here.
 export const useSyncWithPrimaryWorktree = () =>
@@ -116,9 +110,9 @@ export function useSyncMoveMutations(): Record<
   ReturnType<typeof useSyncMutation>
 > {
   return {
-    push: usePushWorktree(),
-    pull: usePullWorktree(),
-    publish: usePublishWorktree(),
-    pullAndPush: usePullAndPushWorktree(),
+    push: useSyncMutation("push", "Couldn't push"),
+    pull: useSyncMutation("pull", "Couldn't pull"),
+    publish: useSyncMutation("publish", "Couldn't publish branch"),
+    pullAndPush: useSyncMutation("pullAndPush", "Couldn't pull and push"),
   };
 }

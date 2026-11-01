@@ -16,7 +16,7 @@ import * as Effect from "effect/Effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import { reorderProjects } from "@shared/reorder";
-import { hostKeyDeviceId, worktreeQueriesOn } from "@/lib/queryKeys";
+import { worktreeQueriesOn } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { noteProjects } from "@/lib/viewFeed";
 import {
@@ -152,9 +152,7 @@ export function useRemoveProject(deleteFiles = false) {
       // scoped device so another device's queries never match on a
       // coincidentally equal project id.
       await queryClient.cancelQueries({
-        predicate: (query) =>
-          hostKeyDeviceId(query.queryKey) === deviceId &&
-          query.queryKey.includes(id),
+        predicate: worktreeQueriesOn(deviceId, id),
       });
     },
     onSuccess: async (_data, id) => {
@@ -173,9 +171,7 @@ export function useRemoveProject(deleteFiles = false) {
       // has an observer (a row mid-unmount) would refetch it instead.
       queryClient.removeQueries({
         type: "inactive",
-        predicate: (query) =>
-          hostKeyDeviceId(query.queryKey) === deviceId &&
-          query.queryKey.includes(id),
+        predicate: worktreeQueriesOn(deviceId, id),
       });
     },
     meta: {
