@@ -64,10 +64,8 @@ import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { mirrorHandlers, mirrorViews } from "@host/ipc/modules/mirror";
 import { currentMirrorList } from "@host/mirror/sessions";
 import {
-  createNoAccountSweep,
   endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
-  LEFT_ACCOUNT_DETAIL,
 } from "@host/mirror/registry";
 import * as HostWorktrees from "@host/lib/Worktrees";
 import { MirrorEngine } from "@host/mirror/MirrorEngine";
@@ -115,7 +113,6 @@ import { dataDir } from "@shared/paths";
 import {
   type AccountFacts,
   acceptsPeerCommands,
-  accountSignedIn,
   listAccountDevices,
   setAccountFacts,
 } from "./account";
@@ -262,47 +259,15 @@ const deleteOriginals = (
     ),
   );
 
-// Every daemon snapshot and status change, to every window and to the
-// sweep of sessions the engine brings back for a device on no account.
+// Every daemon snapshot and status change, to every window.
 export const mirrorDaemonChangesLayer = Layer.effectDiscard(
   Effect.flatMap(MirrorDaemon.MirrorDaemon, (daemon) =>
     daemon.changes.pipe(
-      Stream.runForEach(() =>
-        Effect.try(() => {
-          broadcastMirrorChanged();
-          noAccountSweep.run();
-        }).pipe(
-          Effect.catch((error) =>
-            Effect.logWarning(
-              `[mirror] a daemon change listener failed: ${errorWordsOf(error)}`,
-            ),
-          ),
-        ),
-      ),
+      Stream.runForEach(() => Effect.sync(broadcastMirrorChanged)),
       Effect.forkScoped,
     ),
   ),
 );
-const endAllMirrors = () =>
-  Graph.run(
-    endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
-      transfers: true,
-    }),
-  );
-// The sessions the engine brings back for a device on no account
-// (registry.ts createNoAccountSweep), asked about on every snapshot and
-// at the shell's first report. The account fan-out's own sweep covers a
-// sign-out with the daemon up, and resets this one.
-const noAccountSweep = createNoAccountSweep({
-  sessions: mirrorSessionsNow,
-  fresh: () =>
-    Graph.readNow(
-      MirrorDaemon.onDaemon((daemon) => daemon.fresh),
-      () => false,
-    ),
-  signedIn: accountSignedIn,
-  end: () => void endAllMirrors().catch(() => {}),
-});
 
 // The command-access switch as it now stands, to every connected peer
 // (the push is annotated remote). The windows hear it from the shell,
@@ -339,8 +304,8 @@ const toMirrorEngine = (tell: (engine: MirrorEngine["Service"]) => void) =>
 // The account's facts as the shell reports them: at start and after
 // every sign-in, sign-out, rename, credential rotation or switch flip.
 // The first is the baseline, before which the sessions the daemon
-// brought back are not asked about (noAccountSweep, which ends them for
-// a device signed out at start). A later report tells a rename or a
+// brought back are not asked about (the mirror engine ends them for a
+// device signed out at start). A later report tells a rename or a
 // switch flip (same account, nothing to tear down) from a departure.
 // A departure (a sign-out, since the hub refuses a switch without one)
 // tears down what was the account's, in the order the pieces need: the
@@ -355,15 +320,12 @@ export async function applyAccount(next: AccountFacts | null): Promise<void> {
     previous.facts !== null &&
     (next === null || next.accountId !== previous.facts.accountId);
   const first = !previous.reported;
-  if (first) noAccountSweep.run();
   if (leaving) {
     clearDirectTickets();
     await stopPortForwardsTo(() => false);
     await teardownStep("the mirror sweep", () =>
       Graph.run(Effect.flatMap(MirrorEngine, (engine) => engine.leaveAccount)),
     );
-    // After the sweep, so a snapshot during it does not sweep again.
-    noAccountSweep.reset();
   }
   // The switch as it now stands, to every connected peer, whose bridge
   // records it for its UI and CLI. An account switch also restarts the

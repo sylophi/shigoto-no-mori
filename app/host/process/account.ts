@@ -1,13 +1,9 @@
 // The account as the root's callbacks read it (HostAccount, in the
 // graph), synchronously: unknown until the graph is up and the shell's
-// first report lands, which every reader but accountSignedIn takes as
-// no account.
+// first report lands, which every reader takes as no account.
 import type { HubAccount } from "@shared/account/hubConnect";
 import type { AccountFacts } from "@shigomori/contracts/modules/session";
-import type {
-  DeviceInfo,
-  TunnelProvisionResponse,
-} from "@shigomori/contracts/hubProtocol";
+import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
 import * as Effect from "effect/Effect";
 import { type Account, HostAccount, UNREPORTED } from "@host/lib/HostAccount";
 import * as Graph from "./graph";
@@ -23,11 +19,6 @@ const account = (): Account =>
 // Replaces the facts, answering the account they replaced.
 export const setAccountFacts = (next: AccountFacts | null): Promise<Account> =>
   Graph.run(Effect.flatMap(HostAccount, (it) => it.set(next)));
-
-export function accountSignedIn(): boolean | undefined {
-  const { reported, facts } = account();
-  return reported ? facts !== null : undefined;
-}
 
 // The predicate the device link's gate consults live on every gated
 // call, and the verdict every connectInfo answer reports. Every peer
@@ -57,21 +48,6 @@ function signedIn(): {
 export function hubAccount(): HubAccount | null {
   const { facts, service } = account();
   return facts === null || service === null ? null : { ...facts, service };
-}
-
-// Points this device's named tunnel at the listener's current port.
-// The connector token it answers is a bearer secret the caller keeps in
-// memory only. Bounded, so a black-holed route cannot wedge the
-// tunnel's serialized lifecycle.
-export function provisionDeviceTunnel(
-  port: number,
-): Promise<TunnelProvisionResponse> {
-  const current = signedIn();
-  return current.service.provisionTunnel(
-    current.facts.credential,
-    port,
-    AbortSignal.timeout(15_000),
-  );
 }
 
 // The account's device registry, for the terminal's cross-device verbs.

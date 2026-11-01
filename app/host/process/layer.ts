@@ -46,6 +46,7 @@ import * as OrphanSweep from "@host/lib/scripts/OrphanSweep";
 import * as Moves from "@host/lib/sync/Moves";
 import * as FileSyncRunner from "@host/fileSync/runner";
 import * as MirrorGateway from "@host/mirror/MirrorGateway";
+import * as ScratchIndex from "@host/mirror/ScratchIndex";
 import {
   announceProjectChanged,
   mirrorChangesLayer,
@@ -178,7 +179,7 @@ const remotePlanes = logged("the device hub", remotePlanesLayer);
 // the gateway the daemon dials peers through. The daemon resumes
 // persisted sessions the moment it is up, so it starts with the app.
 // The sessions it resumes are swept for a device on no account once the
-// shell's first account report lands (handlers.ts noAccountSweep).
+// shell's first account report lands (MirrorEngineLayer.ts).
 const mirrors = mirrorEngineLayer.pipe(
   Layer.provideMerge(mirrorDaemonChangesLayer),
   Layer.provideMerge(mirrorDaemonLayer),
@@ -227,6 +228,9 @@ const foundation = (
   cachedAnswers.pipe(
     // A villager download under way stops here, and resumes next launch.
     Layer.provideMerge(Villagers.deviceLayer),
+    // The scratch copies of the index the mirrors' git reads take, for
+    // the follower and the peers' calls alike.
+    Layer.provideMerge(ScratchIndex.layer),
     // Every push the host makes and every store write, which the wires
     // and the views read, and the views' shared reads.
     Layer.provideMerge(Views.layer),

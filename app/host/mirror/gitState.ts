@@ -37,8 +37,7 @@
 // working tree is never touched (the engine owns it). read-tree plus
 // an index refresh is what makes the staged view match without
 // rewriting a single file.
-import { copyFile, mkdtemp, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { GitOperationInProgressError } from "@shigomori/contracts/errors";
 import type {
@@ -60,6 +59,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import { untilWatchable } from "@host/lib/watchPath";
+import * as ScratchIndex from "./ScratchIndex";
 
 // A state that can't be read, in the words the other device hears (an
 // operation in progress is GitOperationInProgressError instead, which
@@ -181,53 +181,31 @@ function sameIdentity(a: IndexIdentity, b: IndexIdentity): boolean {
 }
 const indexSnapshots = new Map<string, IndexSnapshot>();
 
-// One private 0700 directory for every scratch index, minted lazily and
-// kept for the life of the process. Directly under a shared /tmp the
-// copies' names are guessable, so another account could read one or
-// pre-plant it as a symlink for the copyFile below to write through.
-let scratchDir: Promise<string> | null = null;
-
-function scratchIndexDir(): Promise<string> {
-  // A failed mint is not cached, or one transient temp-dir error would
-  // poison every recompute for the rest of the run.
-  scratchDir ??= mkdtemp(join(tmpdir(), "sm-index-")).catch(
-    (error: unknown) => {
-      scratchDir = null;
-      throw error;
-    },
-  );
-  return scratchDir;
-}
-
-// A stable scratch index per worktree inside that directory, overwritten
-// on every recompute, so no directory is minted and removed per read.
-// One computation at a time per worktree (below), since two copies
-// racing on the same scratch file would hand write-tree a torn index.
-async function scratchIndexPath(worktreePath: string): Promise<string> {
-  return join(await scratchIndexDir(), worktreeIdFromPath(worktreePath));
-}
-
-// Copies the index into the scratch dir, re-minting it once if it went
-// away: the OS reaps its temp dir on its own schedule, and a
-// long-running app can outlive the path it cached.
-async function copyIndexToScratch(
+// Copies the index to a stable scratch index per worktree in the
+// scratch directory (ScratchIndex.ts), overwritten on every recompute,
+// so no directory is minted and removed per read. One computation at a
+// time per worktree (below), since two copies racing on the same
+// scratch file would hand write-tree a torn index.
+const copyIndexToScratch = Effect.fnUntraced(function* (
   worktreePath: string,
   indexPath: string,
-): Promise<string> {
-  const copy = await scratchIndexPath(worktreePath);
-  try {
-    await copyFile(indexPath, copy);
-    return copy;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    // Either the source index vanished (nothing to retry) or our
-    // scratch dir did. Re-mint and let a second ENOENT stand.
-    scratchDir = null;
-    const fresh = await scratchIndexPath(worktreePath);
-    await copyFile(indexPath, fresh);
-    return fresh;
-  }
-}
+) {
+  const scratch = yield* ScratchIndex.ScratchIndex;
+  const fs = yield* FileSystem.FileSystem;
+  const copyInto = (dir: string) => {
+    const copy = join(dir, worktreeIdFromPath(worktreePath));
+    return fs.copyFile(indexPath, copy).pipe(Effect.as(copy));
+  };
+  return yield* copyInto(yield* scratch.dir).pipe(
+    // Either the source index vanished (nothing to retry) or the
+    // scratch directory did. Mint it again and let a second NotFound
+    // stand.
+    Effect.catchIf(
+      (error) => Predicate.isTagged(error.reason, "NotFound"),
+      () => Effect.flatMap(scratch.remint, copyInto),
+    ),
+  );
+});
 
 const indexTreeInFlight = new Map<
   string,
@@ -283,10 +261,9 @@ const computeIndexTree = Effect.fnUntraced(function* (
     new GitStateError({
       reason: `the index cannot be snapshotted (unresolved conflicts?): ${errorWordsOf(error)}`,
     });
-  const copy = yield* Effect.tryPromise({
-    try: () => copyIndexToScratch(worktreePath, indexPath),
-    catch: unsnapshotted,
-  });
+  const copy = yield* copyIndexToScratch(worktreePath, indexPath).pipe(
+    Effect.mapError(unsnapshotted),
+  );
   const tree = (yield* (yield* Git.Git)
     .run(worktreePath, ["write-tree"], {
       env: { GIT_INDEX_FILE: copy },

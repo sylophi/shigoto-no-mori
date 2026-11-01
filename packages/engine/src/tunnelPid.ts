@@ -1,7 +1,9 @@
 // cloudflared.pid in the app's data folder: the pid of the app's tunnel
 // connector. The next host reaps a leftover one (host/direct/Tunnel.ts)
-// and `sm doctor` reports it, both through these two.
+// and `sm doctor` reports it, both through these.
 import { atoi } from "./doctorParse.ts";
+
+export const TUNNEL_PID_FILE = "cloudflared.pid";
 
 export const tunnelPidText = (pid: number) => `${pid}\n`;
 

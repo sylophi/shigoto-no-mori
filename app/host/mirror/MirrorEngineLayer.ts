@@ -285,6 +285,39 @@ const make = (options: {
       );
     });
 
+    // The engine persists its sessions, so they come back on every
+    // spawn: a boot that starts signed out, or a daemon that was down at
+    // the sign-out, would otherwise resume mirroring with peers of an
+    // account this device is not on. Nothing is asked before the shell's
+    // first report, which asks itself. After it, each session is asked
+    // about one time, so the snapshots while it ends do not end it
+    // again. leaveAccount ends what was running itself and resets the
+    // asked set, so a session reported after it is asked again. Only the
+    // running daemon's own snapshot is asked about: the one that stands
+    // through a restart can end nothing.
+    const endAll = withEngine(
+      endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
+        transfers: true,
+      }),
+    );
+    const asked = new Set<string>();
+    const endSignedOut = Effect.gen(function* () {
+      const { reported, facts } = yield* account.current;
+      if (!reported || !(yield* daemon.fresh)) return;
+      const unasked = (yield* daemon.sessions).filter(
+        (raw) => !asked.has(raw.session),
+      );
+      if (unasked.length === 0) return;
+      for (const raw of unasked) asked.add(raw.session);
+      if (facts === null) runFork(Effect.ignore(endAll));
+    });
+    yield* account.changes.pipe(
+      Stream.filter((current) => current.reported),
+      Stream.take(1),
+      Stream.runForEach(() => endSignedOut),
+      Effect.forkScoped,
+    );
+
     const engine = MirrorEngine.of({
       status: daemon.status,
       failure: daemon.failure,
@@ -314,15 +347,13 @@ const make = (options: {
         follower.onPeerProjectChanged(deviceId, projectId),
       peerWorktreeChanged: (deviceId, projectId, worktreeId) =>
         follower.onPeerWorktreeChanged(deviceId, projectId, worktreeId),
-      leaveAccount: withEngine(
-        endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
-          transfers: true,
-        }),
-      ).pipe(
+      leaveAccount: endAll.pipe(
         Effect.timeoutOrElse({
           duration: LEAVE_ACCOUNT_LIMIT,
           orElse: () => Effect.void,
         }),
+        // After the sweep, so a snapshot during it does not sweep again.
+        Effect.ensuring(Effect.sync(() => asked.clear())),
         Effect.withSpan("MirrorEngine.leaveAccount"),
       ),
     });
@@ -368,9 +399,10 @@ const make = (options: {
 
     // Every snapshot: the follower compares the session set itself (one
     // that only moved a cycle count is a no-op there), and the history,
-    // the orphaned transfers, and the stops that waited for the daemon,
+    // the orphaned transfers, the stops that waited for the daemon,
     // originals gone behind the app's back, sessions a re-open replaced
-    // (registry.ts) are looked at again.
+    // (registry.ts) and the sessions of a device on no account are
+    // looked at again.
     yield* daemon.changes.pipe(
       Stream.runForEach(() =>
         Effect.sync(() => {
@@ -390,6 +422,7 @@ const make = (options: {
               `[mirror] a daemon change went unread: ${errorWordsOf(defect)}`,
             ),
           ),
+          Effect.andThen(endSignedOut),
         ),
       ),
       Effect.forkScoped,
