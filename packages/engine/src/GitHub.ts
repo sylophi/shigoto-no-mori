@@ -503,7 +503,7 @@ const make = Effect.gen(function* () {
     const [remotes, known] = yield* Effect.all(
       [
         git.listRemoteEntries(cwd),
-        knownHosts.pipe(Effect.orElseSucceed(() => ghKnownHosts(""))),
+        knownHosts.pipe(Effect.orElseSucceed(() => new Set(["github.com"]))),
       ],
       { concurrency: 2 },
     );

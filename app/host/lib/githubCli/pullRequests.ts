@@ -21,13 +21,7 @@ import {
 } from "@shigomori/contracts/schemas";
 import * as GitHub from "@shigomori/engine/GitHub";
 import { ageOf, type Stamp } from "@shigomori/engine/keptAnswers";
-import { GH_TIMEOUT_MS } from "./GithubCli";
-
-// gh in the repo at `cwd`, at the host's gh deadline.
-const gh = (cwd: string, args: ReadonlyArray<string>) =>
-  Effect.flatMap(GitHub.GitHub, (github) =>
-    github.run(cwd, args, { timeout: GH_TIMEOUT_MS }),
-  );
+import { GH_TIMEOUT_MS, gh } from "./GithubCli";
 
 // Open PRs read apart from closed ones (gh's "closed" is merged too), so
 // a busy repo's newer closed PRs don't crowd out its older open ones. Past
