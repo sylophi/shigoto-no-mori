@@ -2,24 +2,17 @@ import { useMutation } from "@tanstack/react-query";
 import {
   type ClientConfig,
   type DeviceSettingsPatch,
-  type LauncherCommand,
 } from "@shigomori/contracts/schemas";
 import { storedClientSetting } from "@shigomori/contracts/schemas/config";
 import { storedPicks } from "@shigomori/ui/lib/themes.ts";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { patchClientConfig } from "./useClientConfig";
 import { useRegistry } from "@/lib/runtime/viewHooks";
-import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
+import {
+  deviceFields,
+  type SettingsFormState,
+} from "@shigomori/ui/lib/settingsForm.ts";
 import { useApi } from "@/lib/runtime/pageApi";
-
-// A launcher row persists only once both halves are filled in.
-// Half-typed rows live purely in form state. Shared by the encoders so
-// local and remote saves agree on what a saveable launcher is.
-function validLaunchers(state: SettingsFormState): LauncherCommand[] {
-  return state.launchers.filter(
-    (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
-  );
-}
 
 // The peer encoding: the globalConfig.writeDeviceSettings patch,
 // carrying ONLY the keys a peer's Settings section edits. The host
@@ -47,19 +40,19 @@ function toDeviceSettingsPatch(state: SettingsFormState): DeviceSettingsPatch {
   };
 }
 
-// This machine's encoding: the peer patch plus the launch catalog,
-// which this window's Launch tools section edits. Also the dirty
-// projection, so an unchanged device half skips the device write.
+// This machine's encoding: every device key, the launch catalog
+// included. Also the dirty projection, so an unchanged device half
+// skips the device write.
 function toLocalDeviceSettingsPatch(
   state: SettingsFormState,
 ): DeviceSettingsPatch {
   return {
-    ...toDeviceSettingsPatch(state),
-    launchers: validLaunchers(state),
-    hiddenLaunchers: state.hiddenLaunchers,
-    launchScripts: state.launchScripts,
-    terminal: state.terminal,
-    editor: state.editor,
+    ...deviceFields(state),
+    // A launcher row persists only once both halves are filled in.
+    // Half-typed rows live purely in form state.
+    launchers: state.launchers.filter(
+      (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
+    ),
   };
 }
 

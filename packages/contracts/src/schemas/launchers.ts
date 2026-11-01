@@ -46,7 +46,6 @@ const TERMINAL_IDS = ["terminal", "iterm", "ghostty", "cmux"] as const;
 // The device setting `terminal`: the worktree's terminal drawer in the
 // app, or one of the terminal apps.
 export const TERMINAL_CHOICES = ["app", ...TERMINAL_IDS] as const;
-export type TerminalChoice = (typeof TERMINAL_CHOICES)[number];
 export const TerminalIdSchema = Schema.Literals(TERMINAL_IDS);
 export type TerminalId = typeof TerminalIdSchema.Type;
 
