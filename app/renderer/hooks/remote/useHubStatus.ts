@@ -1,12 +1,12 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { HubStatus, TunnelState } from "@shigomori/contracts/modules/hub";
 import * as Atom from "effect/reactivity/Atom";
-import { hubStatusAtom, hubStatusOf } from "@/lib/remote/remoteDeviceSync";
+import { hubStatusAtom } from "@/lib/remote/remoteDeviceSync";
 
 // The hub bridge's live status (hubStatusAtom, which the device sync
-// mounts for the page's life), null until the first snapshot lands.
+// writes for the page's life), null until the first snapshot lands.
 export function useHubStatus(): HubStatus | null {
-  return useAtomValue(hubStatusAtom, hubStatusOf);
+  return useAtomValue(hubStatusAtom);
 }
 
 // For readers that only care about THIS device's tunnel endpoint (the
@@ -15,7 +15,7 @@ export function useHubStatus(): HubStatus | null {
 // the first snapshot lands, and on a platform with no host half (the
 // web bridge runs no cloudflared).
 export function useTunnelState(): TunnelState | undefined {
-  return useAtomValue(hubStatusAtom, (result) => hubStatusOf(result)?.tunnel);
+  return useAtomValue(hubStatusAtom, (status) => status?.tunnel);
 }
 
 // THIS device's blocked socket, or null while it is anything else (the
@@ -26,7 +26,7 @@ export function useTunnelState(): TunnelState | undefined {
 type HubBlock = Extract<HubStatus["socket"], { phase: "blocked" }>;
 
 const hubBlockAtom = Atom.readable((get): HubBlock | null => {
-  const socket = hubStatusOf(get(hubStatusAtom))?.socket;
+  const socket = get(hubStatusAtom)?.socket;
   return socket?.phase === "blocked" ? socket : null;
 }).pipe(
   Atom.withEquality(

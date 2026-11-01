@@ -48,8 +48,7 @@ import {
 } from "./lib/runtime/hostAnswering";
 import { followDeviceSettings } from "./hooks/config/useGlobalConfig";
 import {
-  onAccountLeft,
-  onSessionLanded,
+  type PeerFollower,
   startRemoteDeviceSync,
 } from "./lib/remote/remoteDeviceSync";
 import { startVillagerMoves } from "./lib/villagers/moves";
@@ -122,29 +121,27 @@ export function startApp({
   // peers' removals and fetches too. What the atoms keep of a peer goes
   // with the account.
   const peerLifecycles = new Map<string, () => void>();
-  onSessionLanded((deviceId) => {
-    registry.update(hostSessionAtom(deviceId), (count) => count + 1);
-    if (!peerLifecycles.has(deviceId)) {
-      const lifecycle = registry.mount(worktreeLifecycleAtom(deviceId));
-      const fetching = registry.mount(gitFetchingAtom(deviceId));
-      peerLifecycles.set(deviceId, () => {
-        lifecycle();
-        fetching();
-      });
-    }
-  });
-  onAccountLeft(() => {
-    for (const unmount of peerLifecycles.values()) unmount();
-    peerLifecycles.clear();
-    registry.update(accountsLeftAtom, (count) => count + 1);
-  });
+  const peerAtoms: PeerFollower = {
+    sessionLanded: (deviceId) => {
+      registry.update(hostSessionAtom(deviceId), (count) => count + 1);
+      if (!peerLifecycles.has(deviceId)) {
+        const lifecycle = registry.mount(worktreeLifecycleAtom(deviceId));
+        const fetching = registry.mount(gitFetchingAtom(deviceId));
+        peerLifecycles.set(deviceId, () => {
+          lifecycle();
+          fetching();
+        });
+      }
+    },
+    accountLeft: () => {
+      for (const unmount of peerLifecycles.values()) unmount();
+      peerLifecycles.clear();
+      registry.update(accountsLeftAtom, (count) => count + 1);
+    },
+  };
 
   followFocus(api, queryClient);
   if (api.isElectron) startLocalHost(api, queryClient, registry, page.signal);
-
-  // The shared settings exchange: this device's copy follows its peers'
-  // and theirs follow it.
-  startSharedSettingsSync(api);
 
   // Remote devices: the remote device registry, rebuilt from the
   // account's device list plus the hub bridge status, on boot and on
@@ -152,11 +149,15 @@ export function startApp({
   // through the same watchHost this machine's do (startLocalHost),
   // from the moment the peer is first seen. On a hostless client that
   // is the ONLY thing keeping the forest live between focus refetches.
-  startRemoteDeviceSync(
+  // Its followers: the peers' atoms, the shared settings exchange (this
+  // device's copy follows its peers' and theirs follow it), and the
+  // sweep requests (a host sweeps while someone is looking, and this
+  // window says so to the hosts it is looking at).
+  startRemoteDeviceSync({
     api,
     queryClient,
     registry,
-    (deviceId, peer) => {
+    watchPeer: (deviceId, peer) => {
       const stopPushes = watchHost(queryClient, deviceId, peer);
       const stopSettings = followDeviceSettings(
         registry,
@@ -168,12 +169,13 @@ export function startApp({
         stopSettings();
       };
     },
-    page.signal,
-  );
-
-  // The other direction: a host sweeps while someone is looking, and
-  // this window says so to the hosts it is looking at.
-  startRemoteSweepRequests(registry, page.signal);
+    followers: [
+      peerAtoms,
+      startSharedSettingsSync(api),
+      startRemoteSweepRequests(api, registry, page.signal),
+    ],
+    signal: page.signal,
+  });
 
   // Villagers moving in and out of any device's worktrees, told in
   // their voice whoever moved them (Village life).

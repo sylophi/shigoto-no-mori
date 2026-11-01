@@ -1,8 +1,8 @@
 // Keeps this device's copy of the shared settings
 // (packages/contracts/src/schemas/sharedSettings.ts) level with its
-// peers', boot-scoped like the other remote subscriptions. No server
-// holds the settings: every device keeps a full copy, and the copies
-// converge by merging (contracts' sharedSettings.ts), which is
+// peers', as the device sync's sessions land (remoteDeviceSync.ts). No
+// server holds the settings: every device keeps a full copy, and the
+// copies converge by merging (contracts' sharedSettings.ts), which is
 // order-free and idempotent, so the exchange needs no sessions, acks or
 // retries. A device that was away catches up the next time any session
 // with it lands.
@@ -38,7 +38,7 @@ import type { RendererApi } from "@/lib/runtime/pageApi";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { remoteDevicesAtom } from "./devices";
-import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
+import type { PeerFollower } from "./remoteDeviceSync";
 
 // Offers entries to every peer in reach. Best-effort by design (see the
 // header): a peer with no grant and a session that just dropped both
@@ -83,32 +83,33 @@ function mergePeerSharedSettings(
   api.run(api.sharedSettings.merge({ doc })).catch(() => undefined);
 }
 
-// Boot wiring, never unsubscribed.
-export function startSharedSettingsSync(api: RendererApi): void {
+export function startSharedSettingsSync(api: RendererApi): PeerFollower {
   // Each peer's pushes are followed from its first landing on, which
   // is also the first moment it can push at all, and the exchange that
   // runs on every landing covers whatever it sent while unfollowed.
   const followed = new Map<string, () => void>();
-  onAccountLeft(() => {
-    for (const unfollow of followed.values()) unfollow();
-    followed.clear();
-  });
-  onSessionLanded((deviceId) => {
-    const peer = apiFor(deviceId);
-    if (!followed.has(deviceId)) {
-      followed.set(
-        deviceId,
-        peer.listen(peer.pushes(sharedSettingsContract, "changed"), (doc) =>
-          mergePeerSharedSettings(api, doc),
-        ),
-      );
-    }
-    exchangeSharedSettings(
-      { merge: (input) => api.run(api.sharedSettings.merge(input)) },
-      {
-        read: () => peer.run(peer.sharedSettings.read()),
-        merge: (input) => peer.run(peer.sharedSettings.merge(input)),
-      },
-    ).catch(() => undefined);
-  });
+  return {
+    accountLeft: () => {
+      for (const unfollow of followed.values()) unfollow();
+      followed.clear();
+    },
+    sessionLanded: (deviceId) => {
+      const peer = api.peerApi(deviceId);
+      if (!followed.has(deviceId)) {
+        followed.set(
+          deviceId,
+          peer.listen(peer.pushes(sharedSettingsContract, "changed"), (doc) =>
+            mergePeerSharedSettings(api, doc),
+          ),
+        );
+      }
+      exchangeSharedSettings(
+        { merge: (input) => api.run(api.sharedSettings.merge(input)) },
+        {
+          read: () => peer.run(peer.sharedSettings.read()),
+          merge: (input) => peer.run(peer.sharedSettings.merge(input)),
+        },
+      ).catch(() => undefined);
+    },
+  };
 }
