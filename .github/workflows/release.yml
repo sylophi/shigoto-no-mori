@@ -103,12 +103,6 @@ jobs:
         working-directory: .
         run: pnpm install --frozen-lockfile
 
-      # The prePackage hook regenerates the third-party notices. Stale
-      # committed copies would ship a build reporting a "-dirty" commit,
-      # so refuse here, naming the fix, rather than build it.
-      - name: Require up-to-date third-party notices
-        run: pnpm run licenses:check
-
       - name: Import Developer ID certificate
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}

@@ -30,8 +30,8 @@ type LicenseEntry = Required<LicenseInfo>;
 
 const require = createRequire(import.meta.url);
 
-// --out writes elsewhere: a Linux package's notices are its own, while
-// the committed copy is the Mac release's.
+// --out writes elsewhere: a Linux package's notices are its own, and CI
+// writes to a scratch folder.
 const outAt = process.argv.indexOf("--out");
 const OUT_DIR =
   outAt === -1
@@ -39,7 +39,6 @@ const OUT_DIR =
     : resolve(process.argv[outAt + 1] ?? "");
 const JSON_OUT = join(OUT_DIR, "third-party-licenses.json");
 const TEXT_OUT = join(OUT_DIR, "THIRD-PARTY-LICENSES.txt");
-const CHECK = process.argv.includes("--check");
 
 const execFileP = promisify(execFile);
 
@@ -592,37 +591,12 @@ async function main() {
           .join("\n"),
     );
     process.exitCode = 1;
-    if (CHECK) return;
   }
 
   const outputs: [string, string][] = [
     [JSON_OUT, JSON.stringify(entries, null, 2) + "\n"],
     [TEXT_OUT, renderText(entries)],
   ];
-
-  // Check compares instead of writing: the packaging hook regenerates
-  // these, so a stale committed copy would ship as a "-dirty" build.
-  if (CHECK) {
-    const stale = (
-      await Promise.all(
-        outputs.map(async ([file, content]) =>
-          (await readFile(file, "utf8").catch(() => null)) === content
-            ? null
-            : relative(appRoot, file),
-        ),
-      )
-    ).filter((file) => file !== null);
-    if (stale.length > 0) {
-      console.error(
-        `[licenses] out of date: ${stale.join(", ")}. ` +
-          "Run `pnpm run licenses` and commit the result.",
-      );
-      process.exitCode = 1;
-    } else {
-      console.log(`[licenses] ${entries.length} notices are up to date`);
-    }
-    return;
-  }
 
   await mkdir(OUT_DIR, { recursive: true });
   await Promise.all(outputs.map(([file, content]) => writeFile(file, content)));
