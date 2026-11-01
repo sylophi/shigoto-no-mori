@@ -1,26 +1,15 @@
-import { cn } from "../../lib/utils.ts";
 import type { KeyboardEvent, ReactNode, Ref } from "react";
-import { Command } from "cmdk";
-import { Folder, FolderGit2, FolderSearch } from "lucide-react";
+import { FolderGit2, FolderSearch } from "lucide-react";
 import type { BrowseListing } from "../../lib/browseListing.ts";
 import { Button } from "../../primitives/button.tsx";
 import { ChipButton } from "../../primitives/chip-button.tsx";
-import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { FileManagerIcon } from "../../primitives/file-manager.tsx";
-import {
-  BrowseKeyHintsView,
-  BrowseUpItemView,
-} from "../shared/BrowseListPartsView.tsx";
-import {
-  ITEM_CLASS,
-  keepFocusInInput,
-  MODAL_COMMAND_CLASS,
-} from "../../primitives/cmdk-classes.ts";
-import { FooterRow } from "../../primitives/footer-row.tsx";
+import { PathBrowserView } from "../shared/PathBrowserView.tsx";
 
 // The add-existing tab's browse stage: the path as typed, the folders
 // it lists, each repo among them addable, and the way to scan the
-// folder for repos (AddExistingForm.tsx runs the adds and the scan).
+// folder for repos (AddExistingForm.tsx runs the adds, the scan and the
+// keys).
 export function AddExistingFormView({
   query,
   onQuery,
@@ -28,20 +17,13 @@ export function AddExistingFormView({
   onInputKeyDown,
   highlighted,
   onHighlight,
-  browseDir,
-  entries,
+  browse,
   registeredNames,
-  isLoading,
-  hasListing,
-  error,
-  leafFilter,
   targetIsGitRepo,
   canPrimary,
   pending,
   onPrimary,
   canBrowseUp,
-  onBrowseUp,
-  onBrowseTo,
   onAdd,
   terrierOptIn,
   onPickFolder,
@@ -52,27 +34,17 @@ export function AddExistingFormView({
   onQuery: (query: string) => void;
   inputRef?: Ref<HTMLInputElement>;
   onInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  // The list row under the keyboard, "browse:<path>" for a folder.
   highlighted: string;
   onHighlight: (value: string) => void;
-  // The folder listed, with its trailing slash.
-  browseDir: string;
-  entries: BrowseListing["filtered"];
+  browse: BrowseListing;
   // The listed folders already added as projects.
   registeredNames: ReadonlySet<string>;
-  isLoading: boolean;
-  hasListing: boolean;
-  error: unknown;
-  // What follows the last slash, narrowing the folders.
-  leafFilter: string;
   // What ↩ does: add the repo typed, or scan the folder for repos.
   targetIsGitRepo: boolean;
   canPrimary: boolean;
   pending: boolean;
   onPrimary: () => void;
   canBrowseUp: boolean;
-  onBrowseUp: () => void;
-  onBrowseTo: (name: string) => void;
   onAdd: (path: string) => void;
   // The terrier switch, for a project terrier should list too.
   terrierOptIn: ReactNode;
@@ -82,121 +54,63 @@ export function AddExistingFormView({
   // keymap's).
   confirmKeys: string;
 }) {
-  const hasHighlighted = highlighted.startsWith("browse:");
   const submitLabel = targetIsGitRepo ? "Add" : "Scan for repos in folder";
-  const submitKbd = hasHighlighted ? confirmKeys : "↩";
 
   return (
-    <Command
+    <PathBrowserView
       label="Add project"
-      loop
-      shouldFilter={false}
-      value={highlighted}
-      onValueChange={onHighlight}
-      // Fills what holds it, so its footer sits at the bottom however few
-      // folders the list has.
-      className={cn(MODAL_COMMAND_CLASS, "flex-1")}
-    >
-      <div
-        data-slot="search-row"
-        className="relative flex items-center gap-2 border-b border-border px-3 py-2"
-      >
-        <Command.Input
-          ref={inputRef}
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of this flow
-          autoFocus
-          value={query}
-          onValueChange={onQuery}
-          onKeyDown={onInputKeyDown}
-          placeholder="Folder path"
-          className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
-        />
-        <Button
-          variant="outline"
-          size="xs"
-          keys={submitKbd}
-          onMouseDown={keepFocusInInput}
-          onClick={onPrimary}
-          disabled={!canPrimary || pending}
-        >
-          {targetIsGitRepo ? (
-            <FolderGit2 className="size-3.5" />
-          ) : (
-            <FolderSearch className="size-3.5" />
-          )}
-          {pending && targetIsGitRepo ? "Adding…" : submitLabel}
-        </Button>
-      </div>
-
-      <Command.List
-        onMouseDown={keepFocusInInput}
-        className="min-h-0 flex-1 overflow-y-auto p-2"
-      >
-        {canBrowseUp && <BrowseUpItemView onSelect={onBrowseUp} />}
-
-        {entries.map((entry) => {
-          const entryPath = `${browseDir}${entry.name}`;
-          const registered = registeredNames.has(entry.name);
-          return (
-            <Command.Item
-              key={entry.name}
-              value={`browse:${entryPath}`}
-              keywords={[entry.name]}
-              onSelect={() => onBrowseTo(entry.name)}
-              className={ITEM_CLASS}
+      placeholder="Folder path"
+      query={query}
+      onQuery={onQuery}
+      inputRef={inputRef}
+      onInputKeyDown={onInputKeyDown}
+      highlighted={highlighted}
+      onHighlight={onHighlight}
+      browse={browse}
+      canBrowseUp={canBrowseUp}
+      primary={{
+        label: (
+          <>
+            {targetIsGitRepo ? (
+              <FolderGit2 className="size-3.5" />
+            ) : (
+              <FolderSearch className="size-3.5" />
+            )}
+            {pending && targetIsGitRepo ? "Adding…" : submitLabel}
+          </>
+        ),
+        disabled: !canPrimary || pending,
+        onClick: onPrimary,
+      }}
+      confirmKeys={confirmKeys}
+      renderIcon={(entry) =>
+        entry.isGitRepo ? (
+          <FolderGit2 className="size-4 text-foreground" />
+        ) : undefined
+      }
+      renderTrailing={(entry, path) =>
+        entry.isGitRepo &&
+        (registeredNames.has(entry.name) ? (
+          <span className="text-xs text-muted-foreground/80">Added</span>
+        ) : (
+          <div
+            className="inline-flex items-center"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="presentation"
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() => onAdd(path)}
             >
-              {entry.isGitRepo ? (
-                <FolderGit2 className="size-4 text-foreground" />
-              ) : (
-                <Folder className="size-4 text-muted-foreground/80" />
-              )}
-              <SimpleTooltip whenTruncated lazy tip={entry.name}>
-                <span className="min-w-0 flex-1 truncate font-mono">
-                  {entry.name}
-                </span>
-              </SimpleTooltip>
-              {entry.isGitRepo &&
-                (registered ? (
-                  <span className="text-xs text-muted-foreground/80">
-                    Added
-                  </span>
-                ) : (
-                  <div
-                    className="inline-flex items-center"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    role="presentation"
-                  >
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="xs"
-                      onClick={() => onAdd(entryPath)}
-                    >
-                      Add
-                    </Button>
-                  </div>
-                ))}
-            </Command.Item>
-          );
-        })}
-
-        {isLoading && !hasListing && (
-          <div className="p-3 text-xs text-muted-foreground">Loading…</div>
-        )}
-        {!isLoading && !error && entries.length === 0 && (
-          <div className="p-3 text-center text-xs text-muted-foreground">
-            {leafFilter.length > 0
-              ? `No folders matching "${leafFilter}".`
-              : "Empty directory."}
+              Add
+            </Button>
           </div>
-        )}
-      </Command.List>
-
-      <FooterRow className="justify-between">
-        <div className="flex items-center gap-3">
-          <BrowseKeyHintsView enterFolder={hasHighlighted} goUp={canBrowseUp} />
-        </div>
+        ))
+      }
+      footerEnd={
         <div className="flex items-center gap-3">
           {terrierOptIn}
           {/* The native dialog is this machine's, so it can't pick a
@@ -208,7 +122,7 @@ export function AddExistingFormView({
             </ChipButton>
           )}
         </div>
-      </FooterRow>
-    </Command>
+      }
+    />
   );
 }

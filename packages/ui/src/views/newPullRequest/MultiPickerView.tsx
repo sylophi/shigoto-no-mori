@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
-import { Check, Plus, Search, X } from "lucide-react";
+import { Check, Plus, X } from "lucide-react";
+import {
+  ComboboxEmpty,
+  ComboboxItem,
+  ComboboxPopup,
+} from "../../primitives/combobox.tsx";
 import { IconButton } from "../../primitives/icon-button.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { rankByScore } from "../../lib/fuzzyMatch.ts";
@@ -77,66 +82,39 @@ export function MultiPickerView({
             <Plus aria-hidden className="size-3.5" />
           </Combobox.Trigger>
         </div>
-        <Combobox.Portal>
-          <Combobox.Positioner
-            sideOffset={4}
-            side="bottom"
-            align="end"
-            className="z-50"
-          >
-            <Combobox.Popup
-              data-slot="combobox-popup"
-              className="flex max-h-72 w-64 flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
-            >
-              <div
-                data-slot="search-row"
-                className="flex items-center gap-2 border-b border-border px-3"
-              >
-                <Search
-                  aria-hidden
-                  className="size-3.5 shrink-0 text-muted-foreground/60"
-                />
-                <Combobox.Input
-                  placeholder={`Search ${label.toLowerCase()}…`}
-                  className="flex-1 bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
-                />
-              </div>
-              <Combobox.List className="flex-1 overflow-y-auto p-1">
-                {ranked.length === 0 && (
-                  <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                    {loading
-                      ? "Loading…"
-                      : options.length === 0
-                        ? empty
-                        : "No matches."}
-                  </div>
+        <ComboboxPopup
+          placeholder={`Search ${label.toLowerCase()}…`}
+          align="end"
+          className="w-64"
+        >
+          {ranked.length === 0 && (
+            <ComboboxEmpty>
+              {loading
+                ? "Loading…"
+                : options.length === 0
+                  ? empty
+                  : "No matches."}
+            </ComboboxEmpty>
+          )}
+          {ranked.map((option) => (
+            <ComboboxItem key={option.value} value={option.value}>
+              <span className="flex size-3.5 shrink-0 items-center justify-center">
+                <Combobox.ItemIndicator>
+                  <Check aria-hidden className="size-3.5" />
+                </Combobox.ItemIndicator>
+              </span>
+              <Mark color={option.color} />
+              <span className="min-w-0 flex-1 truncate">
+                {option.value}
+                {option.detail && (
+                  <span className="ml-1.5 text-xs text-muted-foreground">
+                    {option.detail}
+                  </span>
                 )}
-                {ranked.map((option) => (
-                  <Combobox.Item
-                    key={option.value}
-                    value={option.value}
-                    className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
-                  >
-                    <span className="flex size-3.5 shrink-0 items-center justify-center">
-                      <Combobox.ItemIndicator>
-                        <Check aria-hidden className="size-3.5" />
-                      </Combobox.ItemIndicator>
-                    </span>
-                    <Mark color={option.color} />
-                    <span className="min-w-0 flex-1 truncate">
-                      {option.value}
-                      {option.detail && (
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                          {option.detail}
-                        </span>
-                      )}
-                    </span>
-                  </Combobox.Item>
-                ))}
-              </Combobox.List>
-            </Combobox.Popup>
-          </Combobox.Positioner>
-        </Combobox.Portal>
+              </span>
+            </ComboboxItem>
+          ))}
+        </ComboboxPopup>
       </Combobox.Root>
       {value.length === 0 ? (
         <p className="text-xs text-muted-foreground">None</p>

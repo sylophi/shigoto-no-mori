@@ -1,0 +1,176 @@
+import type { KeyboardEvent, ReactNode, Ref } from "react";
+import { Command } from "cmdk";
+import { CornerLeftUp, Folder } from "lucide-react";
+import type { BrowseListing } from "../../lib/browseListing.ts";
+import { cn } from "../../lib/utils.ts";
+import { Button } from "../../primitives/button.tsx";
+import {
+  EMPTY_CLASS,
+  ITEM_CLASS,
+  keepFocusInInput,
+  MODAL_COMMAND_CLASS,
+} from "../../primitives/cmdk-classes.ts";
+import { FooterRow } from "../../primitives/footer-row.tsx";
+import { SimpleTooltip } from "../../primitives/tooltip.tsx";
+import { BrowseKeyHintsView } from "./BrowseListPartsView.tsx";
+
+// The cmdk value's prefix on every row of the list, `..` included, so
+// isBrowseRow tells "a row is highlighted" from "nothing is".
+export const BROWSE_VALUE_PREFIX = "browse:";
+
+export function isBrowseRow(highlighted: string): boolean {
+  return highlighted.startsWith(BROWSE_VALUE_PREFIX);
+}
+
+type BrowseEntry = BrowseListing["filtered"][number];
+
+// A typed path browsed as folders, for the folder picker and Add
+// Project's browse stage: the input is the path, listed live, beside the
+// button that takes it, over the `..` row and the folders, with the key
+// hints in the footer. The keys on the input are the container's.
+export function PathBrowserView({
+  label,
+  placeholder,
+  query,
+  onQuery,
+  inputRef,
+  onInputKeyDown,
+  highlighted,
+  onHighlight,
+  browse,
+  canBrowseUp,
+  primary,
+  confirmKeys,
+  hint,
+  renderIcon,
+  renderTrailing,
+  footerEnd,
+}: {
+  label: string;
+  placeholder: string;
+  query: string;
+  onQuery: (query: string) => void;
+  inputRef?: Ref<HTMLInputElement>;
+  onInputKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
+  highlighted: string;
+  onHighlight: (value: string) => void;
+  browse: BrowseListing;
+  canBrowseUp: boolean;
+  primary: { label: ReactNode; disabled: boolean; onClick: () => void };
+  // The keys that press the primary button past a highlighted row (the
+  // keymap's). With none highlighted ↩ does.
+  confirmKeys: string;
+  // One line under the input saying what the folder is for.
+  hint?: string;
+  // A folder's mark, a plain folder unless given.
+  renderIcon?: (entry: BrowseEntry) => ReactNode;
+  // What ends a folder's row, by its path.
+  renderTrailing?: (entry: BrowseEntry, path: string) => ReactNode;
+  footerEnd?: ReactNode;
+}) {
+  const { browseDir, leafFilter, listing, isLoading, error, filtered } = browse;
+  const hasHighlighted = isBrowseRow(highlighted);
+
+  return (
+    <Command
+      label={label}
+      loop
+      shouldFilter={false}
+      value={highlighted}
+      onValueChange={onHighlight}
+      // Fills what holds it, so its footer sits at the bottom however few
+      // folders the list has.
+      className={cn(MODAL_COMMAND_CLASS, "flex-1")}
+    >
+      <div
+        data-slot="search-row"
+        className="relative flex items-center gap-2 border-b border-border px-3 py-2"
+      >
+        <Command.Input
+          ref={inputRef}
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- the input is the path, and the flow starts there
+          autoFocus
+          value={query}
+          onValueChange={onQuery}
+          onKeyDown={onInputKeyDown}
+          placeholder={placeholder}
+          className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
+        />
+        <Button
+          variant="outline"
+          size="xs"
+          keys={hasHighlighted ? confirmKeys : "↩"}
+          onMouseDown={keepFocusInInput}
+          onClick={primary.onClick}
+          disabled={primary.disabled}
+        >
+          {primary.label}
+        </Button>
+      </div>
+      {hint && (
+        <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+          {hint}
+        </p>
+      )}
+
+      <Command.List
+        onMouseDown={keepFocusInInput}
+        className="min-h-0 flex-1 overflow-y-auto p-2"
+      >
+        {canBrowseUp && (
+          <Command.Item
+            value={`${BROWSE_VALUE_PREFIX}up`}
+            keywords={[".."]}
+            onSelect={browse.browseUp}
+            className={ITEM_CLASS}
+          >
+            <CornerLeftUp className="size-4 text-muted-foreground/80" />
+            <span className="font-mono text-muted-foreground">..</span>
+          </Command.Item>
+        )}
+
+        {filtered.map((entry) => {
+          const entryPath = `${browseDir}${entry.name}`;
+          return (
+            <Command.Item
+              key={entry.name}
+              value={`${BROWSE_VALUE_PREFIX}${entryPath}`}
+              keywords={[entry.name]}
+              onSelect={() => browse.browseTo(entry.name)}
+              className={ITEM_CLASS}
+            >
+              {renderIcon?.(entry) ?? (
+                <Folder className="size-4 text-muted-foreground/80" />
+              )}
+              <SimpleTooltip whenTruncated lazy tip={entry.name}>
+                <span className="min-w-0 flex-1 truncate font-mono">
+                  {entry.name}
+                </span>
+              </SimpleTooltip>
+              {renderTrailing?.(entry, entryPath)}
+            </Command.Item>
+          );
+        })}
+
+        {isLoading && !listing && (
+          <div className="p-3 text-xs text-muted-foreground">Loading…</div>
+        )}
+        {!isLoading && !error && filtered.length === 0 && (
+          <div className={EMPTY_CLASS}>
+            {leafFilter.length > 0
+              ? `No folders matching "${leafFilter}".`
+              : "Empty directory."}
+          </div>
+        )}
+        {error && <div className={EMPTY_CLASS}>Couldn't read folder.</div>}
+      </Command.List>
+
+      <FooterRow className="justify-between">
+        <div className="flex items-center gap-3">
+          <BrowseKeyHintsView enterFolder={hasHighlighted} goUp={canBrowseUp} />
+        </div>
+        {footerEnd}
+      </FooterRow>
+    </Command>
+  );
+}

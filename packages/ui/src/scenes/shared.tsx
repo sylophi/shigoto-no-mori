@@ -19,10 +19,8 @@ import {
   StaleDeviceNoteView,
 } from "../views/shared/DeviceTabBarView.tsx";
 import { EditorFooterView } from "../views/shared/EditorFooterView.tsx";
-import {
-  BROWSE_VALUE_PREFIX,
-  FolderPickerView,
-} from "../views/shared/FolderPickerView.tsx";
+import { FolderPickerView } from "../views/shared/FolderPickerView.tsx";
+import { BROWSE_VALUE_PREFIX } from "../views/shared/PathBrowserView.tsx";
 import { LauncherIconView } from "../views/shared/LauncherIconView.tsx";
 import { PageShellView } from "../views/shared/PageShellView.tsx";
 import { PathPickerView } from "../views/shared/PathPickerView.tsx";
@@ -305,13 +303,15 @@ export function FolderPickerScene() {
             title="Pick a folder"
             confirmLabel="Use this folder"
             hint="Where new worktrees of this project go."
-            confirmKeys={defaultBinding("confirm")}
-            onPick={noop}
-            onClose={noop}
+            confirmKeys={defaultBinding("confirm").label}
             query={query}
             setQuery={noop}
+            onInputKeyDown={noop}
             highlighted={`${BROWSE_VALUE_PREFIX}${query}docs`}
             setHighlighted={noop}
+            canBrowseUp
+            canConfirm
+            onConfirm={noop}
             browse={{
               browseDir: query,
               leafFilter: "",

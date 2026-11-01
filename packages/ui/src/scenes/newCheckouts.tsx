@@ -24,6 +24,7 @@ import {
 } from "../views/newWorktree/NewWorktreeView.tsx";
 import { PullRequestSourceView } from "../views/newWorktree/PullRequestPickerView.tsx";
 import { BranchComboboxView } from "../views/shared/BranchComboboxView.tsx";
+import { BROWSE_VALUE_PREFIX } from "../views/shared/PathBrowserView.tsx";
 import { DeviceTabBarView } from "../views/shared/DeviceTabBarView.tsx";
 import { ProjectDevicePageView } from "../views/shared/ProjectDevicePageView.tsx";
 import {
@@ -228,22 +229,25 @@ export function AddProjectScene() {
               query="~/dev/"
               onQuery={noop}
               onInputKeyDown={noop}
-              highlighted="browse:~/dev/kawaii-cam"
+              highlighted={`${BROWSE_VALUE_PREFIX}~/dev/kawaii-cam`}
               onHighlight={noop}
-              browseDir="~/dev/"
-              entries={FOLDERS}
+              browse={{
+                browseDir: "~/dev/",
+                leafFilter: "",
+                listingEnabled: true,
+                listing: { path: "/Users/rin/dev", entries: FOLDERS },
+                isLoading: false,
+                error: null,
+                filtered: FOLDERS,
+                browseTo: noop,
+                browseUp: noop,
+              }}
               registeredNames={new Set(["shigoto-no-mori"])}
-              isLoading={false}
-              hasListing
-              error={null}
-              leafFilter=""
               targetIsGitRepo={false}
               canPrimary
               pending={false}
               onPrimary={noop}
               canBrowseUp
-              onBrowseUp={noop}
-              onBrowseTo={noop}
               onAdd={noop}
               terrierOptIn={terrierOptIn}
               onPickFolder={noop}
