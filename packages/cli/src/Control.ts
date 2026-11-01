@@ -162,18 +162,14 @@ type Event =
   | { readonly _tag: "progress"; readonly progress: unknown }
   | { readonly _tag: "result"; readonly result: unknown };
 
-type ProgressOf<A> = A extends {
-  readonly _tag: "progress";
-  readonly progress: infer P;
-}
-  ? P
-  : never;
-type ResultOf<A> = A extends {
-  readonly _tag: "result";
-  readonly result: infer R;
-}
-  ? R
-  : never;
+type ProgressOf<A> = Extract<
+  A,
+  { readonly _tag: "progress"; readonly progress: unknown }
+>["progress"];
+type ResultOf<A> = Extract<
+  A,
+  { readonly _tag: "result"; readonly result: unknown }
+>["result"];
 
 // A module's invokes, each answered with its output, and its views,
 // each answered with the transfer's result once `onProgress` has seen

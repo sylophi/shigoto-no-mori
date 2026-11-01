@@ -115,11 +115,10 @@ export const keptAnswers = Effect.fnUntraced(function* <K, A, E, R>(
         Effect.withFiber((caller) => {
           const now = stampOf(caller.getRef(Clock.Clock));
           const found = Option.getOrUndefined(MutableHashMap.get(entries, key));
-          const entry =
+          const fresh =
             found !== undefined &&
-            (found.kept === null || ageOf(found.kept.at, now) < found.kept.ms)
-              ? found
-              : start(key, caller);
+            (found.kept === null || ageOf(found.kept.at, now) < found.kept.ms);
+          const entry = fresh ? found : start(key, caller);
           entry.waiters += 1;
           return restore(Deferred.await(entry.result)).pipe(
             Effect.ensuring(leave(key, entry)),

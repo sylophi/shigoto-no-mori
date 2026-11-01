@@ -16,16 +16,12 @@ const RESTARTS = byPlatform({
   linux: "The host restarts into it.",
 });
 
-const host = Effect.map(Control.Control, (control) =>
-  control.client(runtimeContract),
-);
-const info = Effect.flatMap(host, (runtime) => runtime.info());
-
 const moveTo = (parentDir: string | undefined) =>
   Effect.gen(function* () {
     const { json, stdoutColor } = yield* Effect.service(Output);
-    const { canonicalDataDirName } = yield* info;
-    yield* (yield* host).moveDataDir({ parentDir });
+    const app = (yield* Control.Control).client(runtimeContract);
+    const { canonicalDataDirName } = yield* app.info();
+    yield* app.moveDataDir({ parentDir });
     const dataDir =
       parentDir === undefined ? null : join(parentDir, canonicalDataDirName);
     if (json) return yield* emit({ ok: true, dataDir });
@@ -47,7 +43,8 @@ const reset = Command.make("reset", { rest }, () => moveTo(undefined));
 export const dataCommand = Command.make("data", {}, () =>
   Effect.gen(function* () {
     const { json, stdoutColor } = yield* Effect.service(Output);
-    const runtime = yield* info;
+    const app = (yield* Control.Control).client(runtimeContract);
+    const runtime = yield* app.info();
     if (json) {
       const { dataDir, dataDirSource, atDefaultDataDir } = runtime;
       return yield* emit({

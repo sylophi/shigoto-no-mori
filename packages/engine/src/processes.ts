@@ -55,9 +55,10 @@ export const childDefaults = Layer.effect(
   ),
 );
 
-// Signal 0 delivers nothing but still checks that the process exists.
-// EPERM means it exists and isn't ours.
-const signalZero = (pid: number) => {
+// Whether a process with the pid exists, whoever owns it. Signal 0
+// delivers nothing but still checks that the process exists, and EPERM
+// means it exists and isn't ours.
+export const isPidAlive = (pid: number) => {
   try {
     process.kill(pid, 0);
     return true;
@@ -66,8 +67,7 @@ const signalZero = (pid: number) => {
   }
 };
 
-// Whether a process with the pid exists, whoever owns it.
-export const pidAlive = (pid: number) => Effect.sync(() => signalZero(pid));
+export const pidAlive = (pid: number) => Effect.sync(() => isPidAlive(pid));
 
 const MONTHS = [
   "Jan",

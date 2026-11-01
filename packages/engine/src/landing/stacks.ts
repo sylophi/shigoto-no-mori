@@ -78,15 +78,13 @@ export const makeStacks = ({
         // Asked for by number, so it could be a stranger's fork PR. The
         // layers under it never are.
         const top = chain[chain.length - 1] as PullRequestSummary;
-        if (
+        const foreignFork =
           top.isCrossRepository === true &&
           (yield* github.checkedOutPullRequest(
             project.path,
             top.headRefName,
-          )) !== number
-        ) {
-          return yield* refuse(verb, "fork", [number]);
-        }
+          )) !== number;
+        if (foreignFork) return yield* refuse(verb, "fork", [number]);
         while (chain.length < MAX_STACK_DEPTH) {
           const base: string = (chain[0] as PullRequestSummary).baseRefName;
           if (base === trunk) break;
