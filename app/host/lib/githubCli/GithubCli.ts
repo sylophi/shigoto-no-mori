@@ -34,6 +34,12 @@ import { type GithubRepoInfo, parseRemoteUrl } from "./remote";
 // timeout.
 export const GH_TIMEOUT_MS = 30_000;
 
+// gh in the repo at `cwd`, at the host's gh deadline.
+export const gh = (cwd: string, args: ReadonlyArray<string>) =>
+  Effect.flatMap(GitHub.GitHub, (github) =>
+    github.run(cwd, args, { timeout: GH_TIMEOUT_MS }),
+  );
+
 // gh installed but not usable, for a read that would rather fail than
 // answer blank.
 export class GithubCli extends Context.Service<

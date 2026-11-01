@@ -30,11 +30,7 @@ const UrlSchema = Schema.String.pipe(
   ),
 );
 
-export const PullRequestStateSchema = Schema.Literals([
-  "OPEN",
-  "CLOSED",
-  "MERGED",
-]);
+const PullRequestStateSchema = Schema.Literals(["OPEN", "CLOSED", "MERGED"]);
 
 export const PullRequestSchema = Schema.Struct({
   number: PullRequestNumberSchema,
