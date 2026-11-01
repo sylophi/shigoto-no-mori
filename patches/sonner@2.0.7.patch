@@ -1,0 +1,30 @@
+diff --git a/dist/index.js b/dist/index.js
+index bd21e898f431298b70e941833c78819a1eb53a36..57581ece55ae0e52e5be2429bf2aa9105c020220 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -540,7 +540,9 @@ const Toast = (props)=>{
+         const toastNode = toastRef.current;
+         const originalHeight = toastNode.style.height;
+         toastNode.style.height = 'auto';
+-        const newHeight = toastNode.getBoundingClientRect().height;
++        // offsetHeight, unlike the rect, ignores the scale a toast behind
++        // the front one wears, which would otherwise stick as its height.
++        const newHeight = toastNode.offsetHeight;
+         toastNode.style.height = originalHeight;
+         setInitialHeight(newHeight);
+         setHeights((heights)=>{
+diff --git a/dist/index.mjs b/dist/index.mjs
+index d0c7a5a1fa1ed8b19c27bea968bb404f2437a07e..739811faf0ded5c586455e53b42d6e39df8ce3c3 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -533,7 +533,9 @@ const Toast = (props)=>{
+         const toastNode = toastRef.current;
+         const originalHeight = toastNode.style.height;
+         toastNode.style.height = 'auto';
+-        const newHeight = toastNode.getBoundingClientRect().height;
++        // offsetHeight, unlike the rect, ignores the scale a toast behind
++        // the front one wears, which would otherwise stick as its height.
++        const newHeight = toastNode.offsetHeight;
+         toastNode.style.height = originalHeight;
+         setInitialHeight(newHeight);
+         setHeights((heights)=>{
