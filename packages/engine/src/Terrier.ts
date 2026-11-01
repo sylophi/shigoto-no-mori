@@ -1,5 +1,4 @@
 import type { TerrierReadiness } from "@shigomori/contracts/schemas/terrier";
-import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -12,6 +11,7 @@ import * as Paths from "./Paths.ts";
 import { isNotFound } from "./platformErrors.ts";
 import { byPlatform } from "./platform.ts";
 import { captureWithin, exec, stderrOf } from "./processes.ts";
+import { keptAnswers } from "./keptAnswers.ts";
 import { terrierProjectId } from "./terrierId.ts";
 
 // Terrier (github.com/dittofleet/terrier) is an external registry of
@@ -252,16 +252,11 @@ const make = Effect.gen(function* () {
   // one spawn and a long-lived host still sees terrier change. The switch
   // is read on every ask, so a view re-read as it flips lists the
   // projects it brings or takes.
-  // One entry, keyed by nothing: a Cache rather than a cached effect
-  // because invalidating it also drops a probe under way, which may have
+  // Invalidating it also drops a probe under way, which may have
   // started before terrier was installed or its toggle flipped.
-  const cache = yield* Cache.make({
-    lookup: (_: void) => probe,
-    capacity: 1,
-    timeToLive: "10 seconds",
-  });
-  const answered = Cache.get(cache, undefined);
-  const invalidate = Cache.invalidateAll(cache);
+  const cache = yield* keptAnswers((_: void) => probe, "10 seconds");
+  const answered = cache.get(undefined);
+  const invalidate = cache.invalidate(undefined);
 
   // A write is read back by the next ask, so a project added or removed
   // right after lists as terrier now does.

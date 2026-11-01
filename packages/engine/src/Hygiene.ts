@@ -8,17 +8,15 @@ import type {
   WorktreeDiskUsage,
   WorktreeHygiene,
 } from "@shigomori/contracts/schemas/hygiene";
-import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as NativeFs from "./NativeFs.ts";
 import * as Git from "./Git.ts";
 import { splitRemoteRef } from "./gitParse.ts";
+import { keptAnswers } from "./keptAnswers.ts";
 import type { RegisteredProject } from "./Registry.ts";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import * as Worktrees from "./Worktrees.ts";
@@ -254,7 +252,7 @@ const make = Effect.gen(function* () {
   // A project's identities with its primary ref, kept long enough to
   // serve one page load: the page asks for every row's size at once.
   // A failed listing isn't kept: the next ask tries again.
-  const identities = yield* Cache.makeWith(
+  const identities = yield* keptAnswers(
     (project: RegisteredProject) =>
       worktrees
         .identityList([project], { primaryRef: true })
@@ -265,16 +263,12 @@ const make = Effect.gen(function* () {
               : Effect.fail(skipped[0].error),
           ),
         ),
-    {
-      capacity: 64,
-      timeToLive: (exit) =>
-        Exit.isFailure(exit) ? Duration.zero : Duration.seconds(10),
-    },
+    "10 seconds",
   );
 
   // A key compares by value: the project's own fields, nothing more.
   const identitiesOf = (project: RegisteredProject) =>
-    Cache.get(identities, {
+    identities.get({
       id: project.id,
       name: project.name,
       path: project.path,
@@ -390,17 +384,16 @@ const make = Effect.gen(function* () {
 
   // Kept for a minute by the folder and what was carved out of it, so a
   // walk isn't reused after a nested worktree came or went.
-  const measured = yield* Cache.make({
-    lookup: ({
+  const measured = yield* keptAnswers(
+    ({
       root,
       exclude,
     }: {
       readonly root: string;
       readonly exclude: ReadonlyArray<string>;
     }) => measure(root, exclude),
-    capacity: 256,
-    timeToLive: Duration.minutes(1),
-  });
+    "1 minute",
+  );
 
   const diskUsage = Effect.fn("Hygiene.diskUsage")(function* (
     project: RegisteredProject,
@@ -420,7 +413,7 @@ const make = Effect.gen(function* () {
         (path) => path !== worktree.path && isSameOrInside(path, worktree.path),
       )
       .toSorted();
-    const usage = yield* Cache.get(measured, {
+    const usage = yield* measured.get({
       root: worktree.path,
       exclude: nested,
     });

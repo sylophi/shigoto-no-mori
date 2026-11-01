@@ -25,7 +25,7 @@ import * as Git from "@shigomori/engine/Git";
 import * as GitHub from "@shigomori/engine/GitHub";
 import { isCommandError } from "@shigomori/engine/processes";
 import * as Ops from "../engineOps";
-import { keptAnswer, keptAnswers } from "../util/kept";
+import { keptAnswer, keptAnswers } from "@shigomori/engine/keptAnswers";
 import { type GithubRepoInfo, parseRemoteUrl } from "./remote";
 
 // A wedged gh (proxy auth, SSO browser prompt) must not hang forever:

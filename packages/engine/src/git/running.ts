@@ -1,6 +1,5 @@
 // Git's runner: a git process in a worktree, its spawn slots, and one index write at a time per worktree.
 import * as Arr from "effect/Array";
-import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Duration from "effect/Duration";
@@ -14,6 +13,7 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import { findExecutable } from "../executables.ts";
+import { keptAnswers } from "../keptAnswers.ts";
 import { subcommandOf } from "../gitParse.ts";
 import {
   DEFAULT_MAX_OUTPUT,
@@ -168,15 +168,9 @@ export const makeRunning = Effect.gen(function* () {
   // without them, while hooked commands still go through the launcher
   // for a hook building native code. Looked up again each minute, for
   // an `xcode-select -s` or a moved Xcode.
-  const gits = yield* Cache.make({
-    capacity: 4,
-    timeToLive: "1 minute",
-    lookup: (key: string) =>
+  const gits = yield* keptAnswers(
+    ([searched, developerDir]: readonly [string, string | undefined]) =>
       Effect.gen(function* () {
-        const [searched, developerDir] = JSON.parse(key) as [
-          string,
-          string | null,
-        ];
         const first = yield* findExecutable("git").pipe(
           Effect.provideService(
             ConfigProvider.ConfigProvider,
@@ -188,7 +182,7 @@ export const makeRunning = Effect.gen(function* () {
           spawner,
           "/usr/bin/xcrun",
           ["--find", "git"],
-          { env: { DEVELOPER_DIR: developerDir ?? undefined } },
+          { env: { DEVELOPER_DIR: developerDir } },
         );
         const found = output.trim();
         return code === 0 && found.startsWith("/") ? found : "git";
@@ -197,7 +191,8 @@ export const makeRunning = Effect.gen(function* () {
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, path),
       ),
-  });
+    "1 minute",
+  );
   const readGit = Effect.fnUntraced(function* (
     env: Readonly<Record<string, string>>,
   ) {
@@ -210,10 +205,7 @@ export const makeRunning = Effect.gen(function* () {
       dir.startsWith("/"),
     );
     if (ahead.length === 0) return "git";
-    return yield* Cache.get(
-      gits,
-      JSON.stringify([ahead.join(":"), developerDir]),
-    );
+    return yield* gits.get([ahead.join(":"), developerDir]);
   });
 
   // A git in `cwd`, its stdout taken whole by `read`.

@@ -30,7 +30,11 @@ import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import type { broadcastAll } from "@host/process/wires";
 import { elapsedMillisUnsafe } from "@shigomori/engine/elapsed";
 import { log } from "@shared/log";
-import { ageOf as ageBetween, type Stamp, stampOf } from "@host/lib/util/kept";
+import {
+  ageOf as ageBetween,
+  type Stamp,
+  stampOf,
+} from "@shigomori/engine/keptAnswers";
 
 // Skip if a fetch finished within this window. Short enough that rapid
 // focus events don't feel stale, long enough that the focus, sweep and

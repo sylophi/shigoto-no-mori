@@ -1,8 +1,8 @@
 // Git's remote: fetching, pulling and pushing, and the syncs with the upstream and the primary branch.
 import { SyncConflictsError } from "@shigomori/contracts/errors";
-import * as Cache from "effect/Cache";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { keptAnswers } from "../keptAnswers.ts";
 import { GitRefusedError, NoRemoteError } from "./documents.ts";
 import type { GitIndexArea } from "./gitIndex.ts";
 import type { MergingArea } from "./merging.ts";
@@ -31,14 +31,12 @@ export const makeRemote = ({
     const { listRemotes } = worktreeVerbs;
     // Overlapping callers share the one in flight, and nothing is kept
     // after it.
-    const fetches = yield* Cache.make({
-      lookup: (repo: string) =>
-        run(repo, ["fetch", "--all", "--quiet", "--prune"]),
-      capacity: Number.POSITIVE_INFINITY,
-      timeToLive: 0,
-    });
+    const fetches = yield* keptAnswers(
+      (repo: string) => run(repo, ["fetch", "--all", "--quiet", "--prune"]),
+      0,
+    );
     const fetchAll = Effect.fn("Git.fetchAll")(function* (repo: string) {
-      yield* Cache.get(fetches, repo);
+      yield* fetches.get(repo);
     });
 
     // Whether a rebase onto `ref` only replays commits that exist nowhere

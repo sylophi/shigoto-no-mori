@@ -21,7 +21,7 @@ import type * as Engine from "./Engine";
 import * as Ops from "./engineOps";
 import { isLoopbackPortListening } from "./net";
 import { findProject, findWorktreeIdentity } from "./projects";
-import { keptAnswer, keptAnswers } from "./util/kept";
+import { keptAnswer, keptAnswers } from "@shigomori/engine/keptAnswers";
 
 interface Worktree {
   readonly projectId: string;

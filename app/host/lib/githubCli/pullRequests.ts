@@ -22,7 +22,7 @@ import {
   summarizeChecks,
 } from "@shigomori/contracts/schemas";
 import * as GitHub from "@shigomori/engine/GitHub";
-import { ageOf, type Stamp } from "../util/kept";
+import { ageOf, type Stamp } from "@shigomori/engine/keptAnswers";
 import { GH_TIMEOUT_MS } from "./GithubCli";
 
 // gh in the repo at `cwd`, at the host's gh deadline.
