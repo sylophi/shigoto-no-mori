@@ -1,5 +1,4 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { callOf } from "@shigomori/contracts/contract";
 import { githubCliContract } from "@shigomori/contracts/modules/githubCli";
 import type { Project } from "@shigomori/contracts/schemas";
 import * as Atom from "effect/reactivity/Atom";
@@ -37,8 +36,8 @@ const pullRequestsAtom = Atom.family((key: string) => {
   const [deviceId = "", projectId = ""] = key.split("\n");
   return hostViewAtom({
     deviceId,
-    view: callOf(githubCliContract, "watchProjectPullRequests"),
-    input: { projectId },
+    view: (api) =>
+      api.view(githubCliContract, "watchProjectPullRequests", { projectId }),
   });
 });
 

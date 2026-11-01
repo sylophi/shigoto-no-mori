@@ -13,7 +13,6 @@ import { departed } from "@shigomori/contracts/schemas/config";
 import { fetchAgain } from "@/lib/askAgain";
 import { throughCancel } from "@/lib/queryClientOptions";
 import { hashKey, type QueryClient } from "@tanstack/react-query";
-import { callOf } from "@shigomori/contracts/contract";
 import { accountContract } from "@shigomori/contracts/modules/account";
 import { hubContract, type HubStatus } from "@shigomori/contracts/modules/hub";
 import type { DeviceInfo } from "@shigomori/contracts/hubProtocol";
@@ -24,7 +23,7 @@ import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
-import { clientAtoms, clientPushes, heard } from "@/lib/runtime/atoms";
+import { clientAtoms, heard } from "@/lib/runtime/atoms";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 import { directPresenceRule } from "@shared/hub/directPresence";
 import {
@@ -462,18 +461,17 @@ export const hubStatusAtom = Atom.keepAlive(
   clientAtoms.atom(() => {
     let pushed = false;
     let seeded = false;
-    const pushes = clientPushes(
-      hubContract,
-      callOf(hubContract, "statusChanged"),
-    ).pipe(
-      Stream.tap((status) =>
-        heard("hub status", () => {
-          pushed = true;
-          noteSessions(status);
-          reconcile({ status, hubDriven: true });
-        }),
-      ),
-    );
+    const pushes = pageApi()
+      .pushes(hubContract, "statusChanged")
+      .pipe(
+        Stream.tap((status) =>
+          heard("hub status", () => {
+            pushed = true;
+            noteSessions(status);
+            reconcile({ status, hubDriven: true });
+          }),
+        ),
+      );
     const boot = Stream.fromEffect(pageApi().hub.status()).pipe(
       Stream.catch(() => Stream.empty),
       Stream.filter(() => !pushed && !seeded),

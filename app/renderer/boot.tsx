@@ -24,13 +24,12 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { App } from "./App";
 import {
   accountsLeftAtom,
-  clientLinksAtom,
+  apiAtom,
   localDeviceIdAtom,
   hostSessionAtom,
   queryClientAtom,
 } from "./lib/runtime/atoms";
 import { ApiProvider, type RendererApi } from "./lib/runtime/pageApi";
-import type { ClientLinks } from "./lib/runtime/ClientLinks";
 import { AppToaster } from "./components/AppChrome";
 import { UpdateNews } from "./components/UpdateNews";
 import { ErrorDetailsHost } from "@shigomori/ui/primitives/inline-error.tsx";
@@ -86,24 +85,20 @@ export interface AppClient {
 
 export function startApp({
   api,
-  links,
 }: {
   // The page's api, which the entry built.
   api: RendererApi;
-  // The client's links (lib/runtime/client.ts), which the atoms' host
-  // views ride.
-  links: ClientLinks["Service"];
 }): AppClient {
   // The shared config (defaults, global error toasts, the meta
   // opt-outs) lives in lib/queryClientOptions.ts.
   const queryClient = createAppQueryClient(
     (deviceId) => remoteDeviceById(registry, deviceId)?.label,
   );
-  // The page's atoms, over its client's links, for as long as the
-  // page lives.
+  // The page's atoms, over its client's api, for as long as the page
+  // lives.
   const registry = AtomRegistry.make({
     initialValues: [
-      [clientLinksAtom, links],
+      [apiAtom, api],
       [localDeviceIdAtom, api.deviceId],
       [queryClientAtom, queryClient],
     ],

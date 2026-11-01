@@ -1,4 +1,3 @@
-import { callOf } from "@shigomori/contracts/contract";
 import { updaterContract } from "@shigomori/contracts/modules/updater";
 import { useMutation } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
@@ -23,10 +22,10 @@ import { useView, useViews, viewsOf } from "@/lib/runtime/viewHooks";
 // seeded by its read (pushedState). A peer's starts again on each new
 // session to it, which covers its restart into the new build.
 const updaterStateAtom = Atom.family((deviceId: string) =>
-  hostStateAtom(deviceId, {
-    read: callOf(updaterContract, "get"),
-    push: callOf(updaterContract, "state"),
-  }).pipe(Atom.setIdleTTL("1 minute")),
+  hostStateAtom(deviceId, (api) => ({
+    read: api.updater.get(),
+    push: api.pushes(updaterContract, "state"),
+  })).pipe(Atom.setIdleTTL("1 minute")),
 );
 
 const updaterStatesAtom = viewsOf(updaterStateAtom);

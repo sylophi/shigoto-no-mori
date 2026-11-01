@@ -5,17 +5,10 @@ import { ClerkProvider } from "@clerk/react";
 import { createBrowserHistory } from "@tanstack/react-router";
 import { mountWindow, startApp } from "@/boot";
 import { pageRoot } from "@/lib/themeRoot";
-import type { ClientLinks } from "@/lib/runtime/ClientLinks";
 import type { RendererApi } from "@/lib/runtime/pageApi";
 
-export function bootWeb({
-  api,
-  links,
-}: {
-  api: RendererApi;
-  links: ClientLinks["Service"];
-}): void {
-  mountWindow(startApp({ api, links }), {
+export function bootWeb({ api }: { api: RendererApi }): void {
+  mountWindow(startApp({ api }), {
     element: pageRoot(),
     ClerkProvider,
     history: createBrowserHistory(),

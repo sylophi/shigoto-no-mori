@@ -13,7 +13,6 @@
 import type { MirrorLink } from "@shigomori/ui/lib/forest.ts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
-import { callOf } from "@shigomori/contracts/contract";
 import { hostViewAtom } from "@/lib/runtime/atoms";
 import {
   useRegistry,
@@ -72,8 +71,7 @@ const EMPTY: MirrorListResult = {
 const mirrorsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    view: callOf(mirrorContract, "watch"),
-    input: undefined,
+    view: (api) => api.view(mirrorContract, "watch", undefined),
   }),
 );
 

@@ -21,7 +21,6 @@ import {
   type ScriptEvent,
   scriptErrorLine,
 } from "@shigomori/contracts/schemas";
-import { callOf } from "@shigomori/contracts/contract";
 import { errorMessageOf } from "@shigomori/contracts/errors";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import type {
@@ -30,15 +29,16 @@ import type {
 } from "@shigomori/ui/lib/scriptRun.ts";
 import { assertNever } from "@shigomori/ui/lib/utils.ts";
 import * as Effect from "effect/Effect";
+import * as FiberSet from "effect/FiberSet";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Stream from "effect/Stream";
+import type { HostApi } from "@/lib/runtime/Api";
 import {
   accountsLeftAtom,
   clientAtoms,
+  deviceApi,
   heard,
-  hostCalls,
-  hostPushes,
   localDeviceIdAtom,
   valueNow,
 } from "@/lib/runtime/atoms";
@@ -140,22 +140,6 @@ const withoutEntry = <K, V>(map: ReadonlyMap<K, V>, key: K) => {
   return next;
 };
 
-// The host calls a device's runs make, over its link.
-type ScriptCalls = {
-  readonly attach: (input: {
-    runId: string;
-  }) => Promise<{ streaming: boolean; output: string } | null>;
-  readonly cancel: (input: {
-    runId: string;
-  }) => Promise<{ cancelled: boolean }>;
-  readonly write: (input: { runId: string; data: string }) => Promise<void>;
-  readonly resize: (input: {
-    runId: string;
-    cols: number;
-    rows: number;
-  }) => Promise<void>;
-};
-
 export class ScriptRuns {
   // What the rows, consoles and the sidebar draw, mounted with the
   // atom that made this (scriptRunsAtom).
@@ -181,7 +165,9 @@ export class ScriptRuns {
   // The runs the device's list named last (settle).
   private listed = new Set<string>();
   private registry: AtomRegistry.AtomRegistry;
-  private api: ScriptCalls;
+  // The device's script calls, and what runs each as a Promise.
+  private scripts: HostApi["scripts"];
+  private call: <A, E>(call: Effect.Effect<A, E>) => Promise<A>;
   // Whether a removed-worktree notice is worth a toast even for a
   // worktree these runs never saw a run in. True for this machine's (a
   // renderer reload forgets runs the host still reaps), false for a
@@ -192,11 +178,13 @@ export class ScriptRuns {
 
   constructor(
     registry: AtomRegistry.AtomRegistry,
-    api: ScriptCalls,
+    scripts: HostApi["scripts"],
+    call: <A, E>(call: Effect.Effect<A, E>) => Promise<A>,
     warnOnUnseenRemoval: boolean,
   ) {
     this.registry = registry;
-    this.api = api;
+    this.scripts = scripts;
+    this.call = call;
     this.warnOnUnseenRemoval = warnOnUnseenRemoval;
   }
 
@@ -259,7 +247,7 @@ export class ScriptRuns {
     if (held?.status === "starting") return true;
     this.attaching.add(run.runId);
     try {
-      const joined = await this.api.attach({ runId: run.runId });
+      const joined = await this.call(this.scripts.attach({ runId: run.runId }));
       if (joined === null) return true;
       // This connection heard the run already (another window on it
       // attached, or this one started it before a reload), so what it
@@ -301,7 +289,8 @@ export class ScriptRuns {
     if (this.current.states.get(key)?.runId === run.runId) {
       return this.cancel(key);
     }
-    return (await this.api.cancel({ runId: run.runId })).cancelled;
+    return (await this.call(this.scripts.cancel({ runId: run.runId })))
+      .cancelled;
   }
 
   // Resolves whether the host stopped the run.
@@ -316,7 +305,9 @@ export class ScriptRuns {
     );
     let cancelled: boolean;
     try {
-      ({ cancelled } = await this.api.cancel({ runId: state.runId }));
+      ({ cancelled } = await this.call(
+        this.scripts.cancel({ runId: state.runId }),
+      ));
     } catch {
       // The exit that follows a real stop is what clears the flag, so a
       // stop that could not be asked must clear it here or the button
@@ -362,13 +353,13 @@ export class ScriptRuns {
   write(key: ScriptKey, data: string): void {
     const runId = this.liveInteractiveRunId(key);
     if (!runId) return;
-    void this.api.write({ runId, data }).catch(() => {});
+    void this.call(this.scripts.write({ runId, data })).catch(() => {});
   }
 
   resize(key: ScriptKey, cols: number, rows: number): void {
     const runId = this.liveInteractiveRunId(key);
     if (!runId) return;
-    void this.api.resize({ runId, cols, rows }).catch(() => {});
+    void this.call(this.scripts.resize({ runId, cols, rows })).catch(() => {});
   }
 
   private liveInteractiveRunId(key: ScriptKey): string | null {
@@ -684,21 +675,15 @@ export const scriptRunsAtom = Atom.family((deviceId: string) =>
         const localDeviceId = get(localDeviceIdAtom);
         const local = deviceId === localDeviceId;
         if (!local) get(accountsLeftAtom);
-        const call = yield* hostCalls(deviceId, localDeviceId);
-        const runs = new ScriptRuns(
-          get.registry,
-          {
-            attach: (input) => call(callOf(scriptsContract, "attach"), input),
-            cancel: (input) => call(callOf(scriptsContract, "cancel"), input),
-            write: (input) => call(callOf(scriptsContract, "write"), input),
-            resize: (input) => call(callOf(scriptsContract, "resize"), input),
-          },
-          local,
-        );
+        const api = yield* deviceApi(deviceId, localDeviceId);
+        // Each call runs on the atom's scope, so one still in flight
+        // ends with it.
+        const run = yield* FiberSet.makeRuntimePromise<never>();
+        const runs = new ScriptRuns(get.registry, api.scripts, run, local);
         get.mount(runs.state);
         const pushes = <K extends "event" | "stoppedForRemovedWorktree">(
           key: K,
-        ) => hostPushes(deviceId, localDeviceId, callOf(scriptsContract, key));
+        ) => api.pushes(scriptsContract, key);
         yield* Stream.runForEach(pushes("event"), (event) =>
           heard("script event", () => runs.handleEvent(event)),
         ).pipe(Effect.forkScoped({ startImmediately: true }));

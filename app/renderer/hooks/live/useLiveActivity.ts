@@ -6,7 +6,6 @@
 // its own surfaces read it: the scripts, the terminals and the mirrors
 // as their hosts' views (scripts:watch, terminals:list, mirror:watch),
 // the forwards off portForward:changed, so nothing here polls.
-import { callOf } from "@shigomori/contracts/contract";
 import { scriptsContract } from "@shigomori/contracts/modules/scripts";
 import * as Atom from "effect/reactivity/Atom";
 import type {
@@ -47,8 +46,7 @@ export type HostScripts = {
 const runningScriptsAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,
-    view: callOf(scriptsContract, "watch"),
-    input: undefined,
+    view: (api) => api.view(scriptsContract, "watch", undefined),
   }),
 );
 

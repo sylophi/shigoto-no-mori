@@ -1,70 +1,67 @@
 // The atoms a container reads a host view or a push stream through
-// (EFFECT.md, section 10): each on the client's runtime, over the links
-// the page's api rides, which the boot seeds into the page's registry
-// (clientLinksAtom) with this device's id (localDeviceIdAtom) and the
-// page's query client (queryClientAtom). A request stays a React Query
-// query.
-import type { Decoded, Encoded } from "@shigomori/contracts/codec";
-import {
-  type ContractCall,
-  type ContractModule,
-  channelOf,
-  type InputOf,
-  type OutputOf,
-  outputOf,
-  type PayloadOf,
-  payloadOf,
-} from "@shigomori/contracts/contract";
+// (EFFECT.md, section 10): each on the client's runtime, over the page's
+// api (Api.ts), which the boot seeds into the page's registry
+// (apiAtom) with this device's id (localDeviceIdAtom) and the page's
+// query client (queryClientAtom). A request stays a React Query query.
 import {
   isContractError,
   isNoDirectConnectionError,
   isPeerRefusal,
   isRemoteCallError,
 } from "@shigomori/contracts/errors";
-import { hubContract } from "@shigomori/contracts/modules/hub";
-import { projectsContract } from "@shigomori/contracts/modules/projects";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FiberSet from "effect/FiberSet";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Atom from "effect/reactivity/Atom";
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type { QueryClient } from "@tanstack/react-query";
-import type { Link } from "@shared/ipc/transport";
-import { ClientLinks } from "./ClientLinks";
-import { peerLink } from "./peerLink";
+import { Api, type ClientApi, type HostApi } from "./Api";
 
 // Put in the registry by the boot, before anything reads a view.
-export const clientLinksAtom = Atom.keepAlive(
-  Atom.make<ClientLinks["Service"] | null>(null),
-);
+export const apiAtom = Atom.keepAlive(Atom.make<ClientApi | null>(null));
 
-// This device's id, put in the registry by the boot beside the links:
-// a view of it rides the local link, any other device's the hub hop.
+// This device's id, put in the registry by the boot beside the api:
+// a view of it rides this machine's own link, any other device's the
+// hub hop.
 export const localDeviceIdAtom = Atom.keepAlive(Atom.make(""));
 
 // The page's query client, put in the registry by the boot beside the
-// links, for an atom whose pushes move a request's cache (a worktree's
+// api, for an atom whose pushes move a request's cache (a worktree's
 // removal, a carry-over rewriting project.json).
 export const queryClientAtom = Atom.keepAlive(
   Atom.make<QueryClient | null>(null),
 );
 
 export const clientAtoms = Atom.runtime((get) => {
-  const links = get(clientLinksAtom);
-  return links === null
+  const api = get(apiAtom);
+  return api === null
     ? Layer.effect(
-        ClientLinks,
-        Effect.die(new Error("the boot seeds the client's links")),
+        Api,
+        Effect.die(new Error("the boot seeds the client's api")),
       )
-    : Layer.succeed(ClientLinks, links);
+    : Layer.succeed(Api, api);
 });
+
+// One device's api: the page's for this machine, a peer's (peerApi)
+// over the hub hop.
+export const deviceApi = (deviceId: string, localDeviceId: string) =>
+  Effect.map(
+    Api,
+    (api): HostApi =>
+      deviceId === localDeviceId ? api : api.peerApi(deviceId),
+  );
+
+// A stream on one device's api.
+export const deviceStream = <A, E>(
+  deviceId: string,
+  localDeviceId: string,
+  stream: (api: HostApi) => Stream.Stream<A, E>,
+): Stream.Stream<A, E, Api> =>
+  Stream.unwrap(Effect.map(deviceApi(deviceId, localDeviceId), stream));
 
 // How many sessions to each device's host have landed, which the boot
 // counts: a peer's (onSessionLanded), and this machine's link landing
@@ -120,113 +117,28 @@ const REDIAL = Schedule.exponential("250 millis", 2).pipe(
 // still dialing at boot.
 const PEER_TRIES = 7;
 
-// One device's host modules: this machine's over its own link, a peer's
-// over the hub hop.
-const hostLinkOf = (deviceId: string, localDeviceId: string) =>
-  Effect.gen(function* () {
-    const { linkOf } = yield* ClientLinks;
-    return deviceId === localDeviceId
-      ? linkOf(projectsContract)
-      : peerLink(linkOf(hubContract), deviceId);
-  });
-
-// A push's payloads on a link, decoded unless the link is to this
-// machine's own app (a peer's cross the hub hop untyped). One that
-// doesn't read is dropped, there being no caller to fail.
-export function pushesOn<R extends ContractCall>(
-  link: Link,
-  push: R,
-): Stream.Stream<Decoded<PayloadOf<R>>> {
-  type A = Decoded<PayloadOf<R>>;
-  const values = link.pushes(channelOf(push));
-  if (link.local === true) return values as Stream.Stream<A>;
-  const decode = Schema.decodeUnknownEffect(payloadOf(push));
-  return values.pipe(
-    Stream.mapEffect((value) =>
-      decode(value).pipe(
-        Effect.tapError(() =>
-          Effect.logWarning(
-            `dropped a ${channelOf(push)} push this build does not read`,
-          ),
-        ),
-        Effect.option,
-      ),
-    ),
-    Stream.filter(Option.isSome),
-    Stream.map((some) => some.value),
-  );
-}
-
-// A view's values on a link, decoded unless the link is to this
-// machine's own app. One that doesn't read ends the view.
-export function viewOn<R extends ContractCall>(
-  link: Link,
-  view: R,
-  input: unknown,
-): Stream.Stream<Decoded<PayloadOf<R>>, unknown> {
-  type A = Decoded<PayloadOf<R>>;
-  const channel = channelOf(view);
-  const values = link.view(channel, input);
-  if (link.local === true) return values as Stream.Stream<A, unknown>;
-  const decode = Schema.decodeUnknownEffect(payloadOf(view));
-  return values.pipe(Stream.mapEffect((value) => decode(value)));
-}
-
-// One device's pushes on its host (contracts' callOf), as they come, for
-// as long as the stream runs: this machine's over its own link, a peer's
-// out of the hub hop.
-export const hostPushes = <R extends ContractCall>(
-  deviceId: string,
-  localDeviceId: string,
-  push: R,
-) =>
-  Stream.unwrap(
-    Effect.map(hostLinkOf(deviceId, localDeviceId), (link) =>
-      pushesOn(link, push),
-    ),
-  );
-
-// The same for a module of the client's own (the hub's status).
-export const clientPushes = <R extends ContractCall>(
-  module: ContractModule,
-  push: R,
-) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const { linkOf } = yield* ClientLinks;
-      return pushesOn(linkOf(module), push);
-    }),
-  );
-
 // State a device or this window's shell keeps whole and pushes on
 // every change (the updater's, the guide's), as its stream: the pushes,
 // with a read as the seed, kept only if no push reached the stream's
 // reader between the read's start and its answer, so the order is the
 // reader's, not the fibers'. A read that fails fails the stream.
-export function pushedState<R extends ContractCall, P extends ContractCall>(
-  link: Link,
-  options: { readonly read: R; readonly push: P },
-): Stream.Stream<Decoded<PayloadOf<P>>, unknown, ClientLinks> {
-  type A = Decoded<PayloadOf<P>>;
+type PushedState<A> = {
+  readonly read: Effect.Effect<A, unknown>;
+  readonly push: Stream.Stream<A>;
+};
+
+function pushedState<A>({
+  read,
+  push,
+}: PushedState<A>): Stream.Stream<A, unknown> {
   let pushes = 0;
-  const read = Effect.suspend(() => {
+  const seed = Effect.suspend(() => {
     const after = pushes;
-    return link.call(channelOf(options.read), undefined).pipe(
-      Effect.flatMap((output) =>
-        link.local === true
-          ? Effect.succeed(output as A)
-          : Effect.orDie(
-              Schema.decodeUnknownEffect(outputOf(options.read))(output),
-            ),
-      ),
-      Effect.map((value) => ({ value: value as A, after })),
-    );
+    return Effect.map(read, (value) => ({ value, after }));
   });
   return Stream.merge(
-    (pushesOn(link, options.push) as Stream.Stream<A>).pipe(
-      Stream.map((value) => ({ value, after: undefined })),
-    ),
-    Stream.fromEffect(read),
+    push.pipe(Stream.map((value) => ({ value, after: undefined }))),
+    Stream.fromEffect(seed),
   ).pipe(
     Stream.filter((next) => {
       if (next.after === undefined) {
@@ -239,29 +151,21 @@ export function pushedState<R extends ContractCall, P extends ContractCall>(
   );
 }
 
-// The same over this window's own link for a module of its shell,
-// asked again as a view is (redialing).
-export const shellState = <R extends ContractCall, P extends ContractCall>(
-  module: ContractModule,
-  options: Parameters<typeof pushedState<R, P>>[1],
-) => {
+// The same for a module of this window's shell, asked again as a view
+// is (redialing).
+export const shellState = <A>(state: (api: ClientApi) => PushedState<A>) => {
   const memory = { seen: false };
   return redialing(
-    Stream.unwrap(
-      Effect.gen(function* () {
-        const { linkOf } = yield* ClientLinks;
-        return pushedState(linkOf(module), options);
-      }),
-    ),
+    Stream.unwrap(Effect.map(Api, (api) => pushedState(state(api)))),
     { peer: false, memory },
   );
 };
 
 // The same for one device's host module: it starts again on each new
 // session to the host, which covers a restart into a new build.
-export const hostStateAtom = <R extends ContractCall, P extends ContractCall>(
+export const hostStateAtom = <A>(
   deviceId: string,
-  options: Parameters<typeof pushedState<R, P>>[1],
+  state: (api: HostApi) => PushedState<A>,
 ) => {
   const memory = { seen: false };
   return clientAtoms.atom((get) => {
@@ -269,42 +173,11 @@ export const hostStateAtom = <R extends ContractCall, P extends ContractCall>(
     const peer = deviceId !== localDeviceId;
     get(hostSessionAtom(deviceId));
     return redialing(
-      Stream.unwrap(
-        Effect.map(hostLinkOf(deviceId, localDeviceId), (link) =>
-          pushedState(link, options),
-        ),
-      ),
+      deviceStream(deviceId, localDeviceId, (api) => pushedState(state(api))),
       { peer, memory },
     );
   });
 };
-
-// One device's host calls as Promises, for an atom whose methods a
-// caller outside an effect uses (the script runs): each runs on the
-// atom's scope, so one still in flight ends with it, and its answer is
-// decoded where it may come from another build.
-export const hostCalls = (deviceId: string, localDeviceId: string) =>
-  Effect.gen(function* () {
-    const link = yield* hostLinkOf(deviceId, localDeviceId);
-    const run = yield* FiberSet.makeRuntimePromise<never>();
-    return <R extends ContractCall>(
-      call: R,
-      input: Encoded<InputOf<R>>,
-    ): Promise<Decoded<OutputOf<R>>> =>
-      run(
-        link
-          .call(channelOf(call), input)
-          .pipe(
-            Effect.flatMap((output) =>
-              link.local === true
-                ? Effect.succeed(output as Decoded<OutputOf<R>>)
-                : Effect.orDie(
-                    Schema.decodeUnknownEffect(outputOf(call))(output),
-                  ),
-            ),
-          ),
-      );
-  });
 
 // What a push stream does as each value comes besides keeping it (a
 // toast, a cache write), run so that one that throws is logged and the
@@ -367,56 +240,36 @@ function redialing<A, R>(
   ) as Stream.Stream<A, never, R>;
 }
 
-// A host view's values, decoded where they may come from another build
-// (a peer's), as an atom. The device's own failure (an unknown project)
-// is what the view ends with. A refusal and a dropped link are asked
-// again (REDIAL), and a peer's view starts again on a new session to
-// it. Kept a while after its last reader goes, so a page that comes
-// back finds it streaming.
-export function hostViewAtom<R extends ContractCall>(options: {
+// A host view's values as an atom. The device's own failure (an
+// unknown project) is what the view ends with. A refusal and a dropped
+// link are asked again (REDIAL), and a peer's view starts again on a new
+// session to it. Kept a while after its last reader goes, so a page
+// that comes back finds it streaming.
+export function hostViewAtom<A>(options: {
   readonly deviceId: string;
-  // The view (contracts' callOf), whose values are decoded with its own
-  // schema.
-  readonly view: R;
-  readonly input: Encoded<InputOf<R>>;
+  // The view, on the device's api.
+  readonly view: (api: HostApi) => Stream.Stream<A, unknown>;
   // Each value as it comes, and the stream going (its last reader gone,
   // or the device's own failure), for a watcher outside React.
-  readonly onValue?: (value: Decoded<PayloadOf<R>>) => void;
+  readonly onValue?: (value: A) => void;
   readonly onStop?: () => void;
   // How long it keeps streaming after its last reader goes, a minute
   // unless said.
   readonly idle?: Duration.Input;
-}): Atom.Atom<AsyncResult.AsyncResult<Decoded<PayloadOf<R>>, unknown>> {
-  type A = Decoded<PayloadOf<R>>;
-  const decode = Schema.decodeUnknownEffect(payloadOf(options.view));
+}): Atom.Atom<AsyncResult.AsyncResult<A, unknown>> {
   const memory = { seen: false };
-  const valuesOn = (localDeviceId: string) => {
-    const peer = options.deviceId !== localDeviceId;
-    return Stream.unwrap(
-      Effect.map(hostLinkOf(options.deviceId, localDeviceId), (link: Link) =>
-        link
-          .view(channelOf(options.view), options.input)
-          .pipe(
-            Stream.mapEffect((value) =>
-              link.local === true
-                ? Effect.succeed(value as A)
-                : Effect.orDie(decode(value)),
-            ),
-          ),
-      ),
-    ).pipe(
-      (values) => redialing(values, { peer, memory }),
-      Stream.tap((value) => Effect.sync(() => options.onValue?.(value))),
-      Stream.ensuring(Effect.sync(() => options.onStop?.())),
-    );
-  };
   return clientAtoms
     .atom((get) => {
       const localDeviceId = get(localDeviceIdAtom);
-      if (options.deviceId !== localDeviceId) {
-        get(hostSessionAtom(options.deviceId));
-      }
-      return valuesOn(localDeviceId);
+      const peer = options.deviceId !== localDeviceId;
+      if (peer) get(hostSessionAtom(options.deviceId));
+      return redialing(
+        deviceStream(options.deviceId, localDeviceId, options.view),
+        { peer, memory },
+      ).pipe(
+        Stream.tap((value) => Effect.sync(() => options.onValue?.(value))),
+        Stream.ensuring(Effect.sync(() => options.onStop?.())),
+      );
     })
     .pipe(Atom.setIdleTTL(options.idle ?? "1 minute")) as Atom.Atom<
     AsyncResult.AsyncResult<A, unknown>
@@ -521,23 +374,6 @@ export function endWith<A, E>(
     if (!AsyncResult.isSuccess(result)) return;
     if (until === "next" || until.caughtUp(result.value)) end();
   });
-}
-
-// A mutation on one device's host, as an atom function: its call over
-// the device's link.
-export function hostCallFn<Arg>(options: {
-  readonly deviceId: string;
-  readonly call: (arg: Arg) => { channel: string; input: unknown };
-}) {
-  return clientAtoms.fn((arg: Arg, get) =>
-    Effect.flatMap(
-      hostLinkOf(options.deviceId, get(localDeviceIdAtom)),
-      (link) => {
-        const { channel, input } = options.call(arg);
-        return link.call(channel, input);
-      },
-    ),
-  );
 }
 
 // What a container reads off a view, in the shape it reads a query in:

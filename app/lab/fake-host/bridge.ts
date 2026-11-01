@@ -1994,7 +1994,7 @@ export function installFakeHostBridge(
     // unless it stands in for the released app (frames.tsx).
     dev?: boolean;
   } = {},
-): { api: RendererApi; links: ClientLinks["Service"] } {
+): { api: RendererApi } {
   WEB_SHELL = opts.webShell === true;
   villageLife =
     opts.villageLife ??
@@ -2423,5 +2423,5 @@ export function installFakeHostBridge(
     });
   }
 
-  return { api, links: fixtureClient.links };
+  return { api };
 }
