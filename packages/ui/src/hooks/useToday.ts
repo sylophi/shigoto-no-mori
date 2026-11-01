@@ -3,7 +3,7 @@ import { calendarDayOf } from "../lib/villagers/birthdays.ts";
 import { subscribeClock } from "./useNow.ts";
 
 // The local calendar day, for what changes with it (a villager's
-// birthday). It rides the shared clock's tick and wake, but the snapshot
+// birthday). It rides the shared clock's tick, but the snapshot
 // is one Date per day, so subscribers re-render once, when the day rolls
 // over (up to a tick late), not on every tick.
 

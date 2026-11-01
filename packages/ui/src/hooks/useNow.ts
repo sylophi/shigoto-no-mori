@@ -5,7 +5,7 @@ import { useSyncExternalStore } from "react";
 // at whatever render happened last. One interval serves every
 // subscriber, and it only runs while someone is subscribed and the
 // document is visible: a hidden window pays nothing and catches up on
-// the next visibility change or focus. The tick is coarse on purpose: under a
+// the next visibility change. The tick is coarse on purpose: under a
 // minute formatRelativeTime shows seconds, so a label can lag the wall
 // clock by up to one tick, and past that it shows minutes.
 const TICK_MS = 10_000;
@@ -46,7 +46,6 @@ export function subscribeClock(listener: () => void): () => void {
     // from hours ago.
     now = Date.now();
     document.addEventListener("visibilitychange", onVisibilityChange);
-    window.addEventListener("focus", onVisibilityChange);
     start();
   }
   listeners.add(listener);
@@ -54,7 +53,6 @@ export function subscribeClock(listener: () => void): () => void {
     listeners.delete(listener);
     if (listeners.size === 0) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      window.removeEventListener("focus", onVisibilityChange);
       stop();
     }
   };
