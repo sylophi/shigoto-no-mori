@@ -4,6 +4,7 @@ import type { WorktreeFile } from "@shigomori/contracts/schemas";
 import { Button } from "../../primitives/button.tsx";
 import { CenteredMessage } from "../../primitives/centered-message.tsx";
 import { EmptyPanel } from "../../primitives/empty-panel.tsx";
+import { SHOWS_LATE } from "../../primitives/skeleton.tsx";
 import { formatBytes } from "../../lib/formatBytes.ts";
 import { cn } from "../../lib/utils.ts";
 import { MediaFileView } from "../files/FileViewerView.tsx";
@@ -80,7 +81,7 @@ export function MediaDiffSideView({
       )}
     >
       {reading ? (
-        <CenteredMessage>
+        <CenteredMessage className={SHOWS_LATE}>
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
         </CenteredMessage>
       ) : file?.kind === "media" ? (

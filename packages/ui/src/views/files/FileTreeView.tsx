@@ -9,7 +9,9 @@ import { DropdownMenuItem } from "../../primitives/dropdown-menu.tsx";
 import { MaterialIcon } from "../../primitives/material-icon.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { cn } from "../../lib/utils.ts";
+import { opensOnPress, warmOnRest } from "../../lib/pointerIntent.ts";
 import { parentOf } from "./treePaths.ts";
+import { SHOWS_LATE } from "../../primitives/skeleton.tsx";
 
 // The files page's list: the worktree as a folder tree (FileTree.tsx
 // reads it a folder at a time). Rows are one flat run of buttons in
@@ -48,6 +50,12 @@ export function FileTreeView({
     if (rows.length === 0) return;
     const active = e.currentTarget.ownerDocument.activeElement;
     const at = rows.findIndex((row) => row === active);
+    // The tree itself has focus (it takes it as the page opens): the
+    // first arrow lands on its tab stop.
+    if (at === -1 && e.key.startsWith("Arrow")) {
+      e.preventDefault();
+      return rows.find((row) => row.tabIndex === 0)?.focus();
+    }
     const row = rows[at];
     const focus = (i: number) => {
       e.preventDefault();
@@ -110,8 +118,12 @@ export function FileTreeView({
             aria-label="Files"
             // The rows take the tab stop (see tabIndex on the row).
             tabIndex={-1}
+            ref={takeFocus}
             onKeyDown={onKeyDown}
-            className={cn("flex flex-col overflow-y-auto p-1", className)}
+            className={cn(
+              "flex flex-col overflow-y-auto p-1 outline-none",
+              className,
+            )}
           />
         }
       >
@@ -141,6 +153,7 @@ export function FileTreeRowsView({
   onToggleFolder,
   onSelectFile,
   onOpenFile,
+  warm,
   renderFolder,
 }: {
   // The folder they are in, "" for the top.
@@ -157,6 +170,9 @@ export function FileTreeRowsView({
   onSelectFile: (path: string) => void;
   // Opens a file in the editor, on a double click.
   onOpenFile?: (path: string) => void;
+  // Starts reading a file, or listing a shut folder, once the pointer
+  // rests on its row.
+  warm?: { file: (path: string) => void; folder: (path: string) => void };
   // An open folder's rows.
   renderFolder: (path: string) => ReactNode;
 }) {
@@ -184,9 +200,16 @@ export function FileTreeRowsView({
               : -1
           }
           ref={selected ? revealRow : undefined}
-          onClick={() =>
-            entry.isDirectory ? onToggleFolder(path, !open) : onSelectFile(path)
-          }
+          {...opensOnPress(() =>
+            entry.isDirectory
+              ? onToggleFolder(path, !open)
+              : onSelectFile(path),
+          )}
+          {...warmOnRest(
+            warm && !open && !selected
+              ? () => (entry.isDirectory ? warm.folder : warm.file)(path)
+              : undefined,
+          )}
           onDoubleClick={
             entry.isDirectory || !onOpenFile
               ? undefined
@@ -194,7 +217,7 @@ export function FileTreeRowsView({
           }
           style={{ paddingLeft: `${depth * 12 + 4}px` }}
           className={cn(
-            "flex w-full shrink-0 items-center gap-1.5 rounded-md py-1 pr-2 text-left transition-colors",
+            "flex w-full shrink-0 items-center gap-1.5 rounded-md py-1 pr-2 text-left",
             selected
               ? "bg-accent text-accent-foreground"
               : "hover:bg-accent/50 hover:text-foreground",
@@ -235,6 +258,15 @@ export function FileTreeRowsView({
 const revealRow = (row: HTMLButtonElement | null) =>
   row?.scrollIntoView({ block: "nearest" });
 
+// The tree is what the page is for, so the arrow keys work on it from
+// the start, unless the page was opened onto something else that holds
+// focus.
+function takeFocus(tree: HTMLDivElement | null) {
+  if (tree && tree.ownerDocument.activeElement === tree.ownerDocument.body) {
+    tree.focus({ preventScroll: true });
+  }
+}
+
 // A folder's stand-in row while it loads, when it is empty, or when it
 // couldn't be read, at the depth its entries would sit.
 export function FileTreeNoteView({
@@ -250,7 +282,10 @@ export function FileTreeNoteView({
     <div
       role="none"
       style={{ paddingLeft: `${depth * 12 + 22}px` }}
-      className="flex shrink-0 items-center gap-1.5 py-1 text-2xs text-muted-foreground"
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 py-1 text-2xs text-muted-foreground",
+        loading && SHOWS_LATE,
+      )}
     >
       {loading && <Loader2 aria-hidden className="size-3 animate-spin" />}
       {children}

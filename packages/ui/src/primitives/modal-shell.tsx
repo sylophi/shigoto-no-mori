@@ -53,6 +53,9 @@ interface ModalShellProps {
   // Optional override for the popover's class list (sizing, layout).
   // Defaults to a max-w-xl column.
   popoverClassName?: string;
+  // Comes and goes without the fade, for a dialog that is up many times
+  // an hour (the palette), where it would only be a wait to read it.
+  still?: boolean;
   children: ReactNode;
 }
 
@@ -67,6 +70,7 @@ export function ModalShell({
   onEscape,
   dismissable = true,
   popoverClassName,
+  still = false,
   children,
 }: ModalShellProps) {
   // Escape lives on the shell's document, not the shell: after a click
@@ -126,12 +130,13 @@ export function ModalShell({
     backdrop.addEventListener("scroll", onScroll, true);
     return () => {
       backdrop.removeEventListener("scroll", onScroll, true);
-      // Nothing to see go: motion is reduced, or the window is hidden
-      // (its fade would wait to play until it's shown again), or the
-      // shell is still on its way in (a fresh copy would jump back to
-      // fully open first).
+      // Nothing to see go: the shell is still, motion is reduced, the
+      // window is hidden (its fade would wait to play until it's shown
+      // again), or the shell is on its way in (a fresh copy would jump
+      // back to fully open first).
       const doc = backdrop.ownerDocument;
       if (
+        still ||
         doc.defaultView?.matchMedia("(prefers-reduced-motion: reduce)")
           .matches ||
         doc.hidden ||
@@ -158,7 +163,7 @@ export function ModalShell({
         fadeOut(ghost);
       });
     };
-  }, [backdrop]);
+  }, [backdrop, still]);
   // Portaled to the theme root: the shell is fixed and z-50, but under
   // doubutsu the main canvas is its own stacking context (isolation:
   // isolate in doubutsu.css), which would trap the shell beneath the
@@ -180,7 +185,9 @@ export function ModalShell({
         <Dialog.Viewport
           ref={setBackdrop}
           className={cn(
-            "group/modal fixed duration-200 ease-(--ease-out-quart) data-closed:animate-out data-closed:duration-150 data-closed:fade-out-0 data-closed:fill-mode-forwards motion-safe:animate-in motion-safe:fade-in-0",
+            "group/modal fixed",
+            !still &&
+              "duration-200 ease-(--ease-out-quart) data-closed:animate-out data-closed:duration-150 data-closed:fade-out-0 data-closed:fill-mode-forwards motion-safe:animate-in motion-safe:fade-in-0",
             MODAL_BACKDROP,
           )}
         >
@@ -189,7 +196,9 @@ export function ModalShell({
             render={
               <ModalBox
                 className={cn(
-                  "outline-none duration-200 ease-(--ease-out-quart) group-data-closed/modal:duration-150 group-data-closed/modal:fill-mode-forwards motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:slide-in-from-top-2 group-data-closed/modal:animate-out group-data-closed/modal:zoom-out-95",
+                  "outline-none",
+                  !still &&
+                    "duration-200 ease-(--ease-out-quart) group-data-closed/modal:duration-150 group-data-closed/modal:fill-mode-forwards motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:slide-in-from-top-2 group-data-closed/modal:animate-out group-data-closed/modal:zoom-out-95",
                   popoverClassName,
                 )}
               />

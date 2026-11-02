@@ -35,6 +35,7 @@ import type {
 } from "../../../lib/commitRewrite.ts";
 import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
+import { opensOnPress, warmOnRest } from "../../../lib/pointerIntent.ts";
 import type { CommitSummary } from "@shigomori/contracts/schemas";
 
 // The row the Git page shows, `branch` or `commit:<hash>`, marked in
@@ -58,6 +59,7 @@ export function CommitRowView({
   menu = true,
   unpushed = false,
   onOpen,
+  warm,
   onAmend,
 }: {
   commit: CommitSummary;
@@ -77,6 +79,8 @@ export function CommitRowView({
   unpushed?: boolean;
   // Shows the commit beside the list (CommitRow).
   onOpen: () => void;
+  // Starts reading the commit once the pointer rests on its row.
+  warm?: () => void;
   // Opens the Changes tab to amend it, for the newest commit.
   onAmend: () => void;
 }) {
@@ -93,7 +97,8 @@ export function CommitRowView({
     <button
       type="button"
       aria-current={selected || undefined}
-      onClick={onOpen}
+      {...opensOnPress(onOpen)}
+      {...warmOnRest(warm)}
       className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left focus-visible:outline-2 focus-visible:outline-ring"
     >
       <span
@@ -127,7 +132,7 @@ export function CommitRowView({
     return (
       <div
         className={cn(
-          "rounded-md transition-colors",
+          "rounded-md",
           selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
         )}
       >
@@ -141,7 +146,7 @@ export function CommitRowView({
         render={
           <div
             className={cn(
-              "group/commit relative rounded-md transition-colors",
+              "group/commit relative rounded-md",
               selected
                 ? "bg-accent text-accent-foreground"
                 : "hover:bg-accent/50 has-data-popup-open:bg-accent/50",

@@ -8,6 +8,7 @@ import type { Worktree } from "@shigomori/contracts/schemas";
 import { useSidebarMarks } from "@/hooks/config/useSidebarMarks";
 import { useWorktreeForwardTip } from "@/hooks/remote/usePortForwards";
 import { useResident } from "@/hooks/villagers/useResident";
+import { useWarmWorktreePage } from "@/hooks/worktrees/useWarmWorktreePage";
 import type { SidebarDeviceBadge } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
   WORKTREE_DETAIL_ROUTE_ID,
@@ -72,10 +73,12 @@ export function useWorktreeEntry({
   const activity = running === "failed" && onScreen ? null : running;
 
   const resident = useResident(worktree);
+  const warm = useWarmWorktreePage();
   const forwardTip = useWorktreeForwardTip(deviceId, worktree);
   return {
     look: { isSelected, activity, terminal, isDeleting },
     open: () => void navigate({ to: WORKTREE_ROUTE_PATHS.detail, params }),
+    warm: () => warm(deviceId, worktree),
     resident,
     // Only a peer's worktree is forwarded from here.
     forwardTip: device ? forwardTip : undefined,

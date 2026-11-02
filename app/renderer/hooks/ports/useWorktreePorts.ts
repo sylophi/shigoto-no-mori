@@ -22,17 +22,18 @@ const worktreePortsAtom = Atom.family((key: string) => {
   });
 });
 
+export const worktreePortsView = (
+  deviceId: string,
+  worktree: { projectId: string; id: string },
+) =>
+  worktreePortsAtom(
+    `${deviceId}\n${worktree.projectId}\n${worktree.id}\n${worktreeViewGeneration(deviceId, worktree.id)}`,
+  );
+
 export function useWorktreePorts(worktree: {
   projectId: string;
   id: string;
 }): LiveViewState<WorktreePortsResult> {
   const { deviceId, hasHost } = useHostScope();
-  const generation = worktreeViewGeneration(deviceId, worktree.id);
-  return useView(
-    hasHost
-      ? worktreePortsAtom(
-          `${deviceId}\n${worktree.projectId}\n${worktree.id}\n${generation}`,
-        )
-      : null,
-  );
+  return useView(hasHost ? worktreePortsView(deviceId, worktree) : null);
 }

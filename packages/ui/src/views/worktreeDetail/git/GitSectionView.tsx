@@ -6,6 +6,7 @@ import { SectionHeading } from "../../../primitives/section-heading.tsx";
 import { TONE_MARK } from "../../../primitives/status-dot.tsx";
 import { pluralize } from "@shigomori/contracts/words";
 import { cn } from "../../../lib/utils.ts";
+import { opensOnPress, warmOnRest } from "../../../lib/pointerIntent.ts";
 import { getBrowseLeafSegment } from "@shigomori/contracts/projectPaths";
 import type {
   CommitSummary,
@@ -33,6 +34,7 @@ export function GitSectionView({
   syncPills,
   operationBanner,
   nav,
+  warm,
 }: {
   worktree: Worktree;
   // The uncommitted changes, the stashes, newest first, and the
@@ -54,6 +56,12 @@ export function GitSectionView({
     toStash: (hash: string) => void;
     toCommit: (hash: string) => void;
     toBranchDiff: () => void;
+  };
+  // The reads each way in opens on, started as the pointer rests on it.
+  warm?: {
+    changes: () => void;
+    stash: (hash: string) => void;
+    commit: (hash: string) => void;
   };
 }) {
   const named = files.slice(0, NAMED_FILES);
@@ -78,6 +86,7 @@ export function GitSectionView({
         <EntryRow
           label="Changes"
           onOpen={nav.toDiff}
+          warm={warm?.changes}
           trailing={
             // With not one file counted (binaries, or more new files than
             // the host counts) there is no total, not "+0 −0".
@@ -126,6 +135,7 @@ export function GitSectionView({
           <EntryRow
             label="Stashes"
             onOpen={() => nav.toStash(newestStash.hash)}
+            warm={warm && (() => warm.stash(newestStash.hash))}
             trailing={
               <Muted>
                 <RelativeDate date={newestStash.date} />
@@ -156,6 +166,7 @@ export function GitSectionView({
               commit={commit}
               local={index < worktree.unpushedCount}
               onOpen={() => nav.toCommit(commit.hash)}
+              warm={warm && (() => warm.commit(commit.hash))}
             />
           ))
         )}
@@ -177,11 +188,13 @@ export function GitSectionView({
 function EntryRow({
   label,
   onOpen,
+  warm,
   trailing,
   children,
 }: {
   label: string;
   onOpen: (() => void) | undefined;
+  warm?: () => void;
   trailing?: ReactNode;
   children: ReactNode;
 }) {
@@ -211,10 +224,11 @@ function EntryRow({
   return (
     <button
       type="button"
-      onClick={onOpen}
+      {...opensOnPress(onOpen)}
+      {...warmOnRest(warm)}
       className={cn(
         shape,
-        "transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring",
+        "hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring",
       )}
     >
       {body}
@@ -229,16 +243,19 @@ function CommitRow({
   commit,
   local,
   onOpen,
+  warm,
 }: {
   label: string;
   commit: CommitSummary;
   local: boolean;
   onOpen: () => void;
+  warm?: () => void;
 }) {
   return (
     <EntryRow
       label={label}
       onOpen={onOpen}
+      warm={warm}
       trailing={
         <span className="grid grid-cols-[4.5rem_4.5rem_4.5rem] items-center text-muted-foreground phone:grid-cols-[4.5rem_4.5rem]">
           <span className="font-mono phone:hidden">{commit.hash}</span>

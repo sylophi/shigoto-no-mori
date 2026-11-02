@@ -19,6 +19,7 @@ import {
   type RefObject,
 } from "react";
 import { AlertTriangle, GitPullRequest } from "lucide-react";
+import { warmOnRest } from "../../lib/pointerIntent.ts";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { PageHeaderView } from "../shared/PageHeaderView.tsx";
 import { PAGE_BODY } from "../shared/PageShellView.tsx";
@@ -178,6 +179,7 @@ export function ProjectTileView({
   onLocate,
   unlisted,
   onOpen,
+  warm,
   onHover,
   triggerRef,
   icon,
@@ -198,6 +200,9 @@ export function ProjectTileView({
   // neither opens a worktree nor offers to make one until it knows.
   unlisted: boolean;
   onOpen: () => void;
+  // Starts the reads the worktree the tile opens shows, once the
+  // pointer rests on it.
+  warm?: () => void;
   // Hover reveals the actions.
   onHover: (hovered: boolean) => void;
   // The actions' menu trigger, which a right-click pops.
@@ -246,6 +251,7 @@ export function ProjectTileView({
       <button
         type="button"
         {...drag?.listeners}
+        {...warmOnRest(missing ? undefined : warm)}
         data-project-tile
         disabled={missing ? onLocate === undefined : unlisted}
         onClick={missing ? onLocate : onOpen}

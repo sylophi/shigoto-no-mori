@@ -20,6 +20,7 @@ const counted = (label: string, count: number | null) =>
 export function GitPageSidebarView({
   tab,
   onTab,
+  warmTab,
   changedCount,
   stashCount,
   hasHistory,
@@ -30,6 +31,8 @@ export function GitPageSidebarView({
 }: {
   tab: GitTab;
   onTab: (tab: GitTab) => void;
+  // The reads a tab opens on, once the pointer rests on it.
+  warmTab?: (tab: GitTab) => void;
   changedCount: number | null;
   stashCount: number;
   // A commit to open History on.
@@ -52,6 +55,7 @@ export function GitPageSidebarView({
           optionClassName="flex-1 justify-center px-1 py-0.5 text-xs"
           value={tab}
           onChange={onTab}
+          warm={warmTab}
           options={[
             {
               value: "changes",

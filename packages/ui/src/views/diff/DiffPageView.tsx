@@ -36,6 +36,7 @@ import {
   hunkAnnotations,
   type HunkControls,
 } from "./HunkBarView.tsx";
+import { SHOWS_LATE } from "../../primitives/skeleton.tsx";
 
 export type DiffStyle = "unified" | "split";
 
@@ -263,7 +264,7 @@ export function DiffPaneView({
       className="min-h-0 min-w-0 flex-1 overflow-auto bg-background"
     >
       {state === "loading" ? (
-        <CenteredMessage>
+        <CenteredMessage className={SHOWS_LATE}>
           <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
           Computing diff…
         </CenteredMessage>

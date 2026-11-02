@@ -6,7 +6,7 @@ import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 // One file of a worktree. Nothing watches plain files for edits, so it
 // goes stale in seconds and is refetched on mount and focus: coming back
 // from an editor shows what was saved.
-function worktreeFileQuery(
+export function worktreeFileQuery(
   { api, keys }: Pick<HostScope, "api" | "keys">,
   projectId: string,
   worktreeId: string,

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Radio } from "@base-ui/react/radio";
 import { RadioGroup } from "@base-ui/react/radio-group";
+import { warmOnRest } from "../lib/pointerIntent.ts";
 import { SimpleTooltip } from "./tooltip.tsx";
 import { cn } from "../lib/utils.ts";
 
@@ -32,10 +33,14 @@ export function SegmentedControl<T extends string>({
   disabled,
   className,
   optionClassName,
+  warm,
   "aria-label": ariaLabel,
 }: {
   value: T;
   onChange: (next: T) => void;
+  // Starts the reads of what an option shows once the pointer rests on
+  // it, for options that are pages.
+  warm?: (option: T) => void;
   options: readonly SegmentedOption<T>[];
   disabled?: boolean;
   className?: string;
@@ -62,6 +67,7 @@ export function SegmentedControl<T extends string>({
             nativeButton
             render={<button type="button" aria-label={opt.ariaLabel} />}
             disabled={disabled || opt.disabled}
+            {...warmOnRest(warm && (() => warm(opt.value)))}
             className={cn(
               // Concentric with the track: the option radius is the
               // rounded-md outer radius (--radius * 0.8) minus the p-0.5

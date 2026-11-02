@@ -64,7 +64,7 @@ export function ProjectRowView({
         // the slot has doubutsu stripe the row rather than a band of it.
         data-slot={pickable ? "sidebar-project-row" : undefined}
         className={cn(
-          "group/project relative flex items-center gap-0.5 rounded-md py-0.5 transition-colors",
+          "group/project relative flex items-center gap-0.5 rounded-md py-0.5",
           // It fills like the worktree rows it leads to: under the
           // pointer, and for the project the page on screen belongs
           // to, which is where the list was left from. Unfolded, the

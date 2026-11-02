@@ -20,6 +20,7 @@ interface TreeCtx {
   // Opens a file in the editor, on a double click or from its menu.
   // Absent where the files aren't this machine's.
   onOpenFile: ((path: string) => void) | undefined;
+  warm: { file: (path: string) => void; folder: (path: string) => void };
 }
 
 // The files page's list: the worktree as a folder tree, read one folder
@@ -128,6 +129,7 @@ function FolderRows({
       onToggleFolder={onToggleFolder}
       onSelectFile={onSelectFile}
       onOpenFile={onOpenFile}
+      warm={ctx.warm}
       renderFolder={(path) => (
         <FolderRows ctx={ctx} relative={path} depth={depth + 1} />
       )}

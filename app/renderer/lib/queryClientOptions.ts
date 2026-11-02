@@ -4,10 +4,12 @@
 // the silentError opt-out.
 import { UNNAMED_DEVICE } from "@shigomori/ui/lib/deviceRoster.ts";
 import {
+  type FetchQueryOptions,
   isCancelledError,
   MutationCache,
   QueryCache,
   QueryClient,
+  type QueryKey,
 } from "@tanstack/react-query";
 import {
   isCommandRefusedError,
@@ -59,6 +61,20 @@ export function throughCancel<A>(
 // not an error to toast. On this machine a failure is a real one.
 export function gatedHostReadMeta(remote: boolean, errorTitle: string) {
   return remote ? { silentError: true } : { errorTitle };
+}
+
+// A read started ahead of the page it is for (a pointer resting on the
+// way in). It fails quietly: the page's own read says why, should it
+// open. One a page already shows reads on that page's terms.
+export function prefetchAhead<T, Key extends QueryKey>(
+  queryClient: QueryClient,
+  options: FetchQueryOptions<T, Error, T, Key>,
+): void {
+  const shown = queryClient
+    .getQueryCache()
+    .find({ queryKey: options.queryKey, exact: true });
+  if (shown && shown.getObserversCount() > 0) return;
+  void queryClient.prefetchQuery({ ...options, meta: { silentError: true } });
 }
 
 // `deviceLabelOf` names a peer by its id for the refusal toast.

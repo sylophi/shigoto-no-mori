@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { useParams } from "@tanstack/react-router";
 import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
@@ -10,6 +16,7 @@ import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
 import { useNow } from "@shigomori/ui/hooks/useNow.ts";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
+import { useWarmWorktreePage } from "@/hooks/worktrees/useWarmWorktreePage";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { isMac } from "@shigomori/ui/lib/platform.ts";
 import { useBinding, useKeymapAction } from "@/hooks/ui/useKeymap";
@@ -277,6 +284,15 @@ function PaletteDialog({
   // through the list doesn't read every row it passes.
   const settledKey = useDebouncedValue(paneRow?.key, 150);
   const paneSettled = picked !== null || settledKey === paneRow?.key;
+  const warm = useWarmWorktreePage();
+  const resting =
+    paneSettled && paneRow?.kind === "worktree" ? paneRow.entry : null;
+  const warmResting = useEffectEvent(() => {
+    if (resting) {
+      warm(resting.device?.deviceId, resting.worktree);
+    }
+  });
+  useEffect(() => warmResting(), [resting?.key]);
 
   // The pane's worktree's tools, when it lives here (launch tools open
   // on the machine showing this window). The palette holds their
@@ -446,6 +462,7 @@ function PaletteDialog({
   return (
     <ModalShell
       label="Command palette"
+      still
       onClose={onClose}
       onEscape={onEscape}
       // As tall as the window allows, and never resized by what it

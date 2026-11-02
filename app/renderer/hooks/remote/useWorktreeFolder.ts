@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { SyncWorktreeFolderEntry } from "@shigomori/contracts/modules/sync";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { type HostScope, useHostScope } from "@/hooks/remote/useHostScope";
 
 // One folder of a worktree with git's ignore verdict per entry
 // (sync:worktreeFolder, which says what `ruleIgnored` adds), read
@@ -8,14 +8,14 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 // copy, the mirror's own page and the files page the local one.
 // Dampened like the carry-over listing, since each read walks the
 // checkout's ignored tree on the host.
-export function useWorktreeFolder(
+export function worktreeFolderQuery(
+  { api, keys }: Pick<HostScope, "api" | "keys">,
   projectId: string,
   worktreeId: string,
   relative: string,
   ruleIgnored: boolean,
 ) {
-  const { api, keys } = useHostScope();
-  return useQuery<readonly SyncWorktreeFolderEntry[]>({
+  return queryOptions<readonly SyncWorktreeFolderEntry[]>({
     queryKey: keys.worktreeFolder(projectId, worktreeId, relative, ruleIgnored),
     queryFn: ({ signal }) =>
       api.run(
@@ -30,4 +30,21 @@ export function useWorktreeFolder(
     staleTime: 15_000,
     meta: { errorTitle: "Couldn't read folder" },
   });
+}
+
+export function useWorktreeFolder(
+  projectId: string,
+  worktreeId: string,
+  relative: string,
+  ruleIgnored: boolean,
+) {
+  return useQuery(
+    worktreeFolderQuery(
+      useHostScope(),
+      projectId,
+      worktreeId,
+      relative,
+      ruleIgnored,
+    ),
+  );
 }
