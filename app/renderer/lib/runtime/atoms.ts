@@ -69,7 +69,9 @@ export const deviceStream = <A, E>(
 // again on each new session, since one riding a session this side
 // closed (a probe that found it dead) is never told it ended. What an
 // atom folds from pushes starts again on either, since the pushes that
-// would have ended it went with the session or the host that died.
+// would have ended it went with the session or the host that died. The
+// script runs attach again instead, as a run's output and its end
+// still come once a session asks for them (scriptRuns.ts).
 export const hostSessionAtom = Atom.family((_deviceId: string) =>
   Atom.keepAlive(Atom.make(0)),
 );

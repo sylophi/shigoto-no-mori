@@ -39,6 +39,7 @@ import {
   clientAtoms,
   deviceApi,
   heard,
+  hostSessionAtom,
   localDeviceIdAtom,
   valueNow,
 } from "@/lib/runtime/atoms";
@@ -89,6 +90,10 @@ interface OutputLog {
   // Sum of chunk lengths, so trimming needn't re-measure the log.
   bytes: number;
 }
+
+// What a console following a run's log is handed: the next chunk, or
+// with `reset` the whole log again, which started over (resume).
+type OutputUpdate = { readonly data: string; readonly reset: boolean };
 
 interface RunMeta {
   worktreeId: string;
@@ -148,7 +153,7 @@ export class ScriptRuns {
   // render per PTY read would be the hot path. Consoles catch up from it
   // on mount and follow it through outputSubs.
   private buffers = new Map<ScriptKey, OutputLog>();
-  private outputSubs = new KeyedSubscribers<ScriptKey, string>();
+  private outputSubs = new KeyedSubscribers<ScriptKey, OutputUpdate>();
   private runIdToKey = new Map<string, ScriptKey>();
   // Events that arrived before the `scripts.run` invoke resolved and let
   // us bind the runId to a key. A spawned child can emit its first bytes
@@ -282,6 +287,33 @@ export class ScriptRuns {
     }
   }
 
+  // A new session to the device (hostSessionAtom). The host sends a
+  // run's events to the session that started or attached it, which is
+  // gone, so each run held as running is attached again on this one,
+  // its log and its consoles starting over from the host's backlog. One
+  // the host no longer has, or that could not be asked about, ends as
+  // the list drops it (settle).
+  resume(): void {
+    for (const [key, state] of this.current.states) {
+      if (state.status === "running" && state.runId !== null) {
+        void this.rejoin(key, state.runId);
+      }
+    }
+  }
+
+  private async rejoin(key: ScriptKey, runId: string): Promise<void> {
+    const joined = await this.runPromise(this.scripts.attach({ runId })).catch(
+      () => null,
+    );
+    if (joined === null || this.current.states.get(key)?.runId !== runId) {
+      return;
+    }
+    // What of the run came before the answer is in the backlog too.
+    const { output } = joined;
+    this.buffers.set(key, { chunks: [output], bytes: output.length });
+    this.outputSubs.notify(key, { data: output, reset: true });
+  }
+
   // Stops a run the host lists, whether these runs hold it (its
   // console then reads "Stopping…" until the exit) or not (one another
   // window or device started, stopped by its id).
@@ -387,7 +419,10 @@ export class ScriptRuns {
     return this.buffers.get(key)?.chunks ?? [];
   }
 
-  subscribeOutput(key: ScriptKey, cb: (chunk: string) => void): () => void {
+  subscribeOutput(
+    key: ScriptKey,
+    cb: (update: OutputUpdate) => void,
+  ): () => void {
     return this.outputSubs.subscribe(key, cb);
   }
 
@@ -489,7 +524,7 @@ export class ScriptRuns {
       }
       log.chunks.splice(0, drop);
     }
-    this.outputSubs.notify(key, chunk);
+    this.outputSubs.notify(key, { data: chunk, reset: false });
     this.setStateWithActivity(key, (s) =>
       s.hasOutput ? s : { ...s, hasOutput: true },
     );
@@ -671,7 +706,9 @@ export function activityOf(
 // page open. A peer's start on first use (a scoped page, or a sidebar
 // row that wants the device's runs) and are kept for the page's
 // lifetime, until the account they belonged to is left
-// (accountsLeftAtom): a run state and a scrollback are the peer's.
+// (accountsLeftAtom): a run state and a scrollback are the peer's. A
+// new session to the device's host keeps them, and attaches again to
+// the runs they hold (resume).
 export const scriptRunsAtom = Atom.family((deviceId: string) =>
   Atom.keepAlive(
     clientAtoms.atom((get) =>
@@ -685,6 +722,7 @@ export const scriptRunsAtom = Atom.family((deviceId: string) =>
         const run = yield* FiberSet.makeRuntimePromise<never>();
         const runs = new ScriptRuns(get.registry, api.scripts, run, local);
         get.mount(runs.state);
+        get.subscribe(hostSessionAtom(deviceId), () => runs.resume());
         const pushes = <K extends "event" | "stoppedForRemovedWorktree">(
           key: K,
         ) => api.pushes(scriptsContract, key);
