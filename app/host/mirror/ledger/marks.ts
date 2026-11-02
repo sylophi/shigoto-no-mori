@@ -83,8 +83,8 @@ export const makeMarks = () => {
   // itself once the new one is up, so the leftover sweep must not race
   // it to the terminate, an admission must not resume it, and a second
   // rule change (both devices' pages at once) would open another session
-  // on the pair.
-  const recreating = new Set<string>();
+  // on the pair. Counted, since a move and a rule change can overlap.
+  const recreating = countedHolds();
 
   // Worktrees an in-app delete or move is working on (Scripts
   // withDeletesInflight): their root vanishing is that mutation, whose
@@ -109,9 +109,9 @@ export const makeMarks = () => {
     run: Effect.Effect<A, E, R>,
   ) =>
     Effect.acquireUseRelease(
-      Effect.sync(() => recreating.add(session)),
+      Effect.sync(() => recreating.hold([session])),
       () => run,
-      () => Effect.sync(() => recreating.delete(session)),
+      (release) => Effect.sync(release),
     );
 
   return {

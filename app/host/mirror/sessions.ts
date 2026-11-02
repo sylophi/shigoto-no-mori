@@ -408,7 +408,7 @@ export const reopenMirror = (
     }
     if (ledger.isRecreating(session)) {
       return yield* new MirrorError({
-        reason: "What the mirror leaves out is already changing.",
+        reason: "This mirror is already re-opening. Try again in a moment.",
       });
     }
     const next = yield* daemon.recreate(
