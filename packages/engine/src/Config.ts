@@ -218,8 +218,9 @@ export class Config extends Context.Service<
     // doesn't model included. A project with no settings reads as null.
     readonly read: (scope: ConfigScope) => Effect.Effect<ConfigDoc | null>;
     // The device's and a project's documents as `read` gives them, as the
-    // contracts read a stored one: the device's is empty with nothing
-    // stored, a project's null.
+    // contracts read a stored one, less any setting of the wrong type:
+    // the device's is empty with nothing stored, a project's null with
+    // nothing stored or no default branch, when none of it applies.
     readonly readDevice: Effect.Effect<typeof StoredGlobalConfigSchema.Type>;
     readonly readProject: (
       scope: Extract<ConfigScope, { readonly kind: "project" }>,
@@ -421,6 +422,23 @@ const missingBranch = (doc: ConfigDoc) => {
   const [branch] = docGet(doc, "defaultBranch");
   return typeof branch !== "string" || branch.trim() === "";
 };
+
+// A stored document less the keys `fields` models whose value isn't of
+// their type: one setting of the wrong type is ignored, as `device`
+// reads it, not the whole document.
+const readable = (
+  fields: { readonly [key: string]: Schema.Decoder<unknown> },
+  doc: ConfigDoc,
+): ConfigDoc =>
+  Object.fromEntries(
+    Object.entries(doc).filter(([key, value]) => {
+      const field = fields[key];
+      return (
+        field === undefined ||
+        Option.isSome(Schema.decodeUnknownOption(field)(value))
+      );
+    }),
+  );
 
 const listedValue = (key: ConfigKey, doc: ConfigDoc): Setting => {
   const [value, set] = docGet(doc, key.name);
@@ -660,16 +678,22 @@ const make = Effect.gen(function* () {
   });
 
   const readDevice = Effect.flatMap(read({ kind: "device" }), (doc) =>
-    Schema.decodeUnknownEffect(StoredGlobalConfigSchema)(doc ?? {}),
+    Schema.decodeUnknownEffect(StoredGlobalConfigSchema)(
+      readable(StoredGlobalConfigSchema.schema.fields, doc ?? {}),
+    ),
   ).pipe(Effect.orDie, Effect.withSpan("Config.readDevice"));
 
   const readProject = Effect.fn("Config.readProject")(function* (
     scope: Extract<ConfigScope, { readonly kind: "project" }>,
   ) {
-    return yield* Schema.decodeUnknownEffect(
-      Schema.NullOr(StoredShigomoriConfigSchema),
-    )(yield* read(scope));
-  }, Effect.orDie);
+    const doc = yield* read(scope);
+    if (doc === null) return null;
+    return Option.getOrNull(
+      Schema.decodeUnknownOption(StoredShigomoriConfigSchema)(
+        readable(StoredShigomoriConfigSchema.schema.fields, doc),
+      ),
+    );
+  });
 
   const device = Effect.fn("Config.device")(function* <
     K extends keyof DeviceSettingsPatch,
