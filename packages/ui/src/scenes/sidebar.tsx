@@ -258,10 +258,10 @@ export function sceneGrid() {
 function smGroupKey(shell: SceneShell): string {
   const project = forests[LOCAL_DEVICE_ID]?.projects[0];
   if (!project) throw new Error("no fixture project");
-  return projectGroupKey(
-    project,
-    shell === "desktop" ? undefined : LOCAL_DEVICE_ID,
-  );
+  return projectGroupKey(project, {
+    deviceId: LOCAL_DEVICE_ID,
+    isThisDevice: shell === "desktop",
+  });
 }
 
 function entryOf(

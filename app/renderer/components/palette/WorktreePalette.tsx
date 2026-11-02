@@ -4,7 +4,6 @@ import { ModalShell } from "@shigomori/ui/primitives/modal-shell.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useForestSources } from "@/components/sidebar/forestSources";
 import { worktreeRowKey } from "@shigomori/ui/lib/forest.ts";
-import { rowDeviceId } from "@/lib/routePaths";
 import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
@@ -71,7 +70,10 @@ export function WorktreePalette() {
   const pageKey =
     worktreeId === undefined || deviceId === undefined
       ? undefined
-      : worktreeRowKey(rowDeviceId(api.deviceId, deviceId), worktreeId);
+      : worktreeRowKey(
+          { deviceId, isThisDevice: deviceId === api.deviceId },
+          worktreeId,
+        );
 
   useEffect(() => {
     if (pageKey !== undefined) recordWorktreeVisit(pageKey);
@@ -110,12 +112,7 @@ export function WorktreePalette() {
     <PaletteDialog
       pageKey={pageKey}
       // This device's project on screen, where a new worktree goes first.
-      pageProjectId={
-        deviceId !== undefined &&
-        rowDeviceId(api.deviceId, deviceId) === undefined
-          ? projectId
-          : undefined
-      }
+      pageProjectId={deviceId === api.deviceId ? projectId : undefined}
       onClose={() => setOpen(false)}
     />
   );
@@ -299,7 +296,7 @@ function PaletteDialog({
   // A worktree page on whichever machine the entry lives on.
   const go: GoTo = (entry, page, extra = {}) => {
     onClose();
-    toPageOn(entry.device?.deviceId, page, {
+    toPageOn(entry.deviceId, page, {
       projectId: entry.worktree.projectId,
       worktreeId: entry.worktree.id,
       ...extra,
@@ -335,10 +332,10 @@ function PaletteDialog({
       case "worktree":
         return go(row.entry, "detail");
       case "project": {
-        const { lead, project, device } = row.item;
+        const { lead, project, deviceId } = row.item;
         return lead
           ? go(lead, "detail")
-          : actions.openCreateForm(project.id, device?.deviceId);
+          : actions.openCreateForm(project.id, deviceId);
       }
       case "page":
         return actions.openPage(row.page);
@@ -468,7 +465,7 @@ function PaletteDialog({
                   <ProjectIcon
                     projectId={picked.row.entry.worktree.projectId}
                     name={picked.row.entry.project.name}
-                    deviceId={picked.row.entry.device?.deviceId}
+                    deviceId={picked.row.entry.deviceId}
                     className="size-3"
                   />
                 )

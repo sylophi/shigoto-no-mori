@@ -52,23 +52,6 @@ export const PROJECT_ROUTE_PATHS = {
 // which a window shows in place of the app.
 export const MIGRATION_PATH = "/migration";
 
-// The sidebar and the palette name this machine's rows with no device
-// (worktreeRowKey), the routes name every device by id. These two cross
-// between the two spellings, given this machine's id.
-export function routeDeviceId(
-  localDeviceId: string,
-  rowDevice: string | undefined,
-): string {
-  return rowDevice ?? localDeviceId;
-}
-
-export function rowDeviceId(
-  localDeviceId: string,
-  routeDevice: string,
-): string | undefined {
-  return routeDevice === localDeviceId ? undefined : routeDevice;
-}
-
 // Fills a route template's `$param` segments with values, for a route
 // handed to the shell as a string (a notification's, a new window's).
 export function fillRoutePath(

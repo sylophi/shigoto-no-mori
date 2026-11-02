@@ -5,12 +5,13 @@ import {
 } from "@shigomori/contracts/pullRequestStack";
 import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
 import {
+  type ForestDevice,
   type ForestItem,
   type LocalSide,
-  mirrorBadgeLookup,
+  mirrorBadgeOf,
+  type MirrorPair,
   mirrorPairsOf,
-  type MirrorLink,
-  remoteWorktreeKey,
+  worktreeAt,
   worktreeRowKey,
   worktreeShelfOf,
 } from "../../../lib/forest.ts";
@@ -33,8 +34,8 @@ interface BuildInboxRowsArgs {
   // boxes: the inbox is one list of everything in flight, wherever it
   // lives.
   items: readonly ForestItem[];
-  // See buildSidebarRows: a mirrored pair files once, as the local row.
-  mirrors: readonly MirrorLink[];
+  // See buildSidebarRows: a mirrored pair files once, as the kept row.
+  mirrors: readonly MirrorPair[];
   // See buildSidebarRows: this device's sides of pairs whose projects
   // `items` leaves out, filed as this machine's own.
   localSides?: ReadonlyMap<string, LocalSide>;
@@ -62,8 +63,8 @@ interface Entry extends InboxRank {
   project: Project;
   pr: PullRequest | undefined;
   stack: StackPosition | null;
-  // Undefined for this machine's own worktree.
-  device: SidebarDeviceBadge | undefined;
+  key: string;
+  device: ForestDevice;
   mirror: SidebarDeviceBadge | undefined;
   mirrorWorktreeId: string | undefined;
   shelf: InboxShelf | null;
@@ -72,12 +73,13 @@ interface Entry extends InboxRank {
 function worktreeRow(entry: Entry): SidebarRow {
   return {
     kind: "inbox-worktree",
-    key: worktreeRowKey(entry.device?.deviceId, entry.worktree.id),
+    key: entry.key,
+    deviceId: entry.device.deviceId,
     worktree: entry.worktree,
     project: entry.project,
     pr: entry.pr,
     stack: entry.stack,
-    device: entry.device,
+    device: entry.device.isThisDevice ? undefined : entry.device,
     mirror: entry.mirror,
     mirrorWorktreeId: entry.mirrorWorktreeId,
     shelf: entry.shelf,
@@ -107,8 +109,7 @@ export function buildInboxRows({
   allowAgentWorking,
   pinWaiting,
 }: BuildInboxRowsArgs): SidebarViewModel {
-  const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
-  const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
+  const { keptOf, foldedOf } = mirrorPairsOf(mirrors);
 
   const live: Entry[] = [];
   const shelves: Record<InboxShelf, Entry[]> = {
@@ -120,31 +121,34 @@ export function buildInboxRows({
   // Filed for every shelved worktree, open shelf or not. It's the
   // folded case that revealKey needs an answer for. Keyed like the rows.
   const shelfOf = new Map<string, InboxShelf>();
-  // The primaries left out because their project keeps them out, by row
-  // key. Not one whose config is still unread: that one may yet show.
+  // The primaries left out because their project keeps them out, by
+  // worktreeAt. Not one whose config is still unread: that one may yet
+  // show.
   const leftOut = new Set<string>();
-  // Where each of this machine's entries filed, for the peers' rows to
-  // fold into.
+  // Where each of this machine's entries filed, by worktreeAt, for the
+  // peers' rows to fold into.
   const localShelf = new Map<string, InboxShelf | null>();
-  // Every entry filed, by row key, for revealKey.
-  const filed = new Set<string>();
+  // Every entry's row key, by worktreeAt, for revealKey.
+  const filed = new Map<string, string>();
   const file = (
     project: Project,
     trees: readonly Worktree[],
     prs: Record<string, PullRequest> | undefined,
     // Undefined while the project's config is unread.
     showPrimary: boolean | undefined,
-    device: SidebarDeviceBadge | undefined,
+    device: ForestDevice,
     // The stack's trunk, off the project's listing.
     trunk = trunkOf(trees),
   ) => {
     for (const worktree of trees) {
-      const key = worktreeRowKey(device?.deviceId, worktree.id);
+      const at = worktreeAt(device.deviceId, worktree.id);
       if (worktree.isPrimary && showPrimary !== true) {
-        if (showPrimary === false) leftOut.add(key);
+        if (showPrimary === false) leftOut.add(at);
         continue;
       }
+      const key = worktreeRowKey(device, worktree.id);
       const pr = prs?.[worktree.branch];
+      const folded = foldedOf.get(at);
       const shelf = worktreeShelfOf(
         worktree,
         pr,
@@ -156,16 +160,14 @@ export function buildInboxRows({
         project,
         pr,
         stack: pullRequestStackPosition(prs, worktree.branch, trunk),
+        key,
         device,
-        mirror: device === undefined ? mirrorBadgeFor(worktree) : undefined,
-        mirrorWorktreeId:
-          device === undefined
-            ? peerOfLocal.get(worktree.id)?.peerWorktreeId
-            : undefined,
+        mirror: mirrorBadgeOf(folded, deviceBadges),
+        mirrorWorktreeId: folded?.worktreeId,
         shelf,
       };
-      if (device === undefined) localShelf.set(worktree.id, shelf);
-      filed.add(key);
+      if (device.isThisDevice) localShelf.set(at, shelf);
+      filed.set(at, key);
       if (shelf === null) {
         live.push(entry);
       } else {
@@ -189,33 +191,33 @@ export function buildInboxRows({
         item.worktrees,
         pullRequests,
         item.showPrimaryInInbox,
-        undefined,
+        device,
       );
       continue;
     }
-    const localOf = (worktree: Worktree) =>
-      peerRowsFolded.get(remoteWorktreeKey(device.deviceId, worktree.id));
+    const keptOn = (worktree: Worktree) =>
+      keptOf.get(worktreeAt(device.deviceId, worktree.id));
     for (const worktree of item.worktrees) {
-      const local = localOf(worktree);
-      const side = local === undefined ? undefined : localSides.get(local);
+      const kept = keptOn(worktree);
+      const side = kept === undefined ? undefined : localSides.get(kept);
       if (side === undefined) continue;
       file(
         side.project,
         [side.worktree],
         pullRequests,
         side.showPrimaryInInbox,
-        undefined,
+        side.device,
         trunkOf(item.worktrees),
       );
     }
     file(
       item.project,
       item.worktrees.filter((worktree) => {
-        const local = localOf(worktree);
-        if (local === undefined) return true;
+        const kept = keptOn(worktree);
+        if (kept === undefined) return true;
         const pr = pullRequests[worktree.branch];
         return (
-          localShelf.get(local) !==
+          localShelf.get(kept) !==
           worktreeShelfOf(worktree, pr, hiddenPrefixes, allowAgentWorking)
         );
       }),
@@ -245,10 +247,7 @@ export function buildInboxRows({
     const entries = grouped.get(prefix) ?? [];
     grouped.set(prefix, entries);
     entries.push(entry);
-    groupOf.set(
-      worktreeRowKey(entry.device?.deviceId, entry.worktree.id),
-      prefix,
-    );
+    groupOf.set(entry.key, prefix);
   }
   const rows: SidebarRow[] = rest.toSorted(byInboxRank).map(worktreeRow);
   for (const prefix of groupedPrefixes) {
@@ -296,17 +295,15 @@ export function buildInboxRows({
     // A page's own entry only: a peer's worktree with none may just be
     // unlisted yet, which a device the filter hides looks the same as.
     leftOut: (worktreeId, deviceId) =>
-      leftOut.has(worktreeRowKey(deviceId, worktreeId)),
+      leftOut.has(worktreeAt(deviceId, worktreeId)),
     revealKey: (_projectId, worktreeId, deviceId) => {
-      // A peer's worktree with no entry of its own (folded into its
-      // local mirror, its device hidden by the filter, or not listed
-      // yet): reveal its local mirror, the pair's row.
-      const peerKey = worktreeRowKey(deviceId, worktreeId);
-      const local = filed.has(peerKey)
-        ? undefined
-        : peerRowsFolded.get(peerKey);
-      const key =
-        local === undefined ? peerKey : worktreeRowKey(undefined, local);
+      // A worktree with no entry of its own (folded into its pair's
+      // kept row, its device hidden by the filter, or not listed yet):
+      // reveal the kept row, the pair's.
+      const at = worktreeAt(deviceId, worktreeId);
+      const kept = keptOf.get(at);
+      const key = filed.get(at) ?? (kept && filed.get(kept));
+      if (key === undefined) return null;
       const shelf = shelfOf.get(key);
       if (shelf && !openShelves.has(shelf)) return `shelf:${shelf}`;
       const group = groupOf.get(key);

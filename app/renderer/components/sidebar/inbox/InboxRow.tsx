@@ -11,17 +11,18 @@ import {
   InboxRowView,
 } from "@shigomori/ui/views/sidebar/inbox/InboxRowView.tsx";
 
-export function InboxRow({ mirrorWorktreeId, ...props }: InboxRowProps) {
-  const { worktree, project, pr, device, mirror } = props;
-  const entry = useWorktreeEntry(worktree, device, {
-    deviceId: mirror?.deviceId,
-    worktreeId: mirrorWorktreeId,
-  });
+export function InboxRow({
+  deviceId,
+  mirrorWorktreeId,
+  ...props
+}: InboxRowProps & { deviceId: string }) {
+  const { worktree, project, pr } = props;
+  const entry = useWorktreeEntry({ ...props, deviceId, mirrorWorktreeId });
   return (
     <WorktreeMenu
       worktree={worktree}
       pr={pr}
-      deviceId={device?.deviceId}
+      deviceId={deviceId}
       project={project}
       row={
         <InboxRowView
@@ -31,7 +32,7 @@ export function InboxRow({ mirrorWorktreeId, ...props }: InboxRowProps) {
             <ProjectIcon
               projectId={worktree.projectId}
               name={project.name}
-              deviceId={device?.deviceId}
+              deviceId={deviceId}
               className="size-3"
             />
           }

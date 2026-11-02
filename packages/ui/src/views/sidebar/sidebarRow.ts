@@ -95,14 +95,16 @@ type SidebarRowKinds =
   | {
       kind: "worktree";
       key: string;
+      // The device the worktree is on.
+      deviceId: string;
       worktree: Worktree;
       // A peer's row carries the device's badge, in its connection
       // tone. Not `reachable` renders the row faded: the device is off
       // and this is its last known state. Absent, the row is local.
       device?: SidebarDeviceBadge;
-      // The peer device a local row is kept in step with (a live mirror
-      // either way round), in which case the peer's own row for the
-      // pair is folded into this one.
+      // The device the row's worktree is kept in step with (a live
+      // mirror either way round), whose own row for the pair is folded
+      // into this one.
       mirror?: SidebarDeviceBadge;
       // The peer's copy the row stands for too, whose page selects it.
       mirrorWorktreeId?: string;
@@ -130,13 +132,14 @@ type SidebarRowKinds =
   | {
       kind: "inbox-worktree";
       key: string;
+      deviceId: string;
       worktree: Worktree;
       project: Project;
       pr: PullRequest | undefined;
       // The PR's place in its stack, off the same map as `pr`.
       stack: StackPosition | null;
       device: SidebarDeviceBadge | undefined;
-      // The peer a local row is mirrored with, when it is (the tree's
+      // The device the row is mirrored with, when it is (the tree's
       // worktree row wears the same), and its copy there.
       mirror?: SidebarDeviceBadge;
       mirrorWorktreeId?: string;
@@ -240,17 +243,15 @@ export interface SidebarViewModel {
   // null when the view can't place it at all, or not yet: the tree
   // opens the project of the page on screen itself (Sidebar), and the
   // row is revealed once it draws.
-  // A deviceId names a peer's worktree. Absent, the worktree is this
-  // machine's.
   revealKey: (
     projectId: string,
     worktreeId: string,
-    deviceId?: string,
+    deviceId: string,
   ) => string | null;
   // Whether the view leaves a listed worktree out by design, so it will
   // have no row for it however long it is given (the inbox, which
   // keeps primaries out). Absent for a view that lists every worktree.
-  leftOut?: (worktreeId: string, deviceId?: string) => boolean;
+  leftOut?: (worktreeId: string, deviceId: string) => boolean;
 }
 
 const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {

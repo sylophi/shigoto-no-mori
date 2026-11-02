@@ -97,14 +97,14 @@ function Grid({
   const { openCreateForm } = useQuickCreateWorktree();
   // The worktree the tile names, or with none anywhere yet, the place
   // to make one: the palette's ↩ on a project.
-  const open = ({ lead, project, device }: GroupWork) => {
+  const open = ({ lead, project, deviceId }: GroupWork) => {
     if (lead) {
-      toPageOn(lead.device?.deviceId, "detail", {
+      toPageOn(lead.deviceId, "detail", {
         projectId: lead.worktree.projectId,
         worktreeId: lead.worktree.id,
       });
     } else {
-      openCreateForm(project.id, device?.deviceId);
+      openCreateForm(project.id, deviceId);
     }
   };
   const folderTargets = new Map<string, ReactNode>();

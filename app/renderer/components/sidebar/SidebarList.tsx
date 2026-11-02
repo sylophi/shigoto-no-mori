@@ -1,6 +1,6 @@
 import { useVirtualizer, type VirtualItem } from "@tanstack/react-virtual";
 import { useMatch } from "@tanstack/react-router";
-import { rowDeviceId, WORKTREE_DETAIL_ROUTE_ID } from "@/lib/routePaths";
+import { WORKTREE_DETAIL_ROUTE_ID } from "@/lib/routePaths";
 import {
   useEffect,
   useLayoutEffect,
@@ -19,7 +19,6 @@ import { SidebarListView } from "@shigomori/ui/views/sidebar/SidebarRowsView.tsx
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useWindowRoot } from "@/lib/themeRoot";
-import { useApi } from "@/lib/runtime/pageApi";
 
 interface SidebarListProps {
   rows: SidebarRow[];
@@ -63,7 +62,6 @@ export function SidebarList({
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const root = useWindowRoot();
   const hasLocalHost = useHasLocalHost();
-  const localDeviceId = useApi().deviceId;
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -143,11 +141,8 @@ export function SidebarList({
       lastRevealedRef.current = null;
       return;
     }
-    const { projectId, worktreeId } = open;
-    // The device spelled the way the rows spell it (none for this
-    // machine's).
-    const deviceId = rowDeviceId(localDeviceId, open.deviceId);
-    const revealed = `${deviceId ?? ""}:${worktreeId}`;
+    const { deviceId, projectId, worktreeId } = open;
+    const revealed = `${deviceId}:${worktreeId}`;
     if (lastRevealedRef.current === revealed) return;
     const key = revealKey(projectId, worktreeId, deviceId);
     if (!key) return;

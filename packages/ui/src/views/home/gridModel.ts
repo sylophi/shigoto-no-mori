@@ -48,7 +48,7 @@ function workByGroup(
   groups: ReadonlyMap<string, ProjectGroupEntries>,
 ): Map<string, GroupWork> {
   return new Map(
-    [...groups].map(([key, { project, device, trees }]) => {
+    [...groups].map(([key, { project, deviceId, trees }]) => {
       const shown = trees.filter((entry) => !entry.hidden);
       const prs = new Set(
         shown.flatMap((entry) =>
@@ -60,7 +60,7 @@ function workByGroup(
         {
           lead: projectLead(trees),
           project,
-          device,
+          deviceId,
           lastActivity: Math.max(
             0,
             ...shown.map((entry) => worktreeLastActivityAt(entry.worktree)),

@@ -10,7 +10,7 @@
 // through the scope they are mounted under, which is that device's: its
 // own page, or the far end's page re-scoped to it
 // (useWorktreeMirrorLinks).
-import type { MirrorLink } from "@shigomori/ui/lib/forest.ts";
+import type { MirrorPair } from "@shigomori/ui/lib/forest.ts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Atom from "effect/reactivity/Atom";
 import { hostViewAtom } from "@/lib/runtime/atoms";
@@ -147,31 +147,35 @@ export function useCopyOff(
   return off === undefined ? undefined : { device, off };
 }
 
-function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
-  const links: MirrorLink[] = [];
+function mirrorLinksOf(
+  scopedDeviceId: string,
+  mirrors: MirrorListResult,
+): MirrorPair[] {
+  const links: MirrorPair[] = [];
   for (const pair of [...mirrors.sessions, ...mirrors.starting]) {
     if (pair.localWorktreeId === "") continue;
     links.push({
-      peerDeviceId: pair.deviceId,
-      peerWorktreeId: pair.worktreeId,
-      localWorktreeId: pair.localWorktreeId,
+      kept: { deviceId: scopedDeviceId, worktreeId: pair.localWorktreeId },
+      folded: { deviceId: pair.deviceId, worktreeId: pair.worktreeId },
     });
   }
   for (const stream of mirrors.serving) {
     if (stream.peerWorktreeId === undefined) continue;
     links.push({
-      peerDeviceId: stream.peerDeviceId,
-      peerWorktreeId: stream.peerWorktreeId,
-      localWorktreeId: stream.worktreeId,
+      kept: { deviceId: scopedDeviceId, worktreeId: stream.worktreeId },
+      folded: {
+        deviceId: stream.peerDeviceId,
+        worktreeId: stream.peerWorktreeId,
+      },
     });
   }
   return links;
 }
 
-const NO_LINKS: MirrorLink[] = [];
+const NO_LINKS: MirrorPair[] = [];
 
-const linkKey = (link: MirrorLink) =>
-  `${link.peerDeviceId}:${link.peerWorktreeId}:${link.localWorktreeId}`;
+const linkKey = ({ kept, folded }: MirrorPair) =>
+  `${folded.deviceId}:${folded.worktreeId}:${kept.worktreeId}`;
 
 // The pairs a peer's list adds for the scoped device: the sessions
 // that peer runs against the scoped device's worktrees, and the ones it
@@ -182,13 +186,12 @@ function peerMirrorLinksOf(
   peerDeviceId: string,
   scopedDeviceId: string,
   mirrors: MirrorListResult,
-): MirrorLink[] {
+): MirrorPair[] {
   return [...mirrors.sessions, ...mirrors.starting]
     .filter((pair) => pair.deviceId === scopedDeviceId)
     .map((pair) => ({
-      peerDeviceId,
-      peerWorktreeId: pair.localWorktreeId,
-      localWorktreeId: pair.worktreeId,
+      kept: { deviceId: scopedDeviceId, worktreeId: pair.worktreeId },
+      folded: { deviceId: peerDeviceId, worktreeId: pair.localWorktreeId },
     }));
 }
 
@@ -197,13 +200,14 @@ function peerMirrorLinksOf(
 // the lists the compiler memoizes, so the rows are rebuilt only when a
 // list moves. With nothing to add from the others, the own projection
 // is returned as is.
-export function useMirrorLinks(): MirrorLink[] {
+export function useMirrorLinks(): MirrorPair[] {
   const { hasHost, deviceId } = useHostScope();
   const ownList = useDeviceMirrors(deviceId, hasHost);
   const others = useOtherHostMirrors(deviceId, (list, peerDeviceId) =>
     peerMirrorLinksOf(peerDeviceId, deviceId, list),
   );
-  const own = ownList === undefined ? NO_LINKS : mirrorLinksOf(ownList);
+  const own =
+    ownList === undefined ? NO_LINKS : mirrorLinksOf(deviceId, ownList);
   if (others.every((other) => (other.data?.length ?? 0) === 0)) return own;
   const seen = new Set(own.map(linkKey));
   const links = [...own];

@@ -48,7 +48,7 @@ function WorktreeRow({
   query: string;
   now: number;
 }) {
-  const { worktree, project, device } = entry;
+  const { worktree, project, deviceId } = entry;
   const showBadge = useClientFlag("showDeviceBadges");
   return (
     <WorktreeRowView
@@ -61,7 +61,7 @@ function WorktreeRow({
         <ProjectIcon
           projectId={worktree.projectId}
           name={project.name}
-          deviceId={device?.deviceId}
+          deviceId={deviceId}
         />
       }
       kindIcon={<WorktreeKindIcon worktree={worktree} />}
@@ -70,7 +70,7 @@ function WorktreeRow({
 }
 
 function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
-  const { project, device } = item;
+  const { project, deviceId } = item;
   return (
     <ProjectRowView
       item={item}
@@ -79,7 +79,7 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
         <ProjectIcon
           projectId={project.id}
           name={project.name}
-          deviceId={device?.deviceId}
+          deviceId={deviceId}
         />
       }
     />

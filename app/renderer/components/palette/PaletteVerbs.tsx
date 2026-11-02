@@ -18,7 +18,6 @@ import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { useBinding, useKeymap } from "@/hooks/ui/useKeymap";
 import { useHasLocalHost } from "@/lib/localHost";
 import { openWorktreeInNewWindow } from "@/lib/newWindow";
-import { routeDeviceId } from "@/lib/routePaths";
 import { useLaunch } from "@/hooks/launchers/useLaunchers";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -60,7 +59,7 @@ export interface PaletteActions {
   // A worktree off the project's default branch, on `branch` when the
   // query named one. The palette stays up until it lands.
   create: (projectId: string, branch?: string) => void;
-  // The new-worktree form, on the peer `deviceId` names, else here.
+  // The new-worktree form, on the device `deviceId` names, else here.
   openCreateForm: (projectId: string, deviceId?: string) => void;
   openPage: (page: PalettePage) => void;
 }
@@ -126,9 +125,8 @@ function WorktreeVerbs({
   const { openUrl } = useOutside();
   const { worktree, pr } = entry;
   const changesKeys = useBinding("paletteChanges");
-  const deviceId = entry.device?.deviceId;
-  const api = useRemoteDeviceApi(deviceId);
-  const reachable = deviceId === undefined || api !== undefined;
+  const api = useRemoteDeviceApi(entry.device?.deviceId);
+  const reachable = entry.device === undefined || api !== undefined;
   const opens: Verb[] = [
     {
       key: "detail",
@@ -153,7 +151,7 @@ function WorktreeVerbs({
       run: () => {
         actions.close();
         openWorktreeInNewWindow(page, {
-          deviceId: routeDeviceId(page.deviceId, deviceId),
+          deviceId: entry.deviceId,
           projectId: worktree.projectId,
           worktreeId: worktree.id,
         });
@@ -196,7 +194,7 @@ function WorktreeVerbs({
         />
       )}
       {settled && reachable && (
-        <MaybeHostScope deviceId={deviceId ?? ""} api={api}>
+        <MaybeHostScope deviceId={entry.deviceId} api={api}>
           <SyncVerbs entry={entry} query={query} actions={actions} />
           <ScriptVerbs entry={entry} query={query} actions={actions} />
         </MaybeHostScope>
@@ -369,7 +367,7 @@ function ProjectVerbs({
   query: string;
   actions: PaletteActions;
 }) {
-  const { project, device, lead, localProject } = item;
+  const { project, deviceId, lead, localProject } = item;
   const verbs: Verb[] = [];
   if (lead) {
     verbs.push({
@@ -395,7 +393,7 @@ function ProjectVerbs({
     label: "New worktree from…",
     icon: iconOf(SquarePen),
     listKeys: lead ? undefined : "↩",
-    run: () => actions.openCreateForm(project.id, device?.deviceId),
+    run: () => actions.openCreateForm(project.id, deviceId),
   });
   return <VerbGroupView heading={project.name} query={query} verbs={verbs} />;
 }

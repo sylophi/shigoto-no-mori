@@ -7,10 +7,10 @@ import { isCloneableRemote } from "@shigomori/contracts/predicates/remoteUrl";
 import {
   type ForestItem,
   groupKeyOf,
-  mirrorBadgeLookup,
+  mirrorBadgeOf,
+  type MirrorPair,
   mirrorPairsOf,
-  type MirrorLink,
-  projectGroupKey,
+  worktreeAt,
   worktreeRowKey,
   worktreeShelfOf,
 } from "../../lib/forest.ts";
@@ -28,14 +28,14 @@ import { worktreeTitle } from "../../lib/worktreeTitle.ts";
 
 export interface PaletteList {
   entries: PaletteEntry[];
-  // The entry standing for a row key: a mirrored peer worktree's is
-  // its local copy's, the row it folds into.
+  // The entry standing for a row key: a mirrored pair's folded side's
+  // is its kept side's, the row it folds into.
   entryKeyOf: (rowKey: string) => string;
 }
 
 interface BuildPaletteEntriesArgs {
   items: readonly ForestItem[];
-  mirrors: readonly MirrorLink[];
+  mirrors: readonly MirrorPair[];
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   hiddenPrefixes: readonly string[];
   // Whether a working agent session shelves its worktree (isAgentWorking).
@@ -60,33 +60,38 @@ export function buildPaletteEntries({
   allowAgentWorking,
   visits,
 }: BuildPaletteEntriesArgs): PaletteList {
-  const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
-  const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
+  const { keptOf, foldedOf } = mirrorPairsOf(mirrors);
   const entries: PaletteEntry[] = [];
-  const localIds = new Set(
-    items.flatMap((item) =>
-      item.device.isThisDevice ? item.worktrees.map((w) => w.id) : [],
+  // Every worktree listed, by worktreeAt: its row key.
+  const listed = new Map(
+    items.flatMap(({ device, worktrees }) =>
+      worktrees.map((worktree) => [
+        worktreeAt(device.deviceId, worktree.id),
+        worktreeRowKey(device, worktree.id),
+      ]),
     ),
   );
   const folds = new Map<string, string>();
 
   for (const { device, project, worktrees, pullRequests } of items) {
-    const peer = device.isThisDevice ? undefined : device;
     for (const worktree of worktrees) {
-      const key = worktreeRowKey(peer?.deviceId, worktree.id);
-      // The local row of a mirrored pair stands for both copies.
-      const folded = peer && peerRowsFolded.get(key);
-      if (folded !== undefined && localIds.has(folded)) {
-        folds.set(key, worktreeRowKey(undefined, folded));
+      const at = worktreeAt(device.deviceId, worktree.id);
+      const key = worktreeRowKey(device, worktree.id);
+      // The kept row of a mirrored pair stands for both copies.
+      const kept = keptOf.get(at);
+      const keptKey = kept && listed.get(kept);
+      if (keptKey !== undefined) {
+        folds.set(key, keptKey);
         continue;
       }
       const pr = pullRequests[worktree.branch];
       entries.push({
         key,
+        deviceId: device.deviceId,
         worktree,
         project,
-        device: peer,
-        mirror: peer ? undefined : mirrorBadgeFor(worktree),
+        device: device.isThisDevice ? undefined : device,
+        mirror: mirrorBadgeOf(foldedOf.get(at), deviceBadges),
         pr,
         hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
         shelf: worktreeShelfOf(worktree, pr, [], allowAgentWorking),
@@ -183,9 +188,10 @@ function ownerNames(project: Project): string[] {
 
 export interface ProjectGroupEntries {
   project: Project;
+  deviceId: string;
   device: SidebarDeviceBadge | undefined;
   trees: PaletteEntry[];
-  devices: Set<string | undefined>;
+  devices: Set<string>;
 }
 
 // Every project on every device as its sidebar group, the ones with no
@@ -200,30 +206,36 @@ export function projectGroups(
   items: readonly ForestItem[],
 ): Map<string, ProjectGroupEntries> {
   const groups = new Map<string, ProjectGroupEntries>();
+  // Each device's project's group key, by worktreeAt's spelling.
+  const keyOf = new Map<string, string>();
   for (const item of items) {
     if (item.project.pathExists === false) continue;
     const { project } = item;
+    const { deviceId } = item.device;
     const device = item.device.isThisDevice ? undefined : item.device;
     const key = groupKeyOf(item);
+    keyOf.set(worktreeAt(deviceId, project.id), key);
     const group = groups.get(key);
     if (!group) {
       groups.set(key, {
         project,
+        deviceId,
         device,
         trees: [],
-        devices: new Set([device?.deviceId]),
+        devices: new Set([deviceId]),
       });
       continue;
     }
-    group.devices.add(device?.deviceId);
+    group.devices.add(deviceId);
     if (group.device && !group.device.reachable && device?.reachable) {
       group.project = project;
+      group.deviceId = deviceId;
       group.device = device;
     }
   }
   for (const entry of entries) {
-    const key = projectGroupKey(entry.project, entry.device?.deviceId);
-    groups.get(key)?.trees.push(entry);
+    const key = keyOf.get(worktreeAt(entry.deviceId, entry.project.id));
+    if (key !== undefined) groups.get(key)?.trees.push(entry);
   }
   return groups;
 }
@@ -238,9 +250,10 @@ export function rankPaletteProjects(
 ): PaletteProject[] {
   if (!query) return [];
   const items = [...projectGroups(entries, forest)].map(
-    ([key, { project, device, trees, devices }]): PaletteProject => ({
+    ([key, { project, deviceId, device, trees, devices }]): PaletteProject => ({
       key: `project:${key}`,
       project,
+      deviceId,
       device,
       lead: projectLead(trees),
       localProject: device ? undefined : project,

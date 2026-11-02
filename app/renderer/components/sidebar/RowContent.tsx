@@ -81,6 +81,7 @@ export function RowContent({
     case "worktree":
       return (
         <WorktreeRow
+          deviceId={row.deviceId}
           worktree={row.worktree}
           device={row.device}
           mirror={row.mirror}
@@ -98,6 +99,7 @@ export function RowContent({
           project={row.project}
           pr={row.pr}
           stack={row.stack}
+          deviceId={row.deviceId}
           device={row.device}
           mirror={row.mirror}
           mirrorWorktreeId={row.mirrorWorktreeId}

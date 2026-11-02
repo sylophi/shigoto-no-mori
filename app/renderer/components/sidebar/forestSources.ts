@@ -27,7 +27,6 @@ import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
 import { projectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
 import { useDeviceBadges, useThisDevice } from "./deviceBadges";
 import { useDeviceFilter } from "./deviceFilter";
-import { useApi } from "@/lib/runtime/pageApi";
 
 export function useForestSources({
   arrangeMode = false,
@@ -39,7 +38,6 @@ export function useForestSources({
   // The inbox's extra facts about the peers' worktrees.
   inboxFacts?: boolean;
 } = {}) {
-  const localDeviceId = useApi().deviceId;
   const { data: projects = [], isLoading } = useProjects();
   const sortMode = useProjectSort();
   const groupByOwner = useGroupProjectsByOwner();
@@ -100,11 +98,12 @@ export function useForestSources({
   // Narrowed to a peer, this device's sides of its pairs with it, which
   // the builders list among the peer's rows.
   const localSides =
-    activeFilter === null || activeFilter.deviceId === localDeviceId
+    activeFilter === null || activeFilter.deviceId === thisDevice.deviceId
       ? new Map<string, LocalSide>()
       : localSidesWith(
           activeFilter.deviceId,
           mirrors,
+          thisDevice,
           orderedProjects,
           worktreeQueries,
           configQueries,

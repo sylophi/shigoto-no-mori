@@ -20,6 +20,7 @@ import {
   groupKeyOf,
   projectGroupKey,
 } from "@shigomori/ui/lib/forest.ts";
+import { useApi } from "@/lib/runtime/pageApi";
 import { useSetSidebarView } from "@/hooks/projects/useSidebarView";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { useWindowRoot } from "@/lib/themeRoot";
@@ -45,17 +46,20 @@ export function setOpenProject(groupKey: string | null): void {
 }
 
 // The tree, open on a project: the inbox's way from a worktree to its
-// project. `deviceId` is the peer holding the project, undefined for
-// this machine's. On a phone the tree is a tab of its own.
-export function useGoToProject(): (
-  project: Project,
-  deviceId: string | undefined,
-) => void {
+// project, on the device holding it. On a phone the tree is a tab of
+// its own.
+export function useGoToProject(): (project: Project, deviceId: string) => void {
+  const localDeviceId = useApi().deviceId;
   const phone = usePhoneLayout();
   const navigate = useNavigate();
   const { mutate: setView } = useSetSidebarView();
   return (project, deviceId) => {
-    setOpenProject(projectGroupKey(project, deviceId));
+    setOpenProject(
+      projectGroupKey(project, {
+        deviceId,
+        isThisDevice: deviceId === localDeviceId,
+      }),
+    );
     if (phone) {
       void navigate({ to: "/forest/$view", params: { view: "projects" } });
     } else {
