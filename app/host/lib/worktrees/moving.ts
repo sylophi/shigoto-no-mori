@@ -1,7 +1,7 @@
 // The Worktrees service's moves (../Worktrees.ts): `sm worktrees move`
 // and a rename, which the engine commits, held off by the work running
 // in the checkout and by the tombstone, with the mirrors rooted in it
-// re-opened on its new path after.
+// re-opened on its new path after. A mirror's copy doesn't move.
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -10,7 +10,7 @@ import { findProjectAndWorktree, hostWorktree } from "../projects";
 import * as Scripts from "../Scripts";
 import { Terminals } from "../terminals/Terminals";
 import { MirrorLedger } from "@host/mirror/MirrorLedger";
-import { RunningWorkError } from "./documents";
+import { MirroredCopyError, RunningWorkError } from "./documents";
 
 export const makeMoving = <H>(host: Context.Context<H>) =>
   Effect.gen(function* () {
@@ -58,6 +58,11 @@ export const makeMoving = <H>(host: Context.Context<H>) =>
         // The engine refuses to move the primary checkout, whatever runs
         // in it, so that is what it hears.
         if (!worktree.isPrimary) yield* refuseRunningWork(worktree, verb);
+        // A copy is known here by the stream its mirror is served, so a
+        // paused mirror's isn't.
+        if (ledger.mirrorStreamInto(worktree.id) !== undefined) {
+          return yield* new MirroredCopyError({ verb });
+        }
         return yield* scripts.withDeletesInflight(
           [worktree.id],
           {

@@ -32,6 +32,18 @@ export class RunningWorkError extends Schema.TaggedError<RunningWorkError>()(
   }
 }
 
+// A mirror's copy stays where its mirror put it: the session on the
+// other device holds it by its path-derived id, which a move would hand
+// to whatever is made at the old folder next.
+export class MirroredCopyError extends Schema.TaggedError<MirroredCopyError>()(
+  "MirroredCopyError",
+  { verb: Schema.Literals(["move", "rename"]) },
+) {
+  override get message(): string {
+    return `This worktree is a mirror's copy. ${this.verb === "move" ? "Move" : "Rename"} the original instead.`;
+  }
+}
+
 // The transplant's teardown refused: scripts run in the worktree. Said
 // as the reason a kept source gives, mid-sentence.
 export class ScriptsRunningError extends Schema.TaggedError<ScriptsRunningError>()(

@@ -38,6 +38,7 @@ import {
   makeCarryOver,
 } from "./worktrees/carryOver";
 import type {
+  MirroredCopyError,
   RunningWorkError,
   ScriptsRunningError,
 } from "./worktrees/documents";
@@ -132,7 +133,7 @@ export class Worktrees extends Context.Service<
       readonly destinationPath: string;
     }) => Effect.Effect<
       Worktree,
-      ChangeError | RunningWorkError,
+      ChangeError | RunningWorkError | MirroredCopyError,
       Engine.Services
     >;
     // A move to the same parent under a new folder name.
@@ -142,7 +143,7 @@ export class Worktrees extends Context.Service<
       readonly name: string;
     }) => Effect.Effect<
       Worktree,
-      ChangeError | RunningWorkError,
+      ChangeError | RunningWorkError | MirroredCopyError,
       Engine.Services
     >;
     // A delete, its scripts stopped first, unless `refuseRunningScripts`.
