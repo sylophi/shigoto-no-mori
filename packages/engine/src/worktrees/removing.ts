@@ -308,6 +308,15 @@ export const makeRemoving = ({
       // cut short.
       const half = yield* halfRemoved(worktree);
       const deletingBranch = yield* deletesBranch(located, options.keepBranch);
+      // The worktree's mirror stops first, before the cleanup, so nothing
+      // a cleanup script writes crosses to the other device, and is told
+      // once the removal is done whether git's side went: the files
+      // gone, whatever follows.
+      let filesWent = false;
+      yield* Effect.acquireRelease(
+        stopMirrors(project.id, worktree),
+        (stopped) => Effect.suspend(() => stopped(filesWent)),
+      );
       // Never for an external worktree: no provision ever ran.
       let cleanupRan = false;
       if (!worktree.isExternal && !options.skipCleanup && !half) {
@@ -416,11 +425,8 @@ export const makeRemoving = ({
       // side is done (an orphaned checkout's too), the rest goes before
       // anything can cut in: what is kept under the id, which a worktree
       // made at the same path later would take over, and the branch, which
-      // nothing would remove after an interrupt (a Ctrl-C, a quit). The
-      // worktree's mirror stops first, and is told after whether git's
-      // side went: the files gone, whatever follows.
-      let filesWent = false;
-      const deleting = Effect.uninterruptible(
+      // nothing would remove after an interrupt (a Ctrl-C, a quit).
+      const removed = yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const checkout: Effect.Effect<
             void,
@@ -449,11 +455,6 @@ export const makeRemoving = ({
           return outcome;
         }),
       );
-      const removed = yield* Effect.acquireUseRelease(
-        stopMirrors(project.id, worktree),
-        () => deleting,
-        (stopped) => Effect.suspend(() => stopped(filesWent)),
-      );
       if (
         Result.isFailure(removed) &&
         !(removed.failure instanceof OrphanedWorktree)
@@ -481,7 +482,7 @@ export const makeRemoving = ({
         path: worktree.path,
         projectName: project.name,
       };
-    });
+    }, Effect.scoped);
     return {
       requireClean,
       wipe,
