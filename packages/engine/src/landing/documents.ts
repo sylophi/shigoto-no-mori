@@ -569,9 +569,10 @@ const cleanupDocument = (cleanup: Cleanup, merged: object) => {
           ? {}
           : catchUpFields(cleanup.catchUp)),
         ok: false,
+        ...errorDocument(cleanup.error),
         ...(cleanup.error instanceof Worktrees.CleanupFailed
           ? { cleanupError: Worktrees.cleanupErrorOf(cleanup.error) }
-          : errorDocument(cleanup.error)),
+          : {}),
       };
   }
 };
