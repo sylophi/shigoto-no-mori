@@ -231,17 +231,6 @@ export const findWorktreeIdentity = Effect.fnUntraced(function* (
   const [identity] = yield* Ops.listWorktreeIdentities(
     { projectId, worktreeId },
     opts,
-  ).pipe(
-    // An id from before a move: the worktree it became.
-    Effect.catchTags({
-      UnknownWorktreeError: (gone) =>
-        Effect.flatMap(Ops.wtFolderMovedIds, (moved) => {
-          const now = moved.get(worktreeId);
-          return now === undefined
-            ? Effect.fail(gone)
-            : Ops.listWorktreeIdentities({ projectId, worktreeId: now }, opts);
-        }),
-    }),
   );
   if (!identity) return yield* new UnknownWorktreeError({ worktreeId });
   return identity;

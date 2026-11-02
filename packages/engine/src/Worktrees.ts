@@ -8,6 +8,7 @@ import type { MovedSource } from "@shigomori/contracts/schemas";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
 import { type AgentSession } from "./agentSessions.ts";
 import type { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
@@ -168,7 +169,8 @@ export class Worktrees extends Context.Service<
       TargetError | Registry.UnknownProject | Git.GitError
     >;
     // The worktree a command means. The reserved names root and primary
-    // are the project's primary checkout.
+    // are the project's primary checkout, and an id from before a move
+    // is the worktree it moved to.
     readonly resolve: (
       here: Here,
       target: Target,
@@ -398,7 +400,7 @@ export class Worktrees extends Context.Service<
     // re-key (`changed`). `back` is an undo's, which leaves a changed one,
     // or one kept at `toPath`'s id, where it is. `fromPath`, where the
     // checkout is now, records the move for what follows the id outside
-    // the store (WtFolder.movedIds).
+    // the store (movedIds).
     readonly rekey: (
       project: RegisteredProject,
       from: string,
@@ -409,6 +411,17 @@ export class Worktrees extends Context.Service<
         readonly fromPath?: string;
       },
     ) => Effect.Effect<string, CaptureNotCarried>;
+    // Where a worktree's folder went, moved by the migration, `worktrees
+    // move`, a rename, an adopt, a project relocate or the data-folder
+    // move (every re-key whose checkout moved, worktrees/kept.ts), for
+    // state kept by its path.
+    readonly movedTo: (
+      fromPath: string,
+    ) => Effect.Effect<Option.Option<string>>;
+    // The id each moved worktree had, to the one it has now, for a peer
+    // or a mirror session that still names it by the old one. A folder
+    // back at the old path keeps the id to itself.
+    readonly movedIds: Effect.Effect<ReadonlyMap<string, string>>;
     // Points a project whose repo was moved or renamed by hand at where
     // it is now (an absolute path, any folder inside it will do), keeping
     // its id, and terrier's entry with it. The linked worktrees that moved along are re-linked, and the managed
@@ -430,9 +443,9 @@ export class Worktrees extends Context.Service<
 const make = Effect.gen(function* () {
   const listing = yield* makeListing;
   const statusCard = yield* makeStatusCard({ listing });
-  const resolving = yield* makeResolving({ listing });
-  const describing = yield* makeDescribing({ listing });
   const kept = yield* makeKept;
+  const resolving = yield* makeResolving({ listing, kept });
+  const describing = yield* makeDescribing({ listing });
   const creating = yield* makeCreating({ listing, statusCard, kept });
   const removing = yield* makeRemoving({ listing, creating, kept });
   const moving = yield* makeMoving({ listing, creating, removing, kept });
@@ -496,6 +509,8 @@ const make = Effect.gen(function* () {
     rekey,
     forgetKept: kept.forgetRows,
     keptUnder: kept.keptUnder,
+    movedTo: kept.movedTo,
+    movedIds: kept.movedIds,
     relocateProject,
     deletesBranch: removing.deletesBranch,
     relocationPlan,

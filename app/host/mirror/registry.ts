@@ -564,7 +564,7 @@ export const rootExists = (path: string): Promise<boolean> =>
 // failure rather than fail, and a look that can't read the record leaves
 // the session to the next one.
 const recordedMove = (path: string) =>
-  Effect.map(Effect.exit(Ops.wtFolderMovedTo(path)), (read) =>
+  Effect.map(Effect.exit(Ops.worktreeMovedTo(path)), (read) =>
     Exit.isSuccess(read) ? read.value : undefined,
   );
 

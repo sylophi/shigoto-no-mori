@@ -18,7 +18,6 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -34,7 +33,6 @@ import * as Migration from "./Migration.ts";
 import * as Paths from "./Paths.ts";
 import * as Registry from "./Registry.ts";
 import { working, type Working } from "./processes.ts";
-import { worktreeIdFromPath } from "./worktreeLayout.ts";
 import * as Worktrees from "./Worktrees.ts";
 
 // A worktree still in its v2 folder, and why when a move failed.
@@ -60,17 +58,6 @@ export class WtFolder extends Context.Service<
     readonly retry: (
       projectId: string,
     ) => Effect.Effect<ReadonlyArray<Unmoved>>;
-    // Where a worktree's folder went, moved by the migration, `worktrees
-    // move`, a rename, an adopt, a project relocate or the data-folder
-    // move (every re-key whose checkout moved, worktrees/kept.ts), for
-    // state kept by its path.
-    readonly movedTo: (
-      fromPath: string,
-    ) => Effect.Effect<Option.Option<string>>;
-    // The id each moved worktree had, to the one it has now, for a peer
-    // or a mirror session that still names it by the old one. A folder
-    // back at the old path keeps the id to itself.
-    readonly movedIds: Effect.Effect<ReadonlyMap<string, string>>;
   }
 >()("sm/engine/WtFolder") {}
 
@@ -517,50 +504,11 @@ const make = Effect.gen(function* () {
     return (yield* unmoved).filter((row) => row.projectId === projectId);
   });
 
-  // Where each recorded folder is now, its moves applied in the order
-  // they were made (a move's record is written anew each time, so its
-  // rowid orders it): a move undone and made again ends where it was made
-  // last, and a folder that came back is where it started, whether or
-  // not either path can be looked at (a drive away). A later move from a
-  // path is the folder that took that path since.
-  const placed = Effect.gen(function* () {
-    const rows = yield* sql<{ from_path: string; to_path: string }>`
-      SELECT from_path, to_path FROM wt_moves WHERE moved = 1
-      ORDER BY rowid`.pipe(Effect.orDie);
-    const at = new Map<string, string>();
-    for (const { from_path, to_path } of rows) {
-      for (const [start, now] of at) {
-        if (now === from_path) at.set(start, to_path);
-      }
-      at.set(from_path, to_path);
-    }
-    return at;
-  });
-
-  const movedTo = Effect.fn("WtFolder.movedTo")(function* (fromPath: string) {
-    const now = (yield* placed).get(fromPath);
-    return Option.fromNullishOr(now === fromPath ? undefined : now);
-  });
-
-  const movedIds = Effect.gen(function* () {
-    const ids = new Map<string, string>();
-    for (const [start, now] of yield* placed) {
-      if (now === start) continue;
-      const taken = yield* fs
-        .exists(start)
-        .pipe(Effect.orElseSucceed(() => true));
-      if (!taken) ids.set(worktreeIdFromPath(start), worktreeIdFromPath(now));
-    }
-    return ids as ReadonlyMap<string, string>;
-  }).pipe(Effect.withSpan("WtFolder.movedIds"));
-
   return WtFolder.of({
     drain,
     unmoved,
     retryStuck,
     retry,
-    movedTo,
-    movedIds,
   });
 });
 

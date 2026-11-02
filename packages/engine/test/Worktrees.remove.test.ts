@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
 import { afterEach, beforeEach, it } from "vitest";
 import * as Git from "../src/Git.ts";
 import { MirrorsOnDelete } from "../src/MirrorsOnDelete.ts";
@@ -152,4 +154,52 @@ it("a refused delete never stops the worktree's mirror", async () => {
   const { located, loose } = await withLooseFile();
   assert.deepEqual(await removingMirrored(located, { force: false }), []);
   assert.ok(existsSync(loose));
+});
+
+// An id from before a rename follows to the worktree it became, until
+// that one is removed: a worktree made at its path later has its id,
+// and must never be taken for the one the old id named.
+it("a removed worktree's old ids don't follow to a new worktree at its path", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const byId = (worktreeId: string) =>
+        Effect.flatMap(worktrees.nowhere, (at) =>
+          worktrees.resolve(at, { projectId: project.id, worktreeId }),
+        );
+      const foo = yield* worktrees.create(
+        project,
+        { name: "foo", skipSetup: true },
+        silent,
+      );
+      const renamed = yield* worktrees.rename(project, foo.worktree.id, "bar");
+      const followed = (yield* byId(foo.worktree.id)).worktree.id;
+      yield* worktrees.remove(
+        yield* byId(renamed.worktree.id),
+        { force: true, keepBranch: false, skipCleanup: true },
+        silent,
+      );
+      const again = yield* worktrees.create(
+        project,
+        { name: "bar", branch: "bar-again", skipSetup: true },
+        silent,
+      );
+      const stale = yield* Effect.result(byId(foo.worktree.id));
+      return {
+        followed: followed === renamed.worktree.id,
+        sameId: again.worktree.id === renamed.worktree.id,
+        gone:
+          Result.isFailure(stale) &&
+          Predicate.isTagged(stale.failure, "UnknownWorktree"),
+      };
+    }),
+  )) as { followed: boolean; sameId: boolean; gone: boolean };
+  assert.deepEqual(result, {
+    followed: true,
+    sameId: true,
+    gone: true,
+  });
 });
