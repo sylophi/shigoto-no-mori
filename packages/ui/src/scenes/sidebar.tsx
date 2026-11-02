@@ -6,7 +6,7 @@
 import { defaultBinding } from "../lib/keymap.ts";
 import { buildGrid } from "../views/home/gridModel.ts";
 import type { ReactNode } from "react";
-import type { Project, SidebarView } from "@shigomori/contracts/schemas";
+import type { SidebarView } from "@shigomori/contracts/schemas";
 import { AddProjectButtonView } from "../views/sidebar/AddProjectButtonView.tsx";
 import { buildSidebarRows } from "../views/sidebar/buildSidebarRows.ts";
 import { projectGroupOrder } from "../views/sidebar/projectGroupOrder.ts";
@@ -58,11 +58,7 @@ import { WorktreeRowView } from "../views/sidebar/WorktreeRowView.tsx";
 import { ProjectIconView } from "../views/shared/ProjectIconView.tsx";
 import type { DeviceRosterEntry } from "../lib/deviceRoster.ts";
 import type { SidebarMarks } from "../views/sidebar/WorktreeEntryView.tsx";
-import {
-  type ForestItem,
-  projectGroupKey,
-  type RemoteForestItem,
-} from "../lib/forest.ts";
+import { type ForestItem, projectGroupKey } from "../lib/forest.ts";
 import { deviceStatusView } from "../lib/deviceStatus.ts";
 import { assertNever } from "../lib/utils.ts";
 import {
@@ -150,91 +146,39 @@ function filterChoices(shell: SceneShell): DeviceRosterEntry[] {
   ];
 }
 
-function remoteForests(shell: SceneShell): RemoteForestItem[] {
-  return peersOf(shell).flatMap((device) => {
-    const status = statusOf(shell, device.deviceId);
+// Every device's projects as the forest's items, this machine's first:
+// Studio Mac's own on the desktop, then every peer that answers.
+function forestItems(shell: SceneShell): ForestItem[] {
+  const here = accountDevices.find((d) => d.deviceId === LOCAL_DEVICE_ID);
+  const devices = [
+    ...(shell === "desktop" && here ? [here] : []),
+    ...peersOf(shell),
+  ];
+  return devices.flatMap((device) => {
+    const isThisDevice = shell === "desktop" && device === here;
+    const status = isThisDevice
+      ? { tone: "emerald" as const, reachable: true }
+      : statusOf(shell, device.deviceId);
     const forest = forests[device.deviceId];
     if (!status.reachable || !forest) return [];
-    return forest.projects.map((project) => ({
-      deviceId: device.deviceId,
-      deviceLabel: device.name,
-      deviceIcon: device.icon ?? "desktop",
-      reachable: status.reachable,
-      tone: status.tone,
-      project,
-      worktrees: forest.worktrees[project.id] ?? [],
-      pullRequests: unposedPullRequests(project.id),
-      showPrimaryInInbox: false,
-      worktreesError: false,
-    }));
-  });
-}
-
-// Every device's projects as the forest's items, this machine's first.
-function forestItems(shell: SceneShell): ForestItem[] {
-  const local = accountDevices.find((d) => d.deviceId === LOCAL_DEVICE_ID);
-  const forest = forests[LOCAL_DEVICE_ID];
-  const here: ForestItem[] =
-    shell === "desktop" && local && forest
-      ? forest.projects.map((project) => ({
-          device: {
-            deviceId: LOCAL_DEVICE_ID,
-            label: local.name,
-            icon: local.icon ?? "desktop",
-            tone: "emerald",
-            reachable: true,
-            isThisDevice: true,
-          },
-          project,
-          worktrees: forest.worktrees[project.id] ?? [],
-          listing: "ready",
-          pullRequests: unposedPullRequests(project.id),
-          showPrimaryInInbox: false,
-        }))
-      : [];
-  return [
-    ...here,
-    ...remoteForests(shell).map(
-      (item): ForestItem => ({
+    return forest.projects.map(
+      (project): ForestItem => ({
         device: {
-          deviceId: item.deviceId,
-          label: item.deviceLabel,
-          icon: item.deviceIcon,
-          tone: item.tone,
-          reachable: item.reachable,
-          isThisDevice: false,
+          deviceId: device.deviceId,
+          label: device.name,
+          icon: device.icon ?? "desktop",
+          tone: status.tone,
+          reachable: status.reachable,
+          isThisDevice,
         },
-        project: item.project,
-        worktrees: item.worktrees,
+        project,
+        worktrees: forest.worktrees[project.id] ?? [],
         listing: "ready",
-        pullRequests: item.pullRequests,
-        showPrimaryInInbox: item.showPrimaryInInbox,
+        pullRequests: unposedPullRequests(project.id),
+        showPrimaryInInbox: false,
       }),
-    ),
-  ];
-}
-
-const settled = <T,>(data: T) => ({
-  data,
-  error: null,
-  isLoading: false,
-  isPending: false,
-  isError: false,
-});
-
-function localInputs(shell: SceneShell) {
-  const forest = forests[LOCAL_DEVICE_ID];
-  const projects = shell === "desktop" && forest ? forest.projects : [];
-  return {
-    projects,
-    worktreeQueries: projects.map((project) =>
-      settled(forest?.worktrees[project.id] ?? []),
-    ),
-    pullRequestQueries: projects.map((project) =>
-      settled(unposedPullRequests(project.id)),
-    ),
-    configQueries: projects.map(() => settled(null)),
-  };
+    );
+  });
 }
 
 function inboxModel(shell: SceneShell) {
@@ -252,10 +196,9 @@ function inboxModel(shell: SceneShell) {
 }
 
 // The projects as stored, none pinned or in a folder.
-function manualOrder(projects: Project[], remote: RemoteForestItem[]) {
+function manualOrder(items: readonly ForestItem[]) {
   return projectGroupOrder({
-    projects,
-    remote,
+    items,
     sortMode: "manual",
     pinned: new Set(),
     folders: new Map(),
@@ -263,14 +206,13 @@ function manualOrder(projects: Project[], remote: RemoteForestItem[]) {
 }
 
 function treeModel(shell: SceneShell, openKey: string | null) {
-  const local = localInputs(shell);
-  const remote = remoteForests(shell);
+  const items = forestItems(shell);
   return buildSidebarRows({
-    ...local,
+    items,
     openKey,
     inline: null,
     worktreeSort: () => "name",
-    order: manualOrder(local.projects, remote),
+    order: manualOrder(items),
     openShelves: {
       agentWorking: new Set(),
       shelved: new Set(),
@@ -282,7 +224,6 @@ function treeModel(shell: SceneShell, openKey: string | null) {
     arrangeMode: false,
     byOwner: null,
     shutFolders: new Set(),
-    remote,
     mirrors: [],
     deviceBadges: deviceBadges(shell),
   });
@@ -299,17 +240,14 @@ export function projectRows() {
 // The home page's tiles over the desktop's forest (home/gridModel.ts),
 // none visited yet.
 export function sceneGrid() {
-  const local = localInputs("desktop");
-  const remote = remoteForests("desktop");
+  const items = forestItems("desktop");
   return buildGrid({
-    ...local,
-    order: manualOrder(local.projects, remote),
+    items,
+    order: manualOrder(items),
     hiddenPrefixes: [],
     allowAgentWorking: MARKS.allowAgentWorking,
     byOwner: true,
-    remote,
     mirrors: [],
-    items: forestItems("desktop"),
     deviceBadges: deviceBadges("desktop"),
     visits: {},
   });

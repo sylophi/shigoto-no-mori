@@ -32,8 +32,7 @@ import {
 import { useDoctorWatch } from "@/hooks/cli/useDoctor";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useOpenProject } from "@/components/sidebar/openProject";
-import { useProjects } from "@/hooks/projects/useProjects";
-import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
+import { useForestSources } from "@/components/sidebar/forestSources";
 import { useDeepLinks } from "@/hooks/ui/useDeepLinks";
 import { useEscapeGoesBack } from "@/hooks/ui/useEscapeGoesBack";
 import { useKeymapListener } from "@/hooks/ui/useKeymap";
@@ -175,9 +174,7 @@ export function AppShell() {
 // (openProject.ts), so the Projects tab comes back inside the project
 // just visited.
 function ForestKeepalive() {
-  const { items } = useRemoteForests();
-  const { data: projects = [] } = useProjects();
-  useOpenProject(projects, items);
+  useOpenProject(useForestSources().items);
   return null;
 }
 

@@ -5,11 +5,9 @@
 // keep the noise down on a fresh window, all but the inline list's
 // folded projects, a stored preference (useCollapsedProjects).
 import { useState } from "react";
-import type { Project } from "@shigomori/contracts/schemas";
 import { useCollapsedProjects } from "@/hooks/projects/useCollapsedProjects";
-import { projectGroupKey, remoteGroupKeyOf } from "@shigomori/ui/lib/forest.ts";
 import { withMember, withToggled } from "@shigomori/ui/lib/toggleSet.ts";
-import type { GroupIdSet } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
+import type { GroupKeySet } from "@shigomori/ui/views/sidebar/buildSidebarRows.ts";
 import type {
   GroupShelf,
   SidebarRow,
@@ -39,7 +37,12 @@ type FoldKind = StartsShut | keyof typeof NONE_SHUT;
 
 const startsShut = (kind: FoldKind): kind is StartsShut => kind in NONE_OPENED;
 
-export function useForestFolds(projects: readonly Project[]) {
+// The project folds are kept by group key (projectGroupKey), one per
+// repo, so narrowed to any device that holds it a repo keeps them.
+const worktreeGroupKey = (groupKey: string, prefix: string) =>
+  `${groupKey}\n${prefix}`;
+
+export function useForestFolds() {
   // The open keys of the kinds that start shut, and the shut keys of
   // the rest.
   const [opened, setOpened] = useState(NONE_OPENED);
@@ -69,32 +72,14 @@ export function useForestFolds(projects: readonly Project[]) {
   const isOpen = (kind: FoldKind, key: string) =>
     startsShut(kind) ? opened[kind].has(key) : !shut[kind].has(key);
 
-  // The project folds are kept by group key (projectGroupKey), one per
-  // repo: narrowed to a peer, a repo this machine also holds is drawn as
-  // that peer's group, and it still reads and writes the one key the
-  // local project's group goes by.
-  const localGroupKeys = new Map(
-    projects.map((project) => [
-      project.id,
-      projectGroupKey(project, undefined),
-    ]),
-  );
-  const groupKeyOf = (groupId: string): string =>
-    remoteGroupKeyOf(groupId) ?? localGroupKeys.get(groupId) ?? groupId;
-  const worktreeGroupKey = (groupId: string, prefix: string) =>
-    `${groupKeyOf(groupId)}\n${prefix}`;
   const { collapsedKeys, toggleCollapsed } = useCollapsedProjects();
-
-  const shelfOpen = (shelf: GroupShelf): GroupIdSet => ({
-    has: (groupId) => opened[shelf].has(groupKeyOf(groupId)),
-  });
   // A fold's kind and key, for a row heading one.
   const foldOf = (row: SidebarRow): [FoldKind, string] | null => {
     switch (row.kind) {
       case "group-shelf":
-        return [row.shelf, groupKeyOf(row.groupId)];
+        return [row.shelf, row.groupKey];
       case "worktree-group":
-        return ["worktreeGroup", worktreeGroupKey(row.groupId, row.prefix)];
+        return ["worktreeGroup", worktreeGroupKey(row.groupKey, row.prefix)];
       case "owner-header":
         return ["owner", row.ownerKey];
       case "project-folder":
@@ -110,16 +95,14 @@ export function useForestFolds(projects: readonly Project[]) {
 
   return {
     // buildSidebarRows'.
-    collapsed: {
-      has: (groupId) => collapsedKeys.has(groupKeyOf(groupId)),
-    } satisfies GroupIdSet,
+    collapsed: collapsedKeys satisfies GroupKeySet,
     groupShelvesOpen: {
-      agentWorking: shelfOpen("agentWorking"),
-      shelved: shelfOpen("shelved"),
-      hidden: shelfOpen("hidden"),
-    } satisfies Record<GroupShelf, GroupIdSet>,
-    worktreeGroupShut: (groupId: string, prefix: string) =>
-      shut.worktreeGroup.has(worktreeGroupKey(groupId, prefix)),
+      agentWorking: opened.agentWorking,
+      shelved: opened.shelved,
+      hidden: opened.hidden,
+    } satisfies Record<GroupShelf, GroupKeySet>,
+    worktreeGroupShut: (groupKey: string, prefix: string) =>
+      shut.worktreeGroup.has(worktreeGroupKey(groupKey, prefix)),
     shutOwners: shut.owner,
     shutFolders: shut.folder,
     // buildInboxRows'.
@@ -127,12 +110,12 @@ export function useForestFolds(projects: readonly Project[]) {
     shutInboxGroups: shut.inboxGroup,
     toggleCollapsed,
     toggles: {
-      onToggleShelved: (groupId, shelf) => toggle(shelf, groupKeyOf(groupId)),
+      onToggleShelved: (groupKey, shelf) => toggle(shelf, groupKey),
       onToggleShelf: (shelf) => toggle("inboxShelf", shelf),
       onToggleOwner: (ownerKey) => toggle("owner", ownerKey),
       onToggleFolder: (foldKey) => toggle("folder", foldKey),
-      onToggleWorktreeGroup: (groupId, prefix) =>
-        toggle("worktreeGroup", worktreeGroupKey(groupId, prefix)),
+      onToggleWorktreeGroup: (groupKey, prefix) =>
+        toggle("worktreeGroup", worktreeGroupKey(groupKey, prefix)),
       onToggleInboxGroup: (prefix) => toggle("inboxGroup", prefix),
     } satisfies Partial<RowHandlers>,
     // For revealing a worktree behind a shut fold (SidebarList): opens

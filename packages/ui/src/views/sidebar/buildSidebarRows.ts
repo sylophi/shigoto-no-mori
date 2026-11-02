@@ -5,30 +5,22 @@ import {
 } from "@shigomori/contracts/pullRequestStack";
 import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
 import {
-  deviceBadgeOf,
+  type ForestGroup,
+  type ForestItem,
+  forestGroups,
   groupShelfOf,
   type LocalSide,
   mirrorBadgeLookup,
   mirrorPairsOf,
   type MirrorLink,
-  type ProjectPullRequestQueries,
-  type ProjectWorktreeQueries,
   projectGroupKey,
-  type RemoteForestItem,
-  remoteGroupId,
   remoteWorktreeKey,
   worktreeRowKey,
 } from "../../lib/forest.ts";
-import type {
-  Project,
-  PullRequest,
-  Worktree,
-  WorktreeSortMode,
-} from "@shigomori/contracts/schemas";
+import type { Worktree, WorktreeSortMode } from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadgeView.tsx";
 import {
   ALL_KEY,
-  claimRemote,
   groupSections,
   ownerKeyOf,
   type ProjectGroupOrder,
@@ -43,18 +35,14 @@ import {
 } from "./sidebarRow.ts";
 import { sortWorktrees } from "../../lib/sortWorktrees.ts";
 
-// A set of group ids as the builder asks it: only whether one is in.
-// The shell keeps the open project and the shelf reveals by group key
-// (projectGroupKey), so it hands a view over those rather than the ids
-// spelled out.
-export type GroupIdSet = Pick<ReadonlySet<string>, "has">;
+// A set of group keys (projectGroupKey) as the builder asks it: only
+// whether one is in.
+export type GroupKeySet = Pick<ReadonlySet<string>, "has">;
 
 export interface BuildSidebarRowsArgs {
-  projects: readonly Project[];
-  // Both positionally aligned with `projects`. The PR maps are what
-  // gathers a stack's rows together.
-  worktreeQueries: ProjectWorktreeQueries;
-  pullRequestQueries: ProjectPullRequestQueries;
+  // Every device's projects, this machine's first (forestGroups). The
+  // PR maps are what gathers a stack's rows together.
+  items: readonly ForestItem[];
   // The group key (projectGroupKey) of the project the tree is inside,
   // null on the list of projects. A key no group here goes by (the
   // device filter narrowed the project away, or it was removed) reads
@@ -63,7 +51,7 @@ export interface BuildSidebarRowsArgs {
   // Lists every project's worktrees under its header on the list of
   // projects, the groups in `collapsed` drawn as their header alone,
   // rather than one project at a time. Null steps into projects.
-  inline: { collapsed: GroupIdSet } | null;
+  inline: { collapsed: GroupKeySet } | null;
   // Where each group sits (projectGroupOrder), decided over every
   // device's projects so the device filter never reorders the groups.
   order: ProjectGroupOrder;
@@ -71,7 +59,7 @@ export interface BuildSidebarRowsArgs {
   // (useWorktreeSorts).
   worktreeSort: (groupKey: string) => WorktreeSortMode;
   // The groups whose shelf is open, per shelf.
-  openShelves: Record<GroupShelf, GroupIdSet>;
+  openShelves: Record<GroupShelf, GroupKeySet>;
   // Worktrees starting with one of these fold away like shelved ones.
   hiddenPrefixes: readonly string[];
   // Whether a working agent session shelves its worktree (isAgentWorking).
@@ -81,7 +69,7 @@ export interface BuildSidebarRowsArgs {
   // names drawn as their header alone. Null groups nothing.
   byPrefix: {
     prefixes: readonly string[];
-    shut: (groupId: string, prefix: string) => boolean;
+    shut: (groupKey: string, prefix: string) => boolean;
   } | null;
   arrangeMode: boolean;
   // Splits the list of projects under a header per owner (ownerOf),
@@ -93,11 +81,6 @@ export interface BuildSidebarRowsArgs {
   // The folders (ProjectGroupOrder.folders) drawn as their header
   // alone, by fold key (the "project-folder" row's).
   shutFolders: ReadonlySet<string>;
-  // Peer devices' forests, merged into the tree: a remote project
-  // sharing a local project's repo identity contributes its worktrees
-  // to that group (marked per row), the rest gather under project
-  // headers of their own.
-  remote: RemoteForestItem[];
   // This device's mirrored pairs (useMirrorLinks). A pair is one
   // worktree on two machines, so the peer's row folds into the local
   // row (see mirrorPairsOf).
@@ -109,25 +92,23 @@ export interface BuildSidebarRowsArgs {
   // under every device.
   localSides?: ReadonlyMap<string, LocalSide>;
   // Every peer's badge off the device registry (useDeviceBadges),
-  // whether or not its rows are in `remote`: the device filter narrows
+  // whether or not its rows are in `items`: the device filter narrows
   // the rows, and a local row's mirror still names its peer while the
   // peer's own rows are hidden.
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
 }
 
-// Flattens `projects` plus their per-project worktree queries into the
-// SidebarRow list the virtualizer renders. A plain function, not a hook:
-// the queries are subscribed once by the Sidebar and handed to whichever
-// builder the active view needs, so flipping views doesn't tear the
-// subscriptions down and re-probe git for every project.
+// Flattens every device's items into the SidebarRow list the
+// virtualizer renders. A plain function, not a hook: the reads are
+// subscribed once by the Sidebar and handed to whichever builder the
+// active view needs, so flipping views doesn't tear the subscriptions
+// down and re-probe git for every project.
 //
 // No memo, deliberately. The result is O(rows) to rebuild and the inputs
 // change whenever anything on screen does, so a cache here would need a
 // deep fingerprint to stay correct and would save nothing.
 export function buildSidebarRows({
-  projects,
-  worktreeQueries,
-  pullRequestQueries,
+  items,
   openKey,
   inline,
   order,
@@ -139,49 +120,31 @@ export function buildSidebarRows({
   arrangeMode,
   byOwner,
   shutFolders,
-  remote,
   mirrors,
   localSides,
   deviceBadges,
 }: BuildSidebarRowsArgs): SidebarViewModel {
-  const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
-  const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
-  const localRows = (
-    trees: readonly Worktree[],
-    pullRequests: Record<string, PullRequest> | undefined,
-    shelf: GroupShelf | null,
-    groupId: string,
-  ): WorktreeRow[] =>
-    trees.map((worktree) => ({
-      kind: "worktree",
-      key: worktreeRowKey(undefined, worktree.id),
-      worktree,
-      mirror: mirrorBadgeFor(worktree),
-      mirrorWorktreeId: peerOfLocal.get(worktree.id)?.peerWorktreeId,
-      pr: pullRequests?.[worktree.branch],
-      stack: null,
-      shelf,
-      groupId,
-    }));
-
   if (arrangeMode) {
-    const rows: SidebarRow[] = projects.map((project) => ({
-      kind: "project",
-      key: `p:${project.id}`,
-      groupId: project.id,
-      groupKey: projectGroupKey(project, undefined),
-      project,
-      local: true,
-      expanded: false,
-      // Arranging draws the stored order, which the pins don't lead,
-      // and no folders.
-      pinned: false,
-      folder: null,
-      folders: [],
-      section: ALL_KEY,
-      devices: [],
-      members: [],
-    }));
+    // Arranging is this machine's stored order, a row per project.
+    const rows: SidebarRow[] = items
+      .filter((item) => item.device.isThisDevice)
+      .map(({ project }) => ({
+        kind: "project",
+        key: `p:${project.id}`,
+        groupId: project.id,
+        groupKey: projectGroupKey(project, undefined),
+        project,
+        local: true,
+        expanded: false,
+        // Arranging draws the stored order, which the pins don't lead,
+        // and no folders.
+        pinned: false,
+        folder: null,
+        folders: [],
+        section: ALL_KEY,
+        devices: [],
+        members: [],
+      }));
     return {
       rows,
       emptyMessage: null,
@@ -189,14 +152,17 @@ export function buildSidebarRows({
     };
   }
 
+  const { peerRowsFolded } = mirrorPairsOf(mirrors);
+  const groups = sortedGroups(items, order);
   const file = groupFiler(
     {
-      projects,
-      worktreeQueries,
+      groups,
       openShelves,
       hiddenPrefixes,
       allowAgentWorking,
       localSides,
+      mirrors,
+      deviceBadges,
     },
     peerRowsFolded,
   );
@@ -207,37 +173,25 @@ export function buildSidebarRows({
   // The header each row behind a shut fold stands behind, for
   // revealKey.
   const shutFoldRows = new Map<string, string>();
-  const hide = (
-    local: readonly Worktree[],
-    peers: readonly WorktreeRow[],
-    foldKey: string,
-  ) => {
-    for (const worktree of local)
-      shutFoldRows.set(worktreeRowKey(undefined, worktree.id), foldKey);
-    for (const row of peers) shutFoldRows.set(row.key, foldKey);
+  const hide = (rows: readonly WorktreeRow[], foldKey: string) => {
+    for (const row of rows) shutFoldRows.set(row.key, foldKey);
   };
-  const sorted = sortedGroups({
-    projects,
-    worktreeQueries,
-    pullRequestQueries,
-    remote,
-    order,
-  });
   // The tree draws one level: the open project on its own, or the list
   // of projects, a header each, and inline each one's rows under it.
   // (A repo registered twice here is two groups under one key, and
   // opens as both.)
   const open =
-    inline === null ? sorted.filter((group) => group.groupKey === openKey) : [];
+    inline === null ? groups.filter((group) => group.key === openKey) : [];
   const inProject = open.length > 0;
-  for (const group of inProject ? open : sorted) {
-    const { groupId, project, query } = group;
+  for (const group of inProject ? open : groups) {
+    const { id: groupId, key: groupKey } = group;
+    const [lead] = group.items;
     // Inline, whether the project is folded to its header.
     const isFolded =
-      inline === null ? undefined : inline.collapsed.has(groupId);
+      inline === null ? undefined : inline.collapsed.has(groupKey);
     const rowsDrawn = inProject || isFolded === false;
     const filed = file(group);
-    const { localVisible, localShelves, remoteVisible, remoteShelves } = filed;
+    const { visible, shelves } = filed;
     const header = projectHeader(group, filed, {
       order,
       byOwner: byOwner !== null,
@@ -250,44 +204,39 @@ export function buildSidebarRows({
     // them. A repo registered twice opens as both its groups, and those
     // keep their headers in the rows, each over its own.
     if (inProject && open.length === 1) pinned = header;
-    if (project.pathExists === false) continue;
+    if (lead.project.pathExists === false) continue;
     if (!rowsDrawn) {
       // A folded project's header stands in for its rows.
       if (isFolded) {
-        hide(localVisible, remoteVisible, header.key);
-        for (const shelf of GROUP_SHELVES)
-          hide(localShelves[shelf], remoteShelves[shelf], header.key);
+        hide(visible, header.key);
+        for (const shelf of GROUP_SHELVES) hide(shelves[shelf], header.key);
       }
       continue;
     }
     if (filed.unlisted !== null) {
+      const { kind, item } = filed.unlisted;
       rows.push({
-        kind: filed.unlisted,
-        key: `${filed.unlisted === "worktree-skeleton" ? "sk" : "err"}:${project.id}`,
-        projectId: project.id,
+        kind,
+        key: `${kind === "worktree-skeleton" ? "sk" : "err"}:${item.project.id}`,
+        groupId,
       });
     }
     // In the project's sort, then a stack's rows sit together on a
     // rail, top layer first, wherever its layers are checked out:
-    // gathered at its first layer's place. The trunk comes off
-    // whichever listing the group has.
-    const trunk = trunkOf(query?.data) ?? trunkOf(group.remote[0]?.worktrees);
-    const placed = (
-      local: readonly Worktree[],
-      peers: WorktreeRow[],
-      shelf: GroupShelf | null,
-    ): SidebarRow[] =>
+    // gathered at its first layer's place. The trunk comes off the
+    // first listing that names one, and the PRs off the group's lead.
+    const trunk = group.items
+      .map((item) => trunkOf(item.worktrees))
+      .find((branch) => branch !== undefined);
+    const prs = lead.pullRequests;
+    const placed = (filedRows: WorktreeRow[]): SidebarRow[] =>
       placeByStack(
-        sortWorktrees(
-          [...localRows(local, group.pullRequests, shelf, groupId), ...peers],
-          worktreeSort(group.groupKey),
-          (row) => row.worktree,
-        ),
+        sortWorktrees(filedRows, worktreeSort(groupKey), (row) => row.worktree),
         (row) => row.worktree.branch,
-        group.pullRequests,
+        prs,
         trunk,
       ).map(({ item, position, rail }) => {
-        // The rows were built for this call, so they are ours to fill in.
+        // The rows were built for this build, so they are ours to fill in.
         item.stack = position;
         item.stackRail = rail;
         return item;
@@ -295,14 +244,12 @@ export function buildSidebarRows({
     // A fold's rows: placed when it is open, else left out with the
     // fold's header standing in for each.
     const foldRows = (
-      local: Worktree[],
-      peers: WorktreeRow[],
-      shelf: GroupShelf | null,
+      foldedRows: WorktreeRow[],
       shown: boolean,
       foldKey: string,
     ): SidebarRow[] => {
-      if (shown) return placed(local, peers, shelf);
-      hide(local, peers, foldKey);
+      if (shown) return placed(foldedRows);
+      hide(foldedRows, foldKey);
       return [];
     };
     // The open rows a prefix gathers sit under its header, after the
@@ -313,17 +260,14 @@ export function buildSidebarRows({
     // Stacks by their bottom branch, each with the prefix its lowest
     // listed layer files under.
     const stackOf = (worktree: Worktree) =>
-      group.pullRequests && !worktree.detached
-        ? pullRequestStackFor(group.pullRequests, worktree.branch, trunk)
-        : null;
+      worktree.detached
+        ? null
+        : pullRequestStackFor(prs, worktree.branch, trunk);
     const stackPrefix = new Map<
       string,
       { index: number; prefix: string | null }
     >();
-    for (const worktree of [
-      ...localVisible,
-      ...remoteVisible.map((row) => row.worktree),
-    ]) {
+    for (const { worktree } of visible) {
       const stack = stackOf(worktree);
       const bottom = stack?.entries[0]?.branch;
       if (!stack || bottom === undefined) continue;
@@ -334,61 +278,57 @@ export function buildSidebarRows({
         prefix: groupPrefixOf(worktree, prefixes),
       });
     }
-    const rest: Bucket = { local: [], peers: [] };
-    const grouped = new Map<string, Bucket>();
-    const bucketOf = (worktree: Worktree): Bucket => {
-      const bottom = stackOf(worktree)?.entries[0]?.branch;
+    const rest: WorktreeRow[] = [];
+    const grouped = new Map<string, WorktreeRow[]>();
+    for (const row of visible) {
+      const bottom = stackOf(row.worktree)?.entries[0]?.branch;
       const prefix =
         bottom === undefined
-          ? groupPrefixOf(worktree, prefixes)
+          ? groupPrefixOf(row.worktree, prefixes)
           : (stackPrefix.get(bottom)?.prefix ?? null);
-      if (prefix === null) return rest;
-      const bucket = grouped.get(prefix) ?? { local: [], peers: [] };
+      if (prefix === null) {
+        rest.push(row);
+        continue;
+      }
+      const bucket = grouped.get(prefix) ?? [];
       grouped.set(prefix, bucket);
-      return bucket;
-    };
-    for (const worktree of localVisible)
-      bucketOf(worktree).local.push(worktree);
-    for (const row of remoteVisible) bucketOf(row.worktree).peers.push(row);
-    rows.push(...placed(rest.local, rest.peers, null));
+      bucket.push(row);
+    }
+    rows.push(...placed(rest));
     for (const prefix of prefixes) {
       const bucket = grouped.get(prefix);
       if (!bucket) continue;
-      const groupOpen = !shut(groupId, prefix);
+      const groupOpen = !shut(groupKey, prefix);
       const headerKey = `g:${groupId}:${prefix}`;
       rows.push(
         {
           kind: "worktree-group",
           key: headerKey,
           groupId,
+          groupKey,
           prefix,
-          count: bucket.local.length + bucket.peers.length,
+          count: bucket.length,
           expanded: groupOpen,
         },
-        ...foldRows(bucket.local, bucket.peers, null, groupOpen, headerKey),
+        ...foldRows(bucket, groupOpen, headerKey),
       );
     }
     for (const shelf of GROUP_SHELVES) {
-      const count = localShelves[shelf].length + remoteShelves[shelf].length;
-      if (count === 0) continue;
-      const shelfOpen = openShelves[shelf].has(groupId);
+      const shelfRows = shelves[shelf];
+      if (shelfRows.length === 0) continue;
+      const shelfOpen = openShelves[shelf].has(groupKey);
       const shelfKey = `${shelf}:${groupId}`;
       rows.push(
         {
           kind: "group-shelf",
           key: shelfKey,
           groupId,
+          groupKey,
           shelf,
-          count,
+          count: shelfRows.length,
           expanded: shelfOpen,
         },
-        ...foldRows(
-          localShelves[shelf],
-          remoteShelves[shelf],
-          shelf,
-          shelfOpen,
-          shelfKey,
-        ),
+        ...foldRows(shelfRows, shelfOpen, shelfKey),
       );
     }
   }
@@ -420,12 +360,11 @@ export function buildSidebarRows({
         const foldKey = shutFoldRows.get(key);
         return foldKey === undefined ? undefined : shown(foldKey);
       };
-      // A peer's row is device-qualified (remoteWorktreeRows). It
-      // is absent while its listing is in flight or the tree is not
-      // inside its project, which reveals nothing: the shell opens the
-      // project of the worktree on screen, and the row is revealed
-      // once it draws. Settling for the header would mark the reveal
-      // done before then.
+      // A peer's row is device-qualified. It is absent while its
+      // listing is in flight or the tree is not inside its project,
+      // which reveals nothing: the shell opens the project of the
+      // worktree on screen, and the row is revealed once it draws.
+      // Settling for the header would mark the reveal done before then.
       if (deviceId !== undefined) {
         const key = remoteWorktreeKey(deviceId, worktreeId);
         // A peer's worktree folded into its local mirror: reveal that.
@@ -441,12 +380,6 @@ export function buildSidebarRows({
       return shown(worktreeRowKey(undefined, worktreeId)) ?? null;
     },
   };
-}
-
-// One fold's rows, before they are placed.
-interface Bucket {
-  local: Worktree[];
-  peers: WorktreeRow[];
 }
 
 const NO_PREFIX_GROUPS: NonNullable<BuildSidebarRowsArgs["byPrefix"]> = {
@@ -465,20 +398,6 @@ const emptyShelves = <T>(): Record<GroupShelf, T[]> => ({
 function headerKeyIfPresent(rows: SidebarRow[], projectId: string) {
   const key = `p:${projectId}`;
   return rows.some((r) => r.key === key) ? key : null;
-}
-
-// What one header leads. `query` is this machine's worktree listing,
-// which a peer-only group has none of.
-interface ProjectGroup {
-  groupId: string;
-  // What the shell keeps the open project by (projectGroupKey).
-  groupKey: string;
-  project: Project;
-  query: ProjectWorktreeQueries[number] | undefined;
-  // The repo's branch -> PR map, off whichever checkout the group has.
-  pullRequests: Record<string, PullRequest> | undefined;
-  local: boolean;
-  remote: RemoteForestItem[];
 }
 
 // A group's header and, when they are drawn, the rows under it.
@@ -550,66 +469,29 @@ function listRows(
   return [...lead, ...after];
 }
 
-// One group per header: every local project with the peers' checkouts
-// of the same repo, then the repos only peers hold, where `order` puts
-// them. A project is a project wherever it is checked out, so both
-// kinds sort together and render through the same rows.
-function sortedGroups({
-  projects,
-  worktreeQueries,
-  pullRequestQueries,
-  remote,
-  order,
-}: Pick<
-  BuildSidebarRowsArgs,
-  "projects" | "worktreeQueries" | "pullRequestQueries" | "remote" | "order"
->): ProjectGroup[] {
-  const { claimed, peerOnly } = claimRemote(projects, remote);
-  const groups: ProjectGroup[] = projects.map((project, i) => ({
-    groupId: project.id,
-    groupKey: projectGroupKey(project, undefined),
-    project,
-    query: worktreeQueries[i],
-    pullRequests: pullRequestQueries[i]?.data,
-    local: true,
-    remote: claimed[i] ?? [],
-  }));
-  // The same repo on several devices reads as one project (the per-row
-  // device marker tells them apart), led by the first device's
-  // checkout.
-  for (const [groupKey, items] of peerOnly) {
-    const [first] = items;
-    if (!first) continue;
-    groups.push({
-      groupId: remoteGroupId(groupKey),
-      groupKey,
-      project: first.project,
-      query: undefined,
-      // One repo has one set of PRs wherever it is checked out, so the
-      // first peer's map serves the group.
-      pullRequests: first.pullRequests,
-      local: false,
-      remote: items,
-    });
-  }
-  // Every group is in the order, which was built over a superset of
-  // these inputs. The fallback only keeps the comparator total.
-  const rankOf = (group: ProjectGroup) =>
-    order.groups.get(group.groupId) ?? order.groups.size;
-  return groups.toSorted((a, b) => rankOf(a) - rankOf(b));
+// Every group in the order's place for it. Every group is in the order,
+// which was built over a superset of these items. The fallback only
+// keeps the comparator total.
+function sortedGroups(
+  items: readonly ForestItem[],
+  order: ProjectGroupOrder,
+): ForestGroup[] {
+  const rankOf = (group: ForestGroup) =>
+    order.groups.get(group.id) ?? order.groups.size;
+  return forestGroups(items).toSorted((a, b) => rankOf(a) - rankOf(b));
 }
 
-// What a group lists, the open rows and each fold's, this machine's and
-// the peers' apart. Worked out the same way at both levels, so the
-// list's count is the rows the project draws once opened. `unlisted`
-// is the row standing in for this machine's listing while it loads or
-// after it failed.
+// What a group lists, the open rows and each fold's. Worked out the
+// same way at both levels, so the list's count is the rows the project
+// draws once opened. `unlisted` is the row standing in for a listing
+// that is loading or failed, and the item it stands for.
 interface FiledGroup {
-  localVisible: Worktree[];
-  localShelves: Record<GroupShelf, Worktree[]>;
-  remoteVisible: WorktreeRow[];
-  remoteShelves: Record<GroupShelf, WorktreeRow[]>;
-  unlisted: "worktree-skeleton" | "worktree-error" | null;
+  visible: WorktreeRow[];
+  shelves: Record<GroupShelf, WorktreeRow[]>;
+  unlisted: {
+    kind: "worktree-skeleton" | "worktree-error";
+    item: ForestItem;
+  } | null;
 }
 
 // Files a group as it draws. Filing one lists this device's sides of
@@ -617,23 +499,43 @@ interface FiledGroup {
 // into, so the filer is called once per group, in drawing order.
 function groupFiler(
   {
-    projects,
-    worktreeQueries,
+    groups,
     openShelves,
     hiddenPrefixes,
     allowAgentWorking,
     localSides = new Map(),
+    mirrors,
+    deviceBadges,
   }: Pick<
     BuildSidebarRowsArgs,
-    | "projects"
-    | "worktreeQueries"
     | "openShelves"
     | "hiddenPrefixes"
     | "allowAgentWorking"
     | "localSides"
-  >,
+    | "mirrors"
+    | "deviceBadges"
+  > & { groups: readonly ForestGroup[] },
   peerRowsFolded: ReadonlyMap<string, string>,
-): (group: ProjectGroup) => FiledGroup {
+): (group: ForestGroup) => FiledGroup {
+  const { peerOfLocal } = mirrorPairsOf(mirrors);
+  const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
+  const shelfOf = (worktree: Worktree) =>
+    groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
+  const localRow = (
+    worktree: Worktree,
+    pr: WorktreeRow["pr"],
+    group: ForestGroup,
+  ): WorktreeRow => ({
+    kind: "worktree",
+    key: worktreeRowKey(undefined, worktree.id),
+    worktree,
+    mirror: mirrorBadgeFor(worktree),
+    mirrorWorktreeId: peerOfLocal.get(worktree.id)?.peerWorktreeId,
+    pr,
+    stack: null,
+    shelf: shelfOf(worktree),
+    groupId: group.id,
+  });
   // The local rows this build lists, decided up front: a peer's row
   // folds only into a local row that is really on screen. Its listing
   // still loading or failed, or its fold shut, the peer's row stays
@@ -645,21 +547,22 @@ function groupFiler(
     string,
     { groupId: string; shelf: GroupShelf | null; shown: boolean }
   >();
-  projects.forEach((project, i) => {
-    if (project.pathExists === false) return;
-    const query = worktreeQueries[i];
-    // A failed refetch keeps its last data, but the group draws the
-    // error row instead of it.
-    if (!query || query.error) return;
-    for (const worktree of query.data ?? []) {
-      const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
-      listedLocal.set(worktree.id, {
-        groupId: project.id,
-        shelf,
-        shown: shelf === null || openShelves[shelf].has(project.id),
-      });
-    }
-  });
+  const list = (worktree: Worktree, group: ForestGroup) => {
+    const shelf = shelfOf(worktree);
+    listedLocal.set(worktree.id, {
+      groupId: group.id,
+      shelf,
+      shown: shelf === null || openShelves[shelf].has(group.key),
+    });
+  };
+  for (const group of groups)
+    for (const item of group.items)
+      if (
+        item.device.isThisDevice &&
+        item.listing === "ready" &&
+        item.project.pathExists !== false
+      )
+        for (const worktree of item.worktrees) list(worktree, group);
   const foldedInto = (
     peerKey: string,
     shelf: GroupShelf | null,
@@ -674,70 +577,82 @@ function groupFiler(
     );
   };
   return (group) => {
-    const { groupId, query } = group;
     // Peers' worktrees of this same repo sort in among the local rows
-    // (sortWorktrees) -- and render on EVERY path below: a claimed
-    // group that then skipped rendering (local listing still loading,
-    // or errored) would vanish from the tree entirely, hiding the
-    // peer's perfectly healthy worktrees behind a local-only failure.
-    // Their shelved and hidden ones share the group's folds with the
-    // local ones, so a device showing only peers' work (the web
-    // client) can still reach them.
-    const remoteVisible: WorktreeRow[] = [];
-    const remoteShelves = emptyShelves<WorktreeRow>();
-    const localVisible: Worktree[] = [];
-    const localShelves = emptyShelves<Worktree>();
-    const fileLocal = (worktree: Worktree) => {
-      const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
-      (shelf === null ? localVisible : localShelves[shelf]).push(worktree);
-      return shelf;
-    };
-    const folded = (peerKey: string, shelf: GroupShelf | null) =>
-      foldedInto(peerKey, shelf, groupId);
-    for (const item of group.remote) {
-      // This device's side of a pair with the peer, filed among the
-      // group's local rows and listed for the peer's row to fold into.
+    // (sortWorktrees), and render on EVERY path below: a group whose
+    // local listing is still loading, or failed, would otherwise hide
+    // the peer's perfectly healthy worktrees behind a local-only
+    // failure. Their shelved and hidden ones share the group's folds
+    // with the local ones, so a device showing only peers' work (the
+    // web client) can still reach them. This machine's rows come first,
+    // which a tie in the sort keeps.
+    const local: WorktreeRow[] = [];
+    const peers: WorktreeRow[] = [];
+    const [lead] = group.items;
+    for (const item of group.items) {
+      const { device } = item;
+      if (device.isThisDevice) {
+        if (item.listing === "ready")
+          for (const worktree of item.worktrees)
+            local.push(
+              localRow(worktree, item.pullRequests[worktree.branch], group),
+            );
+        continue;
+      }
       for (const worktree of item.worktrees) {
-        const local = peerRowsFolded.get(
-          remoteWorktreeKey(item.deviceId, worktree.id),
-        );
-        const side = local === undefined ? undefined : localSides.get(local);
-        if (side === undefined) continue;
-        const shelf = fileLocal(side.worktree);
-        listedLocal.set(side.worktree.id, {
-          groupId,
+        const key = remoteWorktreeKey(device.deviceId, worktree.id);
+        // This device's side of a pair with the peer, filed among the
+        // group's local rows and listed for the peer's row to fold into.
+        const paired = peerRowsFolded.get(key);
+        const side = paired === undefined ? undefined : localSides.get(paired);
+        if (side !== undefined) {
+          local.push(
+            localRow(
+              side.worktree,
+              lead.pullRequests[side.worktree.branch],
+              group,
+            ),
+          );
+          list(side.worktree, group);
+        }
+      }
+    }
+    for (const { device, worktrees, pullRequests } of group.items) {
+      if (device.isThisDevice) continue;
+      for (const worktree of worktrees) {
+        const key = remoteWorktreeKey(device.deviceId, worktree.id);
+        const shelf = shelfOf(worktree);
+        // The local row of a mirrored pair stands for both copies.
+        if (foldedInto(key, shelf, group.id)) continue;
+        peers.push({
+          kind: "worktree",
+          key,
+          worktree,
+          device,
+          pr: pullRequests[worktree.branch],
+          stack: null,
           shelf,
-          shown: shelf === null || openShelves[shelf].has(groupId),
+          groupId: group.id,
         });
       }
-      const peerRows = remoteWorktreeRows(
-        item,
-        groupId,
-        hiddenPrefixes,
-        allowAgentWorking,
-        folded,
-      );
-      for (const row of peerRows) {
-        const { shelf } = row;
-        (shelf === null ? remoteVisible : remoteShelves[shelf]).push(row);
-      }
     }
-    const unlisted = query?.isLoading
-      ? "worktree-skeleton"
-      : query?.error
-        ? "worktree-error"
-        : null;
-    if (query && unlisted === null) {
-      for (const worktree of query.data ?? []) {
-        fileLocal(worktree);
-      }
-    }
+    const visible: WorktreeRow[] = [];
+    const shelves = emptyShelves<WorktreeRow>();
+    for (const row of [...local, ...peers])
+      (row.shelf === null ? visible : shelves[row.shelf]).push(row);
+    const pending = group.items.find((item) => item.listing !== "ready");
     return {
-      localVisible,
-      localShelves,
-      remoteVisible,
-      remoteShelves,
-      unlisted,
+      visible,
+      shelves,
+      unlisted:
+        pending === undefined
+          ? null
+          : {
+              kind:
+                pending.listing === "loading"
+                  ? "worktree-skeleton"
+                  : "worktree-error",
+              item: pending,
+            },
     };
   };
 }
@@ -745,8 +660,8 @@ function groupFiler(
 // A group's header: on the list of projects, or `expanded` over the
 // open project. `folded` is the inline list's (the project row's).
 function projectHeader(
-  group: ProjectGroup,
-  { localVisible, remoteVisible, unlisted }: FiledGroup,
+  group: ForestGroup,
+  { visible, unlisted }: FiledGroup,
   {
     order,
     byOwner,
@@ -759,48 +674,45 @@ function projectHeader(
     folded: boolean | undefined;
   },
 ): ProjectListRow {
-  const { groupId, project } = group;
+  const [{ project, device }] = group.items;
+  const peers = group.items.filter((item) => !item.device.isThisDevice);
   const section = byOwner ? ownerKeyOf(project) : ALL_KEY;
   const rowsDrawn = expanded || folded === false;
   const missing = project.pathExists === false;
   return {
     kind: "project",
-    key: `p:${groupId}`,
-    groupId,
-    groupKey: group.groupKey,
+    key: `p:${group.id}`,
+    groupId: group.id,
+    groupKey: group.key,
     project,
-    local: group.local,
+    local: device.isThisDevice,
     expanded,
     folded,
-    pinned: order.pinned.has(group.groupKey),
-    folder: order.folders.get(group.groupKey) ?? null,
+    pinned: order.pinned.has(group.key),
+    folder: order.folders.get(group.key) ?? null,
     folders: [...(order.filed.get(section)?.keys() ?? [])],
     section,
     // The worktrees beside the primary checkouts. Those are left out
     // because every project has one, and a number on every line
-    // would say nothing about where the work is. None while this
-    // machine's listing is loading or failed, since the peers' share
-    // alone would read as the whole.
+    // would say nothing about where the work is. None while a listing
+    // is loading or failed, since the rest's share alone would read as
+    // the whole.
     branches:
       rowsDrawn || missing || unlisted !== null
         ? undefined
-        : localVisible.filter((worktree) => !worktree.isPrimary).length +
-          remoteVisible.filter((row) => !row.worktree.isPrimary).length,
-    devices: deviceBadgesOf(group.remote),
-    members: membersOf(group.remote),
+        : visible.filter((row) => !row.worktree.isPrimary).length,
+    devices: deviceBadgesOf(peers),
+    members: membersOf(peers),
   };
 }
 
 // What lists the projects as the tree does (projectListSections).
 export type ProjectListArgs = Pick<
   BuildSidebarRowsArgs,
-  | "projects"
-  | "worktreeQueries"
-  | "pullRequestQueries"
+  | "items"
   | "order"
   | "hiddenPrefixes"
   | "allowAgentWorking"
-  | "remote"
   | "mirrors"
   | "localSides"
 > & { byOwner: boolean };
@@ -808,17 +720,19 @@ export type ProjectListArgs = Pick<
 // The list of projects' headers in its order, with no project's rows
 // drawn and so no fold open.
 export function projectHeaders({
+  items,
+  order,
   byOwner,
-  mirrors,
   ...forest
 }: ProjectListArgs): ProjectListRow[] {
+  const groups = sortedGroups(items, order);
   const file = groupFiler(
-    { ...forest, openShelves: NO_SHELVES },
-    mirrorPairsOf(mirrors).peerRowsFolded,
+    { ...forest, groups, openShelves: NO_SHELVES, deviceBadges: new Map() },
+    mirrorPairsOf(forest.mirrors).peerRowsFolded,
   );
-  return sortedGroups(forest).map((group) =>
+  return groups.map((group) =>
     projectHeader(group, file(group), {
-      order: forest.order,
+      order,
       byOwner,
       expanded: false,
       folded: undefined,
@@ -826,7 +740,7 @@ export function projectHeaders({
   );
 }
 
-const NO_SHELVES: Record<GroupShelf, GroupIdSet> = {
+const NO_SHELVES: Record<GroupShelf, GroupKeySet> = {
   agentWorking: EMPTY,
   shelved: EMPTY,
   hidden: EMPTY,
@@ -834,45 +748,18 @@ const NO_SHELVES: Record<GroupShelf, GroupIdSet> = {
 
 type WorktreeRow = Extract<SidebarRow, { kind: "worktree" }>;
 
-function remoteWorktreeRows(
-  item: RemoteForestItem,
-  groupId: string,
-  hiddenPrefixes: readonly string[],
-  allowAgentWorking: boolean,
-  folded: (peerKey: string, shelf: GroupShelf | null) => boolean,
-): WorktreeRow[] {
-  const rows: WorktreeRow[] = [];
-  for (const worktree of item.worktrees) {
-    const key = remoteWorktreeKey(item.deviceId, worktree.id);
-    const shelf = groupShelfOf(worktree, hiddenPrefixes, allowAgentWorking);
-    // The local row of a mirrored pair stands for both copies.
-    if (folded(key, shelf)) continue;
-    rows.push({
-      kind: "worktree",
-      key,
-      worktree,
-      device: deviceBadgeOf(item),
-      pr: item.pullRequests[worktree.branch],
-      stack: null,
-      shelf,
-      groupId,
-    });
-  }
-  return rows;
-}
-
 // The group's (device, project) pairs, in the order they were merged,
 // one per device like the badges: a device that registered the same
 // repo twice acts through its first registration.
-function membersOf(items: readonly RemoteForestItem[]): RemoteProjectMember[] {
+function membersOf(items: readonly ForestItem[]): RemoteProjectMember[] {
   const members = new Map<string, RemoteProjectMember>();
-  for (const item of items) {
-    if (!members.has(item.deviceId)) {
-      members.set(item.deviceId, {
-        deviceId: item.deviceId,
-        deviceLabel: item.deviceLabel,
-        deviceIcon: item.deviceIcon,
-        project: item.project,
+  for (const { device, project } of items) {
+    if (!members.has(device.deviceId)) {
+      members.set(device.deviceId, {
+        deviceId: device.deviceId,
+        deviceLabel: device.label,
+        deviceIcon: device.icon,
+        project,
       });
     }
   }
@@ -881,14 +768,10 @@ function membersOf(items: readonly RemoteForestItem[]): RemoteProjectMember[] {
 
 // One badge per contributing device, first sighting wins the order (a
 // device usually contributes one project slice here anyway).
-function deviceBadgesOf(
-  items: readonly RemoteForestItem[],
-): SidebarDeviceBadge[] {
+function deviceBadgesOf(items: readonly ForestItem[]): SidebarDeviceBadge[] {
   const badges = new Map<string, SidebarDeviceBadge>();
-  for (const item of items) {
-    if (!badges.has(item.deviceId)) {
-      badges.set(item.deviceId, deviceBadgeOf(item));
-    }
+  for (const { device } of items) {
+    if (!badges.has(device.deviceId)) badges.set(device.deviceId, device);
   }
   return [...badges.values()];
 }

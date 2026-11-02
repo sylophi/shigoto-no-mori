@@ -46,13 +46,13 @@ export function useHostChipIndex(localDeviceId: string): HostChipIndex {
     })),
   );
   for (const item of forests.items) {
-    const chips = byDevice.get(item.deviceId) ?? [];
+    const chips = byDevice.get(item.device.deviceId) ?? [];
     chips.push({
       projectId: item.project.id,
       name: item.project.name,
       worktrees: item.worktrees.length,
     });
-    byDevice.set(item.deviceId, chips);
+    byDevice.set(item.device.deviceId, chips);
   }
 
   return {

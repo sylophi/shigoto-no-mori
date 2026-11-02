@@ -75,7 +75,7 @@ export function RowContent({
           label={row.prefix}
           count={row.count}
           expanded={row.expanded}
-          onToggle={() => onToggleWorktreeGroup(row.groupId, row.prefix)}
+          onToggle={() => onToggleWorktreeGroup(row.groupKey, row.prefix)}
         />
       );
     case "worktree":
@@ -112,7 +112,7 @@ export function RowContent({
           shelf={row.shelf}
           count={row.count}
           expanded={row.expanded}
-          onToggle={() => onToggleShelved(row.groupId, row.shelf)}
+          onToggle={() => onToggleShelved(row.groupKey, row.shelf)}
         />
       );
     case "inbox-shelf":

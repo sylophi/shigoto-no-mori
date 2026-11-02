@@ -2,14 +2,13 @@ import { useRef, useState, type ReactNode } from "react";
 import { SimpleTooltip } from "@shigomori/ui/primitives/tooltip.tsx";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
-import type { RemoteForestItem } from "@shigomori/ui/lib/forest.ts";
+import type { ForestItem } from "@shigomori/ui/lib/forest.ts";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import {
   useQuickCreateWorktree,
   wantsCreateForm,
 } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { rankByScore } from "@shigomori/ui/lib/fuzzyMatch.ts";
-import type { Project } from "@shigomori/contracts/schemas";
 import type { ProjectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
 import { DeviceBadgeView } from "@shigomori/ui/views/sidebar/DeviceBadgeView.tsx";
 import {
@@ -31,10 +30,9 @@ import {
 } from "@shigomori/ui/views/sidebar/inbox/NewWorktreeButtonView.tsx";
 
 interface NewWorktreeButtonProps {
-  projects: readonly Project[];
-  // Peers' forests, so a project that lives only on another machine
-  // (or on this one and others) can be created into from here.
-  remote: RemoteForestItem[];
+  // Every device's projects, so a project that lives only on another
+  // machine (or on this one and others) can be created into from here.
+  items: readonly ForestItem[];
   order: ProjectGroupOrder;
   byOwner: boolean;
 }
@@ -47,15 +45,13 @@ interface NewWorktreeButtonProps {
 // where that header's + would (useGroupCreator), and the form a
 // modified pick opens can move it to another device.
 export function NewWorktreeButton({
-  projects,
-  remote,
+  items,
   order,
   byOwner,
 }: NewWorktreeButtonProps) {
   const commandableApi = useCommandableApi();
   const sections = buildCreateSections({
-    projects,
-    remote,
+    items,
     order,
     byOwner,
     commandableApi,

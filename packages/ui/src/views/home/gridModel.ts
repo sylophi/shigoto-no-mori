@@ -12,12 +12,9 @@ import {
 import type { SidebarDeviceBadge } from "../sidebar/DeviceBadgeView.tsx";
 import { projectListSections } from "../sidebar/projectListSections.ts";
 import type { ProjectSection } from "../sidebar/sidebarRow.ts";
-import type { ForestItem } from "../../lib/forest.ts";
 import type { ProjectListArgs } from "../sidebar/buildSidebarRows.ts";
 
 export type GridInput = ProjectListArgs & {
-  // Every device's items the device filter leaves, whole.
-  items: readonly ForestItem[];
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   // recordWorktreeVisit's record by row key.
   visits: Record<string, number>;
@@ -41,7 +38,7 @@ export function buildGrid({
     visits,
   });
   return {
-    sections: projectListSections(forest),
+    sections: projectListSections({ items, ...forest }),
     work: workByGroup(projectGroups(entries, items)),
   };
 }

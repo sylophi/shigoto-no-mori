@@ -130,18 +130,15 @@ function Forest({
   // narrows: creating is not browsing.
   const {
     projects,
-    orderedProjects,
     loading,
     sortMode,
     groupByOwner,
-    worktreeQueries,
-    remoteItems,
-    devicesFailed,
-    order,
-    local,
-    localSides,
-    shownRemote,
+    items,
     shownItems,
+    devicesFailed,
+    failedListings,
+    order,
+    localSides,
     mirrors,
     deviceBadges,
     hiddenPrefixes,
@@ -155,7 +152,7 @@ function Forest({
   const reorderProjects = useReorderProjects();
   // Off arranging, the drag files projects into folders.
   const filing = useFolderDragging();
-  const folds = useForestFolds(projects);
+  const folds = useForestFolds();
   const [activeId, setActiveId] = useState<string | null>(null);
   // Stepped aside for a page's list (SidebarTakeover).
   const takenOver = useSidebarTakenOver();
@@ -170,7 +167,7 @@ function Forest({
   // goes into the project of the page on screen (openProject.ts).
   // Inline, it shows every project's worktrees under it instead, each
   // project folding in place.
-  const { openKey, onScreenKey } = useOpenProject(projects, remoteItems);
+  const { openKey, onScreenKey } = useOpenProject(items);
   const inline = useClientFlag("inlineWorktrees");
   const worktreeSort = useWorktreeSorts();
   // The level last asked for here, by picking a project or going back,
@@ -195,7 +192,7 @@ function Forest({
         pinWaiting: markAgentsWaiting,
       })
     : buildSidebarRows({
-        ...local,
+        items: shownItems,
         openKey,
         inline: inline ? { collapsed: folds.collapsed } : null,
         worktreeSort,
@@ -210,7 +207,6 @@ function Forest({
         arrangeMode,
         byOwner: groupByOwner ? { shut: folds.shutOwners } : null,
         shutFolders: folds.shutFolders,
-        remote: shownRemote,
         mirrors,
         localSides,
         deviceBadges,
@@ -230,9 +226,6 @@ function Forest({
   // filter shows their rows. Without it a peer's project would
   // silently vanish from the tree, and a narrowed forest must not also
   // mute a failure behind it.
-  const failedListings =
-    worktreeQueries.filter((q) => q.error).length +
-    remoteItems.filter((item) => item.worktreesError).length;
   useFanOutErrorToast(failedListings);
   useUnreachedDevicesToast(devicesFailed);
 
@@ -346,8 +339,7 @@ function Forest({
           <InboxCreateRowView
             button={
               <NewWorktreeButton
-                projects={orderedProjects}
-                remote={remoteItems}
+                items={items}
                 order={order}
                 byOwner={groupByOwner}
               />
@@ -386,7 +378,9 @@ function Forest({
               : filing.handlers)}
           >
             <SortableContext
-              items={orderedProjects.map((p) => p.id)}
+              items={items.flatMap((item) =>
+                item.device.isThisDevice ? [item.project.id] : [],
+              )}
               strategy={verticalListSortingStrategy}
             >
               {pinnedRow}

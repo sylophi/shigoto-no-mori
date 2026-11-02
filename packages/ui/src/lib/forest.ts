@@ -1,12 +1,9 @@
 // What the sidebar, the inbox, the home grid and the palette build their
-// rows from, as the app's hooks read it: this device's per-project reads,
-// its peers' forests and its mirrors. The fixture world builds the same.
+// rows from, as the app's hooks read it: every device's projects as
+// items, and this device's mirrors. The fixture world builds the same.
 // And what every one of those builders reads off it alike: a group's
-// key, a row's key, a peer's badge and the fold a worktree sits behind.
-import {
-  type DeviceIcon,
-  MACHINE_FALLBACK_ICON,
-} from "@shigomori/contracts/deviceIcon";
+// key, a row's key and the fold a worktree sits behind.
+import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
 import {
   isAgentWorking,
   type Project,
@@ -16,7 +13,6 @@ import {
 } from "@shigomori/contracts/schemas";
 import { peerProjectKey } from "@shigomori/contracts/schemas/config";
 import { isHiddenByPrefix } from "@shigomori/contracts/sharedSettings";
-import type { StatusTone } from "../primitives/status-dot.tsx";
 import type { SidebarDeviceBadge } from "../views/sidebar/DeviceBadgeView.tsx";
 import type { GroupShelf, InboxShelf } from "../views/sidebar/sidebarRow.ts";
 import { UNNAMED_DEVICE } from "./deviceRoster.ts";
@@ -64,35 +60,6 @@ export interface ForestItem {
   // (ShigomoriConfigSchema.showPrimaryInInbox). Undefined while unread,
   // which for a peer is whenever the inbox isn't showing.
   showPrimaryInInbox: boolean | undefined;
-}
-
-// One remote project's slice, flat because that is exactly the unit
-// the row builder merges by repo identity.
-export interface RemoteForestItem {
-  deviceId: string;
-  deviceLabel: string;
-  // What the device looks like, for its badge on the rows.
-  deviceIcon: DeviceIcon;
-  // False when the device is not currently reachable: its rows are the
-  // cache's last known state, and the tree fades them rather than
-  // hiding work that still exists on that machine.
-  reachable: boolean;
-  // The device's connection tone, so a badge for it reads the same as
-  // its chip on the account page.
-  tone: StatusTone;
-  project: Project;
-  worktrees: readonly Worktree[];
-  // Branch -> PR on that device, what its own sidebar reads for the
-  // pills and the inbox's merged shelf. Empty until it lands.
-  pullRequests: Record<string, PullRequest>;
-  // That project's inbox opt-in for its primary checkout
-  // (ShigomoriConfigSchema.showPrimaryInInbox), read off the peer so a
-  // project shows its root the same way in every sidebar. Undefined
-  // until the config is read, which is only while the inbox shows.
-  showPrimaryInInbox: boolean | undefined;
-  // A failed worktree listing, folded into the sidebar's coalesced
-  // fan-out toast beside the local failures.
-  worktreesError: boolean;
 }
 
 // A mirrored pair as the sidebar folds it: the peer's row (device,
@@ -258,16 +225,41 @@ export function projectGroupKey(
 export const groupKeyOf = ({ project, device }: ForestItem) =>
   projectGroupKey(project, device.isThisDevice ? undefined : device.deviceId);
 
-// A peer-only group's id: its key (projectGroupKey) behind a prefix,
-// so it can never collide with a local project's id and the shell can
-// read the key back off a toggle.
-const REMOTE_GROUP_PREFIX = "rp:";
-export const remoteGroupId = (groupKey: string) =>
-  `${REMOTE_GROUP_PREFIX}${groupKey}`;
-export const remoteGroupKeyOf = (groupId: string): string | undefined =>
-  groupId.startsWith(REMOTE_GROUP_PREFIX)
-    ? groupId.slice(REMOTE_GROUP_PREFIX.length)
-    : undefined;
+// The groups a forest's items fall into, in the items' order: one per
+// group key, every device's checkout of a repo together, led by the
+// first. Items come this machine's first, so a group this machine holds
+// is led by its checkout. A repo registered twice here is two groups
+// under one key, the later going by its project's id, the one thing
+// that can't collide with a key or another project here.
+export interface ForestGroup {
+  id: string;
+  key: string;
+  items: [ForestItem, ...ForestItem[]];
+}
+
+export function forestGroups(items: readonly ForestItem[]): ForestGroup[] {
+  const groups: ForestGroup[] = [];
+  const byKey = new Map<string, ForestGroup>();
+  for (const item of items) {
+    const key = groupKeyOf(item);
+    const held = byKey.get(key);
+    const again =
+      item.device.isThisDevice &&
+      held?.items.some((other) => other.device.isThisDevice);
+    if (held && !again) {
+      held.items.push(item);
+      continue;
+    }
+    const group: ForestGroup = {
+      id: held ? item.project.id : key,
+      key,
+      items: [item],
+    };
+    if (!held) byKey.set(key, group);
+    groups.push(group);
+  }
+  return groups;
+}
 
 // Device-qualified: the same repo pulled to two machines can carry
 // the same worktree id on both. Shared with the inbox builder so a
@@ -285,14 +277,3 @@ export const worktreeRowKey = (
   deviceId === undefined
     ? `w:${worktreeId}`
     : remoteWorktreeKey(deviceId, worktreeId);
-
-// A peer's badge, as the rows and menus draw it.
-export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
-  return {
-    deviceId: item.deviceId,
-    label: item.deviceLabel,
-    icon: item.deviceIcon,
-    tone: item.tone,
-    reachable: item.reachable,
-  };
-}

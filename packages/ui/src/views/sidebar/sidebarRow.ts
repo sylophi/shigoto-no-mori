@@ -47,10 +47,9 @@ type SidebarRowKinds =
   // A project header, for one repo wherever it is checked out: on this
   // machine with any peers' checkouts merged in, or on peers alone.
   // `project` is this machine's checkout when `local`, else the first
-  // peer's, standing in for the group. `groupId` is what a pick off
-  // the list names and what the group's rows report their hover to:
-  // the local project's id, or a peer-only group's (remoteGroupId).
-  // `expanded` is the open project, heading the tree on its own.
+  // peer's, standing in for the group. `groupId` is what keeps the
+  // group's rows apart and what they report their hover to (its key,
+  // forestGroups). `expanded` is the open project, heading the tree on its own.
   // `devices` lists the peer devices in the group (empty for a purely
   // local project), for the header's badge cluster, and `members` the
   // same peers' checkouts, for the header's actions. A peer-only group
@@ -144,8 +143,8 @@ type SidebarRowKinds =
       // The shelf the row was filed on, null for live work.
       shelf: InboxShelf | null;
     }
-  | { kind: "worktree-skeleton"; key: string; projectId: string }
-  | { kind: "worktree-error"; key: string; projectId: string }
+  | { kind: "worktree-skeleton"; key: string; groupId: string }
+  | { kind: "worktree-error"; key: string; groupId: string }
   // The head of an owner's run on the list of projects, when it is
   // split by owner (buildSidebarRows, ownerOf): the org or user the
   // projects below belong to. Shut, the projects are left out and
@@ -180,6 +179,8 @@ type SidebarRowKinds =
       kind: "worktree-group";
       key: string;
       groupId: string;
+      // What the shell keeps the fold by, with the prefix.
+      groupKey: string;
       prefix: string;
       count: number;
       expanded: boolean;
@@ -187,9 +188,9 @@ type SidebarRowKinds =
   | {
       kind: "group-shelf";
       key: string;
-      // The shelf is the group's: a local project's, or a peer-only
-      // group's (remoteGroupId).
       groupId: string;
+      // What the shell keeps the shelf open by.
+      groupKey: string;
       shelf: GroupShelf;
       count: number;
       expanded: boolean;
