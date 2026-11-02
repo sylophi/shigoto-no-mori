@@ -9,13 +9,8 @@ import {
   DeviceTabNoteView,
   StaleDeviceNoteView,
 } from "@shigomori/ui/views/shared/DeviceTabBarView.tsx";
-import {
-  HostScopeProvider,
-  LocalHostScope,
-  type HostApi,
-} from "@/hooks/remote/useHostScope";
-import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
-import { useDevice, useHostDevices } from "@/hooks/remote/useDevices";
+import { DeviceScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { useHostDevices } from "@/hooks/remote/useDevices";
 import { peerReadOnlyNote } from "@shigomori/ui/lib/commandAccessCopy.ts";
 import { commandAccessOf, liveApi, statusViewOf } from "@/lib/remote/devices";
 import {
@@ -154,34 +149,28 @@ export function DeviceTabPanel({
   subject: string;
   children: ReactNode;
 }) {
-  // This device is re-pinned rather than left to the surrounding
-  // scope: under a peer's /devices route the page already sits in that
-  // peer's scope, and its "this device" tab must not. Keyed per device
-  // either way: a body seeds from the picked device's own answers, so
-  // carrying state across would show one device's data under another's.
-  // The peer's last api survives a session blip so the body under it
-  // (a form and its unsaved edits) stays mounted, and the offline note
-  // moves above it. A peer never reached in this window has nothing to
-  // show and gets the note alone.
-  const kept = useLastGoodApi(useDevice(tab.deviceId));
-  if (tab.isThisDevice) {
-    return <LocalHostScope key={tab.deviceId}>{children}</LocalHostScope>;
-  }
-  const offline = tab.api === undefined || tab.block === "offline";
-  const note = offline
-    ? `${capitalized(tab.label)} is offline, and ${subject} loads when it reconnects.`
-    : tab.block === "no-grant"
-      ? peerReadOnlyNote(tab.label)
-      : null;
-  if (note !== null && (!offline || kept === undefined)) {
-    return <DeviceTabNoteView note={note} />;
-  }
-  const api = tab.api ?? kept;
-  if (api === undefined) return null;
+  // Every tab is scoped, this device's too: under a peer's /devices
+  // route the page already sits in that peer's scope, and its "this
+  // device" tab must not. Keyed per device: a body seeds from the picked
+  // device's own answers, so carrying state across would show one
+  // device's data under another's. An offline peer's body stays through
+  // the blip (DeviceScope) with the note above it. One that couldn't be
+  // asked since the panel opened on it has nothing to show and gets the
+  // note alone.
+  const offline = tab.block === "offline";
+  const offlineNote = `${capitalized(tab.label)} is offline, and ${subject} loads when it reconnects.`;
   return (
-    <HostScopeProvider key={tab.deviceId} deviceId={tab.deviceId} api={api}>
-      {offline && note !== null && <StaleDeviceNoteView note={note} />}
-      {children}
-    </HostScopeProvider>
+    <DeviceScope
+      key={tab.deviceId}
+      deviceId={tab.deviceId}
+      absent={offline ? <DeviceTabNoteView note={offlineNote} /> : undefined}
+    >
+      {offline && <StaleDeviceNoteView note={offlineNote} />}
+      {tab.block === "no-grant" ? (
+        <DeviceTabNoteView note={peerReadOnlyNote(tab.label)} />
+      ) : (
+        children
+      )}
+    </DeviceScope>
   );
 }

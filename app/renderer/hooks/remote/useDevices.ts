@@ -11,6 +11,7 @@ import { useExternalStore } from "@shigomori/ui/lib/externalStore.ts";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import {
   type Device,
+  isLive,
   liveApi,
   peerOf,
   remoteDevicesAtom,
@@ -61,6 +62,23 @@ export function useDevice(deviceId: string | undefined): Device | undefined {
   );
   if (deviceId === page.deviceId) return thisDevice;
   return peer === undefined ? undefined : peerOf(page, peer);
+}
+
+// How a device can be reached from here: this machine, a peer that can
+// be asked now, one that can't, one that shares nothing, or an id the
+// list doesn't know.
+export type DeviceReach =
+  | { kind: "gone"; device: undefined }
+  | { kind: "this" | "live" | "away" | "notSharing"; device: Device };
+
+export function useDeviceReach(deviceId: string): DeviceReach {
+  const device = useDevice(deviceId);
+  if (device === undefined) return { kind: "gone", device };
+  if (device.isThisDevice) return { kind: "this", device };
+  if (device.status.phase === "notSharing") {
+    return { kind: "notSharing", device };
+  }
+  return { kind: isLive(device) ? "live" : "away", device };
 }
 
 // The account's machines: the devices with a host behind them to read

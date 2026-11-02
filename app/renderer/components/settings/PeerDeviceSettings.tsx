@@ -4,8 +4,7 @@ import { EmptyPanel } from "@shigomori/ui/primitives/empty-panel.tsx";
 import { ErrorBanner } from "@shigomori/ui/primitives/error-banner.tsx";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { HostScopeProvider } from "@/hooks/remote/useHostScope";
-import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
+import { DeviceScope } from "@/hooks/remote/useHostScope";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
 import type { Device } from "@/lib/remote/devices";
 import { deviceSections } from "./deviceSections";
@@ -38,31 +37,28 @@ export function PeerDeviceSettings({
   active: HostTab | undefined;
 }) {
   const { reachable } = deviceStatusView(device.status);
-  const api = useLastGoodApi(device);
-  const offline = !reachable;
-
   // Never reached at all: no wire to read the device's config over, so
   // there is nothing honest to render. Say where the settings are
   // instead of showing a form that could not save (or, worse, defaults
-  // that would look like the device's real answers).
-  if (api === undefined) {
-    return (
-      <HostPanels
-        deviceId={device.deviceId}
-        active={active}
-        sections={onEveryHostTab(<OfflineNote device={device} />)}
-      />
-    );
-  }
-
+  // that would look like the device's real answers). Once shown, the
+  // form and its unsaved edits stay through a blip (DeviceScope).
   return (
-    <HostScopeProvider deviceId={device.deviceId} api={api}>
+    <DeviceScope
+      deviceId={device.deviceId}
+      absent={
+        <HostPanels
+          deviceId={device.deviceId}
+          active={active}
+          sections={onEveryHostTab(<OfflineNote device={device} />)}
+        />
+      }
+    >
       <ReachablePeerSettings
         device={device}
-        offline={offline}
+        offline={!reachable}
         active={active}
       />
-    </HostScopeProvider>
+    </DeviceScope>
   );
 }
 

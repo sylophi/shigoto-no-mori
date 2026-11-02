@@ -11,13 +11,12 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import { HostScopeProvider } from "@/hooks/remote/useHostScope";
+import { DeviceScope } from "@/hooks/remote/useHostScope";
 import { useHasLocalHost } from "@/lib/localHost";
 import { useApi } from "@/lib/runtime/pageApi";
-import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
-import { useDevice } from "@/hooks/remote/useDevices";
+import { type DeviceReach, useDeviceReach } from "@/hooks/remote/useDevices";
 import { deviceStatusView } from "@shigomori/ui/lib/deviceStatus.ts";
-import { type Device, isLive } from "@/lib/remote/devices";
+import type { Device } from "@/lib/remote/devices";
 import { NotSharingView } from "@shigomori/ui/views/remote/NotSharingView.tsx";
 import {
   OpenDevicesButtonView,
@@ -33,39 +32,20 @@ function RemoteScopeGate({
   deviceId: string;
   Page: ComponentType;
 }) {
-  const device = useDevice(deviceId);
-  // Kept across a blip so the page under it stays mounted (why: the
-  // hook). This matters twice here: a page opened on this device's
-  // route can be showing ANOTHER device's tab (ProjectDevicePage picks
-  // locally, without navigating), and that device is fine. The wrapper
-  // keys this gate by deviceId, so the kept api never outlives a
-  // navigation to a different device.
-  const api = useLastGoodApi(device);
-
-  // Nothing it shared is kept, so there is no page to stand under a
-  // banner.
-  if (device?.status.phase === "notSharing") {
-    return (
-      <NotSharingView label={device.label} action={<OpenDevicesButton />} />
-    );
-  }
-
-  // No session has ever been open on this device in this window (a
-  // fresh open of a route for a device that is off), so there is
-  // nothing to show under a banner: every query would be empty. A
-  // device gone from the registry (removed from the account) is not a
-  // blip either: its last state is nobody's to act on.
-  if (api === undefined || device === undefined) {
-    return <UnreachableDevice device={device} />;
-  }
-
+  const reach = useDeviceReach(deviceId);
+  // Kept across a blip so the page under it stays mounted (why:
+  // DeviceScope). This matters twice here: a page opened on this
+  // device's route can be showing ANOTHER device's tab
+  // (ProjectDevicePage picks locally, without navigating), and that
+  // device is fine. The wrapper keys this gate by deviceId, so what is
+  // kept never outlives a navigation to a different device.
   return (
-    <HostScopeProvider deviceId={deviceId} api={api}>
+    <DeviceScope deviceId={deviceId} absent={<AbsentDevice reach={reach} />}>
       <RemoteScopeFrameView
         banner={
-          !isLive(device) && (
+          reach.kind !== "live" && (
             <UnreachableBannerView
-              label={unreachableLabel(device)}
+              label={unreachableLabel(reach.device)}
               action={<OpenDevicesButton />}
             />
           )
@@ -73,8 +53,26 @@ function RemoteScopeGate({
       >
         <Page />
       </RemoteScopeFrameView>
-    </HostScopeProvider>
+    </DeviceScope>
   );
+}
+
+// Nothing a device that stopped sharing shared is kept, so there is no
+// page to stand under a banner. Nor is there for a device that couldn't
+// be asked since the gate opened (a fresh open of a route for a device
+// that is off), where every query would be empty, or for one gone from
+// the registry (removed from the account), whose last state is nobody's
+// to act on.
+function AbsentDevice({ reach }: { reach: DeviceReach }) {
+  if (reach.kind === "notSharing") {
+    return (
+      <NotSharingView
+        label={reach.device.label}
+        action={<OpenDevicesButton />}
+      />
+    );
+  }
+  return <UnreachableDevice device={reach.device} />;
 }
 
 function unreachableLabel(device: Device | undefined, signedIn = true): string {
