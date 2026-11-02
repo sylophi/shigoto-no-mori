@@ -3,9 +3,10 @@
 // under the tombstone, each announced to every viewer while it goes and
 // with its outcome after. The engine stops a worktree's mirror before
 // its files go (mirror/onDelete.ts). A mirror is one worktree on two
-// devices, so a delete takes the other side too. A move's teardown and
-// a removal that must happen end the mirror after instead, and a delete
-// the other side asked for (`oneSide`) leaves that side to it.
+// devices, so a delete takes the other side too. A move's teardown, a
+// removal that must happen and a delete the other side asked for
+// (`oneSide`) leave that side alone and end the mirror after instead,
+// its thread forgotten with the worktree.
 import { isEntityGoneError } from "@shigomori/contracts/errors";
 import {
   type CleanupError,
@@ -183,9 +184,9 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
       yield* scripts.assertWorktreeMutable(worktreeId, busy);
       yield* announce(input.projectId, worktreeId, "removing");
       let removed = false;
-      // A move's teardown: the worktree lives on on the device it went
-      // to, so the copy of its mirror stays.
-      const moved = input.expect !== undefined;
+      // A move's teardown (the worktree lives on on the device it went
+      // to) or a delete the other side asked for: the other side stays.
+      const oneSide = input.expect !== undefined || input.oneSide === true;
       return yield* scripts
         .withDeletesInflight(
           [worktreeId],
@@ -206,11 +207,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
                 { projectId: input.projectId, worktreeId },
                 "remove",
               ),
-            ).pipe(
-              moved || input.oneSide === true
-                ? thisSideOnly
-                : (deleting) => deleting,
-            ),
+            ).pipe(oneSide ? thisSideOnly : (deleting) => deleting),
           ).pipe(
             Effect.tap((outcome) =>
               Effect.sync(() => {
@@ -219,7 +216,7 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
             ),
           ),
           (outcome) =>
-            outcome.ok && moved ? stopMirrors([worktreeId]) : Effect.void,
+            outcome.ok && oneSide ? stopMirrors([worktreeId]) : Effect.void,
         )
         .pipe(
           Effect.ensuring(
