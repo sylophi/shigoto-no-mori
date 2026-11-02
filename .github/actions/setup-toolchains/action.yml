@@ -1,0 +1,20 @@
+name: Set up toolchains
+description: Sets up Go for file-sync and nativefs, and Bun for the terminal sm.
+
+runs:
+  using: composite
+  steps:
+    # Pinned to commit digests like release.yml, so a retagged action
+    # cannot change what runs. file-sync/go.mod asks for the newest Go
+    # of the modules.
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: file-sync/go.mod
+        cache-dependency-path: |
+          file-sync/go.sum
+          nativefs/go.sum
+
+    # The third-party notices name this Bun too.
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version-file: .bun-version
