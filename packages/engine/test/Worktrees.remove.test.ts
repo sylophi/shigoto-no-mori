@@ -82,6 +82,41 @@ it("keeps the project's default branch when it removes the worktree it is out in
   assert.equal(box.git(repo, "branch", "--list", "main").trim(), "main");
 });
 
+// A bare clone's default branch is the one its HEAD names, which no
+// remote's HEAD records there, here sorted after another branch.
+it("keeps a bare clone's default branch when it removes the worktree it is out in", async () => {
+  const upstream = box.repo("upstream", { "README.md": "hi\n" });
+  box.git(upstream, "branch", "-m", "trunk");
+  box.git(upstream, "branch", "alpha");
+  const repo = join(box.home, "proj.git");
+  box.git(box.home, "clone", "-q", "--bare", upstream, repo);
+  const removed = await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const made = yield* worktrees.create(
+        project,
+        { name: "trunk", base: "trunk", checkout: true, skipSetup: true },
+        silent,
+      );
+      return yield* worktrees.remove(
+        yield* worktrees.resolve(yield* worktrees.nowhere, {
+          projectId: project.id,
+          worktreeId: made.worktree.id,
+        }),
+        { force: false, keepBranch: false, skipCleanup: true },
+        silent,
+      );
+    }),
+  );
+  assert.equal((removed as Worktrees.Removed).branch, "trunk");
+  assert.equal(
+    box.git(repo, "for-each-ref", "--format=%(refname)", "refs/heads/trunk"),
+    "refs/heads/trunk\n",
+  );
+});
+
 // A worktree holding only an untracked file, in a repo whose git config
 // hides untracked files from status.
 const withLooseFile = async () => {
