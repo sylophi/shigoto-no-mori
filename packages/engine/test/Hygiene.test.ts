@@ -46,8 +46,10 @@ it("tells merged, squash-merged, unique, detached and primary work apart", async
   writeFileSync(join(unique, "c.txt"), "c\n");
   box.git(unique, "add", "c.txt");
   box.git(unique, "commit", "-q", "-m", "c");
-  // A tag of the branch's name, on main, which git would read first.
+  // Tags git would read before the branches: one of the branch's name on
+  // main, and one of main's name on the branch.
   box.git(repo, "tag", "unique");
+  box.git(repo, "tag", "main", "refs/heads/unique");
   const detached = tree("detached");
   box.git(detached, "checkout", "-q", "--detach");
 

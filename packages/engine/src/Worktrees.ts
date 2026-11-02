@@ -535,11 +535,12 @@ const make = Effect.gen(function* () {
     primaryTarget: Effect.fn("Worktrees.primaryTarget")(function* (
       project: RegisteredProject,
     ) {
-      const { remotes, primaryRef, primaryBranch } =
+      const { remotes, primaryRef, primaryFullRef, primaryBranch } =
         yield* primaryRefOf(project);
       return {
         remotes,
         primaryRef,
+        primaryFullRef,
         remote: splitRemoteRef(primaryRef, remotes)?.remote ?? "",
         primaryBranch,
       };

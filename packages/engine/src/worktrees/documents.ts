@@ -189,6 +189,8 @@ export type Removed = {
 export type PrimaryTarget = {
   readonly remotes: ReadonlyArray<string>;
   readonly primaryRef: string;
+  // primaryRef in full, for git to read where a tag shares its name.
+  readonly primaryFullRef: string;
   readonly remote: string;
   readonly primaryBranch: string;
 };

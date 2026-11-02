@@ -559,13 +559,17 @@ export const makeVerbs = ({
       // The delete is `branch -D`, so it needs proof the branch is merged:
       // an ancestor of the primary ref, or held whole by the head of a
       // merged PR (a squash merge leaves no ancestry, and the branch may
-      // have moved on since, or reuse an older PR's name). Its full name,
-      // since git reads a bare one as a tag first.
+      // have moved on since, or reuse an older PR's name). Both refs in
+      // full, since git reads a bare name as a tag first.
       if (
         branch !== target.primaryBranch &&
         !options.force &&
         !(yield* git
-          .isAncestor(project.path, `refs/heads/${branch}`, target.primaryRef)
+          .isAncestor(
+            project.path,
+            `refs/heads/${branch}`,
+            target.primaryFullRef,
+          )
           .pipe(Effect.orElseSucceed(() => false)))
       ) {
         const heads = yield* github
