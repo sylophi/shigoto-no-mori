@@ -35,9 +35,9 @@
 //     read of it, HEAD on its branch, checked before its scripts stop
 //     or its cleanup runs,
 //   - a copy's delete takes both sides only of a mirror its peer runs
-//     with the files settled and the branch at the same commit on both,
-//     and not of a primary's, expecting what the original's device read
-//     of it.
+//     with the files settled before and after the original's device
+//     read it and the branch at the same commit on both, and not of a
+//     primary's, expecting what that device read of it.
 //
 // Run: pnpm test worktree-removals.
 import assert from "node:assert/strict";
@@ -824,8 +824,9 @@ const removalAnnounced = (input: {
 // copy's own delete takes it only when the peer running the mirror says
 // the files are settled, asked while the stream into the copy is up,
 // with the branch at the same commit on both, whatever git last said,
-// and only if it still holds what its device read of it then. A
-// primary's copy never takes the primary.
+// and still settled once its device read it, and only if it still holds
+// what its device read of it then. A primary's copy never takes the
+// primary.
 it("a copy's delete takes both sides only of a mirror in step, expecting what the original's device read, and a delete the other device asked for never does", async () => {
   const { project } = await repoAt("one-side");
   const asked = await create(project, { worktreeName: "asked" });
@@ -833,6 +834,9 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
   // A commit here the original lacks.
   const ahead = await create(project, { worktreeName: "ahead" });
   git(ahead.path, "commit", "-q", "--allow-empty", "-m", "ahead");
+  // An edit on the original after its peer's first word that the files
+  // are settled, and before its device read it, still crossing.
+  const written = await create(project, { worktreeName: "written" });
   const primary = await create(project, { worktreeName: "mirror-main" });
   // A paused mirror's stream is down.
   const paused = await create(project, { worktreeName: "paused" });
@@ -840,7 +844,11 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
     projectId: project.id,
     worktreeId: worktree.id,
   });
-  const mirrorInto = (worktree: Worktree, mode = "mirror") =>
+  const mirrorInto = (
+    worktree: Worktree,
+    mode = "mirror",
+    fields: Partial<MirrorSessionRaw> = {},
+  ) =>
     annotateMirrorSession(
       rawMirrorSession({
         session: `into-${worktree.name}`,
@@ -852,16 +860,22 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
           [MIRROR_LABEL_LOCAL_PROJECT]: "far",
         },
         successfulCycles: 1,
+        ...fields,
       }),
       { status: "following", detail: "" },
     );
   // The original at the commit every worktree here started from.
   const held = holding(own);
-  const link = sourceLink(() => ({ tip: held.branchTip }));
+  let reads = 0;
+  let writtenAfter = Infinity;
+  const link = sourceLink(() => {
+    reads += 1;
+    return { tip: held.branchTip };
+  });
   standInPeers({
     invoke: (_, channel) =>
       channel === "mirror:list"
-        ? Effect.succeed({
+        ? Effect.sync(() => ({
             daemon: "running",
             sessions: [
               mirrorInto(asked),
@@ -869,10 +883,15 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
               mirrorInto(ahead),
               mirrorInto(primary, "mirror-branch"),
               mirrorInto(paused),
+              mirrorInto(
+                written,
+                "mirror",
+                reads > writtenAfter ? { status: "staging-local" } : {},
+              ),
             ],
             serving: [],
             starting: [],
-          })
+          }))
         : channel === "sync:openSource"
           ? link.open()
           : Effect.fail(new RemoteCallError({ text: "not here" })),
@@ -881,7 +900,7 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
   });
   await runHost(
     Effect.map(MirrorLedger, (ledger) => {
-      for (const worktree of [asked, own, ahead, primary]) {
+      for (const worktree of [asked, own, ahead, primary, written]) {
         const key = `peer:${worktree.name}`;
         ledger.noteServing(
           key,
@@ -916,4 +935,9 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
       kept.name,
     );
   }
+  writtenAfter = reads;
+  assert.deepEqual(
+    await removalAnnounced(of(written)),
+    Option.some({ ...of(written), state: "removed" }),
+  );
 });

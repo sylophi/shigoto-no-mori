@@ -11,7 +11,7 @@
 // stop the session itself, mid-delete (its device announces the
 // removal), and a delete that failed is looked into (copyIsGone) before
 // the copy reads as stayed. The delete is forced, since the copy holds
-// the original's uncommitted state by design. The original's delete's
+// the original's uncommitted state by design. The original's delete
 // expects what the copy's device read of it when the two were found in
 // step, so a copy changed since stays.
 import * as Effect from "effect/Effect";

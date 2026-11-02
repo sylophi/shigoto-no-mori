@@ -5,7 +5,6 @@
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import { mirrorBranchFor } from "@shigomori/contracts/git/branches";
 import {
   isHaltedStatus,
   type MirrorSession,
@@ -57,9 +56,9 @@ export const makeTombstones = ({
     const reach = yield* PeerReach;
 
     // A delete from the terminal, which runs the engine in its own
-    // process and asks the app around the files going (onDelete.ts
-    // stopMirrorForDelete): what its stop left to do once the files
-    // went. A terminal gone between the two leaves its worktree's mirror
+    // process and asks the app around its cleanup and the files going
+    // (onDelete.ts stopMirrorForDelete): what its stop left to do once
+    // the delete ended. A terminal gone between the two leaves its worktree's mirror
     // paused.
     const fromTerminal = new Map<string, Stopped>();
 
@@ -113,8 +112,7 @@ export const makeTombstones = ({
     // that exists nowhere else, so that side stays. What each session on
     // a worktree about to be deleted here finds of its copy, at `tip`
     // here: read on the copy's device (peerHolding), then found in step,
-    // so what it read is what was in step. A copy on mirror/<branch> (its
-    // device has the branch out in its primary) is read there.
+    // so what it read is what was in step.
     const lookAtCopiesOf = Effect.fn("MirrorLedger.lookAtCopiesOf")(
       function* (localWorktreeId: string, branch: string, tip: string) {
         const looks = new Map<string, MovedSource>();
@@ -126,7 +124,7 @@ export const makeTombstones = ({
                 const expect = yield* peerHolding(
                   raw.deviceId,
                   { projectId: raw.projectId, worktreeId: raw.worktreeId },
-                  onMirrorBranch(raw) ? mirrorBranchFor(branch) : branch,
+                  branch,
                 );
                 if (expect?.branchTip !== tip) return;
                 const live = (yield* findSession(daemon, raw.session)) ?? raw;
@@ -141,11 +139,11 @@ export const makeTombstones = ({
     );
 
     // The original of a copy here, at `tip` here, read on its device
-    // (peerHolding) when the device running the mirror says the files
-    // are settled, asked before the delete ends the stream into the
-    // copy, after which no mirror reads as settled. Its delete there
-    // expects what the read found, if its branch is at the same commit
-    // as here. Only a mirror running live has a stream here, a device
+    // (peerHolding) between two of its answers that the files are
+    // settled, so what it read is what was settled, asked before the
+    // delete ends the stream into the copy, after which no mirror reads
+    // as settled. Its delete there expects what the read found, if its
+    // branch is at the same commit as here. Only a mirror running live has a stream here, a device
     // that doesn't answer within a probe's time confirms nothing, and a
     // primary's copy (on mirror/<branch>) takes nothing: a primary is
     // never deleted.
@@ -153,18 +151,21 @@ export const makeTombstones = ({
       function* (worktreeId: string, branch: string, tip: string) {
         const stream = streams.mirrorStreamInto(worktreeId);
         if (stream === undefined) return undefined;
-        const listed = yield* answerWithin(
-          peerMirrorFor(stream.peerDeviceId).list(),
-          PROBE_TIMEOUT_MS,
+        const settled = Effect.map(
+          answerWithin(
+            peerMirrorFor(stream.peerDeviceId).list(),
+            PROBE_TIMEOUT_MS,
+          ),
+          (listed) =>
+            Option.isSome(listed) && Exit.isSuccess(listed.value)
+              ? listed.value.value.sessions.find(
+                  (running: MirrorSession) =>
+                    running.localWorktreeId === stream.peerWorktreeId &&
+                    mirrorFilesSettled(running),
+                )
+              : undefined,
         );
-        if (Option.isNone(listed) || !Exit.isSuccess(listed.value)) {
-          return undefined;
-        }
-        const session = listed.value.value.sessions.find(
-          (running: MirrorSession) =>
-            running.localWorktreeId === stream.peerWorktreeId &&
-            mirrorFilesSettled(running),
-        );
+        const session = yield* settled;
         if (session === undefined || onMirrorBranch(session)) return undefined;
         const expect = yield* peerHolding(
           stream.peerDeviceId,
@@ -174,7 +175,10 @@ export const makeTombstones = ({
           },
           branch,
         );
-        return expect?.branchTip === tip ? expect : undefined;
+        if (expect?.branchTip !== tip) return undefined;
+        return (yield* settled)?.session === session.session
+          ? expect
+          : undefined;
       },
       Effect.provideService(PeerReach, reach),
     );
