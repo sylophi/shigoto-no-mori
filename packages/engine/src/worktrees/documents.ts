@@ -548,13 +548,6 @@ export class WorktreeRefused extends Schema.TaggedError<WorktreeRefused>()(
   }
 }
 
-// What a failed cleanup says, the error's and the document's alike.
-export const cleanupFailureWords = (failure: {
-  readonly phase: string;
-  readonly exitCode: number | null;
-}) =>
-  `${failure.phase} ${failure.exitCode === null ? "failed to run" : `exited with code ${failure.exitCode}`}, so the worktree was not removed`;
-
 // A worktree's rows went to its new id but its dirty capture's ref
 // didn't follow: the capture is kept under the old id. A re-key asked
 // again carries one that failed. One `occupied`, by another capture
@@ -591,7 +584,7 @@ export class CleanupFailed extends Schema.TaggedError<CleanupFailed>()(
   },
 ) {
   override get message(): string {
-    return cleanupFailureWords(this);
+    return `${this.phase} ${this.exitCode === null ? "failed to run" : `exited with code ${this.exitCode}`}, so the worktree was not removed`;
   }
 }
 

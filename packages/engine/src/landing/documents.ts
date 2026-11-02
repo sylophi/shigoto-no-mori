@@ -11,29 +11,6 @@ import type { PullRequestSummary } from "../GitHub.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 
-// A document `sm --json` prints for a landing verb: the fields the
-// terminal and the host read by name, typed, beside the rest it prints.
-export type Document = Readonly<Record<string, unknown>> & {
-  readonly ok?: boolean;
-  readonly error?: string;
-  readonly hint?: string;
-  readonly cleanupError?: ReturnType<typeof Worktrees.cleanupErrorOf>;
-  readonly removed?: Worktrees.Removed;
-  readonly worktree?: Worktrees.WorktreeRow;
-  readonly deletedBranch?: string | null;
-  readonly outcome?: Outcome;
-  // A pull request's: the one opened, or merged.
-  readonly url?: string;
-  readonly number?: number;
-  readonly state?: string;
-  readonly title?: string;
-  readonly method?: MergeMethod;
-  readonly catchUpSkipped?: string;
-  readonly merged?: Readonly<Record<string, unknown>>;
-  // A stack's land or removal: the layers it removed, before its own.
-  readonly stack?: { readonly removed: ReadonlyArray<Worktrees.Removed> };
-};
-
 // What landing won't do, the reason in its message. `numbers` and
 // `names` are the PRs, branches and paths the message names, in order.
 // A done whose checkout failed after it freed the branch, and whose
@@ -240,6 +217,24 @@ export type MergeOutcome = {
   readonly alreadyArmed?: boolean;
 };
 
+// What `merge` did: GitHub's merge of a stack, a PR merged by number
+// (the app's), or the worktree's own PR, which merge waits on until it
+// merges.
+export type Merged =
+  | {
+      readonly kind: "stack";
+      readonly method: MergeMethod;
+      readonly outcome: "merged" | "queued";
+    }
+  | (MergeOutcome & { readonly kind: "number"; readonly number: number })
+  | {
+      readonly kind: "branch";
+      readonly pr: PullRequestSummary;
+      readonly branch: string;
+      readonly method: MergeMethod;
+      readonly outcome: "merged";
+    };
+
 // How long the wait for GitHub to merge sleeps between reads.
 export const MergePollInterval = Context.Reference<Duration.Duration>(
   "sm/engine/Landing/MergePollInterval",
@@ -268,14 +263,22 @@ export type CatchUp = {
   readonly catchUpSkipped?: string;
 };
 
+// What `done` did: the checkout's row back on the primary branch, the
+// branch it deleted, and why its pull of the primary branch was skipped.
+// A land from the primary checkout ends in one too, the base line's
+// catch-up beside it.
+export type Done = CatchUp & {
+  readonly worktree: Worktrees.WorktreeRow;
+  readonly deletedBranch: string | undefined;
+};
+
 // Where a land's steps go as they happen: the merged layers of a stack,
 // the cleanup's, the scripts of a removal.
 export type Reporter = Worktrees.Reporter & {
-  // A layer of a stack merged: its document, and the PR, whose title a
-  // person's line names.
+  // A layer of a stack merged.
   readonly merged?: (
-    event: Document,
     pr: PullRequestSummary,
+    method: MergeMethod,
   ) => Effect.Effect<void>;
   // How a merge by number ended, and its PR, whose title the document
   // leaves out and a person's line names.
@@ -338,6 +341,61 @@ export type RemoveOptions = {
   readonly skipCleanup: boolean;
 };
 
+// `pr`'s: the worktree's pull request, any state, found for `branch`.
+export type BranchPullRequest = {
+  readonly pr: PullRequestSummary;
+  readonly branch: string;
+};
+
+type RemoveError = Effect.Error<
+  ReturnType<Worktrees.Worktrees["Service"]["remove"]>
+>;
+
+// The layers a stack's cleanup landed, and the worktrees on them it
+// removed before its own.
+export type StackCleanup = {
+  readonly landed: ReadonlyArray<PullRequestSummary>;
+  readonly removed: ReadonlyArray<Worktrees.Removed>;
+};
+
+// How a land's or a stack removal's cleanup ended: the primary checkout
+// back on the primary branch, or this worktree removed. A removal that
+// failed, this worktree's or a stack layer's before it, left the rest.
+export type Cleanup =
+  | {
+      readonly kind: "done";
+      readonly stack: StackCleanup | undefined;
+      readonly done: Done;
+    }
+  | {
+      readonly kind: "removed";
+      readonly stack: StackCleanup | undefined;
+      readonly catchUp: CatchUp;
+      readonly removed: Worktrees.Removed;
+    }
+  | {
+      readonly kind: "failed";
+      readonly stack: StackCleanup | undefined;
+      // None when a stack layer's removal failed first.
+      readonly catchUp: CatchUp | undefined;
+      readonly error: RemoveError;
+    };
+
+// What `land` did: the PR it merged (with `method`) or found merged
+// (none), then the cleanup, or a stack a merge queue took, which has
+// nothing cleaned up yet.
+export type Landed = {
+  readonly pr: PullRequestSummary;
+  readonly branch: string;
+} & (
+  | { readonly kind: "queued"; readonly method: MergeMethod }
+  | {
+      readonly kind: "cleaned";
+      readonly method: MergeMethod | undefined;
+      readonly cleanup: Cleanup;
+    }
+);
+
 // The fields a merge verdict needs, which only the merge paths ask for.
 export const MERGE_FIELDS = ["mergeStateStatus", "autoMergeRequest"];
 
@@ -346,36 +404,6 @@ export const SETTLE_TIMEOUT_MS = 20 * 1000;
 // Bounds the walk down a chain: the rows are a snapshot, so a loop in
 // stale ones must end.
 export const MAX_STACK_DEPTH = 64;
-
-// The merge's fields in merge's document and land's "merged". No method
-// means the PR was merged before the command ran.
-export const mergeResultFields = (
-  pr: PullRequestSummary,
-  branch: string,
-  method: MergeMethod | undefined,
-): Document => ({
-  number: pr.number,
-  title: pr.title,
-  branch,
-  url: pr.url,
-  ...(method === undefined ? { alreadyMerged: true } : { method }),
-});
-
-export const outcomeFields = (o: MergeOutcome) => ({
-  outcome: o.outcome,
-  queued: o.outcome === "queued",
-});
-
-// The document of a merge that went through, landed or not.
-export const mergeDocument = (
-  pr: PullRequestSummary,
-  branch: string,
-  o: MergeOutcome,
-): Document => ({
-  ...mergeResultFields(pr, branch, o.method),
-  ok: true,
-  ...outcomeFields(o),
-});
 
 // The chain from the bottom of the stack up to `number`, or just that PR
 // when nothing sits under it: a PR whose base is another PR's head is
@@ -417,6 +445,20 @@ export function stackBelow(
 export const projectScope = (project: RegisteredProject) =>
   ({ kind: "project", projectId: project.id, path: project.path }) as const;
 
+// --- the documents `sm --json` prints ---
+
+// `sm pr --json`.
+export const pullRequestDocument = ({ pr, branch }: BranchPullRequest) => ({
+  ok: true,
+  number: pr.number,
+  title: pr.title,
+  state: pr.state,
+  isDraft: pr.isDraft,
+  branch,
+  url: pr.url,
+});
+
+// A layer of a stack as it merges.
 export const mergedEvent = (pr: PullRequestSummary, method: MergeMethod) => ({
   event: "merged",
   number: pr.number,
@@ -424,28 +466,127 @@ export const mergedEvent = (pr: PullRequestSummary, method: MergeMethod) => ({
   method,
 });
 
-export const doneDocument = (
-  row: Worktrees.WorktreeRow,
+// A PR's merge in merge's document and land's. No method means the PR
+// was merged before the command ran.
+const mergeResultFields = (
+  pr: PullRequestSummary,
   branch: string,
-  deleted: boolean,
-  extra: Record<string, unknown>,
-): Document => ({
-  ok: true,
-  worktree: row,
-  deletedBranch: deleted ? branch : null,
-  ...extra,
+  method: MergeMethod | undefined,
+) => ({
+  number: pr.number,
+  title: pr.title,
+  branch,
+  url: pr.url,
+  ...(method === undefined ? { alreadyMerged: true } : { method }),
 });
 
-// A cleanup failure after the merge: the document keeps the merge's
-// fields, since one without them would read as nothing changed.
-export const cleanupFailed = (
-  error: unknown,
-  extra: Record<string, unknown>,
-): Document =>
-  error instanceof Worktrees.CleanupFailed
-    ? {
+const outcomeFields = (o: MergeOutcome) => ({
+  outcome: o.outcome,
+  queued: o.outcome === "queued",
+});
+
+const pullRequestMerged = (
+  pr: PullRequestSummary,
+  branch: string,
+  o: MergeOutcome,
+) => ({
+  ...mergeResultFields(pr, branch, o.method),
+  ok: true,
+  ...outcomeFields(o),
+});
+
+// `sm merge --json`. A stack's names an outcome only when a merge queue
+// took it.
+export const mergeDocument = (merged: Merged) => {
+  switch (merged.kind) {
+    case "stack":
+      return merged.outcome === "queued"
+        ? { ok: true, method: merged.method, outcome: merged.outcome }
+        : { ok: true, method: merged.method };
+    case "number":
+      return {
+        ok: true,
+        number: merged.number,
+        method: merged.method,
+        ...outcomeFields(merged),
+      };
+    case "branch":
+      return pullRequestMerged(merged.pr, merged.branch, merged);
+  }
+};
+
+// A skipped catch-up before a caught-up one.
+const catchUpFields = ({ catchUpSkipped, caughtUp }: CatchUp) => ({
+  ...(catchUpSkipped === undefined ? {} : { catchUpSkipped }),
+  ...(caughtUp === undefined ? {} : { caughtUp }),
+});
+
+// `extra` is a land's, between the row and the catch-up.
+const doneFields = (done: Done, extra: object) => ({
+  ok: true,
+  worktree: done.worktree,
+  deletedBranch: done.deletedBranch ?? null,
+  ...extra,
+  ...catchUpFields(done),
+});
+
+// `sm done --json`.
+export const doneDocument = (done: Done) => doneFields(done, {});
+
+// `merged` is a land's. A failed removal's document keeps it, since one
+// without it would read as nothing changed.
+const cleanupDocument = (cleanup: Cleanup, merged: object) => {
+  const extra = {
+    ...merged,
+    ...(cleanup.stack === undefined
+      ? {}
+      : {
+          stack: {
+            landed: cleanup.stack.landed.map((layer) => ({
+              number: layer.number,
+              title: layer.title,
+              branch: layer.headRefName,
+              url: layer.url,
+            })),
+            removed: cleanup.stack.removed,
+          },
+        }),
+  };
+  switch (cleanup.kind) {
+    case "done":
+      return doneFields(cleanup.done, extra);
+    case "removed":
+      return {
+        ok: true,
+        removed: cleanup.removed,
         ...extra,
+        ...catchUpFields(cleanup.catchUp),
+      };
+    case "failed":
+      return {
+        ...extra,
+        ...(cleanup.catchUp === undefined
+          ? {}
+          : catchUpFields(cleanup.catchUp)),
         ok: false,
-        cleanupError: Worktrees.cleanupErrorOf(error),
-      }
-    : { ...extra, ok: false, ...errorDocument(error) };
+        ...(cleanup.error instanceof Worktrees.CleanupFailed
+          ? { cleanupError: Worktrees.cleanupErrorOf(cleanup.error) }
+          : errorDocument(cleanup.error)),
+      };
+  }
+};
+
+// `sm land --json`.
+export const landDocument = (landed: Landed) =>
+  landed.kind === "queued"
+    ? pullRequestMerged(landed.pr, landed.branch, {
+        method: landed.method,
+        outcome: "queued",
+      })
+    : cleanupDocument(landed.cleanup, {
+        merged: mergeResultFields(landed.pr, landed.branch, landed.method),
+      });
+
+// `sm rm --stack --json`.
+export const removeStackDocument = (cleanup: Cleanup) =>
+  cleanupDocument(cleanup, {});

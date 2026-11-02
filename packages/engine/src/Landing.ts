@@ -4,8 +4,8 @@
 // method picked (the flag, the project's last one, the repo's first),
 // auto-merge armed where the base branch's rules aren't met yet, a stack
 // landed whole. `done` lands a checkout back on the primary branch.
-// Answers are the documents `sm --json` prints, and each step reported
-// along the way is too.
+// Each verb answers what it did, and a function of its own renders that
+// as the document `sm --json` prints.
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -18,17 +18,30 @@ import { makeStacks } from "./landing/stacks.ts";
 import { makeCleanup } from "./landing/cleanup.ts";
 import { type StackRemoval, makeVerbs } from "./landing/verbs.ts";
 import {
-  type Document,
+  type BranchPullRequest,
+  type Cleanup,
+  type Done,
   type DoneError,
   type LandError,
+  type Landed,
   LandingRefused,
   type MergeError,
+  type Merged,
   type RemoveOptions,
   type RemoveStackError,
   type Reporter,
 } from "./landing/documents.ts";
-export { LandingRefused, MergePollInterval } from "./landing/documents.ts";
-export type { Document, Reporter } from "./landing/documents.ts";
+export {
+  LandingRefused,
+  MergePollInterval,
+  doneDocument,
+  landDocument,
+  mergeDocument,
+  mergedEvent,
+  pullRequestDocument,
+  removeStackDocument,
+} from "./landing/documents.ts";
+export type { Cleanup, Done, Merged, Reporter } from "./landing/documents.ts";
 export type { StackRemoval } from "./landing/verbs.ts";
 
 export class Landing extends Context.Service<
@@ -38,7 +51,7 @@ export class Landing extends Context.Service<
     readonly pullRequest: (
       located: Worktrees.Located,
     ) => Effect.Effect<
-      Document,
+      BranchPullRequest,
       LandingRefused | GitHub.GitHubCliError | GitHub.GitHubOutputError
     >;
     // `sm merge`: the worktree's open PR, or with `number` that PR of the
@@ -56,7 +69,7 @@ export class Landing extends Context.Service<
         readonly stack: boolean;
       },
       reporter: Reporter,
-    ) => Effect.Effect<Document, MergeError>;
+    ) => Effect.Effect<Merged, MergeError>;
     // `sm land`: merge, catch the base branch's checkout up, clean up.
     readonly land: (
       located: Worktrees.Located,
@@ -65,7 +78,7 @@ export class Landing extends Context.Service<
         readonly stack: boolean;
       },
       reporter: Reporter,
-    ) => Effect.Effect<Document, LandError>;
+    ) => Effect.Effect<Landed, LandError>;
     // `sm rm --stack` from `located`: what it removes, resolved and
     // checked, for removeStack to carry out.
     readonly planRemoveStack: (
@@ -77,13 +90,13 @@ export class Landing extends Context.Service<
     readonly removeStack: (
       removal: StackRemoval,
       reporter: Reporter,
-    ) => Effect.Effect<Document, RemoveStackError>;
+    ) => Effect.Effect<Cleanup, RemoveStackError>;
     // `sm done`: the checkout back on the primary branch, the merged
     // branch it was on deleted.
     readonly done: (
       located: Worktrees.Located,
       options: { readonly force: boolean },
-    ) => Effect.Effect<Document, DoneError>;
+    ) => Effect.Effect<Done, DoneError>;
   }
 >()("sm/engine/Landing") {}
 

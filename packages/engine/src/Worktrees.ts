@@ -73,7 +73,6 @@ export {
   UnknownWorktree,
   WorktreeRefused,
   cleanupErrorOf,
-  cleanupFailureWords,
   isShelfable,
   projectsHint,
   trimGoSpace,

@@ -42,8 +42,6 @@ import {
   type DeleteStackResult,
   type DeviceSettingsPatch,
   type MergeMethod,
-  type MergeOutcome,
-  MergeOutcomeSchema,
   type Project,
   ProjectSchema,
   type MovedSource,
@@ -64,7 +62,6 @@ import {
   asCall,
   asChange,
   changing,
-  EngineCallError,
   engineFailure,
   locate,
   projectById,
@@ -231,52 +228,53 @@ export const planStack = Effect.fnUntraced(function* (
   );
 });
 
-// The worktrees a stack's plan names, removed together. The document
-// lists them: the worktree itself under `removed`, the others under
-// `stack.removed`, and on a cleanup failure whatever went before it.
-// `removedOther` hears each of the others as it goes, so a removal cut
-// short still tells what went.
+// The worktrees a stack's plan names, removed together, and on a
+// cleanup failure whatever went before it. `removedOther` hears each of
+// the others as it goes, so a removal cut short still tells what went.
 export const deleteStack = Effect.fnUntraced(function* (
   project: Project,
   removal: Landing.StackRemoval,
   reporter: Worktrees.Reporter,
   removedOther: (worktreeId: string) => void,
 ) {
-  const doc = yield* asChange(
+  const ids = {
+    projectId: project.id,
+    worktreeId: removal.located.worktree.id,
+  };
+  const cleanup = yield* asChange(
     Effect.flatMap(Landing.Landing, (landing) =>
       landing.removeStack(removal, {
         ...reporter,
         removedOther: (removed) => Effect.sync(() => removedOther(removed.id)),
       }),
     ),
-    { projectId: project.id, worktreeId: removal.located.worktree.id },
+    ids,
     "remove",
   );
-  const removed = removedIdsOf(doc);
-  if (doc.ok === true) {
-    return { ok: true, removed } satisfies DeleteStackResult;
+  // The lower layers first and the worktree it ran from last, the order
+  // they were removed in.
+  const removed = (cleanup.stack?.removed ?? []).map((entry) => entry.id);
+  switch (cleanup.kind) {
+    case "done":
+      return { ok: true, removed } satisfies DeleteStackResult;
+    case "removed":
+      return {
+        ok: true,
+        removed: [...removed, cleanup.removed.id],
+      } satisfies DeleteStackResult;
+    case "failed":
+      if (cleanup.error instanceof Worktrees.CleanupFailed) {
+        return {
+          ok: false,
+          removed,
+          cleanupError: decodeCleanupError(
+            Worktrees.cleanupErrorOf(cleanup.error),
+          ),
+        } satisfies DeleteStackResult;
+      }
+      return yield* engineFailure(cleanup.error, ids);
   }
-  if (doc.cleanupError !== undefined) {
-    return {
-      ok: false,
-      removed,
-      cleanupError: decodeCleanupError(doc.cleanupError),
-    } satisfies DeleteStackResult;
-  }
-  return yield* new EngineCallError({
-    reason: doc.error ?? "removing the stack failed",
-    cause: doc,
-  });
 });
-
-// The worktree ids a stack removal's document says went, the lower
-// layers first and the worktree it ran from last, the order they were
-// removed in.
-function removedIdsOf(doc: Landing.Document): string[] {
-  const ids = (doc.stack?.removed ?? []).map((entry) => entry.id);
-  if (doc.removed) ids.push(doc.removed.id);
-  return ids;
-}
 
 // Not forced: the cleanup box shows for a merged PR, but the branch can
 // hold commits made since, which only `done`'s own proof refuses to
@@ -285,7 +283,7 @@ export const finishWorktree = Effect.fnUntraced(function* (
   project: Project,
   worktreeId: string,
 ) {
-  const doc = yield* asChange(
+  const done = yield* asChange(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
       return yield* (yield* Landing.Landing).done(located, { force: false });
@@ -293,7 +291,7 @@ export const finishWorktree = Effect.fnUntraced(function* (
     { projectId: project.id, worktreeId },
     "finish",
   );
-  return decodeWorktree(doc["worktree"]);
+  return decodeWorktree(done.worktree);
 });
 
 // `stack`: the PR and every open PR under it in its stack, which the
@@ -304,7 +302,7 @@ export const mergePullRequest = Effect.fnUntraced(function* (
   method: MergeMethod,
   options: { stack?: boolean } = {},
 ) {
-  const doc = yield* asChange(
+  const merged = yield* asChange(
     Effect.gen(function* () {
       const registered = yield* projectById(project.id);
       return yield* (yield* Landing.Landing).merge(
@@ -316,16 +314,8 @@ export const mergePullRequest = Effect.fnUntraced(function* (
     { projectId: project.id },
     "merge",
   );
-  return { outcome: mergeOutcomeOf(doc) };
+  return { outcome: merged.outcome };
 });
-
-const isMergeOutcome = Schema.is(MergeOutcomeSchema);
-
-// The document spells the outcome the way MergeOutcomeSchema does. A
-// document without one (a stack merge's) landed.
-function mergeOutcomeOf(doc: Landing.Document): MergeOutcome {
-  return isMergeOutcome(doc.outcome) ? doc.outcome : "merged";
-}
 
 export const setShelved = Effect.fnUntraced(function* (
   project: Project,
