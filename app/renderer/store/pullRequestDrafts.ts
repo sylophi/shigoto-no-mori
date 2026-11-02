@@ -80,3 +80,20 @@ export function forgetPullRequestDrafts(
   for (const key of next.keys()) if (key.startsWith(prefix)) next.delete(key);
   if (next.size !== drafts.get().size) drafts.publish(next);
 }
+
+// Every branch's form, for a worktree that moved to another id.
+export function movePullRequestDrafts(
+  deviceId: string,
+  from: string,
+  to: string,
+): void {
+  const prefix = pullRequestDraftKey(deviceId, from, "");
+  const next = new Map<string, PullRequestDraftForm>();
+  for (const [key, form] of drafts.get()) {
+    const moved = key.startsWith(prefix)
+      ? pullRequestDraftKey(deviceId, to, key.slice(prefix.length))
+      : key;
+    next.set(moved, form);
+  }
+  drafts.publish(next);
+}

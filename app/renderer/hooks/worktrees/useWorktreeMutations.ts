@@ -34,9 +34,12 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { isOwnPullRequest } from "@shigomori/ui/lib/worktreeTitle.ts";
 import type { QueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import { clearCommitDraft } from "@/lib/commitDraft";
+import { clearCommitDraft, moveCommitDraft } from "@/lib/commitDraft";
 import { forgetPicks } from "@/hooks/worktrees/useChangesPicks";
-import { forgetPullRequestDrafts } from "@/store/pullRequestDrafts";
+import {
+  forgetPullRequestDrafts,
+  movePullRequestDrafts,
+} from "@/store/pullRequestDrafts";
 import { drawerKey, forgetDrawer } from "@/store/terminalDrawer";
 
 interface CreateWorktreeInput {
@@ -134,8 +137,9 @@ export function useRenamingWorktree(
   }).includes(worktreeId);
 }
 
-// Convert and relocate both leave the worktree under a new id: swap
-// the row in the list and forget what was held under the old id.
+// Convert, relocate and rename all leave the worktree under a new id:
+// swap the row in the list and move what was held under the old id
+// (moveWorktreeState).
 function useReplaceWorktree<
   Input extends { projectId: string; worktreeId: string },
   Result,
@@ -161,12 +165,13 @@ function useReplaceWorktree<
     onSuccess: (result, vars, context) => {
       const row = rowOf(result);
       spliceWorktreeRow(registry, deviceId, row, vars.worktreeId);
-      forgetWorktreeState(
+      moveWorktreeState(
         queryClient,
         registry,
         deviceId,
         vars.projectId,
         vars.worktreeId,
+        row.id,
       );
       // Only a window still where the rename started: one that went
       // elsewhere meanwhile stays there.
@@ -321,6 +326,21 @@ function forgetWorktreeState(
   forgetPicks(deviceId, projectId, worktreeId);
   forgetPullRequestDrafts(deviceId, worktreeId);
   forgetDrawer(drawerKey(deviceId, projectId, worktreeId));
+}
+
+// Once a worktree moved to another id: the messages being written for
+// it go along, and the rest is forgotten with the old id.
+function moveWorktreeState(
+  queryClient: QueryClient,
+  registry: AtomRegistry.AtomRegistry,
+  deviceId: string,
+  projectId: string,
+  from: string,
+  to: string,
+): void {
+  moveCommitDraft(deviceId, projectId, from, to);
+  movePullRequestDrafts(deviceId, from, to);
+  forgetWorktreeState(queryClient, registry, deviceId, projectId, from);
 }
 
 export function useDeleteWorktree() {
