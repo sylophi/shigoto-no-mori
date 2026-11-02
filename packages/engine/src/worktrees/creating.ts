@@ -445,8 +445,12 @@ export const makeCreating = ({
         }
         // The id is the path's, so what a worktree removed from here left
         // under it (a removal a crash cut short) isn't this one's, nor is
-        // the move of one that left it.
-        yield* kept.forget(project, made.id, [...new Set([place, made.path])]);
+        // the move of one that left it. All but a dirty capture, as the
+        // doctor's prune leaves one: it may hold the only copy of some
+        // work, and apply puts it only onto the commit it was taken on.
+        yield* kept.forgetRows(project, made.id, [
+          ...new Set([place, made.path]),
+        ]);
         return { made, found, cloned, baseBranch };
       });
 
