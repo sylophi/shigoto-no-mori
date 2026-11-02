@@ -219,11 +219,12 @@ function validateDetailSearch(search: Record<string, unknown>): {
 // which it is showing. Local-only affordances inside them gate on
 // useHostScope().remote.
 //
-// remountDeps on the detail and project pages: the router keeps one
-// component instance across a params change and just re-renders it, so
-// without this a route would keep showing the previous entity's data
-// until its queries happened to refetch. The router keys the match on
-// this value.
+// remountDeps on the detail, changes, files and project pages: the
+// router keeps one component instance across a params change and just
+// re-renders it, so without this a route would keep showing the
+// previous entity's data until its queries happened to refetch, and
+// carry its state over (the changes page's commit message, saved as the
+// next worktree's). The router keys the match on this value.
 //
 // A worktree's pages share a layout (WorktreePages), scoped once for
 // all of them, which keeps its terminal drawer across them.
@@ -246,6 +247,7 @@ const worktreeDiffRoute = createRoute({
   path: WORKTREE_ROUTE_PATHS.diff,
   component: WorktreeDiff,
   validateSearch: validateDiffSearch,
+  remountDeps: ({ params }) => params,
 });
 
 const pullRequestDiffRoute = createRoute({
