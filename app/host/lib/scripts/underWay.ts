@@ -1,7 +1,7 @@
 // What a quit, a restart into an update or a data-folder move would
 // interrupt (the shell's prompt and a peer's refusal word it,
 // shared/busy.ts), and what the quit does to the scripts.
-import type { BusyOperations } from "@shared/busy";
+import type { BusyOperations } from "@shigomori/contracts/modules/session";
 import * as Effect from "effect/Effect";
 import { EngineChanges } from "../Engine";
 import { Terminals } from "../terminals/Terminals";

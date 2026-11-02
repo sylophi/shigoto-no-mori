@@ -5,7 +5,7 @@
 // The layer's close is the quit's stop of every run.
 import type { WorktreeSettingUpError } from "@shigomori/contracts/errors";
 import type { RunningScript } from "@shigomori/contracts/schemas";
-import type { BusyOperations } from "@shared/busy";
+import type { BusyOperations } from "@shigomori/contracts/modules/session";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

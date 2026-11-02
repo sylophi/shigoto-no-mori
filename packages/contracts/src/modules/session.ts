@@ -52,13 +52,20 @@ export type ChangeKind = typeof ChangeKindSchema.Type;
 
 const BusyOperationsSchema = strict(
   Schema.Struct({
+    // PTY runs and the engine's lifecycle runs alike.
     runningScripts: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    // Worktree deletes, and project removals.
     inflightDeletes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    // Worktree moves and renames, the data-folder move's included.
     inflightMoves: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    // The other git work a person started (or an auto-pull's), one
+    // entry each.
     engineChanges: Schema.Array(ChangeKindSchema),
+    // Terminals whose shell runs something.
     busyTerminals: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   }),
 );
+export type BusyOperations = typeof BusyOperationsSchema.Type;
 
 export const sessionContract = defineContract(
   "session",

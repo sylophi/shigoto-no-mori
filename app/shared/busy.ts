@@ -8,21 +8,10 @@ import {
   plural,
   pluralize,
 } from "@shigomori/contracts/words";
-import type { ChangeKind } from "@shigomori/contracts/modules/session";
-
-export type BusyOperations = {
-  // PTY runs and the engine's lifecycle runs alike.
-  readonly runningScripts: number;
-  // Worktree deletes, and project removals.
-  readonly inflightDeletes: number;
-  // Worktree moves and renames, the data-folder move's included.
-  readonly inflightMoves: number;
-  // The other git work a person started (or an auto-pull's), one
-  // entry each.
-  readonly engineChanges: ReadonlyArray<ChangeKind>;
-  // Terminals whose shell runs something.
-  readonly busyTerminals: number;
-};
+import type {
+  BusyOperations,
+  ChangeKind,
+} from "@shigomori/contracts/modules/session";
 
 export type BusyAction = "quit" | "restart";
 
