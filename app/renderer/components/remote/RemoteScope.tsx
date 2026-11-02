@@ -102,12 +102,12 @@ function unreachableLabel(device: Device | undefined, signedIn = true): string {
 // are read, and a device missing from a list not read yet may well be
 // on it: nothing is said until both are.
 function UnknownDevice() {
-  const { data: status } = useAccountStatus();
-  const { isPending } = useAccountDevices();
-  if (status === undefined || isPending) return null;
+  const status = useAccountStatus();
+  const devices = useAccountDevices();
+  if (status.isPending || devices.isPending) return null;
   return (
     <UnreachableDeviceView
-      label={unreachableLabel(undefined, status.signedIn)}
+      label={unreachableLabel(undefined, status.data?.signedIn === true)}
       action={<OpenDevicesButton />}
     />
   );
