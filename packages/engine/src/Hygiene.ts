@@ -16,7 +16,6 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as NativeFs from "./NativeFs.ts";
 import * as Git from "./Git.ts";
-import { splitRemoteRef } from "./gitParse.ts";
 import { keptAnswers } from "./keptAnswers.ts";
 import type { RegisteredProject } from "./Registry.ts";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
@@ -74,9 +73,15 @@ const ACTIVITY_EXCLUDED = new Set([
   "__pycache__",
 ]);
 
-// A ref to compare against, and the tree it points at. A null tree means
-// it wouldn't resolve, which turns the containment probe off for it.
-type PrimaryCandidate = { readonly ref: string; readonly tree: string | null };
+// A ref to compare against, as the facts name it and in full for git
+// (which reads a bare name as a tag first), and the tree it points at. A
+// null tree means it wouldn't resolve, which turns the containment probe
+// off for it.
+type PrimaryCandidate = {
+  readonly ref: string;
+  readonly full: string;
+  readonly tree: string | null;
+};
 
 // Worktrees probed at once, across every project: the page asks for all
 // of them together, and a chain can include a merge-tree.
@@ -148,7 +153,7 @@ const make = Effect.gen(function* () {
     candidate.tree === null
       ? Effect.succeed(false)
       : git
-          .run(repo, ["merge-tree", "--write-tree", candidate.ref, head], {
+          .run(repo, ["merge-tree", "--write-tree", candidate.full, head], {
             okExitCodes: [1],
           })
           .pipe(
@@ -162,28 +167,27 @@ const make = Effect.gen(function* () {
   // remote one, and its local branch, since work merged locally isn't
   // lost either. Canonical first, so the reported ref is the remote one
   // whenever it holds the work.
-  const candidatesOf = (
-    repo: string,
-    primaryRef: string | null,
-    remotes: ReadonlyArray<string>,
-  ) =>
+  const candidatesOf = (repo: string, target: Worktrees.PrimaryTarget) =>
     Effect.gen(function* () {
-      if (primaryRef === null) return [];
-      const split = splitRemoteRef(primaryRef, remotes);
-      const refs = [primaryRef];
+      if (target.primaryRef === "") return [];
+      const refs = [{ ref: target.primaryRef, full: target.primaryFullRef }];
       if (
-        split !== undefined &&
-        split.branch !== primaryRef &&
-        (yield* git.localBranchExists(repo, split.branch))
+        target.remote !== "" &&
+        (yield* git.localBranchExists(repo, target.primaryBranch))
       ) {
-        refs.push(split.branch);
+        refs.push({
+          ref: target.primaryBranch,
+          full: `refs/heads/${target.primaryBranch}`,
+        });
       }
       return yield* Effect.forEach(
         refs,
-        (ref) =>
-          git.treeOf(repo, ref).pipe(
-            Effect.map((tree): PrimaryCandidate => ({ ref, tree })),
-            Effect.orElseSucceed((): PrimaryCandidate => ({ ref, tree: null })),
+        (named) =>
+          git.treeOf(repo, named.full).pipe(
+            Effect.map((tree): PrimaryCandidate => ({ ...named, tree })),
+            Effect.orElseSucceed(
+              (): PrimaryCandidate => ({ ...named, tree: null }),
+            ),
           ),
         { concurrency: "unbounded" },
       );
@@ -193,7 +197,7 @@ const make = Effect.gen(function* () {
     identity: Worktrees.IdentityRow,
     repo: string,
     candidates: ReadonlyArray<PrimaryCandidate>,
-    primaryBranch: string | null,
+    primaryBranch: string,
   ) =>
     Effect.gen(function* () {
       const head = yield* headCommit(identity.path);
@@ -205,9 +209,7 @@ const make = Effect.gen(function* () {
         contentAlreadyInPrimary: false,
         primaryRef: candidates[0]?.ref ?? null,
         holdsPrimaryBranch:
-          !identity.detached &&
-          primaryBranch !== null &&
-          identity.branch === primaryBranch,
+          !identity.detached && identity.branch === primaryBranch,
         untracked: false,
       };
       // Nothing to compare for the primary, a detached HEAD, or without a
@@ -221,14 +223,19 @@ const make = Effect.gen(function* () {
         return base;
       }
       // The first candidate that contains the work wins, and the facts
-      // name it. Contained rows are checked for untracked files last.
+      // name it. Contained rows are checked for untracked files last. The
+      // branch by its full name, since git reads a bare one as a tag first.
       let fallback: WorktreeHygiene | null = null;
       for (const candidate of candidates) {
-        const unique = yield* uniqueCommits(identity.path, candidate.ref);
+        const unique = yield* uniqueCommits(identity.path, candidate.full);
         if (unique === null) continue;
         if (
           unique === 0 ||
-          (yield* contentAlreadyIn(repo, candidate, identity.branch))
+          (yield* contentAlreadyIn(
+            repo,
+            candidate,
+            `refs/heads/${identity.branch}`,
+          ))
         ) {
           return {
             ...base,
@@ -247,13 +254,13 @@ const make = Effect.gen(function* () {
       return fallback ?? base;
     });
 
-  // A project's identities with its primary ref, kept long enough to
-  // serve one page load: the page asks for every row's size at once.
-  // A failed listing isn't kept: the next ask tries again.
+  // A project's identities, kept long enough to serve one page load: the
+  // page asks for every row's size at once. A failed listing isn't kept:
+  // the next ask tries again.
   const identities = yield* keptAnswers(
     (project: RegisteredProject) =>
       worktrees
-        .identityList([project], { primaryRef: true })
+        .identityList([project], { primaryRef: false })
         .pipe(
           Effect.flatMap(({ rows, skipped }) =>
             skipped[0] === undefined
@@ -275,19 +282,16 @@ const make = Effect.gen(function* () {
   const facts = Effect.fn("Hygiene.facts")(function* (
     project: RegisteredProject,
   ) {
-    const [listed, remotes] = yield* Effect.all(
-      [identitiesOf(project), git.listRemotes(project.path)],
+    const [listed, target] = yield* Effect.all(
+      [identitiesOf(project), worktrees.primaryTarget(project)],
       { concurrency: 2 },
     );
-    // Resolved once per project and carried on every identity.
-    const primaryRef = listed[0]?.primaryRef ?? null;
-    const primaryBranch = listed[0]?.primaryBranch ?? null;
-    const candidates = yield* candidatesOf(project.path, primaryRef, remotes);
+    const candidates = yield* candidatesOf(project.path, target);
     return yield* Effect.forEach(
       listed,
       (identity) =>
         probes.withPermit(
-          factsOf(identity, project.path, candidates, primaryBranch),
+          factsOf(identity, project.path, candidates, target.primaryBranch),
         ),
       { concurrency: "unbounded" },
     );

@@ -1,7 +1,7 @@
 // The re-key of a worktree's dirty capture, which the data-folder move
 // and its undo run: a capture is never written over or taken for none,
-// and one that can't follow stays where it was (real git on a sandbox
-// data dir).
+// and one that can't follow stays where it was. And a create at a path
+// whose id holds one leaves it (real git on a sandbox data dir).
 import assert from "node:assert/strict";
 import {
   chmodSync,
@@ -240,4 +240,50 @@ it("fails a re-key back over a packed-refs git can't parse, and carries it once 
     }),
   )) as { reason: string; back: boolean };
   assert.deepEqual(result, { reason: "failed", back: true });
+});
+
+// A worktree made at the path of one removed outside sm takes its id,
+// and the capture that one left may be the only copy of its work.
+it("leaves the dirty capture a create finds under the new worktree's id", async () => {
+  const repo = box.repo("proj", { "README.md": "hi\n" });
+  const silent = { report: () => Effect.void, color: false };
+  const result = (await box.engine(
+    Effect.gen(function* () {
+      const registry = yield* Registry.Registry;
+      const worktrees = yield* Worktrees.Worktrees;
+      const project = yield* registry.register({ name: "proj", path: repo });
+      const gone = yield* worktrees.create(
+        project,
+        { name: "fox", skipSetup: true },
+        silent,
+      );
+      const capture = box.git(repo, "rev-parse", "HEAD").trim();
+      box.git(
+        repo,
+        "update-ref",
+        `refs/shigomori/dirty/${gone.worktree.id}`,
+        capture,
+      );
+      box.git(repo, "worktree", "remove", gone.worktree.path);
+      box.git(repo, "branch", "-D", "fox");
+      const made = yield* worktrees.create(
+        project,
+        { name: "fox", skipSetup: true },
+        silent,
+      );
+      const left = box
+        .git(
+          repo,
+          "for-each-ref",
+          "--format=%(objectname)",
+          `refs/shigomori/dirty/${made.worktree.id}`,
+        )
+        .trim();
+      return {
+        sameId: made.worktree.id === gone.worktree.id,
+        kept: left === capture,
+      };
+    }),
+  )) as { sameId: boolean; kept: boolean };
+  assert.deepEqual(result, { sameId: true, kept: true });
 });

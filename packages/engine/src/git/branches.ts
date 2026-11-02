@@ -96,20 +96,35 @@ export const makeBranches = ({
       (effect) => Effect.ignore(effect),
     );
 
+    // The branch a bare repo's HEAD names: the default it was cloned
+    // with, which no remote's HEAD records there. A checkout's HEAD is
+    // only where it is.
+    const bareHead = (repo: string) =>
+      run(repo, ["rev-parse", "--is-bare-repository"]).pipe(
+        Effect.flatMap((bare) =>
+          bare.trim() === "true"
+            ? run(repo, ["symbolic-ref", "--quiet", "--short", "HEAD"])
+            : Effect.succeed(""),
+        ),
+        Effect.map((head) => head.trim()),
+        Effect.orElseSucceed(() => ""),
+      );
+
     const resolvePrimaryRef = Effect.fn("Git.resolvePrimaryRef")(function* (
       repo: string,
       override?: string,
       remotes?: readonly string[],
     ) {
-      return Option.flatMap(
-        yield* pickDefault(repo, override, remotes),
-        ({ refs, picked }) =>
-          picked === undefined
-            ? Option.map(
-                Option.fromUndefinedOr(refs.locals[0]),
-                (branch) => `refs/heads/${branch}`,
-              )
-            : Option.some(picked),
+      const found = yield* pickDefault(repo, override, remotes);
+      if (Option.isNone(found)) return Option.none<string>();
+      const { refs, picked } = found.value;
+      if (picked !== undefined) return Option.some(picked);
+      const head = yield* bareHead(repo);
+      return Option.map(
+        Option.fromUndefinedOr(
+          refs.locals.includes(head) ? head : refs.locals[0],
+        ),
+        (branch) => `refs/heads/${branch}`,
       );
     });
 

@@ -414,8 +414,8 @@ export class Git extends Context.Service<
       ref: string,
     ) => Effect.Effect<boolean>;
     // The fully qualified primary ref a row is measured against, which
-    // may also fall back to the first local branch: a merge target only
-    // has to exist. `remotes` saves a `git remote` for a caller that
+    // may also fall back to a bare repo's HEAD, then the first local
+    // branch: a merge target only has to exist. `remotes` saves a `git remote` for a caller that
     // has them.
     readonly resolvePrimaryRef: (
       repo: string,

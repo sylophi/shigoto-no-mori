@@ -261,4 +261,32 @@ esac`,
     assert.equal(unasked["ok"], false, JSON.stringify(unasked));
     kept();
   });
+
+  // git reads a bare name as a tag first, and a tag of the branch's name
+  // on main is merged.
+  it("done refuses a branch only a tag of its name is merged as", async () => {
+    const upstream = box.repo("upstream", { "README.md": "hi\n" });
+    const repo = join(box.home, "repo");
+    execFileSync("git", ["clone", "-q", upstream, repo]);
+    box.git(repo, "tag", "fox");
+    box.git(repo, "checkout", "-q", "-b", "fox");
+    box.git(repo, "commit", "-q", "--allow-empty", "-m", "fox");
+    const located = (await box.engine(
+      Effect.gen(function* () {
+        yield* (yield* Registry.Registry).register({
+          name: "repo",
+          path: repo,
+        });
+        const worktrees = yield* Worktrees.Worktrees;
+        return yield* worktrees.resolve(yield* worktrees.here(repo), {});
+      }),
+    )) as Worktrees.Located;
+    mergedGh(`echo '[]'`);
+    const refused = await done(located);
+    assert.equal(refused["ok"], false, JSON.stringify(refused));
+    assert.match(
+      box.git(repo, "log", "-1", "--format=%s", "refs/heads/fox"),
+      /^fox/,
+    );
+  });
 });

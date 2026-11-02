@@ -287,7 +287,7 @@ export const makeVerbs = ({
       // the PR never had, made after its last push, or under a name an
       // older PR merged with.
       const remote = Result.isSuccess(target) ? target.success.remote : "";
-      const guarded = yield* deletesBranch(worktree, options);
+      const guarded = yield* deletesBranch(located, options);
       const guardBranch = (verb: "land" | "rm") =>
         Effect.gen(function* () {
           if (!guarded) return;
@@ -436,7 +436,7 @@ export const makeVerbs = ({
       headOf: (number: number) => ReturnType<typeof github.headOf>,
     ) =>
       Effect.gen(function* () {
-        if (yield* deletesBranch(located.worktree, options)) {
+        if (yield* deletesBranch(located, options)) {
           yield* guardCommits(
             located.project.path,
             located.worktree.branch,
@@ -559,12 +559,17 @@ export const makeVerbs = ({
       // The delete is `branch -D`, so it needs proof the branch is merged:
       // an ancestor of the primary ref, or held whole by the head of a
       // merged PR (a squash merge leaves no ancestry, and the branch may
-      // have moved on since, or reuse an older PR's name).
+      // have moved on since, or reuse an older PR's name). Both refs in
+      // full, since git reads a bare name as a tag first.
       if (
         branch !== target.primaryBranch &&
         !options.force &&
         !(yield* git
-          .isAncestor(project.path, branch, target.primaryRef)
+          .isAncestor(
+            project.path,
+            `refs/heads/${branch}`,
+            target.primaryFullRef,
+          )
           .pipe(Effect.orElseSucceed(() => false)))
       ) {
         const heads = yield* github

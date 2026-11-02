@@ -7,7 +7,7 @@ import {
   ShigomoriConfigSchema,
 } from "@shigomori/contracts/schemas/config";
 import * as Config from "@shigomori/engine/Config";
-import { messageOf } from "@shigomori/engine/errorDocument";
+import { messageOf, withHint } from "@shigomori/engine/errorDocument";
 import * as Icons from "@shigomori/engine/Icons";
 import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
@@ -380,7 +380,8 @@ const relocate = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const { json, binaryName, stdoutColor } = yield* Effect.service(Output);
+      const { json, binaryName, stdoutColor, stderrColor } =
+        yield* Effect.service(Output);
       const most = Option.isSome(given(input.projectId)) ? 0 : 1;
       const count = input.args.length;
       if (count === 0 || count - 1 > most) {
@@ -393,9 +394,24 @@ const relocate = Command.make(
         projectId: input.projectId,
         project: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
       });
-      const row = yield* (yield* Worktrees.Worktrees).relocateProject(
-        project,
-        destination,
+      const { project: row, stayed } =
+        yield* (yield* Worktrees.Worktrees).relocateProject(
+          project,
+          destination,
+        );
+      // A relocate asked again won't move them, since the project is
+      // already where it went.
+      const warning = styles(stderrColor).yellow("warning:");
+      yield* Effect.forEach(
+        stayed,
+        ({ worktree, destination: to, error }) =>
+          note(
+            `${warning} ${withHint(
+              `couldn't move ${worktree.name} to ${to}: ${messageOf(error)}`,
+              `Fix that, then run \`${binaryName} worktrees move -p ${row.name} ${worktree.name} ${to}\`.`,
+            )}`,
+          ),
+        { discard: true },
       );
       yield* json
         ? emit({ ok: true, project: row })

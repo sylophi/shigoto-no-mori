@@ -22,6 +22,7 @@ import {
 import {
   CaptureNotCarried,
   RelocateRefused,
+  type Relocated,
   type WorktreeIdentity,
 } from "./documents.ts";
 import type { ListingArea } from "./listing.ts";
@@ -160,7 +161,8 @@ export const makeRelocating = ({
 
     // The managed bases are named after the repo's folder, so a rename
     // would leave the managed worktrees reading as external. Each moves to
-    // where new worktrees go.
+    // where new worktrees go. Answers the ones that couldn't, left where
+    // they were.
     const rehomeManaged = (project: RegisteredProject, oldPath: string) =>
       Effect.gen(function* () {
         const oldBases = yield* layout.managedBases({
@@ -172,6 +174,7 @@ export const makeRelocating = ({
         const found = yield* identities(project).pipe(
           Effect.orElseSucceed((): ReadonlyArray<WorktreeIdentity> => []),
         );
+        const stayed: Array<Relocated["stayed"][number]> = [];
         for (const worktree of found) {
           if (
             worktree.isPrimary ||
@@ -183,11 +186,15 @@ export const makeRelocating = ({
           ) {
             continue;
           }
-          yield* move(
-            { project, worktree },
-            path.join(base, path.basename(worktree.path)),
-          ).pipe(Effect.ignore);
+          const destination = path.join(base, path.basename(worktree.path));
+          const moved = yield* move({ project, worktree }, destination).pipe(
+            Effect.result,
+          );
+          if (Result.isFailure(moved)) {
+            stayed.push({ worktree, destination, error: moved.failure });
+          }
         }
+        return stayed;
       });
 
     const relocateProject = Effect.fn("Worktrees.relocateProject")(function* (
@@ -201,6 +208,7 @@ export const makeRelocating = ({
       const repo = yield* git.locate(target);
       if (Option.isNone(repo)) return yield* refuse("not-a-repo", target);
       const to = repo.value.primaryPath;
+      let stayed: Relocated["stayed"] = [];
       if (to !== project.path) {
         // Only for a repo that went: pointing a project that is still there
         // at another repo would hand that repo its settings and marks.
@@ -262,13 +270,13 @@ export const makeRelocating = ({
           }
           yield* carryLease(where.fromPath, worktree);
         }
-        yield* rehomeManaged(relocated, project.path);
+        stayed = yield* rehomeManaged(relocated, project.path);
       }
       const rows = yield* registry.rows();
       const found = rows.find((listed) => listed.id === project.id);
       if (!found)
         return yield* new UnknownProjectError({ projectId: project.id });
-      return found;
+      return { project: found, stayed } satisfies Relocated;
     });
 
     // Where each of the project's managed worktrees would go under

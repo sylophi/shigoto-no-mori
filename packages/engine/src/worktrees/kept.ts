@@ -185,6 +185,8 @@ export const makeKept = Effect.gen(function* () {
       ),
     );
 
+  // `madeAt`, for a checkout just made there (its path, as asked and as
+  // git spells it), ends the record of the folder that left it.
   const forgetRows = (
     project: RegisteredProject,
     worktreeId: string,
@@ -262,15 +264,9 @@ export const makeKept = Effect.gen(function* () {
                 ),
         ),
       ),
-    // `madeAt`, for a checkout just made there (its path, as asked and as
-    // git spells it), ends the record of the folder that left it.
-    forget: (
-      project: RegisteredProject,
-      worktreeId: string,
-      madeAt: ReadonlyArray<string> = [],
-    ) =>
+    forget: (project: RegisteredProject, worktreeId: string) =>
       Effect.andThen(
-        forgetRows(project, worktreeId, madeAt),
+        forgetRows(project, worktreeId),
         git.deleteRef(project.path, dirtyRef(worktreeId)).pipe(Effect.ignore),
       ),
   };

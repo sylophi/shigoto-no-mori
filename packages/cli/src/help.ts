@@ -160,7 +160,7 @@ const catalog = (names: Names) => {
       [
         "worktrees rm [<name>] [--stack] [-f] [--keep-branch]",
         "Remove a worktree",
-        "Teardown, release port, delete the branch per app settings. --stack also removes the worktrees of the merged layers under it in its PR stack (the cleanup half of land --stack, for a stack that has landed, and an open PR is refused). The removal guards cover all of them first.",
+        "Teardown, release port, delete the branch per app settings (never the project's default branch). --stack also removes the worktrees of the merged layers under it in its PR stack (the cleanup half of land --stack, for a stack that has landed, and an open PR is refused). The removal guards cover all of them first.",
       ],
       [
         "worktrees done [<name>] [-f]",
@@ -323,7 +323,7 @@ const catalog = (names: Names) => {
         "Point a project at its moved repo",
         "For a repo moved or renamed by hand: refused while the old path is still there. The project keeps its config and state " +
           "(terrier's entry for it moves too), and its worktrees are reconnected to the repo (`git worktree repair`), including any that moved with it. " +
-          "After a rename, managed worktrees move to the folder named after the new one. " +
+          "After a rename, managed worktrees move to the folder named after the new one, and a warning names any that can't. " +
           "--json prints {ok, project}, project being a `projects list` row.",
       ],
       [
