@@ -63,6 +63,10 @@ says the copy can go.
 ## Notes
 
 - With several machines, ask the user which one they're on.
+- `mirror`, `send`, `bring` and `projects clone` wait until the worktree
+  or the repo has crossed, as long as that takes, so run them where a
+  long command won't time out. An interrupted one is cancelled and
+  rolled back.
 - `send` and `bring` move a worktree once instead of mirroring it. Use
   them only when asked, and pass `--source teardown` (which deletes the
   original) only when the user asks for it.
