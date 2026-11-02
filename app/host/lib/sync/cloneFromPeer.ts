@@ -46,7 +46,7 @@ import { errorWordsOf } from "@host/lib/errorWords";
 import {
   addProject,
   findProjectByIdentity,
-  loadProjects,
+  listedProjects,
 } from "@host/lib/projects";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import {
@@ -435,7 +435,7 @@ export const clonePeerProject = Effect.fnUntraced(function* (
         sourceHome: (yield* peerEffects(runtimeContract, deviceId).info())
           .homedir,
         destinationHome: homedir(),
-        destinationProjects: loadProjects(),
+        destinationProjects: yield* listedProjects,
       }),
     peer.path,
   );

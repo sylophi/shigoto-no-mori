@@ -27,7 +27,7 @@ import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as EngineWorktrees from "@shigomori/engine/Worktrees";
 import * as Git from "@shigomori/engine/Git";
-import { findProjectInsideDataDir, freshProjects } from "./projects";
+import { findProjectInsideDataDir, listedProjects } from "./projects";
 import * as Scripts from "./Scripts";
 import * as Worktrees from "./Worktrees";
 import { dataDir } from "@shared/paths";
@@ -98,7 +98,7 @@ export const nukeEverything = Effect.fnUntraced(function* <R, U, P>(options: {
   readonly teardownTimeoutMs?: number;
 }) {
   const { onProgress } = options;
-  const projects = yield* freshProjects;
+  const projects = yield* listedProjects;
   // Refuse up front, before any script is stopped or worktree removed.
   const trap = nukeTrap(projects, dataDir(), options.home ?? homedir());
   if (trap !== null) return yield* new NukeRefusedError({ reason: trap });

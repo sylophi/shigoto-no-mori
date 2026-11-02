@@ -16,16 +16,10 @@ import { errorWordsOf } from "@host/lib/errorWords";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import * as Scripts from "@host/lib/Scripts";
 import { bookingScripts } from "@host/lib/worktrees/documents";
-import {
-  addProject,
-  findProject,
-  freshProjects,
-  loadProjects,
-  refresh,
-} from "./index";
+import { addProject, findProject, listedProjects } from "./index";
 
 // Moves run one at a time: each writes the whole order, so a second
-// drag computed before the first's refresh landed would put the first
+// drag computed before the first's write landed would put the first
 // one's project back.
 const reorders = Semaphore.makeUnsafe(1);
 
@@ -164,7 +158,7 @@ const removing = Effect.fnUntraced(function* <E, R>(
   id: string,
   removal: (scripts: Scripts.Scripts["Service"]) => Effect.Effect<void, E, R>,
 ) {
-  if (!(yield* freshProjects).some((p) => p.id === id)) return;
+  if (!(yield* listedProjects).some((p) => p.id === id)) return;
   const scripts = yield* Scripts.Scripts;
   yield* scripts.removingProject(
     id,
@@ -200,15 +194,15 @@ export const deleteProject = Effect.fn("projects.delete")(
 
 // Over the whole list, terrier-only projects included: the engine stores
 // the order apart from the registry entries, so any project can hold
-// any place. Each move goes over the list the previous one left (see
-// reorders), and the engine checks the ids against its own read (one
-// added meanwhile lands last, a stale id is ignored).
+// any place. Each move goes over the list as the previous one left it
+// (see reorders).
 export const reorderProject = Effect.fn("projects.reorder")(function* (input: {
   readonly draggedId: string;
   readonly targetId: string;
   readonly position: Parameters<typeof reorderProjects>[3];
 }) {
-  const current = loadProjects();
+  const registry = yield* Registry.Registry;
+  const current = yield* registry.listed;
   const next = reorderProjects(
     current,
     input.draggedId,
@@ -216,10 +210,8 @@ export const reorderProject = Effect.fn("projects.reorder")(function* (input: {
     input.position,
   );
   if (next === current) return;
-  const registry = yield* Registry.Registry;
   yield* registry.reorder(
-    yield* registry.listed,
+    current,
     next.map((p) => p.id),
   );
-  yield* refresh;
 }, reorders.withPermits(1));

@@ -1,16 +1,10 @@
 // The host's view of the registered projects. The engine owns the list
 // (its registry, terrier's repos merged in, each decorated with its
-// path check, repo identity, use stats and icon), so the host reads it
-// as `sm projects list` does and keeps the last answer's projects as a
-// snapshot for the handful of sync callers (the git watcher, the fetch
-// sweep). A lookup by id asks the engine, and the sidebar's
-// projects:list refreshes the snapshot on every call.
+// path check, repo identity and use stats), and every caller reads it
+// from the engine as `sm projects list` does, so none can be behind a
+// write made here or in a terminal.
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
-import type {
-  Project,
-  ProjectRow,
-  Worktree,
-} from "@shigomori/contracts/schemas";
+import type { Project, Worktree } from "@shigomori/contracts/schemas";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
@@ -22,118 +16,50 @@ import { handedRemotes, pickCloneUrl } from "@shared/cloneUrl";
 import { toAbsolute } from "@shared/paths";
 import { changing } from "../Engine";
 
-let snapshot: readonly Project[] = [];
-// The last read's rows, which the callers that asked before it began
-// share.
-let lastRows: readonly ProjectRow[] = [];
-// The first refresh of a session re-scans projects the icon cache
-// remembers as icon-less, so an icon added while the app was closed
-// shows up.
-let iconsRescanned = false;
+// Every listed project as the registry holds it, none of the rows'
+// probes run.
+export const listedProjects = Effect.flatMap(
+  Registry.Registry,
+  (registry) => registry.listed,
+);
 
-// Reads run one at a time. A caller is answered by a read that started
-// after it asked, never by an older one: a refresh that follows a
-// registry write must see that write. Callers that asked while a read
-// ran share the next one.
-const reads = Semaphore.makeUnsafe(1);
-let asked = 0;
-let answered = 0;
-
-// Re-reads the list.
-export const refresh = Effect.suspend(() => {
-  const ask = ++asked;
-  return Effect.suspend(() => {
-    if (answered >= ask) return Effect.succeed(lastRows);
-    const covers = asked;
-    return Effect.flatMap(Registry.Registry, (registry) =>
-      registry.rows({ rescanIconMisses: !iconsRescanned }),
-    ).pipe(
-      Effect.tap((rows) =>
-        Effect.sync(() => {
-          iconsRescanned = true;
-          lastRows = rows;
-          snapshot = rows.map(toProject);
-          answered = covers;
-        }),
-      ),
-    );
-  }).pipe(reads.withPermits(1));
-});
-
-// The boot's read, of the registry alone: the sync callers need only
-// the projects, and the rows' git probes (each repo's identity and
-// icon) would hold the app's start on every project.
-export const firstList = Effect.flatMap(Registry.Registry, (registry) =>
-  Effect.map(registry.listed, (listed) => {
-    snapshot = listed.map(toProject);
-  }),
+// Every listed project with its path check, repo identity and use
+// stats.
+const projectRows = Effect.flatMap(Registry.Registry, (registry) =>
+  registry.rows(),
 );
 
 // Registers a repo with the engine (`sm projects add`, `--terrier` for
-// `terrier`), then re-reads the list so the sync readers (the git
-// watcher's reconcile right after the IPC call settles) see the new
-// project.
-export const addProject = Effect.fnUntraced(function* (
-  path: string,
-  terrier?: boolean,
-) {
-  const project = yield* (yield* Projects.Projects).add(path, { terrier });
-  yield* refresh;
-  return project;
-});
+// `terrier`).
+export const addProject = (path: string, terrier?: boolean) =>
+  Effect.flatMap(Projects.Projects, (projects) =>
+    projects.add(path, { terrier }),
+  );
 
-// The fields a lookup needs, without the list's decorations.
-function toProject(row: Project): Project {
-  return {
+// Points a project at its moved repo (`sm projects relocate`) and
+// reconnects its worktrees, answering the project at its new path.
+export const relocateProject = (id: string, path: string) =>
+  changing(
+    Effect.gen(function* () {
+      const project = yield* findProject(id);
+      return yield* (yield* Worktrees.Worktrees).relocateProject(project, path);
+    }),
+    { projectId: id },
+  );
+
+// The sidebar's list: the rows as ProjectsList serves them.
+export const listProjectsWithStatus = Effect.map(projectRows, (rows) =>
+  rows.map((row) => ({
     id: row.id,
     name: row.name,
     path: row.path,
     ...(row.source === undefined ? {} : { source: row.source }),
-  };
-}
-
-// Points a project at its moved repo (`sm projects relocate`), then
-// re-reads the list for the same reason as addProject.
-export const relocateProject = Effect.fnUntraced(function* (
-  id: string,
-  path: string,
-) {
-  // Its worktrees reconnected too.
-  const project = yield* changing(
-    Effect.gen(function* () {
-      const registered = yield* findProject(id);
-      return yield* (yield* Worktrees.Worktrees).relocateProject(
-        registered,
-        path,
-      );
-    }),
-    { projectId: id },
-  );
-  yield* refresh;
-  return project;
-});
-
-// The last-read list, for the sync callers. Empty until the boot's
-// first list (process/layer.ts).
-export function loadProjects(): readonly Project[] {
-  return snapshot;
-}
-
-// A freshly read list, for the flows that act on every project (nuke,
-// the data dir move, a project's removal).
-export const freshProjects = Effect.map(refresh, (rows) => rows.map(toProject));
-
-// The sidebar's list: the rows as ProjectsList serves them.
-export const listProjectsWithStatus = Effect.map(refresh, (rows) =>
-  rows.map((row) =>
-    Object.assign(toProject(row), {
-      pathExists: row.pathExists,
-      lastUsed: row.lastUsed,
-      recentCount: row.recentCount,
-      identity: row.identity,
-      remote: row.remote,
-    }),
-  ),
+    pathExists: row.pathExists,
+    lastUsed: row.lastUsed,
+    recentCount: row.recentCount,
+    identity: row.identity,
+    remote: row.remote,
+  })),
 );
 
 class NoLocalBranchesError extends Schema.TaggedError<NoLocalBranchesError>()(
@@ -179,12 +105,9 @@ export const handedCloneUrl = Effect.fnUntraced(function* (path: string) {
 // trusted from the caller, so a pull can never be aimed at a
 // non-matching repo.
 export const findProjectByIdentity = (identity: string) =>
-  Effect.map(refresh, (rows) => {
-    const match = rows.find(
-      (row) => row.pathExists && row.identity === identity,
-    );
-    return match === undefined ? undefined : toProject(match);
-  });
+  Effect.map(projectRows, (rows) =>
+    rows.find((row) => row.pathExists && row.identity === identity),
+  );
 
 class NoProjectOfIdentityError extends Schema.TaggedError<NoProjectOfIdentityError>()(
   "NoProjectOfIdentityError",

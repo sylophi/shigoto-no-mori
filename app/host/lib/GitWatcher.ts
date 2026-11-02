@@ -72,8 +72,9 @@ import * as Semaphore from "effect/Semaphore";
 import * as PlatformError from "effect/PlatformError";
 import * as Stream from "effect/Stream";
 import * as Git from "@shigomori/engine/Git";
+import type * as Registry from "@shigomori/engine/Registry";
 import { splitZ } from "@shigomori/engine/gitParse";
-import { loadProjects } from "@host/lib/projects";
+import { listedProjects } from "@host/lib/projects";
 import * as TreeWatch from "@host/lib/watchTree";
 
 const DEBOUNCE_MS = 300;
@@ -291,10 +292,10 @@ export class GitWatcher extends Context.Service<
     // Bring the watched set in line with the registry: one watch per
     // project whose git directory resolves, dropped when the project
     // leaves the registry or its git directory moves, and a change no
-    // event said signalled. Runs at boot, on every store change, the
+    // event said signalled. Runs at boot and on every store change, the
     // terminal's or the app's own (host/process/layer.ts), which together
-    // cover every way a project is added, removed or relocated, and every
-    // BACKSTOP.
+    // cover every way a project is added, removed or relocated. Every
+    // BACKSTOP the projects it last listed are read again.
     readonly reconcile: Effect.Effect<void>;
     // The projects whose index git wrote (a stage, an unstage, another
     // program's refresh of it), from the moment this returns and for
@@ -332,6 +333,7 @@ const make = (deps: GitWatcherDeps) =>
     const fs = yield* FileSystem.FileSystem;
     const paths = yield* Path.Path;
     const git = yield* Git.Git;
+    const engine = yield* Effect.context<Registry.Registry>();
     const platform = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     // Each watched project's git directory and the fiber watching it.
     const watches = yield* FiberMap.make<string>();
@@ -813,50 +815,59 @@ const make = (deps: GitWatcherDeps) =>
         yield* dropTrees(projectId);
       }).pipe(serial.withPermits(1));
 
+    // The projects as the last reconcile listed them. A store change
+    // reconciles (host/process/layer.ts), so the beat reads only their
+    // files, not the list again.
+    let projects: ReadonlyArray<Registry.ListedProject> = [];
+
     // Each project's files read with no lock held and at most one read
     // out per project, so one on a volume that hangs holds up nothing
     // but itself, and is skipped after on a doubling wait. One pass at a
     // time, so two (the beat's and a store change's) don't read alike.
     const passes = yield* Semaphore.make(1);
-    const reconcileNow = Effect.gen(function* () {
-      const projects = yield* Effect.try(loadProjects).pipe(Effect.option);
-      // The registry is unreadable right now, so keep what is watched.
-      if (Option.isNone(projects)) return;
-      const ids = new Set(projects.value.map((project) => project.id));
-      const known = [
-        ...gitDirs.keys(),
-        ...trees.keys(),
-        ...states.keys(),
-        ...stalled.keys(),
-      ];
-      for (const projectId of new Set(known)) {
-        if (!ids.has(projectId)) yield* forget(projectId);
-      }
-      for (const project of projects.value) {
-        if ((stalled.get(project.id)?.until ?? -1) > beats) continue;
-        const read = yield* readOf(project.id, project.path);
-        // A read still out is left to finish, a stuck one stalls.
-        if (read === "busy") continue;
-        if (read === "late") {
-          stall(project.id);
-          continue;
-        }
-        stalled.delete(project.id);
-        const quiet = (hearing.get(project.id) ?? -2) < beats - 1;
-        const moved = yield* apply(project.id, project.path, read);
-        // Owed even while the watch is heard: its fire reads past it.
-        if (moved === "git") hearingGit.add(project.id);
-        if (quiet) {
-          yield* signal(
-            project.id,
-            hearingGit.delete(project.id) ? "git" : moved,
+    const pass = (relist: boolean) =>
+      Effect.gen(function* () {
+        if (relist) {
+          const listed = yield* Effect.exit(
+            listedProjects.pipe(Effect.provide(engine)),
           );
+          // The registry is unreadable right now, so keep what is watched.
+          if (Exit.isFailure(listed)) return;
+          projects = listed.value;
         }
-      }
-    }).pipe(passes.withPermits(1));
-    const reconcile = reconcileNow.pipe(
-      Effect.withSpan("GitWatcher.reconcile"),
-    );
+        const ids = new Set(projects.map((project) => project.id));
+        const known = [
+          ...gitDirs.keys(),
+          ...trees.keys(),
+          ...states.keys(),
+          ...stalled.keys(),
+        ];
+        for (const projectId of new Set(known)) {
+          if (!ids.has(projectId)) yield* forget(projectId);
+        }
+        for (const project of projects) {
+          if ((stalled.get(project.id)?.until ?? -1) > beats) continue;
+          const read = yield* readOf(project.id, project.path);
+          // A read still out is left to finish, a stuck one stalls.
+          if (read === "busy") continue;
+          if (read === "late") {
+            stall(project.id);
+            continue;
+          }
+          stalled.delete(project.id);
+          const quiet = (hearing.get(project.id) ?? -2) < beats - 1;
+          const moved = yield* apply(project.id, project.path, read);
+          // Owed even while the watch is heard: its fire reads past it.
+          if (moved === "git") hearingGit.add(project.id);
+          if (quiet) {
+            yield* signal(
+              project.id,
+              hearingGit.delete(project.id) ? "git" : moved,
+            );
+          }
+        }
+      }).pipe(passes.withPermits(1));
+    const reconcile = pass(true).pipe(Effect.withSpan("GitWatcher.reconcile"));
 
     yield* reconcile;
     // Without a span: one every beat would crowd out the spans a restart's
@@ -868,7 +879,7 @@ const make = (deps: GitWatcherDeps) =>
             beats += 1;
           }),
         ),
-        Effect.andThen(reconcileNow),
+        Effect.andThen(pass(false)),
         Effect.forever,
       ),
     );

@@ -26,7 +26,7 @@ import * as Stream from "effect/Stream";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as Identity from "@shigomori/engine/Identity";
 import * as Registry from "@shigomori/engine/Registry";
-import { findProject, refresh } from "../projects";
+import { findProject } from "../projects";
 import * as SharedSettingsStore from "./store";
 
 // What the entries of a project's synced settings would hold.
@@ -112,7 +112,9 @@ export const layer = Layer.effectDiscard(
         const doc = yield* SharedSettingsStore.read;
         if (!anyProjectSettingsSync(doc)) return;
         if (relist) {
-          rows = yield* refresh;
+          rows = yield* Effect.flatMap(Registry.Registry, (registry) =>
+            registry.rows(),
+          );
           relist = false;
         }
         yield* Effect.forEach(

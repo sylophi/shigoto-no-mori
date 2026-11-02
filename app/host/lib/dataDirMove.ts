@@ -12,7 +12,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as DataDirMove from "@shigomori/engine/dataDirMove";
-import { findProjectInsideDataDir, freshProjects } from "./projects";
+import { findProjectInsideDataDir, listedProjects } from "./projects";
 import { busyRefusal } from "@shared/busy";
 import { hostCallFailure } from "./Engine";
 import * as Scripts from "./Scripts";
@@ -220,7 +220,7 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     // Same trap as nukeEverything: a project repo registered from inside
     // the data dir would be dragged along, breaking its recorded path.
     // Read holding the lock, so no project is added after.
-    const trapped = findProjectInsideDataDir(yield* freshProjects, spellings);
+    const trapped = findProjectInsideDataDir(yield* listedProjects, spellings);
     if (trapped) {
       return yield* new DataDirMoveError({
         reason:
