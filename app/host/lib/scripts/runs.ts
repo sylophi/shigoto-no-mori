@@ -429,7 +429,7 @@ export const makeRuns = ({
         stream,
         // Closing the run's scope (./ScriptRuns.ts) is its kill chain.
         stop: (graceMs) => close({ graceMs, wait: true }),
-        signal: close({ graceMs: 0, wait: false }),
+        signal: Effect.suspend(() => close({ graceMs: 0, wait: false })),
         flushOutput,
       };
       ptyRuns.set(runId, record);

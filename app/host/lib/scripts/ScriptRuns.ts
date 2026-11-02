@@ -285,7 +285,7 @@ const make = Effect.gen(function* () {
     // holding it. The release finds the child exited and signals
     // nothing.
     yield* handle.exit.pipe(
-      Effect.andThen(close({ graceMs: 0, wait: false })),
+      Effect.andThen(() => close({ graceMs: 0, wait: false })),
       Effect.forkIn(scope),
     );
     return { pty: handle, close };
