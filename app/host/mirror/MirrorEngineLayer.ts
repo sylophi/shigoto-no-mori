@@ -7,7 +7,7 @@ import { errorMessageOf } from "@shigomori/contracts/errors";
 import * as MirrorAgreements from "@shigomori/engine/MirrorAgreements";
 import * as MirrorHistoryStore from "@shigomori/engine/MirrorHistory";
 import * as StoreChanges from "@shigomori/engine/StoreChanges";
-import * as WtFolder from "@shigomori/engine/WtFolder";
+import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -101,17 +101,17 @@ const make = (options: {
       onChange: options.onChange,
     });
 
-    // Every re-key the engine records (WtFolder.movedIds), this process's
-    // or another's (the terminal's adopt or relocate), carries the thread
-    // kept under the old id: those made while the app was closed as it
-    // comes up, and each one after as the store records it. The sessions
-    // follow at the daemon's next snapshot, which finds their root gone
-    // and the move recorded, once their peer takes this device's calls,
-    // within 2 minutes (settleMirrorBookkeeping).
-    const folder = yield* WtFolder.WtFolder;
+    // Every re-key the engine records (Worktrees.movedIds), this
+    // process's or another's (the terminal's adopt or relocate), carries
+    // the thread kept under the old id: those made while the app was
+    // closed as it comes up, and each one after as the store records it.
+    // The sessions follow at the daemon's next snapshot, which finds their
+    // root gone and the move recorded, once their peer takes this
+    // device's calls, within 2 minutes (settleMirrorBookkeeping).
+    const worktrees = yield* Worktrees.Worktrees;
     const carried = new Map<string, string>();
     const carryRekeys = Effect.gen(function* () {
-      for (const [from, to] of yield* folder.movedIds) {
+      for (const [from, to] of yield* worktrees.movedIds) {
         if (carried.get(from) === to) continue;
         carried.set(from, to);
         history.move(from, to);

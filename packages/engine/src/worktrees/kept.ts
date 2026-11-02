@@ -7,7 +7,7 @@
 // later call finishes it. A re-key whose checkout moved records the
 // move in `wt_moves` in the same transaction, which is where anything
 // kept outside the store under the old id (the host's mirrors) learns
-// of it, whoever re-keyed it (WtFolder.movedIds).
+// of it, whoever re-keyed it (movedIds).
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -17,6 +17,7 @@ import { dirtyRef } from "../Dirty.ts";
 import * as Git from "../Git.ts";
 import * as Paths from "../Paths.ts";
 import { scriptOutputDir } from "../scriptOutput.ts";
+import { worktreeIdFromPath } from "../worktreeLayout.ts";
 import * as Registry from "../Registry.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as WorktreeData from "../WorktreeData.ts";
@@ -50,7 +51,7 @@ export const makeKept = Effect.gen(function* () {
       sql`DELETE FROM wt_moves WHERE moved = 1 AND from_path IN ${sql.in(paths)}`,
     );
 
-  // Written anew, so the rowid orders the moves (WtFolder's placed).
+  // Written anew, so the rowid orders the moves (placed).
   const recordMove = (project: RegisteredProject, moved: Moved) =>
     Effect.all([
       claimed([moved.fromPath, moved.toPath]),
@@ -62,6 +63,56 @@ export const makeKept = Effect.gen(function* () {
         moved: 1,
       })}`,
     ]);
+
+  // Where each recorded folder is now, its moves applied in the order
+  // they were made (a move's record is written anew each time, so its
+  // rowid orders it): a move undone and made again ends where it was made
+  // last, and a folder that came back is where it started, whether or
+  // not either path can be looked at (a drive away). A later move from a
+  // path is the folder that took that path since.
+  const placed = Effect.gen(function* () {
+    const rows = yield* sql<{ from_path: string; to_path: string }>`
+      SELECT from_path, to_path FROM wt_moves WHERE moved = 1
+      ORDER BY rowid`.pipe(Effect.orDie);
+    const at = new Map<string, string>();
+    for (const { from_path, to_path } of rows) {
+      for (const [start, now] of at) {
+        if (now === from_path) at.set(start, to_path);
+      }
+      at.set(from_path, to_path);
+    }
+    return at;
+  });
+
+  const movedTo = Effect.fn("Worktrees.movedTo")(function* (fromPath: string) {
+    const now = (yield* placed).get(fromPath);
+    return Option.fromNullishOr(now === fromPath ? undefined : now);
+  });
+
+  const movedIds = Effect.gen(function* () {
+    const ids = new Map<string, string>();
+    for (const [start, now] of yield* placed) {
+      if (now === start) continue;
+      const taken = yield* fs
+        .exists(start)
+        .pipe(Effect.orElseSucceed(() => true));
+      if (!taken) ids.set(worktreeIdFromPath(start), worktreeIdFromPath(now));
+    }
+    return ids as ReadonlyMap<string, string>;
+  }).pipe(Effect.withSpan("Worktrees.movedIds"));
+
+  // The recorded moves that end at a worktree gone from the store, so an
+  // id from before them doesn't follow to one made at its path later.
+  const forgetMovesInto = (worktreeId: string) =>
+    Effect.gen(function* () {
+      const starts = [...(yield* placed)]
+        .filter(([, now]) => worktreeIdFromPath(now) === worktreeId)
+        .map(([start]) => start);
+      if (starts.length > 0) {
+        yield* sql`DELETE FROM wt_moves
+          WHERE moved = 1 AND from_path IN ${sql.in(starts)}`;
+      }
+    });
 
   const rekeyRows = (
     project: RegisteredProject,
@@ -145,6 +196,7 @@ export const makeKept = Effect.gen(function* () {
           registry.forgetWorktree(worktreeId),
           data.forget(project.id, worktreeId),
           cloneCheckout.forget(worktreeId),
+          forgetMovesInto(worktreeId),
           madeAt.length === 0 ? Effect.void : claimed(madeAt),
         ]),
       )
@@ -178,6 +230,8 @@ export const makeKept = Effect.gen(function* () {
 
   return {
     keptUnder,
+    movedTo,
+    movedIds,
     rekeyRows,
     rekeyCapture,
     forgetRows,

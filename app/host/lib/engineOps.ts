@@ -35,7 +35,6 @@ import * as ShellIntegration from "@shigomori/engine/ShellIntegration";
 import * as Usage from "@shigomori/engine/Usage";
 import * as WorktreeData from "@shigomori/engine/WorktreeData";
 import * as Worktrees from "@shigomori/engine/Worktrees";
-import * as WtFolder from "@shigomori/engine/WtFolder";
 import {
   AgentHarnessStatusListSchema,
   CleanupErrorSchema,
@@ -731,20 +730,15 @@ export const storeProjectOrder = Effect.fnUntraced(function* (ids: string[]) {
 
 // ---- Reads ----
 
-// Where the v3 migration moved a v2 worktree folder, null when it
-// didn't.
-export const wtFolderMovedTo = Effect.fnUntraced(function* (fromPath: string) {
+// Where a worktree's folder was moved to, null when it wasn't.
+export const worktreeMovedTo = Effect.fnUntraced(function* (fromPath: string) {
   const moved = yield* asCall(
-    Effect.flatMap(WtFolder.WtFolder, (folder) => folder.movedTo(fromPath)),
+    Effect.flatMap(Worktrees.Worktrees, (worktrees) =>
+      worktrees.movedTo(fromPath),
+    ),
   );
   return Option.getOrNull(moved);
 });
-
-// The id each worktree a recorded move took had, to the one it has
-// now (WtFolder.movedIds).
-export const wtFolderMovedIds = Effect.suspend(() =>
-  asCall(Effect.flatMap(WtFolder.WtFolder, (folder) => folder.movedIds)),
-);
 
 // The contract's row: the terminal's project name and its sessions'
 // permission prompts are left out.
