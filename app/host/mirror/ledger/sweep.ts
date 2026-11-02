@@ -86,7 +86,7 @@ export const makeSweep = ({
   readonly ends: Ends;
   readonly moves: Moves;
 }) =>
-  Effect.gen(function* () {
+  Effect.sync(() => {
     const {
       pendingStops,
       endingSessions,
