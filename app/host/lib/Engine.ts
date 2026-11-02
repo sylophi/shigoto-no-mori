@@ -159,27 +159,36 @@ export const asCall = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.mapError(engineFailure));
 
 // What a host call's failure crosses a wire as: a git the engine ran
-// in the words errorWordsOf gives it, and anything else as
-// callFailureOf makes it.
+// in the words errorWordsOf gives it, a store's refusal in the store's
+// words, and anything else as callFailureOf makes it. The host's store
+// refuses as moved only while the host's own move runs or is still
+// unsettled, which is what the move's lock refuses a change with.
 export const hostCallFailure = (error: unknown) => {
   const store = storeErrorOf(error);
   return callFailureOf(
     error instanceof Git.GitCommandError
       ? new RemoteCallError({ text: errorWordsOf(error) })
       : store !== undefined
-        ? new RemoteCallError({ text: store.message })
+        ? new RemoteCallError({
+            text:
+              store.category === "moved"
+                ? new DataDirLock.DataDirMoving().message
+                : store.message,
+          })
         : error,
   );
 };
 
 // An operation that changes a worktree on disk, run only while no
 // data-folder move can start (`DataDirLock`): every hold of the lock the
-// host takes passes here. Its one home is where the work is asked for:
-// a call that changes code is held by the link that serves it
-// (socket/DeviceLink.ts), and what the host runs past such a call or
-// apart from one (a create's whole run, a removal, a move, a landing, a
-// capture, an auto-pull) is held by the service that runs it. A write
-// that only touches the store holds nothing (DataDirLock.ts). Counted
+// host takes passes here. A call that changes code is held by the link
+// that serves it (socket/DeviceLink.ts), and what the host runs past
+// such a call or apart from one (a create's whole run, a removal, a
+// move, a landing, a capture, an auto-pull, a project added or removed)
+// is held by the service that runs it. A create, removal or move asked
+// over such a call is held by both, the second joining the first's
+// hold. A write that only touches the store holds nothing: a move's
+// store refuses it (DataDirLock.ts, hostCallFailure). Counted
 // while it runs (Scripts.busy) when it is work a quit should wait on,
 // which `kind` names: something a person started, or an auto-pull's
 // fast-forward. `ids` name the worktree or project it changes, so a

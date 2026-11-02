@@ -32,12 +32,14 @@
 //  0. The lock alone, waiting 30 s for the changes under way (one still
 //     running refuses the move), then an earlier journal settled. Until
 //     it is, the move is refused and the store keeps refusing writes.
-//  1. The app's last checks, scripts killed (`ready`), the pointer
-//     staged and flushed. A staged pointer naming a folder that never
-//     came, which Paths ignores: its rescue needs a journal.
-//  2. The store refusing, then the journal, with no entries. Before the
-//     journal, a refusing store with none, which the next settle lets
-//     write; after it, an undo with nothing to reverse.
+//  1. No project registered inside the data dir, the app's last checks,
+//     scripts killed (`ready`), the pointer staged and flushed. A staged
+//     pointer naming a folder that never came, which Paths ignores: its
+//     rescue needs a journal.
+//  2. The store refusing, the projects read again (none registered
+//     since is inside the data dir), then the journal, with no entries.
+//     Before the journal, a refusing store with none, which the next
+//     settle lets write; after it, an undo with nothing to reverse.
 //  3. The plan: git's listing of each project's worktrees, made holding
 //     the lock alone, so no create, adopt or move can change it. A
 //     listing that fails refuses the move, unless the project's folder
@@ -481,6 +483,17 @@ class EarlierMoveUnfinished extends Schema.TaggedError<EarlierMoveUnfinished>()(
   }
 }
 
+// A move refused before anything moved: a project registered inside the
+// data dir, which would go with it and leave its recorded path behind.
+class ProjectInsideDataDir extends Schema.TaggedError<ProjectInsideDataDir>()(
+  "ProjectInsideDataDir",
+  { project: Schema.String, from: Schema.String },
+) {
+  override get message(): string {
+    return `Refusing to move: project "${this.project}" lives inside ${this.from} and would be moved with it. Move the repository out first.`;
+  }
+}
+
 // A move refused before anything moved: a project whose folder is there
 // that git can't list.
 class ProjectUnlisted extends Schema.TaggedError<ProjectUnlisted>()(
@@ -574,6 +587,15 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     );
   const underFrom = (at: string) =>
     move.spellings.find((dir) => isSameOrInside(at, dir));
+  // The registered projects, none of them inside the data dir.
+  const projectsOutside = Effect.gen(function* () {
+    const projects = yield* registry.listed;
+    const inside = projects.find((project) => underFrom(project.path));
+    if (inside !== undefined) {
+      return yield* new ProjectInsideDataDir({ project: inside.name, from });
+    }
+    return projects;
+  });
   const suffix = (yield* Random.nextInt).toString(36);
   // The pointer is written beside itself under a name of its own, then
   // renamed in.
@@ -595,9 +617,10 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     if (yield* fs.exists(journalFile).pipe(Effect.orElseSucceed(() => true))) {
       return yield* new EarlierMoveUnfinished();
     }
+    // Asked before the app's last checks stop its scripts, and again
+    // below on the list a new registration can no longer join.
+    yield* projectsOutside;
     yield* hooks.ready;
-    // Read holding the lock, so no project is added after.
-    const projects = yield* registry.listed;
     // Staged before anything moves: a move that succeeds but leaves the
     // pointer unwritable would strand the data where no boot can find
     // it. Staged last of the preconditions so a failure above can't
@@ -610,6 +633,9 @@ export const moveDataDir = Effect.fnUntraced(function* <E, R>(
     }
     yield* retireStore;
     storeRetired = true;
+    // Read once the store refuses every write but the move's, so no
+    // project is registered after.
+    const projects = yield* projectsOutside;
     yield* journalHere;
     journaled = true;
 

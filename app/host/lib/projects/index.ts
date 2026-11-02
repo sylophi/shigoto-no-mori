@@ -32,8 +32,11 @@ const projectRows = Effect.flatMap(Registry.Registry, (registry) =>
 // Registers a repo with the engine (`sm projects add`, `--terrier` for
 // `terrier`).
 export const addProject = (path: string, terrier?: boolean) =>
-  Effect.flatMap(Projects.Projects, (projects) =>
-    projects.add(path, { terrier }),
+  changing(
+    Effect.flatMap(Projects.Projects, (projects) =>
+      projects.add(path, { terrier }),
+    ),
+    {},
   );
 
 // Points a project at its moved repo (`sm projects relocate`) and
@@ -127,10 +130,10 @@ export const findProjectByIdentityOrFail = (identity: string) =>
   );
 
 // A project repo registered from inside the data dir (nothing stops
-// projects.add from accepting one) would be wiped or dragged along by
-// data-dir-wide operations. Nuke and the data dir move both refuse up front on
-// this test. Takes the caller's already-loaded list so the guard adds
-// no extra read.
+// projects.add from accepting one) would be wiped by a nuke, which
+// refuses up front on this test (a data-folder move asks the engine's
+// own). Takes the caller's already-loaded list so the guard adds no
+// extra read.
 export function findProjectInsideDataDir(
   projects: readonly Project[],
   roots: readonly string[],

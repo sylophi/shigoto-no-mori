@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Projects from "@shigomori/engine/Projects";
 import * as Registry from "@shigomori/engine/Registry";
+import { changing } from "@host/lib/Engine";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { GithubCli } from "@host/lib/githubCli/GithubCli";
 import * as Scripts from "@host/lib/Scripts";
@@ -168,8 +169,13 @@ const removing = Effect.fnUntraced(function* <E, R>(
 
 export const removeProject = Effect.fn("projects.remove")((id: string) =>
   removing(id, () =>
-    Effect.flatMap(findProject(id), (project) =>
-      Effect.flatMap(Projects.Projects, (projects) => projects.remove(project)),
+    changing(
+      Effect.flatMap(findProject(id), (project) =>
+        Effect.flatMap(Projects.Projects, (projects) =>
+          projects.remove(project),
+        ),
+      ),
+      { projectId: id },
     ),
   ),
 );
