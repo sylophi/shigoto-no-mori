@@ -28,8 +28,8 @@ import {
   useMirrorHereBlocker,
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
-import { useCanForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useDevices";
+import { useHasLocalHost } from "@/lib/localHost";
 import {
   type TransferDialog,
   TransferActionsView,
@@ -80,14 +80,15 @@ export function useTransferOffers(
   worktree: Worktree,
   { ready, mirrorBlocker }: TransferSide,
 ): TransferOffers {
-  const canForwardPorts = useCanForwardPorts();
+  // App only: the mirror's daemon lives in the host, and a copy or a
+  // move here lands on this machine, which a browser is not.
+  const hasLocalHost = useHasLocalHost();
   const links = useWorktreeMirrorLinks(worktree);
   // The branch is checked again for a dialog held open past it.
-  const canOpen = ready && hasOwnBranch(worktree) && links.length === 0;
+  const canOpen =
+    hasLocalHost && ready && hasOwnBranch(worktree) && links.length === 0;
   return {
-    // App only: the mirror's daemon lives in the host, and a copy here
-    // lands on this machine, which a browser is not.
-    mirror: canOpen && canForwardPorts,
+    mirror: canOpen,
     mirrorBlocker,
     transplant: canOpen && !worktree.isPrimary,
     mirroring: links.some(
