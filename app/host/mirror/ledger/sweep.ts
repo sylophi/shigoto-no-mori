@@ -30,7 +30,6 @@ import { MIRROR_LABEL_REPLACES } from "@shigomori/contracts/modules/mirror";
 import { ageOf, stamp } from "@shigomori/engine/keptAnswers";
 import { worktreeIdFromPath } from "@shigomori/engine/worktreeLayout";
 import * as Worktrees from "@shigomori/engine/Worktrees";
-import { PeerReach } from "@host/ipc/PeerReach";
 import type { MirrorEngine } from "../MirrorEngine";
 import {
   type MirrorSessionRaw,
@@ -88,7 +87,6 @@ export const makeSweep = ({
   readonly moves: Moves;
 }) =>
   Effect.gen(function* () {
-    const reach = yield* PeerReach;
     const {
       pendingStops,
       endingSessions,
