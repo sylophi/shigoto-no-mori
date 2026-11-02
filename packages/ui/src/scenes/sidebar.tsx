@@ -184,6 +184,7 @@ function forestItems(shell: SceneShell): ForestItem[] {
 function inboxModel(shell: SceneShell) {
   return buildInboxRows({
     items: forestItems(shell),
+    deviceFilter: null,
     mirrors: [],
     deviceBadges: deviceBadges(shell),
     openShelves: new Set(),
@@ -224,6 +225,7 @@ function treeModel(shell: SceneShell, openKey: string | null) {
     arrangeMode: false,
     byOwner: null,
     shutFolders: new Set(),
+    deviceFilter: null,
     mirrors: [],
     deviceBadges: deviceBadges(shell),
   });
@@ -247,6 +249,7 @@ export function sceneGrid() {
     hiddenPrefixes: [],
     allowAgentWorking: MARKS.allowAgentWorking,
     byOwner: true,
+    deviceFilter: null,
     mirrors: [],
     deviceBadges: deviceBadges("desktop"),
     visits: {},

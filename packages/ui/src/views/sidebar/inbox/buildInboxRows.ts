@@ -5,9 +5,9 @@ import {
 } from "@shigomori/contracts/pullRequestStack";
 import { groupPrefixOf } from "@shigomori/contracts/sharedSettings";
 import {
+  deviceFiling,
   type ForestDevice,
   type ForestItem,
-  type LocalSide,
   mirrorBadgeOf,
   type MirrorPair,
   mirrorPairsOf,
@@ -15,11 +15,7 @@ import {
   worktreeRowKey,
   worktreeShelfOf,
 } from "../../../lib/forest.ts";
-import type {
-  Project,
-  PullRequest,
-  Worktree,
-} from "@shigomori/contracts/schemas";
+import type { Project, PullRequest } from "@shigomori/contracts/schemas";
 import type { SidebarDeviceBadge } from "../DeviceBadgeView.tsx";
 import {
   INBOX_SHELVES,
@@ -34,11 +30,11 @@ interface BuildInboxRowsArgs {
   // boxes: the inbox is one list of everything in flight, wherever it
   // lives.
   items: readonly ForestItem[];
+  // The device the filter picked, null for every device: what files is
+  // deviceFiling's.
+  deviceFilter: string | null;
   // See buildSidebarRows: a mirrored pair files once, as the kept row.
   mirrors: readonly MirrorPair[];
-  // See buildSidebarRows: this device's sides of pairs whose projects
-  // `items` leaves out, filed as this machine's own.
-  localSides?: ReadonlyMap<string, LocalSide>;
   // Every peer's badge off the device registry (see buildSidebarRows).
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   // Which shelves are open. Absence means shut, so both shelves start
@@ -59,10 +55,11 @@ interface BuildInboxRowsArgs {
 }
 
 interface Entry extends InboxRank {
-  worktree: Worktree;
   project: Project;
   pr: PullRequest | undefined;
   stack: StackPosition | null;
+  // Where it is (worktreeAt), and its row's key.
+  at: string;
   key: string;
   device: ForestDevice;
   mirror: SidebarDeviceBadge | undefined;
@@ -99,8 +96,8 @@ function worktreeRow(entry: Entry): SidebarRow {
 // belong to the Sidebar, so switching views is free.
 export function buildInboxRows({
   items,
+  deviceFilter,
   mirrors,
-  localSides = new Map(),
   deviceBadges,
   openShelves,
   hiddenPrefixes,
@@ -110,6 +107,42 @@ export function buildInboxRows({
   pinWaiting,
 }: BuildInboxRowsArgs): SidebarViewModel {
   const { keptOf, foldedOf } = mirrorPairsOf(mirrors);
+
+  const files = deviceFiling(deviceFilter, mirrors);
+  // The primaries left out because their project keeps them out, by
+  // worktreeAt. Not one whose config is still unread: that one may yet
+  // show.
+  const leftOut = new Set<string>();
+  // Every worktree the filter keeps, in the items' order, before the
+  // folds.
+  const listed: Entry[] = [];
+  for (const item of items) {
+    if (item.project.pathExists === false) continue;
+    const { device, project, pullRequests: prs } = item;
+    const trunk = trunkOf(item.worktrees);
+    for (const worktree of item.worktrees) {
+      if (!files(device.deviceId, worktree.id)) continue;
+      const at = worktreeAt(device.deviceId, worktree.id);
+      if (worktree.isPrimary && item.showPrimaryInInbox !== true) {
+        if (item.showPrimaryInInbox === false) leftOut.add(at);
+        continue;
+      }
+      const pr = prs[worktree.branch];
+      const folded = foldedOf.get(at);
+      listed.push({
+        ...inboxRank(worktree, pinWaiting),
+        project,
+        pr,
+        stack: pullRequestStackPosition(prs, worktree.branch, trunk),
+        at,
+        key: worktreeRowKey(device, worktree.id),
+        device,
+        mirror: mirrorBadgeOf(folded, deviceBadges),
+        mirrorWorktreeId: folded?.worktreeId,
+        shelf: worktreeShelfOf(worktree, pr, hiddenPrefixes, allowAgentWorking),
+      });
+    }
+  }
 
   const live: Entry[] = [];
   const shelves: Record<InboxShelf, Entry[]> = {
@@ -121,110 +154,22 @@ export function buildInboxRows({
   // Filed for every shelved worktree, open shelf or not. It's the
   // folded case that revealKey needs an answer for. Keyed like the rows.
   const shelfOf = new Map<string, InboxShelf>();
-  // The primaries left out because their project keeps them out, by
-  // worktreeAt. Not one whose config is still unread: that one may yet
-  // show.
-  const leftOut = new Set<string>();
-  // Where each of this machine's entries filed, by worktreeAt, for the
-  // peers' rows to fold into.
-  const localShelf = new Map<string, InboxShelf | null>();
   // Every entry's row key, by worktreeAt, for revealKey.
   const filed = new Map<string, string>();
-  const file = (
-    project: Project,
-    trees: readonly Worktree[],
-    prs: Record<string, PullRequest> | undefined,
-    // Undefined while the project's config is unread.
-    showPrimary: boolean | undefined,
-    device: ForestDevice,
-    // The stack's trunk, off the project's listing.
-    trunk = trunkOf(trees),
-  ) => {
-    for (const worktree of trees) {
-      const at = worktreeAt(device.deviceId, worktree.id);
-      if (worktree.isPrimary && showPrimary !== true) {
-        if (showPrimary === false) leftOut.add(at);
-        continue;
-      }
-      const key = worktreeRowKey(device, worktree.id);
-      const pr = prs?.[worktree.branch];
-      const folded = foldedOf.get(at);
-      const shelf = worktreeShelfOf(
-        worktree,
-        pr,
-        hiddenPrefixes,
-        allowAgentWorking,
-      );
-      const entry: Entry = {
-        ...inboxRank(worktree, pinWaiting),
-        project,
-        pr,
-        stack: pullRequestStackPosition(prs, worktree.branch, trunk),
-        key,
-        device,
-        mirror: mirrorBadgeOf(folded, deviceBadges),
-        mirrorWorktreeId: folded?.worktreeId,
-        shelf,
-      };
-      if (device.isThisDevice) localShelf.set(at, shelf);
-      filed.set(at, key);
-      if (shelf === null) {
-        live.push(entry);
-      } else {
-        shelves[shelf].push(entry);
-        shelfOf.set(key, shelf);
-      }
+  // A folded side's row folds only into a kept entry in the same box: a
+  // kept copy on a shelf would take the other's live worktree off the
+  // list with it.
+  const boxOf = new Map(listed.map((entry) => [entry.at, entry.shelf]));
+  for (const entry of listed) {
+    const kept = keptOf.get(entry.at);
+    if (kept !== undefined && boxOf.get(kept) === entry.shelf) continue;
+    filed.set(entry.at, entry.key);
+    if (entry.shelf === null) {
+      live.push(entry);
+    } else {
+      shelves[entry.shelf].push(entry);
+      shelfOf.set(entry.key, entry.shelf);
     }
-  };
-  // A peer's row folds only into a local entry filed in the same box:
-  // a local copy on a shelf would take the peer's live worktree off
-  // the list with it. Where `items` leaves this machine's project out,
-  // its side of a pair with the peer (localSides) files first, as this
-  // machine's own: its own primary opt-in, and the repo's pull requests
-  // and trunk off the peer's listing.
-  for (const item of items) {
-    if (item.project.pathExists === false) continue;
-    const { device, pullRequests } = item;
-    if (device.isThisDevice) {
-      file(
-        item.project,
-        item.worktrees,
-        pullRequests,
-        item.showPrimaryInInbox,
-        device,
-      );
-      continue;
-    }
-    const keptOn = (worktree: Worktree) =>
-      keptOf.get(worktreeAt(device.deviceId, worktree.id));
-    for (const worktree of item.worktrees) {
-      const kept = keptOn(worktree);
-      const side = kept === undefined ? undefined : localSides.get(kept);
-      if (side === undefined) continue;
-      file(
-        side.project,
-        [side.worktree],
-        pullRequests,
-        side.showPrimaryInInbox,
-        side.device,
-        trunkOf(item.worktrees),
-      );
-    }
-    file(
-      item.project,
-      item.worktrees.filter((worktree) => {
-        const kept = keptOn(worktree);
-        if (kept === undefined) return true;
-        const pr = pullRequests[worktree.branch];
-        return (
-          localShelf.get(kept) !==
-          worktreeShelfOf(worktree, pr, hiddenPrefixes, allowAgentWorking)
-        );
-      }),
-      pullRequests,
-      item.showPrimaryInInbox,
-      device,
-    );
   }
 
   const total = Object.values(shelves).reduce(
@@ -281,15 +226,21 @@ export function buildInboxRows({
 
   return {
     rows,
-    // Only once every listing has landed and none of them failed. An
-    // empty list looks the same whether the answer is "nothing here",
-    // "still asking", or "couldn't ask". The last two have their own
-    // signals already (the skeleton, the fan-out toast), so asserting
-    // the first over them is the one wrong answer available.
+    // Only once every listing the filter shows has landed and none of
+    // them failed. An empty list looks the same whether the answer is
+    // "nothing here", "still asking", or "couldn't ask". The last two
+    // have their own signals already (the skeleton, the fan-out
+    // toast), so asserting the first over them is the one wrong answer
+    // available.
     // (The shell gates this on the peers' listings still being in
     // flight or failed, the same way it gates the tree's.)
     emptyMessage:
-      total === 0 && items.every((item) => item.listing === "ready")
+      total === 0 &&
+      items.every(
+        (item) =>
+          item.listing === "ready" ||
+          (deviceFilter !== null && item.device.deviceId !== deviceFilter),
+      )
         ? "No worktrees yet."
         : null,
     // A page's own entry only: a peer's worktree with none may just be

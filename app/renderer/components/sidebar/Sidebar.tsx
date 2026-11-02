@@ -134,11 +134,10 @@ function Forest({
     sortMode,
     groupByOwner,
     items,
-    shownItems,
+    deviceFilter,
     devicesFailed,
     failedListings,
     order,
-    localSides,
     mirrors,
     deviceBadges,
     hiddenPrefixes,
@@ -180,9 +179,9 @@ function Forest({
   };
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
-        items: shownItems,
+        items,
+        deviceFilter,
         mirrors,
-        localSides,
         deviceBadges,
         openShelves: folds.inboxShelvesOpen,
         hiddenPrefixes,
@@ -192,7 +191,8 @@ function Forest({
         pinWaiting: markAgentsWaiting,
       })
     : buildSidebarRows({
-        items: shownItems,
+        items,
+        deviceFilter,
         openKey,
         inline: inline ? { collapsed: folds.collapsed } : null,
         worktreeSort,
@@ -208,7 +208,6 @@ function Forest({
         byOwner: groupByOwner ? { shut: folds.shutOwners } : null,
         shutFolders: folds.shutFolders,
         mirrors,
-        localSides,
         deviceBadges,
       });
   const { rows, pinned, level } = view;

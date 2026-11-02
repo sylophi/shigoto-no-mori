@@ -1,14 +1,14 @@
 // What the sidebar, the inbox, the home grid and the palette build their
 // rows from, as the app's hooks read it: every device's projects as
-// items, and this device's mirrors. The fixture world builds the same.
-// And what every one of those builders reads off it alike: a group's
-// key, a row's key and the fold a worktree sits behind.
+// items, and the mirrored pairs between them. The fixture world builds
+// the same. And what every one of those builders reads off it alike: a
+// group's key, a row's key, the fold a worktree sits behind and whether
+// the device filter keeps it.
 import { MACHINE_FALLBACK_ICON } from "@shigomori/contracts/deviceIcon";
 import {
   isAgentWorking,
   type Project,
   type PullRequest,
-  type ShigomoriConfig,
   type Worktree,
 } from "@shigomori/contracts/schemas";
 import { peerProjectKey } from "@shigomori/contracts/schemas/config";
@@ -16,24 +16,6 @@ import { isHiddenByPrefix } from "@shigomori/contracts/sharedSettings";
 import type { SidebarDeviceBadge } from "../views/sidebar/DeviceBadgeView.tsx";
 import type { GroupShelf, InboxShelf } from "../views/sidebar/sidebarRow.ts";
 import { UNNAMED_DEVICE } from "./deviceRoster.ts";
-import { showPrimaryInInbox } from "./showPrimaryInInbox.ts";
-
-// One read per project, positionally aligned with the projects it was
-// asked for (the app's useAllProject… fan-outs).
-type ProjectReads<T> = readonly {
-  readonly data: T | undefined;
-  readonly error: Error | null;
-  readonly isLoading: boolean;
-  readonly isPending: boolean;
-}[];
-
-export type ProjectWorktreeQueries = ProjectReads<readonly Worktree[]>;
-// Branch -> PR, per project.
-export type ProjectPullRequestQueries = ProjectReads<
-  Record<string, PullRequest>
->;
-export type ProjectShigomoriConfigQueries =
-  ProjectReads<ShigomoriConfig | null>;
 
 // A device as the forest's items carry it: its badge, and whether it
 // is the machine this window runs on.
@@ -119,49 +101,26 @@ export function mirrorBadgeOf(
   );
 }
 
-// This device's worktree in a mirrored pair, in its project, with the
-// project's primary opt-in (showPrimaryInInbox), undefined while unread.
-export interface LocalSide {
-  device: ForestDevice;
-  worktree: Worktree;
-  project: Project;
-  showPrimaryInInbox: boolean | undefined;
-}
-
-// This device's sides of its pairs with a peer, by worktreeAt, for the
-// device filter narrowed to that peer. A pair is one worktree on two
-// machines, so it is on either one's filter: the builders list this
-// device's side among the peer's rows as they do under every device,
-// and the peer's row folds into it by the same rule. A listing not in
-// yet, or failed, holds none.
-export function localSidesWith(
-  peerDeviceId: string,
-  mirrors: readonly MirrorPair[],
-  device: ForestDevice,
-  projects: readonly Project[],
-  worktreeQueries: ProjectWorktreeQueries,
-  configQueries: ProjectShigomoriConfigQueries,
-): Map<string, LocalSide> {
-  const paired = new Set(
-    mirrors
-      .filter((pair) => pair.folded.deviceId === peerDeviceId)
-      .map((pair) => pair.kept.worktreeId),
-  );
-  const sides = new Map<string, LocalSide>();
-  projects.forEach((project, i) => {
-    const query = worktreeQueries[i];
-    if (project.pathExists === false || query?.error) return;
-    for (const worktree of query?.data ?? []) {
-      if (!paired.has(worktree.id)) continue;
-      sides.set(worktreeAt(device.deviceId, worktree.id), {
-        device,
-        worktree,
-        project,
-        showPrimaryInInbox: showPrimaryInInbox(configQueries[i]?.data),
-      });
-    }
-  });
-  return sides;
+// Whether a worktree files under the device filter (`picked`, null for
+// every device): one on the picked device does, and so does one paired
+// with one there, since a pair is one worktree on two machines and is
+// on either one's filter. The builders then fold it as they do under
+// every device.
+export function deviceFiling(
+  picked: string | null,
+  pairs: readonly MirrorPair[],
+): (deviceId: string, worktreeId: string) => boolean {
+  const paired = new Set<string>();
+  for (const { kept, folded } of pairs) {
+    if (kept.deviceId === picked)
+      paired.add(worktreeAt(folded.deviceId, folded.worktreeId));
+    if (folded.deviceId === picked)
+      paired.add(worktreeAt(kept.deviceId, kept.worktreeId));
+  }
+  return (deviceId, worktreeId) =>
+    picked === null ||
+    deviceId === picked ||
+    paired.has(worktreeAt(deviceId, worktreeId));
 }
 
 // Which fold a worktree sits behind in its group, if any. An agent's

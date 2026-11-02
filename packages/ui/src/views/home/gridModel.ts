@@ -29,8 +29,13 @@ export function buildGrid({
   sections: ProjectSection[];
   work: Map<string, GroupWork>;
 } {
+  // A tile's work is its projects' on the picked device alone.
+  const picked =
+    forest.deviceFilter === null
+      ? items
+      : items.filter((item) => item.device.deviceId === forest.deviceFilter);
   const { entries } = buildPaletteEntries({
-    items,
+    items: picked,
     mirrors: forest.mirrors,
     deviceBadges,
     hiddenPrefixes: forest.hiddenPrefixes,
@@ -39,7 +44,7 @@ export function buildGrid({
   });
   return {
     sections: projectListSections({ items, ...forest }),
-    work: workByGroup(projectGroups(entries, items)),
+    work: workByGroup(projectGroups(entries, picked)),
   };
 }
 

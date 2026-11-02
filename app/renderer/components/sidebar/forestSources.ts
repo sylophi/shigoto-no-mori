@@ -1,8 +1,8 @@
-// What the forest is built from: every device's projects as items, this
-// machine's mirrors, and the device filter's narrowing of them. One hook
-// for the sidebar, the home page's grid of projects (home/ProjectGrid.tsx)
-// and the palette, so the three list the very same projects, the grid in
-// the list's order, narrowed the same way.
+// What the forest is built from: every device's projects as items, the
+// mirrored pairs between them, and the device the filter picked. One
+// hook for the sidebar, the home page's grid of projects
+// (home/ProjectGrid.tsx) and the palette, so the three list the very
+// same projects, the grid in the list's order, narrowed the same way.
 import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects } from "@/hooks/projects/useProjects";
@@ -10,18 +10,14 @@ import {
   useGroupProjectsByOwner,
   useProjectSort,
 } from "@/hooks/projects/useProjectSort";
-import { useMirrorLinks } from "@/hooks/remote/useMirrors";
+import { useMirrorPairs } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useClientFlag } from "@/hooks/config/useSidebarMarks";
 import { usePinnedProjects } from "@/hooks/sharedSettings/usePinnedProjects";
 import { useProjectFolders } from "@/hooks/sharedSettings/useProjectFolders";
 import { useWorktreePrefixes } from "@/hooks/sharedSettings/useWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import {
-  type ForestItem,
-  type LocalSide,
-  localSidesWith,
-} from "@shigomori/ui/lib/forest.ts";
+import type { ForestItem } from "@shigomori/ui/lib/forest.ts";
 import { showPrimaryInInbox } from "@shigomori/ui/lib/showPrimaryInInbox.ts";
 import { sortProjects } from "@shigomori/ui/lib/sortProjects.ts";
 import { projectGroupOrder } from "@shigomori/ui/views/sidebar/projectGroupOrder.ts";
@@ -56,8 +52,8 @@ export function useForestSources({
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
   const remote = useRemoteForests({ inboxFacts });
-  // This device's mirrored pairs, so a pair reads as one row.
-  const mirrors = useMirrorLinks();
+  // Every mirrored pair, so a pair reads as one row.
+  const mirrors = useMirrorPairs();
   // Off the registry, not the rows: a local row mirrored with a peer
   // the filter hides keeps naming it.
   const deviceBadges = useDeviceBadges();
@@ -88,26 +84,6 @@ export function useForestSources({
     }),
     ...remote.items,
   ];
-  // The device filter narrows what the builders are handed rather than
-  // what they do: one machine's items only. The reads above stay
-  // subscribed either way, so a pick costs no refetch.
-  const shownItems =
-    activeFilter === null
-      ? items
-      : items.filter((item) => item.device.deviceId === activeFilter.deviceId);
-  // Narrowed to a peer, this device's sides of its pairs with it, which
-  // the builders list among the peer's rows.
-  const localSides =
-    activeFilter === null || activeFilter.deviceId === thisDevice.deviceId
-      ? new Map<string, LocalSide>()
-      : localSidesWith(
-          activeFilter.deviceId,
-          mirrors,
-          thisDevice,
-          orderedProjects,
-          worktreeQueries,
-          configQueries,
-        );
   return {
     // The stored order, which dragging writes.
     projects,
@@ -120,11 +96,12 @@ export function useForestSources({
     sortMode,
     groupByOwner,
     items,
-    shownItems,
+    // The device the filter picked, null for every device, which the
+    // builders file by (deviceFiling).
+    deviceFilter: activeFilter?.deviceId ?? null,
     // Over every device's projects, not the filtered ones, so a pick
     // narrows the tree without reordering it.
     order: projectGroupOrder({ items, sortMode, pinned, folders }),
-    localSides,
     mirrors,
     deviceBadges,
     hiddenPrefixes,

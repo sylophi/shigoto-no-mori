@@ -32,6 +32,7 @@ export function buildCreateSections({
         ? [{ ...item, worktrees: [], listing: "ready" as const }]
         : [],
     ),
+    deviceFilter: null,
     order,
     hiddenPrefixes: [],
     allowAgentWorking: false,

@@ -53,13 +53,13 @@ export function ProjectGrid() {
   // visits, never during one.
   const [visits] = useState(readWorktreeVisits);
   const { sections, work } = buildGrid({
-    items: sources.shownItems,
+    items: sources.items,
+    deviceFilter: sources.deviceFilter,
     order: sources.order,
     hiddenPrefixes: sources.hiddenPrefixes,
     allowAgentWorking: sources.allowAgentWorking,
     byOwner: sources.groupByOwner,
     mirrors: sources.mirrors,
-    localSides: sources.localSides,
     deviceBadges: sources.deviceBadges,
     visits,
   });
