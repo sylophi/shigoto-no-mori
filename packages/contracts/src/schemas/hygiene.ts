@@ -18,8 +18,7 @@ export const WorktreeHygieneSchema = Schema.Struct({
   // failed or conflicted, so it fails safe.
   contentAlreadyInPrimary: Schema.Boolean,
   primaryRef: Schema.NullOr(Schema.String),
-  // Removal would delete the local default branch, which nothing else
-  // can restore.
+  // On the project's default branch, which the page never ticks.
   holdsPrimaryBranch: Schema.Boolean,
   // Untracked files, asked only for a row whose branch is already in
   // the primary, by a check of its own that reads true when it can't
@@ -46,7 +45,7 @@ export const WorktreeDiskUsageSchema = Schema.Struct({
 export type WorktreeDiskUsage = typeof WorktreeDiskUsageSchema.Type;
 
 export type HygieneVerdictKind =
-  | "defaultBranch" // holds the project's default branch: removal would delete it
+  | "defaultBranch" // on the project's default branch
   | "merged" // no unique commits: fully contained in primary
   | "absorbed" // squash/rebase merged: content already in primary
   | "dirty" // uncommitted changes would be destroyed
@@ -107,7 +106,7 @@ export function deriveHygieneVerdict(
   if (hygiene?.holdsPrimaryBranch) {
     return verdict(
       "defaultBranch",
-      `Removing this deletes ${worktree.branch}, the project's default branch.`,
+      `This worktree is on ${worktree.branch}, the project's default branch.`,
     );
   }
   if (!hygiene || !hygiene.primaryRef) {

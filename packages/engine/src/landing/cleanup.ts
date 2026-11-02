@@ -76,14 +76,14 @@ export const makeCleanup = ({
     // skips it for, a primary land's done deletes unless kept, and any
     // other's removal decides (Worktrees.deletesBranch).
     const deletesBranch = (
-      worktree: Worktrees.WorktreeIdentity,
+      located: Worktrees.Located,
       options: RemoveOptions,
     ) =>
       options.force
         ? Effect.succeed(false)
-        : worktree.isPrimary
+        : located.worktree.isPrimary
           ? Effect.succeed(!options.keepBranch)
-          : worktrees.deletesBranch(worktree, options.keepBranch);
+          : worktrees.deletesBranch(located, options.keepBranch);
 
     // Refuses the delete of `branch` when PR #`number`'s head, `head`,
     // lacks any of its commits, or can't be read to tell.
@@ -408,7 +408,13 @@ export const makeCleanup = ({
             );
           }
           const layer = chain.find((pr) => pr.headRefName === other.branch);
-          if (layer !== undefined && (yield* deletesBranch(other, options))) {
+          if (
+            layer !== undefined &&
+            (yield* deletesBranch(
+              { project: located.project, worktree: other },
+              options,
+            ))
+          ) {
             yield* guardCommits(
               located.project.path,
               other.branch,

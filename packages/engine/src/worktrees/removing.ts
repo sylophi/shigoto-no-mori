@@ -89,7 +89,7 @@ export const makeRemoving = ({
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const paths = yield* Paths.Paths;
-    const { projectSettings } = listing;
+    const { projectSettings, primaryRefOf } = listing;
     const { scriptContext, runScript, portPoolActive } = creating;
 
     // Fails closed on a dirty or unreadable worktree, since the next
@@ -266,21 +266,22 @@ export const makeRemoving = ({
     });
 
     // Whether removing `worktree` deletes its branch: never an external
-    // worktree's, a detached one's (it has none), or one kept, else as the
-    // device's setting says.
+    // worktree's, a detached one's (it has none), one kept, or the
+    // project's primary branch, else as the device's setting says.
     const deletesBranch = Effect.fn("Worktrees.deletesBranch")(function* (
-      worktree: WorktreeIdentity,
+      { project, worktree }: Located,
       keepBranch: boolean,
     ) {
       if (
         keepBranch ||
         worktree.isExternal ||
         worktree.detached ||
-        worktree.branch === UNKNOWN_BRANCH
+        worktree.branch === UNKNOWN_BRANCH ||
+        !(yield* config.device("deleteBranchOnRemove"))
       ) {
         return false;
       }
-      return yield* config.device("deleteBranchOnRemove");
+      return worktree.branch !== (yield* primaryRefOf(project)).primaryBranch;
     });
 
     const remove = Effect.fn("Worktrees.remove")(function* (
@@ -306,7 +307,7 @@ export const makeRemoving = ({
       // A half-removed checkout's cleanup ran before the delete that was
       // cut short.
       const half = yield* halfRemoved(worktree);
-      const deletingBranch = yield* deletesBranch(worktree, options.keepBranch);
+      const deletingBranch = yield* deletesBranch(located, options.keepBranch);
       // Never for an external worktree: no provision ever ran.
       let cleanupRan = false;
       if (!worktree.isExternal && !options.skipCleanup && !half) {

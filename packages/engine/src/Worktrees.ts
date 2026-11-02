@@ -302,10 +302,11 @@ export class Worktrees extends Context.Service<
       // A half-removed checkout's wipe.
       | PlatformError.PlatformError
     >;
-    // Whether removing `worktree` deletes its branch: never an external
-    // or a detached one's, or one kept, else as the device's setting says.
+    // Whether removing the worktree deletes its branch: never an external
+    // or a detached one's, one kept, or the project's primary branch, else
+    // as the device's setting says.
     readonly deletesBranch: (
-      worktree: WorktreeIdentity,
+      located: Located,
       keepBranch: boolean,
     ) => Effect.Effect<boolean>;
     // The guards every removal shares: never the primary checkout, and no

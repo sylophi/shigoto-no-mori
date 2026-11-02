@@ -48,7 +48,7 @@ export const TIDY_SORT_OPTIONS = [
 
 // Display order when sorting by "Recommended": the removable ones first,
 // then increasingly attached work, with the project's default branch
-// pinned last since removing it would delete the branch itself.
+// pinned last.
 const VERDICT_RANK: Record<HygieneVerdictKind, number> = {
   merged: 0,
   absorbed: 1,
