@@ -15,6 +15,8 @@ export const makeStreams = ({ changes }: { readonly changes: Changes }) =>
     const serving = new Map<string, MirrorServing>();
     // How each of those streams' child is ended, under the same key.
     const stops = new Map<string, () => void>();
+    // Those of them a move's files step opened, not a mirror.
+    const transfers = new Set<string>();
 
     // Worktrees being deleted here: the streams into them end, and none
     // opens until the delete is done, so nothing crosses while their files
@@ -31,18 +33,28 @@ export const makeStreams = ({ changes }: { readonly changes: Changes }) =>
 
     const listServing = (): MirrorServing[] => [...serving.values()];
 
+    // The stream a mirror on the peer has into a copy here.
+    const mirrorStreamInto = (worktreeId: string): MirrorServing | undefined =>
+      [...serving].find(
+        ([key, entry]) =>
+          entry.worktreeId === worktreeId && !transfers.has(key),
+      )?.[1];
+
     const noteServing = (
       key: string,
       entry: MirrorServing,
       stop: () => void,
+      transfer = false,
     ): void => {
       stops.set(key, stop);
       serving.set(key, entry);
+      if (transfer) transfers.add(key);
       changes.changed();
     };
 
     const forgetServing = (key: string): void => {
       stops.delete(key);
+      transfers.delete(key);
       if (serving.delete(key)) changes.changed();
     };
 
@@ -50,6 +62,7 @@ export const makeStreams = ({ changes }: { readonly changes: Changes }) =>
       holdServing,
       servingHeld: held.has,
       listServing,
+      mirrorStreamInto,
       noteServing,
       forgetServing,
     };

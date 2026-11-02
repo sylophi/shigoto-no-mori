@@ -18,7 +18,11 @@ import {
   send,
 } from "@host/lib/control/ops";
 import { access, setAccess } from "@host/lib/control/access";
-import { mirrorDeleteDone, stopMirrorForDelete } from "@host/mirror/onDelete";
+import {
+  mirrorDeleteDone,
+  mirrorDeleteStoppedShort,
+  stopMirrorForDelete,
+} from "@host/mirror/onDelete";
 
 export const controlHandlers = {
   devices,
@@ -27,6 +31,7 @@ export const controlHandlers = {
   mirrorStop,
   stopMirrorForDelete,
   mirrorDeleteDone,
+  mirrorDeleteStoppedShort,
   access,
   setAccess,
 } satisfies EffectHandlers<

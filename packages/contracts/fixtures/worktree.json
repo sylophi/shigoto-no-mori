@@ -1270,6 +1270,23 @@
       }
     ]
   },
+  "WorktreeCopyStayedSchema": {
+    "accepts": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "deviceId": "8f14e45f-ceea-467a-9575-4d1a1f6b2c3d",
+        "why": "the mirror is paused"
+      }
+    ],
+    "rejects": [
+      {
+        "projectId": "7C9E6679-7425-40DE-944B-E07FC1F90AE7",
+        "worktreeId": "e0f76c6cc80a",
+        "deviceId": "8f14e45f-ceea-467a-9575-4d1a1f6b2c3d"
+      }
+    ]
+  },
   "WorktreeSchema": {
     "accepts": [
       {

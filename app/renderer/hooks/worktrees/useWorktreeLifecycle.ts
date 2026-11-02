@@ -7,12 +7,14 @@
 // transplant's source teardown, the CLI's unmirror all remove through
 // the same host delete). The create phases stream to the caller, so
 // only this machine's atom hears them, while a peer's carries the
-// peer's removals.
+// peer's removals. A mirror's copy that stayed when this window deleted
+// its original is said by either.
 import { useAtomValue } from "@effect/atom-react";
 import { worktreesContract } from "@shigomori/contracts/modules/worktrees";
 import type {
   CreatePhase,
   WorktreeCarryOverComplete,
+  WorktreeCopyStayed,
   WorktreeRemoval,
 } from "@shigomori/contracts/schemas";
 import { pluralize } from "@shigomori/contracts/words";
@@ -23,8 +25,11 @@ import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Stream from "effect/Stream";
 import {
   forgetDeletedWorktree,
+  isOwnDelete,
   isOwnDeletePending,
 } from "@/hooks/worktrees/useWorktreeMutations";
+import { UNNAMED_DEVICE } from "@shigomori/ui/lib/deviceRoster.ts";
+import { remoteDevicesAtom } from "@/lib/remote/devices";
 import { queryKeysFor, worktreeQueriesOn } from "@/lib/queryKeys";
 import type { Api } from "@/lib/runtime/Api";
 import {
@@ -110,6 +115,22 @@ function followRemoval(
       removal.worktreeId,
     );
   }
+}
+
+// A mirror's copy that stayed when this window deleted its original.
+function tellCopyStayed(
+  registry: AtomRegistry.AtomRegistry,
+  localDeviceId: string,
+  { deviceId, why }: WorktreeCopyStayed,
+): void {
+  const where =
+    deviceId === localDeviceId
+      ? "this device"
+      : (registry
+          .get(remoteDevicesAtom)
+          .find((device) => device.deviceId === deviceId)?.label ??
+        UNNAMED_DEVICE);
+  toast.warning(`The copy on ${where} stays, since ${why}.`);
 }
 
 // What a carry-over did that its caller has long stopped waiting for.
@@ -201,7 +222,11 @@ export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
       const queryClient = get(queryClientAtom);
       const registry = get.registry;
       const pushes = <
-        K extends "removal" | "lifecyclePhase" | "carryOverComplete",
+        K extends
+          | "removal"
+          | "copyStayed"
+          | "lifecyclePhase"
+          | "carryOverComplete",
       >(
         key: K,
       ) =>
@@ -222,13 +247,27 @@ export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
           }),
         ),
       );
+      // Said only in the window that asked for the delete, wherever the
+      // worktree was.
+      const stays = pushes("copyStayed").pipe(
+        Stream.tap((stayed) =>
+          heard("copy stayed", () => {
+            if (
+              queryClient !== null &&
+              isOwnDelete(queryClient, deviceId, stayed.worktreeId)
+            ) {
+              tellCopyStayed(registry, localDeviceId, stayed);
+            }
+          }),
+        ),
+      );
       // Starting over shows nothing held until a push says otherwise.
       const states = (events: Stream.Stream<unknown, never, Api>) =>
         Stream.concat(
           Stream.make(NOTHING),
           events.pipe(Stream.map(() => state)),
         );
-      if (!local) return states(removals);
+      if (!local) return states(removals.pipe(Stream.merge(stays)));
       const phases = pushes("lifecyclePhase").pipe(
         Stream.tap(({ worktreeId, phase }) =>
           heard("lifecycle phase", () => {
@@ -248,7 +287,11 @@ export const worktreeLifecycleAtom = Atom.family((deviceId: string) =>
         ),
       );
       return states(
-        removals.pipe(Stream.merge(phases), Stream.merge(carryOvers)),
+        removals.pipe(
+          Stream.merge(stays),
+          Stream.merge(phases),
+          Stream.merge(carryOvers),
+        ),
       );
     },
     { initialValue: NOTHING },

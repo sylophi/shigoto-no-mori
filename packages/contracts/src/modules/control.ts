@@ -287,8 +287,9 @@ export const controlContract = defineContract(
     { gated: true },
   ),
   // A delete from the terminal: the worktree's mirror stops before its
-  // files go, and is told after whether they went (the engine's
-  // MirrorsOnDelete).
+  // cleanup, and is told after how the delete ended (the engine's
+  // MirrorsOnDelete): whether git's step took its files, or that the
+  // delete stopped short of that step, so the mirror goes on.
   invoke("stopMirrorForDelete", strict(ControlMirrorTargetSchema), VoidSchema, {
     gated: true,
   }),
@@ -300,6 +301,12 @@ export const controlContract = defineContract(
         gone: Schema.Boolean,
       }),
     ),
+    VoidSchema,
+    { gated: true },
+  ),
+  invoke(
+    "mirrorDeleteStoppedShort",
+    strict(ControlMirrorTargetSchema),
     VoidSchema,
     { gated: true },
   ),

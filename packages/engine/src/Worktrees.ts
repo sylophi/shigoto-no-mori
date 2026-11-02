@@ -287,8 +287,9 @@ export class Worktrees extends Context.Service<
         readonly keepBranch: boolean;
         readonly skipCleanup: boolean;
         readonly preflighted?: boolean;
-        // A transplant's teardown: what the move took, which the worktree
-        // must still be after its cleanup, right before the delete.
+        // A transplant's teardown or a mirror's other side: what the
+        // worktree must still hold after its cleanup, right before the
+        // delete (refuseChangedSince).
         readonly expect?: MovedSource;
       },
       reporter: Reporter,
@@ -302,6 +303,13 @@ export class Worktrees extends Context.Service<
       // A half-removed checkout's wipe.
       | PlatformError.PlatformError
     >;
+    // Refused ("changed-since-move") unless the worktree still holds
+    // `expect`: HEAD on its branch at its tip, and its uncommitted work
+    // the same tree.
+    readonly refuseChangedSince: (
+      located: Located,
+      expect: MovedSource,
+    ) => Effect.Effect<void, WorktreeRefused | Git.GitError>;
     // Whether removing the worktree deletes its branch: never an external
     // or a detached one's, one kept, or the project's primary branch, else
     // as the device's setting says.
@@ -524,6 +532,7 @@ const make = Effect.gen(function* () {
     movedIds: kept.movedIds,
     relocateProject,
     deletesBranch: removing.deletesBranch,
+    refuseChangedSince: removing.refuseChangedSince,
     relocationPlan,
     relink,
     checkRemovable: Effect.fn("Worktrees.checkRemovable")(function* (

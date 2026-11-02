@@ -30,7 +30,11 @@ import { makeMoves } from "./ledger/moves";
 import { makePeers, type Taken } from "./ledger/peers";
 import { makeStreams } from "./ledger/streams";
 import { makeSweep } from "./ledger/sweep";
-import { makeTombstones } from "./ledger/tombstones";
+import {
+  type CopyLook,
+  makeTombstones,
+  type Stayed,
+} from "./ledger/tombstones";
 import { makeTransfers, type TransferTarget } from "./ledger/transfers";
 
 type Daemon = MirrorEngine["Service"];
@@ -52,10 +56,14 @@ export class MirrorLedger extends Context.Service<
     readonly holdServing: (worktreeIds: readonly string[]) => () => void;
     readonly servingHeld: (worktreeId: string) => boolean;
     readonly listServing: () => MirrorServing[];
+    readonly mirrorStreamInto: (
+      worktreeId: string,
+    ) => MirrorServing | undefined;
     readonly noteServing: (
       key: string,
       entry: MirrorServing,
       stop: () => void,
+      transfer?: boolean,
     ) => void;
     readonly forgetServing: (key: string) => void;
 
@@ -79,21 +87,26 @@ export class MirrorLedger extends Context.Service<
 
     // ledger/tombstones.ts
     readonly stopMirrorsForWorktree: (id: string) => Effect.Effect<void>;
-    readonly mirrorsInStepOn: (
-      ids: readonly string[],
-    ) => Effect.Effect<ReadonlySet<string>>;
-    readonly mirrorInStepInto: (
-      worktreeId: string,
-    ) => Effect.Effect<MirrorSession | undefined>;
+    readonly lookAtCopiesOf: (
+      id: string,
+      branch: string,
+    ) => Effect.Effect<ReadonlyMap<string, CopyLook>>;
+    readonly lookAtOriginalOf: (
+      id: string,
+      branch: string,
+    ) => Effect.Effect<MovedSource | undefined>;
+    // Answers the sessions it paused.
     readonly pauseMirrorsOn: (
       ids: readonly string[],
-    ) => Effect.Effect<void, MirrorError>;
+    ) => Effect.Effect<readonly string[], MirrorError>;
+    readonly resumeMirrors: (
+      sessions: readonly string[],
+    ) => Effect.Effect<void>;
     readonly endMirrorsOfKept: (ids: readonly string[]) => Effect.Effect<void>;
     readonly deleteCopiesOf: (
       id: string,
-      inStep: ReadonlySet<string>,
-      holding: MovedSource | undefined,
-    ) => Effect.Effect<void>;
+      looks: ReadonlyMap<string, CopyLook>,
+    ) => Effect.Effect<readonly Stayed[]>;
     // The original's root vanishing is this delete or move's, not one
     // behind the app's back, until the release.
     readonly holdRootChecks: (worktreeIds: readonly string[]) => () => void;
@@ -110,6 +123,7 @@ export class MirrorLedger extends Context.Service<
     readonly endThenDeleteCopy: (
       daemon: Daemon,
       raw: MirrorSessionRaw,
+      expect?: MovedSource,
     ) => Effect.Effect<string | undefined, MirrorError>;
     readonly endMirrorKeepingCopy: (
       daemon: Daemon,

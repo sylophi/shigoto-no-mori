@@ -2,7 +2,7 @@
 // device runs: the mirrors with a device that left the account ended,
 // and the sessions into a copy it deleted ended, with the originals a
 // delete of both sides takes here too, each expected to still hold what
-// the copy held.
+// this device read of it when the two were found in step.
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";

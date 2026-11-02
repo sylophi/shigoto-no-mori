@@ -41,9 +41,12 @@ import {
   SyncPullProgressSchema,
   syncContract,
 } from "@shigomori/contracts/modules/sync";
+import { mirrorBranchFor } from "@shigomori/contracts/git/branches";
+import type { MovedSource } from "@shigomori/contracts/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
 import { PeerReach, peerMirrorFor } from "@host/ipc/PeerReach";
 import * as DeviceId from "@host/lib/config/DeviceId";
+import { findProjectAndWorktree } from "@host/lib/projects";
 import * as Moves from "@host/lib/sync/Moves";
 import { rollBackSent, sendWorktree } from "@host/lib/sync/move";
 import { transferFilesOnce } from "./oneShot";
@@ -57,11 +60,14 @@ import {
   findSession,
   type MirrorSessionRaw,
   mirrorSessions,
+  MIRROR_LABEL_LOCAL_PROJECT,
+  onMirrorBranch,
   ORIGINAL_GONE_DETAIL,
   requireRunningEngine,
   rootExists,
   STOPPED_WAITING_DETAIL,
 } from "./registry";
+import { peerHolding } from "./peerHolding";
 import { MirrorEngine, MirrorError } from "./MirrorEngine";
 import { MirrorLedger } from "./MirrorLedger";
 import { ownMirrorHereBlocker } from "./MirrorGateway";
@@ -301,8 +307,15 @@ export const stopMirror = (session: string, force: boolean) =>
     // last verdict (a commit on the copy a moment ago is exactly what
     // must not be lost), and the files settled, since git says nothing
     // about an edit the engine has not carried yet or holds still as a
-    // conflict.
+    // conflict. Read on its device before that look, so its delete there
+    // expects what was found in step, unless already not in step.
+    let expect: MovedSource | undefined;
     if (!force) {
+      const before = mirrorStopBlocker({
+        ...raw,
+        git: daemon.gitStatus(session),
+      });
+      if (before === undefined) expect = yield* copyHolding(raw);
       const git = yield* daemon.refreshGit(session);
       const live = (yield* findSession(daemon, session)) ?? raw;
       const blocker = mirrorStopBlocker({ ...live, git });
@@ -322,10 +335,27 @@ export const stopMirror = (session: string, force: boolean) =>
         ...annotateMirrorSession(raw, daemon.gitStatus(session)),
         stopping: true,
       },
-      stopAndRemoveCopy(daemon, ledger, raw),
+      stopAndRemoveCopy(daemon, ledger, raw, expect),
     );
     return { removedCopy: true };
   });
+
+// What the copy holds now, read on its device (peerHolding): a primary's
+// copy is on mirror/<branch>. Nothing when the original has no branch,
+// or the copy can't be read, and its delete then expects nothing.
+const copyHolding = (raw: MirrorSessionRaw) =>
+  Effect.gen(function* () {
+    const { worktree } = yield* findProjectAndWorktree(
+      raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
+      raw.localWorktreeId,
+    );
+    if (worktree.detached) return undefined;
+    return yield* peerHolding(
+      raw.deviceId,
+      { projectId: raw.projectId, worktreeId: raw.worktreeId },
+      onMirrorBranch(raw) ? mirrorBranchFor(worktree.branch) : worktree.branch,
+    );
+  }).pipe(Effect.orElseSucceed(() => undefined));
 
 // The stop past the safety check: the engine ends the session, then
 // the copy on the peer goes. A copy that stayed is reported, with the
@@ -335,8 +365,9 @@ const stopAndRemoveCopy = Effect.fnUntraced(function* (
   daemon: Daemon,
   ledger: MirrorLedger["Service"],
   raw: MirrorSessionRaw,
+  expect: MovedSource | undefined,
 ) {
-  const stayed = yield* ledger.endThenDeleteCopy(daemon, raw);
+  const stayed = yield* ledger.endThenDeleteCopy(daemon, raw, expect);
   daemon.noteEvent(
     raw.localWorktreeId,
     "stopped",

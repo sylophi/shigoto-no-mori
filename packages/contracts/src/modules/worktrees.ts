@@ -66,6 +66,7 @@ import {
   StashChangesPayloadSchema,
   StashEntrySchema,
   WorktreeCarryOverCompleteSchema,
+  WorktreeCopyStayedSchema,
   WorktreeFileSchema,
   WorktreeLifecyclePhaseSchema,
   WorktreeRemovalSchema,
@@ -330,6 +331,7 @@ export const worktreesContract = defineContract(
   push("removal", WorktreeRemovalSchema, {
     remote: true,
   }),
+  push("copyStayed", WorktreeCopyStayedSchema, { remote: true }),
   // The host's own signal to its views.
   push("filesChanged", ProjectScopedPayloadSchema),
 );

@@ -300,10 +300,11 @@ export const WorktreeLifecyclePhaseSchema = Schema.Struct({
 export type WorktreeLifecyclePhase = typeof WorktreeLifecyclePhaseSchema.Type;
 
 // What a delete asked for by another device expects the worktree to
-// still hold right before its files go: its branch at a tip, and its
-// uncommitted work as the tree of a capture (none: clean). A transfer's
-// teardown expects what moved, and a mirror's other side what this side
-// was when the two were found in step.
+// still hold before its scripts stop and again right before its files
+// go: HEAD on its branch at a tip, and its uncommitted work as the tree
+// of a capture (none: clean), each read on the worktree's own device. A
+// transfer's teardown expects what moved, and a mirror's other side what
+// it held when the two were found in step.
 const MovedSourceSchema = Schema.Struct({
   branch: GitRefNameSchema,
   branchTip: CommitHashSchema,
@@ -319,11 +320,21 @@ export const WorktreeRemovalSchema = Schema.Struct({
   state: Schema.Literals(["removing", "removed", "kept"]),
   // A copy's delete that takes both sides of its mirror, found in step:
   // the device holding the original deletes it too, if it still holds
-  // this. Not a move's teardown, a removal that must happen (a nuke),
-  // nor one the other device asked for.
+  // this, its own reading of it then. Not a move's teardown, a removal
+  // that must happen (a nuke), nor one the other device asked for.
   expect: Schema.optional(MovedSourceSchema),
 });
 export type WorktreeRemoval = typeof WorktreeRemovalSchema.Type;
+
+// A mirror's copy on `deviceId` that stays though its original was
+// deleted here, and why, finishing "The copy on <device> stays, since
+// …", for the window that asked for the delete to say.
+export const WorktreeCopyStayedSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  deviceId: Schema.String,
+  why: Schema.String,
+});
+export type WorktreeCopyStayed = typeof WorktreeCopyStayedSchema.Type;
 
 export const WorktreeCarryOverCompleteSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
@@ -383,9 +394,9 @@ export const DeleteWorktreePayloadSchema = Schema.Struct({
   // Refuse rather than kill live app scripts, for a transplant's
   // teardown.
   refuseRunningScripts: Schema.optional(Schema.Boolean),
-  // A transplant's teardown or a mirror's other side: refused, after its
-  // cleanup and right before the delete, unless the worktree is still
-  // this.
+  // A transplant's teardown or a mirror's other side: refused unless
+  // the worktree still holds this, before its scripts stop and again
+  // after its cleanup, right before the delete.
   expect: Schema.optional(MovedSourceSchema),
   // The other device taking its copy (a mirror's stop, a cancelled
   // start or send, the original's delete): that device deals with its

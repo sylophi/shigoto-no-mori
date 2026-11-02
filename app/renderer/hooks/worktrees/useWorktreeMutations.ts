@@ -260,6 +260,19 @@ export function isOwnDeletePending(
   return queryClient.isMutating(deleteFilters(deviceId, worktreeId)) > 0;
 }
 
+// Whether this window asked for the worktree's delete, under way or done,
+// for as long as the mutation cache keeps the ask.
+export function isOwnDelete(
+  queryClient: QueryClient,
+  deviceId: string,
+  worktreeId: string,
+): boolean {
+  return (
+    queryClient.getMutationCache().findAll(deleteFilters(deviceId, worktreeId))
+      .length > 0
+  );
+}
+
 // What the renderer does once a worktree is gone from a device: drop
 // it from its list at once (consumers routing off the back of the
 // mutation must not read it until the host's list drops it too), and

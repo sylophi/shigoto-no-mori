@@ -172,7 +172,8 @@ it("git's own remove refuses an untracked file the user's git setting hides", as
 });
 
 // The app's side of MirrorsOnDelete, noting whether the worktree's files
-// were there when its mirror stopped, and what it was told after.
+// were there when its mirror stopped, and how it was told the delete
+// ended.
 const removingMirrored = (
   located: Worktrees.Located,
   options: { readonly force: boolean },
@@ -194,9 +195,9 @@ const removingMirrored = (
             stop: () =>
               Effect.sync(() => {
                 told.push(`stopped, files ${at()}`);
-                return (gone) =>
+                return (end) =>
                   Effect.sync(() => {
-                    told.push(gone ? "files went" : "files kept");
+                    told.push(`ended ${end}`);
                   });
               }),
           }),
@@ -212,12 +213,12 @@ it("stops a worktree's mirror before its files go, and tells it they went", asyn
   const { located } = await withLooseFile();
   assert.deepEqual(await removingMirrored(located, { force: true }), [
     "stopped, files there",
-    "files went",
+    "ended gone",
   ]);
   assert.ok(!existsSync(located.worktree.path));
 });
 
-it("a refused delete never stops the worktree's mirror", async () => {
+it("a delete its checks refuse never stops the worktree's mirror", async () => {
   const { located, loose } = await withLooseFile();
   assert.deepEqual(await removingMirrored(located, { force: false }), []);
   assert.ok(existsSync(loose));

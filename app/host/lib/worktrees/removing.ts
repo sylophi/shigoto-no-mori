@@ -172,6 +172,23 @@ export const makeRemoving = <H>(host: Context.Context<H>) =>
         input.projectId,
         input.worktreeId,
       );
+      // Asked first, so a worktree that changed keeps its scripts and its
+      // cleanup unrun. The engine asks again right before the delete.
+      if (input.expect !== undefined) {
+        const expect = input.expect;
+        yield* asCall(
+          changing(
+            Effect.flatMap(
+              findProjectAndWorktree(input.projectId, worktreeId),
+              (located) =>
+                Effect.flatMap(EngineWorktrees.Worktrees, (worktrees) =>
+                  worktrees.refuseChangedSince(located, expect),
+                ),
+            ),
+            { projectId: input.projectId, worktreeId },
+          ),
+        );
+      }
       if (input.refuseRunningScripts === true) {
         const running = scripts.runningIn(worktreeId);
         if (running > 0) {

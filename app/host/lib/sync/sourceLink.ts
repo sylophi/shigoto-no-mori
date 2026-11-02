@@ -410,10 +410,11 @@ function coalescedProgress(
 
 // What a source knows about its own worktree, read locally: the
 // answers its end of a link gives, and what a send's teardown checks
-// the source against (it is this device's own worktree then).
-export type SourceFacts = {
-  tip(branch: string): Effect.Effect<string | null, unknown, SourceServices>;
-  capture: Effect.Effect<SyncCapture, unknown, SourceServices>;
+// the source against (it is this device's own worktree then). Asked
+// over a link, it needs nothing of this device's (R never).
+export type SourceFacts<R = SourceServices> = {
+  tip(branch: string): Effect.Effect<string | null, unknown, R>;
+  capture: Effect.Effect<SyncCapture, unknown, R>;
 };
 
 export function localSource(project: Project, worktreeId: string): SourceFacts {
@@ -763,8 +764,8 @@ export const offer = <T, E, R, R2 = never>(
 
 type UnpackTarget = Project | { path: string };
 
-export type WorktreeSource = SourceFacts & {
-  cloneFacts: Effect.Effect<CloneFacts, unknown, SourceServices>;
+export type WorktreeSource = SourceFacts<never> & {
+  cloneFacts: Effect.Effect<CloneFacts, unknown>;
   // Asks for a bundle of `refs` thinned by `haves`, writes it to a temp
   // file as it arrives and unpacks it into `into`, every ref under
   // refs/shigomori/ (landingRefOf). Byte progress once with 0 when

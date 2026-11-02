@@ -243,9 +243,10 @@ const ORIGINAL_CONTROL_OFF_DETAIL =
 // A mirror is one worktree on two devices: the originals here whose
 // copy was deleted on its device while the two were in step go too,
 // forced, since that delete stood for both, each only if it still holds
-// what the copy held (`expect`, checked right before its files go). Only
-// under the command switch, as the peer's own delete call here would be.
-// One that stays says why on its thread.
+// what this device read of it when the two were found in step
+// (`expect`, checked before its scripts stop and again right before its
+// files go). Only under the command switch, as the peer's own delete
+// call here would be. One that stays says why on its thread.
 const deleteOriginals = (originals: readonly Taken[]) =>
   Effect.gen(function* () {
     const engine = yield* MirrorEngine;

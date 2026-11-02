@@ -9,28 +9,32 @@
 //   - a worktree its script dirtied as it stopped is refused, after the
 //     stop and before any teardown,
 //   - a refusal at the plan stops nothing and leaves no marks,
-//   - deleting a mirrored worktree pauses its mirror before any file
-//     goes, then ends the mirror and deletes the copy on its device,
-//     expecting it to hold what the original held,
+//   - deleting a mirrored worktree pauses its mirror before its cleanup,
+//     then ends the mirror and deletes the copy on its device,
+//     expecting what that device read of it when the two were in step,
 //   - one not in step with its copy (paused, the copy's device away,
-//     git diverged, a file changed on both sides) goes alone, its
-//     mirror ended and its copy kept,
-//   - a refused delete, here or of the copy on its device, leaves the
-//     mirror running,
+//     git diverged, a file changed on both sides, the copy unread)
+//     goes alone, its mirror ended and its copy kept,
+//   - a delete refused at its checks leaves the mirror running, and one
+//     whose cleanup fails resumes it, so its retry takes both sides,
 //   - a copy whose delete fails or is refused on its device stays, and
 //     is never asked again,
 //   - a delete from the terminal stops the mirror through the app
-//     before its files go, and the copy goes after,
+//     before its cleanup, and the copy goes after, or the mirror goes
+//     on when the delete stopped short,
 //   - a worktree whose mirror doesn't pause is kept, and a copy found
 //     gone before its device says both sides went still takes the
 //     original,
-//   - only a copy's delete of both sides takes the original, if it
-//     still holds what the copy held (not a move's teardown or a nuke's
-//     removal there, nor a delete the original's device asked for, nor
-//     an older build's word for both sides), and the original that
-//     stays says why on its thread,
+//   - only a copy's delete of both sides takes the original (not a
+//     move's teardown or a nuke's removal there, nor a delete the
+//     original's device asked for, nor an older build's word for both
+//     sides), and the original that stays says why on its thread,
+//   - an original taken so goes only if it still holds what its device
+//     read of it, HEAD on its branch, checked before its scripts stop
+//     or its cleanup runs,
 //   - a copy's delete takes both sides only of a mirror its peer runs
-//     in step, expecting what the copy held.
+//     in step and not of a primary's, expecting what the original's
+//     device read of it.
 //
 // Run: pnpm test worktree-removals.
 import assert from "node:assert/strict";
@@ -38,6 +42,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Effect from "effect/Effect";
 import { callFailureOf, RemoteCallError } from "@shigomori/contracts/errors";
+import type { ChannelEndpoint, ChannelHandle } from "@shigomori/contracts/link";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { afterAll, beforeAll, it } from "vitest";
@@ -311,12 +316,66 @@ it("a refusal at the plan marks nothing and stops nothing", async () => {
 
 const synced: MirrorGitStatus = { status: "synced", detail: "" };
 
+// What a worktree on the peer holds as its source link answers it: a
+// tip, and the tree of a capture when it isn't clean. Null: the link
+// fails, as a device that can't read it does.
+type Held = { readonly tip: string; readonly tree?: string } | null;
+
+const PEER_TIP = "0123456789abcdef0123456789abcdef01234567";
+
+// The peer's end of sync:openSource's link, answering each ask as
+// `held()` says then.
+const sourceLink = (held: () => Held) => ({
+  open: () =>
+    held() === null
+      ? Effect.fail(new RemoteCallError({ text: "can't read it" }))
+      : Effect.void,
+  channels: () => async () => ({
+    has: () => true,
+    attach: (channelId: string, endpoint: ChannelEndpoint): ChannelHandle => {
+      let lines = "";
+      const answer = (ask: { ask: string }) => {
+        const now = held();
+        if (now === null) return { error: "can't read it" };
+        if (ask.ask === "tip") return { ok: { commit: now.tip } };
+        return {
+          ok:
+            now.tree === undefined
+              ? { captured: false }
+              : { captured: true, commit: now.tree, tree: now.tree },
+        };
+      };
+      return {
+        channelId,
+        open: true,
+        write: (data) => {
+          lines += Buffer.from(data).toString("utf8");
+          for (let end = lines.indexOf("\n"); end !== -1;) {
+            const reply = answer(JSON.parse(lines.slice(0, end)));
+            lines = lines.slice(end + 1);
+            end = lines.indexOf("\n");
+            setImmediate(() =>
+              endpoint.onData(
+                Buffer.from(`${JSON.stringify(reply)}\n`),
+                () => {},
+              ),
+            );
+          }
+          return true;
+        },
+        end: () => {},
+        reset: () => {},
+      };
+    },
+  }),
+});
+
 // A worktree fox mirrored to a peer's copy, in step unless `session`
 // and `gitStatus` say otherwise, against a recording daemon and a peer
-// whose copy's delete `deleteCopy` answers. `calls` says, in order, what
-// the mirror was asked and whether fox's folder was still there,
-// `deletes` what each delete of the copy expected, and `noted` what
-// fox's thread was told.
+// whose copy holds `copy` and whose copy's delete `deleteCopy` answers.
+// `calls` says, in order, what the mirror was asked and whether fox's
+// folder was still there, `deletes` what each delete of the copy
+// expected, and `noted` what fox's thread was told.
 const mirroredFox = async (
   name: string,
   deleteCopy: () => Promise<unknown>,
@@ -324,10 +383,12 @@ const mirroredFox = async (
     pauseFails = false,
     session = {},
     gitStatus = synced,
+    copy = { tip: PEER_TIP },
   }: {
     readonly pauseFails?: boolean;
     readonly session?: Partial<MirrorSessionRaw>;
     readonly gitStatus?: MirrorGitStatus;
+    readonly copy?: Held;
   } = {},
 ) => {
   const { project } = await repoAt(name);
@@ -387,34 +448,36 @@ const mirroredFox = async (
         }),
     }),
   );
-  let peer = deleteCopy;
+  const link = sourceLink(() => copy);
   standInPeers({
     // Its worktrees list without the copy, which a look then finds gone.
     invoke: (_, channel, input) =>
       channel === "worktrees:list"
         ? Effect.succeed([])
-        : channel !== "worktrees:delete"
-          ? Effect.fail(new RemoteCallError({ text: "not here" }))
-          : Effect.tryPromise({
-              try: () => {
-                calls.push(`delete copy, fox ${at()}`);
-                deletes.push((input as { expect?: unknown }).expect);
-                return peer();
-              },
-              catch: callFailureOf,
-            }),
+        : channel === "sync:openSource"
+          ? link.open()
+          : channel !== "worktrees:delete"
+            ? Effect.fail(new RemoteCallError({ text: "not here" }))
+            : Effect.tryPromise({
+                try: () => {
+                  calls.push(`delete copy, fox ${at()}`);
+                  deletes.push((input as { expect?: unknown }).expect);
+                  return deleteCopy();
+                },
+                catch: callFailureOf,
+              }),
     onPush: () => () => {},
-    channelsFor: () => () => Promise.reject(new Error("not here")),
+    channelsFor: link.channels,
     admits: () => true,
   });
-  const remove = (force: boolean) =>
+  const remove = (force: boolean, skipCleanup = false) =>
     runHost(
       worktreesHandlers.delete(
-        { projectId: project.id, worktreeId: fox.id, force },
+        { projectId: project.id, worktreeId: fox.id, force, skipCleanup },
         here,
       ),
     ).then(
-      () => "removed",
+      (result) => (result.ok ? "removed" : "kept"),
       () => "refused",
     );
   return { project, fox, calls, deletes, noted, remove };
@@ -427,12 +490,11 @@ const holding = (worktree: Worktree) => ({
   branchTip: git(worktree.path, "rev-parse", "HEAD").trim(),
 });
 
-it("deleting a mirrored worktree pauses its mirror first, then deletes the copy if it still holds what the original did", async () => {
+it("deleting a mirrored worktree pauses its mirror first, then deletes the copy expecting what its device read of it", async () => {
   const { fox, calls, deletes, remove } = await mirroredFox(
     "mirrored",
     async () => ({ ok: true }),
   );
-  const held = holding(fox);
   assert.equal(await remove(false), "removed");
   await waitFor(() => calls.length === 3, "the copy's delete was asked");
   assert.deepEqual(calls, [
@@ -440,7 +502,7 @@ it("deleting a mirrored worktree pauses its mirror first, then deletes the copy 
     "terminate",
     "delete copy, fox gone",
   ]);
-  assert.deepEqual(deletes, [held]);
+  assert.deepEqual(deletes, [{ branch: fox.branch, branchTip: PEER_TIP }]);
   assert.ok(!existsSync(fox.path));
 });
 
@@ -460,6 +522,7 @@ it("a mirrored worktree not in step with its copy goes alone, its mirror ended a
       },
     ],
     ["diverged", { gitStatus: { status: "diverged", detail: "both moved" } }],
+    ["unread", { copy: null }],
     [
       "conflicted",
       {
@@ -499,6 +562,31 @@ it("a refused delete of a mirrored worktree leaves its mirror running", async ()
   assert.ok(existsSync(join(fox.path, "wip.txt")));
 });
 
+// The page then offers the delete again without the cleanup, which
+// must still find the mirror to take the copy.
+it("a mirrored worktree whose cleanup fails keeps its mirror going, and the delete again takes both sides", async () => {
+  const { project, fox, calls, remove } = await mirroredFox(
+    "mirrored-cleanup-failed",
+    async () => ({ ok: true }),
+  );
+  await runHost(
+    Fixtures.writeProjectConfig(project.id, {
+      defaultBranch: "main",
+      scripts: { teardown: "exit 1" },
+    }),
+  );
+  assert.equal(await remove(false), "kept");
+  assert.deepEqual(calls, ["pause there", "resume"]);
+  assert.ok(existsSync(fox.path));
+  assert.equal(await remove(true, true), "removed");
+  await waitFor(() => calls.length === 5, "the copy's delete was asked");
+  assert.deepEqual(calls.slice(2), [
+    "pause there",
+    "terminate",
+    "delete copy, fox gone",
+  ]);
+});
+
 const settleBookkeeping = Effect.flatMap(
   MirrorLedger,
   (ledger) => ledger.settleMirrorBookkeeping,
@@ -518,10 +606,7 @@ const announced = (state: string, said: object = {}) =>
     ),
   );
 
-const copyHeld = {
-  branch: "fox",
-  branchTip: "0123456789abcdef0123456789abcdef01234567",
-};
+const copyHeld = { branch: "fox", branchTip: PEER_TIP };
 
 it("a mirrored worktree whose mirror doesn't pause is kept", async () => {
   const { fox, calls, remove } = await mirroredFox(
@@ -573,18 +658,22 @@ it("a copy whose delete was refused on its device keeps the original and its mir
 });
 
 // `sm rm` runs the engine in its own process, which asks the app
-// around the files going (packages/cli/src/mirrorsOnDelete.ts).
-it("a delete from the terminal stops the mirror through the app first, then deletes the copy", async () => {
+// around its cleanup and its files going
+// (packages/cli/src/mirrorsOnDelete.ts).
+it("a delete from the terminal stops the mirror through the app first, then deletes the copy, or goes on when it stopped short", async () => {
   const { project, fox, calls } = await mirroredFox(
     "mirrored-terminal",
     async () => ({ ok: true }),
   );
   const worktree = { projectId: project.id, worktreeId: fox.id };
   await runHost(controlHandlers.stopMirrorForDelete(worktree));
+  await runHost(controlHandlers.mirrorDeleteStoppedShort(worktree));
+  assert.deepEqual(calls, ["pause there", "resume"]);
+  await runHost(controlHandlers.stopMirrorForDelete(worktree));
   git(project.path, "worktree", "remove", "--force", fox.path);
   await runHost(controlHandlers.mirrorDeleteDone({ ...worktree, gone: true }));
-  await waitFor(() => calls.length === 3, "the copy's delete was asked");
-  assert.deepEqual(calls, [
+  await waitFor(() => calls.length === 5, "the copy's delete was asked");
+  assert.deepEqual(calls.slice(2), [
     "pause there",
     "terminate",
     "delete copy, fox gone",
@@ -642,11 +731,33 @@ it("only a copy's delete of both sides takes the original, and one that stays sa
 
 // What the original's device does with a copy's delete of both sides
 // (host/process/handlers.ts deleteOriginals): the original goes only if
-// it still holds what the copy held, so an edit since the look keeps it.
-it("an original taken by its copy's delete goes only if it still holds what the copy held", async () => {
+// it still holds what its device read of it at the look, so an edit or
+// a branch switch since keeps it, with its scripts running and its
+// cleanup unrun.
+it("an original taken by its copy's delete goes only if it still holds what its device read of it", async () => {
   const { project } = await repoAt("original-taken");
   const fox = await create(project, { worktreeName: "fox" });
   const held = holding(fox);
+  const run = join(root, "original-taken-run");
+  mkdirSync(run);
+  const teardowns = join(run, "teardowns");
+  await runHost(
+    Fixtures.writeProjectConfig(project.id, {
+      defaultBranch: "main",
+      scripts: { teardown: `echo ran >> '${teardowns}'` },
+    }),
+  );
+  await runIn(project, fox, join(run, "fox.pid"));
+  await waitFor(
+    () => existsSync(join(run, "fox.pid")),
+    "fox's script to start",
+  );
+  const pid = pidIn(readFileSync(join(run, "fox.pid"), "utf8"));
+  assert.ok(pid !== undefined, "fox's script wrote no pid");
+  const untouched = () => {
+    assert.doesNotThrow(() => process.kill(pid, 0), "fox's script still runs");
+    assert.ok(!existsSync(teardowns), "no teardown ran");
+  };
   const take = () =>
     runHost(
       Effect.flatMap(HostWorktrees.Worktrees, (worktrees) =>
@@ -668,11 +779,18 @@ it("an original taken by its copy's delete goes only if it still holds what the 
   writeFileSync(join(fox.path, "since.txt"), "an edit after the look\n");
   assert.equal(await take(), "refused");
   assert.ok(existsSync(join(fox.path, "since.txt")));
+  untouched();
   git(fox.path, "add", "since.txt");
   git(fox.path, "commit", "-q", "-m", "since");
   assert.equal(await take(), "refused");
-  assert.ok(existsSync(fox.path));
+  untouched();
   git(fox.path, "reset", "-q", "--hard", "HEAD~1");
+  // Its branch where it was, with HEAD on another holding a commit.
+  git(fox.path, "checkout", "-q", "-b", "elsewhere");
+  git(fox.path, "commit", "-q", "--allow-empty", "-m", "elsewhere");
+  assert.equal(await take(), "refused");
+  untouched();
+  git(fox.path, "checkout", "-q", fox.branch);
   assert.equal(await take(), "removed");
   assert.ok(!existsSync(fox.path));
 });
@@ -705,30 +823,40 @@ const removalAnnounced = (input: {
 // to delete the copy: that delete mustn't take the original back. The
 // copy's own delete takes it only when the peer running the mirror says
 // the two are in step, asked while the stream into the copy is up, and
-// only if it still holds what the copy held.
-it("a copy's delete takes both sides only of a mirror in step, expecting what the copy held, and a delete the other device asked for never does", async () => {
+// only if it still holds what its device read of it then. A primary's
+// copy never takes the primary.
+it("a copy's delete takes both sides only of a mirror in step, expecting what the original's device read, and a delete the other device asked for never does", async () => {
   const { project } = await repoAt("one-side");
   const asked = await create(project, { worktreeName: "asked" });
   const own = await create(project, { worktreeName: "own" });
   const diverged = await create(project, { worktreeName: "diverged" });
+  const primary = await create(project, { worktreeName: "mirror-main" });
   // A paused mirror's stream is down.
   const paused = await create(project, { worktreeName: "paused" });
   const of = (worktree: Worktree) => ({
     projectId: project.id,
     worktreeId: worktree.id,
   });
-  const mirrorInto = (worktree: Worktree, gitStatus: MirrorGitStatus) =>
+  const mirrorInto = (
+    worktree: Worktree,
+    gitStatus: MirrorGitStatus,
+    mode = "mirror",
+  ) =>
     annotateMirrorSession(
       rawMirrorSession({
         session: `into-${worktree.name}`,
         projectId: project.id,
         worktreeId: worktree.id,
         localWorktreeId: `original-${worktree.name}`,
-        labels: { [MIRROR_LABEL_MODE]: "mirror" },
+        labels: {
+          [MIRROR_LABEL_MODE]: mode,
+          [MIRROR_LABEL_LOCAL_PROJECT]: "far",
+        },
         successfulCycles: 1,
       }),
       gitStatus,
     );
+  const link = sourceLink(() => ({ tip: PEER_TIP }));
   standInPeers({
     invoke: (_, channel) =>
       channel === "mirror:list"
@@ -741,18 +869,21 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
                 status: "diverged",
                 detail: "both moved",
               }),
+              mirrorInto(primary, synced, "mirror-branch"),
               mirrorInto(paused, synced),
             ],
             serving: [],
             starting: [],
           })
-        : Effect.fail(new RemoteCallError({ text: "not here" })),
+        : channel === "sync:openSource"
+          ? link.open()
+          : Effect.fail(new RemoteCallError({ text: "not here" })),
     onPush: () => () => {},
-    channelsFor: () => () => Promise.reject(new Error("not here")),
+    channelsFor: link.channels,
   });
   await runHost(
     Effect.map(MirrorLedger, (ledger) => {
-      for (const worktree of [asked, own, diverged]) {
+      for (const worktree of [asked, own, diverged, primary]) {
         const key = `peer:${worktree.name}`;
         ledger.noteServing(
           key,
@@ -772,12 +903,15 @@ it("a copy's delete takes both sides only of a mirror in step, expecting what th
     await removalAnnounced({ ...of(asked), oneSide: true }),
     Option.some({ ...of(asked), state: "removed" }),
   );
-  const ownHeld = holding(own);
   assert.deepEqual(
     await removalAnnounced(of(own)),
-    Option.some({ ...of(own), state: "removed", expect: ownHeld }),
+    Option.some({
+      ...of(own),
+      state: "removed",
+      expect: { branch: own.branch, branchTip: PEER_TIP },
+    }),
   );
-  for (const kept of [diverged, paused]) {
+  for (const kept of [diverged, primary, paused]) {
     assert.deepEqual(
       await removalAnnounced(of(kept)),
       Option.some({ ...of(kept), state: "removed" }),
