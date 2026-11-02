@@ -285,7 +285,7 @@ export const finishWorktree = Effect.fnUntraced(function* (
   project: Project,
   worktreeId: string,
 ) {
-  const doc = yield* asChange(
+  const done = yield* asChange(
     Effect.gen(function* () {
       const located = yield* locate(project.id, worktreeId);
       return yield* (yield* Landing.Landing).done(located, { force: false });
@@ -293,7 +293,7 @@ export const finishWorktree = Effect.fnUntraced(function* (
     { projectId: project.id, worktreeId },
     "finish",
   );
-  return decodeWorktree(doc["worktree"]);
+  return decodeWorktree(done.worktree);
 });
 
 // `stack`: the PR and every open PR under it in its stack, which the

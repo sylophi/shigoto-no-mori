@@ -18,7 +18,7 @@ import {
   type RemoveOptions,
   type Reporter,
   cleanupFailed,
-  doneDocument,
+  doneFields,
 } from "./documents.ts";
 import type { PullRequestsArea } from "./pullRequests.ts";
 
@@ -325,16 +325,16 @@ export const makeCleanup = ({
               yield* reporter.caughtUp(said);
             }
           }
-          // The base's catch-up as the document has it, and the primary's
-          // skipped pull beside it.
-          return doneDocument(row, worktree.branch, deleted, {
-            ...extra,
-            ...skipped,
-            ...caught,
-            ...(skipped !== undefined && caught !== undefined
-              ? { catchUpSkipped }
-              : {}),
-          });
+          // The primary's skipped pull wins over the base's.
+          return doneFields(
+            {
+              worktree: row,
+              deletedBranch: deleted ? worktree.branch : undefined,
+              catchUpSkipped: catchUpSkipped ?? caught?.catchUpSkipped,
+              caughtUp: caught?.caughtUp,
+            },
+            extra,
+          );
         }
         const caught: CatchUp = Result.isFailure(target)
           ? { catchUpSkipped: target.failure.message }

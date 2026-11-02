@@ -268,6 +268,33 @@ export type CatchUp = {
   readonly catchUpSkipped?: string;
 };
 
+// What `done` did: the checkout's row back on the primary branch, the
+// branch it deleted, and why its pull of the primary branch was skipped.
+// A land from the primary checkout ends in one too, the base line's
+// catch-up beside it.
+export type Done = CatchUp & {
+  readonly worktree: Worktrees.WorktreeRow;
+  readonly deletedBranch: string | undefined;
+};
+
+// A skipped catch-up before a caught-up one, as the documents have them.
+const catchUpFields = ({ catchUpSkipped, caughtUp }: CatchUp) => ({
+  ...(catchUpSkipped === undefined ? {} : { catchUpSkipped }),
+  ...(caughtUp === undefined ? {} : { caughtUp }),
+});
+
+// `extra` is a land's, between the row and the catch-up.
+export const doneFields = (done: Done, extra: Record<string, unknown>) => ({
+  ok: true,
+  worktree: done.worktree,
+  deletedBranch: done.deletedBranch ?? null,
+  ...extra,
+  ...catchUpFields(done),
+});
+
+// `sm done --json`.
+export const doneDocument = (done: Done) => doneFields(done, {});
+
 // Where a land's steps go as they happen: the merged layers of a stack,
 // the cleanup's, the scripts of a removal.
 export type Reporter = Worktrees.Reporter & {
@@ -422,18 +449,6 @@ export const mergedEvent = (pr: PullRequestSummary, method: MergeMethod) => ({
   number: pr.number,
   branch: pr.headRefName,
   method,
-});
-
-export const doneDocument = (
-  row: Worktrees.WorktreeRow,
-  branch: string,
-  deleted: boolean,
-  extra: Record<string, unknown>,
-): Document => ({
-  ok: true,
-  worktree: row,
-  deletedBranch: deleted ? branch : null,
-  ...extra,
 });
 
 // A cleanup failure after the merge: the document keeps the merge's

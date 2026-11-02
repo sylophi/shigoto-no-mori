@@ -9,12 +9,12 @@ import type { PullRequestSummary } from "../GitHub.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 import {
+  type Done,
   LandingRefused,
   MERGE_FIELDS,
   MergeUnverified,
   type RemoveOptions,
   type Reporter,
-  doneDocument,
   mergeDocument,
   mergeResultFields,
   outcomeFields,
@@ -614,12 +614,11 @@ export const makeVerbs = ({
         worktree,
         yield* worktrees.identities(project),
       );
-      return doneDocument(
-        row,
-        branch,
-        deleted,
-        catchUpSkipped === undefined ? {} : { catchUpSkipped },
-      );
+      return {
+        worktree: row,
+        deletedBranch: deleted ? branch : undefined,
+        catchUpSkipped,
+      } satisfies Done;
     });
 
     return { pullRequest, merge, land, planRemoveStack, removeStack, done };

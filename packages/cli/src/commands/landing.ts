@@ -168,6 +168,17 @@ const failureOf = (doc: Landing.Document) =>
     ? Worktrees.cleanupFailureWords(doc.cleanupError)
     : withHint(doc.error ?? "", doc.hint);
 
+// A checkout put back on the primary branch.
+const reportDone = (done: Landing.Done) =>
+  Effect.flatMap(Effect.service(Output), ({ stdoutColor }) => {
+    const { dim, green } = styles(stdoutColor);
+    const deleted = done.deletedBranch;
+    return out(
+      green(`${done.worktree.name} is now on ${done.worktree.branch}`) +
+        (deleted === undefined ? "" : dim(` (deleted branch ${deleted})`)),
+    );
+  });
+
 // How land, done and rm --stack end, from the document: this checkout
 // removed or put back on the primary branch. The steps before it were
 // said as they happened (landingReporter).
@@ -190,13 +201,12 @@ const reportCleanup = (doc: Landing.Document, located: Worktrees.Located) =>
     if (json) {
       return yield* emit(hint === "" ? doc : { ...doc, cdHint: hint });
     }
-    const { dim, green } = styles(stdoutColor);
+    const { green } = styles(stdoutColor);
     if (worktree !== undefined) {
-      const deleted = doc.deletedBranch ?? "";
-      return yield* out(
-        green(`${worktree.name} is now on ${worktree.branch}`) +
-          (deleted === "" ? "" : dim(` (deleted branch ${deleted})`)),
-      );
+      return yield* reportDone({
+        worktree,
+        deletedBranch: doc.deletedBranch ?? undefined,
+      });
     }
     if (removed !== undefined) {
       yield* out(green(`removed ${removed.name}`));
@@ -324,13 +334,14 @@ export const done = Command.make(
   (input) =>
     Effect.gen(function* () {
       const { located } = yield* resolveWorktree(input);
-      const doc = yield* (yield* Landing.Landing).done(located, {
+      const finished = yield* (yield* Landing.Landing).done(located, {
         force: input.force,
       });
-      yield* reportCleanup(doc, located);
-      const skipped = doc.catchUpSkipped;
       const { json, stderrColor } = yield* Effect.service(Output);
-      if (!json && skipped !== undefined) {
+      if (json) return yield* emit(Landing.doneDocument(finished));
+      yield* reportDone(finished);
+      const skipped = finished.catchUpSkipped;
+      if (skipped !== undefined) {
         yield* note(styles(stderrColor).dim(`skipped catch-up: ${skipped}`));
       }
     }),

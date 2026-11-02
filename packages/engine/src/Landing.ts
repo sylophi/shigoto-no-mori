@@ -19,6 +19,7 @@ import { makeCleanup } from "./landing/cleanup.ts";
 import { type StackRemoval, makeVerbs } from "./landing/verbs.ts";
 import {
   type Document,
+  type Done,
   type DoneError,
   type LandError,
   LandingRefused,
@@ -27,8 +28,12 @@ import {
   type RemoveStackError,
   type Reporter,
 } from "./landing/documents.ts";
-export { LandingRefused, MergePollInterval } from "./landing/documents.ts";
-export type { Document, Reporter } from "./landing/documents.ts";
+export {
+  LandingRefused,
+  MergePollInterval,
+  doneDocument,
+} from "./landing/documents.ts";
+export type { Document, Done, Reporter } from "./landing/documents.ts";
 export type { StackRemoval } from "./landing/verbs.ts";
 
 export class Landing extends Context.Service<
@@ -83,7 +88,7 @@ export class Landing extends Context.Service<
     readonly done: (
       located: Worktrees.Located,
       options: { readonly force: boolean },
-    ) => Effect.Effect<Document, DoneError>;
+    ) => Effect.Effect<Done, DoneError>;
   }
 >()("sm/engine/Landing") {}
 
