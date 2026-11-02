@@ -134,6 +134,12 @@ export const startOf = (pid: number) =>
 // A record's birth when the process that wrote it couldn't read its own.
 export const UNKNOWN_BIRTH = 0;
 
+// How far a birth ps reports may be from a recorded one of the same
+// process: ps counts in whole seconds, and a spawn is stamped just after
+// it returns. Generous enough for a loaded machine, still orders of
+// magnitude tighter than any plausible pid reuse.
+export const BIRTH_TOLERANCE_MS = 5_000;
+
 // Whether the process that recorded itself as `pid`, born at
 // `startedAt`, still runs: a live pid born at another time is another
 // process the system handed the number to since. A birth unknown on
@@ -144,9 +150,9 @@ export const stillRunning = (pid: number, startedAt: number) =>
     if (pid < 2 || !(yield* pidAlive(pid))) return false;
     if (startedAt === UNKNOWN_BIRTH) return true;
     const started = yield* startOf(pid);
-    // A few seconds' slack: ps counts in whole seconds.
     return (
-      Option.isNone(started) || Math.abs(started.value - startedAt) <= 5000
+      Option.isNone(started) ||
+      Math.abs(started.value - startedAt) <= BIRTH_TOLERANCE_MS
     );
   });
 
