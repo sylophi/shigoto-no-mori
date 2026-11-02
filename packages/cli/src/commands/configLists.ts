@@ -4,7 +4,8 @@
 // survive an edit.
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { isAbsolute, relative, sep } from "node:path";
+import { isAbsolute, relative } from "node:path";
+import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
 import { isSafeRelPath } from "@shigomori/contracts/predicates/relPath";
 import * as Config from "@shigomori/engine/Config";
 import type { ConfigDoc } from "@shigomori/engine/configDoc";
@@ -205,20 +206,25 @@ const outsideRoot = () =>
     problem: "Carry-over paths must stay within the project root.",
   });
 
-// A path as stored: project-relative with forward slashes, its `.`
-// segments, doubled and trailing slashes gone, so one entry has one
-// spelling. An absolute path inside the project is made relative.
+// A path as stored, and as `list` prints it: from a checkout's root,
+// with forward slashes, its `.` segments, doubled and trailing slashes
+// gone, so one entry has one spelling. An absolute path is read from the
+// deepest of the project's checkouts that holds it, since one can sit
+// inside another.
 const carryOverPath = (project: Registry.ListedProject, raw: string) =>
   Effect.gen(function* () {
     let path = raw.trim();
     if (isAbsolute(path)) {
-      const inside = relative(project.path, path);
-      if (inside === ".." || inside.startsWith(`..${sep}`)) {
+      const [root] = (yield* (yield* Worktrees.Worktrees).identities(project))
+        .map((checkout) => checkout.path)
+        .filter((checkout) => isSameOrInside(path, checkout))
+        .toSorted((a, b) => b.length - a.length);
+      if (root === undefined) {
         return yield* new UsageError({
           problem: `${path} is outside the project (${project.path}).`,
         });
       }
-      path = inside;
+      path = relative(root, path);
     }
     if (!isSafeRelPath(path)) return yield* outsideRoot();
     const kept = path

@@ -588,6 +588,10 @@ export class CleanupFailed extends Schema.TaggedError<CleanupFailed>()(
     runId: Schema.String,
   },
 ) {
+  get flagHint(): string {
+    return "Pass --skip-cleanup to remove it without the scripts.";
+  }
+
   override get message(): string {
     return `${this.phase} ${this.exitCode === null ? "failed to run" : `exited with code ${this.exitCode}`}, so the worktree was not removed`;
   }

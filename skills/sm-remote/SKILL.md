@@ -6,9 +6,9 @@ description: "Move or mirror a Shigoto no Mori (sm) worktree between the user's 
 The app must be open and signed in on both machines. If a command says
 it isn't running, open it with `sm app` (on a Linux machine, where it
 runs with no window, `sm service start`) and retry once `sm devices`
-shows the other machine as ready. A Linux machine signs in with
-`sm login`, which prints a link and a code: pass both on, since it waits
-for the user to approve them.
+shows the other machine as ready, or as connected when run outside a
+project. A Linux machine signs in with `sm login`, which prints a link
+and a code: pass both on, since it waits for the user to approve them.
 
 ## Send it to the user
 
@@ -63,6 +63,11 @@ says the copy can go.
 ## Notes
 
 - With several machines, ask the user which one they're on.
+- `mirror`, `send`, `bring` and `projects clone` wait until the worktree
+  or the repo has crossed, as long as that takes, so run them where a
+  long command won't time out. Interrupted before the worktree lands, a
+  `mirror`, `send` or `bring` is cancelled and its copy removed, though
+  a repo it cloned on the other machine stays.
 - `send` and `bring` move a worktree once instead of mirroring it. Use
   them only when asked, and pass `--source teardown` (which deletes the
   original) only when the user asks for it.

@@ -187,17 +187,15 @@ export const commandLine = (
     const tokens = [...line.own];
 
     // The command, a level at a time. A flags-first namespace's flags
-    // stay valid down to its verb, which reads those it knows.
+    // stay valid down to its verb, which takes only its own.
     const chain = [root];
     const path: string[] = [];
-    let spec: Flags | undefined;
     for (;;) {
       const level = chain[chain.length - 1] as Command.Command.Any;
       if (level.subcommands.length === 0) break;
       let at = 0;
       if (FLAGS_FIRST.has(path.join(" "))) {
-        spec = namespaceFlags(chain);
-        at = (yield* parse(tokens, spec)).first;
+        at = (yield* parse(tokens, namespaceFlags(chain))).first;
         if (at === -1) break;
       }
       const word = tokens[at];
@@ -211,16 +209,13 @@ export const commandLine = (
       tokens.splice(at, 1);
     }
 
-    const own = flagsOf(chain);
-    const { values, positionals } = yield* parse(tokens, spec ?? own);
+    const { values, positionals } = yield* parse(tokens, flagsOf(chain));
     positionals.push(...(line.past ?? []));
-    const flagArgs = [...values]
-      .filter(([name]) => own.has(name))
-      .flatMap(([name, value]) =>
-        typeof value === "boolean"
-          ? [`--${name}=${value}`]
-          : value.map((each) => `--${name}=${each}`),
-      );
+    const flagArgs = [...values].flatMap(([name, value]) =>
+      typeof value === "boolean"
+        ? [`--${name}=${value}`]
+        : value.map((each) => `--${name}=${each}`),
+    );
     // Past `--`, effect/cli reads a positional as it is, as only a flag
     // could be read otherwise.
     return [

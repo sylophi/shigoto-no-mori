@@ -81,9 +81,10 @@ When the user wants to discard a worktree, don't ask to keep the work:
 sm worktrees rm
 ```
 
-It refuses uncommitted changes, and `-f` overrides that. The removal is
-local, so delete the remote branch too if it was pushed:
-`git push origin --delete <branch>`.
+It refuses uncommitted changes, and `-f` overrides that. If the
+teardown script fails, the worktree stays, and `--skip-cleanup` removes
+it without the scripts. The removal is local, so delete the remote
+branch too if it was pushed: `git push origin --delete <branch>`.
 
 After land or rm, if your shell was inside the worktree, `cd` to the
 path the command prints.

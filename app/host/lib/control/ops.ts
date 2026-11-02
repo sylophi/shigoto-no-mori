@@ -29,6 +29,7 @@ import {
 } from "@shigomori/contracts/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { EffectHandlers, ViewHandlers } from "@shigomori/contracts/types";
+import { hostCallFailure } from "@host/lib/Engine";
 import { errorWordsOf } from "@host/lib/errorWords";
 import { pullWorktreeName } from "@shigomori/contracts/git/branches";
 import {
@@ -248,7 +249,7 @@ const settled =
   (input, ctx) =>
     Effect.gen(function* () {
       const moved = yield* transfer(input, ctx).pipe(
-        Effect.mapError(callFailureOf),
+        Effect.mapError(hostCallFailure),
       );
       if ("done" in moved) return moved.done;
       const source = yield* settleSource(input.source ?? "keep", moved.settle);
@@ -666,7 +667,7 @@ export const clone = (
       ...cloned,
       device: { deviceId: device.deviceId, name: device.name },
     };
-  }).pipe(Effect.mapError(callFailureOf));
+  }).pipe(Effect.mapError(hostCallFailure));
 
 // The mirrors this device is part of: the ones it runs, and the
 // ones peers run against its worktrees, each seen from this side.

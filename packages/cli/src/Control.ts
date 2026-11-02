@@ -265,9 +265,20 @@ const make = Effect.fn("Control.make")(function* (flavor: Flavor) {
       protocolVersion: PROTOCOL_VERSION,
       token: file.token,
     }).pipe(
+      // The older of the two is an app an update replaced and that
+      // never restarted, or another copy of this binary first on PATH.
       Effect.mapError((error) =>
         isProtocolVersionMismatchError(error)
-          ? new ControlRefused({ channel: "link:hello", said: error.message })
+          ? new ControlRefused({
+              channel: "link:hello",
+              said:
+                error.hostVersion < error.clientVersion
+                  ? byPlatform({
+                      darwin: `The app running here is older than this ${paths.binaryName}. Restart it to update (quit it and open it again), and try again.`,
+                      linux: `The host running here is older than this ${paths.binaryName}. Restart it to update (\`${paths.binaryName} service restart\`), and try again.`,
+                    })
+                  : `This ${paths.binaryName} is older than the ${byPlatform({ darwin: "app", linux: "host" })} running here. Run \`${paths.binaryName} doctor\` to see the ${paths.binaryName} binaries on PATH.`,
+            })
           : turnedAway(),
       ),
     );

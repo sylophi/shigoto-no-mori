@@ -158,9 +158,9 @@ const catalog = (names: Names) => {
         "On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Tracked files are cloned (copy-on-write) from an existing checkout wherever it has them unchanged, and git writes the rest (--no-clone has git write them all). Run from an agent's shell, it binds the agent's session to the new worktree (see agents). Runs carry-over, the setup script (--no-setup skips it), and port provision, then drops into the new worktree: a subshell, or your own shell with shell integration (--no-cd, --json, and scripts skip it).",
       ],
       [
-        "worktrees rm [<name>] [--stack] [-f] [--keep-branch]",
+        "worktrees rm [<name>] [--stack] [-f] [--keep-branch] [--skip-cleanup]",
         "Remove a worktree",
-        "Teardown, release port, delete the branch per app settings (never the project's default branch). --stack also removes the worktrees of the merged layers under it in its PR stack (the cleanup half of land --stack, for a stack that has landed, and an open PR is refused). The removal guards cover all of them first.",
+        "Teardown, release port, delete the branch per app settings (never the project's default branch). A failed teardown or port release keeps the worktree, and --skip-cleanup removes it without them. --stack also removes the worktrees of the merged layers under it in its PR stack (the cleanup half of land --stack, for a stack that has landed, and an open PR is refused). The removal guards cover all of them first.",
       ],
       [
         "worktrees done [<name>] [-f]",
@@ -178,7 +178,7 @@ const catalog = (names: Names) => {
         "Method follows the repo's settings unless -m overrides. On a repo that allows auto-merge, a PR still waiting on its base branch's rules (checks running, a review missing) gets auto-merge enabled instead. It then waits for GitHub to merge the PR, as it does for a PR a merge queue took, and stops with an error when the PR needs attention instead (a required check failed, a conflict, changes requested, auto-merge turned off). --stack lands the PR and every open PR under it in its stack, bottom first, and doesn't wait on a queue.",
       ],
       [
-        "worktrees land [<name>] [-m <method>] [--stack] [-f] [--keep-branch]",
+        "worktrees land [<name>] [-m <method>] [--stack] [-f] [--keep-branch] [--skip-cleanup]",
         "Merge the PR, then clean up",
         "merge + rm in one step (done when landing the primary checkout), fast-forwarding the checkout that has the PR's base branch out in between. An already-merged PR skips straight to cleanup. A PR that doesn't merge on the spot (auto-merge enabled, or a merge queue took it) is waited on as merge does, then cleaned up. One that needs attention instead stops it with an error and nothing removed. A stack a merge queue took stops before the cleanup, and running land again once it has merged does the rest. A branch with commits the PR doesn't have (made after its last push) is refused before anything merges, naming them, unless -f or --keep-branch. " +
           "--stack lands the PR with every open PR under it in its stack (merge --stack), then removes every worktree whose branch landed, the lower layers' included. A PR that sits on another open PR is refused without it. The removal guards cover all of them before anything merges.",
@@ -207,7 +207,7 @@ const catalog = (names: Names) => {
       [
         "worktrees send [<name>] [--to <device>]",
         "Move a worktree to another device",
-        "The app's \"Transplant to…\". --to takes a device's name or id, or the start of either, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it, and a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open, and finishes there even if interrupted. Exits 3 when the worktree landed but something after it didn't hold.",
+        "The app's \"Transplant to…\". --to takes a device's name or id, or the start of either, and can be left off when only one device qualifies (`devices` says which). --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule). --setup / --no-setup overrides whether the copy runs the setup script. --source keep|shelve|teardown decides what becomes of the original (default keep). teardown also deletes ignored files that did not cross. A device with no checkout of the repo takes it too, cloning the repo first into the folder --clone-into <dir> names there (a leading ~ is that device's home, so quote it, and a path in this device's home reads as the same path in that one's), by default the checkout's own place with the two homes swapped. A checkout of the repo already in that folder is used as it is. Left off, --to prefers a device that holds the repo. Needs the app open. Interrupted before the worktree lands, it is cancelled and its copy removed, though a repo it cloned there stays. Exits 3 when the worktree landed but something after it didn't hold.",
       ],
       [
         "worktrees bring <worktree> [--from <device>]",
@@ -334,7 +334,7 @@ const catalog = (names: Names) => {
           bin +
           " projects config list`. Structured lists get element verbs: launcher add " +
           "<label> <command> / rm <label-or-id>, and carryover add <path> [--copy|--symlink] " +
-          "/ rm <path> (add upserts, so re-adding switches the mode). The flags --setup <cmd>, " +
+          "/ rm <path> (add upserts, so re-adding switches the mode), each <path> from a checkout's root as carryover lists it, or absolute in any checkout. The flags --setup <cmd>, " +
           `--teardown <cmd>, and --default-branch <ref> are shorthands: "" clears a ` +
           "script, and default-branch can't be cleared.",
       ],

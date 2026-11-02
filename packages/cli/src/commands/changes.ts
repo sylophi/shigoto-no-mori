@@ -2,6 +2,7 @@
 // waits for the lifecycle scripts), rm, move and rename.
 import { cdHintFor, cdNote, removeFlags } from "../removal.ts";
 import { envVar } from "@shigomori/engine/environment";
+import { errorDocument } from "@shigomori/engine/errorDocument";
 import type * as Lifecycle from "@shigomori/engine/Lifecycle";
 import { CD_FILE_ENV } from "@shigomori/engine/shellHook";
 import * as Agents from "@shigomori/engine/Agents";
@@ -249,6 +250,7 @@ export const rm = Command.make(
                 ? Effect.andThen(
                     emit({
                       ok: false,
+                      ...errorDocument(failed),
                       cleanupError: Worktrees.cleanupErrorOf(failed),
                     }),
                     Effect.fail(new ExitCode({ code: 1 })),
