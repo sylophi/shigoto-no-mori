@@ -114,11 +114,16 @@ export const keptAnswers = Effect.fnUntraced(function* <K, A, E, R>(
       Effect.uninterruptibleMask((restore) =>
         Effect.withFiber((caller) => {
           const now = stampOf(caller.getRef(Clock.Clock));
-          const found = Option.getOrUndefined(MutableHashMap.get(entries, key));
-          const fresh =
-            found !== undefined &&
-            (found.kept === null || ageOf(found.kept.at, now) < found.kept.ms);
-          const entry = fresh ? found : start(key, caller);
+          // Every answer past its age goes as any key is asked, so a key
+          // no longer asked keeps none.
+          for (const [old, { kept }] of entries) {
+            if (kept !== null && ageOf(kept.at, now) >= kept.ms) {
+              MutableHashMap.remove(entries, old);
+            }
+          }
+          const entry =
+            Option.getOrUndefined(MutableHashMap.get(entries, key)) ??
+            start(key, caller);
           entry.waiters += 1;
           return restore(Deferred.await(entry.result)).pipe(
             Effect.ensuring(leave(key, entry)),
