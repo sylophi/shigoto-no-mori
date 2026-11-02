@@ -9,15 +9,15 @@ import type { PullRequestSummary } from "../GitHub.ts";
 import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 import {
+  type BranchPullRequest,
   type Done,
+  type Landed,
   LandingRefused,
   MERGE_FIELDS,
   type Merged,
   MergeUnverified,
   type RemoveOptions,
   type Reporter,
-  mergeResultFields,
-  pullRequestMerged,
 } from "./documents.ts";
 import type { PullRequestsArea } from "./pullRequests.ts";
 import type { StacksArea } from "./stacks.ts";
@@ -91,16 +91,7 @@ export const makeVerbs = ({
       if (Option.isNone(found)) {
         return yield* refuse("pr", "no-pull-request", [], [branch]);
       }
-      const pr = found.value;
-      return {
-        ok: true,
-        number: pr.number,
-        title: pr.title,
-        state: pr.state,
-        isDraft: pr.isDraft,
-        branch,
-        url: pr.url,
-      };
+      return { pr: found.value, branch } satisfies BranchPullRequest;
     });
 
     // The repo's methods are read beside the stack when not already known.
@@ -360,27 +351,29 @@ export const makeVerbs = ({
           );
           yield* persistMethod(project, method);
           if (queued) {
-            return pullRequestMerged(pr, branch, {
-              method,
-              outcome: "queued",
-            });
+            return { kind: "queued", pr, branch, method } satisfies Landed;
           }
           yield* guardAfterMerge;
           plan = yield* planCleanup;
         } else if (reporter.landing !== undefined) {
           yield* reporter.landing(pr, undefined);
         }
-        return yield* execStackCleanup(
-          located,
+        return {
+          kind: "cleaned",
           pr,
-          true,
-          chain,
-          plan,
-          lookups.target,
-          options,
-          { merged: mergeResultFields(pr, branch, method) },
-          reporter,
-        );
+          branch,
+          method,
+          cleanup: yield* execStackCleanup(
+            located,
+            pr,
+            true,
+            chain,
+            plan,
+            lookups.target,
+            options,
+            reporter,
+          ),
+        } satisfies Landed;
       }
 
       let method: MergeMethod | undefined;
@@ -415,14 +408,20 @@ export const makeVerbs = ({
         method = outcome.method;
       }
       if (reporter.landing !== undefined) yield* reporter.landing(pr, method);
-      return yield* landCleanup(
-        located,
-        pr.baseRefName,
-        target,
-        options,
-        { merged: mergeResultFields(pr, branch, method) },
-        reporter,
-      );
+      return {
+        kind: "cleaned",
+        pr,
+        branch,
+        method,
+        cleanup: yield* landCleanup(
+          located,
+          pr.baseRefName,
+          target,
+          options,
+          undefined,
+          reporter,
+        ),
+      } satisfies Landed;
     });
 
     // The commits check of the branch a stack's removal runs from (the
@@ -546,7 +545,6 @@ export const makeVerbs = ({
         plan,
         target,
         options,
-        {},
         reporter,
       );
     });

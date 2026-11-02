@@ -16,6 +16,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as Agents from "@shigomori/engine/Agents";
@@ -62,7 +63,6 @@ import {
   asCall,
   asChange,
   changing,
-  EngineCallError,
   engineFailure,
   locate,
   projectById,
@@ -229,52 +229,51 @@ export const planStack = Effect.fnUntraced(function* (
   );
 });
 
-// The worktrees a stack's plan names, removed together. The document
-// lists them: the worktree itself under `removed`, the others under
-// `stack.removed`, and on a cleanup failure whatever went before it.
-// `removedOther` hears each of the others as it goes, so a removal cut
-// short still tells what went.
+// The worktrees a stack's plan names, removed together, and on a
+// cleanup failure whatever went before it. `removedOther` hears each of
+// the others as it goes, so a removal cut short still tells what went.
 export const deleteStack = Effect.fnUntraced(function* (
   project: Project,
   removal: Landing.StackRemoval,
   reporter: Worktrees.Reporter,
   removedOther: (worktreeId: string) => void,
 ) {
-  const doc = yield* asChange(
+  const ids = {
+    projectId: project.id,
+    worktreeId: removal.located.worktree.id,
+  };
+  const cleanup = yield* asChange(
     Effect.flatMap(Landing.Landing, (landing) =>
       landing.removeStack(removal, {
         ...reporter,
         removedOther: (removed) => Effect.sync(() => removedOther(removed.id)),
       }),
     ),
-    { projectId: project.id, worktreeId: removal.located.worktree.id },
+    ids,
     "remove",
   );
-  const removed = removedIdsOf(doc);
-  if (doc.ok === true) {
+  // The lower layers first and the worktree it ran from last, the order
+  // they were removed in.
+  const removed = (cleanup.stack?.removed ?? []).map((entry) => entry.id);
+  if (cleanup.kind === "done") {
     return { ok: true, removed } satisfies DeleteStackResult;
   }
-  if (doc.cleanupError !== undefined) {
+  const { result } = cleanup;
+  if (Result.isSuccess(result)) {
+    removed.push(result.success.id);
+    return { ok: true, removed } satisfies DeleteStackResult;
+  }
+  if (result.failure instanceof Worktrees.CleanupFailed) {
     return {
       ok: false,
       removed,
-      cleanupError: decodeCleanupError(doc.cleanupError),
+      cleanupError: decodeCleanupError(
+        Worktrees.cleanupErrorOf(result.failure),
+      ),
     } satisfies DeleteStackResult;
   }
-  return yield* new EngineCallError({
-    reason: doc.error ?? "removing the stack failed",
-    cause: doc,
-  });
+  return yield* engineFailure(result.failure, ids);
 });
-
-// The worktree ids a stack removal's document says went, the lower
-// layers first and the worktree it ran from last, the order they were
-// removed in.
-function removedIdsOf(doc: Landing.Document): string[] {
-  const ids = (doc.stack?.removed ?? []).map((entry) => entry.id);
-  if (doc.removed) ids.push(doc.removed.id);
-  return ids;
-}
 
 // Not forced: the cleanup box shows for a merged PR, but the branch can
 // hold commits made since, which only `done`'s own proof refuses to

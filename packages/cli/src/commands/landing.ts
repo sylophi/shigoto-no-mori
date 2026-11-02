@@ -2,19 +2,19 @@
 // pull request, merge merges it (arming auto-merge, or letting a queue
 // take it, and waiting for GitHub to merge it), land merges and cleans
 // up, done puts a checkout back on the primary branch, and rm --stack
-// cleans up a landed stack. The engine answers each with the --json
-// document, which a person's lines are read from.
+// cleans up a landed stack. The engine answers each with what it did,
+// which a person's lines are read from, and renders its --json document.
 import { cdHintFor, cdNote, removeFlags } from "../removal.ts";
 import {
   type MergeMethod,
   MergeMethodSchema,
 } from "@shigomori/contracts/schemas/pullRequest";
 import { execFile } from "node:child_process";
-import { withHint } from "@shigomori/engine/errorDocument";
 import * as Landing from "@shigomori/engine/Landing";
-import * as Worktrees from "@shigomori/engine/Worktrees";
+import type * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
@@ -32,18 +32,6 @@ import {
 } from "../here.ts";
 import { emit, note, out, Output, styles } from "../output.ts";
 import { reporter } from "../reporter.ts";
-
-type Doc = Landing.Document;
-
-// A cleanup that failed after the merge, whose document said why.
-class CleanupDidNotFinish extends Schema.TaggedError<CleanupDidNotFinish>()(
-  "CleanupDidNotFinish",
-  { problem: Schema.String },
-) {
-  override get message(): string {
-    return this.problem;
-  }
-}
 
 class OpenFailed extends Schema.TaggedError<OpenFailed>()("OpenFailed", {
   url: Schema.String,
@@ -83,9 +71,9 @@ const target = {
 // A merge as a person reads it: merged, queued, or auto-merge armed.
 const mergeLine = (
   outcome: {
-    readonly number: number | undefined;
-    readonly method: MergeMethod | undefined;
-    readonly outcome: Doc["outcome"];
+    readonly number: number;
+    readonly method: MergeMethod;
+    readonly outcome: Landing.Merged["outcome"];
     readonly alreadyArmed?: boolean | undefined;
   },
   title: string,
@@ -101,16 +89,10 @@ const mergeLine = (
           : "merged";
     return out(
       styles(stdoutColor).green(
-        `${verb} PR #${String(outcome.number)} (${outcome.method ?? ""}): ${title}`,
+        `${verb} PR #${outcome.number} (${outcome.method}): ${title}`,
       ),
     );
   });
-
-const docOutcome = (doc: Doc) => ({
-  number: doc.number,
-  method: doc.method,
-  outcome: doc.outcome,
-});
 
 // The landing reporter: the worktree events as the other verbs report
 // them, each layer of a stack as it merges, the wait for GitHub to
@@ -158,12 +140,6 @@ const landingReporter = Effect.gen(function* () {
   } satisfies Landing.Reporter;
 });
 
-// What a cleanup's failed document says.
-const failureOf = (doc: Landing.Document) =>
-  doc.cleanupError !== undefined
-    ? Worktrees.cleanupFailureWords(doc.cleanupError)
-    : withHint(doc.error ?? "", doc.hint);
-
 // A checkout put back on the primary branch.
 const reportDone = (done: Landing.Done) =>
   Effect.flatMap(Effect.service(Output), ({ stdoutColor }) => {
@@ -175,48 +151,42 @@ const reportDone = (done: Landing.Done) =>
     );
   });
 
-// How land, done and rm --stack end, from the document: this checkout
-// removed or put back on the primary branch. The steps before it were
-// said as they happened (landingReporter).
-const reportCleanup = (doc: Landing.Document, located: Worktrees.Located) =>
+// How land and rm --stack end: this checkout removed or put back on the
+// primary branch, or `doc` under --json. The steps before it were said
+// as they happened (landingReporter).
+const reportCleanup = (
+  cleanup: Landing.Cleanup,
+  doc: object,
+  located: Worktrees.Located,
+) =>
   Effect.gen(function* () {
     const { json, stdoutColor } = yield* Effect.service(Output);
-    const { removed, worktree } = doc;
-    // A shell standing in the removed folder is told where to go.
-    const hint =
-      removed === undefined
-        ? ""
-        : cdHintFor(removed.path, located.project.path);
-    if (doc.ok === false) {
-      if (json) {
-        yield* emit(doc);
-        return yield* new ExitCode({ code: 1 });
-      }
-      return yield* new CleanupDidNotFinish({ problem: failureOf(doc) });
+    if (cleanup.kind === "done") {
+      return yield* json ? emit(doc) : reportDone(cleanup.done);
     }
+    const { result } = cleanup;
+    if (Result.isFailure(result)) {
+      if (!json) return yield* Effect.fail(result.failure);
+      yield* emit(doc);
+      return yield* new ExitCode({ code: 1 });
+    }
+    const removed = result.success;
+    // A shell standing in the removed folder is told where to go.
+    const hint = cdHintFor(removed.path, located.project.path);
     if (json) {
       return yield* emit(hint === "" ? doc : { ...doc, cdHint: hint });
     }
-    const { green } = styles(stdoutColor);
-    if (worktree !== undefined) {
-      return yield* reportDone({
-        worktree,
-        deletedBranch: doc.deletedBranch ?? undefined,
-      });
-    }
-    if (removed !== undefined) {
-      yield* out(green(`removed ${removed.name}`));
-      if (hint !== "") yield* cdNote("the removed worktree", hint);
-    }
+    yield* out(styles(stdoutColor).green(`removed ${removed.name}`));
+    if (hint !== "") yield* cdNote("the removed worktree", hint);
   });
 
 export const pr = Command.make("pr", target, (input) =>
   Effect.gen(function* () {
     const { located } = yield* resolveWorktree(input);
-    const doc = yield* (yield* Landing.Landing).pullRequest(located);
+    const found = yield* (yield* Landing.Landing).pullRequest(located);
     const { json, stderrColor } = yield* Effect.service(Output);
-    if (json) return yield* emit(doc);
-    const url = doc.url ?? "";
+    if (json) return yield* emit(Landing.pullRequestDocument(found));
+    const { url, number, state, title } = found.pr;
     // Where there's no screen to open it on, the link is what it gets.
     const opener = yield* screenOpener;
     if (Option.isSome(opener)) {
@@ -236,7 +206,7 @@ export const pr = Command.make("pr", target, (input) =>
       });
     }
     yield* out(
-      `${Option.isSome(opener) ? "opened " : ""}PR #${String(doc.number)} (${(doc.state ?? "").toLowerCase()}): ${doc.title ?? ""}`,
+      `${Option.isSome(opener) ? "opened " : ""}PR #${number} (${state.toLowerCase()}): ${title}`,
     );
     yield* note(styles(stderrColor).dim(url));
   }),
@@ -300,7 +270,7 @@ export const land = Command.make(
       const method = yield* methodOf(input.method);
       const { located } = yield* resolveWorktree(input);
       const { json, binaryName, stderrColor } = yield* Effect.service(Output);
-      const doc = yield* (yield* Landing.Landing).land(
+      const landed = yield* (yield* Landing.Landing).land(
         located,
         {
           force: input.force,
@@ -311,17 +281,24 @@ export const land = Command.make(
         },
         yield* landingReporter,
       );
-      // A stack a merge queue took: nothing to clean up yet.
-      if (doc.merged === undefined && doc.outcome !== undefined) {
+      const doc = Landing.landDocument(landed);
+      if (landed.kind === "queued") {
         if (json) return yield* emit(doc);
-        yield* mergeLine(docOutcome(doc), doc.title ?? "");
+        yield* mergeLine(
+          {
+            number: landed.pr.number,
+            method: landed.method,
+            outcome: "queued",
+          },
+          landed.pr.title,
+        );
         return yield* note(
           styles(stderrColor).dim(
             `nothing removed yet. Run \`${binaryName} land\` again once GitHub has merged it`,
           ),
         );
       }
-      yield* reportCleanup(doc, located);
+      yield* reportCleanup(landed.cleanup, doc, located);
     }),
 ).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
@@ -361,9 +338,13 @@ export const removeStack = (
 ) =>
   Effect.gen(function* () {
     const landing = yield* Landing.Landing;
-    const doc = yield* landing.removeStack(
+    const cleanup = yield* landing.removeStack(
       yield* landing.planRemoveStack(located, options),
       yield* landingReporter,
     );
-    yield* reportCleanup(doc, located);
+    yield* reportCleanup(
+      cleanup,
+      Landing.removeStackDocument(cleanup),
+      located,
+    );
   });

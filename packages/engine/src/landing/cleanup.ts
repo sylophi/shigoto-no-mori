@@ -13,12 +13,12 @@ import type { RegisteredProject } from "../Registry.ts";
 import * as Worktrees from "../Worktrees.ts";
 import {
   type CatchUp,
+  type Cleanup,
   DoneUnfinished,
   LandingRefused,
   type RemoveOptions,
   type Reporter,
-  cleanupFailed,
-  doneFields,
+  type StackCleanup,
 } from "./documents.ts";
 import type { PullRequestsArea } from "./pullRequests.ts";
 
@@ -296,7 +296,7 @@ export const makeCleanup = ({
       base: string,
       target: Result.Result<Worktrees.PrimaryTarget, LandingRefused>,
       options: RemoveOptions,
-      extra: Record<string, unknown>,
+      stack: StackCleanup | undefined,
       reporter: Reporter,
     ) =>
       Effect.gen(function* () {
@@ -325,16 +325,17 @@ export const makeCleanup = ({
               yield* reporter.caughtUp(said);
             }
           }
-          // The primary's skipped pull wins over the base's.
-          return doneFields(
-            {
+          return {
+            kind: "done",
+            stack,
+            done: {
               worktree: row,
               deletedBranch: deleted ? worktree.branch : undefined,
+              // The primary's skipped pull wins over the base's.
               catchUpSkipped: catchUpSkipped ?? caught?.catchUpSkipped,
               caughtUp: caught?.caughtUp,
             },
-            extra,
-          );
+          } satisfies Cleanup;
         }
         const caught: CatchUp = Result.isFailure(target)
           ? { catchUpSkipped: target.failure.message }
@@ -344,13 +345,15 @@ export const makeCleanup = ({
               worktrees.identities(project),
             );
         if (reporter.caughtUp !== undefined) yield* reporter.caughtUp(caught);
-        const removed = yield* worktrees
+        const result = yield* worktrees
           .remove(located, { ...options, preflighted: true }, reporter)
           .pipe(Effect.result);
-        if (Result.isFailure(removed)) {
-          return cleanupFailed(removed.failure, { ...extra, ...caught });
-        }
-        return { ok: true, removed: removed.success, ...extra, ...caught };
+        return {
+          kind: "removal",
+          stack,
+          catchUp: caught,
+          result,
+        } satisfies Cleanup;
       });
 
     const primaryTargetOf = (
@@ -458,9 +461,9 @@ export const makeCleanup = ({
       });
 
     // The removals: the other landed worktrees, then this one through the
-    // plain cleanup, whose document carries the landed layers and the
-    // worktrees removed for them. The catch-up targets the branch the stack
-    // landed on, the bottom's base.
+    // plain cleanup, which carries the landed layers and the worktrees
+    // removed for them. The catch-up targets the branch the stack landed
+    // on, the bottom's base.
     const execStackCleanup = (
       located: Worktrees.Located,
       pr: PullRequestSummary,
@@ -469,25 +472,16 @@ export const makeCleanup = ({
       plan: Effect.Success<ReturnType<typeof planStackCleanup>>,
       target: Worktrees.PrimaryTarget,
       options: RemoveOptions,
-      extra: Record<string, unknown>,
       reporter: Reporter,
     ) =>
       Effect.gen(function* () {
-        const landed = chain
-          .filter(
-            (layer) =>
-              plan.landing.has(layer.headRefName) ||
-              (ownLanded && layer.number === pr.number),
-          )
-          .map((layer) => ({
-            number: layer.number,
-            title: layer.title,
-            branch: layer.headRefName,
-            url: layer.url,
-          }));
+        const landed = chain.filter(
+          (layer) =>
+            plan.landing.has(layer.headRefName) ||
+            (ownLanded && layer.number === pr.number),
+        );
         const removed: Worktrees.Removed[] = [];
         const stack = { landed, removed };
-        const withStack = { ...extra, stack };
         const base = (chain[0] as PullRequestSummary).baseRefName;
         if (plan.primary !== undefined && reporter.note !== undefined) {
           yield* reporter.note(
@@ -495,19 +489,24 @@ export const makeCleanup = ({
           );
         }
         for (const other of plan.others) {
-          const outcome = yield* worktrees
+          const result = yield* worktrees
             .remove(
               { project: located.project, worktree: other },
               { ...options, preflighted: true },
               reporter,
             )
             .pipe(Effect.result);
-          if (Result.isFailure(outcome)) {
-            return cleanupFailed(outcome.failure, withStack);
+          if (Result.isFailure(result)) {
+            return {
+              kind: "removal",
+              stack,
+              catchUp: undefined,
+              result,
+            } satisfies Cleanup;
           }
-          removed.push(outcome.success);
+          removed.push(result.success);
           if (reporter.removedOther !== undefined) {
-            yield* reporter.removedOther(outcome.success);
+            yield* reporter.removedOther(result.success);
           }
         }
         return yield* landCleanup(
@@ -515,7 +514,7 @@ export const makeCleanup = ({
           base,
           Result.succeed(target),
           options,
-          withStack,
+          stack,
           reporter,
         );
       });
