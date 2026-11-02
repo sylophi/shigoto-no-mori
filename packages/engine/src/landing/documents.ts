@@ -2,7 +2,6 @@
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { errorDocument } from "../errorDocument.ts";
 import * as Git from "../Git.ts";
@@ -365,11 +364,17 @@ export type Cleanup =
       readonly done: Done;
     }
   | {
-      readonly kind: "removal";
+      readonly kind: "removed";
+      readonly stack: StackCleanup | undefined;
+      readonly catchUp: CatchUp;
+      readonly removed: Worktrees.Removed;
+    }
+  | {
+      readonly kind: "failed";
       readonly stack: StackCleanup | undefined;
       // None when a stack layer's removal failed first.
       readonly catchUp: CatchUp | undefined;
-      readonly result: Result.Result<Worktrees.Removed, RemoveError>;
+      readonly error: RemoveError;
     };
 
 // What `land` did: the PR it merged (with `method`) or found merged
@@ -543,21 +548,28 @@ const cleanupDocument = (cleanup: Cleanup, merged: object) => {
           },
         }),
   };
-  if (cleanup.kind === "done") return doneFields(cleanup.done, extra);
-  const caught =
-    cleanup.catchUp === undefined ? {} : catchUpFields(cleanup.catchUp);
-  const { result } = cleanup;
-  if (Result.isSuccess(result)) {
-    return { ok: true, removed: result.success, ...extra, ...caught };
+  switch (cleanup.kind) {
+    case "done":
+      return doneFields(cleanup.done, extra);
+    case "removed":
+      return {
+        ok: true,
+        removed: cleanup.removed,
+        ...extra,
+        ...catchUpFields(cleanup.catchUp),
+      };
+    case "failed":
+      return {
+        ...extra,
+        ...(cleanup.catchUp === undefined
+          ? {}
+          : catchUpFields(cleanup.catchUp)),
+        ok: false,
+        ...(cleanup.error instanceof Worktrees.CleanupFailed
+          ? { cleanupError: Worktrees.cleanupErrorOf(cleanup.error) }
+          : errorDocument(cleanup.error)),
+      };
   }
-  return {
-    ...extra,
-    ...caught,
-    ok: false,
-    ...(result.failure instanceof Worktrees.CleanupFailed
-      ? { cleanupError: Worktrees.cleanupErrorOf(result.failure) }
-      : errorDocument(result.failure)),
-  };
 };
 
 // `sm land --json`.

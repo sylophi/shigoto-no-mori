@@ -14,7 +14,6 @@ import * as Landing from "@shigomori/engine/Landing";
 import type * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Argument from "effect/cli/Argument";
 import * as Command from "effect/cli/Command";
@@ -152,32 +151,35 @@ const reportDone = (done: Landing.Done) =>
   });
 
 // How land and rm --stack end: this checkout removed or put back on the
-// primary branch, or `doc` under --json. The steps before it were said
-// as they happened (landingReporter).
+// primary branch, or the document `render` makes under --json. The steps
+// before it were said as they happened (landingReporter).
 const reportCleanup = (
   cleanup: Landing.Cleanup,
-  doc: object,
   located: Worktrees.Located,
+  render: () => object,
 ) =>
   Effect.gen(function* () {
     const { json, stdoutColor } = yield* Effect.service(Output);
-    if (cleanup.kind === "done") {
-      return yield* json ? emit(doc) : reportDone(cleanup.done);
+    switch (cleanup.kind) {
+      case "done":
+        return yield* json ? emit(render()) : reportDone(cleanup.done);
+      case "failed":
+        if (!json) return yield* cleanup.error;
+        yield* emit(render());
+        return yield* new ExitCode({ code: 1 });
+      case "removed": {
+        const { removed } = cleanup;
+        // A shell standing in the removed folder is told where to go.
+        const hint = cdHintFor(removed.path, located.project.path);
+        if (json) {
+          return yield* emit(
+            hint === "" ? render() : { ...render(), cdHint: hint },
+          );
+        }
+        yield* out(styles(stdoutColor).green(`removed ${removed.name}`));
+        if (hint !== "") yield* cdNote("the removed worktree", hint);
+      }
     }
-    const { result } = cleanup;
-    if (Result.isFailure(result)) {
-      if (!json) return yield* Effect.fail(result.failure);
-      yield* emit(doc);
-      return yield* new ExitCode({ code: 1 });
-    }
-    const removed = result.success;
-    // A shell standing in the removed folder is told where to go.
-    const hint = cdHintFor(removed.path, located.project.path);
-    if (json) {
-      return yield* emit(hint === "" ? doc : { ...doc, cdHint: hint });
-    }
-    yield* out(styles(stdoutColor).green(`removed ${removed.name}`));
-    if (hint !== "") yield* cdNote("the removed worktree", hint);
   });
 
 export const pr = Command.make("pr", target, (input) =>
@@ -281,9 +283,8 @@ export const land = Command.make(
         },
         yield* landingReporter,
       );
-      const doc = Landing.landDocument(landed);
       if (landed.kind === "queued") {
-        if (json) return yield* emit(doc);
+        if (json) return yield* emit(Landing.landDocument(landed));
         yield* mergeLine(
           {
             number: landed.pr.number,
@@ -298,7 +299,9 @@ export const land = Command.make(
           ),
         );
       }
-      yield* reportCleanup(landed.cleanup, doc, located);
+      yield* reportCleanup(landed.cleanup, located, () =>
+        Landing.landDocument(landed),
+      );
     }),
 ).pipe(Command.provideEffectDiscard(refuseUnmigrated), changing);
 
@@ -342,9 +345,7 @@ export const removeStack = (
       yield* landing.planRemoveStack(located, options),
       yield* landingReporter,
     );
-    yield* reportCleanup(
-      cleanup,
+    yield* reportCleanup(cleanup, located, () =>
       Landing.removeStackDocument(cleanup),
-      located,
     );
   });

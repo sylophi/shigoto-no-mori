@@ -16,7 +16,6 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as EngineConfig from "@shigomori/engine/Config";
 import * as Agents from "@shigomori/engine/Agents";
@@ -255,24 +254,26 @@ export const deleteStack = Effect.fnUntraced(function* (
   // The lower layers first and the worktree it ran from last, the order
   // they were removed in.
   const removed = (cleanup.stack?.removed ?? []).map((entry) => entry.id);
-  if (cleanup.kind === "done") {
-    return { ok: true, removed } satisfies DeleteStackResult;
+  switch (cleanup.kind) {
+    case "done":
+      return { ok: true, removed } satisfies DeleteStackResult;
+    case "removed":
+      return {
+        ok: true,
+        removed: [...removed, cleanup.removed.id],
+      } satisfies DeleteStackResult;
+    case "failed":
+      if (cleanup.error instanceof Worktrees.CleanupFailed) {
+        return {
+          ok: false,
+          removed,
+          cleanupError: decodeCleanupError(
+            Worktrees.cleanupErrorOf(cleanup.error),
+          ),
+        } satisfies DeleteStackResult;
+      }
+      return yield* engineFailure(cleanup.error, ids);
   }
-  const { result } = cleanup;
-  if (Result.isSuccess(result)) {
-    removed.push(result.success.id);
-    return { ok: true, removed } satisfies DeleteStackResult;
-  }
-  if (result.failure instanceof Worktrees.CleanupFailed) {
-    return {
-      ok: false,
-      removed,
-      cleanupError: decodeCleanupError(
-        Worktrees.cleanupErrorOf(result.failure),
-      ),
-    } satisfies DeleteStackResult;
-  }
-  return yield* engineFailure(result.failure, ids);
 });
 
 // Not forced: the cleanup box shows for a merged PR, but the branch can

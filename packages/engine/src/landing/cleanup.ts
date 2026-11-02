@@ -348,11 +348,19 @@ export const makeCleanup = ({
         const result = yield* worktrees
           .remove(located, { ...options, preflighted: true }, reporter)
           .pipe(Effect.result);
+        if (Result.isFailure(result)) {
+          return {
+            kind: "failed",
+            stack,
+            catchUp: caught,
+            error: result.failure,
+          } satisfies Cleanup;
+        }
         return {
-          kind: "removal",
+          kind: "removed",
           stack,
           catchUp: caught,
-          result,
+          removed: result.success,
         } satisfies Cleanup;
       });
 
@@ -498,10 +506,10 @@ export const makeCleanup = ({
             .pipe(Effect.result);
           if (Result.isFailure(result)) {
             return {
-              kind: "removal",
+              kind: "failed",
               stack,
               catchUp: undefined,
-              result,
+              error: result.failure,
             } satisfies Cleanup;
           }
           removed.push(result.success);
