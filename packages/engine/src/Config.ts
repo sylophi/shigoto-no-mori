@@ -8,6 +8,8 @@ import {
   PROJECT_CONFIG_DEFAULTS,
   type ProjectSettingsPatch,
   ShigomoriConfigSchema,
+  StoredGlobalConfigSchema,
+  StoredShigomoriConfigSchema,
 } from "@shigomori/contracts/schemas/config";
 import {
   anyProjectSettingsSync,
@@ -57,6 +59,12 @@ export type ConfigScope =
       // The primary checkout, which a write asks git about.
       readonly path: string;
     };
+
+// A project's settings document.
+export const projectScope = (project: {
+  readonly id: string;
+  readonly path: string;
+}) => ({ kind: "project", projectId: project.id, path: project.path }) as const;
 
 // `stamp: false` is a write that copies settings rather than edits them
 // (a new project's seed, its repo's settings arriving from another
@@ -209,6 +217,13 @@ export class Config extends Context.Service<
     // The document as stored: no defaults filled in, keys this build
     // doesn't model included. A project with no settings reads as null.
     readonly read: (scope: ConfigScope) => Effect.Effect<ConfigDoc | null>;
+    // The device's and a project's documents as `read` gives them, as the
+    // contracts read a stored one: the device's is empty with nothing
+    // stored, a project's null.
+    readonly readDevice: Effect.Effect<typeof StoredGlobalConfigSchema.Type>;
+    readonly readProject: (
+      scope: Extract<ConfigScope, { readonly kind: "project" }>,
+    ) => Effect.Effect<typeof StoredShigomoriConfigSchema.Type | null>;
     // A device setting as it applies: the stored value when it is one
     // of the setting's, else its default.
     readonly device: <K extends keyof DeviceSettingsPatch>(
@@ -644,6 +659,18 @@ const make = Effect.gen(function* () {
     return yield* load(scope);
   });
 
+  const readDevice = Effect.flatMap(read({ kind: "device" }), (doc) =>
+    Schema.decodeUnknownEffect(StoredGlobalConfigSchema)(doc ?? {}),
+  ).pipe(Effect.orDie, Effect.withSpan("Config.readDevice"));
+
+  const readProject = Effect.fn("Config.readProject")(function* (
+    scope: Extract<ConfigScope, { readonly kind: "project" }>,
+  ) {
+    return yield* Schema.decodeUnknownEffect(
+      Schema.NullOr(StoredShigomoriConfigSchema),
+    )(yield* read(scope));
+  }, Effect.orDie);
+
   const device = Effect.fn("Config.device")(function* <
     K extends keyof DeviceSettingsPatch,
   >(key: K) {
@@ -826,6 +853,8 @@ const make = Effect.gen(function* () {
     list,
     get,
     read,
+    readDevice,
+    readProject,
     device,
     patch,
     patchProject,

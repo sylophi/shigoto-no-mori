@@ -169,6 +169,12 @@ export class Worktrees extends Context.Service<
       Registry.ListedProject,
       TargetError | UnknownProjectError | Git.GitError
     >;
+    // The worktree an id names, in the project another names when given:
+    // an id from before a move is the worktree it moved to.
+    readonly resolveById: (
+      here: Here,
+      ids: { readonly projectId?: string; readonly worktreeId: string },
+    ) => Effect.Effect<Located, UnknownProjectError | UnknownWorktreeError>;
     // The worktree a command means. The reserved names root and primary
     // are the project's primary checkout, and an id from before a move
     // is the worktree it moved to.
@@ -461,6 +467,7 @@ const make = Effect.gen(function* () {
     resolveProject,
     resolveProjectById,
     resolveProjectRef,
+    resolveById,
     resolve,
   } = resolving;
   const { setShelved, setAutoPull, description, describe } = describing;
@@ -485,6 +492,7 @@ const make = Effect.gen(function* () {
     resolveProject,
     resolveProjectById,
     resolveProjectRef,
+    resolveById,
     resolve,
     setShelved,
     setAutoPull,

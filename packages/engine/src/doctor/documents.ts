@@ -78,6 +78,9 @@ export type RunInput = {
   // Whether a person is at a terminal, which makes a shell hook that
   // isn't active in this session worth a word.
   readonly terminal: boolean;
+  // The login shell's ZDOTDIR, where the shell-hook check looks for its
+  // .zshrc, over the one this process was started with.
+  readonly zdotdir?: string | undefined;
   // Apply the repairs, a destructive one only once `approve` says yes.
   // `failed` hears each "couldn't <label>: <why>" line as it happens,
   // in checklist order.

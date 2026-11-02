@@ -198,21 +198,29 @@ export const makeResolving = ({
       return { project, worktree };
     });
 
+    const resolveById = Effect.fn("Worktrees.resolveById")(function* (
+      here: Here,
+      ids: { readonly projectId?: string; readonly worktreeId: string },
+    ) {
+      const scope = ids.projectId
+        ? [yield* resolveProjectById(here, ids.projectId)]
+        : here.projects;
+      const located = yield* worktreeWithId(scope, ids.worktreeId);
+      if (located) return located;
+      const now = (yield* kept.movedIds).get(ids.worktreeId);
+      const moved =
+        now === undefined ? undefined : yield* worktreeWithId(scope, now);
+      if (moved) return moved;
+      return yield* new UnknownWorktreeError({ worktreeId: ids.worktreeId });
+    });
+
     const resolve = Effect.fn("Worktrees.resolve")(function* (
       here: Here,
       target: Target,
     ) {
       if (target.worktreeId) {
-        const scope = target.projectId
-          ? [yield* resolveProjectById(here, target.projectId)]
-          : here.projects;
-        const located = yield* worktreeWithId(scope, target.worktreeId);
-        if (located) return located;
-        const now = (yield* kept.movedIds).get(target.worktreeId);
-        const moved =
-          now === undefined ? undefined : yield* worktreeWithId(scope, now);
-        if (moved) return moved;
-        return yield* new UnknownWorktreeError({
+        return yield* resolveById(here, {
+          projectId: target.projectId,
           worktreeId: target.worktreeId,
         });
       }
@@ -311,6 +319,7 @@ export const makeResolving = ({
       resolveProject,
       resolveProjectById,
       resolveProjectRef,
+      resolveById,
       resolve,
     };
   });

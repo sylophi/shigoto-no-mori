@@ -55,8 +55,9 @@ export const makeEnvironmentChecks = ({
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const { home, binaryName, flavor } = paths;
     const names = flavorNames(flavor);
-    // ZDOTDIR read once, as Paths reads the environment.
-    const place = hookPlace(paths, yield* envVar("ZDOTDIR"));
+    // ZDOTDIR read once, as Paths reads the environment, for a run that
+    // names none.
+    const zdotdir = yield* envVar("ZDOTDIR");
     // The shell wrapper's directive file, set while the hook is active.
     const cdFile = yield* envVar(CD_FILE_ENV);
 
@@ -318,9 +319,10 @@ export const makeEnvironmentChecks = ({
     // Installed and current: install refreshes the block in place, so one
     // from an older vintage was written by a build whose guard line has
     // since changed.
-    const checkShellHook = (terminal: boolean) =>
+    const checkShellHook = (input: RunInput) =>
       Effect.gen(function* () {
         const line = check("Environment", "shell-hook", "shell hook");
+        const place = hookPlace(paths, input.zdotdir ?? zdotdir);
         const installed: ShellKind[] = [];
         const edited: ShellKind[] = [];
         const stale: ShellKind[] = [];
@@ -353,7 +355,7 @@ export const makeEnvironmentChecks = ({
         }
         // "This session" is a terminal's. Without one (the app's read) it
         // would always read as a problem.
-        const inactive = terminal && cdFile === "";
+        const inactive = input.terminal && cdFile === "";
         return line.ok(
           `installed for ${installed.join(", ")}${inactive ? " (not active in this session)" : ""}`,
         );
