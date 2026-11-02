@@ -5,6 +5,10 @@
 // shapes `sm worktrees ... --json` prints, field for field.
 import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import type { MovedSource } from "@shigomori/contracts/schemas";
+import {
+  UnknownProjectError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -53,7 +57,6 @@ import {
   type StatusCard,
   type Target,
   TargetError,
-  UnknownWorktree,
   type WorktreeIdentity,
   WorktreeRefused,
   type WorktreeRow,
@@ -70,7 +73,6 @@ export {
   RelocateRefused,
   TargetError,
   UNKNOWN_BRANCH,
-  UnknownWorktree,
   WorktreeRefused,
   cleanupErrorOf,
   isShelfable,
@@ -157,7 +159,7 @@ export class Worktrees extends Context.Service<
     readonly resolveProjectById: (
       here: Here,
       projectId: string,
-    ) => Effect.Effect<Registry.ListedProject, Registry.UnknownProject>;
+    ) => Effect.Effect<Registry.ListedProject, UnknownProjectError>;
     // The project a command names: by --project-id, else by -p, else the
     // one at the cwd. An empty flag is no flag.
     readonly resolveProjectRef: (
@@ -165,7 +167,7 @@ export class Worktrees extends Context.Service<
       ref: Pick<Target, "project" | "projectId">,
     ) => Effect.Effect<
       Registry.ListedProject,
-      TargetError | Registry.UnknownProject | Git.GitError
+      TargetError | UnknownProjectError | Git.GitError
     >;
     // The worktree a command means. The reserved names root and primary
     // are the project's primary checkout, and an id from before a move
@@ -175,7 +177,7 @@ export class Worktrees extends Context.Service<
       target: Target,
     ) => Effect.Effect<
       Located,
-      TargetError | UnknownWorktree | Registry.UnknownProject | Git.GitError
+      TargetError | UnknownWorktreeError | UnknownProjectError | Git.GitError
     >;
 
     readonly setShelved: (
@@ -323,7 +325,7 @@ export class Worktrees extends Context.Service<
       name: string,
     ) => Effect.Effect<
       { readonly worktree: WorktreeRow; readonly previousId: string },
-      WorktreeRefused | UnknownWorktree | Git.GitError
+      WorktreeRefused | UnknownWorktreeError | Git.GitError
     >;
     // What a move carries once git lists the checkout at `toPath`: what
     // is kept under the old id, port-pool's lease, and a record of the
@@ -432,7 +434,7 @@ export class Worktrees extends Context.Service<
     ) => Effect.Effect<
       ProjectRow,
       | RelocateRefused
-      | Registry.UnknownProject
+      | UnknownProjectError
       | Registry.ProjectPathTaken
       | TerrierRefused
     >;

@@ -1,4 +1,3 @@
-import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import { hygieneContract } from "@shigomori/contracts/modules/hygiene";
 import type { EffectHandlers } from "@shigomori/contracts/types";
 import * as Hygiene from "@shigomori/engine/Hygiene";
@@ -21,13 +20,6 @@ export const hygieneHandlers = {
   diskUsage: ({ projectId, worktreeId }) =>
     Effect.gen(function* () {
       const hygiene = yield* Hygiene.Hygiene;
-      return yield* hygiene
-        .diskUsage(yield* registered(projectId), worktreeId)
-        .pipe(
-          Effect.catchTag(
-            "UnknownWorktree",
-            () => new UnknownWorktreeError({ worktreeId }),
-          ),
-        );
+      return yield* hygiene.diskUsage(yield* registered(projectId), worktreeId);
     }),
 } satisfies EffectHandlers<typeof hygieneContract, unknown, HostServices>;

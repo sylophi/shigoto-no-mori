@@ -15,6 +15,10 @@
 // name is passed through as given. Answers are the documents `sm --json`
 // prints, with the headline a person reads.
 import type { CallsOf, OutputOf } from "@shigomori/contracts/contract";
+import type {
+  UnknownProjectError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import {
   type ControlCloneResult,
   controlContract,
@@ -27,7 +31,6 @@ import type { SyncPullProgress } from "@shigomori/contracts/modules/sync";
 import type { ViewInput } from "@shigomori/contracts/types";
 import type * as Git from "@shigomori/engine/Git";
 import * as Paths from "@shigomori/engine/Paths";
-import type * as Registry from "@shigomori/engine/Registry";
 import type { RegisteredProject } from "@shigomori/engine/Registry";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import * as Context from "effect/Context";
@@ -201,8 +204,8 @@ export type Unmirrored = {
 
 type ResolveError =
   | Worktrees.TargetError
-  | Worktrees.UnknownWorktree
-  | Registry.UnknownProject
+  | UnknownWorktreeError
+  | UnknownProjectError
   | Git.GitError;
 
 type ReadError = Control.ControlError;

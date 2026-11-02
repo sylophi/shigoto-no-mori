@@ -222,15 +222,6 @@ export type Created = {
 
 // --- errors ---------------------------------------------------------------
 
-export class UnknownWorktree extends Schema.TaggedError<UnknownWorktree>()(
-  "UnknownWorktree",
-  { worktreeId: Schema.String },
-) {
-  override get message(): string {
-    return `Unknown worktree: ${this.worktreeId}`;
-  }
-}
-
 // What a command that can't tell the project says about the ones there
 // are.
 export const projectsHint = (names: ReadonlyArray<string>) =>

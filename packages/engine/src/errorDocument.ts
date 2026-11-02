@@ -6,12 +6,15 @@ import * as Predicate from "effect/Predicate";
 import { CheckoutUnfinished, HookFailed } from "./CloneCheckout.ts";
 import * as Git from "./Git.ts";
 import * as GitHub from "./GitHub.ts";
-import { UnknownProject } from "./Registry.ts";
 import { NoScripts } from "./Scripts.ts";
 import { UpdateInProgress } from "./stagingLock.ts";
 import { storeErrorOf } from "./storeErrors.ts";
-import { DirtyWorktree, UnknownWorktree } from "./Worktrees.ts";
-import { errorMessageOf } from "@shigomori/contracts/errors";
+import { DirtyWorktree } from "./Worktrees.ts";
+import {
+  errorMessageOf,
+  UnknownProjectError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 
 export type ErrorDocument = {
   readonly error: string;
@@ -53,8 +56,8 @@ export const codeOf = (error: unknown): string | undefined => {
       ? "uncommitted-changes"
       : "status-unreadable";
   }
-  if (error instanceof UnknownProject) return "unknown-project";
-  if (error instanceof UnknownWorktree) return "unknown-worktree";
+  if (error instanceof UnknownProjectError) return "unknown-project";
+  if (error instanceof UnknownWorktreeError) return "unknown-worktree";
   if (error instanceof NoScripts) return "no-scripts";
   if (error instanceof UpdateInProgress) return "update-in-progress";
   // A tag, not the class: Landing imports this module.

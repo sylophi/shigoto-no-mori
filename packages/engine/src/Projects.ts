@@ -2,6 +2,7 @@
 // project starts with.
 import { listed } from "@shigomori/contracts/words";
 import { isSameOrInside } from "@shigomori/contracts/git/worktreeLayout";
+import { UnknownProjectError } from "@shigomori/contracts/errors";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -111,7 +112,7 @@ export class Projects extends Context.Service<
     // checkouts stay on disk.
     readonly remove: (
       project: Registry.ListedProject,
-    ) => Effect.Effect<void, Terrier.TerrierRefused | Registry.UnknownProject>;
+    ) => Effect.Effect<void, Terrier.TerrierRefused | UnknownProjectError>;
     // What removeWithFiles refuses, checked alone.
     readonly checkDeletable: (
       project: Registry.ListedProject,
@@ -135,7 +136,7 @@ export class Projects extends Context.Service<
       | Git.GitError
       | PlatformError.PlatformError
       | Terrier.TerrierRefused
-      | Registry.UnknownProject
+      | UnknownProjectError
     >;
   }
 >()("sm/engine/Projects") {}

@@ -89,9 +89,7 @@ type Ids = { projectId: string; worktreeId?: string };
 // A create's or an adopt's run, as a change, its guard's refusal kept.
 const asCreate = <A, E, R>(effect: Effect.Effect<A, E, R>, ids: Ids) =>
   changing(effect, ids, "create").pipe(
-    Effect.mapError(
-      (error) => guardRefusal(error) ?? engineFailure(error, ids),
-    ),
+    Effect.mapError((error) => guardRefusal(error) ?? engineFailure(error)),
   );
 
 // The engine's create, every event of its run to `reporter`
@@ -224,7 +222,6 @@ export const planStack = Effect.fnUntraced(function* (
         skipCleanup: input.skipCleanup === true,
       });
     }),
-    { projectId: project.id, worktreeId: input.worktreeId },
   );
 });
 
@@ -272,7 +269,7 @@ export const deleteStack = Effect.fnUntraced(function* (
           ),
         } satisfies DeleteStackResult;
       }
-      return yield* engineFailure(cleanup.error, ids);
+      return yield* engineFailure(cleanup.error);
   }
 });
 
@@ -423,7 +420,6 @@ export const readSyncedProjectValues = (projectId: string) =>
       const stored = yield* (yield* EngineConfig.Config).read(scope);
       return EngineConfig.syncedProjectValues(stored);
     }),
-    { projectId },
   );
 
 // A project's repo identity, or null.
@@ -432,7 +428,6 @@ export const projectRepoIdentity = (projectId: string) =>
     Effect.flatMap(projectById(projectId), (project) =>
       repoIdentity(project.path),
     ),
-    { projectId },
   );
 
 // The proofs' fixture: the project's settings as a whole document.
@@ -474,7 +469,6 @@ export const checkDeletable = Effect.fnUntraced(function* (projectId: string) {
       const project = yield* projectById(projectId);
       yield* (yield* Projects.Projects).checkDeletable(project);
     }),
-    { projectId },
   );
 });
 
@@ -618,7 +612,6 @@ export const resumeAgent = Effect.fnUntraced(function* (
       const located = yield* locate(project.id, worktreeId);
       yield* (yield* Agents.Agents).resume(located, { harness, session });
     }),
-    { projectId: project.id, worktreeId },
   );
 });
 
@@ -750,7 +743,6 @@ export const listWorktrees = Effect.fnUntraced(function* (projectId: string) {
       const project = yield* projectById(projectId);
       return yield* (yield* Worktrees.Worktrees).list([project]);
     }),
-    { projectId },
   );
   return listing.rows.map(hostWorktree);
 });
@@ -767,7 +759,6 @@ export const describeWorktree = Effect.fnUntraced(function* (
         settle: true,
       });
     }),
-    { projectId, worktreeId },
   );
   return hostWorktree(row);
 });
@@ -794,7 +785,6 @@ export const listWorktreeIdentities = Effect.fnUntraced(function* (
           : [yield* worktrees.resolveProjectById(at, scope.projectId)];
       return (yield* worktrees.identityList(projects, options)).rows;
     }),
-    scope,
   );
 });
 
@@ -833,7 +823,6 @@ export const projectIcon = Effect.fnUntraced(function* (projectId: string) {
         rescanMisses: true,
       });
     }),
-    { projectId },
   );
   return Option.getOrNull(icon);
 });
@@ -850,7 +839,6 @@ export const worktreeDestination = (projectId: string, name?: string) =>
         name ?? "",
       );
     }),
-    { projectId },
   );
 
 const decodeGlobalConfig = Schema.decodeUnknownSync(StoredGlobalConfigSchema);
@@ -879,7 +867,6 @@ export const readProjectConfig = Effect.fnUntraced(function* (
       const scope = yield* projectScope(projectId);
       return yield* (yield* EngineConfig.Config).read(scope);
     }),
-    { projectId },
   );
   return decodeProjectConfig(stored);
 });
@@ -894,7 +881,6 @@ export const launcherRow = Effect.fnUntraced(function* (projectId: string) {
       const project = yield* projectById(projectId);
       return yield* (yield* Launchers.Launchers).row(project);
     }),
-    { projectId },
   );
   return { entries, hiddenCount };
 });
@@ -928,7 +914,6 @@ export const packageScripts = Effect.fnUntraced(function* (
           ),
         );
     }),
-    { projectId, worktreeId },
   );
   return listed;
 });
@@ -1051,7 +1036,6 @@ export const bundleCreate = Effect.fnUntraced(function* (
         haves,
       );
     }),
-    { projectId: project.id },
   );
 });
 
@@ -1104,7 +1088,6 @@ export const openFile = Effect.fnUntraced(function* (
       const located = yield* locate(project.id, worktreeId);
       yield* (yield* Open.Open).edit(located, path);
     }),
-    { projectId: project.id, worktreeId },
   );
 });
 

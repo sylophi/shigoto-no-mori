@@ -6,16 +6,17 @@ import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import * as DataDirLock from "@shigomori/engine/DataDirLock";
 import type { Flavor } from "@shigomori/engine/flavor";
 import { migratingEngineLayer } from "@shigomori/engine/layer";
-import { codeOf, messageOf } from "@shigomori/engine/errorDocument";
+import { messageOf } from "@shigomori/engine/errorDocument";
 import * as Git from "@shigomori/engine/Git";
 import * as Store from "@shigomori/engine/Store";
 import { storeErrorOf } from "@shigomori/engine/storeErrors";
 import * as Worktrees from "@shigomori/engine/Worktrees";
 import {
   callFailureOf,
+  isEntityGoneError,
   RemoteCallError,
-  UnknownProjectError,
-  UnknownWorktreeError,
+  type UnknownProjectError,
+  type UnknownWorktreeError,
 } from "@shigomori/contracts/errors";
 import type { ChangeKind } from "@shigomori/contracts/modules/session";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -141,27 +142,19 @@ export class EngineCallError extends Schema.TaggedError<EngineCallError>()(
 }
 
 // An engine failure the way the host's callers branch on it: a project
-// or worktree that is gone as the contract's error, which the renderer
-// reads by tag, and anything else in the words `sm` prints for it.
-export function engineFailure(
+// or worktree that is gone as the contract's error the engine fails
+// with, which the renderer reads by tag, and anything else in the words
+// `sm` prints for it.
+export const engineFailure = (
   error: unknown,
-  ids: Ids = {},
-): UnknownProjectError | UnknownWorktreeError | EngineCallError {
-  const code = codeOf(error);
-  if (code === "unknown-project" && ids.projectId !== undefined) {
-    return new UnknownProjectError({ projectId: ids.projectId });
-  }
-  if (code === "unknown-worktree" && ids.worktreeId !== undefined) {
-    return new UnknownWorktreeError({ worktreeId: ids.worktreeId });
-  }
-  return new EngineCallError({ reason: messageOf(error), cause: error });
-}
+): UnknownProjectError | UnknownWorktreeError | EngineCallError =>
+  isEntityGoneError(error)
+    ? error
+    : new EngineCallError({ reason: messageOf(error), cause: error });
 
 // An engine effect, its failure translated.
-export const asCall = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  ids: Ids = {},
-) => effect.pipe(Effect.mapError((error) => engineFailure(error, ids)));
+export const asCall = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(Effect.mapError(engineFailure));
 
 // What a host call's failure crosses a wire as: a git the engine ran
 // in the words errorWordsOf gives it, and anything else as
@@ -202,7 +195,7 @@ export const asChange = <A, E, R>(
   effect: Effect.Effect<A, E, R>,
   ids: Ids = {},
   kind?: ChangeKind,
-) => asCall(changing(effect, ids, kind), ids);
+) => asCall(changing(effect, ids, kind));
 
 // A registered project by id.
 export const projectById = (projectId: string) =>

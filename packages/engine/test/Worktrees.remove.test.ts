@@ -193,7 +193,7 @@ it("a removed worktree's old ids don't follow to a new worktree at its path", as
         sameId: again.worktree.id === renamed.worktree.id,
         gone:
           Result.isFailure(stale) &&
-          Predicate.isTagged(stale.failure, "UnknownWorktree"),
+          Predicate.isTagged(stale.failure, "UnknownWorktreeError"),
       };
     }),
   )) as { followed: boolean; sameId: boolean; gone: boolean };

@@ -1,5 +1,9 @@
 // Worktrees' resolving: the worktree or project a command means, from
 // where it runs, a name, a path or an id.
+import {
+  UnknownProjectError,
+  UnknownWorktreeError,
+} from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -13,7 +17,6 @@ import {
   type Located,
   type Target,
   TargetError,
-  UnknownWorktree,
   isPrimaryKeyword,
   looksLikePath,
 } from "./documents.ts";
@@ -172,7 +175,7 @@ export const makeResolving = ({
     const resolveProjectById = Effect.fn("Worktrees.resolveProjectById")(
       function* (here: Here, projectId: string) {
         const found = here.projects.find((project) => project.id === projectId);
-        if (!found) return yield* new Registry.UnknownProject({ projectId });
+        if (!found) return yield* new UnknownProjectError({ projectId });
         return found;
       },
     );
@@ -209,7 +212,9 @@ export const makeResolving = ({
         const moved =
           now === undefined ? undefined : yield* worktreeWithId(scope, now);
         if (moved) return moved;
-        return yield* new UnknownWorktree({ worktreeId: target.worktreeId });
+        return yield* new UnknownWorktreeError({
+          worktreeId: target.worktreeId,
+        });
       }
 
       const ref = target.ref ?? "";

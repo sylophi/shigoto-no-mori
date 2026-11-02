@@ -9,6 +9,7 @@
 // through this module: `worktrees move`, a rename, the migration's into
 // `wt/` and relocate's. A create refuses a path a record still names.
 import * as Cause from "effect/Cause";
+import { UnknownWorktreeError } from "@shigomori/contracts/errors";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -32,7 +33,6 @@ import {
 } from "../worktreeLayout.ts";
 import {
   type Located,
-  UnknownWorktree,
   type WorktreeIdentity,
   WorktreeRefused,
 } from "./documents.ts";
@@ -624,7 +624,7 @@ export const makeMoving = ({
       const found = yield* identities(project);
       const worktree = found.find(({ id }) => id === worktreeId);
       if (worktree === undefined)
-        return yield* new UnknownWorktree({ worktreeId });
+        return yield* new UnknownWorktreeError({ worktreeId });
       if (worktree.isPrimary) {
         return yield* new WorktreeRefused({
           reason: "rename-primary",

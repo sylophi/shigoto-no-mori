@@ -148,7 +148,7 @@ export const makeCreating = (removing: {
               if (created === null) {
                 Deferred.doneUnsafe(
                   made,
-                  Exit.fail(Engine.engineFailure(error, { projectId })),
+                  Exit.fail(Engine.engineFailure(error)),
                 );
               } else {
                 log.warn("[engine] mid-run event failed validation", error);
