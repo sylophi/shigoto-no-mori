@@ -361,7 +361,9 @@ export class ScriptRuns {
 
   // Ends the runs that left the device's list with no exit heard here
   // (its host restarted, or the session dropped as the run ended), so
-  // their consoles stop reading running. Only runs the list named
+  // their consoles stop reading running, and lets go of the events
+  // buffered for one never bound here (another window's, whose events
+  // a peer's session brings every window). Only runs the list named
   // before: it lags a start here by the view's next value.
   settle(runs: readonly RunningScript[]): void {
     const now = new Set(runs.map((run) => run.runId));
@@ -374,7 +376,11 @@ export class ScriptRuns {
   private lost(runId: string): void {
     setTimeout(() => {
       const key = this.runIdToKey.get(runId);
-      if (!key || this.current.states.get(key)?.status !== "running") return;
+      if (!key) {
+        this.pendingByRunId.delete(runId);
+        return;
+      }
+      if (this.current.states.get(key)?.status !== "running") return;
       // Its exit, should it still come, would wait for a binding forever.
       this.ignored.add(runId);
       this.applyEvent(key, { runId, kind: "exit", code: null });
