@@ -1,18 +1,29 @@
 import { useMutation } from "@tanstack/react-query";
+import type { DeviceSettingsPatch } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { peerSettingsWrite } from "./useSettingsSave";
-import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
+import { changedKeys } from "@shigomori/ui/hooks/useDirtyForm.ts";
+import type { DeviceFormState } from "@shigomori/ui/lib/settingsForm.ts";
 
-// Save for the device-managed keys of whichever device the surrounding
-// HostScope names: a patch of the keys the form changed from what it
-// last saved, so a key the device's own user changed meanwhile is never
-// written back. A refused save (the host revoked command access
-// mid-edit) surfaces through the central CommandRefusedError toast.
-//
-// The local device's save does NOT come through here. It writes two
-// stores (device config plus this window's appearance) as one mutation
-// through useSettingsSave, whose device half is this same patch write
-// plus the launch catalog. This hook is for peers.
+// The globalConfig.writeDeviceSettings patch for a form. A launcher row
+// persists only once both halves are filled in. Half-typed rows live
+// purely in form state.
+function toDeviceSettingsPatch(state: DeviceFormState): DeviceSettingsPatch {
+  return {
+    ...state,
+    launchers: state.launchers.filter(
+      (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
+    ),
+  };
+}
+
+// Save for whichever device the surrounding HostScope names, this
+// machine's or a peer's: a patch of the keys the form changed from what
+// it last saved, so a key the device's own user changed meanwhile is
+// never written back. The host applies it as absent-means-keep, so a
+// changed key carries its value explicitly, default included (the host
+// then stores it by omission). A refused save (the host revoked command
+// access mid-edit) surfaces through the central CommandRefusedError
+// toast.
 export function useDeviceSettingsSave() {
   const { api } = useHostScope();
   return useMutation({
@@ -20,14 +31,15 @@ export function useDeviceSettingsSave() {
       state,
       saved,
     }: {
-      state: SettingsFormState;
-      saved: SettingsFormState;
+      state: DeviceFormState;
+      saved: DeviceFormState;
     }) => {
-      await api.run(
-        api.globalConfig.writeDeviceSettings({
-          patch: peerSettingsWrite(saved, state),
-        }),
+      const patch = changedKeys(
+        toDeviceSettingsPatch(saved),
+        toDeviceSettingsPatch(state),
       );
+      if (Object.keys(patch).length === 0) return;
+      await api.run(api.globalConfig.writeDeviceSettings({ patch }));
     },
     meta: { errorTitle: "Couldn't save settings" },
   });

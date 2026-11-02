@@ -2,7 +2,7 @@
 // with an update staged, the Appearance section with Village life on,
 // the other sections and states, and the health check and changelog
 // dialogs.
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import type { ReactNode } from "react";
 import { DeviceTabBarView } from "../views/shared/DeviceTabBarView.tsx";
 import { EditorFooterView } from "../views/shared/EditorFooterView.tsx";
 import { SidebarTakeoverView } from "../views/sidebar/SidebarTakeoverView.tsx";
@@ -73,8 +73,7 @@ import {
   VersionSectionView,
 } from "../views/settings/VersionSectionView.tsx";
 import { WorktreePrefixesSectionView } from "../views/settings/WorktreePrefixesSectionView.tsx";
-import { fromConfig } from "../lib/settingsForm.ts";
-import type { SettingsFormState } from "../lib/settingsForm.ts";
+import { fromClientConfig, fromDeviceConfig } from "../lib/settingsForm.ts";
 import { DARK_THEMES, LIGHT_THEMES } from "../lib/themes.ts";
 import { keymapGroups, resolveKeymap } from "../lib/keymap.ts";
 import { KeyboardSectionView } from "../views/settings/KeyboardSectionView.tsx";
@@ -99,12 +98,13 @@ import { deviceById, deviceTabs, noop } from "./world.ts";
 const HOME = "/Users/rin";
 const VERSION = "3.0.3";
 const COMMIT = "fake-host";
-const FORM: SettingsFormState = fromConfig(fakeGlobalConfig, {
+const FORM = fromClientConfig({
   theme: "system",
   doubutsu: true,
   villageLife: true,
 });
-const setForm: Dispatch<SetStateAction<SettingsFormState>> = noop;
+const DEVICE_FORM = fromDeviceConfig(fakeGlobalConfig);
+const setForm = noop;
 const SECTIONS = settingsSections(true, true, true);
 const STAGED = {
   kind: "ready",
@@ -385,7 +385,7 @@ export function SettingsPartsScene() {
       <div className="flex min-w-0 flex-col gap-8">
         <ScenePart label="Launch tools" gap={3}>
           <LaunchToolsPanelView
-            form={FORM}
+            form={DEVICE_FORM}
             setForm={setForm}
             detected={FAKE_DETECTED}
           />
@@ -407,13 +407,13 @@ export function SettingsPartsScene() {
             saveError={null}
           >
             <WorktreeTogglesView
-              form={FORM}
+              form={DEVICE_FORM}
               setForm={setForm}
               driveBase="/Volumes/<drive>/.sm/wt/<project>"
             />
           </DeviceTogglesView>
           <IntegrationTogglesView
-            form={FORM}
+            form={DEVICE_FORM}
             setForm={setForm}
             readiness={{
               portPoolInstalled: false,

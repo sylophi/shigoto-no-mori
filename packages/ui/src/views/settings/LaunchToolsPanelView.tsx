@@ -15,7 +15,7 @@ import { SegmentedControl } from "../../primitives/segmented-control.tsx";
 import { SimpleTooltip } from "../../primitives/tooltip.tsx";
 import { CustomLauncherInputView } from "../shared/CustomLauncherInputView.tsx";
 import { ScriptEnvPopoverView } from "../shared/ScriptEnvPopoverView.tsx";
-import type { SettingsFormState } from "../../lib/settingsForm.ts";
+import type { DeviceFormState } from "../../lib/settingsForm.ts";
 import { useLauncherListEditor } from "../../hooks/useLauncherListEditor.ts";
 import { DetectedToolsSectionView } from "./DetectedToolsSectionView.tsx";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
@@ -37,8 +37,8 @@ export function LaunchToolsPanelView({
   setForm,
   detected,
 }: {
-  form: SettingsFormState;
-  setForm: Dispatch<SetStateAction<SettingsFormState>>;
+  form: DeviceFormState;
+  setForm: Dispatch<SetStateAction<DeviceFormState>>;
   // The tools this machine knows of, installed or not.
   detected: readonly DetectedLauncher[];
 }) {

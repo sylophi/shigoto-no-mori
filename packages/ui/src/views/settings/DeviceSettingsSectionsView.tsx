@@ -1,7 +1,7 @@
 import { plural } from "@shigomori/contracts/words";
 import { type Dispatch, type SetStateAction, useState } from "react";
 import { digitsOnly } from "@shigomori/contracts/schemas";
-import type { SettingsFormState } from "../../lib/settingsForm.ts";
+import type { DeviceFormState } from "../../lib/settingsForm.ts";
 import { ToggleRowView } from "../shared/ToggleRowView.tsx";
 import { Input } from "../../primitives/input.tsx";
 import { SegmentedControl } from "../../primitives/segmented-control.tsx";
@@ -20,17 +20,16 @@ const TERRIER = {
 
 // The device-managed toggles, a view per host section (Worktrees,
 // Integrations), shared verbatim between this device's form and every
-// peer's on the Settings page. Everything here reads and writes only
-// device-managed keys on SettingsFormState, and every query it runs
-// (port-pool install check, gh and terrier readiness, runtime info)
-// goes through host-scoped hooks, so the same JSX answers for
-// whichever device the surrounding HostScope names. Client-scoped
+// peer's on the Settings page. Every query it runs (port-pool install
+// check, gh and terrier readiness, runtime info) goes through
+// host-scoped hooks, so the same JSX answers for whichever device the
+// surrounding HostScope names. Client-scoped
 // concerns (appearance) and local-by-nature ones (the launch tools)
 // live on their own sections and must not move here. The page header
 // names the section, so neither repeats it as a heading.
 export type ToggleProps = {
-  form: SettingsFormState;
-  setForm: Dispatch<SetStateAction<SettingsFormState>>;
+  form: DeviceFormState;
+  setForm: Dispatch<SetStateAction<DeviceFormState>>;
 };
 
 export function WorktreeTogglesView({

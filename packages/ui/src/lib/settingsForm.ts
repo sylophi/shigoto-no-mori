@@ -13,11 +13,9 @@ import {
   resolveDoubutsuPicks,
 } from "./themes.ts";
 
-// The settings form's staged state, one flat shape across both stores:
-// what this window shows (client config) and what the device stores.
-export type SettingsFormState = ClientFormState & DeviceFormState;
-
-interface ClientFormState {
+// The settings forms' staged state, one form per store: what this
+// window shows (client config) and what a device stores.
+export interface ClientFormState {
   theme: Theme;
   doubutsu: boolean;
   lightTheme: LightTheme;
@@ -43,20 +41,14 @@ interface ClientFormState {
   keybindings: Readonly<Record<string, string>>;
 }
 
-type DeviceFormState = Required<DeviceSettingsPatch>;
+export type DeviceFormState = Required<DeviceSettingsPatch>;
 
 const DEVICE_FIELDS = Object.keys(DEFAULTS) as (keyof DeviceFormState)[];
 
-// Decode, the encoders' other half (useSettingsSave.ts). Each default
-// comes from the table its store omits it by, never respelled here.
-export function fromConfig(
-  config: GlobalConfig,
-  clientConfig: ClientConfig,
-): SettingsFormState {
-  return { ...fromClientConfig(clientConfig), ...fromDeviceConfig(config) };
-}
-
-function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
+// Decode, the encoders' other half (useSettingsSave.ts,
+// useDeviceSettingsSave.ts). Each default comes from the table its
+// store omits it by, never respelled here.
+export function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
   const picks = resolveDoubutsuPicks(clientConfig);
   return {
     theme: clientSetting(clientConfig, "theme"),
@@ -83,7 +75,7 @@ function fromClientConfig(clientConfig: ClientConfig): ClientFormState {
   };
 }
 
-function fromDeviceConfig(config: GlobalConfig): DeviceFormState {
+export function fromDeviceConfig(config: GlobalConfig): DeviceFormState {
   const form = Object.fromEntries(
     DEVICE_FIELDS.map((key) => [key, config[key] ?? DEFAULTS[key]]),
   ) as DeviceFormState;
@@ -92,28 +84,4 @@ function fromDeviceConfig(config: GlobalConfig): DeviceFormState {
   // hiding is set-semantic -- without this, re-hiding a tool in a
   // different order would read as an unsaved change.
   return { ...form, hiddenLaunchers: form.hiddenLaunchers.toSorted() };
-}
-
-// The form's device-config fields alone.
-export function deviceFields(form: SettingsFormState): DeviceFormState {
-  return Object.fromEntries(
-    DEVICE_FIELDS.map((key) => [key, form[key]]),
-  ) as DeviceFormState;
-}
-
-const CLIENT_FIELDS = Object.keys(
-  fromClientConfig({}),
-) as (keyof ClientFormState)[];
-
-// `form` with its client-config fields as `client` has them: the
-// snapshot after a save whose device write landed and client write
-// didn't.
-export function withClientFields(
-  form: SettingsFormState,
-  client: SettingsFormState,
-): SettingsFormState {
-  const merged = { ...form };
-  for (const key of CLIENT_FIELDS)
-    Object.assign(merged, { [key]: client[key] });
-  return merged;
 }

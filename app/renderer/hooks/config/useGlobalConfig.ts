@@ -12,9 +12,8 @@ import { useApi } from "@/lib/runtime/pageApi";
 import { useView, useViewErrorToast } from "@/lib/runtime/viewHooks";
 
 // A device's config, as its host streams it (globalConfig:watch). Writes
-// go through useSettingsSave (this machine) and useDeviceSettingsSave (a
-// peer), which own the dirty diff, and the view follows them, as it
-// does `sm config`.
+// go through useDeviceSettingsSave, which owns the dirty diff, and the
+// view follows them, as it does `sm config`.
 const globalConfigAtom = Atom.family((deviceId: string) =>
   hostViewAtom({
     deviceId,

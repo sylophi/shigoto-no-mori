@@ -1,5 +1,5 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
-import type { SettingsFormState } from "@shigomori/ui/lib/settingsForm.ts";
+import type { DeviceFormState } from "@shigomori/ui/lib/settingsForm.ts";
 import { DeviceTogglesView } from "@shigomori/ui/views/settings/PeerDeviceSettingsView.tsx";
 import { AgentsSection } from "./AgentsSection";
 import { CliSection } from "./CliSection";
@@ -26,8 +26,8 @@ export function deviceSections({
   saveError = null,
   dangerZone = false,
 }: {
-  form: SettingsFormState;
-  setForm: Dispatch<SetStateAction<SettingsFormState>>;
+  form: DeviceFormState;
+  setForm: Dispatch<SetStateAction<DeviceFormState>>;
   // The Version section, at the head of General.
   version: ReactNode;
   commands: boolean;
