@@ -380,7 +380,8 @@ const relocate = Command.make(
   },
   (input) =>
     Effect.gen(function* () {
-      const { json, binaryName, stdoutColor } = yield* Effect.service(Output);
+      const { json, binaryName, stdoutColor, stderrColor } =
+        yield* Effect.service(Output);
       const most = Option.isSome(given(input.projectId)) ? 0 : 1;
       const count = input.args.length;
       if (count === 0 || count - 1 > most) {
@@ -393,9 +394,19 @@ const relocate = Command.make(
         projectId: input.projectId,
         project: Option.fromNullishOr(count > 1 ? input.args[0] : undefined),
       });
-      const row = yield* (yield* Worktrees.Worktrees).relocateProject(
-        project,
-        destination,
+      const { project: row, stayed } =
+        yield* (yield* Worktrees.Worktrees).relocateProject(
+          project,
+          destination,
+        );
+      const warning = styles(stderrColor).yellow("warning:");
+      yield* Effect.forEach(
+        stayed,
+        (left) =>
+          note(
+            `${warning} couldn't move ${left.worktree.name} to ${left.destination}: ${messageOf(left.error)}`,
+          ),
+        { discard: true },
       );
       yield* json
         ? emit({ ok: true, project: row })

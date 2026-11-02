@@ -3,7 +3,6 @@
 // status card, finding the worktree a command means, and the marks and
 // descriptions the app and agents set. The rows and documents keep the
 // shapes `sm worktrees ... --json` prints, field for field.
-import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import type { MovedSource } from "@shigomori/contracts/schemas";
 import {
   UnknownProjectError,
@@ -52,6 +51,7 @@ import {
   PullRequestNeedsTitle,
   PullRequestUnchecked,
   RelocateRefused,
+  type Relocated,
   type Removed,
   type Reporter,
   type StatusCard,
@@ -434,12 +434,13 @@ export class Worktrees extends Context.Service<
     // it is now (an absolute path, any folder inside it will do), keeping
     // its id, and terrier's entry with it. The linked worktrees that moved along are re-linked, and the managed
     // ones a rename would leave external move to where new ones go.
-    // Answers the project's row.
+    // Answers the project's row and the managed worktrees that couldn't
+    // move.
     readonly relocateProject: (
       project: Registry.ListedProject,
       destination: string,
     ) => Effect.Effect<
-      ProjectRow,
+      Relocated,
       | RelocateRefused
       | UnknownProjectError
       | Registry.ProjectPathTaken

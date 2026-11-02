@@ -45,7 +45,11 @@ export const relocateProject = (id: string, path: string) =>
   changing(
     Effect.gen(function* () {
       const project = yield* findProject(id);
-      return yield* (yield* Worktrees.Worktrees).relocateProject(project, path);
+      const relocated = yield* (yield* Worktrees.Worktrees).relocateProject(
+        project,
+        path,
+      );
+      return relocated.project;
     }),
     { projectId: id },
   );

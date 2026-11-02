@@ -8,6 +8,7 @@ import type {
   Worktree,
   WorktreeIdentity as WorktreeIdentityRow,
 } from "@shigomori/contracts/schemas";
+import type { ProjectRow } from "@shigomori/contracts/schemas/project";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
@@ -218,6 +219,17 @@ export type Cloned = {
 export type Created = {
   readonly worktree: WorktreeRow;
   readonly failures: ReadonlyArray<Lifecycle.ScriptFailure>;
+};
+
+// A project pointed at where its repo is now, and the managed worktrees
+// that couldn't move to where new ones go, each left where it was.
+export type Relocated = {
+  readonly project: ProjectRow;
+  readonly stayed: ReadonlyArray<{
+    readonly worktree: WorktreeIdentity;
+    readonly destination: string;
+    readonly error: WorktreeRefused | Git.GitError;
+  }>;
 };
 
 // --- errors ---------------------------------------------------------------

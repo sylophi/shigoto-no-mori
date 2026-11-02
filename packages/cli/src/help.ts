@@ -323,7 +323,7 @@ const catalog = (names: Names) => {
         "Point a project at its moved repo",
         "For a repo moved or renamed by hand: refused while the old path is still there. The project keeps its config and state " +
           "(terrier's entry for it moves too), and its worktrees are reconnected to the repo (`git worktree repair`), including any that moved with it. " +
-          "After a rename, managed worktrees move to the folder named after the new one. " +
+          "After a rename, managed worktrees move to the folder named after the new one, and a warning names any that can't. " +
           "--json prints {ok, project}, project being a `projects list` row.",
       ],
       [
