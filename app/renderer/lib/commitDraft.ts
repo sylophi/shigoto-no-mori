@@ -39,6 +39,19 @@ export function clearCommitDraft(
   removeStored(draftKey(deviceId, projectId, worktreeId));
 }
 
+// A worktree that moved to another id takes its draft along.
+export function moveCommitDraft(
+  deviceId: string,
+  projectId: string,
+  from: string,
+  to: string,
+): void {
+  const draft = readCommitDraft(deviceId, projectId, from);
+  if (isEmptyDraft(draft)) return;
+  writeStored(draftKey(deviceId, projectId, to), JSON.stringify(draft));
+  clearCommitDraft(deviceId, projectId, from);
+}
+
 export function isEmptyDraft(draft: CommitDraft): boolean {
   return !draft.summary && !draft.description;
 }

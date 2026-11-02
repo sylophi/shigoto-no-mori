@@ -127,10 +127,9 @@ export const accountDevicesQueryOptions = (api: RendererApi) =>
     meta: { silentError: true },
   });
 
-// Both of this hook's call sites render only under a signed-in guard,
-// so a signed-out or unconfigured app never mounts it and never hits
-// the network. The handler returns [] in those states anyway, which is
-// also all the device sync's own read of the entry can get.
+// Signed out or unconfigured, the handler returns [] without asking
+// the hub, which is also all the device sync's own read of the entry
+// can get.
 export function useAccountDevices() {
   return useQuery(accountDevicesQueryOptions(useApi()));
 }

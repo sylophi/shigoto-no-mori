@@ -40,6 +40,7 @@ export function ProjectDevicePage({
   parent,
   renderAllDevices,
   devicesLocked = false,
+  unsaved = false,
   children,
 }: {
   title: string;
@@ -56,6 +57,9 @@ export function ProjectDevicePage({
   // sync): the device tabs are disabled, and the all-devices tab shows
   // the routed device's body.
   devicesLocked?: boolean;
+  // The body holds edits not saved yet, which another device's tab would
+  // throw away: the other devices' tabs wait for a save or a discard.
+  unsaved?: boolean;
   // The body, given the picked device's copy of the project, when
   // there is a choice the tab it came from, and whether it shows under
   // the locked all-devices tab. It reads everything else through the
@@ -68,7 +72,7 @@ export function ProjectDevicePage({
 }) {
   const scope = useHostScope();
   const { toProjectPage } = useProjectNav();
-  const project = useRoutedProject();
+  const { project, isLoading } = useRoutedProject();
   const holders = useDeviceTargets(project).filter(isHolder);
   // The tab the page opens on is the device the route named. A route
   // change remounts the page (remountDeps), so this never goes stale.
@@ -83,7 +87,9 @@ export function ProjectDevicePage({
   if (locked && !allDevicesPicked) setAllDevicesPicked(true);
 
   if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
+    return isLoading ? null : (
+      <CenteredMessage>Project not found.</CenteredMessage>
+    );
   }
 
   // A pick only means something with a bar to make it on. Without one
@@ -128,7 +134,18 @@ export function ProjectDevicePage({
       tabs={
         tabbed ? (
           <DeviceTabBarView
-            tabs={holders}
+            tabs={
+              unsaved && devicePicked
+                ? holders.map((tab) =>
+                    tab.deviceId === picked.deviceId
+                      ? tab
+                      : {
+                          ...tab,
+                          disabledReason: "Save or discard your changes first",
+                        },
+                  )
+                : holders
+            }
             selectedId={allDevicesPicked ? ALL_DEVICES_TAB_ID : picked.deviceId}
             onSelect={(id) => {
               setAllDevicesPicked(id === ALL_DEVICES_TAB_ID);

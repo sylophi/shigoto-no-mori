@@ -1,11 +1,18 @@
 import { useEffect } from "react";
 import type { GlobalConfig } from "@shigomori/contracts/schemas";
-import { keepTouched, useDirtyForm } from "@shigomori/ui/hooks/useDirtyForm.ts";
+import {
+  changedKeys,
+  keepTouched,
+  useDirtyForm,
+} from "@shigomori/ui/hooks/useDirtyForm.ts";
 import {
   type DeviceFormState,
   fromDeviceConfig,
 } from "@shigomori/ui/lib/settingsForm.ts";
-import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";
+import {
+  storedDeviceSettings,
+  useDeviceSettingsSave,
+} from "@/hooks/config/useDeviceSettingsSave";
 import { useRegisterSettingsEditor } from "./useSettingsEditors";
 
 // One device's form on the Settings page, this machine's or a peer's,
@@ -29,9 +36,16 @@ export function useDeviceSettingsForm(deviceId: string, config: GlobalConfig) {
     const saved = savedSnapshot;
     try {
       await save.mutateAsync({ state: form, saved });
-      // Only the fields this Save carried advance: a change the device
+      // Only the fields this Save carried advance, as stored: a
+      // half-typed launcher row stays unsaved, and a change the device
       // made to another field while it was out stays the device's.
-      setSavedSnapshot((prev) => keepTouched(form, saved, prev));
+      setSavedSnapshot((prev) =>
+        keepTouched(
+          storedDeviceSettings(form),
+          storedDeviceSettings(saved),
+          prev,
+        ),
+      );
     } catch {
       // Surfaced by the mutation cache toast and the form's banner.
       // The form stays dirty so the user can retry or discard.
@@ -40,6 +54,13 @@ export function useDeviceSettingsForm(deviceId: string, config: GlobalConfig) {
 
   useRegisterSettingsEditor(deviceId, {
     isDirty,
+    canSave:
+      Object.keys(
+        changedKeys(
+          storedDeviceSettings(savedSnapshot),
+          storedDeviceSettings(form),
+        ),
+      ).length > 0,
     isPending: save.isPending,
     isSuccess: save.isSuccess,
     save: handleSave,

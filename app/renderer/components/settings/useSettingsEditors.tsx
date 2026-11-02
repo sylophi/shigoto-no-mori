@@ -14,6 +14,9 @@ import {
 // footer, and calls the functions from its Save and Discard.
 export interface SettingsEditor {
   isDirty: boolean;
+  // Dirty with something to store: a half-typed launcher row alone is
+  // not.
+  canSave: boolean;
   isPending: boolean;
   isSuccess: boolean;
   // Never rejects: an editor surfaces its own failure (the mutation's
@@ -25,6 +28,7 @@ export interface SettingsEditor {
 // What the footer needs from all the editors at once.
 export interface EditorSummary {
   isDirty: boolean;
+  canSave: boolean;
   isPending: boolean;
   isSuccess: boolean;
 }
@@ -37,9 +41,15 @@ interface EditorRegistry {
 const EditorRegistryContext = createContext<EditorRegistry | null>(null);
 
 function summarize(editors: Iterable<SettingsEditor>): EditorSummary {
-  const summary = { isDirty: false, isPending: false, isSuccess: false };
+  const summary = {
+    isDirty: false,
+    canSave: false,
+    isPending: false,
+    isSuccess: false,
+  };
   for (const editor of editors) {
     summary.isDirty ||= editor.isDirty;
+    summary.canSave ||= editor.canSave;
     summary.isPending ||= editor.isPending;
     summary.isSuccess ||= editor.isSuccess;
   }
@@ -49,6 +59,7 @@ function summarize(editors: Iterable<SettingsEditor>): EditorSummary {
 function sameSummary(a: EditorSummary, b: EditorSummary): boolean {
   return (
     a.isDirty === b.isDirty &&
+    a.canSave === b.canSave &&
     a.isPending === b.isPending &&
     a.isSuccess === b.isSuccess
   );

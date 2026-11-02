@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
 import { useRoutedProject } from "@/hooks/projects/useProjectNav";
@@ -13,7 +13,8 @@ import { ConfigureShared } from "./ConfigureShared";
 import { ConfigureSkeletonView } from "@shigomori/ui/views/configure/ConfigureSkeletonView.tsx";
 
 export function ConfigureProject() {
-  const synced = useProjectSettingsSync(useRoutedProject()?.identity);
+  const synced = useProjectSettingsSync(useRoutedProject().project?.identity);
+  const [unsaved, setUnsaved] = useState(false);
   return (
     <ProjectDevicePage
       title="Configure"
@@ -23,12 +24,14 @@ export function ConfigureProject() {
         </ConfigureSharedView>
       )}
       devicesLocked={synced}
+      unsaved={unsaved}
     >
       {(scoped, _tab, locked) => (
         // One form for every device, under the shared sections.
         <ConfigureBody
           project={scoped}
           leading={locked && <ConfigureShared project={scoped} />}
+          setUnsaved={setUnsaved}
         />
       )}
     </ProjectDevicePage>
@@ -40,9 +43,11 @@ export function ConfigureProject() {
 function ConfigureBody({
   project,
   leading,
+  setUnsaved,
 }: {
   project: Project;
   leading: ReactNode;
+  setUnsaved: (unsaved: boolean) => void;
 }) {
   const seed = useProjectConfigSeed(project.id);
   if (seed.state === "failed") {
@@ -59,6 +64,7 @@ function ConfigureBody({
       initialConfig={seed.config}
       resolvedDefaultBranch={seed.resolvedDefaultBranch}
       leading={leading}
+      setUnsaved={setUnsaved}
     />
   );
 }

@@ -1,13 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
-import type { DeviceSettingsPatch } from "@shigomori/contracts/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { changedKeys } from "@shigomori/ui/hooks/useDirtyForm.ts";
 import type { DeviceFormState } from "@shigomori/ui/lib/settingsForm.ts";
 
-// The globalConfig.writeDeviceSettings patch for a form. A launcher row
-// persists only once both halves are filled in. Half-typed rows live
-// purely in form state.
-function toDeviceSettingsPatch(state: DeviceFormState): DeviceSettingsPatch {
+// A form as the device stores it. A launcher row persists only once
+// both halves are filled in. Half-typed rows live purely in form state.
+export function storedDeviceSettings(state: DeviceFormState): DeviceFormState {
   return {
     ...state,
     launchers: state.launchers.filter(
@@ -35,8 +33,8 @@ export function useDeviceSettingsSave() {
       saved: DeviceFormState;
     }) => {
       const patch = changedKeys(
-        toDeviceSettingsPatch(saved),
-        toDeviceSettingsPatch(state),
+        storedDeviceSettings(saved),
+        storedDeviceSettings(state),
       );
       if (Object.keys(patch).length === 0) return;
       await api.run(api.globalConfig.writeDeviceSettings({ patch }));
